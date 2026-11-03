@@ -118,10 +118,21 @@ const PALETTE_ON_MAIN: Record<string, string> = {
 };
 
 /**
- * Pairs that read worse than on main and wait for Marty's edit to the protected file; `floor` is what they reach now,
- * so they cannot get worse still. None since his edit of 14 Oct (the * and a missing field's border, map.tsx:381/1087).
+ * Pairs that read worse than on main and wait for Marty's edit to the protected file, or his look at it; `floor` is
+ * what they reach now, so they cannot get worse still. His edit of 14 Oct cleared the first ones (the * and a missing
+ * field's border, map.tsx:381/1087).
+ *
+ * Home look S4 (Marty's yes, 2 Nov: "S4 dark cards own PR"): the dark card went from #1a1a1a to #222822 so cards lift
+ * off the doodle ground (1.01:1 before, 1.17 after). A lighter card lowers every light ink on it, so no value can read
+ * "no worse" here; the map's sheets in dark take the new card like every other screen. All three stay far above 4.5.
+ * They wait for Marty's look at the map in dark (the PR's screenshots); drop them once he has seen it.
  */
-const AWAITING_MARTY: Record<string, { floor: number; fix: string }> = {};
+const S4_LOOK = "Marty's look at the map's sheets in dark on the lifted card (#222822), home look S4";
+const AWAITING_MARTY: Record<string, { floor: number; fix: string }> = {
+    'dark map.tsx text.heading words on surface.card': { floor: 15.06, fix: S4_LOOK },
+    'dark map.tsx text.body words on surface.card': { floor: 13.68, fix: S4_LOOK },
+    'dark map.tsx text.secondary words on surface.card': { floor: 5.93, fix: S4_LOOK },
+};
 
 const THEMES = [
     ['light', lightColors, 0],

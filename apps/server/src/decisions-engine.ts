@@ -48,6 +48,8 @@ import * as engine from '@beanpool/engine';
 import type { Member } from '@beanpool/engine';
 import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, GROUP_KIND_CIRCLE, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
+import { standingParts } from './engine/auto-moderation.js';
+import { BURST } from './engine/burst-cleanup.js';
 import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR, noteKeeperLeftProject } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
@@ -55,6 +57,9 @@ import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/nod
 import { unmutedRecipients } from './engine/chat-mutes.js';
 import { keepNotice } from './engine/kept-notices.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
+import { JURY_SERVE_AFTER_DAYS, juryDraw, juryPasses, juryRuleFor, jurySnapshotAt, jurySnapshotDate, type JuryRule } from '@beanpool/core';
+import { juryConflictsOf, juryPoolOf, juryRollOf, seatedJuror, writeJuryRecords } from './engine/removal-jury.js';
+import { deciderFor, removalDecider } from './config/removal-decider.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from './services/security-signal.js';
@@ -104,7 +109,7 @@ import {
 } from './state-engine.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
-const { t: tr } = wordsFor('en');
+const { t: tr, tn: trn } = wordsFor('en');
 
 /** What a Decision touches: a member, the Commons pool, or only its own scope's things (an enterprise's account and keepers). */
 export type DecisionTouch = 'member' | 'pool' | 'scope';
@@ -310,6 +315,8 @@ export interface DecisionTally {
      * the card says so, and an owner may decide it (ownerDecideTooFew).
      */
     tooFewToVote?: boolean;
+    /** A vote a drawn jury decides (DESIGN-removal-jury-fable.md §5): its electorate is the jury, its quorum the jury's. */
+    decider?: 'jury';
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -384,7 +391,22 @@ export type PublicDecision = Omit<Decision, 'adminHaltedBy' | 'caseHiddenBy' | '
 const MEMBER_BALANCE_PARAMS = ['balance', 'debt'] as const;
 
 function carriesMemberBalance(params: unknown): params is Record<string, unknown> {
-    return !!params && typeof params === 'object' && MEMBER_BALANCE_PARAMS.some(k => k in (params as object));
+    return !!params && typeof params === 'object'
+        && (MEMBER_BALANCE_PARAMS.some(k => k in (params as object)) || 'branchDebt' in (params as object) || Array.isArray((params as any).branch));
+}
+
+/**
+ * A branch vote's params with its balances left off (pauseBranch): each account's balance and debt, and their total, but
+ * for `keepFor`'s own entry; and which admin took a reply down, which members never get. Everything else stays.
+ */
+function branchParamsWithout(params: Record<string, any>, keepFor: string | null): Record<string, any> {
+    const { branchDebt: _total, ...rest } = params;
+    const branch = (params.branch as BranchEntry[]).map(e => {
+        if (!e || typeof e !== 'object') return e;
+        const { balance, debt, replyHiddenBy: _by, ...kept } = e;
+        return e.pubkey === keepFor ? { ...kept, balance, debt } : kept;
+    });
+    return { ...rest, branch };
 }
 
 /**
@@ -407,7 +429,7 @@ export function publicDecision(decision: Decision): PublicDecision {
     if (rest.params && typeof rest.params === 'object'
         && ('suspendedBy' in rest.params || 'pausedBy' in rest.params || carriesMemberBalance(rest.params))) {
         const { suspendedBy: _suspendedBy, pausedBy: _pausedBy, balance: _balance, debt: _debt, ...params } = rest.params;
-        shown = { ...rest, params };
+        shown = { ...rest, params: Array.isArray(params.branch) ? branchParamsWithout(params, null) : params };
     }
     if (decision.effect !== 'remove_member' || decision.scopeKind !== 'community') return shown;
     const proposer = removalProposer(decision);
@@ -463,7 +485,7 @@ function withCaseHidden(decision: Decision, shown: PublicDecision): PublicDecisi
     }
     return {
         ...shown,
-        title: tr('Remove {name}?', { name }),
+        title: isBranchVote(decision) ? branchVoteTitle(removalSubjects(decision).length) : tr('Remove {name}?', { name }),
         description: tr('An admin hid the case for this vote, as one shown to be false. Their reason: {reason}', { reason: decision.caseHiddenReason ?? '' }),
         params,
         ownerDecidedReason: null,
@@ -479,7 +501,16 @@ function withCaseHidden(decision: Decision, shown: PublicDecision): PublicDecisi
 export function decisionForReader(decision: Decision, reader: string | null | undefined): PublicDecision {
     const shown = publicDecision(decision);
     if (!reader || !carriesMemberBalance(decision.params)) return shown;
-    if (reader !== decision.subject && !checkVoterEligibility(reader, decision).ok) return shown;
+    if (isBranchVote(decision)) {
+        // A branch's: its voters see every account's, and an account on its list its own (branchParamsWithout).
+        const full = { ...(shown.params || {}), branch: decision.params.branch, branchDebt: decision.params.branchDebt };
+        if (checkVoterEligibility(reader, decision).ok) {
+            return { ...shown, params: { ...full, branch: (decision.params.branch as BranchEntry[]).map(({ replyHiddenBy: _by, ...e }) => e) } };
+        }
+        if (branchEntryOf(decision, reader)) return { ...shown, params: branchParamsWithout(full, reader) };
+        return shown;
+    }
+    if (reader !== decision.subject && !mayVoteOn(reader, decision)) return shown;
     const params: Record<string, unknown> = { ...(shown.params || {}) };
     for (const k of MEMBER_BALANCE_PARAMS) if (k in decision.params) params[k] = decision.params[k];
     return { ...shown, params };
@@ -494,7 +525,17 @@ export function decisionForReader(decision: Decision, reader: string | null | un
  */
 export function decisionForAdmin(decision: Decision, reader: string | null | undefined): Decision & { balanceHidden?: true } {
     if (!carriesMemberBalance(decision.params)) return decision;
-    if (reader && (reader === decision.subject || checkVoterEligibility(reader, decision).ok)) return decision;
+    if (reader && (reader === decision.subject || mayVoteOn(reader, decision))) return decision;
+    if (isBranchVote(decision)) {
+        // A branch's: every account's balance and debt, and their total, but the reader's own. Who took a reply down stays.
+        const { branchDebt: _total, ...rest } = decision.params;
+        const branch = (decision.params.branch as BranchEntry[]).map(e => {
+            if (!e || typeof e !== 'object' || e.pubkey === reader) return e;
+            const { balance: _b, debt: _d, ...kept } = e;
+            return kept;
+        });
+        return { ...decision, params: { ...rest, branch }, balanceHidden: true };
+    }
     const params: Record<string, unknown> = { ...decision.params };
     for (const k of MEMBER_BALANCE_PARAMS) delete params[k];
     return { ...decision, params, balanceHidden: true };
@@ -639,6 +680,78 @@ export function isPauseVote(decision: Pick<Decision, 'effect' | 'authorPubkey' |
     return decision.effect === 'remove_member' && decision.authorPubkey === SYSTEM_AUTHOR && decision.params?.rule === PAUSE_VOTE_RULE;
 }
 
+/** One account a branch's vote names (pauseBranch): who, what they owed when it opened, and their own reply to its case. */
+export interface BranchEntry {
+    pubkey: string;
+    name: string;
+    balance?: number;
+    debt?: number;
+    reply?: string;
+    repliedAt?: string;
+    replyHiddenAt?: string;
+    replyHiddenReason?: string;
+    /** Which admin took the reply down: never served to members (publicDecision). */
+    replyHiddenBy?: string;
+}
+
+/**
+ * A branch's vote (removal by vote S5, design §3.5): one pause's own vote on removing every account an owner paused in
+ * one invite branch (pauseBranch). Its `subject` is null and its params list them (`branch`), so a path that reads the
+ * subject alone never acts on part of it.
+ */
+export function isBranchVote(decision: Pick<Decision, 'effect' | 'params'> & { authorPubkey?: string }): boolean {
+    return decision.effect === 'remove_member' && Array.isArray(decision.params?.branch)
+        && (decision.authorPubkey === undefined || decision.authorPubkey === SYSTEM_AUTHOR);
+}
+
+/** The accounts a vote on removing members names: a branch vote's list, or its one subject. */
+export function removalSubjects(decision: Pick<Decision, 'effect' | 'subject' | 'params'> & { authorPubkey?: string }): string[] {
+    if (isBranchVote(decision)) {
+        return (decision.params.branch as BranchEntry[]).map(e => e?.pubkey).filter((pk): pk is string => typeof pk === 'string' && !!pk);
+    }
+    return decision.subject ? [decision.subject] : [];
+}
+
+/** This account's entry on a branch vote's list, or null. */
+export function branchEntryOf(decision: Pick<Decision, 'effect' | 'params'>, pubkey: string | null | undefined): BranchEntry | null {
+    if (!pubkey || !isBranchVote(decision)) return null;
+    return (decision.params.branch as BranchEntry[]).find(e => e?.pubkey === pubkey) ?? null;
+}
+
+/**
+ * SQL: the decision row `d` names the member key `pk` (an SQL expression): as its subject, or, on a branch vote, on its list.
+ * Not one taken off the list (`lifted`): the vote no longer holds nor removes them. Only the chain rules read that too
+ * (liftedFromBranchSql).
+ */
+export function namesMemberSql(d: string, pk: string): string {
+    return `(${d}.subject = ${pk} OR (${d}.subject IS NULL AND ${d}.effect = 'remove_member' AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(${d}.params) THEN ${d}.params ELSE '{}' END, '$.branch') bm
+        WHERE json_extract(bm.value, '$.pubkey') = ${pk})))`;
+}
+
+/**
+ * SQL: the branch vote row `d` took the member key `pk` (an SQL expression) off its list (dropFromBranch: an admin lifted
+ * their pause by hand, or the community's own vote brought them back), so its `lifted` names them. Read by the chain rules
+ * alone (votesEndedWithoutRemoving, thirdPauseRefused): that pause, and its end for them, stay on their record. Never where
+ * a vote holds someone (namesMemberSql): it holds them no more.
+ */
+function liftedFromBranchSql(d: string, pk: string): string {
+    return `(${d}.subject IS NULL AND ${d}.effect = 'remove_member' AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(${d}.params) THEN ${d}.params ELSE '{}' END, '$.lifted') bl
+        WHERE json_extract(bl.value, '$.pubkey') = ${pk}))`;
+}
+
+/**
+ * This account's newest entry in a branch vote's `lifted` (dropFromBranch), or null: it never left that list. One with no
+ * readable time is still theirs (its `at` reads NaN), so a reader drops that vote rather than read the vote's own end.
+ */
+function liftedEntryOf(decision: Pick<Decision, 'effect' | 'params'>, pubkey: string): BranchLifted | null {
+    if (!isBranchVote(decision) || !Array.isArray(decision.params.lifted)) return null;
+    const mine = (decision.params.lifted as BranchLifted[]).filter(l => l?.pubkey === pubkey);
+    const timed = mine.filter(l => Number.isFinite(parseDbTime(l.at)));
+    return timed.length ? timed.reduce((a, b) => (parseDbTime(b.at) > parseDbTime(a.at) ? b : a)) : mine[0] ?? null;
+}
+
 function assertEffectAllowedHere(effect: DecisionEffect): void {
     const off = switchOffFor(effect);
     if (off === 'beans') {
@@ -721,11 +834,11 @@ export const REMOVAL_MIN_YES = 3;
 function pausedOnlyByOpenVoteSql(m: string): string {
     return `(${m}.status = 'disabled' AND EXISTS (
         SELECT 1 FROM decisions pv
-        WHERE pv.subject = ${m}.public_key AND pv.status = 'open' AND pv.effect = 'remove_member' AND pv.author_pubkey = '${SYSTEM_AUTHOR}'
+        WHERE ${namesMemberSql('pv', `${m}.public_key`)} AND pv.status = 'open' AND pv.effect = 'remove_member' AND pv.author_pubkey = '${SYSTEM_AUTHOR}'
           AND (CASE WHEN json_valid(pv.params) THEN json_extract(pv.params, '$.rule') END) = ${PAUSE_VOTE_RULE}
           AND NOT EXISTS (
               SELECT 1 FROM decisions o
-              WHERE o.subject = ${m}.public_key AND o.id != pv.id AND (
+              WHERE ${namesMemberSql('o', `${m}.public_key`)} AND o.id != pv.id AND (
                   (o.effect = 'remove_member' AND o.status = 'execution_pending_grace')
                   OR (o.effect = 'suspend_member' AND o.status = 'executed' AND julianday(o.executed_at) >= julianday(pv.opens_at))
               )
@@ -737,6 +850,50 @@ function pausedOnlyByOpenVoteSql(m: string): string {
 function pausedOnlyByOpenVote(pubkey: string): boolean {
     return !!db.prepare(`SELECT 1 FROM members m WHERE m.public_key = ? AND ${pausedOnlyByOpenVoteSql('m')}`).get(pubkey);
 }
+
+/**
+ * Who may serve on a removal jury drawn on `snapshotDate` (DESIGN-removal-jury-fable.md §2), sorted, `exclude` left out
+ * (the subject, and the admin who paused them). Public facts only, so a member can hold the pool the node serves against
+ * the People list: a member who could vote (active, or paused and held by nothing but their own pause's vote, who keeps
+ * their place in every electorate but that one, design §3.3, so pausing someone can't shape a jury either), not frozen,
+ * not an enterprise or a visitor's row, and joined at least JURY_SERVE_AFTER_DAYS before the snapshot (00:00 UTC that day),
+ * so members invited since can't pack it. No activity, trade or standing test: removal is one member one vote, and a juror
+ * who doesn't answer is replaced (slice J2). Who stands aside is private and decided after (juryConflictsOf).
+ */
+export function removalJuryPool(snapshotDate: string, exclude: ReadonlyArray<string | null | undefined>): string[] {
+    const cutoff = new Date(jurySnapshotAt(snapshotDate) - JURY_SERVE_AFTER_DAYS * DAY_MS).toISOString();
+    const out = new Set(exclude.filter((k): k is string => !!k));
+    const rows = db.prepare(`
+        SELECT m.public_key FROM members m
+        WHERE (m.status = 'active' OR ${pausedOnlyByOpenVoteSql('m')})
+          AND COALESCE(m.is_treasury, 0) = 0
+          AND COALESCE(m.credit_frozen, 0) = 0
+          AND m.is_visitor = 0
+          AND m.public_key NOT IN ('SYSTEM', 'COMMONS_POOL')
+          AND m.public_key NOT LIKE 'escrow_%'
+          AND m.joined_at IS NOT NULL AND julianday(m.joined_at) <= julianday(@cutoff)
+    `).all({ cutoff }) as Array<{ public_key: string }>;
+    return rows.map(r => r.public_key).filter(k => !out.has(k)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** What a vote a jury decides records when it opens (pauseMember): the draw's public facts, and the jury's rule (§5). */
+export interface JuryParams extends JuryRule { snapshotDate: string; rosterHash: string; poolSize: number }
+
+/** The jury of a vote a jury decides (params.decider 'jury'), or null for any other vote. */
+export function juryOf(decision: Pick<Decision, 'effect' | 'scopeKind' | 'params'>): JuryParams | null {
+    if (decision.effect !== 'remove_member' || decision.scopeKind !== 'community' || decision.params?.decider !== 'jury') return null;
+    const j = decision.params.jury;
+    return j && typeof j === 'object' && Number.isInteger(j.size) && Number.isInteger(j.mustVote) && Number.isInteger(j.minYes) ? j as JuryParams : null;
+}
+
+/** Whether `reader` may vote on this Decision: the eligibility test, and on a vote a jury decides, a seat on it. */
+function mayVoteOn(reader: string, decision: Decision): boolean {
+    if (!checkVoterEligibility(reader, decision).ok) return false;
+    return !juryOf(decision) || seatedJuror(decision.id, reader);
+}
+
+/** A member not seated on the jury a vote is decided by, voting on it (castDecisionVote). */
+export const JURY_ONLY_VOTE_ERROR = word("A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.");
 
 /**
  * The turnout base (§3.4, answer K): members who could vote and were ACTIVE in the 30 days before
@@ -756,7 +913,7 @@ function pausedOnlyByOpenVote(pubkey: string): boolean {
  * Ledger rows count by `auth_signer`, never `from_pubkey`: the node writes rows FROM a member that the member
  * never signed (the daily circulation fee, engine/audit.ts), and those must not make an idle member active.
  */
-export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: string | null, notCounting?: string | null): number {
+export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: string | null, notCounting?: string | readonly string[] | null): number {
     const asOf = asOfTime ?? Date.now();
     const cutoff = new Date(asOf - 30 * DAY_MS).toISOString();
     const joinedBeforeIso = joinedBefore ? new Date(parseDbTime(joinedBefore)).toISOString() : null;
@@ -764,7 +921,7 @@ export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: strin
     const row = db.prepare(`
         SELECT COUNT(*) AS count FROM members m
         WHERE (m.status = 'active' OR ${pausedOnlyByOpenVoteSql('m')})
-          AND (@notCounting IS NULL OR m.public_key != @notCounting)
+          AND m.public_key NOT IN (SELECT value FROM json_each(@notCounting))
           AND COALESCE(m.is_treasury, 0) = 0
           AND COALESCE(m.credit_frozen, 0) = 0
           AND m.is_visitor = 0
@@ -784,7 +941,7 @@ export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: strin
              OR EXISTS (SELECT 1 FROM decision_votes dv
                         WHERE dv.voter_pubkey = m.public_key AND julianday(dv.updated_at) >= julianday(@cutoff))
           )
-    `).get({ cutoff, joinedBefore: joinedBeforeIso, notCounting: notCounting ?? null }) as any;
+    `).get({ cutoff, joinedBefore: joinedBeforeIso, notCounting: JSON.stringify(notCounting == null ? [] : typeof notCounting === 'string' ? [notCounting] : notCounting) }) as any;
 
     return row?.count || 0;
 }
@@ -799,10 +956,11 @@ function electorateAsOf(decision: { closesAt?: string }, asOfTime?: number): num
 /**
  * The electorate a Decision's turnout is measured against: members who could vote on it (joined before it
  * opened) and were active in the 30 days before it closes (or now, while it is open). A removal's subject is not in
- * it: nobody votes on removing themselves (design §5 point 2).
+ * it: nobody votes on removing themselves (design §5 point 2), nor, on a branch's vote, anyone on its list.
  */
-export function getDecisionElectorate(decision: { opensAt?: string; closesAt?: string; effect?: string; subject?: string | null }, asOfTime?: number): number {
-    const notCounting = decision.effect === 'remove_member' ? decision.subject ?? null : null;
+export function getDecisionElectorate(decision: { opensAt?: string; closesAt?: string; effect?: string; subject?: string | null; params?: any }, asOfTime?: number): number {
+    const notCounting = decision.effect === 'remove_member'
+        ? removalSubjects({ effect: 'remove_member', subject: decision.subject ?? null, params: decision.params ?? null }) : null;
     return getActiveMembersCount30d(electorateAsOf(decision, asOfTime), decision.opensAt ?? null, notCounting);
 }
 
@@ -873,12 +1031,15 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
  */
 export function checkVoterEligibility(
     voterPubkey: string,
-    decision?: { opensAt: string; effect?: string; subject?: string | null } | null,
+    decision?: { opensAt: string; effect?: string; subject?: string | null; params?: any } | null,
 ): { ok: boolean; error?: string } {
     // A visitor's row votes on nothing, as a key with no row votes on nothing (getActingMember).
     const member = getActingMember(voterPubkey);
     if (!member) return { ok: false, error: word('Member not found') };
-    if (decision?.effect === 'remove_member' && decision.subject === voterPubkey) return { ok: false, error: OWN_REMOVAL_VOTE_ERROR };
+    if (decision?.effect === 'remove_member'
+        && removalSubjects({ effect: 'remove_member', subject: decision.subject ?? null, params: decision.params ?? null }).includes(voterPubkey)) {
+        return { ok: false, error: OWN_REMOVAL_VOTE_ERROR };
+    }
     if (member.status !== 'active' && !(member.status === 'disabled' && pausedOnlyByOpenVote(voterPubkey))) {
         return { ok: false, error: word('Voter account is not active') };
     }
@@ -1230,6 +1391,8 @@ export function castDecisionVote(
 
     const elig = checkVoterEligibility(voterPubkey, decision);
     if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
+    // A vote a jury decides takes its jurors' votes only (DESIGN-removal-jury-fable.md §8): everyone else reads the card.
+    if (juryOf(decision) && !seatedJuror(decision.id, voterPubkey)) return { success: false, creditsUsed: 0, error: JURY_ONLY_VOTE_ERROR };
 
     const num = Number(voteCount);
     if (!Number.isFinite(num) || num < 1) {
@@ -1342,8 +1505,12 @@ export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTa
     if (!decision) throw new Error(`Decision ${decisionId} not found`);
     if (decision.scopeKind !== 'community') return tallyScopedDecision(decision);
 
+    const jury = juryOf(decision);
+    if (jury) return tallyJury(decision, jury);
     const removal = decision.effect === 'remove_member';
-    const votes = getDecisionVotes(decisionId).filter(v => !(removal && v.voterPubkey === decision.subject));
+    // On a branch's vote, nobody on its list (removalSubjects).
+    const subjects = new Set(removal ? removalSubjects(decision) : []);
+    const votes = getDecisionVotes(decisionId).filter(v => !subjects.has(v.voterPubkey));
     const totalVoters = votes.length;
     const electorate = getDecisionElectorate(decision, asOfTime);
     const quorumRatio = quorumRatioForEffect(decision.effect, decision.touches);
@@ -1380,6 +1547,86 @@ export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTa
         thresholdRequired,
         passed,
         ...(removal ? { minYes, tooFewToVote: isPauseVote(decision) && !quorumMet && electorate < QUORUM_FLOOR } : {}),
+    };
+}
+
+/**
+ * The tally of a vote a jury decides (DESIGN-removal-jury-fable.md §5), over its roll only: a vote counts while its juror is
+ * seated (`on`), never one of a member passed over, gone silent or gone (slice J2 writes those), nor anyone not drawn, nor
+ * its subject, whatever a row says. It passes with at least `mustVote` cast, two-thirds of them Yes, at least `minYes`
+ * Yes, and more Yes than No (juryPasses); fewer cast is a missed quorum, which lifts the pause as any removal's does.
+ */
+function tallyJury(decision: Decision, jury: JuryParams): DecisionTally {
+    const rows = db.prepare(`
+        SELECT v.support FROM decision_votes v
+        JOIN decision_electors e ON e.decision_id = v.decision_id AND e.member_pubkey = v.voter_pubkey
+             AND e.role_at_open = 'juror' AND e.status = 'on'
+        WHERE v.decision_id = ? AND v.voter_pubkey != ?
+    `).all(decision.id, decision.subject ?? '') as Array<{ support: number }>;
+    const yes = rows.filter(r => r.support === 1).length;
+    const no = rows.length - yes;
+    return {
+        decisionId: decision.id,
+        status: decision.status,
+        totalVoters: rows.length,
+        electorate: jury.size,
+        quorumRatio: jury.mustVote / jury.size,
+        quorumRequired: jury.mustVote,
+        quorumMet: rows.length >= jury.mustVote,
+        yesWeight: yes,
+        noWeight: no,
+        totalWeight: rows.length,
+        supportRatio: rows.length > 0 ? yes / rows.length : 0,
+        thresholdRequired: 2 / 3,
+        passed: juryPasses(yes, no, jury),
+        minYes: jury.minYes,
+        tooFewToVote: false,
+        decider: 'jury',
+    };
+}
+
+/** A tally with which way the votes went left off: how many voted, and what it needs. */
+export type TurnoutTally = Omit<DecisionTally, 'yesWeight' | 'noWeight' | 'totalWeight' | 'supportRatio' | 'passed'>;
+
+/**
+ * The tally as members read it. While a vote a jury decides is open, how many have voted and nothing of which way
+ * (DESIGN-removal-jury-fable.md §8: "12 jurors, 7 have voted", never the split), so no juror is pressed by a running score;
+ * once it closes, the totals. Every other vote's tally as it is.
+ */
+export function tallyForReader(decision: Decision, tally: DecisionTally): DecisionTally | TurnoutTally {
+    if (!juryOf(decision) || decision.status !== 'open') return tally;
+    const { yesWeight: _y, noWeight: _n, totalWeight: _t, supportRatio: _s, passed: _p, ...turnout } = tally;
+    return turnout;
+}
+
+/**
+ * What a member reads of a jury (GET /api/commons/decisions/:id/jury; DESIGN-removal-jury-fable.md §3, §8): the pool it was
+ * drawn from, sorted as hashed, each with their name here now, so anyone can recompute the hash and the draw (@beanpool/core
+ * checkJuryDraw) and hold the pool against the People list; the draw's public facts; and where the reader stands on it.
+ * While it is open nobody else on it is named. Once it closes: who sat (`jury`), who was passed over or stepped aside,
+ * never why (`stoodAside`), who voted and who didn't, never which way. Null for a vote no jury decides.
+ */
+export function juryForReader(decision: Decision, reader: string): Record<string, unknown> | null {
+    const jury = juryOf(decision);
+    const pool = jury ? juryPoolOf(decision.id) : null;
+    if (!jury || !pool) return null;
+    const named = (keys: readonly string[]) => keys.map(k => ({ publicKey: k, callsign: callsignOf(k) }));
+    const roll = juryRollOf(decision.id);
+    const facts = {
+        decisionId: decision.id, subject: decision.subject, snapshotDate: jury.snapshotDate, rosterHash: jury.rosterHash,
+        poolSize: jury.poolSize, size: jury.size, mustVote: jury.mustVote, minYes: jury.minYes,
+        pool: named(pool), you: roll.find(r => r.key === reader)?.status ?? null,
+    };
+    if (decision.status === 'open') return facts;
+    const voted = new Set((db.prepare('SELECT voter_pubkey FROM decision_votes WHERE decision_id = ?').all(decision.id) as Array<{ voter_pubkey: string }>)
+        .map(r => r.voter_pubkey));
+    const sat = roll.filter(r => r.status !== 'stood_aside').map(r => r.key);
+    return {
+        ...facts,
+        jury: named(sat),
+        stoodAside: named(roll.filter(r => r.status === 'stood_aside').map(r => r.key)),
+        voted: named(sat.filter(k => voted.has(k))),
+        didNotVote: named(sat.filter(k => !voted.has(k))),
     };
 }
 
@@ -1521,6 +1768,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         waitForPot(decision, now);
         return { success: false, status: decision.status, error: WAITING_FOR_POT };
     }
+
+    // A branch's vote that passed (or an owner decided, too few being able to vote): its own grace window (startBranchGrace).
+    if (pauseVote && isBranchVote(decision)) return startBranchGrace(decision, now);
 
     const preflight = preflightAssert(decision);
 
@@ -1669,6 +1919,23 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 case 'reinstate_member': {
                     setUserStatusRow(decision.subject!, 'active');
                     db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject!);
+                    // A branch's vote that lists them (its subject null: pauseBranch), still open or in its grace window:
+                    // they leave its list, its record naming this vote (dropFromBranch), and it runs on for the others, so it
+                    // never removes them. Their last account, it is cancelled as one member's removal is, below; an open one
+                    // ends now, so the chain rules read when it ended (votesEndedWithoutRemoving reads its closes_at).
+                    const branchRemovals = (db.prepare(`
+                        SELECT * FROM decisions d
+                        WHERE d.subject IS NULL AND ${namesMemberSql('d', '@pk')} AND d.status IN ('open', 'execution_pending_grace')
+                    `).all({ pk: decision.subject! }) as any[]).map(rowToDecision).filter(d => isBranchVote(d));
+                    for (const b of branchRemovals) {
+                        cancelledDecisionIds.push(b.id);
+                        if (dropFromBranch(b, decision.subject!, now, decision.id)) continue;
+                        db.prepare(`
+                            UPDATE decisions SET status = 'failed', execution_reason = 'Cancelled by member reinstatement decision',
+                                closes_at = CASE WHEN status = 'open' THEN ? ELSE closes_at END, updated_at = ?
+                            WHERE id = ? AND status IN ('open', 'execution_pending_grace')
+                        `).run(now, now, b.id);
+                    }
                     // Cancel any pending removal grace periods for this subject
                     const cancelledDecisions = db.prepare(
                         "SELECT id FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
@@ -1991,7 +2258,14 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
 
         // If member was suspended in grace window, restore them. Only while they are: one who deleted their account in it
         // ('pruned', isDeletedByOwner) stays closed, and the halt still stops the removal.
-        if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject
+        if (decision.status === 'execution_pending_grace' && isBranchVote(decision)) {
+            // A branch's: every account on its list still waiting for it is back (pauseBranch held no role aside).
+            for (const pk of removalSubjects(decision)) {
+                if (getMember(pk)?.status !== 'disabled' || heldByAnotherVote(pk, decision)) continue;
+                setUserStatusRow(pk, 'active');
+                db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(pk);
+            }
+        } else if (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member' && decision.subject
             && getMember(decision.subject)?.status === 'disabled') {
             setUserStatusRow(decision.subject, 'active');
             db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject);
@@ -2005,9 +2279,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
         }
     })();
 
-    if (decision.subject) {
-        broadcast({ type: 'profile_updated', publicKey: decision.subject });
-    }
+    for (const pk of removalSubjects(decision)) broadcast({ type: 'profile_updated', publicKey: pk });
     broadcast({ type: 'decision_halted', decisionId, reason });
     return { success: true };
 }
@@ -2034,9 +2306,16 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
     if (decision.status !== 'execution_pending_grace') {
         return { success: false, error: `Decision is not in grace window (${decision.status})` };
     }
-    if (decision.effect !== 'remove_member' || !decision.subject) {
+    if (decision.effect !== 'remove_member' || (!decision.subject && !isBranchVote(decision))) {
         return { success: false, error: 'Only pending member removals can be accelerated' };
     }
+    // A branch's: each account removed as its vote decided, as the tick would at the window's end (pruneBranchVote).
+    if (isBranchVote(decision)) {
+        if (potIsUnknown()) return { success: false, status: 503, error: COMMONS_POT_PAUSED };
+        pruneBranchVote(decision, new Date().toISOString(), 'Accelerated by admin');
+        return { success: true };
+    }
+    if (!decision.subject) return { success: false, error: 'Only pending member removals can be accelerated' };
     // The prune below acts for the community, but speeding it up takes away the grace window in which an owner
     // could halt the removal of an owner or admin — so only an owner may speed that one up.
     const held = heldPrivilegedRole(decision.subject);
@@ -2079,6 +2358,13 @@ export const SETTLED_BY_OFFBOARDING = "Completed early: an admin settled the mem
  * transaction, after the removal; announceDecisionUpdated tells everyone once it has committed.
  */
 export function closeRemovalSettledEarly(decisionId: string, nowIso: string): void {
+    // A branch's removal closes only once every account on its list is gone: settling one leaves the others in the window,
+    // still paused, for the tick to remove at its end (pruneBranchVote passes over one already removed).
+    const decision = getDecision(decisionId);
+    if (decision && isBranchVote(decision) && removalSubjects(decision).some(pk => {
+        const status = getMember(pk)?.status;
+        return !!status && status !== 'pruned';
+    })) return;
     db.prepare(`
         UPDATE decisions SET status = 'executed', executed_at = ?, execution_reason = ?, updated_at = ?
         WHERE id = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
@@ -2133,7 +2419,8 @@ function haltRestoresRole(decision: Pick<Decision, 'status' | 'effect' | 'author
 export function openPauseVotes(subjectPubkey?: string): Decision[] {
     const rows = subjectPubkey === undefined
         ? db.prepare("SELECT * FROM decisions WHERE status = 'open' AND effect IN ('keep_suspension', 'remove_member')").all()
-        : db.prepare("SELECT * FROM decisions WHERE subject = ? AND status = 'open' AND effect IN ('keep_suspension', 'remove_member')").all(subjectPubkey);
+        : db.prepare(`SELECT * FROM decisions d WHERE ${namesMemberSql('d', '@pk')} AND d.status = 'open' AND d.effect IN ('keep_suspension', 'remove_member')`)
+            .all({ pk: subjectPubkey });
     return (rows as any[]).map(rowToDecision).filter(d => d.effect === 'keep_suspension' || isPauseVote(d));
 }
 
@@ -2226,16 +2513,19 @@ function restoreSuspendedNodeRole(decisionId: string, by: RoleChangeBy): void {
  * back; held by a passed suspension, the community has acted and the role stays gone.
  */
 function liftEmergencySuspensionRow(decision: Decision, by: RoleChangeBy): boolean {
+    // A branch's vote lifts each account on its list that nothing else holds (pauseBranch held no role aside).
+    if (isBranchVote(decision)) {
+        let lifted = false;
+        for (const pk of removalSubjects(decision)) {
+            if (getMember(pk)?.status !== 'disabled' || heldByAnotherVote(pk, decision)) continue;
+            setUserStatusRow(pk, 'active');
+            lifted = true;
+        }
+        return lifted;
+    }
     if (!decision.subject) return false;
     const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(decision.subject) as { status: string } | undefined;
-    const heldElsewhere = row?.status === 'disabled' && db.prepare(`
-        SELECT 1 FROM decisions
-        WHERE subject = ? AND id != ? AND (
-            (effect = 'remove_member' AND status = 'execution_pending_grace')
-            OR (effect = 'suspend_member' AND status = 'executed' AND julianday(executed_at) >= julianday(?))
-        )
-        LIMIT 1
-    `).get(decision.subject, decision.id, decision.opensAt);
+    const heldElsewhere = row?.status === 'disabled' && heldByAnotherVote(decision.subject, decision);
     if (!row || row.status !== 'disabled' || heldElsewhere) {
         // A pending community removal took them while this suspension held their role, so it had nothing to
         // hold itself. Hand the role over to the removal: an owner who halts it gives the member back with it.
@@ -2259,6 +2549,21 @@ function liftEmergencySuspensionRow(decision: Decision, by: RoleChangeBy): boole
     return true;
 }
 
+/**
+ * Whether another vote holds this member 'disabled': a removal of them in its grace window (a branch's included), or a
+ * suspension a vote carried out since `decision` began.
+ */
+function heldByAnotherVote(pubkey: string, decision: Pick<Decision, 'id' | 'opensAt'>): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM decisions d
+        WHERE ${namesMemberSql('d', '@pk')} AND d.id != @id AND (
+            (d.effect = 'remove_member' AND d.status = 'execution_pending_grace')
+            OR (d.effect = 'suspend_member' AND d.status = 'executed' AND julianday(d.executed_at) >= julianday(@opensAt))
+        )
+        LIMIT 1
+    `).get({ pk: pubkey, id: decision.id, opensAt: decision.opensAt });
+}
+
 /** What the record of a pause's own vote says when it lifted the pause (closeUnkeptSuspension). */
 export const PAUSE_LIFTED = word('The pause has been lifted.');
 
@@ -2276,7 +2581,7 @@ function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolve
             UPDATE decisions SET status = ?, execution_reason = ?, execution_error = COALESCE(?, execution_error), updated_at = ? WHERE id = ?
         `).run(status, `${why}. ${after}`, status === 'execution_blocked' ? why : null, nowIso, decision.id);
     })();
-    if (lifted && decision.subject) broadcast({ type: 'profile_updated', publicKey: decision.subject });
+    if (lifted) for (const pk of removalSubjects(decision)) broadcast({ type: 'profile_updated', publicKey: pk });
     announceDecisionUpdated(decision.id);
 }
 
@@ -2352,17 +2657,20 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
     let params: Record<string, unknown>;
     let title: string;
     let description: string;
+    let draw: RemovalJuryDraw | null = null;
     if (decisionsOn()) {
         const serverRole = heldPrivilegedRole(subject.publicKey);
         // Who paused, by the name they have here now (Amendment A point 3): the card names them, as the case's proposer.
         const pausedByName = actor && actor !== 'owner:password' ? callsignOf(actor) : null;
         const secondPause = secondPauseOf(subject.publicKey, now.getTime());
         effect = 'remove_member';
+        draw = chooseRemovalDecider({ kind: 'member', subject: subject.publicKey, actor, atMs: now.getTime() }).draw;
         params = {
             ...removalBalanceParams(subject.publicKey), memberName, pausedAt: opensAt, pausedBy: actor, rule: PAUSE_VOTE_RULE, reason,
             ...(pausedByName ? { pausedByName } : {}),
             ...(serverRole ? { serverRole } : {}),
             ...(secondPause ? { secondPause } : {}),
+            ...(draw ? { decider: 'jury', jury: draw.params } : { decider: 'everyone' }),
         };
         title = tr('Remove {name}?', { name: memberName });
         // What each answer does is the card's to say, not these words': it turns on how many can vote by then, which these
@@ -2397,8 +2705,49 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
             franchise, status, opens_at, closes_at, created_at, updated_at
         ) VALUES (?, ?, ?, ?, 'member', ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?)
     `).run(id, SYSTEM_AUTHOR, title, description, effect, subject.publicKey, JSON.stringify(params), opensAt, closesAt, opensAt, opensAt);
+    if (draw) writeJuryRecords(id, draw.pool, draw.jury, draw.stoodAside, opensAt);
     notePauseForOwners(id, actor, heldRole);
     return getDecision(id)!;
+}
+
+interface RemovalJuryDraw { params: JuryParams; pool: string[]; jury: string[]; stoodAside: string[] }
+
+/**
+ * Who decides a removal vote as it opens, chosen here and nowhere else (pauseMember, pauseBranch); everything after goes by
+ * what the vote records (params.decider, juryOf). One member's pause goes by the community's rule, Who decides a removal
+ * (drawRemovalJury: a jury drawn at or over its line, else everyone). A branch's vote (removal by vote S5, pauseBranch) is
+ * decided by the whole community whatever that rule says, exactly as S5 built it: no draw, no roll, no stand-asides, and
+ * every member who may vote on it votes. The director's call for J1 (3 Nov), reversible and recorded for Marty: whether a
+ * jury should decide a branch is open for J2/J3.
+ */
+function chooseRemovalDecider(vote: { kind: 'branch' } | { kind: 'member'; subject: string; actor: string | null; atMs: number }):
+    { decider: 'everyone'; draw: null } | { decider: 'jury'; draw: RemovalJuryDraw } {
+    if (vote.kind === 'branch') return { decider: 'everyone', draw: null };
+    const draw = drawRemovalJury(vote.subject, vote.actor, vote.atMs);
+    return draw ? { decider: 'jury', draw } : { decider: 'everyone', draw: null };
+}
+
+/**
+ * The jury for a pause made at `atMs`, or null when everyone decides it (DESIGN-removal-jury-fable.md §2–§6). The pool is
+ * that day's (00:00 UTC), without the subject and the admin pausing them; the community's rule and that pool's size say
+ * whether a jury decides (config/removal-decider.ts deciderFor); the draw is @beanpool/core juryDraw, with every member
+ * who has a conflict with the subject passed over (juryConflictsOf). A pool that can't seat a whole jury once they are
+ * passed over is decided by everyone, as a pool under the line is. Reads only: pauseMember writes what it returns.
+ */
+function drawRemovalJury(subject: string, actor: string | null, atMs: number): RemovalJuryDraw | null {
+    const snapshotDate = jurySnapshotDate(atMs);
+    const pool = removalJuryPool(snapshotDate, [subject, actor]);
+    if (deciderFor(removalDecider(), pool.length) !== 'jury') return null;
+    const rule = juryRuleFor(pool.length);
+    const conflicts = juryConflictsOf(subject, atMs);
+    const drawn = juryDraw({ pool, subject, snapshotDate, size: rule.size, standsAside: k => conflicts.has(k) });
+    if (drawn.jury.length < rule.size) return null;
+    return {
+        params: { snapshotDate, rosterHash: drawn.rosterHash, poolSize: drawn.poolSize, ...rule },
+        pool,
+        jury: drawn.jury,
+        stoodAside: drawn.stoodAside,
+    };
 }
 
 /**
@@ -2527,6 +2876,8 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
     db.transaction(() => {
         setUserStatusRow(subjectPubkey, 'active');
         for (const k of openKeeps) {
+            // A branch's vote runs on for the others on its list: this member leaves it (dropFromBranch).
+            if (isBranchVote(k) && dropFromBranch(k, subjectPubkey, nowIso)) continue;
             restoreSuspendedNodeRole(k.id, { actor: adminActor, how: 'the suspension lifted' });
             db.prepare(`
                 UPDATE decisions SET status = 'admin_halted', admin_halted_at = ?, admin_halted_by = ?,
@@ -2538,6 +2889,300 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
     broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
     for (const k of openKeeps) announceDecisionUpdated(k.id);
     return { success: true };
+}
+
+/** What a branch's vote records for an account that left its list (dropFromBranch): their name, when, and which vote if one did. */
+export interface BranchLifted {
+    pubkey: string;
+    name: string;
+    at: string;
+    /** The community's own vote that brought them back (unsuspend_member / reinstate_member), while this vote was open or in its window. */
+    byVote?: string;
+}
+
+/**
+ * An account leaves a branch's list: an admin lifted its pause on the open vote (adminLiftSuspension), or the community's
+ * own vote brought it back while it was open or in its grace window (executeDecision's unsuspend_member / reinstate_member,
+ * `byVote`). Its vote
+ * no longer names them nor removes them, and its record keeps their name and when (`lifted`), which the chain rules still
+ * count as that pause of them, ended then (liftedFromBranchSql). What the list owes is counted
+ * again, and the title and description say the count left. The vote runs on for the others; returns false when nobody is
+ * left on it, writing nothing, for the caller to close it. Rows only, inside the caller's transaction.
+ */
+function dropFromBranch(decision: Decision, pubkey: string, nowIso: string, byVote?: string): boolean {
+    const branch = (decision.params.branch as BranchEntry[]).filter(e => e?.pubkey !== pubkey);
+    if (!branch.length) return false;
+    const gone = branchEntryOf(decision, pubkey);
+    const lifted: BranchLifted[] = [...(Array.isArray(decision.params.lifted) ? decision.params.lifted : []),
+        { pubkey, name: gone?.name || pubkey.slice(0, 8), at: nowIso, ...(byVote ? { byVote } : {}) }];
+    const params = { ...decision.params, branch, lifted, branchDebt: branchDebtOf(branch) };
+    // Its title and description say the count on the list now: a voter never reads 4 for a vote that removes 3.
+    const { title, description } = branchVoteWords(params);
+    db.prepare('UPDATE decisions SET params = ?, title = ?, description = ?, updated_at = ? WHERE id = ?')
+        .run(JSON.stringify(params), title, description, nowIso, decision.id);
+    return true;
+}
+
+/** A branch's vote's title, for the count of accounts on its list now. */
+function branchVoteTitle(count: number): string {
+    return trn(count, 'Remove this account?', 'Remove these {n} accounts?');
+}
+
+/**
+ * A branch's vote's title and description (pauseBranch), from its params: the count on its list now (`branch`), so one
+ * lifted out of it (dropFromBranch) leaves both saying the count the vote decides on. Through the words layer, plural and all.
+ */
+function branchVoteWords(params: Record<string, any>): { title: string; description: string } {
+    const count = Array.isArray(params.branch) ? params.branch.length : 0;
+    const values = {
+        name: typeof params.root?.name === 'string' ? params.root.name : '',
+        date: typeof params.pausedAt === 'string' ? params.pausedAt.slice(0, 10) : '',
+        reason: typeof params.reason === 'string' ? params.reason : '',
+    };
+    return {
+        title: branchVoteTitle(count),
+        description: trn(count,
+            'An owner paused the invite branch of {name} on {date}. This vote is on the one account still paused in it. Reason given: {reason}',
+            'An owner paused the invite branch of {name} on {date}. This vote is on the {n} accounts still paused in it. Reason given: {reason}',
+            values),
+    };
+}
+
+/** What the accounts on a branch's list owe together: what the Commons would absorb if the vote removes them. */
+function branchDebtOf(branch: BranchEntry[]): number {
+    return branch.reduce((sum, e) => sum + (typeof e?.debt === 'number' && Number.isFinite(e.debt) ? e.debt : 0), 0);
+}
+
+// ── Pause branch (removal by vote S5: design §3.5, §2 row 7, Q5) ────────────────────────────────
+
+/** Why a branch pause is refused, to the owner: answered with its HTTP status and words, nothing paused. */
+export interface BranchPauseRefusal { status: number; error: string; code?: string }
+
+/** One account in the branch, and whether the pause lists it (branchPauseSelection). */
+export interface BranchSelectionAccount {
+    pubkey: string;
+    name: string;
+    standing: number;
+    established: boolean;
+    /** On the list: paused, and named by the vote. */
+    listed: boolean;
+    /** Why one is left off: established (unless the owner names it), a node role (no vote removes one), already paused or held, an enterprise. */
+    leftOff?: 'established' | 'role' | 'paused' | 'enterprise';
+}
+
+/** The root of a branch pause holds a node role, which no vote removes (§3.8). */
+export const BRANCH_ROOT_HOLDS_ROLE = "This member holds an owner or admin role on this community's server, and no community vote removes one. "
+    + 'Take that role away first; after that, their branch can be paused.';
+/** A branch pause that would list one account: that is a pause of one member, made from their own page. */
+export const BRANCH_OF_ONE = 'Only one account in this branch would be paused, so pause that member on their own instead.';
+
+/**
+ * The accounts an owner's branch pause lists (pauseBranch): the member chosen (`root`) and everyone in their invite subtree
+ * (state-engine inviteBranchOf) still here, but for these, left off the list and not paused:
+ *  - an established account (standing BURST.establishedStanding or more, as engine/burst-cleanup.ts judges it, a post hidden
+ *    for review counting as kept), unless the owner names it in `include`: real people do get invited by someone who later
+ *    turns out bad (design §3.5). The card names them separately (`params.established`). The root is the owner's own choice,
+ *    so it is listed whatever its standing;
+ *  - an owner or admin of this server (a role a pause held aside included): no vote removes one (§3.8);
+ *  - an account already paused, held or closed (mayBePaused): its own vote, or none, decides it;
+ *  - an enterprise's account or a visitor's row, which are nobody's membership.
+ * Reads only. `refusal` says why nothing would be paused: the root can't be listed, or one account would be.
+ */
+export function branchPauseSelection(rootPubkey: string, include: readonly string[] = [], now: number = Date.now()):
+    { accounts: BranchSelectionAccount[]; refusal: BranchPauseRefusal | null } {
+    const accounts: BranchSelectionAccount[] = [];
+    const named = new Set(include);
+    for (const pubkey of inviteBranchOf(rootPubkey)) {
+        if (!isNameableAccount(pubkey)) continue;
+        const member = getMember(pubkey);
+        if (!member || member.status === 'pruned' || isVisitorRow(pubkey)) continue;
+        const parts = standingParts(pubkey, now, { hiddenCountsAsKept: true });
+        const established = parts.total >= BURST.establishedStanding;
+        const account: BranchSelectionAccount = {
+            pubkey, name: member.callsign || pubkey.slice(0, 8), standing: parts.total, established, listed: false,
+        };
+        if (member.isTreasury) account.leftOff = 'enterprise';
+        else if (heldPrivilegedRole(pubkey)) account.leftOff = 'role';
+        else if (!mayBePaused(member)) account.leftOff = 'paused';
+        else if (established && pubkey !== rootPubkey && !named.has(pubkey)) account.leftOff = 'established';
+        else account.listed = true;
+        accounts.push(account);
+    }
+    const root = accounts.find(a => a.pubkey === rootPubkey);
+    let refusal: BranchPauseRefusal | null = null;
+    if (!root) refusal = { status: 404, error: 'Member not found' };
+    else if (root.leftOff === 'role') refusal = { status: 400, error: BRANCH_ROOT_HOLDS_ROLE };
+    else if (root.leftOff) refusal = { status: 409, error: `${root.name} is already paused or held, or is an enterprise, so no branch can be paused from them` };
+    else if (accounts.filter(a => a.listed).length < 2) refusal = { status: 409, error: BRANCH_OF_ONE };
+    return { accounts, refusal };
+}
+
+/** A visitor's row (a member of another community, seen here): nobody's membership here. */
+function isVisitorRow(pubkey: string): boolean {
+    return !!(db.prepare('SELECT COALESCE(is_visitor, 0) AS v FROM members WHERE public_key = ?').get(pubkey) as { v: number } | undefined)?.v;
+}
+
+export interface PauseBranchOptions {
+    /** Established accounts in the branch the owner names, to list them too (design §3.5). */
+    include?: readonly string[];
+    /** The route asked the owner's fresh proof: always, for a branch. */
+    freshProof?: boolean;
+}
+
+/**
+ * Why pauseBranch would refuse, or null, with the selection it would make. Writes nothing; the route asks it before the
+ * owner's fresh proof is spent. Where the community votes only; by an owner-level actor (an owner's key, or the server's
+ * password); with a pause's reason; the selection (branchPauseSelection); and each listed account through the chain rules
+ * (pauseChainRefusal: the cool-down, a third pause in 90 days, a second within 30 days with the last reason), so a branch
+ * never takes in someone a pause of their own could not. One refused account refuses the whole branch, named.
+ */
+export function pauseBranchRefusal(rootPubkey: string, actor: string, reason: string, opts: PauseBranchOptions = {}):
+    { refusal: BranchPauseRefusal | null; accounts: BranchSelectionAccount[] } {
+    if (!decisionsOn()) return { refusal: { status: 404, error: featureOffMessage('decisions'), code: FEATURE_OFF }, accounts: [] };
+    if (!isOwnerLevelActor(actor)) return { refusal: { status: 403, error: 'Only an owner of this node can pause a whole invite branch' }, accounts: [] };
+    const reasonProblem = suspendReasonProblem(reason);
+    if (reasonProblem) return { refusal: { status: 400, error: reasonProblem }, accounts: [] };
+    const { accounts, refusal } = branchPauseSelection(rootPubkey, opts.include ?? []);
+    if (refusal) return { refusal, accounts };
+    const cleanReason = String(reason).trim();
+    for (const a of accounts.filter(x => x.listed)) {
+        const chain = pauseChainRefusal(a.pubkey, actor, cleanReason, { freshProof: opts.freshProof });
+        if (chain) return { refusal: { status: chain.status, error: chain.error, code: chain.code }, accounts };
+    }
+    return { refusal: null, accounts };
+}
+
+/**
+ * An owner pauses a whole invite branch at once (removal by vote S5; design §3.5): the sybil case of a community whose door
+ * is its invites, where one member brought in a crowd of fakes. Every listed account (branchPauseSelection) is paused, as
+ * pauseMember pauses one ('disabled': reads as a non-member, posts nothing, brings nobody in, listings off the board, keeps
+ * its vote on every other Decision), and ONE vote opens on removing them all, "Remove these N accounts?": a pause's own
+ * vote (isPauseVote) whose params list them (isBranchVote: `branch`, each with the Beans it owes, `branchDebt` their total
+ * the Commons would absorb, `commonsPool`) and name the established accounts left off (`established`). Decided as any
+ * removal is: Yes starts one grace window for every account on the list (startBranchGrace) and removes each at its end
+ * (pruneBranchVote); No, a tie or a missed quorum lifts every pause on the tick that closes it. Nobody on the list votes on
+ * it, nor counts in its electorate. Each may reply to its case (replyToRemovalCase). The owners are told, as of every pause.
+ * Moves no Beans. Returns the vote, or the refusal; nothing is written when refused.
+ */
+export function pauseBranch(rootPubkey: string, actor: string, reason: string, opts: PauseBranchOptions = {}):
+    { success: true; decision: Decision; leftOff: BranchSelectionAccount[] } | ({ success: false } & BranchPauseRefusal) {
+    assertPlainTablesWritable();
+    const { refusal, accounts } = pauseBranchRefusal(rootPubkey, actor, reason, opts);
+    if (refusal) return { success: false, ...refusal };
+    const cleanReason = String(reason).trim();
+    const listed = accounts.filter(a => a.listed);
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const opensAt = now.toISOString();
+    const closesAt = new Date(now.getTime() + EMERGENCY_SUSPENSION_DAYS * DAY_MS).toISOString();
+    const rootName = accounts.find(a => a.pubkey === rootPubkey)!.name;
+    const pausedByName = actor !== 'owner:password' ? callsignOf(actor) : null;
+    let decision!: Decision;
+    try {
+        db.transaction(() => {
+            // Again inside the transaction, as pauseMember asks its chain rules there: nothing is paused if one now refuses.
+            for (const a of listed) {
+                const chain = pauseChainRefusal(a.pubkey, actor, cleanReason, { freshProof: opts.freshProof });
+                if (chain) throw new PauseRefusedError(chain);
+            }
+            const branch: BranchEntry[] = listed.map(a => {
+                const { balance, debt } = removalBalanceParams(a.pubkey);
+                return { pubkey: a.pubkey, name: a.name, balance, debt };
+            });
+            const params = {
+                rule: PAUSE_VOTE_RULE, pausedBy: actor, pausedAt: opensAt, ...(pausedByName ? { pausedByName } : {}), reason: cleanReason,
+                // The whole community, whatever Who decides a removal says (chooseRemovalDecider): no jury is drawn for a branch.
+                decider: chooseRemovalDecider({ kind: 'branch' }).decider,
+                root: { pubkey: rootPubkey, name: rootName },
+                branch,
+                branchDebt: branchDebtOf(branch),
+                commonsPool: Math.round(getCommonsBalanceExact()),
+                established: accounts.filter(a => a.leftOff === 'established').map(a => ({ pubkey: a.pubkey, name: a.name })),
+            };
+            for (const a of listed) setUserStatusRow(a.pubkey, 'disabled', { actor, how: 'suspended' });
+            const { title, description } = branchVoteWords(params);
+            db.prepare(`
+                INSERT INTO decisions (
+                    id, author_pubkey, title, description, touches, effect, subject, params,
+                    franchise, status, opens_at, closes_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, 'member', 'remove_member', NULL, ?, '1m1v', 'open', ?, ?, ?, ?)
+            `).run(id, SYSTEM_AUTHOR, title, description, JSON.stringify(params), opensAt, closesAt, opensAt, opensAt);
+            notePauseForOwners(id, actor, false, listed.length);
+            decision = getDecision(id)!;
+        })();
+    } catch (e) {
+        if (e instanceof PauseRefusedError) return { success: false, status: e.status, error: e.message, code: e.code };
+        throw e;
+    }
+    for (const a of listed) broadcast({ type: 'profile_updated', publicKey: a.pubkey });
+    // No decision_created broadcast: an app from before the branch vote would be handed a card it can't draw. Apps read it
+    // from the list, which serves it only to one that says it draws it (routes/commons.ts `draws=branch`).
+    noticeRemovalVoteOpened(decision);
+    return { success: true, decision, leftOff: accounts.filter(a => !a.listed) };
+}
+
+/**
+ * A branch's vote passed (or, too few being able to vote, an owner decided it): every account still on its list and still
+ * paused waits out one 7-day grace window, its credit frozen, as one removal does (executeDecision); an admin may halt it
+ * (all of them back) or speed it up. An account that deleted itself meanwhile is gone already. Moves no Beans.
+ */
+function startBranchGrace(decision: Decision, now: string): { success: boolean; status: DecisionStatus; error?: string } {
+    const graceEndsAt = new Date(Date.now() + 7 * DAY_MS).toISOString();
+    const byOwner = !!decision.ownerDecidedAt && !tallyDecision(decision.id).passed;
+    const graceReason = `${byOwner ? `${DECIDED_BY_OWNER}. ` : ''}Members suspended. 7-day grace period active before destructive removal.`;
+    const waiting = removalSubjects(decision).filter(pk => getMember(pk)?.status === 'disabled');
+    db.transaction(() => {
+        for (const pk of waiting) db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(pk);
+        db.prepare(`
+            UPDATE decisions SET status = 'execution_pending_grace', grace_period_ends_at = ?, execution_reason = ?,
+                owner_decision_carried_at = CASE WHEN ? THEN ? ELSE owner_decision_carried_at END, updated_at = ?
+            WHERE id = ?
+        `).run(graceEndsAt, graceReason, byOwner ? 1 : 0, now, now, decision.id);
+    })();
+    for (const pk of waiting) broadcast({ type: 'profile_updated', publicKey: pk });
+    announceDecisionUpdated(decision.id);
+    return { success: true, status: 'execution_pending_grace' };
+}
+
+/**
+ * A branch's removal carried out (the tick at the end of its grace window, or an admin's Accelerate): adminPruneUser for
+ * each account on its list as the community's vote, each in its own transaction, as the owner's prune branch did. One that
+ * fails (a confiscation refused) stays paused, and the Decision's reason names it, for an admin to lift or remove by hand;
+ * the others are removed. One already gone (deleted itself) counts as removed.
+ */
+function pruneBranchVote(decision: Decision, now: string, how: string): void {
+    const notRemoved: string[] = [];
+    const notPaused: string[] = [];
+    for (const pk of removalSubjects(decision)) {
+        const member = getMember(pk);
+        if (!member || member.status === 'pruned') continue;
+        // No longer paused (brought back by a way that left them on the list): this vote holds them no more, so it removes
+        // nobody who walks free, and its record names them.
+        if (member.status !== 'disabled') {
+            notPaused.push(branchEntryOf(decision, pk)?.name || pk.slice(0, 8));
+            continue;
+        }
+        try {
+            adminPruneUser(pk, COMMUNITY_DECISION_ACTOR);
+        } catch (e: any) {
+            const name = branchEntryOf(decision, pk)?.name || pk.slice(0, 8);
+            notRemoved.push(`${name} (${e?.message || String(e)})`);
+            console.warn(`[Decisions] ${decision.id}: a branch removal of ${pk.slice(0, 8)} failed: ${e?.message || e}`);
+        }
+    }
+    // Those the community's own vote brought back in the window left the list (dropFromBranch `byVote`): named too.
+    const broughtBack = (Array.isArray(decision.params.lifted) ? decision.params.lifted as BranchLifted[] : [])
+        .filter(l => l && typeof l.byVote === 'string').map(l => l.name);
+    const reason = [
+        how,
+        ...(broughtBack.length ? [`Brought back by a community vote, so not removed: ${broughtBack.join('; ')}`] : []),
+        ...(notPaused.length ? [`No longer paused, so not removed: ${notPaused.join('; ')}`] : []),
+        ...(notRemoved.length ? [`Not removed, still paused: ${notRemoved.join('; ')}`] : []),
+    ].join('. ');
+    db.prepare(`
+        UPDATE decisions SET status = 'executed', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?
+    `).run(now, reason, now, decision.id);
+    announceDecisionUpdated(decision.id);
 }
 
 // ── Fair removal votes (removal by vote, Amendment A points 2–5) ────────────────────────────────
@@ -2572,8 +3217,9 @@ export function replyToRemovalCase(decisionId: string, actor: string, reply: unk
     if (!decisionsOn()) return { success: false, status: 404, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = communityRemovalVote(decisionId);
     if (!decision) return { success: false, status: 404, error: word('Decision not found') };
-    if (!actor || actor !== decision.subject) return { success: false, status: 403, error: REPLY_ONLY_BY_SUBJECT };
-    if (decision.replyHiddenAt) return { success: false, status: 409, error: REPLY_TAKEN_DOWN };
+    const entry = branchEntryOf(decision, actor);
+    if (!actor || (actor !== decision.subject && !entry)) return { success: false, status: 403, error: REPLY_ONLY_BY_SUBJECT };
+    if (entry ? entry.replyHiddenAt : decision.replyHiddenAt) return { success: false, status: 409, error: REPLY_TAKEN_DOWN };
     if (decision.status !== 'open' || parseDbTime(decision.closesAt) <= Date.now()) {
         return { success: false, status: 409, error: REPLY_AFTER_CLOSE };
     }
@@ -2581,10 +3227,31 @@ export function replyToRemovalCase(decisionId: string, actor: string, reply: unk
     if (!text) return { success: false, status: 400, error: REPLY_EMPTY };
     if (text.length > REMOVAL_REPLY_MAX_CHARS) return { success: false, status: 400, error: REPLY_TOO_LONG };
     const now = new Date().toISOString();
-    db.prepare('UPDATE decisions SET subject_reply = ?, subject_replied_at = ?, updated_at = ? WHERE id = ? AND reply_hidden_at IS NULL')
-        .run(text, now, now, decisionId);
+    if (entry) {
+        // On a branch's vote each account on its list replies for itself, on its own entry (BranchEntry).
+        updateBranchEntry(decision, actor, e => ({ ...e, reply: text, repliedAt: now }), now);
+    } else {
+        db.prepare('UPDATE decisions SET subject_reply = ?, subject_replied_at = ?, updated_at = ? WHERE id = ? AND reply_hidden_at IS NULL')
+            .run(text, now, now, decisionId);
+    }
     announceDecisionUpdated(decisionId);
     return { success: true };
+}
+
+/** Rewrite one account's entry on a branch's list, read again inside the write. Returns whether it was there. */
+function updateBranchEntry(decision: Pick<Decision, 'id'>, pubkey: string, change: (e: BranchEntry) => BranchEntry, nowIso: string): boolean {
+    let changed = false;
+    db.transaction(() => {
+        const fresh = getDecision(decision.id);
+        if (!fresh || !isBranchVote(fresh)) return;
+        const branch = (fresh.params.branch as BranchEntry[]).map(e => {
+            if (e?.pubkey !== pubkey) return e;
+            changed = true;
+            return change(e);
+        });
+        if (changed) db.prepare('UPDATE decisions SET params = ?, updated_at = ? WHERE id = ?').run(JSON.stringify({ ...fresh.params, branch }), nowIso, fresh.id);
+    })();
+    return changed;
 }
 
 /**
@@ -2598,6 +3265,13 @@ export function eraseRepliesOf(subjectPubkey: string, at: string): string[] {
         .all(subjectPubkey) as { id: string }[]).map(r => r.id);
     const erase = db.prepare('UPDATE decisions SET subject_reply = NULL, subject_replied_at = NULL, updated_at = ? WHERE id = ?');
     for (const id of ids) erase.run(at, id);
+    // A branch's vote keeps each account's reply on its own entry.
+    const branchVotes = (db.prepare(`SELECT * FROM decisions d WHERE d.subject IS NULL AND ${namesMemberSql('d', '@pk')}`).all({ pk: subjectPubkey }) as any[])
+        .map(rowToDecision).filter(d => { const e = branchEntryOf(d, subjectPubkey); return !!e && (e.reply !== undefined || e.repliedAt !== undefined); });
+    for (const d of branchVotes) {
+        updateBranchEntry(d, subjectPubkey, ({ reply: _r, repliedAt: _a, ...rest }) => rest, at);
+        ids.push(d.id);
+    }
     return ids;
 }
 
@@ -2627,7 +3301,7 @@ export function adminHideCase(decisionId: string, adminActor: string, reason: un
     if (clean.length > 1000) return { success: false, status: 400, error: 'Reason is too long (1000 characters at most)' };
     const decision = communityRemovalVote(decisionId);
     if (!decision) return { success: false, status: 404, error: 'Only a vote on removing a member has a case to hide' };
-    if (decision.subject === adminActor) return { success: false, status: 403, error: HIDE_OWN_CASE };
+    if (removalSubjects(decision).includes(adminActor)) return { success: false, status: 403, error: HIDE_OWN_CASE };
     if (decision.caseHiddenAt) return { success: false, status: 409, error: 'This case is already hidden' };
     const now = new Date().toISOString();
     db.prepare(`
@@ -2648,7 +3322,7 @@ export function adminHideCase(decisionId: string, adminActor: string, reason: un
  * someone else, and the case stays the record of what was alleged. The member is told (noticeReplyTakenDown), and can't
  * write another on that vote (replyToRemovalCase). The vote itself is unchanged.
  */
-export function adminHideReply(decisionId: string, adminActor: string, reason: unknown, push: RemovalVotePush = dispatchPushNotification): FairVoteResult {
+export function adminHideReply(decisionId: string, adminActor: string, reason: unknown, push: RemovalVotePush = dispatchPushNotification, member?: unknown): FairVoteResult {
     assertPlainTablesWritable();
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can take down a reply' };
     const clean = typeof reason === 'string' ? replaceLoneSurrogates(reason).trim() : '';
@@ -2658,6 +3332,19 @@ export function adminHideReply(decisionId: string, adminActor: string, reason: u
     if (clean.length > 1000) return { success: false, status: 400, error: 'Reason is too long (1000 characters at most)' };
     const decision = communityRemovalVote(decisionId);
     if (!decision) return { success: false, status: 404, error: 'Only a vote on removing a member has a reply to take down' };
+    // A branch's vote: one account's reply, named by `member` (BranchEntry).
+    if (isBranchVote(decision)) {
+        const entry = typeof member === 'string' ? branchEntryOf(decision, member) : null;
+        if (!entry) return { success: false, status: 400, error: 'Name the account on this vote whose reply to take down' };
+        if (entry.replyHiddenAt) return { success: false, status: 409, error: 'This reply is already taken down' };
+        if (!entry.reply) return { success: false, status: 409, error: 'The member has written no reply on this vote' };
+        const now = new Date().toISOString();
+        updateBranchEntry(decision, entry.pubkey, ({ reply: _r, repliedAt: _a, ...rest }) =>
+            ({ ...rest, replyHiddenAt: now, replyHiddenBy: adminActor, replyHiddenReason: clean }), now);
+        announceDecisionUpdated(decisionId);
+        noticeReplyTakenDown(entry.pubkey, push);
+        return { success: true };
+    }
     if (decision.replyHiddenAt) return { success: false, status: 409, error: 'This reply is already taken down' };
     if (!decision.subjectReply) return { success: false, status: 409, error: 'The member has written no reply on this vote' };
     const now = new Date().toISOString();
@@ -2668,7 +3355,7 @@ export function adminHideReply(decisionId: string, adminActor: string, reason: u
     `).run(now, adminActor, clean, now, decisionId);
     if (taken.changes === 0) return { success: false, status: 409, error: 'This reply is already taken down' };
     announceDecisionUpdated(decisionId);
-    noticeReplyTakenDown(decision, push);
+    if (decision.subject) noticeReplyTakenDown(decision.subject, push);
     return { success: true };
 }
 
@@ -2686,12 +3373,13 @@ export function removalCaseReport(decisionId: string, reporter: string, words: u
     { success: true; target: string; reason: string; ref: string } | { success: false; status: number; error: string } {
     const decision = communityRemovalVote(decisionId);
     if (!decision) return { success: false, status: 404, error: word('Decision not found') };
-    if (!reporter || reporter !== decision.subject) return { success: false, status: 403, error: REPORT_CASE_ONLY_BY_SUBJECT };
+    const entry = branchEntryOf(decision, reporter);
+    if (!reporter || (reporter !== decision.subject && !entry)) return { success: false, status: 403, error: REPORT_CASE_ONLY_BY_SUBJECT };
     const target = isPauseVote(decision) ? decision.params?.pausedBy : decision.authorPubkey;
     if (typeof target !== 'string' || target === SYSTEM_AUTHOR || !getMember(target)) {
         return { success: false, status: 409, error: REPORT_CASE_NAMES_NOBODY };
     }
-    const name = (typeof decision.params?.memberName === 'string' && decision.params.memberName) || reporter.slice(0, 8);
+    const name = entry?.name || (typeof decision.params?.memberName === 'string' && decision.params.memberName) || reporter.slice(0, 8);
     const own = typeof words === 'string' ? replaceLoneSurrogates(words).trim().slice(0, 300) : '';
     const ref = decision.id.slice(0, 8);
     const said = tr('A false accusation, in the vote on removing {name} ({ref})', { name, ref });
@@ -2711,7 +3399,8 @@ const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
  * Why `actor` may not pause `subjectPubkey` now (Amendment A point 5), or null: a vote on removing them that `actor`
  * brought (paused them for it, or proposed it before proposing a removal closed) ended without removing them less than
  * REMOVAL_COOL_DOWN_DAYS ago. Ended so: the community said No or tied ('failed'), too few voted ('unresolved'), or it was
- * stopped before it closed, by a halt or by lifting the pause ('admin_halted' with no grace window begun). Not a removal the
+ * stopped before it closed, by a halt or by lifting the pause ('admin_halted' with no grace window begun), or, a branch's
+ * vote, it took them off its list (a hand lift, or the community's vote to bring them back). Not a removal the
  * community passed that an admin then halted in its grace window, nor one that passed and couldn't be carried out
  * ('execution_blocked'): the community agreed with that case. Another admin may still pause them, under the usual rules.
  * Only where the community votes: with votes off a pause opens no vote, and the moderators decide (design §10 Q11). The
@@ -2786,30 +3475,47 @@ function broughtBy(decision: Decision): unknown {
     return isPauseVote(decision) ? decision.params?.pausedBy : decision.authorPubkey;
 }
 
+/** A vote on removing a member that ended without removing them (votesEndedWithoutRemoving): when, and how it is told. */
+interface VoteEndedWithoutRemoving { decision: Decision; endedAt: number; after: SecondPauseAfter }
+
 /**
  * The community's votes on removing this member that ended without removing them, newest first, each with when it ended:
  * the community said No or tied ('failed', at its close), too few voted ('unresolved', at its close), or it was stopped
  * before it closed, by a halt or by lifting the pause ('admin_halted' with no grace window begun, when it was stopped). Not
  * a removal the community passed that an admin then halted in its grace window, nor one that passed and couldn't be carried
- * out ('execution_blocked'): the community agreed with that case. The cool-down (removalCoolDownRefusal) reads the ones a
- * given admin brought, and the re-pause rule (repauseWindow) the newest of all.
+ * out ('execution_blocked'): the community agreed with that case. A branch's vote that took them off its list
+ * (liftedFromBranchSql) ended for them then, whatever it went on to decide for the others: told as one member's vote is
+ * when it ends so, a bring-back vote's as cancelled ('failed'), a hand lift's as stopped. The cool-down
+ * (removalCoolDownRefusal) reads the ones a given admin brought, and the re-pause rule (repauseWindow) the newest of all.
  */
-function votesEndedWithoutRemoving(subjectPubkey: string): Array<{ decision: Decision; endedAt: number }> {
+function votesEndedWithoutRemoving(subjectPubkey: string): VoteEndedWithoutRemoving[] {
     return (db.prepare(`
-        SELECT * FROM decisions
-        WHERE subject = ? AND effect = 'remove_member' AND scope_kind = 'community'
-          AND (status IN ('failed', 'unresolved') OR (status = 'admin_halted' AND grace_period_ends_at IS NULL))
-    `).all(subjectPubkey) as any[]).map(rowToDecision)
-        .map(decision => ({ decision, endedAt: parseDbTime(decision.status === 'admin_halted' ? decision.adminHaltedAt : decision.closesAt) }))
+        SELECT * FROM decisions d
+        WHERE d.effect = 'remove_member' AND d.scope_kind = 'community' AND (
+            (${namesMemberSql('d', '@pk')}
+              AND (d.status IN ('failed', 'unresolved') OR (d.status = 'admin_halted' AND d.grace_period_ends_at IS NULL)))
+            OR ${liftedFromBranchSql('d', '@pk')})
+    `).all({ pk: subjectPubkey }) as any[]).map(rowToDecision)
+        .map(decision => endedWithoutRemoving(decision, subjectPubkey))
         .filter(v => Number.isFinite(v.endedAt))
         .sort((a, b) => b.endedAt - a.endedAt);
+}
+
+/** When and how a vote votesEndedWithoutRemoving found ended for this member: their leaving its list first, if they did. */
+function endedWithoutRemoving(decision: Decision, pubkey: string): VoteEndedWithoutRemoving {
+    const left = liftedEntryOf(decision, pubkey);
+    if (left) return { decision, endedAt: parseDbTime(left.at), after: left.byVote ? 'no' : 'stopped' };
+    const { status, executionReason } = decision;
+    if (status === 'admin_halted') return { decision, endedAt: parseDbTime(decision.adminHaltedAt), after: 'stopped' };
+    const after = status === 'unresolved' ? 'too_few' : executionReason?.startsWith(YES_FLOOR_RECORD) ? 'too_few_yes' : 'no';
+    return { decision, endedAt: parseDbTime(decision.closesAt), after };
 }
 
 /**
  * The vote whose end makes pausing this member again an owner's act with a new reason (design §3.4 rule 2), and the moment
  * that stops: the newest vote that ended without removing them, while it ended less than REPAUSE_NEEDS_OWNER_DAYS ago.
  */
-function repauseWindow(subjectPubkey: string, now: number): { decision: Decision; endedAt: number; until: number } | null {
+function repauseWindow(subjectPubkey: string, now: number): (VoteEndedWithoutRemoving & { until: number }) | null {
     const last = votesEndedWithoutRemoving(subjectPubkey)[0];
     if (!last) return null;
     const until = last.endedAt + REPAUSE_NEEDS_OWNER_DAYS * DAY_MS;
@@ -2840,13 +3546,14 @@ export function repauseNeedsOwner(subjectPubkey: string, now: number = Date.now(
 /**
  * Whether pausing this member again would be a third pause within THIRD_PAUSE_DAYS of the first (design §3.4 rule 3): two
  * pauses opened in that time, whatever their votes decided. Each pause opens its own vote (isPauseVote), so they are counted
- * by their votes' opening.
+ * by their votes' opening: a branch's vote too, and one that took them off its list since (liftedFromBranchSql) as well.
  */
 function thirdPauseRefused(subjectPubkey: string, now: number): boolean {
     const since = now - THIRD_PAUSE_DAYS * DAY_MS;
     return (db.prepare(`
-        SELECT * FROM decisions WHERE subject = ? AND effect = 'remove_member' AND author_pubkey = ? AND scope_kind = 'community'
-    `).all(subjectPubkey, SYSTEM_AUTHOR) as any[]).map(rowToDecision)
+        SELECT * FROM decisions d WHERE (${namesMemberSql('d', '@pk')} OR ${liftedFromBranchSql('d', '@pk')})
+          AND d.effect = 'remove_member' AND d.author_pubkey = @system AND d.scope_kind = 'community'
+    `).all({ pk: subjectPubkey, system: SYSTEM_AUTHOR }) as any[]).map(rowToDecision)
         .filter(d => isPauseVote(d) && parseDbTime(d.opensAt) > since).length >= 2;
 }
 
@@ -2900,9 +3607,9 @@ export function pauseChainRefusal(
             // Told as that vote ended, as the card of an owner's second pause tells it (secondPauseSentence).
             return {
                 status: 403, code: REPAUSE_NEEDS_OWNER_CODE,
-                error: window.decision.status === 'admin_halted'
+                error: window.after === 'stopped'
                     ? tr('A vote on {name} was stopped on {date} without removing them. Only an owner can pause them again before {until}.', values)
-                    : window.decision.status === 'unresolved'
+                    : window.after === 'too_few'
                         ? tr('Too few members voted on {name} by {date}. Only an owner can pause them again before {until}.', values)
                         : tr('The community decided on {name} on {date}. Only an owner can pause them again before {until}.', values),
             };
@@ -2937,9 +3644,7 @@ type SecondPauseAfter = 'no' | 'too_few_yes' | 'too_few' | 'stopped';
 export function secondPauseOf(subjectPubkey: string, now: number): { after: SecondPauseAfter; endedAt: string } | null {
     const window = repauseWindow(subjectPubkey, now);
     if (!window) return null;
-    const { status, executionReason } = window.decision;
-    const after = status === 'failed' ? (executionReason?.startsWith(YES_FLOOR_RECORD) ? 'too_few_yes' : 'no') : status === 'unresolved' ? 'too_few' : 'stopped';
-    return { after, endedAt: new Date(window.endedAt).toISOString() };
+    return { after: window.after, endedAt: new Date(window.endedAt).toISOString() };
 }
 
 /** The sentence a second pause's record opens with, in the node's English (the apps say it in the member's language). */
@@ -2958,12 +3663,14 @@ function secondPauseSentence(second: { after: SecondPauseAfter }): string {
  * so one pause is one line in the admin's hour. Called inside the pause's transaction: the alert book tells it once that is
  * over, and only if the record is there (a rolled-back pause paused nobody).
  */
-function notePauseForOwners(decisionId: string, actor: string | null, heldRole: boolean): void {
+function notePauseForOwners(decisionId: string, actor: string | null, heldRole: boolean, branchOf = 0): void {
     if (heldRole) return;
     const actorRole = actor === 'owner:password' ? 'admin password' : !actor ? 'server' : isOwnerLevelActor(actor) ? 'owner' : 'admin';
     const how = { 'admin password': 'by the admin password', server: 'by the server itself', owner: 'by an owner', admin: 'by an admin' }[actorRole];
     noteSecurityEvent({
-        key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersPaused(how), actor: actor || 'SYSTEM', actorRole,
+        key: 'sec.members', detail: '',
+        // A branch's pause (pauseBranch) is one line of its own: one act, however many accounts it paused.
+        perDay: branchOf > 1 ? OWNER_ALERT_WORDS.branchesPaused(how) : OWNER_ALERT_WORDS.membersPaused(how), actor: actor || 'SYSTEM', actorRole,
         stillTrue: () => !!db.prepare('SELECT 1 FROM decisions WHERE id = ?').get(decisionId),
     });
 }
@@ -2975,17 +3682,19 @@ function notePauseForOwners(decisionId: string, actor: string | null, heldRole: 
  * against: anyone who may vote is told.
  */
 function removalVoters(decision: Decision): string[] {
+    // A vote a jury decides is its jurors' to cast: they, not everyone, are told it opened (DESIGN-removal-jury-fable.md §7).
+    if (juryOf(decision)) return juryRollOf(decision.id).filter(r => r.status === 'on').map(r => r.key);
     const rows = db.prepare(`
         SELECT m.public_key FROM members m
         WHERE (m.status = 'active' OR ${pausedOnlyByOpenVoteSql('m')})
-          AND m.public_key != @subject
+          AND m.public_key NOT IN (SELECT value FROM json_each(@subjects))
           AND COALESCE(m.is_treasury, 0) = 0
           AND COALESCE(m.credit_frozen, 0) = 0
           AND m.is_visitor = 0
           AND m.public_key NOT IN ('SYSTEM', 'COMMONS_POOL')
           AND m.public_key NOT LIKE 'escrow_%'
           AND m.joined_at IS NOT NULL AND julianday(m.joined_at) < julianday(@opensAt)
-    `).all({ subject: decision.subject ?? '', opensAt: new Date(parseDbTime(decision.opensAt)).toISOString() }) as Array<{ public_key: string }>;
+    `).all({ subjects: JSON.stringify(removalSubjects(decision)), opensAt: new Date(parseDbTime(decision.opensAt)).toISOString() }) as Array<{ public_key: string }>;
     return rows.map(r => r.public_key);
 }
 
@@ -3015,7 +3724,9 @@ export function removalVoteNoticeBody(closesAt: string): string {
  * committed; a notice that fails never undoes the vote.
  */
 export function noticeRemovalVoteOpened(decision: Decision, push: RemovalVotePush = dispatchPushNotification): void {
-    if (!isPauseVote(decision) || !decision.subject) return;
+    if (!isPauseVote(decision)) return;
+    const subjects = removalSubjects(decision);
+    if (!subjects.length) return;
     const actor = typeof decision.params?.pausedBy === 'string' ? decision.params.pausedBy : SYSTEM_AUTHOR;
     try {
         push(removalVoters(decision), actor, 'A vote on removing a member opened', 'Open Commons, then Decide, to read the case and vote.',
@@ -3024,15 +3735,18 @@ export function noticeRemovalVoteOpened(decision: Decision, push: RemovalVotePus
         console.warn('[Decisions] the removal vote push to its voters failed:', err);
     }
     const body = removalVoteNoticeBody(decision.closesAt);
-    try {
-        const noticeId = keepNotice(decision.subject, REMOVAL_VOTE_NOTICE_TITLE, body, { kind: 'removal_vote', screen: 'decide' });
-        broadcast({ type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body, severity: 'info', kind: 'removal_vote', ...(noticeId ? { noticeId } : {}) },
-            [decision.subject]);
-    } catch (err) {
-        console.warn('[Decisions] the removal vote notice to its member failed:', err);
+    // Each account it names is told, a branch's every one (removalSubjects).
+    for (const member of subjects) {
+        try {
+            const noticeId = keepNotice(member, REMOVAL_VOTE_NOTICE_TITLE, body, { kind: 'removal_vote', screen: 'decide' });
+            broadcast({ type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body, severity: 'info', kind: 'removal_vote', ...(noticeId ? { noticeId } : {}) },
+                [member]);
+        } catch (err) {
+            console.warn('[Decisions] the removal vote notice to its member failed:', err);
+        }
     }
     try {
-        push([decision.subject], SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, body, { screen: 'decide' }, 'recovery', 'account.removal-vote');
+        push(subjects, SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, body, { screen: 'decide' }, 'recovery', 'account.removal-vote');
     } catch (err) {
         console.warn('[Decisions] the removal vote push to its member failed:', err);
     }
@@ -3050,19 +3764,18 @@ export const REPLY_TAKEN_DOWN_NOTICE_BODY = 'An admin took down your reply to th
  * changes for them (announceDecisionUpdated). A member the vote removed can hold no notice here (keepNotice). Call once
  * the takedown is written; a notice that fails never undoes it.
  */
-function noticeReplyTakenDown(decision: Decision, push: RemovalVotePush): void {
-    if (!decision.subject) return;
+function noticeReplyTakenDown(member: string, push: RemovalVotePush): void {
     try {
-        const noticeId = keepNotice(decision.subject, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { kind: 'reply_taken_down', screen: 'decide' });
+        const noticeId = keepNotice(member, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { kind: 'reply_taken_down', screen: 'decide' });
         broadcast({
             type: 'system_announcement', title: REPLY_TAKEN_DOWN_NOTICE_TITLE, body: REPLY_TAKEN_DOWN_NOTICE_BODY, severity: 'info', kind: 'reply_taken_down',
             ...(noticeId ? { noticeId } : {}),
-        }, [decision.subject]);
+        }, [member]);
     } catch (err) {
         console.warn('[Decisions] the notice of a reply taken down failed:', err);
     }
     try {
-        push([decision.subject], SYSTEM_AUTHOR, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.reply-taken-down');
+        push([member], SYSTEM_AUTHOR, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.reply-taken-down');
     } catch (err) {
         console.warn('[Decisions] the push of a reply taken down failed:', err);
     }
@@ -3162,18 +3875,22 @@ export const OWNER_DECIDED_NOTICE_BODY = 'Too few members can vote on whether yo
  * undoes it.
  */
 function noticeOwnerDecided(decision: Decision, push: RemovalVotePush): void {
-    if (!decision.subject) return;
-    try {
-        const noticeId = keepNotice(decision.subject, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { kind: 'removal_vote', screen: 'decide' });
-        broadcast({
-            type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body: OWNER_DECIDED_NOTICE_BODY, severity: 'info', kind: 'removal_vote',
-            ...(noticeId ? { noticeId } : {}),
-        }, [decision.subject]);
-    } catch (err) {
-        console.warn('[Decisions] the notice of an owner deciding a removal vote failed:', err);
+    // Each account the vote names: a branch's every one (removalSubjects).
+    const members = removalSubjects(decision);
+    if (!members.length) return;
+    for (const member of members) {
+        try {
+            const noticeId = keepNotice(member, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { kind: 'removal_vote', screen: 'decide' });
+            broadcast({
+                type: 'system_announcement', title: REMOVAL_VOTE_NOTICE_TITLE, body: OWNER_DECIDED_NOTICE_BODY, severity: 'info', kind: 'removal_vote',
+                ...(noticeId ? { noticeId } : {}),
+            }, [member]);
+        } catch (err) {
+            console.warn('[Decisions] the notice of an owner deciding a removal vote failed:', err);
+        }
     }
     try {
-        push([decision.subject], SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.removal-vote');
+        push(members, SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, OWNER_DECIDED_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.removal-vote');
     } catch (err) {
         console.warn('[Decisions] the push of an owner deciding a removal vote failed:', err);
     }
@@ -3326,6 +4043,21 @@ export function tickDecisions(asOfTime?: number): {
     for (const r of decisionsOn() ? graceDue : []) {
         graceExpired++;
         const now = nowIso;
+        const asDecision = rowToDecision(r);
+        if (isBranchVote(asDecision)) {
+            // The prunes settle balances with the Commons: they wait for an unknown pot, as one removal does below.
+            if (potIsUnknown()) { waitForPot(r, now); continue; }
+            if (r.execution_reason === WAITING_FOR_POT) {
+                const endsAt = new Date(Date.parse(nowIso) + REOPENED_GRACE_HOURS * 3600_000).toISOString();
+                db.prepare('UPDATE decisions SET grace_period_ends_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?')
+                    .run(endsAt, REOPENED_GRACE, now, r.id);
+                announceDecisionUpdated(r.id);
+                continue;
+            }
+            noteCarriedOutAfterWait(r);
+            pruneBranchVote(asDecision, now, 'Pruned automatically after 7-day grace window');
+            continue;
+        }
         if (r.effect === 'remove_member' && r.subject) {
             const member = getMember(r.subject);
             if (!member || member.status === 'pruned') {

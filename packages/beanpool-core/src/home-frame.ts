@@ -19,12 +19,12 @@
  *
  * Pure: no I/O and no Node built-ins (the barrel is bundled for the phone, barrel-is-universal.test.ts).
  */
-import { PRICING_CATEGORIES } from './pricing-catalog.js';
+import { PRICING_CATEGORIES, type PricingCategory } from './pricing-catalog.js';
 import { readSkySettings } from './sky.js';
 import { isTagId } from './tags/index.js';
 import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { toolHomeCardTypes } from './tools/index.js';
-import { word, type WordKey } from './words.js';
+import { t, word, type WordKey } from './words.js';
 import type { CardHue } from './brand-colours.js';
 
 // ── The shape ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ export interface HomeCardType {
     id: string;
     /** The card's hue (S1): brand accent sage for frame cards, a type-specific hue for others. */
     hue: CardHue;
-    /** Its caption, its row in the picker and Edit home. Fixed words, never member text: shown through t(). */
+    /** Its caption, its row in the picker and its band in Arrange. Fixed words, never member text: shown through t(). */
     name: WordKey;
     /** On the worldwide community, where it says something else ("Near you"). */
     globalName?: WordKey;
@@ -313,6 +313,23 @@ const everywhere = () => true;
 const notGlobal = (a: HomeNodeFacts) => a.profile !== 'global';
 
 /**
+ * Arrange's words, one set for both apps (DESIGN-home-layout-fable.md §3.2, §3.7), shown through t(). The bar says arrows
+ * only: holding a band to drag is slices L3 and L4, and it says so when they land.
+ */
+export const ARRANGE_WORDS = {
+    name: word('Arrange'),
+    more: word('Arrange ›'),
+    link: word('Arrange: move the cards on Home'),
+    bar: word("Arrange Home: use the arrows. Done when you're happy."),
+    opened: word('Arrange Home. Use the arrows on each card.'),
+    stays: word('Stays here'),
+    done: word('Done arranging Home'),
+} as const;
+
+/** What the live line says after a move: where the card now stands among the cards that move. */
+export const arrangeMovedLine = (card: string, n: number, m: number) => t('{card} moved to {n} of {m}', { card, n, m });
+
+/**
  * Every card type, in the catalogue's order (the order `cards=` names them in). Unknown features count as on, as the
  * apps read a node's features; the worldwide community has no Beans, deals, enterprise, Decide or invites (§1.2).
  */
@@ -383,11 +400,35 @@ const RANK: ReadonlyMap<string, number> = new Map(HOME_CARD_TYPES.map((t, i) => 
 export const homeCardType = (type: string): HomeCardType | undefined => TYPES.get(type);
 
 /**
- * A card's hue (S1): the type's hue from the catalogue.
+ * The hue a saved search takes from its category (DESIGN-home-look-fable.md §2.2, slice 2): each category's tile colour
+ * (brand-colours `tile`), as the nearest card hue. Labour is yellow, not amber: amber on Home means "waiting on you" and is
+ * never a default. Typed on the category ids, so a category added to the catalogue without a hue here fails the compiler.
+ */
+export const HOME_CATEGORY_HUES: Readonly<Record<PricingCategory, CardHue>> = {
+    food: 'orange', services: 'blue', labour: 'yellow', tools: 'sand', goods: 'sand', garden: 'lime', housing: 'clay',
+    transport: 'sky', education: 'indigo', arts: 'pink', health: 'teal', care: 'rose', animals: 'green', tech: 'sky',
+    energy: 'yellow', mindset: 'plum', general: 'sage',
+};
+
+/** The hue a chat card takes from the kind of chat it shows: a direct chat sage, a group rose, an event's violet, an enterprise's clay. */
+export const HOME_CHAT_KIND_HUES: Readonly<Record<HomeChatKind, CardHue>> = { dm: 'sage', group: 'rose', event: 'violet', enterprise: 'clay' };
+
+/**
+ * A card's hue: the type's hue from the catalogue (S1); a saved search with a category takes the category's, and a chat card
+ * with a chat picked takes its kind's (S2). A search with no category keeps orange, a chat with none picked keeps sage.
  * Sage for an unknown type or instance.
  */
-export const homeCardHue = (instance?: Pick<HomeCardInstance, 'type'> | null): CardHue =>
-    (instance?.type ? TYPES.get(instance.type)?.hue : undefined) ?? 'sage';
+export const homeCardHue = (instance?: Pick<HomeCardInstance, 'type'> & { settings?: unknown } | null): CardHue => {
+    if (!instance?.type) return 'sage';
+    if (instance.type === 'search') {
+        const category = readSearchSettings(instance.settings).category;
+        if (category) return HOME_CATEGORY_HUES[category as PricingCategory];
+    } else if (instance.type === 'chat') {
+        const chat = readChatSettings(instance.settings);
+        if ('kind' in chat) return HOME_CHAT_KIND_HUES[chat.kind];
+    }
+    return TYPES.get(instance.type)?.hue ?? 'sage';
+};
 
 /** The types always drawn and never in a member's list. */
 export const HOME_FIXED_TYPES: readonly string[] = HOME_CARD_TYPES.filter((t) => t.fixed).map((t) => t.id);
@@ -678,7 +719,7 @@ export function endTourLayout(layout: HomeLayoutV2 | null, opts: { pinned?: read
 }
 
 /**
- * The columns chosen in Edit home on a wide screen (D1), dated now so the last write wins as for a move. Unchanged when it
+ * The columns chosen on a wide screen (D1), dated now so the last write wins as for a move. Unchanged when it
  * is already the choice (no view is Auto). A newer app's other keys in the view are kept.
  */
 export function setHomeColumns(layout: HomeLayoutV2 | null, columns: HomeColumns, now: number = Date.now()): HomeLayoutV2 {

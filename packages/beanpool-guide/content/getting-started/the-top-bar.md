@@ -26,7 +26,7 @@ The web app has the "needs you" icons too, where there is room for them:
 Tap the bean at the top left to open the **BeanPool** sheet. It shows:
 
 - **Your community:** its name at the top, and whether it can be reached right now.
-- **Your communities:** tap one to switch to it, or tap **Add a community**. A small number beside one shows how many alerts it has sent you since you last had it open. The **Global community** is always one of them: its second line says whether you can join it.
+- **Your communities:** tap one to switch to it, or tap **Add a community**. A small number beside one shows how many unread messages wait there, as far as your phone has heard. The **Global community** is always one of them: its second line says whether you can join it.
 - **Search the guide**, then **Guides** (how BeanPool works, the rules, common questions), **How to use the app** (this guide, section by section) and **The BeanPool project**, with **What's new**.
 - **beanpool.org:** the public website, with **Share** to send it to a friend.
 
@@ -45,8 +45,8 @@ Between the bean and the buttons on the right, small icons appear only while som
 - **A handshake:** a deal is waiting for you. Someone asked for your listing and is waiting for you to answer, or your Beans are held in trust and waiting for you to release them. It does not show when you are waiting on them. If there is one, the tap opens that deal. If there are more, it opens **Your deals**.
 - **A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. If the first vote is one in a group or a keepers' vote in an enterprise, the tap opens that group or enterprise instead. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.
 - **An envelope:** you are invited to join a group. If there is one invitation, the tap opens it: what the group is, who invited you, and **Join the group**. If there are more, it opens **Commons**, at **Groups**, where each is marked **INVITED**. It goes once you join, say no, or the convenor takes the invitation back. An invitation to a group its members closed does not count, and none count while your account is suspended.
-- **A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.
-- **A group of people:** new lines in your groups, enterprise chats or event chats. Chats you have muted stay quiet here. The tap opens the chat, or **Talk**, at **Groups**, if there are several.
+- **A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Chat**, at **Messages**, showing only the unread ones.
+- **A group of people:** new lines in your groups, enterprise chats or event chats. Chats you have muted stay quiet here. The tap opens the chat, or **Chat**, at **Groups**, if there are several.
 - **A shield:** only for people who help run your community (on the phone). It shows while there is admin work waiting, like a report to review or a stalled trade that needs a ruling. The tap asks for your phone's screen lock, then opens your community's settings at that job. If your community's settings use a sign-in code, it asks for that too. On the web, open your community's settings directly.
 
 The icons stack from the right. The most important one sits next to the ? icon, and keeps its place as others come and go.
@@ -89,6 +89,6 @@ Sometimes a green bar shows under the top bar:
 
 ## The tabs
 
-Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon. On the phone, a local community with no Beans does not show **Ledger**, and hides **Commons** if Decisions are off too (with Decisions on, **Commons** stays for Decisions and groups). The global community shows both, with examples from a local community. See "Beans and the global community".
+Under the top bar are the tabs: **Home**, **Market**, **Map**, **Chat**, **Commons** and **Ledger**. The name of each tab sits above its icon. On the phone, a local community with no Beans does not show **Ledger**, and hides **Commons** if Decisions are off too (with Decisions on, **Commons** stays for Decisions and groups). The global community shows both, with examples from a local community. See "Beans and the global community".
 
 On a long page, tap the tab you are already on to jump back to the top. This works on every tab except **Map**.

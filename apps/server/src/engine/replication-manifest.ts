@@ -217,7 +217,7 @@ export const TABLES: Record<string, TableEntry> = {
     // postFreeTags).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags free_tags shown_from_host shown_from_post_id shown_price'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at pinned_until pinned_at created_via tags free_tags shown_from_host shown_from_post_id shown_price shown_takes_questions'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -324,7 +324,14 @@ export const TABLES: Record<string, TableEntry> = {
     },
     poll_votes: {
         kind: 'replicated', payload: 'pollVotes', watermark: 'created_at',
-        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words'),
+        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words other_answer_id'),
+    },
+    // A poll's answers that name nobody, in each poll's row (`pollAnswers`): they keep no time of their own, on purpose
+    // (schema.sql), and every writer moves the poll's updated_at (engine/posts.ts votePoll, engine/poll-other.ts); the
+    // import replaces the poll's rows with the ones the copy names (engine/sync.ts replacePollAnswers).
+    poll_answers: {
+        kind: 'replicated', payload: 'posts', watermark: 'updated_at', inRowOf: { table: 'posts', field: 'pollAnswers' },
+        columns: cols('post_id id option_id words words_removed'), key: ['post_id', 'id'],
     },
     event_rsvps: {
         kind: 'replicated', payload: 'eventRsvps', watermark: 'updated_at',
@@ -407,6 +414,9 @@ export const TABLES: Record<string, TableEntry> = {
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
     decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
+    // The pool a removal jury was drawn from (engine/removal-jury.ts, DESIGN-removal-jury-fable.md §3): with the roll above
+    // and the decision's params, a restored node serves the same draw and never redraws.
+    decision_jury_pools: plain('decision_id pool created_at updated_at'),
     // A chat group closed by its members' Decision (decisions-engine.ts closeGroupByVote, DESIGN-group-decisions §2.3).
     group_closures: plain('group_id decision_id closed_at created_at updated_at'),
     // A role held aside by a suspension or by a removal in its grace period (decisions-engine.ts). A row whose Decision
@@ -424,7 +434,7 @@ export const TABLES: Record<string, TableEntry> = {
     group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
     group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
     // Every invite already sent, and who used which.
-    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome vouch_level updated_at'),
     // A replacement phone's code an operator issued.
     rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status wrong_matches kind'),
     // The phones that asked for a code, and the digits each shows (engine/rekey-redeem.ts): a promoted standby shows the admin
@@ -493,6 +503,9 @@ export const TABLES: Record<string, TableEntry> = {
     // server (state-engine.ts PUSH_LEAVE_PRUNE_SQL; the age rule). Only members' (MEMBERS_OWN).
     push_token_leaves: plain('public_key token_id left_at applied_at updated_at', { rows: MEMBERS_OWN, agedOut: { column: 'applied_at', days: 1 } }),
     chat_mutes: plain('conversation_id member_pubkey muted_until created_at updated_at'),
+    // A member's ask that an admin invite someone (engine/invite-asks.ts): a promoted standby still has it to answer, and
+    // every delete (answered, taken back, 30 days old, the member gone) goes with a tombstone, so it leaves the standby too.
+    invite_asks: plain('id asker_pubkey first_name how_known asked_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the
@@ -525,9 +538,14 @@ export const TABLES: Record<string, TableEntry> = {
     dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by state_before reached_out_at reach_out_withdrawn_at updated_at', { rows: REAL_CONVERSATIONS }),
     // A limit on sending message requests (engine/request-limits.ts), so a standby that takes over refuses and clears the same.
     request_limits: plain('id sender_pubkey made_at until how lifted_at updated_at'),
-
-    // ── Not copied today, and the design says they should be ──
-    message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
+    // A chat photo, DM or group alike (engine/messaging.ts, engine/group-thread.ts): ciphertext the node can't open, its
+    // nonce and mime, verbatim, so a server that takes over serves the photos its lines name to who may read them
+    // (routes/marketplace.ts, by the copied conversations, participants and group rosters). Its object goes by reference,
+    // as a listing photo's does: the row names it by `sha256` and `bytes`, and the standby fetches only the objects its store
+    // lacks (services/backup-puller.ts fetchPhotoObjects, routes/backup.ts sync-object), under the same key
+    // (storage/image-store.ts attachmentKey). Every delete (the line deleted or removed, its author's account, a
+    // conversation, a withdrawn request) writes a tombstone, and the standby deletes the row and its object.
+    message_attachments: plain('message_id data nonce mime created_at storage_key sha256 bytes updated_at'),
 
     // ── Local by design ──
     sync_cursors: { kind: 'local', reason: "this server's own pull cursors" },
@@ -544,6 +562,7 @@ export const TABLES: Record<string, TableEntry> = {
     bring_back_log: { kind: 'local', reason: "this server's audit trail of the bring-backs it released" },
     writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
     money_acts: { kind: 'local', reason: "this server's own count of each account's money acts in the day (engine/money-limits.ts), a day's: a promoted server starts its day afresh" },
+    agent_made: { kind: 'local', reason: "the groups, enterprises, shops and Pulse links this server's AI assistants made, by grant (agent/owner-seeds.ts): the grants are this server's own, as agent_suggestions are" },
     keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },
@@ -744,6 +763,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
     directory_promise: { kind: 'community-settings', reason: "the listing promise's two ticked lines and the closing day (engine/directory-promise.ts)" },
     recovery_copies: { kind: 'community-settings', reason: "where members' copies go: BeanPool's key vault, this server, or nowhere (config/recovery-copies.ts)" },
+    removal_decider: { kind: 'community-settings', reason: 'who decides a removal: a jury from 100 members, everyone, or a jury (config/removal-decider.ts)' },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

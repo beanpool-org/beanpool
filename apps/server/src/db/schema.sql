@@ -186,6 +186,10 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- (the joiner is a member either way). Declared here for the same reason as genesis_type.
     names_entry_id TEXT,
     names_bind_outcome TEXT,
+    -- A vouch the invite carries, for someone who can vouch to give in one step (engine/invites.ts): 1, 2 or 3, as core
+    -- vouchCreditForLevel, applied at the redeem by the invite's maker if the maker still may. NULL for every other
+    -- invite. Offline tickets and seed invites never carry one. Declared here for the same reason as genesis_type.
+    vouch_level INTEGER,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -344,6 +348,12 @@ CREATE TABLE IF NOT EXISTS posts (
     -- the board (live or paused). A pause or an end takes it off the shopfront by its status and the stamp stays; out of its
     -- shop, or its shop closed, the stamp goes. NULL on every other row. Added to an older database by db.ts.
     featured_at TEXT,
+    -- A pin (scratch/fable-design/DESIGN-pinning-fable.md §2; engine/pins.ts, @beanpool/core pinLive): when it ends, and when it
+    -- was made. Both NULL on every row nobody pinned; a pin ends by the clock on every read, and the hourly hygiene clears
+    -- the stamps (state-engine.ts runMarketplaceHygiene). A row that leaves the board loses them in the same statement
+    -- (posts_pin_ends_off_board, below). Three at most, a week at most. Added to an older database by db.ts.
+    pinned_until TEXT,
+    pinned_at TEXT,
     -- What made it when that was not its author's own app: 'assistant:<grant id>' for a post an owner's AI assistant made
     -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row. Added to
     -- an older database by db.ts.
@@ -369,6 +379,8 @@ CREATE TABLE IF NOT EXISTS posts (
     shown_from_host TEXT,
     shown_from_post_id TEXT,
     shown_price TEXT,
+    -- 1 while the member takes questions about this Offer or Need (engine/event-copy.ts). Anything else: nobody is named.
+    shown_takes_questions INTEGER,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).
@@ -392,9 +404,25 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     -- Where the node keeps it (probation on: the global profile), whether the voter was a new or 12-word account when
     -- they first voted: 1 yes, 0 no, NULL not kept (engine/probation.ts pollVoterNewOrWords). Never changed after.
     voter_new_or_words INTEGER,
+    -- On an open vote only: the poll_answers row holding this voter's typed Other. Never set on an anonymous poll.
+    other_answer_id TEXT,
     PRIMARY KEY (post_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
+-- A poll's answers that name nobody (engine/poll-other.ts). On an anonymous poll that offers Other, poll_votes says only
+-- that a member has answered (option_id 'sealed', no signature), and the choice and any typed words are here. There is no
+-- voter column and no time, the id is random, and WITHOUT ROWID keeps no insertion order, so nothing here leads to a
+-- person or says who came first. On an open vote this holds only the typed words, reached from poll_votes.other_answer_id.
+-- words is NULL on a plain answer, and once it is removed (words_removed 1: the vote still counts): by an owner, with its
+-- poll, or with an open vote's voter's account.
+CREATE TABLE IF NOT EXISTS poll_answers (
+    post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    id TEXT NOT NULL,
+    option_id TEXT NOT NULL,
+    words TEXT,
+    words_removed INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (post_id, id)
+) WITHOUT ROWID;
 -- A plain index, under the name the unique one had (db.ts makeActivePollIndexPlain): how many active polls an author may
 -- have is engine/posts.ts createPost's check (1, or the owners' "Owner and admin limit" for an owner or admin).
 CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
@@ -453,6 +481,10 @@ CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_
 CREATE INDEX IF NOT EXISTS idx_posts_event_start ON posts(event_start_at, id) WHERE type = 'event';
 -- The minute roll (engine/event-series-roll.ts rollDueSeries): the repeating events whose date has ended, and only them.
 CREATE INDEX IF NOT EXISTS idx_posts_event_series ON posts(event_end_at) WHERE type = 'event' AND event_repeat IS NOT NULL;
+-- Retention's minute run, where it is on (engine/posts.ts archiveEndedPosts): the events that have ended, in end order, and
+-- the closed polls still on the board, and only them, so neither scan reads every post the node holds.
+CREATE INDEX IF NOT EXISTS idx_posts_event_end ON posts(event_end_at) WHERE type = 'event' AND event_end_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_poll_closed_on_board ON posts(updated_at) WHERE type = 'poll' AND status = 'completed' AND active = 1;
 -- The 30-day prune of old dates' reminder marks (pruneStaleRsvps).
 CREATE INDEX IF NOT EXISTS idx_event_reminders_sent_occurrence ON event_reminders_sent(occurrence_at);
 
@@ -504,15 +536,23 @@ CREATE INDEX IF NOT EXISTS idx_post_photos_storage_key ON post_photos(storage_ke
 -- `data` is the ciphertext until the image store has it, then `storage_key` names the object and `data` is
 -- null. `nonce` and `mime` never leave the row: the recipient needs both to decrypt, they are a few dozen
 -- bytes, and the node has never held the key that would let it read either the object or the row.
+-- A standby copies the rows verbatim (a plain table, engine/replication-manifest.ts, gap G4) and fetches each object by
+-- `sha256` and `bytes` (the stored ciphertext's), as listing photos go by reference (routes/backup.ts sync-object). Both
+-- are NULL while the row holds `data`, and on a row from before them until the evacuation job fills them in.
 CREATE TABLE IF NOT EXISTS message_attachments (
     message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
     data TEXT,
     nonce TEXT NOT NULL,
     mime TEXT,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    storage_key TEXT
+    storage_key TEXT,
+    sha256 TEXT,
+    bytes INTEGER,
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_message_attachments_storage_key ON message_attachments(storage_key COLLATE NOCASE) WHERE storage_key IS NOT NULL;
+-- A chat photo's object by its content address, as a standby asks for one (routes/backup.ts sync-object).
+CREATE INDEX IF NOT EXISTS idx_message_attachments_sha256 ON message_attachments(sha256) WHERE sha256 IS NOT NULL;
 
 -- 5. Marketplace Transactions
 CREATE TABLE IF NOT EXISTS marketplace_transactions (
@@ -845,6 +885,19 @@ CREATE TABLE IF NOT EXISTS keeper_own_posts (
 );
 CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_keeper ON keeper_own_posts(keeper, made_at);
 CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_made_at ON keeper_own_posts(made_at);
+
+-- 11e′. What an owner's AI assistant made other than posts (agent/owner-seeds.ts): a group, an enterprise, a shop, a Pulse
+-- link, each by the grant that made it (`assistant:<grant id>`, as posts.created_via), so remove_all_i_made and the owner's
+-- "Remove its posts" find them. `ref` is the thing's own id here (a group's id, an enterprise's key, a shop's id, a Pulse
+-- item's id). This server's own, as its grants are (agent_suggestions, agentOAuthGrants): never copied to a standby.
+CREATE TABLE IF NOT EXISTS agent_made (
+    kind TEXT NOT NULL CHECK (kind IN ('group', 'enterprise', 'shop', 'pulse')),
+    ref TEXT NOT NULL,
+    created_via TEXT NOT NULL,
+    made_at TEXT NOT NULL,
+    PRIMARY KEY (kind, ref)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_made_via ON agent_made(created_via, made_at);
 
 -- 11f. Photo upload budget log (engine/photo-upload-budget.ts): records photo bytes stored
 -- per member in a sliding 24-hour window. This server's own, never copied to a standby,
@@ -1475,6 +1528,26 @@ FOR EACH ROW
 WHEN NEW.updated_at IS OLD.updated_at
 BEGIN
     UPDATE posts SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+END;
+
+-- The live pins (posts.pinned_until): a few rows, so every Market read can ask for them for next to nothing.
+CREATE INDEX IF NOT EXISTS idx_posts_pinned_until ON posts(pinned_until) WHERE pinned_until IS NOT NULL;
+
+-- A pin ends when its post leaves the board (DESIGN-pinning-fable.md §2.5), by whichever write takes it off: a pause (its
+-- author's, or a shop's), a deal taking it up, a report hiding it, a moderator's removal, its end. So a post that comes back
+-- (a resume, a restored report, a deal called off) comes back unpinned, and the stamps a pin write counts are never one
+-- that can return past the three (engine/pins.ts). On the table, as the touch trigger above is, because such writes are
+-- many. No connection function: a plain handle and an older image write through it as they did.
+CREATE TRIGGER IF NOT EXISTS posts_pin_ends_off_board
+AFTER UPDATE OF active, status, audience_scope, hidden_by_reports_at, removed_by_moderator_at, event_state ON posts
+FOR EACH ROW
+WHEN NEW.pinned_until IS NOT NULL AND (
+    NEW.active IS NOT 1 OR NEW.status IS NOT 'active'
+    OR COALESCE(NEW.audience_scope, 'public') != 'public'
+    OR NEW.hidden_by_reports_at IS NOT NULL OR NEW.removed_by_moderator_at IS NOT NULL
+    OR NEW.event_state IS 'cancelled')
+BEGIN
+    UPDATE posts SET pinned_until = NULL, pinned_at = NULL WHERE rowid = NEW.rowid;
 END;
 
 CREATE TRIGGER IF NOT EXISTS messages_set_updated_at_on_insert
@@ -2432,12 +2505,25 @@ CREATE TABLE IF NOT EXISTS decision_electors (
     decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     role_at_open  TEXT NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left')),
+    -- 'stood_aside' and 'silent': a removal jury's (role_at_open 'juror', engine/removal-jury.ts): passed over at the draw
+    -- or by the juror, and seated but no vote in 72 hours (slice J2). db.ts rebuilds a table from before for this CHECK.
+    status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left', 'stood_aside', 'silent')),
     created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (decision_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_decision_electors_member ON decision_electors(member_pubkey);
+
+-- The pool a removal jury was drawn from (scratch/fable-design/DESIGN-removal-jury-fable.md §3; engine/removal-jury.ts): its
+-- public keys, sorted and joined by newlines, exactly as @beanpool/core juryDraw hashed them. Written once, when the pause
+-- opens the vote; no member row is referenced and a re-key moves nothing here, so what Check the draw is served is what
+-- the draw was made from. A plain table: copied to a standby verbatim (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS decision_jury_pools (
+    decision_id   TEXT PRIMARY KEY REFERENCES decisions(id) ON DELETE CASCADE,
+    pool          TEXT NOT NULL,
+    created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
 
 -- A chat group its members closed by a Decision (close_group, DESIGN-group-decisions §2.3, slice S3). The group's row stays,
 -- so "Your groups" and its history stay honest: it is shown closed, its chat is read-only, it takes nobody new and no new
@@ -2572,6 +2658,19 @@ BEGIN
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
     WHERE target_group_id = OLD.id;
 END;
+
+-- A member's ask that an admin invite someone (engine/invite-asks.ts): a first name and one line, read only by the community's
+-- owners and admins and the member who asked. Deleted with a tombstone when it is answered, taken back, or 30 days old.
+CREATE TABLE IF NOT EXISTS invite_asks (
+    id           TEXT PRIMARY KEY,
+    asker_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    first_name   TEXT NOT NULL CHECK (length(first_name) BETWEEN 1 AND 30),
+    how_known    TEXT NOT NULL CHECK (length(how_known) BETWEEN 1 AND 140),
+    asked_at     DATETIME NOT NULL,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at   DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_invite_asks_asker ON invite_asks (asker_pubkey);
 
 -- 25b. A group's chat, mutes and convenor succession (groups redesign slice 1, 2026-09-19).
 -- Every group owns one node-readable conversation: conversations.id = groups.id, type 'group_thread'. Its

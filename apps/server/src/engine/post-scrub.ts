@@ -19,7 +19,8 @@
  * takes the neutral title.
  *
  * A poll is left as it is: a closed poll is the community's record, its question and votes stay, and its author already
- * reads as Deleted Member. The tags its author typed are no part of that record, and go with their search words. An
+ * reads as Deleted Member. The tags its author typed are no part of that record, and go with their search words, and one still
+ * open when they left has lost its members' typed answers already (engine/poll-other.ts pollWordsGoWithThePoll). An
  * admin's removal (adminPruneUser) keeps the posts' words, photos and places: a vote can bring the member back.
  *
  * The copies of a title kept elsewhere go too: the event chat's name (engine/event-thread.ts ensureEventThread), the
@@ -67,7 +68,7 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
            SET title = ?, description = '', search_keywords = ?, tags = '', free_tags = '',
                lat = NULL, lng = NULL, event_place_name = NULL, event_private_note = NULL, event_link = NULL,
                lend_terms = NULL, replacement_value = NULL, lend_max_days = NULL,
-               shown_from_host = CASE WHEN shown_from_host IS NULL THEN NULL ELSE '' END, shown_from_post_id = NULL, shown_price = NULL,
+               shown_from_host = CASE WHEN shown_from_host IS NULL THEN NULL ELSE '' END, shown_from_post_id = NULL, shown_price = NULL, shown_takes_questions = NULL,
                updated_at = ?
          WHERE id = ?`);
     const renameChat = db.prepare(`UPDATE conversations SET name = ? WHERE id = ? AND type = 'event_thread'`);

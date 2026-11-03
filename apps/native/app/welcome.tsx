@@ -17,7 +17,9 @@ import {
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 // t comes from useWords() inside the screen (live in the member's language), not core's device-language t.
-import { bundledAvatarForPubkey, joinRuleLines, lowercaseRecoveryWords, photoStepNote, splitBold, type KnownRule } from '@beanpool/core';
+import {
+    bundledAvatarForPubkey, joinRuleLines, landingPostId, lowercaseRecoveryWords, photoStepNote, postIdFromInviteLink, splitBold, type KnownRule,
+} from '@beanpool/core';
 import {
     doorAnswerWords, linkedNoticeWords, nameCheckWords, noWordsBeforeWipeWords, signInReplacedWords, welcomeLineWords,
 } from '../components/welcome/welcome-lines';
@@ -93,6 +95,7 @@ import { returnToApp } from '../utils/sso-signin';
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { fetchKnownRule } from '../utils/known-rule';
+import { holdPostAfterJoin } from '../utils/post-after-join';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
@@ -365,6 +368,13 @@ export default function WelcomeScreen() {
     const pendingWordsAreNew = !!pendingIdentity && pendingNewKey === pendingIdentity.publicKey;
     const [seedConfirmed, setSeedConfirmed] = useState(false);
     const [inviteCode, setInviteCode] = useState('');
+    // The listing the invite was sent from (invite-and-share), with the invite it came with: kept from the link, the params or the
+    // install referrer until the join, then held for the landing (utils/post-after-join.ts). Not shown, not read, not asked for.
+    const [landingPost, setLandingPost] = useState<{ code: string; id: string } | null>(null);
+    const noteLandingPost = useCallback((invite: string, post: unknown) => {
+        const id = landingPostId(post);
+        setLandingPost(id && invite ? { code: normaliseInviteCode(invite), id } : null);
+    }, []);
     const [pendingInviteCode, setPendingInviteCode] = useState('');
     // Whether this identity's invite has already been redeemed on the node. Set once Step 1
     // succeeds, and restored from the persisted wizard record so it survives the app being
@@ -833,6 +843,7 @@ export default function WelcomeScreen() {
         const inviteMatch = fullUrl.match(/[?&]invite=([^&]+)/);
         if (inviteMatch) {
             setInviteCode(decodeURIComponent(inviteMatch[1]));
+            noteLandingPost(decodeURIComponent(inviteMatch[1]), postIdFromInviteLink(fullUrl));
         } else if (!fullUrl.startsWith('http') && (fullUrl.startsWith('BP-') || fullUrl.startsWith('INV-'))) {
             setInviteCode(fullUrl);
         }
@@ -874,6 +885,7 @@ export default function WelcomeScreen() {
             const { arrival, seen } = inviteToApply(inviteLink, {
                 invite: params?.invite as string | undefined,
                 server: params?.server as string | undefined,
+                post: typeof params?.post === 'string' ? params.post : undefined,
                 t: params?.t as string | undefined,
             }, appliedInvites.current);
             seen.forEach(key => appliedInvites.current.add(key));
@@ -889,6 +901,7 @@ export default function WelcomeScreen() {
                         } else {
                             // Deep link (beanpool://)
                             setInviteCode(parsed.queryParams.invite as string);
+                            noteLandingPost(parsed.queryParams.invite as string, parsed.queryParams.post);
                             if (parsed.queryParams.server) {
                                 setCreateAnchorUrl(parsed.queryParams.server as string);
                             }
@@ -903,6 +916,7 @@ export default function WelcomeScreen() {
             if (arrival?.from === 'params') {
                 if (mounted) {
                     setInviteCode(arrival.invite);
+                    noteLandingPost(arrival.invite, arrival.post);
                     if (arrival.server) {
                         setCreateAnchorUrl(arrival.server);
                         setRecoveryAnchorUrl(arrival.server);
@@ -928,6 +942,7 @@ export default function WelcomeScreen() {
             if (!mounted || !referred) return;
             if (referred.kind === 'invite') {
                 setInviteCode(referred.invite);
+                noteLandingPost(referred.invite, referred.post);
                 if (referred.server) setCreateAnchorUrl(referred.server);
                 setMode('create');
                 return;
@@ -1299,6 +1314,11 @@ export default function WelcomeScreen() {
                 setInviteRedeemed(true);
                 undoCommunity = false;
 
+                // Sent from a listing (invite-and-share): it opens when this member lands on Home, and this is the join. Only an id,
+                // and only for this invite; the pasted link itself may carry it too.
+                const sentFrom = postIdFromInviteLink(rawInvite) ?? (landingPost && landingPost.code === parsedCode ? landingPost.id : null);
+                if (sentFrom) await holdPostAfterJoin(nodeUrl, sentFrom);
+
                 // Record wizard state so an interrupted setup (avatar/seed) resumes
                 await setPendingOnboarding({
                     step: 'profileSetup',
@@ -1383,7 +1403,8 @@ export default function WelcomeScreen() {
                             body: bodyString,
                         });
                         if (res.ok) {
-                            await clearPendingProfileChange(url);
+                            // A working style waiting here stays: this publish said nothing of it.
+                            await clearPendingProfileChange(url, undefined, undefined, true);
                         } else {
                             await keepPendingProfileChange(url, pendingIdentity.publicKey, unsent);
                         }
@@ -2259,7 +2280,8 @@ export default function WelcomeScreen() {
                         body: bodyString,
                     });
                     if (res.ok) {
-                        await clearPendingProfileChange(url);
+                        // A working style waiting here stays: this publish said nothing of it.
+                        await clearPendingProfileChange(url, undefined, undefined, true);
                     } else {
                         await keepPendingProfileChange(url, pendingIdentity.publicKey, unsent);
                     }

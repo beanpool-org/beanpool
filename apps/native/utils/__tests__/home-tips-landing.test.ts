@@ -44,6 +44,8 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         Animated: { View: el('div'), Value, timing: () => ({ start: (cb?: () => void) => cb?.() }) },
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
+        BackHandler: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
+        LayoutAnimation: { configureNext: vi.fn(), create: vi.fn() },
         AccessibilityInfo: { isReduceMotionEnabled: vi.fn(async () => true), announceForAccessibility: vi.fn(), sendAccessibilityEvent: vi.fn() },
         AppState: { currentState: 'active', addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
         DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
@@ -368,24 +370,24 @@ describe('Home tips: when a return to Home lands the tip (PR #1694 confirmation 
         }
         const mid = idOf(tipText());
         const seenBefore = tipsRecord().seen;
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-reset"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-reset"]') as HTMLElement).click(); });
         await settle();
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-done"]') as HTMLElement).click(); });
         expect(idOf(tipText())).toBe(mid);
     });
 
-    it('F. Edit home: Remove Tips, then ＋ Add a card brings it back from tip 1; the layout shows it', async () => {
+    it('F. Remove Tips from its "…", then Add a card brings it back from tip 1; the layout shows it', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-tip-next"]') as HTMLElement).click(); });
         await settle();
         const label = (l: string) => document.querySelector(`[aria-label="${l}"]`) as HTMLElement;
-        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        await act(async () => { (document.querySelector('[data-testid="edit-home-tips-menu"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-card-tips-menu"]') as HTMLElement).click(); });
         await act(async () => { label('Remove Tips from Home').click(); });
         await settle();
         expect(tipsRecord().dismissedAt).toEqual(expect.any(String));
         expect(cards()).not.toContain('tips');
-        await act(async () => { (document.querySelector('[data-testid="edit-home-add"]') as HTMLElement).click(); });
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
         await settle(2);
         await act(async () => { label('Add Tips to Home').click(); });
         await settle();

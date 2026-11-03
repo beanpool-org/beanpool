@@ -1,5 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseHandoffFragment, startKeySession, sectionTarget, isModeratorSession, sectionTargetFor, endKeySession, signInWithPassword, forgetStoredAdminSecrets } from './key-session';
+import {
+    parseHandoffFragment,
+    startKeySession,
+    sectionTarget,
+    isModeratorSession,
+    sectionTargetFor,
+    endKeySession,
+    signInWithPassword,
+    forgetStoredAdminSecrets,
+    carriesHandoff,
+    handoffRefusedMessage,
+    handoffResumedMessage,
+    otherSessionMessage,
+    HANDOFF_SECTIONS,
+} from './key-session';
 import { buildAdminHeaders, setKeySessionCsrfToken } from './node-client';
 
 const TOKEN = 'a'.repeat(64);
@@ -21,7 +35,7 @@ beforeEach(() => {
     setKeySessionCsrfToken(null);
 });
 
-describe('parseHandoffFragment', () => {
+describe('parseHandoffFragment and handoff helpers', () => {
     it('reads the token and a known section', () => {
         expect(parseHandoffFragment(`#handoff=${TOKEN}&section=moderation`)).toEqual({ token: TOKEN, section: 'moderation' });
     });
@@ -34,6 +48,44 @@ describe('parseHandoffFragment', () => {
         expect(sectionTarget('disputes')).toEqual({ tab: 'economy', subTab: 'disputes' });
         expect(sectionTarget('decisions')).toEqual({ tab: 'economy', subTab: 'decisions' });
         expect(sectionTarget('home')).toEqual({ tab: 'home' });
+    });
+    it('defines expected HANDOFF_SECTIONS matching server admin sections', () => {
+        expect(HANDOFF_SECTIONS).toEqual(['home', 'moderation', 'disputes', 'decisions']);
+    });
+    it('carriesHandoff checks whether the fragment carries the app handoff parameter', () => {
+        expect(carriesHandoff('#handoff=abc')).toBe(true);
+        expect(carriesHandoff('#section=moderation&handoff=abc')).toBe(true);
+        expect(carriesHandoff('handoff=abc')).toBe(true);
+        expect(carriesHandoff('#section=moderation')).toBe(false);
+        expect(carriesHandoff('#some_other_handoff=abc')).toBe(false);
+        expect(carriesHandoff('')).toBe(false);
+    });
+    it('handoffRefusedMessage formats honest explanations for each refusal reason', () => {
+        expect(handoffRefusedMessage('expired')).toContain('expired (they last 60 seconds)');
+        expect(handoffRefusedMessage('replay')).toContain('was already used');
+        expect(handoffRefusedMessage('damaged')).toContain('arrived cut short or damaged');
+        expect(handoffRefusedMessage('unreachable')).toContain('Could not reach the node');
+        expect(handoffRefusedMessage('refused')).toContain('was not accepted');
+        expect(handoffRefusedMessage('unknown' as any)).toContain('was not accepted');
+    });
+    it('handoffResumedMessage formats resumed explanations when same key session is carried on', () => {
+        expect(handoffResumedMessage('expired')).toContain('had expired');
+        expect(handoffResumedMessage('replay')).toContain('was already used');
+        expect(handoffResumedMessage('refused')).toContain("couldn't be used");
+    });
+    it('otherSessionMessage formats notice when another account or password session is active', () => {
+        expect(otherSessionMessage('password', true)).toBe(
+            "You're still signed in here with the admin password — not the account your phone just sent. Sign out, then tap Manage again."
+        );
+        expect(otherSessionMessage('password', false)).toBe(
+            "You're still signed in here with the admin password — maybe not the account your phone just sent. Sign out, then tap Manage again."
+        );
+        expect(otherSessionMessage({ callsign: 'Alice' }, true)).toBe(
+            "You're still signed in here as Alice — not the account your phone just sent. Sign out, then tap Manage again."
+        );
+        expect(otherSessionMessage({ callsign: null }, false)).toBe(
+            "You're still signed in here as another account — maybe not the account your phone just sent. Sign out, then tap Manage again."
+        );
     });
 });
 

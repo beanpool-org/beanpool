@@ -99,6 +99,12 @@ describe('readNodeProfile', () => {
         expect(readNodeProfile({ profile: 'local', features: {} })!.features.membersOnDemand).toBeUndefined();
     });
 
+    it('keeps pins, which a community reports from pinning S1 on (DESIGN-pinning-fable.md §2)', () => {
+        expect(readNodeProfile({ profile: 'local', features: { pins: true } })!.features).toEqual({ pins: true });
+        expect(readNodeProfile({ profile: 'local', features: { pins: false } })!.features).toEqual({ pins: false });
+        expect(readNodeProfile({ profile: 'local', features: { pins: 'yes' } })!.features).toEqual({});
+    });
+
     it('keeps shareOutside, which a local community reports while members may share a post outside (front doors S6)', () => {
         const local = readNodeProfile({ profile: 'local', features: { shareOutside: true } })!;
         expect(local.features).toEqual({ shareOutside: true });

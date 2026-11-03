@@ -80,7 +80,10 @@ vi.mock('expo-clipboard', () => ({ setStringAsync: async (v: unknown) => { sent.
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
     KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
+    // The ask sheet's lift (components/InviteAsks.tsx, useModalKeyboardLift): no keyboard here.
+    useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }),
 }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return {

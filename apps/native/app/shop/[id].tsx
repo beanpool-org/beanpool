@@ -21,6 +21,7 @@ import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
 import { createConversationApi, getMemberProfile } from '../../utils/db';
 import { isUserBlocked } from '../../utils/blocklist';
+import { signedRequestWords } from '../../components/signed-request-lines';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { marketShowsBeans } from '../../utils/market-global';
 import { HOME_TARGET_DP } from '../../components/home/HomeParts';
@@ -81,7 +82,7 @@ export default function ShopPageScreen() {
         } catch (e) {
             const said = e instanceof Error ? e.message : '';
             const offline = !said || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(said);
-            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : said);
+            Alert.alert(t('Error'), offline ? t('Connect to your community to start a chat.') : signedRequestWords(said));
         } finally {
             setMessaging(false);
         }

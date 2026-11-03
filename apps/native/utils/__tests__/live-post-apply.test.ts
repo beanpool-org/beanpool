@@ -96,6 +96,22 @@ describe('applyDelta liveChanges: a pushed listing goes through the delta sync\'
         expect(row().title).toBe('Spare lemons');
     });
 
+    it('a copy whose member stops taking questions names nobody here once the next sync lands: no name, no key, no door', async () => {
+        const shownCopy = { shownCopy: true, shownFrom: { host: 'mullum.example.org', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' } };
+        await applyDelta({ posts: [offer({ ...shownCopy, takesQuestions: true })] });
+        expect(row()).toMatchObject({ author_pubkey: ANN, carried_callsign: 'Ann' });
+        expect(JSON.parse(row().shown_from).takesQuestions).toBe(true);
+        await applyDelta({ posts: [offer({ ...shownCopy, authorPublicKey: 'hidden', authorCallsign: '', updatedAt: '2026-09-24T02:00:00.000Z' })] });
+        expect(row()).toMatchObject({ author_pubkey: 'hidden', carried_callsign: '' });
+        expect(JSON.parse(row().shown_from).takesQuestions).toBeUndefined();
+    });
+
+    it('a listing with no name on a read keeps the name its row holds (the control)', async () => {
+        await applyDelta({ posts: [offer()] });
+        await applyDelta({ posts: [offer({ authorCallsign: undefined, updatedAt: '2026-09-24T02:00:00.000Z' })] });
+        expect(row().carried_callsign).toBe('Ann');
+    });
+
     it('a later delta sync that returns the same listing does not duplicate it', async () => {
         await applyDelta({ liveChanges: [upsert(offer(), true)] });
         await applyDelta({ posts: [offer({ description: 'A bag, from the tree out the back' })] });
@@ -282,13 +298,15 @@ describe('every column the node sends survives the write, on a sync and on a pus
         target_archetypes: null, // dormant: the node never sends it and nothing reads it
         event_start_at: null, event_end_at: null, event_place_name: null, event_state: null,
         event_going_count: 0, event_interested_count: 0,
-        event_start_local: null, event_end_local: null, event_tz: null, event_online: null, event_repeat: null, event_repeat_until: null,
+        event_start_local: null, event_end_local: null, event_tz: null, event_online: null, event_repeat: null, event_repeat_until: null, event_repeat_skips: null,
         carried_callsign: 'Ann', // the author's name as the node sent it, for a listing whose author the directory doesn't hold
         carried_avatar: null, // and their face: this copy names none
         carried_banner: null, // and an enterprise's shop banner: a member's listing names none (market-banner-cache.test.ts)
         tags: '',
         free_tags: '',
         shown_from: null, // a member's copy on the global community says where it is from (below)
+        pinned_until: null, // a pin (design pinning §4): none on a listing that was never pinned
+        pinned_at: null,
     };
     const directNeed = (extra: Record<string, unknown> = {}) => offer({
         id: 'post-d', type: 'need', title: 'Lift to the station', audienceScope: 'direct', targetPubkey: ME, assignedTo: ME, ...extra,

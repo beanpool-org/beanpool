@@ -153,11 +153,13 @@ import { createKeeperRoutes } from './routes/keepers.js';
 import { createOpenJoinRoutes } from './routes/open-join.js';
 import { createGlobalDirectoryRoutes } from './routes/global-directory.js';
 import { createKnockRoutes } from './routes/knocks.js';
+import { createInviteAskRoutes } from './routes/invite-asks.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { createToolRoutes } from './routes/tools.js';
 import { createShopRoutes } from './routes/shops.js';
 import { startTidyingKnocks } from './engine/knocks.js';
+import { startTidyingInviteAsks } from './engine/invite-asks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
@@ -1438,6 +1440,8 @@ export async function startHttpsServer(port: number): Promise<number> {
                     ctx.set('Access-Control-Allow-Origin', '*');
                     ctx.set('Access-Control-Allow-Headers', SIGNED_COPY_HEADERS);
                     ctx.set('Access-Control-Allow-Methods', copyMethods);
+                    // A browser reads this on a 429 only if it is told it may: an Off owed waits as long as it asks.
+                    ctx.set('Access-Control-Expose-Headers', 'Retry-After');
                 }
             }
         }
@@ -1564,6 +1568,7 @@ export async function startHttpsServer(port: number): Promise<number> {
     // Requests to join (G6): on the main server, what no member will read again is cleared from them, and a row past
     // its windows is deleted, on the same kind of timer (engine/knocks.ts, "What is kept").
     startTidyingKnocks();
+    startTidyingInviteAsks();
 
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.
@@ -1995,6 +2000,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createOpenJoinRoutes(deps),
         createGlobalDirectoryRoutes(deps),
         createKnockRoutes(deps),
+        createInviteAskRoutes(deps),
         createNoticeRoutes(deps),
         createBlockRoutes(deps),
         createToolRoutes(deps),

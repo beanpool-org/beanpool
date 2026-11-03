@@ -169,8 +169,8 @@ export interface ReportedGroupLine {
      */
     words: { state: 'verified'; text: string } | { state: 'unverified' } | { state: 'gone'; by: 'author' | 'convenor' | null };
     /**
-     * A photo line's photo, null for a text line. 'unavailable': this server holds no photo for it, as after a standby took
-     * over (chat photos are not copied to a standby, gap G4).
+     * A photo line's photo, null for a text line. 'unavailable': this server holds no photo for it, as after a take-over by a
+     * standby that never had its object (one from before chat photos were copied, gap G4, or its main server's object lost).
      */
     photo: { state: 'verified'; dataUri: string } | { state: 'unverified' } | { state: 'unavailable' } | null;
 }

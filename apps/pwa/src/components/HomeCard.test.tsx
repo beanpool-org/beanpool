@@ -1,26 +1,25 @@
 /**
- * A Home card's "…" (components/HomeCard.tsx): version 1's Hide · Move up · Move down, and the card frame's (CARD-FRAME
- * §1.3, slice F3) Settings… · Move up · Move down · Remove, named by the card's screen-reader name, never its caption.
+ * A Home card's "…" (components/HomeCard.tsx): version 1's Hide, and the card frame's (CARD-FRAME §1.3, slice F3)
+ * Settings… · Arrange · Remove, named by the card's screen-reader name, never its caption. The moves are in Arrange.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import { CardMenu, HomeCard } from './HomeCard';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CardMenu, HomeCard, PackedBlock } from './HomeCard';
 
 describe('HomeCard menu', () => {
-    it('the card frame: Settings… · Move up · Move down · Remove, labelled by the saved search\'s words; the caption stays fixed words', () => {
+    it('the card frame: Settings… · Arrange · Remove, labelled by the saved search\'s words; the caption stays fixed words', () => {
         const onRemove = vi.fn();
         const onSettings = vi.fn();
         render(
             <HomeCard id="search-aaaa" title="A saved search"
-                menu={{ label: '"eggs"', canMoveUp: true, canMoveDown: false, onRemove, onSettings, onMove: vi.fn() }}>
+                menu={{ label: '"eggs"', onRemove, onSettings, onArrange: vi.fn() }}>
                 <p>body</p>
             </HomeCard>,
         );
         expect(screen.getByRole('heading', { name: 'A saved search' })).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Card options for "eggs"' }));
-        expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['…', 'Settings…', 'Move up', 'Move down', 'Remove']);
+        expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['…', 'Settings…', 'Arrange', 'Remove']);
         expect(screen.queryByText('Hide')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Move down' })).toBeDisabled();
         fireEvent.click(screen.getByRole('button', { name: 'Remove "eggs" from Home' }));
         expect(onRemove).toHaveBeenCalled();
         fireEvent.click(screen.getByRole('button', { name: 'Card options for "eggs"' }));
@@ -28,11 +27,11 @@ describe('HomeCard menu', () => {
         expect(onSettings).toHaveBeenCalled();
     });
 
-    it('version 1: Hide · Move up · Move down, as before', () => {
+    it('version 1: Hide, as before', () => {
         const onHide = vi.fn();
-        render(<HomeCard id="events" title="Coming up" menu={{ canMoveUp: false, canMoveDown: true, onHide, onMove: vi.fn() }}><p>body</p></HomeCard>);
+        render(<HomeCard id="events" title="Coming up" menu={{ onHide }}><p>body</p></HomeCard>);
         fireEvent.click(screen.getByRole('button', { name: 'Card options for Coming up' }));
-        expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['…', 'Hide', 'Move up', 'Move down']);
+        expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['…', 'Hide']);
         fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
         expect(onHide).toHaveBeenCalled();
     });
@@ -43,7 +42,7 @@ describe('HomeCard menu', () => {
                 id="decide"
                 title="Decide"
                 titleAside={<span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">2 Decisions open, the first closes Tue · 2 polls open</span>}
-                menu={{ label: 'Decide', canMoveUp: false, canMoveDown: false, onMove: vi.fn() }}
+                menu={{ label: 'Decide' }}
             >
                 <p>body</p>
             </HomeCard>,
@@ -61,7 +60,7 @@ describe('HomeCard menu', () => {
     });
 
     it('CardMenu without ink preserves -mt-2 text-text-secondary hover:text-text-primary for the safety card', () => {
-        render(<CardMenu title="Your way back in" canMoveUp={false} canMoveDown={false} onMove={vi.fn()} />);
+        render(<CardMenu title="Your way back in" />);
         const button = screen.getByRole('button', { name: 'Card options for Your way back in' });
         expect(button.className).toContain('-mt-2');
         expect(button.className).toContain('text-text-secondary');
@@ -70,7 +69,7 @@ describe('HomeCard menu', () => {
     });
 
     it('CardMenu with ink takes its colour from the band and none of the safety card\'s classes', () => {
-        render(<CardMenu title="New in the Market" ink="var(--bp-card-orange-ink)" canMoveUp={false} canMoveDown={false} onMove={vi.fn()} />);
+        render(<CardMenu title="New in the Market" ink="var(--bp-card-orange-ink)" />);
         const button = screen.getByRole('button', { name: 'Card options for New in the Market' });
         expect(button.className).not.toContain('-mt-2');
         expect(button.className).toContain('-my-1');
@@ -88,7 +87,7 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
                 id="market"
                 title="New in the Market"
                 hue="orange"
-                menu={{ label: 'Market', canMoveUp: false, canMoveDown: false, onMove: vi.fn() }}
+                menu={{ label: 'Market' }}
             >
                 <p>body</p>
             </HomeCard>,
@@ -139,6 +138,97 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
         const aside = band.querySelector('div:last-child') as HTMLElement;
         expect(aside.className).toContain('items-center');
         expect(aside.className).not.toContain('items-start');
+    });
+
+    describe('reporting a height after mount (PR #2748)', () => {
+        let observers: { callback: () => void; disconnected: boolean }[] = [];
+        let height = 0;
+        let spy: { mockRestore(): void } | null = null;
+        let reads = 0;
+        beforeEach(() => {
+            observers = [];
+            height = 240;
+            reads = 0;
+            vi.stubGlobal('ResizeObserver', class {
+                entry: { callback: () => void; disconnected: boolean };
+                constructor(callback: () => void) { this.entry = { callback, disconnected: false }; observers.push(this.entry); }
+                observe() {}
+                disconnect() { this.entry.disconnected = true; }
+            });
+            spy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => { reads += 1; return height; });
+        });
+        afterEach(() => { spy?.mockRestore(); vi.unstubAllGlobals(); });
+        const fire = () => act(() => { observers.filter(o => !o.disconnected).forEach(o => o.callback()); });
+
+        it('a HomeCard tells every later height, and stops when it goes', () => {
+            const onHeight = vi.fn();
+            const { unmount } = render(<HomeCard id="tips" title="Tips" onHeight={onHeight}><p>body</p></HomeCard>);
+            height = 320;
+            fire();
+            expect(onHeight).toHaveBeenLastCalledWith(320);
+            unmount();
+            onHeight.mockClear();
+            fire();
+            expect(onHeight).not.toHaveBeenCalled();
+        });
+
+        it('a HomeCard follows the newest onHeight it was given', () => {
+            const first = vi.fn();
+            const second = vi.fn();
+            const { rerender } = render(<HomeCard id="tips" title="Tips" onHeight={first}><p>body</p></HomeCard>);
+            rerender(<HomeCard id="tips" title="Tips" onHeight={second}><p>body</p></HomeCard>);
+            first.mockClear();
+            height = 320;
+            fire();
+            expect(second).toHaveBeenLastCalledWith(320);
+            expect(first).not.toHaveBeenCalled();
+        });
+
+        it('with no onHeight it reads no height at all', () => {
+            render(<HomeCard id="tips" title="Tips"><p>body</p></HomeCard>);
+            fire();
+            expect(reads).toBe(0);
+        });
+
+        it('a PackedBlock is measured the same way, with its tag, testid, style and class kept', () => {
+            const onHeight = vi.fn();
+            render(<PackedBlock tag="p" onHeight={onHeight} data-testid="note" className="mb-3" style={{ gridRow: '1 / span 4' }}>A note</PackedBlock>);
+            expect(onHeight).toHaveBeenCalledWith(240);
+            height = 300;
+            fire();
+            expect(onHeight).toHaveBeenLastCalledWith(300);
+            const note = screen.getByTestId('note');
+            expect(note.tagName).toBe('P');
+            expect(note.className).toBe('mb-3');
+            expect(note.style.gridRow).toBe('1 / span 4');
+        });
+
+        it('with no ResizeObserver there is nothing to report, and no error', () => {
+            vi.stubGlobal('ResizeObserver', undefined);
+            const onHeight = vi.fn();
+            render(<PackedBlock onHeight={onHeight}>A block</PackedBlock>);
+            expect(onHeight).not.toHaveBeenCalled();
+        });
+    });
+
+    it('reports its measured height via onHeight callback (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
+        const onHeight = vi.fn();
+        vi.stubGlobal('ResizeObserver', class {
+            observe() {}
+            disconnect() {}
+        });
+        const offsetSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(240);
+        try {
+            render(
+                <HomeCard id="tips" title="Tips" onHeight={onHeight}>
+                    <p>body</p>
+                </HomeCard>,
+            );
+            expect(onHeight).toHaveBeenCalledWith(240);
+        } finally {
+            offsetSpy.mockRestore();
+            vi.unstubAllGlobals();
+        }
     });
 });
 

@@ -58,7 +58,7 @@ import { memberSigner } from '../crypto';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { signedDelete, signedGet, signedPost } from '../node-post';
 import { fetchedPostPhoto } from '../post-photo';
-import { COPY_KEEP_ALIVE_MS, COPY_TIMEOUT_MS, copyFields, copyResultLine, homeHostOf, mayShowOnGlobal, pairOf, repeatOnCopy, showOnGlobal, stopLaterLine, stopShowing, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
+import { COPY_KEEP_ALIVE_MS, COPY_TIMEOUT_MS, copyFields, copyResultLine, homeHostOf, mayShowOnGlobal, pairOf, repeatOnCopy, showOnGlobal, stopLaterLine, stopShowing, takeQuestions, tendCopies, type CopyDeps, type HomeEvent } from '../show-on-global';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
 const START_MS = 120_000;
@@ -1153,6 +1153,108 @@ const liveCopies = async (me: BeanPoolIdentity) => (await global_.control<Array<
 }));
 const homeSql = (sql: string, params: unknown[]) => local.control('sql', { sql, params });
 
+describe('the door on a copy (the phone against two real nodes, slice GD)', () => {
+    /** A member of global reading it: the row as they read it, by the id global gave it, or null. */
+    const readBy = async (who: BeanPoolIdentity | null, id: string) => {
+        const res = who ? await signedGet(global_.url, `/api/marketplace/posts?id=${id}`, who) : await realFetch(`${global_.url}/api/marketplace/posts?id=${id}`);
+        return ((await res.json()) as Record<string, any>[])[0] ?? null;
+    };
+    /** What a reader's whole sync holds of the two copies. Robin's name in it is the only thing that can fail these. */
+    const syncNames = async (who: BeanPoolIdentity, me: BeanPoolIdentity, name: string, id: string) => {
+        const rows = await (await signedGet(global_.url, '/api/marketplace/posts?sync=true&types=offer,need', who)).json() as Record<string, any>[];
+        const text = JSON.stringify(rows.find((r) => r.id === id) ?? {});
+        return text.includes(me.publicKey) || text.includes(name);
+    };
+
+    it('off, then on, then off: one listing names its member to members only while it is ticked; its neighbour never does', async () => {
+        const name = 'RobinDoor';
+        const me = await memberOfBoth(name);
+        const reader = await memberOfBoth('SamReader');
+        const home = await listingAtHome(me, 'Sourdough loaves');
+        const control = await listingAtHome(me, 'Rye loaves');
+        expect(await showOnGlobal(home, local.url, me, deps())).toBe('shown');
+        expect(await showOnGlobal(control, local.url, me, deps())).toBe('shown');
+        const id = await copyIdOf(home.id, me);
+        const controlId = await copyIdOf(control.id, me);
+
+        // Off, the default: nobody is named, and the phone sent nothing of a door.
+        expect((await copyRow(id)).shown_takes_questions).toBeNull();
+        expect(await readBy(reader, id)).toMatchObject({ authorPublicKey: 'hidden', authorCallsign: '' });
+        expect(await syncNames(reader, me, name, id)).toBe(false);
+
+        // On: a member reads the name and key, and a visitor reads what they read before.
+        expect(await takeQuestions(home.id, true, me, deps())).toBe('shown');
+        expect((await copyRow(id)).shown_takes_questions).toBe(1);
+        expect(await readBy(reader, id)).toMatchObject({ authorPublicKey: me.publicKey, authorCallsign: name, takesQuestions: true });
+        expect(await syncNames(reader, me, name, id)).toBe(true);
+        const visitor = await readBy(null, id);
+        expect(visitor).toMatchObject({ authorPublicKey: 'hidden', authorCallsign: '' });
+        expect(visitor).not.toHaveProperty('takesQuestions');
+        expect(await readBy(reader, controlId)).toMatchObject({ authorPublicKey: 'hidden' });
+        expect(await syncNames(reader, me, name, controlId)).toBe(false);
+
+        // The request: the key on the copy opens a chat, the first line waits, and the member's own community hears nothing.
+        const before = phoneToLocal.length;
+        const open = await (await signedPost(global_.url, '/api/messages/conversation', { type: 'dm', participants: [me.publicKey, reader.publicKey], createdBy: reader.publicKey }, reader)).json() as any;
+        const conv: string = open.conversation?.id ?? open.id;
+        const counts = async () => (await signedGet(global_.url, '/api/me/unread', me)).json() as Promise<{ unread: number; requests: number }>;
+        expect(conv).toBeTruthy();
+        const line = () => signedPost(global_.url, '/api/messages/send', { conversationId: conv, authorPubkey: reader.publicKey, ciphertext: randomBytes(32).toString('base64'), nonce: `x25519-xc20p-v2:${randomBytes(24).toString('base64')}` }, reader);
+        expect(await counts()).toMatchObject({ unread: 0, requests: 0 });
+        expect((await line()).status).toBe(200);
+        expect(await counts()).toMatchObject({ unread: 0, requests: 1 });
+        const second = await line();
+        expect(second.status).toBe(403);
+        expect(await second.json()).toMatchObject({ code: 'dm_request_pending' });
+        expect(phoneToLocal.length).toBe(before);
+
+        // Off: the name goes from every read at once, and the door with it; the plain copy never changed.
+        expect(await takeQuestions(home.id, false, me, deps())).toBe('shown');
+        expect((await copyRow(id)).shown_takes_questions).toBeNull();
+        expect(await readBy(reader, id)).toMatchObject({ authorPublicKey: 'hidden', authorCallsign: '' });
+        expect(await syncNames(reader, me, name, id)).toBe(false);
+        // A request already sent stays theirs to answer: the door is on the member, not the listing (design §3).
+        expect(await counts()).toMatchObject({ unread: 0, requests: 1 });
+        const answered = await signedPost(global_.url, '/api/messages/request', { conversationId: conv, decision: 'ignore' }, me);
+        expect(answered.status).toBe(200);
+        expect(await counts()).toMatchObject({ unread: 0, requests: 0 });
+    }, START_MS);
+
+    it('an edit at home never opens a door shut on global, and a tend sends what a lost Off owed', async () => {
+        const me = await memberOfBoth('RobinTend');
+        const reader = await memberOfBoth('SamTend');
+        const home = await listingAtHome(me, 'Seed potatoes');
+        await showOnGlobal(home, local.url, me, deps(), true);
+        const id = await copyIdOf(home.id, me);
+        expect((await copyRow(id)).shown_takes_questions).toBe(1);
+
+        globalDown = true;
+        expect(await takeQuestions(home.id, false, me, deps())).toBe('later');
+        globalDown = false;
+        expect((await copyRow(id)).shown_takes_questions).toBe(1);
+        expect((await pairOf(home.id, me.publicKey))).toMatchObject({ questions: false, questionsOwed: true });
+
+        await editAtHome(me, home.id, { title: 'Seed potatoes, certified' });
+        await tendCopies(me, deps());
+        expect((await copyRow(id))).toMatchObject({ title: 'Seed potatoes, certified', shown_takes_questions: null });
+        expect(await readBy(reader, id)).toMatchObject({ authorPublicKey: 'hidden' });
+        expect((await pairOf(home.id, me.publicKey))?.questionsOwed).toBe(false);
+    }, START_MS);
+
+    it('a mute on global stops an On and never an Off', async () => {
+        const me = await memberOfBoth('RobinMuted');
+        const home = await listingAtHome(me, 'Garden stakes');
+        await showOnGlobal(home, local.url, me, deps(), true);
+        const id = await copyIdOf(home.id, me);
+        await muteOnGlobal(me, true);
+        expect(await takeQuestions(home.id, false, me, deps())).toBe('shown');
+        expect((await copyRow(id)).shown_takes_questions).toBeNull();
+        expect(typeof await takeQuestions(home.id, true, me, deps())).toBe('object');
+        expect((await copyRow(id)).shown_takes_questions).toBeNull();
+        await muteOnGlobal(me, false);
+    }, START_MS);
+});
+
 describe('an Offer or a Need shown on the global community (the phone against two real nodes)', () => {
     it('the tick: the same key, 0 Beans, the price as words, the rounded point, its photos; home hears nothing of it', async () => {
         const me = await memberOfBoth('Robin Offers');
@@ -1822,7 +1924,19 @@ describe('Stop showing takes the copy down, whichever device stops it: a phone a
     it.each(kinds)('%s: the browser resting at the id the phone came back on, then Stop on the browser', async (kind, make) => {
         const { me, home, browser } = await bothTicked(`Waits ${kind}`, make);
         await pause(me, home);
-        await Promise.all([tendCopies(me, deps()), browser.tendCopies(me, deps())]);
+        // Both read the copy up before either brings it down, or one follows the other and no id is shared: a slow runner decides.
+        let atDown = 0;
+        let bothThere!: () => void;
+        const met = new Promise<void>((go) => { bothThere = go; });
+        const heldAtDown: CopyDeps = {
+            ...deps(),
+            post: async (host, path, ...rest) => {
+                if (path.endsWith('/remove')) { if (++atDown === 2) bothThere(); await met; }
+                return signedPost(host, path, ...rest);
+            },
+        };
+        await Promise.all([tendCopies(me, heldAtDown), browser.tendCopies(me, heldAtDown)]);
+        expect(atDown).toBe(2);
         await resume(me, home);
         await tendCopies(me, deps());
         expect(await liveCopies(me)).toHaveLength(1);

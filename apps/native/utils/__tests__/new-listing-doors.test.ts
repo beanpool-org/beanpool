@@ -54,6 +54,8 @@ describe('the doors to the listing form', () => {
             'app/(tabs)/market.tsx': ["'true'", "'true'", "'true'", 'type'],
             // Home's "post an Offer" steps, and Home's chooser's pick.
             'app/(tabs)/index.tsx': ["'offer'", 'type'],
+            // A month with no events: "No events coming up yet. Start one ›"
+            'app/calendar.tsx': ["'event'"],
             // A pulse post's "Post Your Own Offer →", and "Contribution Required"'s "➕ Create an Offer".
             'app/post/[id].tsx': ["'true'", "'true'"],
             // A tool's Offer (through the List sheet) and its Need.

@@ -8,7 +8,7 @@
  * - **Bounded before anything is dropped.** More than 32 ids in a list of the layout (or 32 dismissals), or more than 17
  *   interests, is refused whole, with a sentence; so is any shape that isn't the one below, or a date that isn't one.
  * - **`needs` and `community` can't be hidden or dismissed** (the card that costs a member something if missed, and the one
- *   that holds Edit home), so either is dropped from `hidden` and `dismissed`. `find`'s first 30 days on the global node are
+ *   that holds Arrange), so either is dropped from `hidden` and `dismissed`. `find`'s first 30 days on the global node are
  *   the Home route's to honour: it is stored like any other card.
  * - **The last write wins by `updatedAt`.** A layout older than the one kept leaves it in place (a phone that edited
  *   offline, then reached the node after the web app had saved a newer one). A date in the future is held to the node's
@@ -59,7 +59,7 @@ export const HOME_CARD_IDS = [
 ] as const;
 export type HomeCardId = (typeof HOME_CARD_IDS)[number];
 
-/** The cards a member can't hide (or dismiss): `needs`, and `community`, which carries Edit home. */
+/** The cards a member can't hide (or dismiss): `needs`, and `community`, which carries Arrange. */
 export const UNHIDEABLE_HOME_CARDS: readonly HomeCardId[] = ['needs', 'community'];
 
 /** The category ids a member can star: the 17 the Market and the composer use. */

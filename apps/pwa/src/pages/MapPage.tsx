@@ -10,10 +10,10 @@
  */
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
-import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS } from '@beanpool/core';
+import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines } from '@beanpool/core';
 import { copyPriceLine, eventCopyOf } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
-import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type CSSProperties } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -39,6 +39,7 @@ import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm, readNearestInCircle } from '../lib/listings-near';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
+import { clusterIcon, elderHaloHtml } from '../lib/map-pin-style';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -52,8 +53,10 @@ import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
 } from '../lib/live-posts';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { MapCalendar, CARD_STOPS_AT_CALENDAR_CLASS, CHIPS_STOP_AT_CALENDAR_CLASS, calendarPanelWidth } from '../components/MapCalendar';
+import { ScrollHintRow } from '../components/ScrollHintRow';
 import { MapStackList } from '../components/MapStackList';
-import { bubblesOnMap, planBubbleTap, stackPins, type StackPin } from '../lib/map-stack';
+import { bubblesOnMap, planBubbleTap, stackPins, stackPinFromPost, type StackPin } from '../lib/map-stack';
 import { EventCard } from '../components/EventCard';
 import { Sentence } from '../components/Sentence';
 import { approximateLocation, listPhotoUrl, tierForCredit, type AddressResult } from '@beanpool/core';
@@ -62,17 +65,19 @@ import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { ShowOnGlobalTick, showEventOnGlobal } from '../components/ShowOnGlobalRow';
+import { ShowOnGlobalTick, TakeQuestionsTick, showEventOnGlobal, useTakeQuestionsTick } from '../components/ShowOnGlobalRow';
 import { marked, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import type { ComposerDraft } from '../tools/builder';
 import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
+import { marketPinMatchesFilter, visibleEventPins as filterEventPins, mapFiltersActive, type MapTypeFilter, type MapFilterState } from '@beanpool/core';
+import { MAP_CATEGORY_CHIPS, MAP_EVENT_WINDOWS, MAP_TYPE_PILLS, mapCategoryChipLabel } from '../lib/map-filters';
 import { MAP_TAP_CAP_ZOOM, STACK_LIST_CLOSED, areaRingLeafletStyle, settleMapStop, stackDropped, stackHeading, stackLift, stackRestWatch, stackShut, stackTapped, type MapFrame, type StackListState } from '@beanpool/core';
 import {
-    CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
+    CLIENT_POST_TYPES, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventRepeatCreate, parseCopyEventContext, withMovedFromLine,
-    eventInWindow, formatEventWhen, isEventHostView, isEventOpen, type EventEditForm, type EventWindow,
+    eventInWindow, formatEventWhen, isEventHostView, type EventEditForm, type EventWindow,
     hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
 } from '../lib/events';
 
@@ -230,6 +235,11 @@ interface Props {
      */
     editEventPostId?: string | null;
     onEditEventHandled?: () => void;
+    /** Open the event calendar overlay/panel (e.g. from Home's "Calendar ›" or Market's calendar button). */
+    openCalendar?: boolean;
+    onOpenCalendarHandled?: () => void;
+    /** ✕ or Esc on a calendar a door opened: the member goes back to the tab the door was on. */
+    onCalendarClosedBack?: () => void;
     /**
      * A visitor to the global lobby (G9b): the node's guest view of each listing, pinned where the node puts it (the
      * centre of its area); a pin's card has the title, "near here" and the way to its detail sheet, and nothing on the
@@ -242,7 +252,7 @@ interface Props {
 const EVENT_PLACE_NAME_MAX = 80;
 const EVENT_PRIVATE_NOTE_MAX = 1000;
 
-export function MapPage({ identity, openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, visitor = false }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, openCalendar, onOpenCalendarHandled, onCalendarClosedBack, visitor = false }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     /**
@@ -251,7 +261,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
      * layer of its own).
      */
     const markersRef = useRef<L.LayerGroup | null>(null);
-    const eventChipsRef = useRef<HTMLDivElement | null>(null);
     const userMarkerRef = useRef<L.Marker | null>(null);
     const radiusCircleRef = useRef<L.Circle | null>(null);
 
@@ -294,6 +303,48 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [keeperOf, setKeeperOf] = useState<string[]>([]);
     const [keeperNames, setKeeperNames] = useState<Record<string, string>>({});
     const [eventWindow, setEventWindow] = useState<EventWindow>('all');
+    // The phone's filter (apps/native map.tsx): the type pills, a category under Offers / Needs / All, the date chips under Events.
+    // The category and the date window are remembered across type switches and each only filters while its row shows
+    // (@beanpool/core map-type-filter.ts).
+    const [mapType, setMapType] = useState<MapTypeFilter>('all');
+    const [mapCategory, setMapCategory] = useState('all');
+    const [categoryOpen, setCategoryOpen] = useState(false);
+    const mapFilterState: MapFilterState<EventWindow> = { type: mapType, category: mapCategory, eventWindow };
+    // The filter bar's height, measured, so the notes about where the pins were read from sit under it (two rows, and more at large text).
+    const filterBarRef = useRef<HTMLDivElement | null>(null);
+    const [filterH, setFilterH] = useState(0);
+    // Offers and All fill with the brand green, Needs with the action orange: the phone's pill colours, from the central tokens.
+    const categoryFill = mapType === 'needs' ? 'bg-bp-action-fill text-bp-action-on' : 'bg-bp-commit-fill text-bp-commit-on';
+    function selectMapType(type: MapTypeFilter) {
+        setMapType(type);
+        setCategoryOpen(false);
+        setPreviewPost(null);
+        // Events brings its pins into view below the rows, as a date chip does (events round 2, B2).
+        if (type === 'events') fitEventPins(eventWindow);
+    }
+    function clearMapFilters() {
+        setMapType('all');
+        setMapCategory('all');
+        setEventWindow('all');
+        setCategoryOpen(false);
+    }
+    useLayoutEffect(() => {
+        const el = filterBarRef.current;
+        if (!el) { setFilterH(0); return; }
+        const measure = () => setFilterH(Math.round(el.getBoundingClientRect().height));
+        measure();
+        if (typeof ResizeObserver === 'undefined') return;
+        const watch = new ResizeObserver(measure);
+        watch.observe(el);
+        return () => watch.disconnect();
+    }, [showNewPost]);
+    // Escape folds the category panel away.
+    useEffect(() => {
+        if (!categoryOpen) return;
+        const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setCategoryOpen(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [categoryOpen]);
     /** True while the event form holds a copy of an existing event, so the form can say what did not come with it. */
     const [eventIsCopy, setEventIsCopy] = useState(false);
     /** Non-null while the event form is editing an existing event: its id and the form as it was opened. */
@@ -303,6 +354,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
     // Polls are anonymous unless their creator makes them an open vote, fixed once someone votes (2026-09-28).
     const [pollOpenVote, setPollOpenVote] = useState(false);
+    // A typed Other, off unless the maker asks, and offered only where the node says it can (@beanpool/core poll-other).
+    const [pollOther, setPollOther] = useState(false);
+    const [nodeHasPollOther, setNodeHasPollOther] = useState(false);
     // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
     // poll is shown there, or, to an author with none, that members nearby won't see it in their list.
     const nearbyLimits = useNearbyLimits(!!identity && showNewPost && newPostType === 'poll');
@@ -335,6 +389,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // #143 step 4 — per-listing reach. 'local' is the default and stays the default.
     const [newPostReach, setNewPostReach] = useState<PostReach>('local');
     const [alsoOnGlobal, setAlsoOnGlobal] = useState(false);
+    const [takesQuestions, setTakesQuestions] = useTakeQuestionsTick(alsoOnGlobal);
     // Off, every time: a form put away or changed to another kind doesn't keep it.
     useEffect(() => { setAlsoOnGlobal(false); }, [showNewPost, newPostType]);
     const [newPostReachPeers, setNewPostReachPeers] = useState<string[]>([]);
@@ -359,6 +414,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             .catch(() => {});
         return () => { cancelled = true; };
     }, [showNewPost, visitorNote, identity]);
+    useEffect(() => {
+        if (!showNewPost || nodeHasPollOther) return;
+        let cancelled = false;
+        communityInfoOnce()
+            .then(info => { if (!cancelled && (info as { pollOther?: unknown }).pollOther === true) setNodeHasPollOther(true); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [showNewPost, nodeHasPollOther]);
     /** A failed save: the node's refusal in the form, anything else as before. */
     function showPostError(e: any, fallback: string) {
         const refusal = nodeRefusal(e);
@@ -391,8 +454,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const pinKeysRef = useRef(new Map<L.Layer, string>());
     const stack = useMemo(() => (stackKeys ? stackPins(stackKeys, pinsOnMap) : []), [stackKeys, pinsOnMap]);
     const stackOpen = stack.length > 0;
+    // The category panel folds away on anything that takes the map's attention, as the phone's does (its 'dismiss'): a pin's
+    // card, a bubble's list, the composer.
+    useEffect(() => {
+        if (previewPost || stackOpen || showNewPost) setCategoryOpen(false);
+    }, [previewPost, stackOpen, showNewPost]);
     const stackListRef = useRef(stackList);
     stackListRef.current = stackList;
+    const [calendarOpen, setCalendarOpen] = useState(false);
+    // Whether a door on another tab opened the calendar: only then does ✕ or Esc take the member back there.
+    const calendarFromDoor = useRef(false);
     // Every row gone is the list gone: it does not come back by itself when a date chip brings those pins back.
     useEffect(() => {
         if (stackKeys && !stackOpen && pinsFromPosts) setStackList(stackDropped);
@@ -413,7 +484,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const [inactiveEnterpriseKeys, setInactiveEnterpriseKeys] = useState<Set<string>>(new Set());
     const [enterprises, setEnterprises] = useState<EnterpriseMapPin[]>([]);
 
-    // Keyboard accessibility: Escape closes preview card (defers to lightbox if open)
+    // Keyboard accessibility: Escape closes preview card or stack list (defers to lightbox if open)
     useEffect(() => {
         if ((!previewPost && !stackOpen) || covered) return;
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -654,6 +725,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         map.on('click', () => {
             setPreviewPost(null);
             setStackList(stackShut);
+            setCategoryOpen(false);
         });
 
         // Markers layer
@@ -664,13 +736,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             // 2 Nov). The library's zoom has no cap and its spiral is what the list replaces.
             zoomToBoundsOnClick: false,
             spiderfyOnMaxZoom: false,
-            iconCreateFunction: (cluster) => {
-                return L.divIcon({
-                    html: `<div style="background-color: #1f2937; color: white; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 18px; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${cluster.getChildCount()}</div>`,
-                    className: 'custom-cluster-icon',
-                    iconSize: [36, 36],
-                });
-            }
+            // The phone's bubble (lib/map-pin-style.ts): blue, a white ring and a glow, sized by the pins inside, 99+ from 99.
+            iconCreateFunction: (cluster) => L.divIcon({ ...clusterIcon(cluster.getChildCount()), className: 'custom-cluster-icon' }),
         });
         clusterGroup.on('clusterclick clusterkeypress', (e: any) => {
             if (e.type === 'clusterkeypress' && e.originalEvent?.keyCode !== 13) return;
@@ -932,8 +999,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     // map has nothing to draw for them (review of #1952, finding 8).
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
-                const ownIds = new Set(localData.map(p => p.id));
-                let allPosts: MarketplacePost[] = [...localData, ...ownData.filter(p => !ownIds.has(p.id))];
+                // Pins come with the read from anywhere, for the Market. The map is the circle it was read for (design §2.2).
+                const inCircle = near ? localData.filter(fitsMap) : localData;
+                const ownIds = new Set(inCircle.map(p => p.id));
+                let allPosts: MarketplacePost[] = [...inCircle, ...ownData.filter(p => !ownIds.has(p.id))];
 
                 // Only fetch from peers the user has toggled on; never for a visitor, whose lobby reads this node's
                 // guest list and no other community's (G9a §7).
@@ -1323,11 +1392,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     pollOptions: validOptions.map((text, idx) => ({ id: `opt_${idx + 1}`, text })),
                     durationDays: pollDurationDays,
                     pollOpenVote,
+                    ...(pollOther && nodeHasPollOther ? { pollOther: true } : {}),
                     audienceScope,
                     ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 });
                 setNewPostTitle('');
                 setNewPostDescription('');
+                setPollOther(false);
                 setPollOptions(['', '']);
                 setPollDurationDays(7);
                 setPollOpenVote(false);
@@ -1402,7 +1473,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 ...(newPostFreeTags.length > 0 ? { freeTags: newPostFreeTags } : {}),
                 ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
             });
-            if (alsoOnGlobal && made?.post && identity) void showEventOnGlobal(made.post, identity).catch(() => {});
+            if (alsoOnGlobal && made?.post && identity) void showEventOnGlobal(made.post, identity, takesQuestions).catch(() => {});
             setAlsoOnGlobal(false);
             setNewPostTitle('');
             setNewPostDescription('');
@@ -1564,11 +1635,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         return () => { map.off('click', onMapClick); };
     }, [pinDropMode]);
 
-    const visibleEventPins = useMemo(() => posts.filter(post => post.type === 'event' && post.lat != null && post.lng != null
-        && eventInWindow(post, eventWindow)
-        && !(post as any)._remoteNode
-        && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey)),
-    [posts, eventWindow, blockedSet, inactiveEnterpriseKeys]);
+    // Events pin under All and Events only; under Events the date chips narrow them (@beanpool/core map-type-filter.ts).
+    const visibleEventPins = useMemo(() => filterEventPins(
+        posts.filter(post => !(post as any)._remoteNode && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey)),
+        { type: mapType, category: mapCategory, eventWindow },
+        (post, window) => eventInWindow(post, window),
+    ),
+    [posts, mapType, mapCategory, eventWindow, blockedSet, inactiveEnterpriseKeys]);
 
     /**
      * A tap on a date chip brings that chip's events into view BELOW the chip row, so a member who asks for
@@ -1584,7 +1657,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             .map(post => [post.lat!, post.lng!] as [number, number]);
         if (points.length === 0) return;
         const container = map.getContainer().getBoundingClientRect();
-        const chips = eventChipsRef.current?.getBoundingClientRect();
+        const chips = filterBarRef.current?.getBoundingClientRect();
         // The pin is drawn 48px tall above its point, so clear the chips by that much and a margin.
         const top = Math.max(110, (chips ? chips.bottom - container.top : 120) + 48 + 16);
         map.fitBounds(points, { paddingTopLeft: [40, top], paddingBottomRight: [40, 140], maxZoom: FIT_MAX_ZOOM });
@@ -1601,16 +1674,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             pinKeys.set(marker, pin.key);
             pinRows.set(pin.key, { ...pin, open });
         };
-        const postRow = (post: MarketplacePost) => ({
-            key: `post:${post.id}`,
-            title: post.title,
-            type: post.type === 'event' ? t('Event') : post.type === 'offer' ? t('Offer') : t('Need'),
-            when: post.type === 'event' ? formatEventWhen(post) || null : null,
-            photo: post.photos?.[0] ? listPhotoUrl(post.photos[0]) : null,
-            emoji: MARKETPLACE_CATEGORIES_BY_ID.get(post.category)?.emoji || '📌',
-            eventStartMs: post.type === 'event' ? Date.parse(post.eventStartAt ?? '') : null,
-            createdMs: Date.parse(post.createdAt ?? ''),
-        });
+        const postRow = (post: MarketplacePost) => stackPinFromPost(post, openPost(post));
         // A row keeps its list for the way back, as the phone does; the map keeps its view by itself.
         const openPost = (post: MarketplacePost) => () => {
             savedStackList = stackListRef.current;
@@ -1618,7 +1682,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         };
 
         posts
-            .filter(post => post.type !== 'poll' && post.type !== 'event' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
+            // Offers and Needs under the type filter and its category (@beanpool/core map-type-filter.ts). A listing with no
+            // coordinates still pins near the community's centre below, so the place is not asked here.
+            .filter(post => post.type !== 'poll' && marketPinMatchesFilter(post, mapFilterState) && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
             .forEach((post) => {
             const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
             const emoji = cat?.emoji || '📌';
@@ -1650,12 +1716,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             if (useModernMarkers) {
                 html = `
                 <div style="position: relative; width: 40px; height: 48px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.15));">
+                    ${elderHaloHtml(hasElderGlow, 40)}
                     <div style="
                         width: 40px; height: 40px; border-radius: 50%;
                         background: rgba(255,255,255,0.95); border: 2.5px solid ${borderColor};
                         display: flex; align-items: center; justify-content: center;
                         box-sizing: border-box; z-index: 2; position: relative;
-                        ${hasElderGlow ? 'border-color: #fbbf24; box-shadow: 0 0 6px rgba(251,191,36,0.8);' : ''}
                     ">
                         <span style="font-size: 22px; line-height: 1; padding-bottom: 2px;">${emoji}</span>
                     </div>
@@ -1670,6 +1736,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             } else {
                 html = `
                 <div style="position: relative; width: 44px; height: 56px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));">
+                    ${elderHaloHtml(hasElderGlow, 44)}
                     <div style="
                         width: 44px; height: 44px; border-radius: 50%;
                         background: rgba(255,255,255,0.95); border: 2.5px solid ${borderColor};
@@ -1760,8 +1827,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 "'": '&#39;',
             }[m] || m));
 
+        // The phone's map has no enterprise pins, so the filter has no rule for them: a business is neither an Offer, a Need
+        // nor an Event and has no category, so they show only while nothing is filtered ("Offers shows offers only").
         enterprises
-            .filter(ent => ent.lat != null && ent.lng != null && ent.status !== 'completed')
+            .filter(ent => !mapFiltersActive(mapFilterState) && ent.lat != null && ent.lng != null && ent.status !== 'completed')
             .forEach(ent => {
                 const isPaused = ent.paused || ent.status === 'paused';
                 const borderColor = isPaused ? '#f59e0b' : '#e06d53';
@@ -1843,7 +1912,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         pinKeysRef.current = pinKeys;
         setPinsOnMap(pinRows);
         setPinsFromPosts(pinsLoaded);
-    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, nodeRadius, visitor, pinsLoaded]);
+    }, [posts, enterprises, useModernMarkers, blockedSet, inactiveEnterpriseKeys, onOpenTreasury, onNavigate, visibleEventPins, mapType, mapCategory, nodeRadius, visitor, pinsLoaded]);
 
     // No location from the node: centre once on this community's own pins, which are its real centre. Posts from
     // partner communities are left out — they are somewhere else. Nothing to centre on leaves the neutral view and
@@ -2015,16 +2084,59 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             centredRef.current = true;
             mapRef.current.setView([target.lat, target.lng], Math.max(mapRef.current.getZoom?.() ?? DEFAULT_ZOOM, 16));
         }
+        // Every filter off, not just the date window: the pins follow the filter, and a card with no pin under it reads as lost.
+        setMapType('all');
+        setMapCategory('all');
+        setCategoryOpen(false);
         setEventWindow('all');
         setPreviewPost(target);
         onFocusPostHandled?.();
     }, [focusPostId, posts, onFocusPostHandled]);
 
-    // Only an event the map can pin: an online one has no place, so the chips would filter nothing (review of #1952, finding 8).
-    const hasOpenEvents = posts.some(p => p.type === 'event' && p.lat != null && p.lng != null && isEventOpen(p) && !(p as any)._remoteNode);
-    // The notes about where the pins were read from take the event chips' spot, so while the chips show they sit under
-    // them (#1770): the chips' row is its 48px buttons with 0.25rem above and below, then a 0.25rem gap.
-    const nearNoteTop = hasOpenEvents ? 'top-[calc(5rem+48px)] md:top-[calc(1.5rem+48px)]' : 'top-[4.25rem] md:top-3';
+    // Open the calendar overlay/panel when requested by a door (Home "Calendar ›", Market's calendar button).
+    useEffect(() => {
+        if (!openCalendar) return;
+        calendarFromDoor.current = true;
+        setCalendarOpen(true);
+        setPreviewPost(null);
+        setStackList(stackShut);
+        onOpenCalendarHandled?.();
+    }, [openCalendar, onOpenCalendarHandled]);
+
+    // Where a pin card (event, offer, need) stands. On a phone it is centred and as wide as the screen allows. From md up
+    // (a tablet and wider) it stands at the LEFT of the map, so it never sits in the middle of the pins, and with the calendar
+    // open it stops where the panel starts, so the two cannot meet at any width. The panel's width rule is written once, in
+    // MapCalendar, as the panel's classes, as this clamp and as a number, and its test pins that they agree.
+    const previewWrapClass = `absolute bottom-0 left-0 right-0 ${calendarOpen ? CARD_STOPS_AT_CALENDAR_CLASS : 'md:right-0'} z-[150] flex flex-col justify-end items-center md:items-start pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4`;
+
+    // A card beside the open calendar needs about 19.5rem of map to its left (a card's width with its 0.75rem gutters). Where
+    // the map is too narrow for that, on a phone (the panel covers the map) and on a tablet whose side bar leaves little
+    // map, a card opening closes the calendar: the phone does the same (map.tsx drops the stack list when a card opens), and
+    // a card squeezed to a sliver or lying over the panel is the thing this is here to prevent. Measured when the card opens
+    // and when the map's width changes, in rem so larger text asks for more room.
+    useEffect(() => {
+        if (!calendarOpen || !previewPost) return;
+        const fit = () => {
+            const el = mapContainer.current;
+            if (!el) return;
+            const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+            const wide = typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 768px)').matches;
+            if (el.clientWidth - calendarPanelWidth(el.clientWidth, wide) < 19.5 * rem) {
+                calendarFromDoor.current = false;
+                setCalendarOpen(false);
+            }
+        };
+        fit();
+        if (typeof ResizeObserver === 'undefined' || !mapContainer.current) return;
+        const watch = new ResizeObserver(fit);
+        watch.observe(mapContainer.current);
+        return () => watch.disconnect();
+    }, [calendarOpen, previewPost]);
+
+    // The notes about where the pins were read from take the filter bar's spot, so they sit under it, whatever its height (two
+    // rows, and more at large text): the bar's measured height, then a 0.25rem gap. The bar is at 4.25rem, under the header.
+    const noteTop = 'top-[calc(4.25rem+var(--map-filter-h,0px)+0.25rem)]';
+    const noteStyle = { '--map-filter-h': `${filterH}px` } as CSSProperties;
 
     // Shared by the offer/need and event forms.
     function renderLocationPicker() {
@@ -2166,7 +2278,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <p
                     role="status"
                     data-testid="map-location-hint"
-                    className="absolute top-[4.25rem] md:top-3 left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 pointer-events-none"
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 pointer-events-none`}
                 >
                     {t("This community hasn't set its location yet")}
                 </p>
@@ -2176,7 +2289,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <p
                     role="status"
                     data-testid="map-near-empty"
-                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>
                         {near.from === 'area'
@@ -2191,7 +2305,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <p
                     role="status"
                     data-testid="map-area-failed"
-                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>{areaStanding}</span>
                 </p>
@@ -2201,7 +2316,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 <p
                     role="status"
                     data-testid="map-area-failed"
-                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>{t("Couldn't check your area just now, so this is the newest from everywhere.")}</span>
                     <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">{t('Try again')}</button>
@@ -2211,7 +2327,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             {nearAgain && !showLocationHint && !showNewPost && (
                 <p
                     data-testid="map-near-again"
-                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                    style={noteStyle}
+                    className={`absolute ${noteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
                     <span>{t('Newest from everywhere.')}</span>
                     <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">
@@ -2220,39 +2337,158 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 </p>
             )}
 
-            {/* Event chips (docs/events-on-the-map.md §3). They filter event pins only, by start time. One row
-                that scrolls sideways rather than wraps, so it holds at 320px with large text, and only as wide as its chips so the rest of the map still pans. Shown once this
-                community has an upcoming event. */}
+            {/* The map's filter (the phone's, apps/native map.tsx; the rule is @beanpool/core map-type-filter.ts) and the Calendar
+                button (DESIGN-map-calendar-fable.md §2, §6). Row one: the type pills (All · Offers · Needs · Events) with a ✕ while
+                a filter is on, then the calendar button. Row two, always under it: one chip naming the category (it opens every
+                category as tiles) for All / Offers / Needs, or the date chips under Events. Each row scrolls sideways rather than
+                wraps, so it holds at 320px with large text. It sits under the header at every width: the header draws on the
+                map at md and up too (see AppHeader), so at md:top-3 the bar stood on the header's sync chip. */}
             {/* Hidden while composing: at 320px the New Post panel leaves only a strip of map to drop a pin in. */}
-            {hasOpenEvents && !showNewPost && (
+            {!showNewPost && (
                 <div
-                    ref={eventChipsRef}
-                    data-testid="event-window-chips"
-                    role="group"
-                    aria-label={t('Show events')}
-                    className="absolute top-[4.25rem] md:top-3 left-0 z-[100] w-fit max-w-full px-3 py-1 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain"
-                    style={{ scrollbarWidth: 'none' }}
+                    ref={filterBarRef}
+                    data-testid="map-filter-bar"
+                    // Over the locate pill and the + button while the panel is open: the phone hides them then, and the tiles under them are taps.
+                    className={`absolute top-[4.25rem] left-0 ${categoryOpen ? 'z-[120]' : 'z-[100]'} w-fit max-w-full ${calendarOpen ? CHIPS_STOP_AT_CALENDAR_CLASS : ''} px-3 py-1 flex flex-col items-start gap-1.5 pointer-events-none`}
                 >
-                    {EVENT_WINDOWS.map(w => (
+                    <ScrollHintRow
+                        testId="map-filter-row"
+                        className="max-w-full flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
+                    >
+                        <div
+                            data-testid="map-type-pills"
+                            role="group"
+                            className="flex-shrink-0 flex flex-nowrap items-center p-0.5 rounded-full border border-nature-200 dark:border-nature-700 bg-white/95 dark:bg-nature-900/95 shadow-md"
+                        >
+                            {MAP_TYPE_PILLS.map(pill => {
+                                const on = mapType === pill.id;
+                                const filled = pill.id === 'offers' ? 'bg-bp-commit-fill text-bp-commit-on'
+                                    : pill.id === 'needs' ? 'bg-bp-action-fill text-bp-action-on'
+                                    : pill.id === 'events' ? 'bg-violet-700 text-white'
+                                    : 'bg-nature-200 dark:bg-nature-700 text-nature-900 dark:text-white';
+                                return (
+                                    <button
+                                        key={pill.id}
+                                        type="button"
+                                        data-testid={`map-type-${pill.id}`}
+                                        aria-pressed={on}
+                                        onClick={() => selectMapType(pill.id)}
+                                        className={`flex-shrink-0 whitespace-nowrap min-h-[44px] px-3.5 rounded-full text-sm cursor-pointer transition-colors ${
+                                            on ? `${filled} font-extrabold` : 'text-nature-700 dark:text-oat-100 font-semibold'
+                                        }`}
+                                    >
+                                        {t(pill.label)}
+                                    </button>
+                                );
+                            })}
+                            {mapFiltersActive(mapFilterState) && (
+                                <button
+                                    type="button"
+                                    data-testid="map-filter-clear"
+                                    aria-label={t('Clear filters')}
+                                    onClick={clearMapFilters}
+                                    className="flex-shrink-0 min-h-[44px] min-w-[44px] px-2 rounded-full text-sm font-extrabold text-nature-600 dark:text-nature-300 cursor-pointer"
+                                >
+                                    <span aria-hidden="true">✕</span>
+                                </button>
+                            )}
+                        </div>
                         <button
-                            key={w.id}
                             type="button"
-                            aria-pressed={eventWindow === w.id}
-                            onClick={() => { setEventWindow(w.id); setPreviewPost(null); fitEventPins(w.id); }}
-                            className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors ${
-                                eventWindow === w.id
+                            data-testid="map-calendar-button"
+                            aria-label={t('Calendar')}
+                            aria-pressed={calendarOpen}
+                            onClick={() => {
+                                calendarFromDoor.current = false;
+                                setCalendarOpen(open => !open);
+                                setPreviewPost(null);
+                                setStackList(stackShut);
+                            }}
+                            className={`flex-shrink-0 min-h-[48px] min-w-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors flex items-center justify-center cursor-pointer ${
+                                calendarOpen
                                     ? 'bg-violet-700 border-violet-700 text-white'
                                     : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
                             }`}
                         >
-                            {w.id === 'all' ? t('All events') : w.id === 'today' ? t('Today') : w.id === 'weekend' ? t('This weekend') : t('Next 7 days')}
+                            <svg data-calendar-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                                <path d="M3.5 10h17M8 3v4M16 3v4" />
+                                <circle cx="8.5" cy="14.5" r="0.6" fill="currentColor" />
+                                <circle cx="12" cy="14.5" r="0.6" fill="currentColor" />
+                                <circle cx="15.5" cy="14.5" r="0.6" fill="currentColor" />
+                            </svg>
                         </button>
-                    ))}
+                    </ScrollHintRow>
+
+                    {mapType === 'events' ? (
+                        <ScrollHintRow
+                            testId="event-window-chips"
+                            role="group"
+                            aria-label={t('Filter events by date')}
+                            className="max-w-full flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain py-1"
+                        >
+                            {MAP_EVENT_WINDOWS.map(w => (
+                                <button
+                                    key={w.id}
+                                    type="button"
+                                    aria-pressed={eventWindow === w.id}
+                                    onClick={() => { setEventWindow(w.id); setPreviewPost(null); fitEventPins(w.id); }}
+                                    className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors cursor-pointer ${
+                                        eventWindow === w.id
+                                            ? 'bg-violet-700 border-violet-700 text-white'
+                                            : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
+                                    }`}
+                                >
+                                    {w.id === 'all' ? t('All events') : w.id === 'today' ? t('Today') : w.id === 'weekend' ? t('This weekend') : t('Next 7 days')}
+                                </button>
+                            ))}
+                        </ScrollHintRow>
+                    ) : (
+                        <div className="relative pointer-events-auto max-w-full">
+                            <button
+                                type="button"
+                                data-testid="map-category-chip"
+                                aria-expanded={categoryOpen}
+                                onClick={() => setCategoryOpen(open => !open)}
+                                className={`whitespace-nowrap min-h-[44px] px-3.5 rounded-full border text-sm font-bold shadow-md transition-colors cursor-pointer ${
+                                    mapCategory !== 'all'
+                                        ? `${categoryFill} border-transparent`
+                                        : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
+                                }`}
+                            >
+                                {mapCategoryChipLabel(mapCategory, categoryOpen)}
+                            </button>
+                            {categoryOpen && (
+                                <div
+                                    data-testid="map-category-panel"
+                                    role="group"
+                                    aria-label={t('Filter by category')}
+                                    className="absolute left-0 top-full mt-1.5 w-[min(24rem,calc(100vw-1.5rem))] max-h-[min(60vh,28rem)] overflow-y-auto overscroll-contain grid gap-1 p-1 rounded-2xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 shadow-xl"
+                                    style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(4.5rem, 1fr))' }}
+                                >
+                                    {MAP_CATEGORY_CHIPS.map(c => (
+                                        <button
+                                            key={c.id}
+                                            type="button"
+                                            aria-pressed={mapCategory === c.id}
+                                            onClick={() => { setMapCategory(c.id); setCategoryOpen(false); setPreviewPost(null); }}
+                                            className={`min-h-[48px] px-0.5 py-1 rounded-xl flex flex-col items-center justify-center text-center cursor-pointer ${
+                                                mapCategory === c.id ? `${categoryFill} font-extrabold` : 'bg-black/5 dark:bg-white/10 text-nature-800 dark:text-oat-50 font-semibold'
+                                            }`}
+                                        >
+                                            <span className="text-lg leading-snug" aria-hidden="true">{c.emoji}</span>
+                                            <span className="text-[0.7rem] leading-tight">{t(c.label)}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
-            {/* FAB Pill - Bottom Left (avoids header overlap). It gives way to the list, which would cut it in half. */}
-            <div className={`${stackOpen ? 'hidden' : 'flex'} absolute bottom-[6.5rem] left-3 flex-col items-center bg-white/95 dark:bg-nature-900/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-nature-200 dark:border-nature-700 rounded-2xl z-[100] overflow-hidden`}>
+            {/* FAB Pill - Bottom Left (avoids header overlap). It gives way to the list or calendar, which would cut it in half, and from md up to a pin card, which stands at the same left edge. */}
+            <div className={`${stackOpen || calendarOpen ? 'hidden' : previewPost ? 'flex md:hidden' : 'flex'} absolute bottom-[6.5rem] left-3 flex-col items-center bg-white/95 dark:bg-nature-900/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-nature-200 dark:border-nature-700 rounded-2xl z-[100] overflow-hidden`}>
                 <button
                     onClick={handleLocate}
                     aria-label={t('My location')}
@@ -2316,12 +2552,34 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             )}
         </div>
 
-        {stackOpen && <MapStackList key={stackKeys?.join()} pins={stack} covered={covered} takeFocus={stackList.byTap} onClose={() => setStackList(stackShut)} />}
-        <p role="status" className="sr-only">{stackOpen && !stackList.byTap && !covered ? stackHeading(stack.length) : ''}</p>
+        {stackOpen && !calendarOpen && <MapStackList key={stackKeys?.join()} pins={stack} covered={covered} takeFocus={stackList.byTap} onClose={() => setStackList(stackShut)} />}
+        <p role="status" className="sr-only">{stackOpen && !calendarOpen && !stackList.byTap && !covered ? stackHeading(stack.length) : ''}</p>
+
+        {calendarOpen && (
+            <MapCalendar
+                posts={posts.filter((p) => !blockedSet.has(p.authorPublicKey) && !inactiveEnterpriseKeys.has(p.authorPublicKey))}
+                covered={covered}
+                onClose={() => {
+                    setCalendarOpen(false);
+                    if (calendarFromDoor.current) onCalendarClosedBack?.();
+                    calendarFromDoor.current = false;
+                }}
+                onOpenPost={(post) => {
+                    calendarFromDoor.current = false;
+                    if (onNavigate) onNavigate('marketplace', post.id);
+                }}
+                onStartEvent={visitor ? undefined : () => {
+                    calendarFromDoor.current = false;
+                    setCalendarOpen(false);
+                    setNewPostType('event');
+                    tryOpenComposer();
+                }}
+            />
+        )}
 
         {/* Map Preview Card — an event shows its own card (§3) */}
         {previewPost && previewPost.type === 'event' && (
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+            <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
                 <div className="m-3 w-[calc(100%-1.5rem)] max-w-[28rem] pointer-events-auto relative flex flex-col gap-2 bg-white dark:bg-nature-900 rounded-[24px] p-2 shadow-[0_10px_20px_rgba(0,0,0,0.15)] border border-nature-200 dark:border-nature-800">
                     <EventCard
                         post={previewPost}
@@ -2359,7 +2617,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         {previewPost && previewPost.type !== 'event' && visitor && (
             // A visitor's pin card (G9a §7): the listing's title and "near here", since the pin is its area's centre, and
             // the way to its detail sheet. No price, no name, no badge.
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+            <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
                 <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800">
                     {/* A 44 px target, as the event card's ✕ (48 px) is: the small circle sits where it was, inside it. */}
                     <button
@@ -2391,7 +2649,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             </div>
         )}
         {previewPost && previewPost.type !== 'event' && !visitor && (
-            <div data-testid="map-preview-card" className="absolute bottom-0 left-0 right-0 z-[150] flex flex-col justify-end items-center pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4" style={covered ? { display: 'none' } : undefined}>
+            <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
                 <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 
                         onClick={() => setPreviewPost(null)}
@@ -3076,6 +3334,22 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 </span>
                             </span>
                         </label>
+                        {nodeHasPollOther && (
+                        <label className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800 text-xs text-nature-800 dark:text-nature-200 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={pollOther}
+                                onChange={(e) => setPollOther(e.target.checked)}
+                                className="mt-0.5 w-5 h-5 shrink-0 accent-purple-600"
+                                data-testid="poll-other"
+                            />
+                            <span className="min-w-0" style={{ overflowWrap: 'anywhere' }}>
+                                <span className="block font-bold mb-0.5">{pollOtherLines.tick()}</span>
+                                <span className="block leading-relaxed">{pollOtherLines.tickHint()}</span>
+                                {!pollOpenVote && <span className="block leading-relaxed mt-1">{pollOtherLines.tickHintAnonymous()}</span>}
+                            </span>
+                        </label>
+                        )}
                         {pollPlacelessNote && (
                             <p data-testid="poll-placeless-note" role="status" className="text-xs leading-relaxed text-nature-700 dark:text-nature-300" style={{ overflowWrap: 'anywhere' }}>
                                 📍 {pollPlacelessNote}
@@ -3368,6 +3642,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         checked={alsoOnGlobal} onChange={setAlsoOnGlobal} identity={identity} listing need={newPostType === 'need'}
                     />
                 )}
+                {alsoOnGlobal && newPostType !== 'event' && newPostType !== 'poll' && <TakeQuestionsTick checked={takesQuestions} onChange={setTakesQuestions} />}
 
                 <button
                     onClick={handleCreatePost}

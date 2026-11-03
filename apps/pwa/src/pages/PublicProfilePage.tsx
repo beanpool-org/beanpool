@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-    getMemberProfile, updateMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
+    getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
     addFriendApi, submitRating, vouchMemberApi, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
     type PublicCreatorChannel
 } from '../lib/api';
@@ -11,6 +11,8 @@ import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, listPhotoUrl, t, tn, word, type QuizResult } from '@beanpool/core';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
+import { keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
+import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
@@ -150,19 +152,14 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     };
 
     const handleQuizComplete = async (quizResult: QuizResult) => {
-        const publicArchetype = JSON.stringify({
-            primary: quizResult.primary,
-            secondary: quizResult.secondary,
-            mode: quizResult.mode,
-            updatedAt: quizResult.updatedAt,
-        });
+        keepQuizResult(identity.publicKey, quizResult);
         const jsonStr = JSON.stringify(quizResult);
         setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
         if (isSelf) {
             setProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
         }
         try {
-            await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+            await publishQuizResult(identity.publicKey, quizResult);
         } catch (e) {
             console.warn('[Archetype] Save failed:', e);
             throw e;
@@ -466,7 +463,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {/* ─── Collaboration Chemistry ─── */}
                 {(() => {
                     if (loading || !profile) return null;
-                    const viewerArchetype = parseArchetype(viewerProfile?.archetype);
+                    const viewerArchetype = parseArchetype(shownWorkingStyle(identity.publicKey, viewerProfile?.archetype));
                     const targetArchetype = parseArchetype(profile?.archetype);
                     const synergy = (!isSelf && viewerArchetype && targetArchetype)
                         ? calculateSynergy(viewerArchetype.primary, targetArchetype.primary)
@@ -664,7 +661,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {/* Working style (self) */}
                 {isSelf && (() => {
                     if (loading || !profile) return null;
-                    const mine = parseArchetype(profile?.archetype) || parseArchetype(viewerProfile?.archetype);
+                    const mine = parseArchetype(shownWorkingStyle(identity.publicKey, profile?.archetype));
                     const primary = mine ? ARCHETYPES[mine.primary] : null;
                     const secondary = mine ? ARCHETYPES[mine.secondary] : null;
 
@@ -734,6 +731,13 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         {t('🔄 Retake')}
                                     </button>
                                 </div>
+                                <RemoveWorkingStyleButton
+                                    publicKey={identity.publicKey}
+                                    onRemoved={() => {
+                                        setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: null }));
+                                        setProfile((prev: any) => ({ ...(prev || {}), archetype: null }));
+                                    }}
+                                />
                             </div>
                         );
                     }

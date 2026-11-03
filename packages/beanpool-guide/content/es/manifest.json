@@ -42,8 +42,8 @@
     },
     "talk": {
       "title": {
-        "text": "Charlas",
-        "sourceHash": "449f5a775762cdc5"
+        "text": "Chat",
+        "sourceHash": "460b3a7da007b7af"
       },
       "summary": {
         "text": "Mensajes, grupos y sus chats, personas y amistades, chats de eventos, silenciar, menciones y un cambio de clave.",

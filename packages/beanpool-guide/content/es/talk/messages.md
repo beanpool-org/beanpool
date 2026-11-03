@@ -9,23 +9,23 @@ source-hash: dd41c095375671ac
 
 ## Tus chats
 
-**Charlas** tiene tres botones en la parte superior: **Mensajes**, **Grupos** y **Personas**.
+**Chat** tiene tres botones en la parte superior: **Mensajes**, **Grupos** y **Personas**.
 
-Toca **Charlas** en la fila de pestañas, luego **Mensajes**. Tus chats con personas se enumeran allí. Los tratos que requieren tu atención están en la parte superior, bajo **Acción requerida**.
+Toca **Chat** en la fila de pestañas, luego **Mensajes**. Tus chats con personas se enumeran allí. Los tratos que requieren tu atención están en la parte superior, bajo **Acción requerida**.
 
 Los chats que pertenecen a un grupo, un emprendimiento o un evento están bajo **Grupos**, no aquí. Consulta «Grupos».
 
 - Busca con **Buscar chats, publicaciones, colaboradores...**.
 - El botón de filtro ordena por **Reciente** o **No leído** (y, donde tu comunidad usa frijoles, por los frijoles en cada trato, de mayor a menor o de menor a mayor), y puede mostrar **Solo no leídos** o **Solo amigos**.
-- En el teléfono, el botón de búsqueda y filtro se oculta al desplazarte hacia abajo. Desplázate un poco hacia arriba y vuelve a aparecer. Toca **Charlas** de nuevo para saltar a la parte superior.
+- En el teléfono, el botón de búsqueda y filtro se oculta al desplazarte hacia abajo. Desplázate un poco hacia arriba y vuelve a aparecer. Toca **Chat** de nuevo para saltar a la parte superior.
 
 En la aplicación web esta es la pestaña **Chat**. Enumera todos tus chats, incluidos los de grupos y eventos, con **Todo**, **Transacciones**, **Directo** y **Grupos** en la parte superior, y no tiene búsqueda ni filtro.
 
 ## Iniciar un chat
 
 - Desde un perfil: abre su perfil y toca **Mensaje**. Ahí también puedes agregarlo como amigo.
-- Desde **Charlas**: toca el botón del lápiz, luego busca a la persona por su nombre. En la comunidad mundial, Mensaje nuevo enumera a las personas con las que has comerciado y a tus amigos. Para encontrar a cualquier otra persona, escribe al menos 2 letras de su nombre.
-- Desde la lista de miembros: **Charlas**, luego **Personas**, y toca 💬 junto al nombre de un miembro en **Comunidad** o **Amigos**.
+- Desde **Chat**: toca el botón del lápiz, luego busca a la persona por su nombre. En la comunidad mundial, Mensaje nuevo enumera a las personas con las que has comerciado y a tus amigos. Para encontrar a cualquier otra persona, escribe al menos 2 letras de su nombre.
+- Desde la lista de miembros: **Chat**, luego **Personas**, y toca 💬 junto al nombre de un miembro en **Comunidad** o **Amigos**.
 - Desde una publicación: toca **Mensaje** y el nombre de la persona.
 
 En la aplicación web, usa **Mensaje** en su perfil, 💬 en su fila bajo **Personas**, **✉️ Nuevo mensaje directo**, o el botón **💬 Mensaje** en una publicación.

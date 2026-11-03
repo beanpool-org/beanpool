@@ -4,7 +4,7 @@
  * (utils/__tests__/needs-you.test.ts); the component only loads the data and draws the result.
  */
 
-import { capitalFirst, dealsNeedingMe, fitNeedsYou, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
+import { capitalFirst, dealsNeedingMe, fitNeedsYou, inviteAskNeedsLine, isOwnInviteChange, NEEDS_YOU_PRIORITY, NEEDS_YOU_SLOT, needsYouRowOrder, t, tn, type NeedsYouKind } from '@beanpool/core';
 import type { DecisionWithTally, MyPoolVoting } from './db';
 import { isMuted, type YourChatMute } from './your-groups';
 import { isOwnRemoval, poolVoteBlocker } from './decision-card';
@@ -189,6 +189,7 @@ export function adminItemInWords(i: Pick<AdminQueueItem, 'kind' | 'count' | 'lab
         case 'removals': return tn(n, '{n} removal in its 7-day grace period', '{n} removals in their 7-day grace period');
         case 'unclean_shutdown': return t('the node restarted after an unclean shutdown');
         case 'knocks': return tn(n, '{n} person asked to join', '{n} people asked to join');
+        case 'invite_asks': return inviteAskNeedsLine(n);
         // A kind a newer node added: its own label, with the count.
         default: return `${i.label.charAt(0).toLowerCase()}${i.label.slice(1)}: ${n}`;
     }
@@ -229,7 +230,9 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
     const queued = (queue?.items || []).filter(x => x.count > 0);
     // Requests to join are answered in People → Invites, which Settings has no list for (front doors S1): their own line.
     const knocks = queued.find(x => x.kind === 'knocks');
-    const adminItems = queued.filter(x => x.kind !== 'knocks');
+    // A member's ask that an admin invite someone: answered in the same place, so the same.
+    const asks = queued.find(x => x.kind === 'invite_asks');
+    const adminItems = queued.filter(x => x.kind !== 'knocks' && x.kind !== 'invite_asks');
     if (queue && adminItems.length) {
         out.push({
             kind: 'admin', count: adminItems.reduce((n, x) => n + x.count, 0), accent: true,
@@ -240,6 +243,9 @@ export function buildNeedsYou(i: NeedsYouInputs): NeedsYouEntry[] {
     }
     if (knocks) {
         out.push({ kind: 'knock', count: knocks.count, accent: true, label: capitalFirst(adminItemInWords(knocks)), target: { to: 'people' } });
+    }
+    if (asks) {
+        out.push({ kind: 'ask', count: asks.count, accent: true, label: capitalFirst(adminItemInWords(asks)), target: { to: 'people' } });
     }
 
     const deals = dealsWaiting(i.transactions || [], i.me, i.now);

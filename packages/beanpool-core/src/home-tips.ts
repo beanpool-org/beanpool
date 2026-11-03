@@ -11,7 +11,7 @@
  * - **Rotation**: the card shows the first tip not seen. Next marks it seen and draws the next one. On landing, a tip
  *   first shown on an earlier local day is marked seen and the next one drawn, once. Nothing moves while Home is in front.
  * - **Stopping**: when every tip in the list is seen, or at once on "Don't show tips again". Showing the card again in
- *   Edit home starts over from the first tip.
+ *   Add a card starts over from the first tip.
  */
 
 import { t, word, type WordKey } from './words.js';
@@ -69,9 +69,9 @@ export const HOME_TIPS: readonly HomeTip[] = [
     { id: 'find-community', when: n => n.profile === 'global', guide: 'finding-a-community',
         text: word('Neighbours trade in a local community, with its own Beans. Find one near you on Home and ask to join: any member there can let you in.') },
     { id: 'invites', when: invitesHere, guide: 'joining',
-        text: word("Know someone who'd fit in? Invite them from Talk, People, Invites: an invite works once and lasts 30 days.") },
+        text: word("Know someone who'd fit in? Invite them from Chat, People, Invites: an invite works once and lasts 30 days.") },
     { id: 'groups', when: always, guide: 'groups',
-        text: word('Groups are for a street, a choir, a garden crew, a guild. Find them in Talk under Groups, or start one.') },
+        text: word('Groups are for a street, a choir, a garden crew, a guild. Find them in Chat under Groups, or start one.') },
     { id: 'votes', when: decideHere, guide: 'decisions',
         text: word('Commons is where your community decides things together. A Decision is a secret ballot, and when it passes it is carried out.') },
     { id: 'polls', when: n => !decideHere(n), guide: 'polls',
@@ -81,7 +81,7 @@ export const HOME_TIPS: readonly HomeTip[] = [
     { id: 'visitors', when: n => !beansOn(n), guide: 'privacy',
         text: word("People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.") },
     { id: 'guide', when: always, guide: 'the-bean',
-        text: word("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Edit home, at the bottom, arranges your cards.") },
+        text: word("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.") },
 ];
 
 /** The tips this node shows this reader, in order. */
@@ -139,7 +139,7 @@ export interface TipsStep { record: TipsRecord; view: TipsView | null }
 
 const seenIn = (record: TipsRecord) => new Set(record.seen);
 
-/** Every tip in this list is seen (the card went by itself: Edit home says "All tips seen"). */
+/** Every tip in this list is seen (the card went by itself: Arrange says "All tips seen"). */
 export function allTipsSeen(record: TipsRecord, list: readonly HomeTip[]): boolean {
     const seen = seenIn(record);
     return list.every(t => seen.has(t.id));
@@ -199,7 +199,7 @@ export function dismissTips(record: TipsRecord, at: string): TipsRecord {
 }
 
 /**
- * Edit home switched Tips on (or Reset to defaults): the tips start over from the first one, kept as the tip on the card
+ * Tips added back (or Reset to defaults): the tips start over from the first one, kept as the tip on the card
  * from today, so the next day's landing moves on from it (PR #1694 review 6: an empty record left tip 1 up two days).
  */
 export function restartTips(list: readonly HomeTip[], today: string): TipsRecord {
@@ -217,5 +217,5 @@ export function tipsNextLabel(view: Pick<TipsView, 'last'>): string {
 }
 
 export const TIPS_DONT_SHOW = word("Don't show tips again");
-export const TIPS_DONT_SHOW_LABEL = word("Don't show tips again. Edit home brings them back.");
+export const TIPS_DONT_SHOW_LABEL = word("Don't show tips again. Add a card brings them back.");
 export const TIPS_ALL_SEEN = word('All tips seen');

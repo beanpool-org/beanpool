@@ -22,7 +22,7 @@ Tính năng tắt thông báo hiện chỉ có trên ứng dụng điện thoạ
 - Nó dừng các cảnh báo của cuộc trò chuyện đó. Trong đoạn chat của một nhóm, ai đó @nhắc đến bạn vẫn có thể liên lạc được với bạn. Xem "Nhắc đến (@tên)".
 - Cuộc trò chuyện của một doanh nghiệp không gửi cảnh báo nào, vì vậy không có cảnh báo nào để dừng lại. Việc tắt thông báo cuộc trò chuyện đó sẽ giúp nó không bị tính vào các con số bên dưới.
 - Cuộc trò chuyện vẫn hiển thị các tin nhắn mới.
-- Trong phần **Trò chuyện**, mục **Nhóm**, một cuộc trò chuyện bị tắt tiếng sẽ hiển thị hình chiếc chuông có dấu gạch ngang qua. Số lượng tin chưa đọc của nó có màu xám, và không được cộng vào con số trên mục **Nhóm**.
+- Trong phần **Chat**, mục **Nhóm**, một cuộc trò chuyện bị tắt tiếng sẽ hiển thị hình chiếc chuông có dấu gạch ngang qua. Số lượng tin chưa đọc của nó có màu xám, và không được cộng vào con số trên mục **Nhóm**.
 - Trong đoạn chat của một nhóm hoặc của một doanh nghiệp, thanh trên cùng cũng sẽ không hiển thị thông báo về nó. Một cuộc trò chuyện bị tắt tiếng với một người vẫn được tính ở đó.
 - Trạng thái tắt thông báo vẫn được duy trì khi bạn rời khỏi cuộc trò chuyện. Khi bạn mở lại đoạn chat của một nhóm hoặc của một doanh nghiệp, phía trên cùng sẽ hiển thị **đã tắt tiếng**.
 

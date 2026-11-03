@@ -39,8 +39,8 @@ Entre o feijão e os botões à direita, pequenos ícones aparecem apenas enquan
 
 - **Um aperto de mãos:** um acordo aguarda você. Alguém espera que você aceite uma solicitação, ou um acordo do qual você participa ainda não foi concluído. Se houver apenas um, o toque abre esse acordo. Se houver mais, abre **Meus acordos**.
 - **Uma urna eleitoral:** uma votação na qual você ainda não votou. O toque abre **Bens comuns**, em **Decidir**. Se a primeira votação for em um grupo ou uma votação de custódios em um empreendimento, o toque abre esse grupo ou empreendimento. Uma votação na qual você ainda não pode votar não conta aqui, por exemplo, uma que exige concluir uma troca primeiro.
-- **Um balão de fala:** uma mensagem não lida de uma pessoa. Se for de uma única pessoa, o toque abre essa conversa. Se for de várias pessoas, abre **Conversas**, em **Mensagens**, mostrando apenas as não lidas.
-- **Um grupo de pessoas:** novas mensagens nos seus grupos, conversas de empreendimentos ou de eventos. Conversas que você silenciou permanecem discretas aqui. O toque abre a conversa, ou **Conversas**, em **Grupos**, se houver várias.
+- **Um balão de fala:** uma mensagem não lida de uma pessoa. Se for de uma única pessoa, o toque abre essa conversa. Se for de várias pessoas, abre **Bate-papo**, em **Mensagens**, mostrando apenas as não lidas.
+- **Um grupo de pessoas:** novas mensagens nos seus grupos, conversas de empreendimentos ou de eventos. Conversas que você silenciou permanecem discretas aqui. O toque abre a conversa, ou **Bate-papo**, em **Grupos**, se houver várias.
 - **Um escudo:** apenas para quem ajuda a administrar sua comunidade. Aparece enquanto houver trabalho administrativo pendente, como uma denúncia a revisar ou uma negociação travada que precisa de mediação. O toque solicita o bloqueio de tela do celular e abre as configurações da comunidade nessa tarefa. Se as configurações da sua comunidade exigirem um código de login, ele também será solicitado.
 
 Os ícones se empilham a partir da direita. O mais importante fica ao lado do ícone ? e mantém seu lugar enquanto outros aparecem e desaparecem.
@@ -83,6 +83,6 @@ Enquanto um desses botões estiver visível, o ícone de convite fica oculto.
 
 ## As abas
 
-Abaixo da barra superior ficam as abas: **Início**, **Mercado**, **Mapa**, **Conversas**, **Bens comuns** e **Registro**. O nome de cada aba fica acima do seu ícone. No celular, uma comunidade local sem Feijões não exibe **Bens comuns** nem **Registro**. A comunidade global mostra ambos, com exemplos de uma comunidade local. Consulte "Os Feijões e a comunidade global".
+Abaixo da barra superior ficam as abas: **Início**, **Mercado**, **Mapa**, **Bate-papo**, **Bens comuns** e **Registro**. O nome de cada aba fica acima do seu ícone. No celular, uma comunidade local sem Feijões não exibe **Bens comuns** nem **Registro**. A comunidade global mostra ambos, com exemplos de uma comunidade local. Consulte "Os Feijões e a comunidade global".
 
 Em uma página longa, toque na aba em que você já está para voltar rapidamente ao topo. Isso funciona em todas as abas, exceto no **Mapa**.

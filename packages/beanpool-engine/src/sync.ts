@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
-import { freeTagsOf, parseReachPeers } from '@beanpool/core';
+import { freeTagsOf, parseReachPeers, pollOtherOption } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -286,6 +286,16 @@ export interface SyncPollVote {
     createdAt: string;
     /** Whether the voter was a new or 12-word account when they first voted: 1, 0, or null where the node kept none. */
     voterNewOrWords?: number | null;
+    /** An open vote's typed Other: its poll_answers row. Never on an anonymous poll. */
+    otherAnswerId?: string | null;
+}
+
+/** A row of poll_answers, as it travels in its poll's row (`pollAnswers` on a copied post): it names nobody. */
+export interface SyncPollAnswer {
+    id: string;
+    optionId: string;
+    words: string | null;
+    wordsRemoved: number;
 }
 
 export interface SyncEventRsvp {
@@ -529,6 +539,8 @@ export interface SyncCommunitySettings {
         directory_promise?: string | null;
         /** Where members' copies go: `server` or `none`, or null for BeanPool's key vault, the default (apps/server config/recovery-copies.ts). */
         recovery_copies?: string | null;
+        /** Who decides a removal: `automatic`, `everyone` or `jury`, or null for the default (apps/server config/removal-decider.ts). */
+        removal_decider?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {
@@ -1008,6 +1020,35 @@ function enterprisePledgeOfRow(r: any): SyncEnterprisePledge {
     };
 }
 
+/**
+ * Posts as a standby copies them, each poll with its poll_answers in its row (`pollAnswers`). They have no time of their
+ * own to be found by (schema.sql): every write moves the poll's updated_at, so a delta that carries a change carries the
+ * poll, and all its answers, in the order of their random ids. This is the copy for a standby, which holds the whole node;
+ * the listings pull reads its own columns and no read of a post has this field.
+ */
+function postsWithAnswers(db: Db, rows: any[]): MarketplacePost[] {
+    const polls = rows.filter((r) => r.type === 'poll').map((r) => r.id as string);
+    const answersOf = new Map<string, SyncPollAnswer[]>();
+    if (polls.length > 0) {
+        try {
+            const found = db.prepare('SELECT post_id, id, option_id, words, words_removed FROM poll_answers WHERE post_id IN (SELECT value FROM json_each(?)) ORDER BY post_id, id')
+                .all(JSON.stringify(polls)) as { post_id: string; id: string; option_id: string; words: string | null; words_removed: number }[];
+            for (const a of found) {
+                if (!answersOf.has(a.post_id)) answersOf.set(a.post_id, []);
+                answersOf.get(a.post_id)!.push({ id: a.id, optionId: a.option_id, words: a.words, wordsRemoved: a.words_removed });
+            }
+        } catch {
+            // Table absent on older schema/fixtures
+        }
+    }
+    return rows.map((row) => {
+        const post = postOfRow(row);
+        const answers = answersOf.get(row.id);
+        // Said even when it is none: the importer replaces a poll's rows with this list, so a last line taken back goes there too.
+        return answers || pollOtherOption(post.pollOptions) ? { ...post, pollAnswers: answers ?? [] } as MarketplacePost : post;
+    });
+}
+
 function postOfRow(row: any): MarketplacePost {
     return {
         id: row.id,
@@ -1045,6 +1086,9 @@ function postOfRow(row: any): MarketplacePost {
         ...(row.shop_id != null ? { shopId: row.shop_id } : {}),
         // When it was featured in its shop, as the main server holds it (apps/server engine/sync.ts postFeatured).
         ...(row.featured_at != null ? { featuredAt: row.featured_at } : {}),
+        // A pin, as the main server holds it (apps/server engine/sync.ts postPinned): none said is none.
+        ...(row.pinned_until != null ? { pinnedUntil: row.pinned_until } : {}),
+        ...(row.pinned_at != null ? { pinnedAt: row.pinned_at } : {}),
         // What made it, when an owner's AI assistant did (apps/server engine/sync.ts postCreatedVia): none said is none.
         ...(row.created_via != null ? { createdVia: row.created_via } : {}),
         // Its tags, as the main server holds them (apps/server engine/sync.ts postTags): none said is none.
@@ -1055,6 +1099,7 @@ function postOfRow(row: any): MarketplacePost {
         ...(row.shown_from_host != null ? { shownFromHost: row.shown_from_host } : {}),
         ...(row.shown_from_post_id != null ? { shownFromPostId: row.shown_from_post_id } : {}),
         ...(row.shown_price != null ? { shownPrice: row.shown_price } : {}),
+        ...(row.shown_takes_questions === 1 ? { shownTakesQuestions: 1 } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,
@@ -1339,6 +1384,7 @@ function pollVoteOfRow(r: any): SyncPollVote {
         signature: r.signature || '',
         createdAt: r.created_at,
         voterNewOrWords: r.voter_new_or_words ?? null,
+        otherAnswerId: r.other_answer_id ?? null,
     };
 }
 
@@ -1548,7 +1594,7 @@ export const EXPORT_CATEGORIES: readonly ExportCategory[] = [
             return rows.map((r) => memberOfRow(withPhoto(r, photos), prefs));
         },
     },
-    { key: 'posts', table: 'posts', delta: { watermark: 'updated_at' }, shape: eachRow(postOfRow) },
+    { key: 'posts', table: 'posts', delta: { watermark: 'updated_at' }, shape: postsWithAnswers },
     // The photos' rows as the table holds them: the server puts each one's bytes back, or, in a copy served in pages, names
     // each one's object by reference (apps/server engine/sync.ts).
     { key: 'photos', table: 'post_photos', delta: { watermark: 'updated_at' }, shape: asTheyAre },
@@ -1641,7 +1687,7 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
-    const posts: MarketplacePost[] = sel('posts', 'updated_at').map(postOfRow);
+    const posts: MarketplacePost[] = postsWithAnswers(db, sel('posts', 'updated_at'));
 
     const photos = sel('post_photos', 'updated_at') as PostPhoto[];
     const projects = sel('projects', 'updated_at') as Project[];

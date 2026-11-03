@@ -16,6 +16,8 @@ vi.hoisted(() => {
     Loader._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 });
 import Module from 'node:module';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -50,7 +52,7 @@ vi.mock('react-native', () => {
         TouchableOpacity: el('button'), SafeAreaView: el('div'), RefreshControl: () => null, ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
-        Alert: { alert: () => {} },
+        Alert: { alert: (...a: unknown[]) => { ((globalThis as any).__shopAlerts ??= []).push(a); } },
         Share: { share: async () => ({}) },
         Linking: { openURL: async () => {}, openSettings: async () => {} },
         DeviceEventEmitter: { addListener: listener, emit() {} },
@@ -250,6 +252,19 @@ for (const dark of [false, true]) {
             await click(byId('shopfront-message'), 'Message Dave');
             expect(net.args.find(([n]) => n === 'createConversationApi')?.[1]).toEqual(['dm', [ME, DAVE], ME]);
             expect(nav.pushes).toContainEqual('/chat/dm-dave');
+        });
+
+        it("Message refused because reports cleared the member's message requests (R1): said in the member's language, dated, not in the node's English", async () => {
+            const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+            const es = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+            const inner = node();
+            net.answer = (name, args) => (name === 'createConversationApi' ? Promise.reject(Object.assign(new Error(LIMITED), { code: 'dm_requests_limited' })) : inner(name, args));
+            await renderIn();
+            ((globalThis as any).__shopAlerts ??= []).length = 0;
+            setLanguage('es', [es]);
+            await click(byId('shopfront-message'), 'Message Dave');
+            expect((globalThis as any).__shopAlerts.at(-1)?.[1]).toBe('Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el 2026-11-08. Todavía puedes responder a quienes te escribieron y publicar.');
+            expect(nav.pushes).not.toContainEqual('/chat/dm-dave');
         });
 
         it("the owner's line is a 48 dp target to their profile", async () => {

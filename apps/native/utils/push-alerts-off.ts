@@ -2,7 +2,7 @@
  * The per-community switch for alerts, default on (scratch/fable-design/DESIGN-cross-community-chat-fable.md R8): the
  * communities the member turned alerts off for, kept on this phone. This phone's push token is not registered with these
  * (push-registrations.ts), whoever asks, the one the phone is set to included. The switch on the BeanPool sheet reads this,
- * and so will the rounds that ask each community for its unread count.
+ * and the rounds that ask each community for its unread count leave these out (other-communities-unread.ts).
  *
  * Off is account-leaves-phone.ts `turnAlertsOffAt`, which writes the list here first and then tells the community. On
  * again is services/push-notifications.ts `turnAlertsOnAt`. A community leaves the list as it leaves the phone, so a rejoin

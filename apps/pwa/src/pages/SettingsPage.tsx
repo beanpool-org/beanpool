@@ -16,7 +16,7 @@ import {
     webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, WEB_VAULT_COPY_LINE, type WebDeletePlan,
 } from '../lib/delete-here';
 import {
-    getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
+    getMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getFriends, removeFriendApi,
     getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, getSignInRecovery, request, getCommunityMe,
@@ -55,6 +55,8 @@ import type { LinkResult } from '../lib/link-signin';
 import { ModerationPauseCard } from '../components/ModerationPauseCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
+import { adoptWorkingStyle, keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
+import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
 import { BoldWords } from '../components/BoldWords';
@@ -633,14 +635,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [quizInitialMode, setQuizInitialMode] = useState<'quick' | 'deep'>('quick');
 
     const handleQuizComplete = async (quizResult: QuizResult) => {
-        const publicArchetype = JSON.stringify({
-            primary: quizResult.primary,
-            secondary: quizResult.secondary,
-            mode: quizResult.mode,
-            updatedAt: quizResult.updatedAt,
-        });
+        keepQuizResult(identity.publicKey, quizResult);
         try {
-            const res = await updateMemberProfile(identity.publicKey, { archetype: publicArchetype });
+            const res = await publishQuizResult(identity.publicKey, quizResult);
             if (res?.profile) {
                 setProfile(res.profile);
             } else {
@@ -710,7 +707,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     };
 
     useEffect(() => {
-        getMemberProfile(identity.publicKey).then(setProfile).catch(() => {});
+        getMemberProfile(identity.publicKey).then(p => {
+            setProfile(p);
+            if (p?.archetype) adoptWorkingStyle(identity.publicKey, p.archetype);
+        }).catch(() => {});
     }, [identity.publicKey, mode]);
 
     const fingerprint = identity.publicKey.slice(0, 16) + '…';
@@ -857,7 +857,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 {t('COMMUNITY WORKING STYLE')}
                             </div>
                             {(() => {
-                                const parsed = parseArchetype(profile?.archetype);
+                                const parsed = parseArchetype(shownWorkingStyle(identity.publicKey, profile?.archetype));
                                 const primary = parsed ? ARCHETYPES[parsed.primary] : null;
                                 const secondary = parsed ? ARCHETYPES[parsed.secondary] : null;
 
@@ -933,6 +933,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     {t('🔄 Retake')}
                                                 </button>
                                             </div>
+                                            <RemoveWorkingStyleButton publicKey={identity.publicKey} onRemoved={() => setProfile(prev => (prev ? { ...prev, archetype: null } : prev))} />
                                         </div>
                                     );
                                 }
@@ -1699,7 +1700,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             <div className="font-bold flex items-center gap-1.5 mb-1 text-amber-800 dark:text-amber-300">
                                 <span>📱</span> {t('Phone App Only')}
                             </div>
-                            <>{t('These preferences govern push notifications delivered to the mobile app for this account. Web browsers do not receive push notifications.')}</>
+                            <p>{t('These preferences govern push notifications delivered to the mobile app for this account. Web browsers do not receive push notifications.')}</p>
+                            <p className="mt-1.5">{t('Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.')}</p>
                         </div>
 
                         {notifLoading ? (

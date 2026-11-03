@@ -1,6 +1,6 @@
 /**
  * Add a card (scratch/home/CARD-FRAME-DESIGN-fable.md §1.2, slice F3): the picker, opened from the community card's
- * "Add a card ›" and Edit home's first row. Three groups (For you · Around you · Getting started), each type this node
+ * "Add a card ›" and Arrange's + Add a card tile. Three groups (For you · Around you · Getting started), each type this node
  * can show (lib/home-layout.ts `pickerGroups`), in the catalogue's order. A row is the type's name and one line of what
  * it shows, with an Add button, "On Home" for a one-of-a-kind already there, or "2 of 5 on Home" under an instance
  * type's line. Nothing is ever shown as locked: a type this node can't show is simply not listed.
@@ -8,13 +8,13 @@
  * A type with settings (a saved search) opens its settings ({@link CardSettingsDialog}) on Add, whose last button is
  * "Add to Home". The same settings open from a card's "…" → Settings…, with Save.
  *
- * A real dialog, as Edit home's: `role="dialog"`, labelled by its heading, focus moved in and kept there, Escape closes
+ * A real dialog: `role="dialog"`, labelled by its heading, focus moved in and kept there, Escape closes
  * it, focus goes back to what opened it (or where the page sends it after an add; components/dialog-focus.ts). Every
  * control is at least 44 px.
  */
 import { useRef, useState, type ReactNode } from 'react';
 import {
-    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readDecideSettings, readSearchSettings, readSkySettings, searchFromSheet, t, word,
+    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, homeCardHue, readDecideSettings, readSearchSettings, readSkySettings, searchFromSheet, t, word,
     type HomeDecideShow, type HomeSearchKind, type SkySettings, type WordKey,
 } from '@beanpool/core';
 import { type PickerGroup, type PickerRow } from '../lib/home-layout';
@@ -54,7 +54,7 @@ interface PickerProps {
     /** Add this type (with its settings, for a type that has them). The page closes the picker and moves focus. */
     onAdd: (type: string, settings?: Record<string, unknown>) => void;
     onClose: () => void;
-    /** Where focus goes on close when what opened the picker has gone (Edit home's ＋ Add a card). */
+    /** Where focus goes on close when what opened the picker has gone (a tile Arrange took with it). */
     returnFocus?: () => HTMLElement | null | undefined;
     /** For a saved search's distance chips: see {@link CardSettingsDialog}. */
     hasPoint?: boolean;
@@ -92,7 +92,12 @@ export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPo
                             <li key={r.type} data-testid={`home-add-row-${r.type}`}
                                 className="flex items-center gap-2 px-3 py-2 border-b border-nature-100 dark:border-nature-800 last:border-b-0 min-w-0">
                                 <span className="flex-1 min-w-0 break-words">
-                                    <span className="block text-sm font-bold text-nature-900 dark:text-white">{r.name}</span>
+                                    <span className="flex items-center min-w-0" style={{ gap: 6 }}>
+                                        {/* The colour the card will have on Home, before it is there: decoration, hidden from a screen reader. */}
+                                        <span aria-hidden="true" data-testid={`home-add-dot-${r.type}`} className="shrink-0 rounded-full"
+                                            style={{ width: 10, height: 10, backgroundColor: `var(--bp-card-${homeCardHue({ type: r.type })}-ink)` }} />
+                                        <span className="min-w-0 text-sm font-bold text-nature-900 dark:text-white">{r.name}</span>
+                                    </span>
                                     <span className="block text-xs text-nature-700 dark:text-nature-200">{r.line}</span>
                                     {r.count && <span data-testid={`home-add-count-${r.type}`} className="block text-xs text-nature-600 dark:text-nature-300">{r.count}</span>}
                                     {r.status && <span className="block text-xs text-nature-600 dark:text-nature-300">{r.status}</span>}

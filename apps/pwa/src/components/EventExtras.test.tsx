@@ -3,6 +3,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventDetail } from './EventCard';
 import { YourEvents } from './YourEvents';
 import * as api from '../lib/api';
+import * as features from '../lib/features';
+
+vi.mock('../lib/features', async () => {
+    const actual = await vi.importActual('../lib/features');
+    return {
+        ...actual,
+        useCommunityInfo: vi.fn(),
+    };
+});
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -15,7 +24,14 @@ vi.mock('../lib/api', async () => {
         setEventReminder: vi.fn(async () => ({ success: true })),
         getNotificationPreferences: vi.fn(async () => ({})),
         getNodeApiUrl: () => 'https://mullum.beanpool.org',
+        myNodeRoleOnce: vi.fn(async () => null),
     };
+});
+
+// The real Invite and share button needs a key; this file's identity stands in for it.
+vi.mock('../lib/identity', async () => {
+    const actual = await vi.importActual('../lib/identity');
+    return { ...actual, loadIdentity: vi.fn(async () => ({ publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me', createdAt: '2026-09-27T00:00:00.000Z' })) };
 });
 
 const HOUR = 60 * 60 * 1000;
@@ -45,6 +61,7 @@ function notFound(): Error {
 }
 
 beforeEach(() => {
+    vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'members' } } as any);
     vi.mocked(api.getMyEvents).mockReset().mockResolvedValue([]);
     vi.mocked(api.setEventReminder).mockReset().mockResolvedValue({ success: true } as any);
     vi.mocked(api.getNotificationPreferences).mockReset().mockResolvedValue({} as any);
@@ -347,5 +364,61 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         expect(screen.queryByTestId('event-add-google-calendar')).toBeNull();
         expect(document.activeElement).toBe(trigger);
         open.mockRestore();
+    });
+
+    it('the Share row on an event gets the share-says line', () => {
+        render(<EventDetail post={event} identity={identity} />);
+        const note = screen.getByTestId('event-share-members-note');
+        expect(note).toBeInTheDocument();
+        expect(note).toHaveTextContent('This link opens for members only.');
+    });
+
+    it('the event Share row says "event" (not "listing") under Share outside', () => {
+        vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'members', shareOutside: true, knocks: true } } as any);
+        render(<EventDetail post={event} identity={identity} />);
+        const line = screen.getByTestId('share-outside-line');
+        expect(line).toHaveTextContent('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
+        expect(line.textContent).not.toMatch(/listing/);
+        expect(screen.queryByTestId('share-outside-privacy')).toBeNull();
+    });
+
+    it('where only admins invite, an event row says nothing until the role is known, and nothing if it could not be read', async () => {
+        vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'admins', shareOutside: false } } as any);
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(undefined);
+        render(<EventDetail post={event} identity={identity} />);
+        await waitFor(() => expect(api.myNodeRoleOnce).toHaveBeenCalled());
+        expect(screen.queryByTestId('event-share-members-note')).toBeNull();
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
+    });
+
+    it('one flow: a member who may invite sees exactly ONE invite action on an event, and the line', async () => {
+        vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'members', shareOutside: false } } as any);
+        render(<EventDetail post={event} identity={identity} />);
+        await screen.findByTestId('invite-and-share-button');
+        expect(screen.getAllByTestId('invite-and-share-button')).toHaveLength(1);
+        expect(screen.queryByTestId('invite-someone-button')).toBeNull();
+        expect(screen.queryByText('Invite someone')).toBeNull();
+        expect(screen.getByTestId('event-share-members-note')).toHaveTextContent('This link opens for members only.');
+    });
+
+    it('one flow: an event row where only admins invite and the member is none has the line and no invite action', async () => {
+        vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'admins', shareOutside: false } } as any);
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
+        render(<EventDetail post={event} identity={identity} />);
+        await waitFor(() => expect(screen.getByTestId('event-share-members-note')).toHaveTextContent('only admins invite here'));
+        await new Promise(r => setTimeout(r, 30));
+        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('invite-someone-button')).toBeNull();
+    });
+
+    it('one flow: an unknown role on an admins-only community shows no invite action', async () => {
+        vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'admins', shareOutside: false } } as any);
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(undefined);
+        render(<EventDetail post={event} identity={identity} />);
+        await waitFor(() => expect(api.myNodeRoleOnce).toHaveBeenCalled());
+        await new Promise(r => setTimeout(r, 30));
+        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('event-share-members-note')).toBeNull();
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
     });
 });

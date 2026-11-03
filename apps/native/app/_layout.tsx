@@ -10,7 +10,7 @@ import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
-import { registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
+import { askOtherCommunitiesNow, registerPushInPickedLanguage, retryPushRegistrations, setupNotificationResponseHandler, showBadgeSum } from '../services/push-notifications';
 import { registerWhenNotificationsAllowed } from '../utils/notification-permission';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
@@ -27,6 +27,7 @@ import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding
 import { forgetKnockKey } from '../utils/knock-key';
 import { inviteLinkToWelcome } from '../utils/waiting-to-join';
 import { listenForScannedInvites } from '../utils/scanned-invite';
+import { postRoute, takePostAfterJoin } from '../utils/post-after-join';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
@@ -65,7 +66,7 @@ import { doorLinkFromSystemPath } from '../utils/open-door';
 import { isCommunityCardPath } from '../utils/community-card-link';
 import { isPeekPath } from '../utils/peek-link';
 import * as WebBrowser from 'expo-web-browser';
-import { t } from '@beanpool/core';
+import { postIdFromInviteLink, requestsClearedNotice, t } from '@beanpool/core';
 import { settingsLineWords } from '../components/settings/settings-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { rekeyPromptWords } from '../components/shell-lines';
@@ -404,6 +405,15 @@ function RootLayoutNav() {
             return;
         }
         const parsedCode = normaliseInviteCode(inviteToken);
+        // The listing an invite-and-share link was sent from (core postIdFromInviteLink: an id, and only beside an invite), opened
+        // once the friend has joined. Nothing about it is read, shown or asked before then.
+        const linkPostId = postIdFromInviteLink(currentUrl);
+        // Joined here with this tap: Home first, then the listing over it, as a shared listing opens. A post this member can't see
+        // opens nothing (app/post/[id].tsx), with no error.
+        const openLinkedPost = () => {
+            const route = postRoute(linkPostId);
+            if (route && isComponentMounted.current) router.push(route as any);
+        };
 
         // Parse node origin / server address from deep link. An address that isn't plain host[:port] (a login, a
         // backslash: utils/node-url.ts) is refused outright: on iOS it reaches another host than it names, and every
@@ -439,6 +449,7 @@ function RootLayoutNav() {
                 router.setParams({
                     invite: parsedCode,
                     server: extractedNodeOrigin || undefined,
+                    post: linkPostId || undefined,
                     t: Date.now().toString()
                 });
             } else {
@@ -447,6 +458,7 @@ function RootLayoutNav() {
                     params: {
                         invite: parsedCode,
                         server: extractedNodeOrigin || undefined,
+                        post: linkPostId || undefined,
                         t: Date.now().toString()
                     }
                 });
@@ -537,6 +549,7 @@ function RootLayoutNav() {
                                             // 'stranger' verdict can't bounce us to the wrong-node screen.
                                             await recheck();
                                             router.replace('/(tabs)');
+                                            openLinkedPost();
                                         })
                                         .catch(err => {
                                             const errStr = err?.message || String(err);
@@ -598,7 +611,7 @@ function RootLayoutNav() {
                                                                 const { removeSavedNode } = await import('../utils/nodes');
                                                                 await removeSavedNode(targetOrigin);
                                                             });
-                                                            router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });
+                                                            router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin, post: linkPostId || undefined } });
                                                         } catch (err: any) {
                                                             Alert.alert(t('Wipe Failed'), err.message);
                                                         }
@@ -623,6 +636,7 @@ function RootLayoutNav() {
                                                 requestSync().catch(console.error);
                                                 await recheck();
                                                 router.replace('/(tabs)');
+                                                openLinkedPost();
                                             })
                                             .catch(err => {
                                                 const errStr = err?.message || String(err);
@@ -857,6 +871,16 @@ function RootLayoutNav() {
         if (landing) router.replace(landing);
         const notice = landing === DEFAULT_MEMBER_LANDING ? takeOpenAfterLanding(identity.publicKey, nodeUrl) : null;
         if (notice) router.push(notice);
+        // Or the listing an invite-and-share link was sent from, held since the join (utils/post-after-join.ts), once.
+        else if (landing === DEFAULT_MEMBER_LANDING) {
+            // The community in use: the node status's, else the phone's own record of it (the status may not have answered yet, and
+            // this landing is the only one the member gets).
+            void (async () => {
+                const community = nodeUrl ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+                const route = await takePostAfterJoin(community);
+                if (route && isComponentMounted.current) router.push(route as any);
+            })();
+        }
     }, [identity, isLoading, segments, recognition, pendingOnboarding, noCommunity]);
 
     // When the phone allows notifications (e.g. Android <= 12, or a restored account on a device where permission was
@@ -1021,6 +1045,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="treasury-post" options={sheetOptions} />
                 <Stack.Screen name="suggest-change" options={sheetOptions} />
                 <Stack.Screen name="owner-words-check" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="calendar" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="community-card" options={{ animation: 'slide_from_right' }} />
@@ -1093,8 +1118,10 @@ export default function RootLayout() {
         const wsSub = DeviceEventEmitter.addListener('ws_activity', (data) => {
             if (data?.type === 'system_announcement') {
                 // The node's own words, as it sent them (slice S4); the phone's stand-in title in the member's language.
-                const title = data.title || t('System Announcement');
-                const body = data.body || '';
+                // "Message requests cleared" is worded here in the member's language (core requests-cleared-words.ts).
+                const own = requestsClearedNotice(data);
+                const title = own?.title ?? (data.title || t('System Announcement'));
+                const body = own?.body ?? (data.body || '');
                 Alert.alert(title, body, [{ text: t('Acknowledge'), style: 'cancel' }]);
                 // A notice the node keeps names its id: shown now, so the background sync never posts it again
                 // (utils/sync-notices.ts).
@@ -1106,6 +1133,11 @@ export default function RootLayout() {
             .then(() => registerPillarSync())
             // Trigger Immediate foreground sync
             .then(() => requestSync())
+            .then(() => {
+                void import('../utils/working-style')
+                    .then(({ firstRunWorkingStyle }) => firstRunWorkingStyle())
+                    .catch(() => {});
+            })
             .catch(err => {
                 console.error('[Init DB] Error:', err);
                 Alert.alert(t('DB Error'), String(err));
@@ -1121,6 +1153,9 @@ export default function RootLayout() {
         // A push registration that didn't land (no connection, no answer, an error), and any community on the phone that
         // was never asked, is tried on each return and with the 5-minute sync, until it lands (utils/push-registrations.ts
         // `registerWhereMissing`). At start, the account's own registrations go anyway (RootLayoutNav).
+        // What waits at the phone's other communities: asked now, on each return and with the 5-minute sync, at most every
+        // 5 minutes however often the member comes back (utils/other-communities-unread.ts).
+        void askOtherCommunitiesNow();
 
         // Set up foreground polling fallback every 5 minutes (safety net)
         const intervalId = setInterval(() => {
@@ -1130,6 +1165,7 @@ export default function RootLayout() {
                 retryPushRegistrations();
                 void syncBlocks();
                 void tendGlobalCopies();
+                void askOtherCommunitiesNow();
             }
         }, 300000);
 
@@ -1149,6 +1185,9 @@ export default function RootLayout() {
                         Notif.setBadgeCountAsync(0).catch(() => {});
                     } catch {}
                 }
+                // Then what waits at the other communities goes back on it, and the round brings that up to date.
+                void showBadgeSum();
+                void askOtherCommunitiesNow();
             }
             appState.current = nextAppState;
         });

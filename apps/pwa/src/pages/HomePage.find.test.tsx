@@ -368,6 +368,34 @@ describe('a community gone quiet on the web find card (front doors S13)', () => 
     });
 });
 
+describe('what a community promised, on the web find card (Mothership A3)', () => {
+    const PROMISE = { v: 1, owners: 2, backups: true, reports: true, notice: true };
+    const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+
+    it('says "Keeps the listing promise", "Accepting members" and the closing day under a row; the row stays a link', async () => {
+        const rows = [
+            { key: 'k', name: 'Kept Creek', url: 'https://kept.example.org', memberCount: 6, distanceKm: 8, promise: PROMISE, acceptingKnocks: true, closingOn: inDays(30) },
+            { key: 'n', name: 'Newtown', url: 'https://newtown.example.org', memberCount: 3, distanceKm: 12, promise: null, acceptingKnocks: false, closingOn: null },
+            { key: 'o', name: 'Oldnode', url: 'https://old.example.org', memberCount: 10, distanceKm: 20 },
+        ];
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: rows }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect((await screen.findByTestId('home-find-promise-k')).textContent).toMatch(/^Keeps the listing promise · Accepting members · Closing on .+\d{4}$/);
+        // A new listing says only that; nothing negative for the request it does not take.
+        expect(screen.getByTestId('home-find-promise-n')).toHaveTextContent(/^New listing$/);
+        // An older global node sends none of the three: no line, and never "New listing".
+        expect(screen.queryByTestId('home-find-promise-o')).toBeNull();
+        expect(screen.getByRole('link', { name: /Kept Creek/ })).toHaveAttribute('href', 'https://kept.example.org');
+    });
+
+    it('a forged promise, or a closing day gone by, is not said', async () => {
+        const rows = [{ key: 'f', name: 'Forge', url: 'https://forge.example.org', memberCount: 6, distanceKm: 8, promise: { ...PROMISE, names: ['Ana'] }, acceptingKnocks: true, closingOn: '2020-01-01' }];
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: rows }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-find-promise-f')).toHaveTextContent(/^Accepting members$/);
+    });
+});
+
 describe('Ask to join from the web find card (front doors S2)', () => {
     const SLEEPY = { key: 'q', name: 'Sleepy Hollow', url: 'https://sleepy.example.org', memberCount: 6, distanceKm: 8 };
     const NO_ADDRESS = { key: 'f', name: 'Riverbend', url: null, memberCount: 10, distanceKm: 20 };

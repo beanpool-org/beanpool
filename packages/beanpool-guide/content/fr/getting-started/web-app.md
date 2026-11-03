@@ -92,7 +92,7 @@ Si vous avez rejoint la communauté globale avec 12 mots, ils sont votre unique 
 ## Noms et emplacements différents
 
 - **Rejoindre avec une invitation :** le bouton de la première étape indique **Créer l'identité et rejoindre →**. Si quelqu'un ici porte déjà le nom choisi, vous l'obtenez avec un chiffre ajouté. **← Retour** sur **Votre photo** affiche votre nom seul, avec **Suivant →** : modifiez-le (jusqu'à 20 caractères) ou conservez-le, sur le même compte. Si quelqu'un possède déjà le nouveau nom, la page le signale et en propose d'autres.
-- **Onglets :** l'application web comporte **Accueil**, **Marché**, **Carte**, **Communs**, **Discussions**, **Membres** et **Registre**. Ce que l'application mobile appelle **Échanges** s'appelle **Discussions** sur le web, et **Membres** dispose de son propre onglet.
+- **Onglets :** l'application web comporte **Accueil**, **Marché**, **Carte**, **Communs**, **Chat**, **Membres** et **Registre**. Les deux applications appellent cet onglet **Chat**, et sur le web **Membres** dispose de son propre onglet.
 - **Paramètres et votre profil :** les petits boutons en haut à droite : votre profil, le **?**, puis les Paramètres. Sur grand écran, ils se trouvent en bas du menu de gauche.
 - **Publier une Offre ou une Demande :** utilisez **Nouvelle publication** sur la page **Carte**.
 - **Thème :** l'option s'appelle **Identique à l'appareil** au lieu de « Comme le téléphone ».

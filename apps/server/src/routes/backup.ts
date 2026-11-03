@@ -1671,8 +1671,9 @@ router.delete('/api/local/admin/sync-copy/:copyId', async (ctx) => {
 
 // One listing photo's object by its content address, for a standby taking a copy whose photos go by reference (engine/sync.ts
 // photoRowsByReference; design scratch/global-node/DESIGN-paged-copies-fable.md §6, P4): the bytes a `post_photos` row of this
-// server names by that sha256, and nothing else. An address no listing photo here names is 404, whatever the store holds
-// under it: a chat attachment's (they never leave this server: replication-manifest.ts message_attachments, G4), anything a
+// server names by that sha256, or a chat photo's (gap G4: a `message_attachments` row of this server names it by that
+// sha256; its object is ciphertext no server can open, sent only to who may pull a copy, which holds the rows that name it), and
+// nothing else. An address no listing or chat photo here names is 404, whatever the store holds under it: anything a
 // shared bucket holds, and an avatar's (no object: it sits in its members row). The same auth as a copy's pages, under the
 // same administrative limiter (https-server.ts): a standby asks only for the objects its store lacks, at its pages' pace
 // (services/backup-puller.ts). A listing photo whose object this server can't find is 404 too; either 404 fails the standby's
@@ -1682,6 +1683,8 @@ router.delete('/api/local/admin/sync-copy/:copyId', async (ctx) => {
 // same-size corruption at rest) is never sent, but answered 410, `why: 'not-its-photo'`, and logged here once; this server's
 // next copy leaves that photo out and names it in `photosOmitted` (engine/sync.ts notePhotoObjectUnreadable), so a standby
 // keeps its own copy and a new one seeds without it, rather than every copy that needs it being refused (review 4148896755).
+// A chat photo's 404 or 410 fails no pull: the standby keeps the row without its object, as this server holds it
+// (services/backup-puller.ts fetchPhotoObjects), and a later whole copy asks again.
 router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
     const ip = replicationClientIp(ctx);
     const authMode = await replicationAuth(ctx, ip);
@@ -1694,13 +1697,19 @@ router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
         return;
     }
     // idx_post_photos_sha256 (db/schema.sql). The same photo on several listings is several rows and objects, the same bytes.
-    const rows = db.prepare(`SELECT storage_key FROM post_photos WHERE sha256 = ? AND storage_key IS NOT NULL LIMIT 8`).all(sha256) as { storage_key: string }[];
+    const photoRows = db.prepare(`SELECT storage_key FROM post_photos WHERE sha256 = ? AND storage_key IS NOT NULL LIMIT 8`).all(sha256) as { storage_key: string }[];
+    // idx_message_attachments_sha256: a chat photo's, when no listing photo names it (gap G4).
+    const chat = photoRows.length === 0;
+    const rows = chat
+        ? db.prepare(`SELECT storage_key FROM message_attachments WHERE sha256 = ? AND storage_key IS NOT NULL LIMIT 8`).all(sha256) as { storage_key: string }[]
+        : photoRows;
     if (rows.length === 0) {
         ctx.status = 404;
-        ctx.body = { error: 'no listing photo of this server has that address', why: 'not-named' };
+        ctx.body = { error: 'no listing or chat photo of this server has that address', why: 'not-named' };
         return;
     }
     const store = getImageStore();
+    const what = chat ? 'chat photo' : 'listing photo';
     let failure: unknown = null;
     let unreadable = false;
     for (const row of rows) {
@@ -1714,7 +1723,9 @@ router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
         if (!bytes) continue;
         const got = crypto.createHash('sha256').update(bytes).digest('hex');
         if (got !== sha256) {
-            notePhotoObjectUnreadable(row.storage_key, sha256, got, bytes.length);
+            // A listing photo's is remembered, so this server's next copy leaves it out; a chat photo's row goes as it is.
+            if (chat) console.error(`[Backup] A chat photo's object in this server's image store is not the one its row names (${row.storage_key}).`);
+            else notePhotoObjectUnreadable(row.storage_key, sha256, got, bytes.length);
             unreadable = true;
             continue;
         }
@@ -1724,19 +1735,19 @@ router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
         return;
     }
     if (failure) {
-        console.error(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, and the image store did not answer:`, (failure as Error)?.message || failure);
+        console.error(`[Backup] A standby asked for ${what} ${sha256.slice(0, 12)}…, and the image store did not answer:`, (failure as Error)?.message || failure);
         ctx.status = 503;
         ctx.body = { error: 'the image store did not answer' };
         return;
     }
     if (unreadable) {
         ctx.status = 410;
-        ctx.body = { error: 'this server\'s object of that listing photo is not the photo its row names: its next copy leaves it out', why: 'not-its-photo' };
+        ctx.body = { error: `this server's object of that ${what} is not the ${what} its row names: ${chat ? 'its row goes as it is' : 'its next copy leaves it out'}`, why: 'not-its-photo' };
         return;
     }
-    console.warn(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, whose object this server's image store does not hold.`);
+    console.warn(`[Backup] A standby asked for ${what} ${sha256.slice(0, 12)}…, whose object this server's image store does not hold.`);
     ctx.status = 404;
-    ctx.body = { error: 'this server cannot find that listing photo\'s object', why: 'unreadable' };
+    ctx.body = { error: `this server cannot find that ${what}'s object`, why: 'unreadable' };
 });
 
 // Restore (sealed-keys.md §6.2; design case 18 §3, the hardened restore). Takes a `.bpsealed` backup ONLY, opened with

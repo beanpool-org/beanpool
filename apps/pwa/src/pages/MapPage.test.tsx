@@ -4,6 +4,7 @@ import React from 'react';
 import { MapPage, resetSavedMapView } from './MapPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
+import type { MarketplacePost } from '../lib/api';
 import L from 'leaflet';
 import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -592,6 +593,12 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             await act(async () => { on('moveend')(); await new Promise((r) => setTimeout(r, STACK_REST_MS + 30)); });
         };
         const listOpen = () => screen.queryByTestId('map-stack-list');
+        /** The Events pill: the date chips appear, and only event pins stay (the old markers are dropped, so a tap finds the new ones). */
+        const showEvents = async () => {
+            mockCreatedMarkers.length = 0;
+            await act(async () => { fireEvent.click(screen.getByTestId('map-type-events')); });
+            await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
+        };
 
         it('takes the tap from the library: no zoom of its own, no spiral', async () => {
             await drawMap();
@@ -693,6 +700,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
 
         it('drops a row the date chips hid', async () => {
             await drawMap();
+            await showEvents();
             await tap(bubble([pinOf('Repair café'), pinOf('Spring working bee')], 20));
             expect(rowTitles(screen.getByTestId('map-stack-list'))).toEqual(['Repair café', 'Spring working bee']);
             fireEvent.click(within(screen.getByTestId('event-window-chips')).getByRole('button', { name: 'Next 7 days' }));
@@ -703,6 +711,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         it('closes when the chips hide every row, and does not come back with them', async () => {
             vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([offer, soon, later, ev('ev-later2', 'Harvest supper', 24 * 21)] as any);
             await drawMap();
+            await showEvents();
             await waitFor(() => expect(pinOf('Harvest supper')).toBeTruthy());
             await tap(bubble([pinOf('Spring working bee'), pinOf('Harvest supper')], 20));
             const chips = () => within(screen.getByTestId('event-window-chips'));
@@ -947,32 +956,39 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
     it('a date chip fits the map to its events, below the chip row (B2)', async () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await act(async () => { fireEvent.click(await view!.findByTestId('map-type-events')); });
         await waitFor(() => expect(view!.getByTestId('event-window-chips')).toBeTruthy());
         const map = (L as any).map.mock.results[0].value;
         map.fitBounds.mockClear();
         await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'All events' })); });
         expect(map.fitBounds).toHaveBeenCalledTimes(1);
         const [points, opts] = map.fitBounds.mock.calls[0];
-        expect(points.length).toBe(eventPins().length);
+        expect(points.length).toBe(new Set(eventPins().map(m => m.opts.title)).size);
         // The chips' own bottom edge plus the 48px pin and a margin: the pin's head never sits under them.
         expect(opts.paddingTopLeft[1]).toBeGreaterThanOrEqual(48 + 16);
     });
 
-    it('filters event pins with Today / This weekend / Next 7 days / All, in one row', async () => {
+    it('Events keeps the date chips: All events / Today / This weekend / Next 7 days, in one row, and the calendar button', async () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        // Under All there is no date row (the phone's rule): the category chip stands in its place.
+        await view!.findByTestId('map-category-chip');
+        expect(view!.queryByTestId('event-window-chips')).toBeNull();
+        await act(async () => { fireEvent.click(view!.getByTestId('map-type-events')); });
         const chips = await view!.findByTestId('event-window-chips');
+        expect(view!.queryByTestId('map-category-chip')).toBeNull();
         expect(chips.className).toContain('flex-nowrap');
         expect(chips.className).toContain('overflow-x-auto');
         const buttons = Array.from(chips.querySelectorAll('button'));
-        expect(buttons.map(b => b.textContent)).toEqual(['Today', 'This weekend', 'Next 7 days', 'All events']);
+        expect(buttons.map(b => b.textContent)).toEqual(['All events', 'Today', 'This weekend', 'Next 7 days']);
         for (const b of buttons) expect(b.className).toContain('whitespace-nowrap');
+        expect(view!.getByTestId('map-calendar-button')).toBeTruthy();
 
         mockCreatedMarkers.length = 0;
         await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'Next 7 days' })); });
         expect(eventPins().map(m => m.opts.title)).toEqual(['Event: Repair café']);
-        // The chips never touch offers.
-        expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true);
+        // Under Events the date chips are the only filter: no offer pin is drawn.
+        expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(false);
 
         mockCreatedMarkers.length = 0;
         await act(async () => { fireEvent.click(view!.getByRole('button', { name: 'All events' })); });
@@ -1213,6 +1229,209 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             await act(async () => { clickHandlers.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
             expect(within(panel).getByText(/Location set/)).toBeInTheDocument();
         });
+    });
+});
+
+describe("MapPage: the type filter, the phone's All / Offers / Needs / Events (web-map-type-filter)", () => {
+    const HOUR = 60 * 60 * 1000;
+    const at = (n: number) => ({ lat: -28.5 - n / 100, lng: 153.5 + n / 100 });
+    const listing = (id: string, type: 'offer' | 'need', category: string, n: number) => ({
+        id, type, category, title: id, description: '', credits: 5, priceType: 'fixed', authorPublicKey: 'author-pk', authorCallsign: 'Bob',
+        createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: true, ...at(n),
+    });
+    const eggs = listing('eggs', 'offer', 'food', 1);
+    const ladder = listing('ladder', 'offer', 'tools', 2);
+    const lift = listing('lift', 'need', 'food', 3);
+    const supper = {
+        id: 'supper', type: 'event', category: 'community', title: 'Supper', description: '', credits: 0, priceType: 'fixed',
+        authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active', repeatable: false,
+        eventStartAt: new Date(Date.now() + 2 * HOUR).toISOString(), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null, ...at(4),
+    };
+    /** What is drawn now, by kind, as the position each marker was made at (n of `at`). */
+    const drawn = () => {
+        const kind = (cls: string) => mockCreatedMarkers.filter(m => m.opts?.className?.includes(cls)).map(m => Math.round((-28.5 - m.coords[0]) * 100)).sort();
+        return { offers: kind('custom-map-pin'), events: kind('custom-event-pin'), enterprises: kind('custom-enterprise-pin') };
+    };
+    /** Pins as they stand after the next click: the markers of the redraw only. */
+    const click = async (testId: string) => {
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(screen.getByTestId(testId)); });
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([eggs, ladder, lift, supper] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({
+            enterprises: [{ publicKey: 'ent-pk', name: 'Tool Shed', callsign: 'Shed', avatar: '🔧', ...at(5), paused: false, status: 'active' }],
+        } as any);
+    });
+
+    const draw = async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(drawn().events.length).toBeGreaterThan(0));
+        await waitFor(() => expect(drawn().enterprises.length).toBeGreaterThan(0));
+    };
+
+    it("has the phone's first row, All · Offers · Needs · Events, with the category chip under it", async () => {
+        await draw();
+        const pills = screen.getByTestId('map-type-pills');
+        expect(within(pills).getAllByRole('button').map(b => b.textContent)).toEqual(['All', 'Offers', 'Needs', 'Events']);
+        expect(screen.getByTestId('map-type-all').getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByTestId('map-category-chip').textContent).toBe('🏷️ All Categories ▾');
+        expect(screen.queryByTestId('map-filter-clear')).toBeNull();
+        expect(screen.getByTestId('map-calendar-button')).toBeTruthy();
+        // All draws every kind of pin.
+        expect(drawn()).toEqual({ offers: [1, 2, 3], events: [4], enterprises: [5] });
+    });
+
+    it('Offers shows offers only: no need, no event, no enterprise', async () => {
+        await draw();
+        await click('map-type-offers');
+        expect(drawn()).toEqual({ offers: [1, 2], events: [], enterprises: [] });
+        expect(screen.getByTestId('map-type-offers').getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('Needs shows needs only', async () => {
+        await draw();
+        await click('map-type-needs');
+        expect(drawn()).toEqual({ offers: [3], events: [], enterprises: [] });
+    });
+
+    it('Show on map with a filter on turns every filter off, so the listing has its pin under its card', async () => {
+        let view!: ReturnType<typeof render>;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(drawn().events.length).toBeGreaterThan(0));
+        await click('map-type-offers');
+        expect(drawn().offers).toEqual([1, 2]);
+        mockCreatedMarkers.length = 0;
+        // The need 'lift' is not drawn under Offers; Show on map opens it.
+        await act(async () => { view.rerender(<MapPage identity={mockIdentity} focusPostId="lift" onFocusPostHandled={() => {}} />); });
+        await waitFor(() => expect(screen.getByTestId('map-type-all').getAttribute('aria-pressed')).toBe('true'));
+        await waitFor(() => expect(drawn().offers).toContain(3));
+    });
+
+    it('Events shows event pins only, with the date chips and the calendar button', async () => {
+        await draw();
+        await click('map-type-events');
+        expect(drawn()).toEqual({ offers: [], events: [4], enterprises: [] });
+        expect(screen.getByTestId('event-window-chips')).toBeTruthy();
+        expect(screen.queryByTestId('map-category-chip')).toBeNull();
+        expect(screen.getByTestId('map-calendar-button')).toBeTruthy();
+    });
+
+    it('a category under Offers narrows the offers, and the chip names it', async () => {
+        await draw();
+        await click('map-type-offers');
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        const panel = screen.getByTestId('map-category-panel');
+        // Every category as a tile, the phone's names: All Categories, then the 17.
+        expect(within(panel).getAllByRole('button')).toHaveLength(18);
+        expect(within(panel).getByRole('button', { name: /Food/ })).toBeTruthy();
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Tools/ })); });
+        expect(drawn()).toEqual({ offers: [2], events: [], enterprises: [] });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        expect(screen.getByTestId('map-category-chip').textContent).toBe('🛠️ Tools ▾');
+        // Under Needs the same category is a different set: the one need is food, so none is tools.
+        await click('map-type-needs');
+        expect(drawn().offers).toEqual([]);
+    });
+
+    it('a category under All also hides the events and enterprise pins, which have none (an event is filed "community")', async () => {
+        await draw();
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(within(screen.getByTestId('map-category-panel')).getByRole('button', { name: /Food/ })); });
+        expect(drawn()).toEqual({ offers: [1, 3], events: [], enterprises: [] });
+    });
+
+    it('the category is remembered across Events (which ignores it) and applies again on the way back', async () => {
+        await draw();
+        await click('map-type-offers');
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        await act(async () => { fireEvent.click(within(screen.getByTestId('map-category-panel')).getByRole('button', { name: /Tools/ })); });
+        await click('map-type-events');
+        expect(drawn().events).toEqual([4]);
+        await click('map-type-offers');
+        expect(drawn().offers).toEqual([2]);
+    });
+
+    it('the category panel folds away on Escape, on the chip again, and on a tap of the map', async () => {
+        await draw();
+        const chip = () => screen.getByTestId('map-category-chip');
+        await act(async () => { fireEvent.click(chip()); });
+        expect(chip().textContent).toBe('🏷️ All Categories ▴');
+        expect(chip().getAttribute('aria-expanded')).toBe('true');
+        await act(async () => { fireEvent.keyDown(window, { key: 'Escape' }); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        await act(async () => { fireEvent.click(chip()); });
+        await act(async () => { fireEvent.click(chip()); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        await act(async () => { fireEvent.click(chip()); });
+        const map = (L as any).map.mock.results[0].value;
+        const onMapClick = map.on.mock.calls.find((c: any[]) => c[0] === 'click')![1];
+        await act(async () => { onMapClick(); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        // Folding it away changed no filter.
+        expect(screen.getByTestId('map-category-chip').textContent).toBe('🏷️ All Categories ▾');
+    });
+
+    it("the category panel folds away when a pin's card opens, as the phone's does", async () => {
+        await draw();
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        expect(screen.getByTestId('map-category-panel')).toBeTruthy();
+        const pin = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!;
+        await act(async () => { pin.listeners.click(); });
+        expect(screen.queryByTestId('map-category-panel')).toBeNull();
+        expect(screen.getByTestId('map-preview-card')).toBeTruthy();
+    });
+
+    it('Clear filters (the ✕) returns to All, the first category and the first date chip, and goes away', async () => {
+        await draw();
+        await click('map-type-offers');
+        await act(async () => { fireEvent.click(screen.getByTestId('map-category-chip')); });
+        await act(async () => { fireEvent.click(within(screen.getByTestId('map-category-panel')).getByRole('button', { name: /Tools/ })); });
+        expect(screen.getByTestId('map-filter-clear').getAttribute('aria-label')).toBe('Clear filters');
+        await click('map-type-events');
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Today' })); });
+        mockCreatedMarkers.length = 0;
+        await act(async () => { fireEvent.click(screen.getByTestId('map-filter-clear')); });
+        expect(screen.queryByTestId('map-filter-clear')).toBeNull();
+        expect(screen.getByTestId('map-type-all').getAttribute('aria-pressed')).toBe('true');
+        expect(screen.getByTestId('map-category-chip').textContent).toBe('🏷️ All Categories ▾');
+        expect(drawn()).toEqual({ offers: [1, 2, 3], events: [4], enterprises: [5] });
+        // And the date window is back to All events, not still on Today.
+        await click('map-type-events');
+        expect(screen.getByRole('button', { name: 'All events' }).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('the bar sits under the header at every width, so it never stands on the sync chip the header draws at md and up', async () => {
+        await draw();
+        const bar = screen.getByTestId('map-filter-bar');
+        expect(bar.className).toContain('top-[4.25rem]');
+        expect(bar.className).not.toMatch(/md:top-/);
+        // And its rows scroll sideways rather than wrap, so 320 px at 130% text keeps every chip whole.
+        expect(screen.getByTestId('map-filter-row').className).toContain('flex-nowrap');
+        expect(screen.getByTestId('map-filter-row').className).toContain('overflow-x-auto');
+    });
+
+    it('the pills use the central colour roles: offers the commit green, needs the action orange, events violet', async () => {
+        await draw();
+        await click('map-type-offers');
+        expect(screen.getByTestId('map-type-offers').className).toContain('bg-bp-commit-fill');
+        await click('map-type-needs');
+        expect(screen.getByTestId('map-type-needs').className).toContain('bg-bp-action-fill');
+        await click('map-type-events');
+        expect(screen.getByTestId('map-type-events').className).toContain('bg-violet-700');
     });
 });
 
@@ -1651,6 +1870,68 @@ describe('MapPage: a listing pushed over the live feed', () => {
 });
 
 /*
+ * Marty, 3 Nov: "some of the offers are green - some yellow?" The yellow was the Elder glow swapping the whole ring to gold,
+ * so an Elder's offer and need looked alike. He chose "Type colour + gold halo": the ring stays the type colour and the
+ * phone's gold halo sits outside it (lib/map-pin-style.ts). (Kept ahead of the describes that vi.restoreAllMocks(): after
+ * those the leaflet mock draws no pins.)
+ */
+describe("an Elder's pin keeps its type colour (web-map-pins)", () => {
+    const base = {
+        category: 'food', description: '', credits: 0, priceType: 'fixed', authorCallsign: 'Erin', createdAt: '2026-09-24T01:00:00.000Z',
+        updatedAt: '2026-09-24T01:00:00.000Z', active: true, status: 'active', audienceScope: 'public', repeatable: false,
+        lat: -28.5495, lng: 153.5005,
+    };
+    const elderOffer = { ...base, id: 'elder-offer', type: 'offer', title: 'Elder eggs', authorPublicKey: 'elder-pk', authorEnergyCycled: 5000 };
+    const elderNeed = { ...base, id: 'elder-need', type: 'need', title: 'Elder ladder', authorPublicKey: 'elder-pk', authorEnergyCycled: 5000 };
+    const newOffer = { ...base, id: 'new-offer', type: 'offer', title: 'New eggs', authorPublicKey: 'new-pk', authorEnergyCycled: 10 };
+    const offerPins = () => mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-map-pin'));
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([elderOffer, elderNeed, newOffer] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    it("an Elder's offer is green and an Elder's need terracotta, each with the gold halo outside; a newer member has none", async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect(offerPins()).toHaveLength(3));
+        const htmls = offerPins().map(m => m.opts.html as string);
+        const ringOf = (html: string) => /border: 2\.5px solid (#[0-9a-f]{6})/i.exec(html)![1];
+        const haloed = htmls.filter(h => h.includes('data-elder-halo'));
+        expect(haloed).toHaveLength(2);
+        expect(haloed.map(ringOf).sort()).toEqual(['#10b981', '#d97757']);
+        for (const h of htmls) {
+            // The ring is never gold: gold is only the halo's own border.
+            expect(ringOf(h)).not.toBe('#fbbf24');
+            expect(h).not.toContain('box-shadow: 0 0 6px rgba(251,191,36');
+        }
+        const plain = htmls.filter(h => !h.includes('data-elder-halo'));
+        expect(plain).toHaveLength(1);
+        expect(plain[0]).not.toContain('#fbbf24');
+    });
+
+    it("the bubble is the phone's: blue, sized by the pins inside, and its icon box is centred on the point", async () => {
+        await act(async () => { render(<MapPage identity={mockIdentity} />); });
+        await waitFor(() => expect((L as any).markerClusterGroup).toHaveBeenCalled());
+        const opts = (L as any).markerClusterGroup.mock.calls[0][0];
+        const icon = opts.iconCreateFunction({ getChildCount: () => 12 });
+        expect(icon.className).toBe('custom-cluster-icon');
+        expect(icon.html).toContain('#2563eb');
+        expect(icon.html).toContain('>12<');
+        expect(icon.iconSize).toEqual([60, 60]);
+        expect(icon.iconAnchor).toEqual([30, 30]);
+        expect(opts.iconCreateFunction({ getChildCount: () => 120 }).html).toContain('>99+<');
+    });
+});
+
+/*
  * G9b (design G9a §7): on a node that shows visitors its listings (the global one), a member's composer says, under
  * the photos, who else will see them; and a visitor to the lobby, with no key, gets the map with nothing to post and
  * a pin card of the listing alone.
@@ -1865,6 +2146,32 @@ describe("the poll form's note for a placeless listing (S4)", () => {
         return { panel, me };
     }
 
+    // A typed Other (@beanpool/core poll-other): new app, old node.
+    it('a node that does not say it can: no tick, and a poll sent with no Other', async () => {
+        const { panel } = await openPoll({ ...BY_AREA, profile: 'local', features: { openJoin: false } }, null);
+        await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+        expect(within(panel).queryByTestId('poll-other')).toBeNull();
+    });
+
+    it('a node that says it can: the tick is there, off', async () => {
+        const { panel } = await openPoll({ ...BY_AREA, pollOther: true }, null);
+        const tick = await within(panel).findByTestId('poll-other') as HTMLInputElement;
+        expect(tick.checked).toBe(false);
+    });
+
+    it('ticked, the poll asks for Other', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ id: 'p' } as any);
+        const { panel } = await openPoll({ ...BY_AREA, pollOther: true }, null);
+        const tick = await within(panel).findByTestId('poll-other');
+        fireEvent.change(within(panel).getByPlaceholderText('What should our community decide?'), { target: { value: 'What is missing?' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 1'), { target: { value: 'Buses' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Option 2'), { target: { value: 'Beans' } });
+        await act(async () => { fireEvent.click(tick); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Create Poll' })); });
+        await waitFor(() => expect(create).toHaveBeenCalled());
+        expect(create.mock.calls[0]![0]).toMatchObject({ pollOther: true });
+    });
+
     it('by area, no area set: the note says so', async () => {
         const { panel } = await openPoll(BY_AREA, null);
         await waitFor(() => expect(within(panel).getByTestId('poll-placeless-note').textContent).toBe(
@@ -1974,6 +2281,23 @@ describe('MapPage: where the pins are read from (S5)', () => {
         await waitFor(() => expect(view!.queryByTestId('map-near-empty')).toBeNull());
     });
 
+    it('a far pin stays off the map: Nothing near and Show everywhere still show (pinning design §2.2)', async () => {
+        // The node hands a pin to the near read from anywhere, for the Market. The map is the circle it was read for.
+        const farPin = { ...post, id: 'far-pin', title: 'Pinned far away', lat: 51.5, lng: -0.12 };
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null ? [farPin] : []) as any);
+        const geo = await import('../lib/geo');
+        vi.mocked(geo.haversineDistance).mockImplementation((_lat, _lng, lat) => (lat === farPin.lat ? 16_000 : 0));
+        try {
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+            const note = await view!.findByTestId('map-near-empty');
+            expect(note).toHaveTextContent('Nothing within 250 km of your area yet.');
+            expect(within(note).getByRole('button', { name: 'Show everywhere' })).toBeInTheDocument();
+        } finally {
+            vi.mocked(geo.haversineDistance).mockImplementation(() => 0);
+        }
+    });
+
     it('after Show everywhere, Near your area reads from the area again', async () => {
         vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.lat != null || f?.author || f?.online ? [] : [post]) as any);
         let view: ReturnType<typeof render> | undefined;
@@ -2000,8 +2324,10 @@ describe('MapPage: where the pins are read from (S5)', () => {
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
         await waitFor(() => expect(ownReads().length).toBe(1));
         expect(await view!.findByTestId('map-near-empty')).toHaveTextContent('Nothing within 250 km of your area yet.');
-        // The chips filter pins; with no event to pin there are none to show (review of #1952, finding 8).
+        // Under All there is no date row; under Events it shows (the phone's rule) with no event to pin (review of #1952, finding 8).
         expect(view!.queryByTestId('event-window-chips')).toBeNull();
+        fireEvent.click(view!.getByTestId('map-type-events'));
+        expect(await view!.findByTestId('event-window-chips')).toBeTruthy();
         expect(mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-event-pin'))).toEqual([]);
         expect(onlineReads()).toEqual([]);
     });
@@ -2022,7 +2348,7 @@ describe('MapPage: where the pins are read from (S5)', () => {
         expect(mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-event-pin'))).toEqual([]);
     });
 
-    it('after Show everywhere with an upcoming event loaded, the note sits under the event chips', async () => {
+    it('after Show everywhere, the note sits under the filter bar, at every width', async () => {
         const event = {
             ...post, id: 'ev-seed', type: 'event', category: 'community', title: 'Seed swap', credits: 0, repeatable: false,
             eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
@@ -2031,13 +2357,15 @@ describe('MapPage: where the pins are read from (S5)', () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
         const note = await view!.findByTestId('map-near-empty');
-        expect(note.className).toContain('top-[4.25rem]');
+        // Under the filter bar, which sits under the header at every width: its measured height, then a gap (jsdom measures none).
+        expect(note.className).toContain('top-[calc(4.25rem+var(--map-filter-h,0px)+0.25rem)]');
+        expect(note.className).not.toContain('md:top-3');
+        expect(note.style.getPropertyValue('--map-filter-h')).toBe('0px');
         fireEvent.click(within(note).getByRole('button', { name: 'Show everywhere' }));
-        await view!.findByTestId('event-window-chips');
+        await view!.findByTestId('map-filter-bar');
         const back = await view!.findByTestId('map-near-again');
-        expect(back.className).toContain('top-[calc(5rem+48px)]');
-        expect(back.className).toContain('md:top-[calc(1.5rem+48px)]');
-        expect(back.className).not.toContain('top-[4.25rem]');
+        expect(back.className).toContain('top-[calc(4.25rem+var(--map-filter-h,0px)+0.25rem)]');
+        expect(back.className).not.toContain('md:top-');
     });
 
     it('a failed read of the member\'s area says so on the Map, with Try again, as the Market does', async () => {
@@ -3311,5 +3639,153 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         const newPanel = await view!.findByTestId('map-new-post-panel');
         // The manually opened composer must NOT have the shop toggle leaked into it
         expect(within(newPanel).queryByTestId('composer-shop-toggle')).toBeNull();
+    });
+
+    describe('MapCalendar integration in MapPage (PR #2762 fixes)', () => {
+        // The month reads today: a day that has gone is shut, so these dates need a today of their own.
+        beforeEach(() => {
+            vi.useFakeTimers({ toFake: ['Date'] });
+            vi.setSystemTime(new Date('2026-11-03T10:00:00'));
+        });
+        afterEach(() => { vi.useRealTimers(); });
+
+        const allowedEvent: MarketplacePost = {
+            id: 'ev-allowed',
+            type: 'event',
+            title: 'Allowed Working Bee',
+            description: 'Community gardening',
+            createdAt: '2026-11-01T00:00:00.000Z',
+            category: 'general',
+            authorPublicKey: 'author-allowed',
+            authorCallsign: 'alice',
+            eventStartLocal: '2026-11-15T10:00',
+            eventEndLocal: '2026-11-15T12:00',
+            eventStartAt: '2026-11-15T10:00:00.000Z',
+            status: 'active',
+            active: true,
+            repeatable: false,
+            credits: 0,
+            priceType: 'fixed',
+            lat: -28.5,
+            lng: 153.5,
+        };
+
+        const blockedEvent: MarketplacePost = {
+            id: 'ev-blocked',
+            type: 'event',
+            title: 'Blocked Member Gathering',
+            description: 'Private gathering',
+            createdAt: '2026-11-01T00:00:00.000Z',
+            category: 'general',
+            authorPublicKey: 'author-blocked',
+            authorCallsign: 'mallory',
+            eventStartLocal: '2026-11-15T14:00',
+            eventEndLocal: '2026-11-15T16:00',
+            eventStartAt: '2026-11-15T14:00:00.000Z',
+            status: 'active',
+            active: true,
+            repeatable: false,
+            credits: 0,
+            priceType: 'fixed',
+            lat: -28.5,
+            lng: 153.5,
+        };
+
+        it('filters blocked authors and inactive enterprises before passing posts to MapCalendar', async () => {
+            const { getBlockedUsers } = await import('../lib/blocklist');
+            (getBlockedUsers as any).mockReturnValue(['author-blocked']);
+            vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([allowedEvent, blockedEvent] as any);
+
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(<MapPage identity={mockIdentity} />);
+            });
+
+            const calBtn = await view!.findByTestId('map-calendar-button');
+            await act(async () => {
+                fireEvent.click(calBtn);
+            });
+
+            // MapCalendar should be open
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            // Allowed event appears in the calendar day list
+            expect(view!.getByText('Allowed Working Bee')).toBeInTheDocument();
+            // Blocked event must NOT appear anywhere in the calendar
+            expect(view!.queryByText('Blocked Member Gathering')).toBeNull();
+        });
+
+        it('dismisses calendarOpen when starting an event so the map is interactive for pin dropping', async () => {
+            const { getBlockedUsers } = await import('../lib/blocklist');
+            (getBlockedUsers as any).mockReturnValue([]);
+            // Provide no events so empty state is displayed with Start one link
+            vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(<MapPage identity={mockIdentity} />);
+            });
+
+            const calBtn = await view!.findByTestId('map-calendar-button');
+            await act(async () => {
+                fireEvent.click(calBtn);
+            });
+
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+
+            // Click "Start one ›" link
+            const startLink = view!.getByTestId('calendar-start-one-link');
+            await act(async () => {
+                fireEvent.click(startLink);
+            });
+
+            // MapCalendar must be dismissed
+            expect(view!.queryByTestId('map-calendar')).toBeNull();
+            // Composer modal must open
+            expect(await view!.findByTestId('map-new-post-panel')).toBeInTheDocument();
+        });
+
+        it('calendar-s4: opens calendar when openCalendar prop is true and calls onOpenCalendarHandled', async () => {
+            const onOpenCalendarHandled = vi.fn();
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(
+                    <MapPage
+                        identity={mockIdentity}
+                        openCalendar={true}
+                        onOpenCalendarHandled={onOpenCalendarHandled}
+                    />
+                );
+            });
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            expect(onOpenCalendarHandled).toHaveBeenCalled();
+        });
+
+        it('calendar-s4: ✕ and Esc on a calendar a door opened take the member back; one the map\'s own button opened do not', async () => {
+            const onCalendarClosedBack = vi.fn();
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => {
+                view = render(<MapPage identity={mockIdentity} openCalendar={true} onCalendarClosedBack={onCalendarClosedBack} />);
+            });
+            // ✕
+            await act(async () => { fireEvent.click(within(view!.getByTestId('map-calendar')).getByRole('button', { name: 'Close' })); });
+            expect(view!.queryByTestId('map-calendar')).toBeNull();
+            expect(onCalendarClosedBack).toHaveBeenCalledTimes(1);
+
+            // The map's own button, then ✕: the member is already on the Map.
+            await act(async () => { fireEvent.click(view!.getByTestId('map-calendar-button')); });
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            await act(async () => { fireEvent.click(within(view!.getByTestId('map-calendar')).getByRole('button', { name: 'Close' })); });
+            expect(onCalendarClosedBack).toHaveBeenCalledTimes(1);
+
+            // A door again, then Esc.
+            view!.rerender(<MapPage identity={mockIdentity} openCalendar={false} onCalendarClosedBack={onCalendarClosedBack} />);
+            await act(async () => {
+                view!.rerender(<MapPage identity={mockIdentity} openCalendar={true} onCalendarClosedBack={onCalendarClosedBack} />);
+            });
+            expect(view!.getByTestId('map-calendar')).toBeInTheDocument();
+            await act(async () => { fireEvent.keyDown(window, { key: 'Escape' }); });
+            expect(view!.queryByTestId('map-calendar')).toBeNull();
+            expect(onCalendarClosedBack).toHaveBeenCalledTimes(2);
+        });
     });
 });

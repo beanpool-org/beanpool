@@ -63,6 +63,7 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, freshBanner, recordFreshBannerDismissal, type WordKey } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
+import { isPostPinned, anyLivePin, marketPins } from '../../utils/pins';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
 export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
@@ -519,6 +520,7 @@ export default function MarketScreen() {
         filterRow: { marginBottom: 4, borderWidth: 1, borderColor: colors.border.default, borderRadius: 26, overflow: 'hidden' },
         filterGrow: { flexGrow: 1 },
         typePill: { paddingHorizontal: 8 },
+        calendarButton: { minWidth: 44, minHeight: 44, paddingHorizontal: 10, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
     }));
 
     const [trustFilter, setTrustFilter] = useState<string>('all');
@@ -527,6 +529,7 @@ export default function MarketScreen() {
     const [viewMode, setViewMode] = useState<'list' | 'grid' | 'compact'>('list');
     const [favCategories, setFavCategories] = useState<string[]>([]);
     const [isCustomizerExpanded, setIsCustomizerExpanded] = useState(true);
+    const [, setNowTick] = useState(Date.now()); // A live pin redraws the screen; each draw reads the time itself.
 
     // "Your events" under ★ For You: the signer's own upcoming RSVPs (decision 1). Its own read, only while
     // that pill is chosen. Empty on anything that goes wrong — a node without the route answers 404, and a
@@ -594,6 +597,15 @@ export default function MarketScreen() {
     const [selectedFree, setSelectedFree] = useState<string | null>(null);
     const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
     const [posts, setPosts] = useState<any[]>([]);
+    // The clock that ends a pin on screen by the time, without a sync. It runs only while a pin is live in the list: a
+    // Market with none (most of them) wakes nothing every 30 seconds. A pin that arrives with a sync changes `posts`.
+    const hasLivePin = anyLivePin(posts);
+    useEffect(() => {
+        if (!hasLivePin) return;
+        setNowTick(Date.now());
+        const timer = setInterval(() => setNowTick(Date.now()), 30000);
+        return () => clearInterval(timer);
+    }, [hasLivePin]);
     // First-run loading: until posts load or a pillar sync completes THIS session, show a
     // loading state rather than the "no items" empty state (which reads as broken/empty).
     const [firstSyncDone, setFirstSyncDone] = useState(false);
@@ -1061,13 +1073,36 @@ export default function MarketScreen() {
         return 0;
     });
 
+    // Pins on the Market (DESIGN-pinning-fable.md §0.2, §2.2, §2.9):
+    // Up to 3 live pins matching current filters, newest pin first.
+    // Absent under search, tag, or distance narrowing.
+    const isNarrowed = Boolean(
+        (searchQuery && searchQuery.trim().length > 0) ||
+        isSearching ||
+        searchResults !== null ||
+        selectedTag !== null ||
+        selectedFree !== null ||
+        radiusKm !== null
+    );
+
+    // The rule is utils/pins.ts marketPins, which a test holds: the screen only says what passes the member's filters.
+    const pinsRead = marketPins<any>({
+        basePosts, filtered: filteredPosts, narrowed: isNarrowed, now: Date.now(),
+        visible: p => feedPostVisible(p, filterState, filterCtx)
+            && !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode),
+    });
+    const pinnedPosts = pinsRead.pinned;
+    filteredPosts = pinsRead.rest;
+    const allMatchingPosts = pinsRead.allMatching;
+    const realMatchingCount = pinsRead.realMatchingCount;
+
     // The fill (utils/market-fill.ts, core market-fill): fewer than FILL_BELOW shown near the member, under their filters, and the
     // newest from elsewhere come beneath, read as the search reads the node. The same filters apply to both parts.
     const fillNeeded = marketFillWanted({
         profile: nodeProfile, member: !!identity?.publicKey, ready: firstSyncDone && !refusal, noArea,
         // A tag filter reads as words do, nearest first from anywhere, so there is no elsewhere to fill from.
         searching: searchQuery.trim().length > 0 || !!selectedTag || !!selectedFree, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
-        shownNear: filteredPosts,
+        shownNear: allMatchingPosts,
     });
     const fillKey = `${filter}|${categoryFilter}`;
     const [elsewhere, setElsewhere] = useState<{ key: string; posts: any[] | null } | null>(null);
@@ -1097,7 +1132,7 @@ export default function MarketScreen() {
     const fillPending = fillNeeded && elsewhere?.key !== fillKey;
     const isOwnPulse = (p: any) => (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
     const fillRows: any[] = elsewhereRead
-        ? elsewhereFill(filteredPosts, elsewhereRead.filter(p => feedPostVisible(p, filterState, filterCtx) && !isOwnPulse(p)))
+        ? elsewhereFill(allMatchingPosts, elsewhereRead.filter(p => feedPostVisible(p, filterState, filterCtx) && !isOwnPulse(p)))
         : [];
 
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
@@ -1107,7 +1142,7 @@ export default function MarketScreen() {
     // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
     // empty state's welcome, or after the real listings.
     const showExamples = showExampleListings({
-        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending ? FILL_BELOW : filteredPosts.length + fillRows.length,
+        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending ? FILL_BELOW : realMatchingCount + fillRows.length,
     });
 
     // Listings posted today, by the local calendar day the TODAY heading uses; events are not listings.
@@ -1259,6 +1294,17 @@ export default function MarketScreen() {
                         moreHint
                         style={styles.filterRow}
                         accessibilityLabel={t('Filter events by date')}
+                        trailing={
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Calendar')}
+                                testID="market-calendar-button"
+                                style={styles.calendarButton}
+                                onPress={() => router.push('/calendar')}
+                            >
+                                <MaterialCommunityIcons name="calendar-month" size={20} color={colors.text.secondary} />
+                            </Pressable>
+                        }
                     />
                 ) : (
                     <FilterChipBar key="filters" fill moreHint style={styles.filterRow} accessibilityLabel={t('Filters')}>
@@ -1606,6 +1652,7 @@ export default function MarketScreen() {
                     onVoteSuccess={() => loadPosts()}
                     informal={pollsInformal(nodeProfile)}
                     decisionsPreview={decisionsPreview}
+                    pinsOn={Boolean(nodeProfile?.features?.pins)}
                 />
             );
         }
@@ -1688,6 +1735,11 @@ export default function MarketScreen() {
                             }
                             return null;
                         })()}
+                        {isPostPinned(item, Date.now()) && (
+                            <View style={[styles.gridBadge, { backgroundColor: colors.overlay.scrim, borderColor: colors.overlay.scrimEdge }]} testID="pinned-chip">
+                                <Text style={[styles.gridPriceText, { fontSize: 10, fontWeight: '700' }]}>{t('📌 PINNED')}</Text>
+                            </View>
+                        )}
                         {dealChip && (
                             <View testID="card-deal-chip" style={[styles.gridBadge, dealChip === 'in-trust'
                                 ? { backgroundColor: colors.feedback.success.solid, borderColor: colors.feedback.success.solid }
@@ -1849,6 +1901,11 @@ export default function MarketScreen() {
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>{t('👤 YOU')}</Text>
                                     </View>
                                 )}
+                                {isPostPinned(item, Date.now()) && (
+                                    <View testID="pinned-chip" style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('📌 PINNED')}</Text>
+                                    </View>
+                                )}
                                 {dealChip && (
                                     <View testID="card-deal-chip" style={{ backgroundColor: dealChip === 'in-trust' ? colors.feedback.success.bg : colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: dealChip === 'in-trust' ? colors.feedback.success.border : colors.feedback.warning.border }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: dealChip === 'in-trust' ? colors.feedback.success.fg : colors.feedback.warning.fg }}>{listingChipWords(dealChip)}</Text>
@@ -1906,14 +1963,40 @@ export default function MarketScreen() {
             </View>
         ))
         : fillRows.map(item => <View key={item.id}>{renderItem({ item })}</View>);
-    const fillFooter = fillRows.length > 0 || (fillPending && filteredPosts.length === 0) ? (
-        <View testID="market-fill" style={{ marginTop: filteredPosts.length > 0 ? 8 : 0 }}>
-            {filteredPosts.length === 0 && (
+
+    // Pinned posts block (DESIGN-pinning-fable.md §0.2, §2.2, §2.9)
+    const pinnedCards = (pinnedPosts.length > 0 && !categoryPanel.open) ? (
+        <View style={{ marginHorizontal: 16, marginTop: 4, marginBottom: 8 }} testID="market-pinned-block">
+            <View style={styles.sectionHeader} testID="pinned-section-header">
+                <Text style={styles.sectionHeaderText}>{upperCase(t('Pinned'))}</Text>
+                <View style={styles.sectionHeaderLine} />
+            </View>
+            <View style={{ marginTop: 8 }}>
+                {viewMode === 'grid' ? (
+                    Array.from({ length: Math.ceil(pinnedPosts.length / 2) }, (_, i) => pinnedPosts.slice(i * 2, i * 2 + 2)).map(pair => (
+                        <View key={pair[0].id} style={{ flexDirection: 'row', gap: 16, marginBottom: 12 }}>
+                            {pair.map(item => <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>)}
+                            {pair.length === 1 ? <View style={{ flex: 1 }} /> : null}
+                        </View>
+                    ))
+                ) : (
+                    pinnedPosts.map(item => (
+                        <View key={item.id} style={{ marginBottom: 8 }}>
+                            {renderItem({ item })}
+                        </View>
+                    ))
+                )}
+            </View>
+        </View>
+    ) : null;
+    const fillFooter = fillRows.length > 0 || (fillPending && realMatchingCount === 0) ? (
+        <View testID="market-fill" style={{ marginTop: realMatchingCount > 0 ? 8 : 0 }}>
+            {realMatchingCount === 0 && (
                 <Text testID="market-near-empty" style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
                     {t('Nothing within 250 km yet.')}
                 </Text>
             )}
-            {filteredPosts.length === 0 && !!identity && <MarketCircleLine identity={identity} colors={colors} />}
+            {realMatchingCount === 0 && !!identity && <MarketCircleLine identity={identity} colors={colors} />}
             {fillRows.length === 0 ? (
                 <ActivityIndicator size="small" color={colors.brand.primary} />
             ) : (
@@ -1943,11 +2026,11 @@ export default function MarketScreen() {
                 data={listData}
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
-                ListHeaderComponent={ListHeader}
-                ListFooterComponent={fillFooter || (showExamples && filteredPosts.length > 0) ? (
+                ListHeaderComponent={<>{ListHeader}{pinnedCards}</>}
+                ListFooterComponent={fillFooter || (showExamples && realMatchingCount > 0) ? (
                     <>
                         {fillFooter}
-                        {showExamples && filteredPosts.length + fillRows.length > 0 ? <ExampleListings /> : null}
+                        {showExamples && realMatchingCount + fillRows.length > 0 ? <ExampleListings /> : null}
                     </>
                 ) : null}
                 contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset }]}
@@ -1968,7 +2051,7 @@ export default function MarketScreen() {
                     />
                 }
                 ListEmptyComponent={
-                    fillRows.length > 0 || (fillPending && filteredPosts.length === 0) ? null : emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
+                    pinnedPosts.length > 0 || fillRows.length > 0 || (fillPending && realMatchingCount === 0) ? null : emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
                         // Not a member of this community: its listings are its members'. Not "trouble connecting".
                         <View style={{ padding: 32, alignItems: 'center' }} testID="members-only-listings">
                             <Text style={{ fontSize: 40, opacity: 0.4, marginBottom: 12 }}>🔒</Text>

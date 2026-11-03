@@ -775,6 +775,24 @@ OUT=$(bash "$CU/run.sh" "$CU/tree" 2>&1)
 grep -qx "child-left-it" <<<"$OUT" && ok "train: a child that inherits cleanup removes nothing" || bad "train: a child ran cleanup ($OUT)"
 grep -qx "main-removed-it" <<<"$OUT" && ok "train: ...and the train's own shell still cleans up" || bad "train: its own shell did not clean up ($OUT)"
 
+# The guard above is the second line. The first: with_limit forks nothing that can hold the train's traps, because the race
+# above cannot be waited for (it removed the tree under test_merge_gate:754 again on 3 Nov, after the guard was in, run for
+# #2783, and bash 5 is not what a Mac runs). Its watcher must be a plain sh, not a bash subshell: a function named sleep is
+# only ever called by a bash subshell, and the traps it was given must be back, whole, when it returns.
+WL="$T/with-limit"; mkdir -p "$WL"
+{ echo 'MARK=$1; sleep() { echo bash-watcher >> "$MARK"; command sleep "$@"; }'
+  awk '/^with_limit\(\) \{$/,/^}$/' "$TRAIN"
+  echo 'trap "echo exit-trap-ran" EXIT; trap "exit 130" INT TERM'
+  echo 'BEFORE=$(trap -p EXIT INT TERM)'
+  echo 'with_limit 1 command sleep 5; echo "stopped-rc=$?"'
+  echo 'with_limit 5 true; echo "quick-rc=$?"'
+  echo '[ "$(trap -p EXIT INT TERM)" = "$BEFORE" ] && echo traps-back'
+  echo 'for i in $(seq 1 60); do with_limit 30 true; done' ; } > "$WL/run.sh"
+OUT=$(bash "$WL/run.sh" "$WL/mark" 2>&1)
+[ ! -s "$WL/mark" ] && ok "train: a with_limit watcher is no bash subshell, so it has no trap to run" || bad "train: the watcher is a bash subshell that carries the train's traps ($(cat "$WL/mark" | head -1))"
+grep -qx "stopped-rc=143" <<<"$OUT" && grep -qx "quick-rc=0" <<<"$OUT" && ok "train: ...a command is still stopped at its limit, and a quick one keeps its status" || bad "train: with_limit changed what it returns ($OUT)"
+grep -qx "traps-back" <<<"$OUT" && [ "$(grep -c '^exit-trap-ran$' <<<"$OUT")" = 1 ] && ok "train: ...the train's traps are back after it, and its EXIT trap runs once, in the train" || bad "train: with_limit left the traps changed, or ran one more than once ($OUT)"
+
 # scripts/test-all-shadow.sh against a log and branches of each kind. It fills in results, lists disagreements, and deletes
 # only train/* branches whose run is finished or never started.
 SHADOWS="$REPO_ROOT/scripts/test-all-shadow.sh"

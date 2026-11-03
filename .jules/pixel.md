@@ -217,3 +217,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-30 - Add busy state to message button in public profile
 **Learning:** In member public profiles, the direct message button conditionally renders an `ActivityIndicator` during conversation initiation, but lacked `accessibilityState={{ disabled: isMessaging, busy: isMessaging }}`, leaving screen readers without loading state feedback.
 **Action:** Supply `accessibilityState={{ disabled: isMessaging, busy: isMessaging }}` on profile direct message action buttons rendering `ActivityIndicator` when busy.
+
+## 2027-02-06 - Add busy state to cancel initiative button in treasury manage
+**Learning:** In treasury management, the cancel initiative action button renders an `ActivityIndicator` when `cancelling` is true, but lacked `accessibilityState={{ disabled: cancelling, busy: cancelling }}`, leaving screen reader users without feedback during async cancellation.
+**Action:** Supply `accessibilityState={{ disabled: cancelling, busy: cancelling }}` on initiative cancellation action buttons rendering an `ActivityIndicator` when busy.

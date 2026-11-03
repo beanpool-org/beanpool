@@ -79,7 +79,7 @@ Baadhi ya mabadiliko haya yapo kwenye seva ya jumuiya yako. Unayapata seva ya ju
 
 ### Vikundi
 
-- **Kila kikundi kina gumzo.** Mazungumzo sasa yana vitufe vitatu: **Jumbe**, **Vikundi** na **Watu**. **Vikundi** huorodhesha vikundi vyako, mashirika unayoyasimamia na matukio unayohudhuria, kila kimoja kikiwa na ujumbe wake wa hivi karibuni na idadi ya jumbe ambazo hazijasomwa.
+- **Kila kikundi kina gumzo.** Gumzo sasa lina vitufe vitatu: **Jumbe**, **Vikundi** na **Watu**. **Vikundi** huorodhesha vikundi vyako, mashirika unayoyasimamia na matukio unayohudhuria, kila kimoja kikiwa na ujumbe wake wa hivi karibuni na idadi ya jumbe ambazo hazijasomwa.
 - **Njia moja ya kuanzisha kikundi.** **Kikundi kipya** katika Mazungumzo na **+** katika Mali za Pamoja hufungua fomu ile ile, huku **Mzunguko wa Kijamii** ukiwa umechaguliwa kwa ajili yako. Baada ya kukiunda unaingia kwenye gumzo lake, linalouliza unataka kumwalika nani.
 - **Mialiko.** Waratibu wanaweza kuwaalika watu kutoka kwenye menyu ya gumzo. Mwaliko huonyesha nani aliyeutuma, na **Jiunge na kikundi** hukupeleka moja kwa moja kwenye gumzo.
 - **Nyamazisha gumzo**: Kwa saa 8, Kwa wiki moja au Kila wakati. Katika kikundi, kutaja kwa @ bado hupita.

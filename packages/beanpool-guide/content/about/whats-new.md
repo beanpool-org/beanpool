@@ -31,12 +31,12 @@ You get these when the global community's server is updated. On the phone they n
 
 ## Home
 
-- **A new Home tab.** The app now opens on Home: a dashboard answering what needs you, what is new around you, and what you could do next. The Market is now its own tab, and the Pulse is a card on Home. You choose your cards: **Add a card** puts one on Home, each card's **…** moves or removes it, and **Edit home** lists them all to reorder or remove, on the phone and in the web app.
+- **A new Home tab.** The app now opens on Home: a dashboard answering what needs you, what is new around you, and what you could do next. The Market is now its own tab, and the Pulse is a card on Home. You choose your cards: **Add a card** puts one on Home, **Arrange** folds them so you can move them, and each card's **…** removes it, on the phone and in the web app.
 - **Getting started.** A new member's Home starts with one card, **Getting started**. Tap **Look around** for a one-minute tour, or **Skip**, and your usual cards appear. Every screen has a **?** at the top with its help.
 - **A saved search on Home.** Choose words such as "eggs", and whether you want offers, needs or both, a category and a distance. The card shows the first four listings that match, the same ones the Market's search finds, and **See more** opens the Market with your words in its search. It needs an up-to-date app and your community's server to be updated.
 - **Save a search from the Market.** While there are words in the Market's search, **Save this search to Home** appears, on the phone and in the web app. It opens Home with your words, **Offers** or **Needs**, the category and the distance filled in. Tap **Add to Home**. A saved search shows its newest matches first; on the global community, the nearest first. It is for Offers and Needs, so it does not show under Events or Polls.
 - **Sun and moon on Home.** Tonight's moon and today's sunrise and sunset, worked out on your phone or in your browser for your community's place or your area, on your own clock. It asks nothing of your community's server. It needs an up-to-date app; until your community's server is updated, it uses your area.
-- **Columns on a wide screen.** In the web app on a wide screen, the cards stand in two or three columns. In **Edit home**, choose **Fill the width (up to three)**, **Two wide**, or **One**. Your choice is saved on your account.
+- **Columns on a wide screen.** In the web app on a wide screen, the cards stand in two or three columns, in your order, with no gaps.
 - **The cards' real content on web.** Cards in the web app show their real content rather than summary lines: up to 3 open deals with who and status, enterprise books with balances and month figures, open Decisions with your voting status and the first poll, recent chat lines in groups, four Pulse posts, your monthly Beans totals, and wide cards show listings and posts as tiles.
 
 ## Privacy by default
@@ -90,12 +90,12 @@ Some of these changes live on your community's server. You get them when your co
 
 ### Groups
 
-- **Every group has a chat.** Talk now has three buttons: **Messages**, **Groups** and **People**. **Groups** lists your groups, the enterprises you keep and the events you are going to, each with its latest message and unread count.
-- **One way to start a group.** **New group** in Talk and **+** in Commons open the same form, with **Social Circle** chosen for you. After you create it you land in its chat, which asks who you want to invite.
+- **Every group has a chat.** Chat now has three buttons: **Messages**, **Groups** and **People**. **Groups** lists your groups, the enterprises you keep and the events you are going to, each with its latest message and unread count.
+- **One way to start a group.** **New group** in Chat and **+** in Commons open the same form, with **Social Circle** chosen for you. After you create it you land in its chat, which asks who you want to invite.
 - **Invitations.** Convenors can invite people from the chat's menu. An invitation shows who sent it, and **Join the group** takes you straight into the chat.
 - **Mute a chat**: For 8 hours, For a week or Always. In a group, @mentions still get through.
 - **One header for every chat**: the group's, enterprise's or event's name at the top. Tap it to see the group, enterprise or event.
-- The old group chats in Talk have been removed, with their messages.
+- The old group chats in Chat have been removed, with their messages.
 - Every group now has a **lead convenor** — whoever created it, to begin with. Any convenor still looks after members and posts, but only the lead can remove or demote a convenor, and nobody can remove the lead. The lead can hand the lead on to someone else. If the lead goes quiet for 30 days, the group can choose a new one, on the group's screen above the roster. See "Rules and how decisions work".
 - **Votes in a group.** A group's members can vote on the group's own things, such as a new convenor or a new lead: open the group and look under **Decisions**.
 - **Choosing a new lead for a quiet group.** Only people who were in the group before its lead went quiet can vote. People who joined, or were made convenors, after that have no say, so new accounts can't take over a group whose lead has gone quiet.

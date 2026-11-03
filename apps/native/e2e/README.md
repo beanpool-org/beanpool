@@ -55,9 +55,9 @@ title fails the run, not just a missing element), then opens and closes the Ledg
   This suite does not create an identity itself; if the target device has none, join one
   by hand first (see that memory, or `staging-web-qa-recipe.md` for a fresh invite/signup
   against `https://test.beanpool.org`).
-- **Tabs asserted:** Home, Market, Map, Talk, Commons, Ledger (the six tabs since Home
+- **Tabs asserted:** Home, Market, Map, Chat, Commons, Ledger (the six tabs since Home
   came, slice H2; Pulse is a card on Home and a route off the bar, and People and Settings
-  are hidden from the bar too, all out of scope for this pass). Home, Market, Talk,
+  are hidden from the bar too, all out of scope for this pass). Home, Market, Chat,
   Commons and Ledger each render a shared `PageTitle` component — it takes an optional
   `testID`, which each screen sets (`page-title-home`, `page-title-market`, etc.) purely
   for this suite; no visual change. Map has no `PageTitle` (its own header UI is

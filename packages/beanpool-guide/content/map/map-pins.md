@@ -37,13 +37,11 @@ You don't have to tap. If you zoom in as far as a tap would take you and a circl
 
 ## Filters
 
-On the phone, at the top of the map:
+The phone and the web app have the same filters, at the top of the map:
 
 - **All**, **Offers**, **Needs** or **Events**. Tap **✕** to clear.
-- **All Categories** to show one category.
-- For events: **All**, **Today**, **This weekend** or **Next 7 days**. The map moves to fit them.
-
-In the web app the map has only the event date chips: **Today**, **This weekend**, **Next 7 days** and **All events**. They show only while your community has an event coming up.
+- **All Categories** to show one category. It sits under **All**, **Offers** and **Needs**.
+- Under **Events**, the date chips: **All** (**All events** in the web app), **Today**, **This weekend** or **Next 7 days**. The map moves to fit them.
 
 ## Buttons on the left
 

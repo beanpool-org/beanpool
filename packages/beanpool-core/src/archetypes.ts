@@ -538,7 +538,30 @@ export interface QuizResult {
     secondary: ArchetypeKey;
     mode: 'quick' | 'deep';
     scores: Record<ArchetypeKey, number>;
-    updatedAt: string;
+    /**
+     * The day it was taken, 'YYYY-MM-DD' in UTC: all a community is told of when, and what orders one result against
+     * another (archetypeIsNewer). None on a result that never carried a date (a bare type key).
+     */
+    takenOn?: string;
+    /** The millisecond stamp a result from before `takenOn` carries, as read. Never stamped now, never published. */
+    updatedAt?: string;
+}
+
+const TAKEN_ON = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The day of a result: its own `takenOn`, or an older result's stamp cut to the day. Undefined for neither, and for a day
+ * past tomorrow (UTC; a clock a day ahead is no fault): a date from a bad clock or a node would otherwise beat every
+ * later retake (archetypeIsNewer), so such a result reads as undated and any dated one is newer than it.
+ */
+function dayOf(takenOn: unknown, updatedAt: unknown): string | undefined {
+    const latest = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    if (typeof takenOn === 'string' && TAKEN_ON.test(takenOn) && !Number.isNaN(Date.parse(takenOn))) return takenOn <= latest ? takenOn : undefined;
+    if (typeof updatedAt !== 'string') return undefined;
+    const stamped = Date.parse(updatedAt);
+    if (Number.isNaN(stamped)) return undefined;
+    const day = new Date(stamped).toISOString().slice(0, 10);
+    return TAKEN_ON.test(day) && day <= latest ? day : undefined;
 }
 
 export function scoreQuiz(
@@ -581,7 +604,7 @@ export function scoreQuiz(
         secondary,
         mode,
         scores,
-        updatedAt: new Date().toISOString(),
+        takenOn: new Date().toISOString().slice(0, 10),
     };
 }
 
@@ -616,12 +639,14 @@ export function parseArchetype(raw?: string | null): QuizResult | null {
             const secondary = (typeof parsed.secondary === 'string' && Object.prototype.hasOwnProperty.call(ARCHETYPES, parsed.secondary))
                 ? (parsed.secondary as ArchetypeKey)
                 : (ARCHETYPES[primary].idealPartners[0] || 'harmonizer');
+            const takenOn = dayOf(parsed.takenOn, parsed.updatedAt);
             return {
                 primary,
                 secondary,
                 mode: parsed.mode === 'deep' ? 'deep' : 'quick',
                 scores: typeof parsed.scores === 'object' && parsed.scores !== null ? parsed.scores : { [primary]: 1 } as any,
-                updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+                ...(takenOn ? { takenOn } : {}),
+                ...(typeof parsed.updatedAt === 'string' ? { updatedAt: parsed.updatedAt } : {}),
             };
         }
         if (typeof parsed === 'string' && Object.prototype.hasOwnProperty.call(ARCHETYPES, parsed)) {
@@ -631,7 +656,6 @@ export function parseArchetype(raw?: string | null): QuizResult | null {
                 secondary: ARCHETYPES[k].idealPartners[0] || 'harmonizer',
                 mode: 'quick',
                 scores: { weaver: 0, connector: 0, catalyst: 0, artisan: 0, sage: 0, guardian: 0, spark: 0, champion: 0, harmonizer: 0, [k]: 1 },
-                updatedAt: new Date().toISOString(),
             };
         }
     } catch {
@@ -645,10 +669,63 @@ export function parseArchetype(raw?: string | null): QuizResult | null {
             secondary: ARCHETYPES[k].idealPartners[0] || 'harmonizer',
             mode: 'quick',
             scores: { weaver: 0, connector: 0, catalyst: 0, artisan: 0, sage: 0, guardian: 0, spark: 0, champion: 0, harmonizer: 0, [k]: 1 },
-            updatedAt: new Date().toISOString(),
         };
     }
     return null;
+}
+
+/**
+ * The one form a community is ever sent: the type, the wing, the mode and the day, and nothing else. Every publish in
+ * both apps goes through this. No scores, and no time of day: a millisecond stamp copied to every community was an exact
+ * fingerprint across them, and a day is all the ordering needs (scratch/fable-design/DESIGN-archetype-across-fable.md §3).
+ */
+export function publicArchetype(result: Pick<QuizResult, 'primary' | 'secondary' | 'mode' | 'takenOn' | 'updatedAt'>): string {
+    const takenOn = dayOf(result.takenOn, result.updatedAt);
+    return JSON.stringify({
+        primary: result.primary,
+        secondary: result.secondary,
+        mode: result.mode,
+        ...(takenOn ? { takenOn } : {}),
+    });
+}
+
+/**
+ * Whether `candidate` is a result to put over `over`: something readable over nothing readable, a later day over an
+ * earlier one, or a dated result over an undated one. Never an older one, and never on a tie: on the same day what is
+ * there stands, and a retake on the phone reaches a community by what waits for it (its waitingArchetype).
+ */
+export function archetypeIsNewer(candidate?: string | null, over?: string | null): boolean {
+    const mine = parseArchetype(candidate);
+    if (!mine) return false;
+    const theirs = parseArchetype(over);
+    if (!theirs) return true;
+    if (!mine.takenOn) return false;
+    return !theirs.takenOn || mine.takenOn > theirs.takenOn;
+}
+
+/**
+ * Whether `result` was taken after `day` ('YYYY-MM-DD', UTC): a removal made on that day stands over it and anything
+ * before it or on it, and a later result stands over the removal. An undated result is never after (Remove my working style).
+ */
+export function archetypeIsAfter(result: string | null | undefined, day: string): boolean {
+    const taken = parseArchetype(result)?.takenOn;
+    return !!taken && taken > day;
+}
+
+/** Whichever of the two to show as the member's own: `first`, unless `second` is newer. */
+export function newestArchetype(first?: string | null, second?: string | null): string | null {
+    return archetypeIsNewer(second, first) ? second ?? null : first ?? null;
+}
+
+/**
+ * What a Save or a catch-up publish carries of the working style: the device's copy in its public form when it is newer
+ * than the community's row, else nothing. The row is never sent back to its own community, and a member who has no
+ * device copy sends nothing.
+ */
+export function archetypeToCarry(deviceCopy?: string | null, row?: string | null): string | null {
+    if (!archetypeIsNewer(deviceCopy, row)) return null;
+    const parsed = parseArchetype(deviceCopy);
+    return parsed ? publicArchetype(parsed) : null;
 }
 
 /**

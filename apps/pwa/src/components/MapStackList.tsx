@@ -9,7 +9,7 @@ import type { StackPin } from '../lib/map-stack';
  * count and a keyboard carries on into the rows. A list that opened by itself leaves focus where it is, on a map the member
  * may be moving with the arrow keys, and MapPage's status line says the count.
  */
-export function MapStackList({ pins, covered, takeFocus, onClose }: { pins: readonly StackPin[]; covered: boolean; takeFocus: boolean; onClose: () => void }) {
+export function MapStackList({ pins, covered, takeFocus, onClose, heading }: { pins: readonly StackPin[]; covered: boolean; takeFocus: boolean; onClose: () => void; heading?: string }) {
     const headingRef = useRef<HTMLHeadingElement>(null);
     useEffect(() => { if (takeFocus) headingRef.current?.focus({ preventScroll: true }); }, []);
 
@@ -34,7 +34,7 @@ export function MapStackList({ pins, covered, takeFocus, onClose }: { pins: read
                     style={{ outline: 'none' }}
                     className="m-0 py-2 flex-1 min-w-0 break-words text-base font-extrabold text-gray-900 dark:text-white"
                 >
-                    {stackHeading(pins.length)}
+                    {heading ?? stackHeading(pins.length)}
                 </h2>
                 <button
                     type="button"

@@ -13,7 +13,7 @@
  *
  * Anything else, a member's words above all, is shown exactly as written.
  */
-import { t, tn, word, type WordKey, DM_LINE_DELETED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT } from '@beanpool/core';
+import { t, tn, word, requestsLimitedWords, type WordKey, DM_LINE_DELETED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_NOT_VERIFIED_TEXT } from '@beanpool/core';
 
 /** utils/name-key-memory.ts markKeyChanged: the details line, alone or after a note the line already had. */
 const KEY_CHANGED_DETAILS = "This phone knew this name on another key, and the new key hasn't confirmed it was theirs.";
@@ -122,6 +122,9 @@ const FILLED: ReadonlyArray<[RegExp, (m: RegExpExecArray) => string]> = [
     [/^The node answered (\d+)\.$/, (m) => t('The node answered {status}.', { status: m[1] })],
     // utils/db.ts signedRequestWithMethod: the same, from a signed request.
     [/^Request failed: (\d+)$/, (m) => t('Request failed: {status}', { status: m[1] })],
+    // The node's refusal of a new message request after reports cleared theirs (403 `dm_requests_limited`): the app words it
+    // (core requests-cleared-words.ts); anything the node worded otherwise is shown as given.
+    [/^People you wrote to reported your message requests, so they were cleared and you can't send new ones until \d{4}-\d{2}-\d{2}\. You can still answer people who wrote to you, and post\.$/, (m) => requestsLimitedWords(m[0])],
 ];
 
 /** A whole line this table knows, in the member's language, or null. */

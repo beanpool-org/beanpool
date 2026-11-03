@@ -277,25 +277,8 @@ export function getConversation(db: Db, id: string): Conversation | undefined {
     } as any;
 }
 
-/**
- * A group chat's membership lines (joined, left, removed, role changed) are shown in the chat but never count
- * as unread — nobody should get a badge because someone joined. The server's group chat
- * (apps/server/src/engine/group-thread.ts, GroupSystemType) writes these kinds.
- */
-export const QUIET_SYSTEM_TYPES: readonly string[] = [
-    'GROUP_MEMBER_JOINED', 'GROUP_MEMBER_LEFT', 'GROUP_MEMBER_REMOVED', 'GROUP_ROLE_CHANGED',
-];
-const QUIET_SQL = QUIET_SYSTEM_TYPES.map(t => `'${t}'`).join(', ');
-
-/**
- * SQL predicate on a `messages m` row: true when it counts toward the viewer's unread badge. Not a membership
- * line, and not a system line about something the viewer did themselves (their own event or poll landing in a
- * group chat). Takes ONE bound parameter: the viewer's pubkey.
- */
-export const COUNTS_AS_UNREAD_SQL = `NOT (m.type = 'system' AND (
-    COALESCE(m.system_type, '') IN (${QUIET_SQL})
-    OR COALESCE(CASE WHEN json_valid(m.metadata) THEN json_extract(m.metadata, '$.actorPubkey') END, '') = ?
-))`;
+import { QUIET_SYSTEM_TYPES, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
+export { QUIET_SYSTEM_TYPES, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql };
 
 export function getUnreadCounts(db: Db, pubkey: string): Record<string, number> {
     const rows = db.prepare(`

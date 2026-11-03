@@ -26,6 +26,7 @@ import {
     Linking, Keyboard,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useKeepCaretVisible } from './useKeepCaretVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -118,7 +119,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
     const [approximate, setApproximate] = useState(false);
     const mapRef = useRef<MapView | null>(null);
-    const scrollRef = useRef<ScrollView | null>(null);
+    const { scrollRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
     // Where the address box sits in the scroll content, for bringing it (and the map under it) into view.
     const addressY = useRef(0);
     // The spot a new pin was placed at, kept while the pin shows Approximate, so the host can still choose it.
@@ -674,7 +675,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         </Pressable>
                     </View>
 
-                    <ScrollView ref={scrollRef} style={styles.body} contentContainerStyle={{ paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+                    <ScrollView ref={scrollRef} {...keepCaretVisible} style={styles.body} contentContainerStyle={{ paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
                         <View style={styles.field}>
                             <Text style={styles.label}>{t('TITLE *')}</Text>
                             <TextInput

@@ -6,12 +6,13 @@ import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, isFriendLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
+import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, isFriendLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile, pushWaitingArchetype } from '../utils/db';
 import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
+import { clearWaitingArchetype, keepQuizResult, keepWaitingArchetype, onGuestVisit, removeWorkingStyle } from '../utils/working-style';
+import { parseArchetype, calculateSynergy, newestArchetype, publicArchetype, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
 import { getCanonicalProfile } from '../utils/canonical-profile';
 import { ChannelChips } from '../components/ChannelChips';
 import { fetchPublicChannels } from '../utils/channels';
@@ -328,6 +329,21 @@ export default function PublicProfileScreen() {
             alignItems: 'center',
             justifyContent: 'center',
         },
+        // Remove my working style: a quiet line under the card's buttons, 44 dp tall, the muted ink of the card.
+        synergyRemoveBtn: {
+            minHeight: 44,
+            paddingHorizontal: 8,
+            marginTop: 4,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        synergyRemoveBtnText: {
+            color: colors.text.secondary,
+            fontSize: 13,
+            fontWeight: '600',
+            textDecorationLine: 'underline',
+            textAlign: 'center',
+        },
         synergyRetakeBtnText: {
             color: colors.text.secondary,
             fontWeight: '700',
@@ -513,7 +529,8 @@ export default function PublicProfileScreen() {
                 const canonical = await getCanonicalProfile().catch(() => null);
                 if (vp) {
                     // Profile S2-W: bio and contact belong to this community alone; no fallback to canonical across communities.
-                    if (!vp.archetype && canonical?.archetype) vp.archetype = canonical.archetype;
+                    // The working style is the member's, not the community's: the device's result when it is the newer.
+                    vp.archetype = newestArchetype(vp.archetype, canonical?.archetype);
                     setViewerProfile(vp);
                 } else if (canonical) {
                     setViewerProfile({
@@ -534,13 +551,6 @@ export default function PublicProfileScreen() {
         const jsonStr = JSON.stringify(quizResult);
         setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
 
-        const publicArchetype = JSON.stringify({
-            primary: quizResult.primary,
-            secondary: quizResult.secondary,
-            mode: quizResult.mode,
-            updatedAt: quizResult.updatedAt,
-        });
-
         // Profile S2-W: publish this community's name, not the phone-wide name (identity.callsign).
         // Same mechanism #2617 used: ownRowOf(row).callsign, falling back to viewerProfile/own,
         // and identity.callsign only if this community holds no row yet.
@@ -550,34 +560,77 @@ export default function PublicProfileScreen() {
             || (ownShown ? own.callsign?.trim() : undefined);
         const nameToUse = communityName || identity.callsign || '';
 
+        const url = await AsyncStorage.getItem('beanpool_anchor_url');
+        // A guest visit keeps it on the phone: the member isn't in this community, so nothing goes to it. Nor into the row:
+        // left empty, the device's copy is the newer once they join, and their first publish there carries it (utils/working-style.ts).
+        const visiting = !!url && await onGuestVisit(url);
         const localUpdate: any = {
             callsign: nameToUse,
             archetype: jsonStr,
         };
-        await updateMemberProfile(identity.publicKey, localUpdate);
+        if (!visiting) await updateMemberProfile(identity.publicKey, localUpdate);
         if (isSelf) {
             setProfile((prev: any) => ({ ...(prev || {}), archetype: jsonStr }));
         }
 
+        // The device's result now, waiting for every other community on the phone (utils/working-style.ts).
+        await keepQuizResult(quizResult, identity.publicKey, url).catch((e) => console.warn('[Archetype] Device copy best effort:', e));
+
+        if (!url || visiting) return;
+        const archetype = publicArchetype(quizResult);
+        // It waits here before it goes: over an older result waiting here, which a same-day tie would otherwise send back
+        // over this one, and for the next sync if the app dies with the publish out.
+        await keepWaitingArchetype(url, identity.publicKey, archetype).catch((e) => console.warn('[Archetype] Waiting copy best effort:', e));
+        let landed = false;
         try {
-            const url = await AsyncStorage.getItem('beanpool_anchor_url');
-            if (url) {
-                const payloadObj: any = {
-                    publicKey: identity.publicKey,
-                    ...(nameToUse ? { callsign: nameToUse } : {}),
-                    archetype: publicArchetype,
-                };
-                const bodyString = JSON.stringify(payloadObj);
-                const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
-                await fetch(`${url}/api/profile/update`, {
-                    method: 'POST',
-                    headers,
-                    body: bodyString,
-                });
-            }
+            const payloadObj: any = {
+                publicKey: identity.publicKey,
+                ...(nameToUse ? { callsign: nameToUse } : {}),
+                archetype,
+            };
+            const bodyString = JSON.stringify(payloadObj);
+            const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
+            const res = await fetch(`${url}/api/profile/update`, {
+                method: 'POST',
+                headers,
+                body: bodyString,
+            });
+            landed = res.ok;
         } catch (e) {
             console.warn('[Archetype] Profile push best effort:', e);
         }
+        // Not landed: the row here holds it already, so nothing else would send it, and it waits for this community's next sync.
+        if (landed) await clearWaitingArchetype(url, archetype);
+    };
+
+    // One confirm, plain words: nothing about a test is lost that a retake doesn't bring back. The device copy and every
+    // community's row go now; each community is told at its own turn, the open one first (utils/working-style.ts).
+    const confirmRemoveWorkingStyle = () => {
+        Alert.alert(
+            t('Remove my working style'),
+            t('This takes your working style off this device and out of every community on it. A retake brings it back.'),
+            [
+                { text: t('Cancel'), style: 'cancel' },
+                {
+                    text: t('Remove'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (!identity) return;
+                        try {
+                            await removeWorkingStyle(identity.publicKey);
+                        } catch (e) {
+                            console.warn('[Archetype] Remove failed:', e);
+                            Alert.alert(t('Error'), t('Please try again.'));
+                            return;
+                        }
+                        setViewerProfile((prev: any) => ({ ...(prev || {}), archetype: null }));
+                        setProfile((prev: any) => ({ ...(prev || {}), archetype: null }));
+                        const url = await AsyncStorage.getItem('beanpool_anchor_url');
+                        if (url) await pushWaitingArchetype({ community: url }).catch((e) => console.warn('[Archetype] Remove publish best effort:', e));
+                    },
+                },
+            ],
+        );
     };
 
     useEffect(() => {
@@ -1462,7 +1515,7 @@ export default function PublicProfileScreen() {
                     your own archetype had no home — which also made the "take the quiz on your
                     profile" chat nudge point at a screen that had no quiz on it. */}
                 {isSelf && (() => {
-                    const mine = parseArchetype(profile?.archetype) || parseArchetype(viewerProfile?.archetype);
+                    const mine = parseArchetype(newestArchetype(profile?.archetype, viewerProfile?.archetype));
                     const primary = mine ? ARCHETYPES[mine.primary] : null;
                     const secondary = mine ? ARCHETYPES[mine.secondary] : null;
 
@@ -1521,6 +1574,14 @@ export default function PublicProfileScreen() {
                                         <Text style={styles.synergyRetakeBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('🔄 Retake')}</Text>
                                     </Pressable>
                                 </View>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('Remove my working style')}
+                                    style={styles.synergyRemoveBtn}
+                                    onPress={confirmRemoveWorkingStyle}
+                                >
+                                    <Text style={styles.synergyRemoveBtnText} numberOfLines={2}>{t('Remove my working style')}</Text>
+                                </Pressable>
                             </View>
                         );
                     }

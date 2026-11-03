@@ -22,7 +22,7 @@ O silenciamento está disponível apenas no aplicativo para celular por enquanto
 - Interrompe os alertas dessa conversa. Na conversa de um grupo, alguém que @mencione você ainda conseguirá alertar você. Veja "Menções".
 - A conversa de um empreendimento não envia alertas, então não há alertas para interromper. Silenciá-la apenas a mantém fora dos números descritos abaixo.
 - A conversa ainda exibe as novas mensagens.
-- Em **Conversas**, sob **Grupos**, uma conversa silenciada exibe um sino riscado. O número de mensagens não lidas fica em cinza e não é somado ao número exibido na aba **Grupos**.
+- Em **Bate-papo**, sob **Grupos**, uma conversa silenciada exibe um sino riscado. O número de mensagens não lidas fica em cinza e não é somado ao número exibido na aba **Grupos**.
 - Na conversa de um grupo ou empreendimento, a barra superior também não mostra avisos sobre ela. Uma conversa silenciada com uma pessoa ainda conta lá.
 - O silenciamento permanece quando você sai da conversa. Ao abrir novamente a conversa de um grupo ou empreendimento, o topo exibe **silenciado**.
 

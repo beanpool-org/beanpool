@@ -1,8 +1,9 @@
 /**
  * The web Home page (DESIGN-home-dashboard-fable.md, slice H3): one request, the cached answer drawn first, the "…" menu
- * and Edit home, interests that reorder the Market card in place, the doorbell's single re-read, offline, and the
+ * and Arrange, interests that reorder the Market card in place, the doorbell's single re-read, offline, and the
  * visitor's Home. The node is lib/api.ts mocked; IndexedDB is the in-memory stand-in.
  */
+import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { HomeAnswer, HomeLayout, HomeLayoutV2 } from '../lib/home-cards';
@@ -37,9 +38,10 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { ARRANGE_WORDS, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
+import { HOLD_MS } from '../components/HomeCard';
 import { FEWER_CARDS_LINE, removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
@@ -86,6 +88,9 @@ function answer(over: Partial<HomeAnswer> = {}, cards: HomeAnswer['cards'] = {})
 /** A 200 from the node: the answer and its tag. */
 const fresh = (a: HomeAnswer, etag = 'W/"home-test"'): HomeRead => ({ notModified: false, answer: a, etag });
 
+/** Arrange, from the community card's link, and Done. */
+const openArrange = () => fireEvent.click(screen.getByTestId('home-arrange-open'));
+const doneArrange = () => fireEvent.click(screen.getByTestId('home-arrange-done'));
 const cardIds = () => Array.from(document.querySelectorAll('[data-testid^="home-card-"]')).map(e => e.getAttribute('data-testid')!.replace('home-card-', '')).filter(id => id !== 'menu');
 /** The Market card's rows, as a screen reader names them. */
 const marketTitles = () => within(screen.getByTestId('home-card-market')).getAllByTestId('home-market-item').map(e => e.getAttribute('aria-label') ?? '');
@@ -287,8 +292,9 @@ describe('tailoring (§4)', () => {
         expect(dots).toHaveAttribute('aria-expanded', 'false');
         fireEvent.click(dots);
         expect(dots).toHaveAttribute('aria-expanded', 'true');
-        // The first item takes focus: Move up (the Pulse has no settings).
-        expect(within(pulse).getByRole('button', { name: 'Move up' })).toHaveFocus();
+        // The first item takes focus: Arrange (the Pulse has no settings). Moves are on the card, never here.
+        expect(within(pulse).getByRole('button', { name: 'Arrange' })).toHaveFocus();
+        expect(within(pulse).queryByRole('button', { name: /^Move/ })).toBeNull();
         fireEvent.click(within(pulse).getByTestId('home-menu-remove'));
         await waitFor(() => expect(screen.queryByTestId('home-card-pulse')).toBeNull());
         const saved = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)!;
@@ -299,65 +305,34 @@ describe('tailoring (§4)', () => {
         expect(Date.parse(l.updatedAt!)).toBeGreaterThan(0);
     });
 
-    it('the menu closes on Escape and gives focus back to its "…"; Move up is off for the first movable card', async () => {
+    it('the menu closes on Escape and gives focus back to its "…"', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         // A new member's first movable card is Tips (after First steps, which this member has done).
         const first = await screen.findByTestId('home-card-tips');
         const dots = within(first).getByRole('button', { name: 'Card options for Tips · 1 of 15' });
         fireEvent.click(dots);
-        expect(within(first).getByRole('button', { name: 'Move up' })).toBeDisabled();
         // The frame's menu ends with Remove where version 1 had Hide.
         fireEvent.keyDown(within(first).getByTestId('home-menu-remove'), { key: 'Escape' });
         expect(within(first).queryByTestId('home-menu-remove')).toBeNull();
         await waitFor(() => expect(dots).toHaveFocus());
     });
 
-    it('Move down swaps a card with the next one, and the community card stays last with no "…"', async () => {
+    it('↓ in Arrange swaps a card with the next one on the list, and the community card stays last with no "…"', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const market = await screen.findByTestId('home-card-market');
-        fireEvent.click(within(market).getByRole('button', { name: 'Card options for New in the Market' }));
-        fireEvent.click(within(market).getByRole('button', { name: 'Move down' }));
-        await waitFor(() => expect(cardIds()).toEqual(['tips', 'events', 'pulse', 'market', 'beans', 'community']));
+        await screen.findByTestId('home-card-market');
+        // Decide, Your groups and Who joined have nothing to show here: they are on the list, so Arrange shows them.
+        const before = (await screen.findByTestId('home-card-market'), cardIds());
+        openArrange();
+        const folded = cardIds();
+        const next = folded[folded.indexOf('market') + 1];
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
+        await waitFor(() => expect(cardIds().indexOf(next)).toBeLessThan(cardIds().indexOf('market')));
+        doneArrange();
+        expect(cardIds().at(-1)).toBe('community');
+        expect(before.at(-1)).toBe('community');
         expect(within(screen.getByTestId('home-card-community')).queryByTestId('home-card-menu')).toBeNull();
-    });
-
-    it('Edit home is a real dialog: labelled, focus inside, ＋ Add a card first, ↑ ↓ … per card, no switches, no Hidden, Reset, Escape back to Edit home', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
-        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        const open = await screen.findByTestId('home-edit-open');
-        open.focus();
-        fireEvent.click(open);
-        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
-        expect(dialog).toHaveAttribute('aria-modal', 'true');
-        expect(dialog.contains(document.activeElement)).toBe(true);
-        expect(within(dialog).getAllByRole('button')[0]).toBe(within(dialog).getByTestId('home-edit-add'));
-        expect(within(dialog).queryAllByRole('switch')).toHaveLength(0);
-        expect(within(dialog).queryByRole('list', { name: 'Hidden' })).toBeNull();
-        // Its "…" removes the card: the row goes, focus to the nearest row's "…", never to the page.
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Options for The Pulse' }));
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Remove The Pulse from Home' }));
-        expect(within(dialog).queryByRole('button', { name: 'Options for The Pulse' })).toBeNull();
-        await waitFor(() => expect(dialog.contains(document.activeElement) && document.activeElement !== dialog).toBe(true));
-        expect(screen.queryByTestId('home-card-pulse')).toBeNull();
-        // Needs you and the community card are never in the list: they always stay.
-        expect(within(dialog).queryByText('Your community')).toBeNull();
-        fireEvent.click(within(dialog).getByRole('button', { name: 'Move Coming up down' }));
-        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
-        // Reset gives the newcomer's list: no Pulse until added.
-        expect(within(dialog).queryByRole('button', { name: 'Options for The Pulse' })).toBeNull();
-        const last = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as ReturnType<typeof v2>;
-        expect(last.v).toBe(2);
-        expect(last.cards.map(c => c.type)).toEqual(newcomerTypes());
-        // Tab stays inside.
-        const done = within(dialog).getByTestId('home-edit-done');
-        done.focus();
-        fireEvent.keyDown(done, { key: 'Tab' });
-        expect(dialog.contains(document.activeElement)).toBe(true);
-        fireEvent.keyDown(dialog, { key: 'Escape' });
-        expect(screen.queryByRole('dialog')).toBeNull();
-        await waitFor(() => expect(open).toHaveFocus());
     });
 
     it('a newer layout from another device wins over this browser\'s older copy', async () => {
@@ -627,7 +602,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         },
     });
 
-    it('the Join card first, then the public cards; no "…", no Edit home, nothing of a member\'s, examples marked Example', async () => {
+    it('the Join card first, then the public cards; no "…", no Arrange, nothing of a member\'s, examples marked Example', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
         render(<HomePage identity={null} visitor={{ joinCard: <section data-testid="lobby-join-card">Join BeanPool</section>, beans: false }} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-community');
@@ -635,7 +610,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         expect(page.querySelector('[data-testid]:not([data-testid="home-live"])')!.getAttribute('data-testid')).toBe('lobby-join-card');
         expect(cardIds()).toEqual(['find', 'events', 'market', 'community']);
         expect(screen.queryAllByTestId('home-card-menu')).toHaveLength(0);
-        expect(screen.queryByTestId('home-edit-open')).toBeNull();
+        expect(screen.queryByTestId('home-arrange-open')).toBeNull();
         expect(screen.queryByTestId('home-hint')).toBeNull();
         expect(screen.getByRole('heading', { name: 'Near you' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: 'What people post' })).toBeInTheDocument();
@@ -774,14 +749,54 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
         return node;
     }
 
-    it('Add a card (from Edit home) reads Home again with the Pulse in cards= once the save is answered, and the card is drawn, no timer waited for', async () => {
+    it('a card added where it is the only one that can move: focus lands on a control, never the page', async () => {
+        nodeV2(answer(), v2([]));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-arrange-open');
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
+        fireEvent.click(screen.getByTestId('home-add-pulse'));
+        await screen.findByTestId('home-card-pulse');
+        await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+        expect(screen.getByTestId('home-card-pulse').contains(document.activeElement)).toBe(true);
+    });
+
+    it('a moved card takes focus and scrolls before it slides: the slide puts it back for a moment, and focus has to see where it landed', async () => {
+        window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return false; }, onchange: null })) as unknown as typeof window.matchMedia;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        const said: string[] = [];
+        const animate = vi.fn(function (this: Element) { said.push('slide'); return {} as Animation; });
+        const scroll = vi.fn(() => { said.push('scroll'); });
+        const had = { animate: Element.prototype.animate, scroll: Element.prototype.scrollIntoView };
+        Element.prototype.animate = animate as never;
+        Element.prototype.scrollIntoView = scroll as never;
+        // jsdom lays nothing out: a card that moved reads as moved only if its box does.
+        let row = 0;
+        const box = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => ({ left: 0, top: (row += 10), right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0, toJSON() {} }) as DOMRect);
+        try {
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-tips');
+            openArrange();
+            said.length = 0;
+            fireEvent.click(screen.getByTestId('home-arrange-down-tips'));
+            await waitFor(() => expect(said).toContain('scroll'));
+            expect(said.indexOf('slide')).toBeGreaterThan(said.indexOf('scroll'));
+        } finally {
+            box.mockRestore();
+            Element.prototype.animate = had.animate;
+            Element.prototype.scrollIntoView = had.scroll;
+        }
+    });
+
+    it('Add a card (from Arrange) reads Home again with the Pulse in cards= once the save is answered, and the card is drawn, no timer waited for', async () => {
         const node = await removePulseThenComeBack();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-add'));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
         fireEvent.click(screen.getByTestId('home-add-pulse'));
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
         expect(node.reads()[2]).toContain('pulse');
         expect(lastCall(vi.mocked(api.getHome))).toBeGreaterThan(lastCall(vi.mocked(api.saveHomePreferences)));
+        doneArrange();
         expect(await screen.findByTestId('home-card-pulse')).toHaveTextContent('How our LETS started');
         // Removing it again reads nothing: the answer in hand has it.
         fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByRole('button', { name: 'Card options for The Pulse' }));
@@ -800,8 +815,8 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
 
     it("Reset to defaults gives the newcomer's list and reads Home again for it once the save is answered", async () => {
         const node = await removePulseThenComeBack();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-reset'));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
         expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(newcomerTypes());
         expect(lastCall(vi.mocked(api.getHome))).toBeGreaterThan(lastCall(vi.mocked(api.saveHomePreferences)));
@@ -809,14 +824,15 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
         expect(node.reads()[2]).not.toContain('pulse');
         expect(node.reads()[2]).not.toContain('beans');
         await waitFor(() => expect(screen.queryByTestId('home-card-beans')).toBeNull());
+        doneArrange();
         expect(screen.getByTestId('home-card-market')).toBeInTheDocument();
     });
 
     it('a Move, or a Remove of another card, after coming back reads nothing', async () => {
         await removePulseThenComeBack();
-        const market = screen.getByTestId('home-card-market');
-        fireEvent.click(within(market).getByRole('button', { name: 'Card options for New in the Market' }));
-        fireEvent.click(within(market).getByRole('button', { name: 'Move up' }));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-up-market'));
+        doneArrange();
         const beans = screen.getByTestId('home-card-beans');
         fireEvent.click(within(beans).getByRole('button', { name: 'Card options for Your Beans' }));
         fireEvent.click(within(beans).getByTestId('home-menu-remove'));
@@ -837,7 +853,7 @@ describe('a card removed on an earlier visit comes back at once when added (PR #
 });
 
 describe('after Remove, focus goes to the nearest card left, and the page says where the card went (PR #1479 review)', () => {
-    it("the next card's \"…\"; Edit home when the removed card was the last above the community card", async () => {
+    it("the next card's \"…\"; Arrange › when the removed card was the last above the community card", async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const pulse = await screen.findByTestId('home-card-pulse');
@@ -850,7 +866,7 @@ describe('after Remove, focus goes to the nearest card left, and the page says w
         const beans = screen.getByTestId('home-card-beans');
         fireEvent.click(within(beans).getByRole('button', { name: 'Card options for Your Beans' }));
         fireEvent.click(within(beans).getByTestId('home-menu-remove'));
-        await waitFor(() => expect(screen.getByTestId('home-edit-open')).toHaveFocus());
+        await waitFor(() => expect(screen.getByTestId('home-arrange-open')).toHaveFocus());
         expect(screen.getByTestId('home-live')).toHaveTextContent(removedLine('Your Beans'));
     });
 });
@@ -1296,7 +1312,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         expect(within(tipsCard()).getByRole('heading', { name: 'Tips · 2 of 15' })).toBeInTheDocument();
     });
 
-    it('Done on the last tip takes the card away, says so, moves focus on; Edit home then says All tips seen; Remove and Add a card again starts over', async () => {
+    it('Done on the last tip takes the card away, says so, moves focus on; Arrange then says All tips seen; Remove and Add a card again starts over', async () => {
         localStorage.setItem(tipsKey(ME.publicKey), JSON.stringify({ v: 1, seen: LOCAL.slice(0, -1).map(t => t.id), current: null, currentShownOn: null, dismissedAt: null }));
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
@@ -1308,15 +1324,14 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
         expect(screen.getByTestId('home-live')).toHaveTextContent(TIPS_DONE_WORDS);
         await waitFor(() => expect(screen.getByRole('button', { name: 'Card options for Coming up' })).toHaveFocus());
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
-        expect(within(within(dialog).getByTestId('home-edit-row-tips')).getByText('All tips seen')).toBeInTheDocument();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-line-tips')).toHaveTextContent('All tips seen');
         // Removed and added again, it starts over from the first tip.
-        fireEvent.click(within(dialog).getByTestId('home-edit-menu-tips'));
-        fireEvent.click(within(dialog).getByTestId('home-edit-remove-tips'));
-        expect(within(dialog).queryByTestId('home-edit-row-tips')).toBeNull();
-        fireEvent.click(within(dialog).getByTestId('home-edit-add'));
+        fireEvent.click(screen.getByTestId('home-arrange-remove-tips'));
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
         fireEvent.click(screen.getByTestId('home-add-tips'));
+        doneArrange();
         expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
     });
 
@@ -1328,7 +1343,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         // runner the card was found before that effect ran, the click's dismiss was written first and the landing's
         // record (dismissedAt null) then overwrote it (15 Oct).
         await waitFor(() => expect(record()).toMatchObject({ current: LOCAL[0].id, dismissedAt: null }));
-        fireEvent.click(within(card).getByRole('button', { name: "Don't show tips again. Edit home brings them back." }));
+        fireEvent.click(within(card).getByRole('button', { name: "Don't show tips again. Add a card brings them back." }));
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
         expect(record().dismissedAt).toEqual(expect.any(String));
         const saved = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as ReturnType<typeof v2>;
@@ -1354,8 +1369,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         fireEvent.click(within(card).getByTestId('home-menu-remove'));
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
         expect(record().dismissedAt).toEqual(expect.any(String));
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-add'));
+        fireEvent.click(screen.getByTestId('home-add-open'));
         fireEvent.click(screen.getByTestId('home-add-tips'));
         expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
         expect(record()).toMatchObject({ seen: [], dismissedAt: null });
@@ -1368,8 +1382,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-community');
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-add'));
+        fireEvent.click(screen.getByTestId('home-add-open'));
         fireEvent.click(screen.getByTestId('home-add-tips'));
         expect(within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text')).toHaveTextContent(LOCAL[0].text);
         expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
@@ -1381,15 +1394,14 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-tips');
         fireEvent.click(within(card).getByRole('button', { name: 'Next tip' }));
-        fireEvent.click(within(tipsCard()).getByRole('button', { name: "Don't show tips again. Edit home brings them back." }));
+        fireEvent.click(within(tipsCard()).getByRole('button', { name: "Don't show tips again. Add a card brings them back." }));
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
-        expect(within(dialog).queryByTestId('home-edit-row-tips')).toBeNull();
-        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
+        openArrange();
+        expect(screen.queryByTestId('home-card-tips')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
         // The newcomer's list holds Tips.
-        expect(within(dialog).getAllByRole('listitem').filter(li => li.textContent?.startsWith('Tips'))).toHaveLength(1);
-        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(screen.getByTestId('home-card-tips')).toBeInTheDocument();
+        doneArrange();
         expect(within(await screen.findByTestId('home-card-tips')).getByRole('heading', { name: 'Tips · 1 of 15' })).toBeInTheDocument();
         expect(record()).toEqual({ v: 1, seen: [], current: LOCAL[0].id, currentShownOn: localDay(), dismissedAt: null });
     });
@@ -1435,8 +1447,9 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-tips');
         // Move it, so the layout names it, and read again.
-        fireEvent.click(within(card).getByRole('button', { name: /^Card options for Tips/ }));
-        fireEvent.click(within(card).getByRole('button', { name: 'Move down' }));
+        expect(card).toBeInTheDocument();
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-down-tips'));
         await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
         await waitFor(() => expect(vi.mocked(api.getHome).mock.calls.length).toBeGreaterThan(1));
         for (const [q] of vi.mocked(api.getHome).mock.calls) expect((q as { cards?: string[] }).cards ?? []).not.toContain('tips');
@@ -1451,12 +1464,242 @@ describe('Home tips: Reset keeps a member part-way through on their tip (PR #169
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const card = await screen.findByTestId('home-card-tips');
         const before = within(card).getByTestId('home-tip-text').textContent;
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
-        fireEvent.click(within(dialog).getByTestId('home-edit-reset'));
-        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
+        doneArrange();
         const after = within(await screen.findByTestId('home-card-tips')).getByTestId('home-tip-text').textContent;
         expect(after).toBe(before);
+    });
+});
+
+// ── Arrange (DESIGN-home-layout-fable.md §3.2, slice L2): one way to move a card, on the card ─────────────────────────
+
+describe('Arrange', () => {
+    const layout3 = () => vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['market', 'events', 'pulse']) as never })));
+    const land = async () => {
+        layout3();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+    };
+    const savedTypes = () => (vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as ReturnType<typeof v2>).cards.map(c => c.type);
+    const body = () => within(screen.getByTestId('home-card-market')).queryAllByTestId('home-market-item');
+
+    it('Arrange › folds the cards to their bands and one line: no bodies, no "…", the type\'s own line, said on entering', async () => {
+        await land();
+        expect(body().length).toBeGreaterThan(0);
+        openArrange();
+        expect(body()).toHaveLength(0);
+        expect(screen.queryByTestId('home-card-menu')).toBeNull();
+        expect(screen.getByTestId('home-arrange-line-events')).toHaveTextContent('Events coming up soon.');
+        expect(screen.getByTestId('home-live')).toHaveTextContent('Arrange Home. Use the arrows on each card.');
+        expect(screen.getByTestId('home-arrange-bar')).toHaveTextContent("Arrange Home: use the arrows. Done when you're happy.");
+        // Nothing here promises a drag until L3 and L4 land.
+        expect(screen.getByTestId('home-arrange-bar').textContent).not.toMatch(/drag/i);
+    });
+
+    it('every control has a name, and Tab meets them in the member\'s order: Done, then each card\'s arrows, then Add a card, then Reset', async () => {
+        await land();
+        openArrange();
+        const page = screen.getByTestId('home-page');
+        const names = Array.from(page.querySelectorAll<HTMLElement>('button:not([disabled])')).map(b => b.getAttribute('aria-label') ?? b.textContent)
+            .filter(name => name !== 'Dismiss'); // The "Use the phone app" card, above Arrange and no part of it.
+        expect(names).toEqual([
+            'Done arranging Home', 'Move New in the Market down', 'Move Coming up up', 'Move Coming up down', 'Move The Pulse up',
+            'Add a card to Home', 'Reset to defaults',
+        ]);
+    });
+
+    it('↑ and ↓ move the card and save through the one write, focus stays on the arrow or goes to its twin at an end, and the place is said', async () => {
+        await land();
+        openArrange();
+        const before = vi.mocked(api.saveHomePreferences).mock.calls.length;
+        const down = screen.getByTestId('home-arrange-down-events');
+        down.focus();
+        fireEvent.click(down);
+        await waitFor(() => expect(savedTypes()).toEqual(['market', 'pulse', 'events']));
+        expect(vi.mocked(api.saveHomePreferences).mock.calls.length).toBe(before + 1);
+        expect(screen.getByTestId('home-live')).toHaveTextContent('Coming up moved to 3 of 3');
+        // Now last: its ↓ is off, so focus goes to its ↑.
+        expect(screen.getByTestId('home-arrange-down-events')).toBeDisabled();
+        expect(screen.getByTestId('home-arrange-up-events')).toHaveFocus();
+        fireEvent.click(screen.getByTestId('home-arrange-up-events'));
+        await waitFor(() => expect(savedTypes()).toEqual(['market', 'events', 'pulse']));
+        expect(screen.getByTestId('home-arrange-up-events')).toHaveFocus();
+        expect(cardIds()).toEqual(['market', 'events', 'pulse', 'community']);
+    });
+
+    it('the first card can\'t go up and the last can\'t go down', async () => {
+        await land();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-up-market')).toBeDisabled();
+        expect(screen.getByTestId('home-arrange-down-pulse')).toBeDisabled();
+    });
+
+    it('Stays here on Needs you, the community card and a pinned Find: no arrows, and neither is in the saved order', async () => {
+        const find = { point: null, communities: [], communityCount: 38, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: null } as unknown as HomeAnswer['cards']['find'];
+        const needs = { items: [{ kind: 'unread', label: '1 unread message', accent: false, count: 1, target: { to: 'unread-messages' } }] } as unknown as HomeAnswer['cards']['needs'];
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global', me: { ...answer().me!, joinedAt: new Date().toISOString() }, layout: v2(['market', 'events']) as never }, { needs, find })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        openArrange();
+        for (const id of ['needs', 'find', 'community']) {
+            expect(screen.getByTestId(`home-arrange-stays-${id}`)).toHaveTextContent('Stays here');
+            expect(screen.queryByTestId(`home-arrange-up-${id}`)).toBeNull();
+        }
+        expect(cardIds()).toEqual(['needs', 'find', 'market', 'events', 'community']);
+    });
+
+    it('a card with nothing to show folds too, with Remove: it goes, is said, is saved without it, and focus goes to the nearest card', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['market', 'decide', 'pulse']) as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        expect(screen.queryByTestId('home-card-decide')).toBeNull();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-line-decide')).toHaveTextContent('Nothing to show now');
+        // A drawn card has no Remove here: it is one tap away in its "…".
+        expect(screen.queryByTestId('home-arrange-remove-market')).toBeNull();
+        fireEvent.click(screen.getByTestId('home-arrange-remove-decide'));
+        await waitFor(() => expect(savedTypes()).toEqual(['market', 'pulse']));
+        expect(screen.queryByTestId('home-card-decide')).toBeNull();
+        expect(screen.getByTestId('home-live').textContent).toMatch(/removed\. Add a card brings it back\.$/);
+        await waitFor(() => expect(screen.getByTestId('home-arrange-up-pulse')).toHaveFocus());
+    });
+
+    it('+ Add a card opens the picker over Arrange; the new card folds in first, focus on its arrow; Escape in the picker closes only the picker', async () => {
+        await land();
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await pause();
+        expect(screen.queryByTestId('home-add-pulse')).toBeNull();
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
+        fireEvent.click(screen.getByTestId('home-add-beans'));
+        await waitFor(() => expect(savedTypes()).toEqual(['beans', 'market', 'events', 'pulse']));
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        expect(cardIds()).toEqual(['beans', 'market', 'events', 'pulse', 'community']);
+        await waitFor(() => expect(screen.getByTestId('home-arrange-down-beans')).toHaveFocus());
+    });
+
+    it('Reset to defaults gives the newcomer\'s list, folded, and Arrange stands', async () => {
+        await land();
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-reset'));
+        await waitFor(() => expect(savedTypes()).toEqual(newcomerTypes()));
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+    });
+
+    it('Done unfolds the cards, saves nothing more, and gives focus back to Arrange ›', async () => {
+        await land();
+        const open = screen.getByTestId('home-arrange-open');
+        open.focus();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-done')).toHaveFocus();
+        const saves = vi.mocked(api.saveHomePreferences).mock.calls.length;
+        doneArrange();
+        expect(screen.queryByTestId('home-arrange-bar')).toBeNull();
+        expect(body().length).toBeGreaterThan(0);
+        expect(vi.mocked(api.saveHomePreferences).mock.calls.length).toBe(saves);
+        await waitFor(() => expect(screen.getByTestId('home-arrange-open')).toHaveFocus());
+    });
+
+    it('"…" → Arrange starts on that card\'s arrow; Escape ends it, back on that card\'s "…"', async () => {
+        await land();
+        const events = screen.getByTestId('home-card-events');
+        fireEvent.click(within(events).getByTestId('home-card-menu'));
+        fireEvent.click(within(events).getByTestId('home-menu-arrange'));
+        await waitFor(() => expect(screen.getByTestId('home-arrange-up-events')).toHaveFocus());
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByTestId('home-arrange-bar')).toBeNull();
+        await waitFor(() => expect(within(screen.getByTestId('home-card-events')).getByTestId('home-card-menu')).toHaveFocus());
+    });
+
+    it('holding a band for half a second enters; a short press, a slide or a press on its "…" doesn\'t', async () => {
+        await land();
+        vi.useFakeTimers();
+        const band = screen.getByTestId('card-band-events');
+        const inArrange = () => !!screen.queryByTestId('home-arrange-bar');
+        fireEvent.pointerDown(band, { button: 0, clientX: 10, clientY: 10 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS - 1); });
+        fireEvent.pointerUp(band);
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(inArrange()).toBe(false);
+        fireEvent.pointerDown(band, { button: 0, clientX: 10, clientY: 10 });
+        fireEvent.pointerMove(band, { clientX: 10, clientY: 40 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(inArrange()).toBe(false);
+        fireEvent.pointerDown(within(band).getByTestId('home-card-menu'), { button: 0, clientX: 10, clientY: 10 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(inArrange()).toBe(false);
+        fireEvent.pointerDown(band, { button: 0, clientX: 10, clientY: 10 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(inArrange()).toBe(true);
+    });
+
+    it('a visitor has no Arrange: no link, no "…", and a band held does nothing', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global', welcome: true, me: null, layout: null })));
+        render(<HomePage identity={null} onNavigate={vi.fn()} visitor={{ joinCard: <div>Join</div>, beans: false }} />);
+        await screen.findByText('Join');
+        const band = await screen.findByTestId('card-band-community');
+        expect(screen.queryByTestId('home-arrange-open')).toBeNull();
+        vi.useFakeTimers();
+        fireEvent.pointerDown(band, { button: 0, clientX: 10, clientY: 10 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        expect(screen.queryByTestId('home-arrange-bar')).toBeNull();
+    });
+
+    it('the order is what comes back: a reload draws the moved order from the saved list, in the same shape, with nothing new in it', async () => {
+        await land();
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
+        await waitFor(() => expect(savedTypes()).toEqual(['events', 'market', 'pulse']));
+        doneArrange();
+        const saved = vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as Record<string, unknown>;
+        expect(Object.keys(saved).sort()).toEqual(['cards', 'dismissed', 'updatedAt', 'v']);
+        expect(Object.keys((saved.cards as Record<string, unknown>[])[0]).sort()).toEqual(['id', 'type']);
+        cleanup();
+        // A new browser: nothing kept here, the account's list alone.
+        resetHomeCacheForTest();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: saved as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        expect(cardIds()).toEqual(['events', 'market', 'pulse', 'community']);
+    });
+
+    it('what a key brings into view stops clear of the bar and the tab bar, and <main>, which every page shares, gets its scroll back at Done and on leaving Home', async () => {
+        layout3();
+        const main = document.createElement('main');
+        main.style.paddingBottom = '60px';
+        document.body.appendChild(main);
+        const { unmount } = render(<HomePage identity={ME} onNavigate={vi.fn()} />, { container: main });
+        await screen.findByTestId('home-card-pulse');
+        expect(main.style.scrollPaddingTop).toBe('');
+        openArrange();
+        // jsdom measures the bar at 0 px, so this is the room left under it; the real height is home-check's `arrangeAcross`.
+        expect(main.style.scrollPaddingTop).toBe('8px');
+        expect(main.style.scrollPaddingBottom).toBe('60px');
+        doneArrange();
+        expect(main.style.scrollPaddingTop).toBe('');
+        expect(main.style.scrollPaddingBottom).toBe('');
+        openArrange();
+        expect(main.style.scrollPaddingTop).toBe('8px');
+        unmount();
+        expect(main.style.scrollPaddingTop).toBe('');
+        expect(main.style.scrollPaddingBottom).toBe('');
+        main.remove();
+    });
+
+    it('in the pseudo-locale, every line and label of Arrange goes through the words layer', async () => {
+        await showIn('xx');
+        await land();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-bar')).toHaveTextContent(xx(ARRANGE_WORDS.bar));
+        expect(screen.getByTestId('home-arrange-done')).toHaveAccessibleName(xx(ARRANGE_WORDS.done));
+        expect(screen.getByTestId('home-arrange-stays-community')).toHaveTextContent(xx(ARRANGE_WORDS.stays));
+        expect(bypassing(screen.getByTestId('home-arrange-bar'))).toEqual([]);
+        expect(bypassing(screen.getByTestId('home-arrange-tile'))).toEqual([]);
+        backToEnglish();
     });
 });
 
@@ -1545,9 +1788,10 @@ describe('the card frame (F3)', () => {
         nodeV2(answer(), v2(['market', 'events', 'pulse']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
-        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByText('Move down'));
+        openArrange();
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
         await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'market', 'pulse']));
+        doneArrange();
         fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByTestId('home-card-menu'));
         fireEvent.click(screen.getByTestId('home-menu-remove'));
         await waitFor(() => expect(cardIds()).not.toContain('pulse'));
@@ -1582,7 +1826,7 @@ describe('the card frame (F3)', () => {
         expect(api.saveHomePreferences).not.toHaveBeenCalled();
     });
 
-    it('a node from before the frame refuses the list: kept here, Edit home says so, sent again once per landing only', async () => {
+    it('a node from before the frame refuses the list: kept here, Arrange says so, sent again once per landing only', async () => {
         const v1Answer = answer({ layout: { v: 1, order: ['market', 'events', 'pulse'], hidden: [], dismissed: {}, updatedAt: AT } as never });
         vi.mocked(api.getHome).mockResolvedValue(fresh(v1Answer));
         vi.mocked(api.saveHomePreferences).mockImplementation(async () => { throw Object.assign(new Error('bad layout'), { status: 400 }); });
@@ -1592,9 +1836,9 @@ describe('the card frame (F3)', () => {
         fireEvent.click(screen.getByTestId('home-menu-remove'));
         await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledTimes(1));
         await waitFor(() => expect(cardIds()).not.toContain('pulse'));
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(screen.getByTestId('home-edit-not-on-account')).toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('home-edit-done'));
+        openArrange();
+        expect(screen.getByTestId('home-arrange-not-on-account')).toBeInTheDocument();
+        doneArrange();
         // More reads on this landing send nothing.
         await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
@@ -2050,20 +2294,37 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         expect(card).not.toHaveTextContent('Fresh eggs');
     });
 
-    it('Edit home names the row by its words, so two searches are two rows', async () => {
+    it('a search saved from the Market with a category comes to Home in that category\'s colour; with none it stays orange (S2)', async () => {
+        const settings = searchFromMarket({ q: 'seedlings', category: 'garden', kind: 'offer' })!;
+        nodeKeeping(answer(), v2(['market'], AT, [
+            { id: 'search-k7mq', type: 'search', settings },
+            { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'any' } },
+        ]));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-search-k7mq');
+        const band = (id: string) => screen.getByTestId(`card-band-${id}`);
+        expect(band('search-k7mq').style.backgroundColor).toBe('var(--bp-card-lime-tint)');
+        expect(band('search-k7mq').style.color).toBe('var(--bp-card-lime-ink)');
+        expect(band('search-m4p9').style.backgroundColor).toBe('var(--bp-card-orange-tint)');
+        // The same colour in Arrange, where the bands stand in for the cards.
+        openArrange();
+        expect(band('search-k7mq').style.backgroundColor).toBe('var(--bp-card-lime-tint)');
+    });
+
+    it('Arrange names the band by its words, so two searches read as two cards', async () => {
         nodeKeeping(answer(), v2(['market'], AT, [
             { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } },
             { id: 'search-m4p9', type: 'search', settings: { q: 'duck eggs', kind: 'any' } },
         ]));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(screen.getByTestId('home-edit-row-search-k7mq')).toHaveTextContent('eggs');
-        expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('duck eggs');
-        expect(screen.getByTestId('home-edit-row-search-k7mq')).not.toHaveTextContent('A saved search');
+        openArrange();
+        expect(screen.getByTestId('card-band-search-k7mq')).toHaveTextContent('eggs');
+        expect(screen.getByTestId('card-band-search-m4p9')).toHaveTextContent('duck eggs');
+        expect(screen.getByTestId('card-band-search-k7mq')).not.toHaveTextContent('A saved search');
     });
 
-    it('Edit home: two searches with the same words and another kind read differently, rows and labels (review of #1716)', async () => {
+    it('Arrange: two searches with the same words and another kind read differently, bands and labels (review of #1716)', async () => {
         nodeKeeping(answer(), v2(['market'], AT, [
             { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'offer' } },
             { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'need' } },
@@ -2071,53 +2332,53 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         ]));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(screen.getByTestId('home-edit-row-search-k7mq')).toHaveTextContent('Offers · eggs');
-        expect(screen.getByTestId('home-edit-row-search-m4p9')).toHaveTextContent('Needs · eggs');
-        expect(screen.getByTestId('home-edit-row-search-r8t2')).toHaveTextContent('eggs');
-        expect(screen.getByTestId('home-edit-row-search-r8t2')).not.toHaveTextContent(/Offers|Needs|Both/);
-        expect(screen.getByTestId('home-edit-up-search-k7mq')).toHaveAccessibleName('Move "eggs" (Offers) up');
-        expect(screen.getByTestId('home-edit-up-search-m4p9')).toHaveAccessibleName('Move "eggs" (Needs) up');
-        expect(screen.getByTestId('home-edit-up-search-r8t2')).toHaveAccessibleName('Move "eggs" up');
+        openArrange();
+        expect(screen.getByTestId('card-band-search-k7mq')).toHaveTextContent('Offers · eggs');
+        expect(screen.getByTestId('card-band-search-m4p9')).toHaveTextContent('Needs · eggs');
+        expect(screen.getByTestId('card-band-search-r8t2')).toHaveTextContent('eggs');
+        expect(screen.getByTestId('card-band-search-r8t2')).not.toHaveTextContent(/Offers|Needs|Both/);
+        expect(screen.getByTestId('home-arrange-up-search-k7mq')).toHaveAccessibleName('Move "eggs" (Offers) up');
+        expect(screen.getByTestId('home-arrange-up-search-m4p9')).toHaveAccessibleName('Move "eggs" (Needs) up');
+        expect(screen.getByTestId('home-arrange-up-search-r8t2')).toHaveAccessibleName('Move "eggs" up');
     });
 });
 
 describe('Home\'s dialogs: only the one in front has the keys, and focus never drops to the page (review of #1701, findings 2 and 3)', () => {
     const withSearch = () => v2(['market', 'events'], AT, [{ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } }]);
     const focused = () => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName;
-    const openSearchSettingsFromEditHome = async () => {
-        nodeKeeping(answer(), withSearch());
+    // Over Arrange, from its word on a card with nothing to show: Sun and moon with no place to work from.
+    const openSkySettingsFromArrange = async () => {
+        nodeKeeping(answer(), v2(['market', 'sky']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        await screen.findByTestId('home-card-search-k7mq');
+        await screen.findByTestId('home-card-market');
         // As a keyboard user does: each control has focus as it is pressed (a click in jsdom moves none).
         const press = (id: string) => { const el = screen.getByTestId(id); el.focus(); fireEvent.click(el); };
-        press('home-edit-open');
-        press('home-edit-menu-search-k7mq');
-        press('home-edit-settings-search-k7mq');
+        press('home-arrange-open');
+        await pause();
+        press('home-arrange-settings-sky');
         return screen.getByTestId('home-settings-dialog');
     };
 
-    it('D1: Escape in a saved search\'s Settings… opened from Edit home closes only the settings; focus to the row\'s "…"', async () => {
-        await openSearchSettingsFromEditHome();
+    it('D1: Escape in a card\'s Settings… opened from Arrange closes only the settings; Arrange stands, focus to its word', async () => {
+        await openSkySettingsFromArrange();
         fireEvent.keyDown(document, { key: 'Escape' });
         await pause();
         expect(screen.queryByTestId('home-settings-dialog')).toBeNull();
-        expect(screen.getByTestId('home-edit-dialog')).toBeInTheDocument();
-        expect(focused()).toBe('home-edit-menu-search-k7mq');
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        expect(focused()).toBe('home-arrange-settings-sky');
     });
 
-    it('D2: Tab in that sheet goes round its own controls: Edit home underneath leaves the key alone', async () => {
-        const sheet = await openSearchSettingsFromEditHome();
+    it('D2: Tab in that sheet goes round its own controls', async () => {
+        const sheet = await openSkySettingsFromArrange();
         const tab = (from: HTMLElement) => {
             from.focus();
             const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
             document.dispatchEvent(ev);
             return ev.defaultPrevented;
         };
-        // Neither is the sheet's last control: the browser moves on to the next one.
-        expect(tab(within(sheet).getByTestId('home-settings-q'))).toBe(false);
+        // Its first control isn't its last: the browser moves on to the next one.
         expect(tab(within(sheet).getByTestId('home-settings-dialog-done'))).toBe(false);
-        // From its last control, round to its first (never out to Edit home's).
+        // From its last control, round to its first (never out to the page).
         const submit = within(sheet).getByTestId('home-settings-submit');
         submit.focus();
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
@@ -2136,16 +2397,19 @@ describe('Home\'s dialogs: only the one in front has the keys, and focus never d
         expect(document.activeElement).toBe(within(screen.getByTestId('home-card-search-k7mq')).getByTestId('home-card-menu'));
     });
 
-    it('D4: the picker opened from Edit home, closed with Done: focus to the community card\'s Add a card', async () => {
+    it('D4: the picker opened from Arrange, closed with Done: Arrange stands, focus to its Add a card', async () => {
         nodeKeeping(answer(), withSearch());
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        fireEvent.click(screen.getByTestId('home-edit-add'));
+        openArrange();
+        // As a keyboard user does: the tile has focus as it is pressed (a click in jsdom moves none).
+        screen.getByTestId('home-arrange-add').focus();
+        fireEvent.click(screen.getByTestId('home-arrange-add'));
         await pause();
         fireEvent.click(screen.getByTestId('home-add-dialog-done'));
         await pause();
-        expect(focused()).toBe('home-add-open');
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        expect(focused()).toBe('home-arrange-add');
     });
 
     it('D5: a card added with nothing to show yet: focus to Add a card, and it stays there once the add\'s read is in', async () => {
@@ -2222,13 +2486,13 @@ describe('sun and moon: worked out in the browser, from the place the answer hol
         expect(sunPart(visible())).toBe(sunPart(skyToday(REYKJAVIK, Date.now()).text));
     });
 
-    it('with no place at all, it is not drawn, and Edit home says why', async () => {
+    it('with no place at all, it is not drawn, and Arrange says why', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(placed({})));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
         expect(screen.queryByTestId('home-card-sky')).toBeNull();
-        fireEvent.click(screen.getByTestId('home-edit-open'));
-        expect(within(screen.getByTestId('home-edit-row-sky')).getByText(SKY_NO_PLACE_LINE)).toBeInTheDocument();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-line-sky')).toHaveTextContent(SKY_NO_PLACE_LINE);
     });
 
     it('makes no request of its own: a landing with it asks exactly what a landing without it asks', async () => {
@@ -2803,22 +3067,18 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
     });
 
-    // A card that is not drawn is not a place to move to: counted, the first press on the card after it swapped the two
-    // in the saved list, moved nothing on screen, and was saved to the account all the same (PR #2411 review).
-    it('"Your way back in" with nothing to show is passed over by the moves: the first card under Needs you cannot move earlier', async () => {
+    it('"Your way back in" with something to say still has it in Arrange, and is drawn again after Done', async () => {
         wordsOnly();
-        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
         await landAt(1400, SAFETY);
-        await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
-        await pause();
-        expect(screen.queryByTestId('home-card-safety')).toBeNull();
-        expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
-        fireEvent.click(within(screen.getByTestId('home-card-tips')).getByTestId('home-card-menu'));
-        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
-        expect(screen.getByRole('button', { name: 'Move later' })).toBeEnabled();
+        await screen.findByTestId('one-way-back-landing');
+        openArrange();
+        expect(screen.getByTestId('home-arrange-line-safety')).not.toHaveTextContent('Nothing to show now');
+        doneArrange();
+        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
     });
 
-    it('"Your way back in" with nothing to show: Move later on the card before it swaps with the next card on screen', async () => {
+    // Arrange shows it with nothing to say, so a move past it shows too: no press moves something a member can't see.
+    it('"Your way back in" with nothing to show folds in Arrange, says so, and the card under it moves past it', async () => {
         wordsOnly();
         localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
         width = 1400;
@@ -2828,25 +3088,12 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
         await pause();
         expect(cardIds()).toEqual(['needs', 'market', 'events', 'pulse', 'community']);
-        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
-        fireEvent.click(screen.getByRole('button', { name: 'Move later' }));
-        await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'safety', 'market', 'pulse']));
-        expect(cardIds()).toEqual(['needs', 'events', 'market', 'pulse', 'community']);
-    });
-
-    it('"Your way back in" drawn is a place to move to; put away, it no longer is', async () => {
-        wordsOnly();
-        await landAt(1400, SAFETY);
-        const card = await screen.findByTestId('one-way-back-landing');
-        const tipsMenu = () => within(screen.getByTestId('home-card-tips')).getByTestId('home-card-menu');
-        fireEvent.click(tipsMenu());
-        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeEnabled();
-        fireEvent.click(tipsMenu());
-        expect(screen.queryByRole('button', { name: 'Move earlier' })).toBeNull();
-        fireEvent.click(within(card).getByRole('button', { name: 'Hide this for now' }));
-        expect(screen.queryByTestId('home-card-safety')).toBeNull();
-        fireEvent.click(tipsMenu());
-        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
+        openArrange();
+        expect(cardIds()).toEqual(['needs', 'market', 'safety', 'events', 'pulse', 'community']);
+        expect(screen.getByTestId('home-arrange-line-safety')).toHaveTextContent('Nothing to show now');
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
+        await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['safety', 'market', 'events', 'pulse']));
+        expect(cardIds()).toEqual(['needs', 'safety', 'market', 'events', 'pulse', 'community']);
     });
 
     // The answer's `safety` is the node's word that the member has only their 12 words, so a card not yet put away is
@@ -2941,28 +3188,30 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(bypassing(hint)).toEqual([]);
     });
 
-    it('side by side, the "…" says Move earlier · Move later (up can be left), and moves the card in the saved list', async () => {
+    it('side by side, the arrows say earlier and later (up can be left), and move the card in the saved list; the DOM stays in that order', async () => {
         width = 1400;
         nodeV2(answer(), v2(['market', 'events', 'pulse']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
-        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
-        expect(screen.queryByText('Move up')).toBeNull();
-        expect(screen.queryByText('Move down')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled();
-        fireEvent.click(screen.getByRole('button', { name: 'Move later' }));
+        openArrange();
+        expect(screen.getByTestId('home-arrange-up-market')).toHaveAccessibleName('Move New in the Market earlier');
+        expect(screen.getByTestId('home-arrange-up-market')).toBeDisabled();
+        expect(screen.getByTestId('home-arrange-down-market')).toHaveAccessibleName('Move New in the Market later');
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
         await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'market', 'pulse']));
-        expect(cardIds().indexOf('events')).toBeLessThan(cardIds().indexOf('market'));
+        expect(cardIds()).toEqual(['events', 'market', 'pulse', 'community']);
+        expect(screen.getByTestId('home-live')).toHaveTextContent('New in the Market moved to 2 of 3');
+        doneArrange();
+        expect(cardIds()).toEqual(['events', 'market', 'pulse', 'community']);
     });
 
-    it('in one column the "…" still says Move up · Move down', async () => {
+    it('in one column the arrows say up and down', async () => {
         width = 360;
         nodeV2(answer(), v2(['market', 'events', 'pulse']));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
-        fireEvent.click(within(screen.getByTestId('home-card-market')).getByTestId('home-card-menu'));
-        expect(screen.getByRole('button', { name: 'Move down' })).toBeEnabled();
-        expect(screen.queryByText('Move later')).toBeNull();
+        openArrange();
+        expect(screen.getByTestId('home-arrange-down-market')).toHaveAccessibleName('Move New in the Market down');
     });
 
     it('the columns follow the page as it changes width (the window, the sidebar), with no new request', async () => {
@@ -3007,6 +3256,492 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(join.parentElement).toBe(grid().parentElement);
         expect(span('community')).toBe('1 / -1');
         expect(span('market')).toBe('');
+    });
+});
+
+describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
+    let width = 0;
+    let measured: { mockRestore(): void } | null = null;
+    let heights: Record<string, number> = {};
+    let offsetSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+        width = 0;
+        heights = {};
+        vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+        measured = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+            return this.getAttribute('data-testid') === 'home-page' ? width : 0;
+        });
+        offsetSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+            const testId = this.getAttribute('data-testid');
+            if (testId && heights[testId]) return heights[testId];
+            return 0;
+        });
+    });
+
+    afterEach(() => {
+        measured?.mockRestore();
+        offsetSpy?.mockRestore();
+    });
+
+    const NEEDS = { items: [{ kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p2', txId: 't1' } }] };
+    const grid = () => screen.getByTestId('home-grid');
+    const SAFETY = { needs: NEEDS, safety: { words: true as const, signInLinked: false as const } };
+
+    async function landWithHeights(w: number, h: Record<string, number>, cards: HomeAnswer['cards'] = { needs: NEEDS }) {
+        width = w;
+        heights = h;
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, cards)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+    }
+
+    it('gaps gone at 2 and 3 columns: cards pack under shortest column', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+
+        expect(grid().style.rowGap).toBe('0px');
+        expect(grid().style.gridAutoRows).toBe('4px');
+
+        const tips = screen.getByTestId('home-card-tips');
+        const events = screen.getByTestId('home-card-events');
+        const market = screen.getByTestId('home-card-market');
+
+        expect(tips.style.gridColumn).toBe('1');
+        expect(events.style.gridColumn).toBe('2');
+        expect(market.style.gridColumn).toBe('2');
+        // Needs (100px: span 29) + note-hint (0px: span 4) start at 1 -> row 34.
+        // Events (150px: span 42) -> ends at 34 + 42 = 76.
+        expect(market.style.gridRow).toBe('76 / span 34');
+
+        cleanup();
+
+        await landWithHeights(1400, {
+            'home-card-needs': 100,
+            'home-card-tips': 300,
+            'home-card-events': 100,
+            'home-card-market': 200,
+            'home-card-pulse': 50,
+            'home-card-beans': 60,
+            'home-card-community': 100,
+        });
+        expect(grid().style.rowGap).toBe('0px');
+        expect(grid().style.gridAutoRows).toBe('4px');
+        const pulse = screen.getByTestId('home-card-pulse');
+        expect(pulse.style.gridColumn).toBe('2');
+        // Needs + note-hint = row 1..34.
+        // Events in col 2: span (100) = 29 -> ends at 34 + 29 = 63.
+        expect(pulse.style.gridRow).toBe('63 / span 17');
+    });
+
+    it('order kept: DOM elements follow saved member order even when packed into different columns', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        const domIds = Array.from(grid().querySelectorAll('[data-testid^="home-card-"]'))
+            .map(e => e.getAttribute('data-testid')?.replace('home-card-', ''))
+            .filter(id => id !== 'menu');
+        expect(domIds).toEqual(['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community']);
+    });
+
+    it('full-row cards: wait for every column and span 1 / -1', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        const needs = screen.getByTestId('home-card-needs');
+        const community = screen.getByTestId('home-card-community');
+
+        expect(needs.style.gridColumn).toBe('1 / -1');
+        expect(needs.style.gridRow).toBe('1 / span 29');
+
+        expect(community.style.gridColumn).toBe('1 / -1');
+        // Col 1 bottom: 34 + 54 (tips) + 24 (pulse) = 112.
+        // Col 2 bottom: 34 + 42 (events) + 34 (market) + 27 (beans) = 137.
+        // Deepest column is 137, so community starts at row 137!
+        expect(community.style.gridRow).toBe('137 / span 32');
+    });
+
+    it('one column unchanged: does not apply packing styles even when heights are reported', async () => {
+        await landWithHeights(360, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        expect(grid().style.gridAutoRows).toBe('');
+        const tips = screen.getByTestId('home-card-tips');
+        expect(tips.style.gridRow).toBe('');
+        expect(tips.style.gridColumn).toBe('');
+    });
+
+    it('no-ResizeObserver fallback keeps today\'s grid (gaps and all)', async () => {
+        vi.stubGlobal('ResizeObserver', undefined);
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        });
+        expect(grid().style.gridAutoRows).toBe('');
+        expect(grid().style.rowGap).toBe('4px');
+        const tips = screen.getByTestId('home-card-tips');
+        expect(tips.style.gridRow).toBe('');
+        expect(tips.style.gridColumn).toBe('');
+    });
+
+    it('safety card when not drawn is skipped by packing and leaves no gap', async () => {
+        localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
+        await landWithHeights(800, {
+            'home-card-needs': 100,
+            'home-card-safety': 180,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        }, SAFETY);
+
+        expect(screen.queryByTestId('home-card-safety')).toBeNull();
+        const tips = screen.getByTestId('home-card-tips');
+        const events = screen.getByTestId('home-card-events');
+        expect(tips.style.gridColumn).toBe('1');
+        expect(tips.style.gridRow).toBe('34 / span 54');
+        expect(events.style.gridColumn).toBe('2');
+        expect(events.style.gridRow).toBe('34 / span 42');
+    });
+
+    it('useLayoutEffect does not re-query DOM card heights when card set is unchanged across re-renders', async () => {
+        width = 800;
+        heights = {
+            'home-card-needs': 100,
+            'home-card-tips': 200,
+            'home-card-events': 150,
+            'home-card-market': 120,
+            'home-card-pulse': 80,
+            'home-card-beans': 90,
+            'home-card-community': 110,
+        };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { needs: NEEDS })));
+        const { rerender } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+
+        const callsBefore = offsetSpy?.mock.calls.length ?? 0;
+        expect(callsBefore).toBeGreaterThan(0);
+
+        // Re-rendering HomePage without card list changes (e.g. parent render with new callback):
+        rerender(<HomePage identity={ME} onNavigate={vi.fn()} />);
+
+        const callsAfter = offsetSpy?.mock.calls.length ?? 0;
+        // With stable shownKey memoization, useLayoutEffect does not re-query DOM heights:
+        expect(callsAfter).toBe(callsBefore);
+    });
+});
+
+describe('a card that changes height really re-packs (PR #2748, DESIGN-home-layout-fable.md §3.1)', () => {
+    /** A ResizeObserver that delivers as a browser does: only for what changed since it last delivered, then quiet. */
+    class WatchingObserver {
+        static live = new Set<WatchingObserver>();
+        size = new Map<Element, string>();
+        constructor(private readonly callback: ResizeObserverCallback) { WatchingObserver.live.add(this); }
+        observe(el: Element) { this.size.set(el, ''); }
+        unobserve(el: Element) { this.size.delete(el); }
+        disconnect() { WatchingObserver.live.delete(this); }
+        deliver(): boolean {
+            const changed = Array.from(this.size.keys()).filter(el => {
+                const now = `${(el as HTMLElement).offsetHeight}x${el.clientWidth}`;
+                const was = this.size.get(el);
+                this.size.set(el, now);
+                return was !== now;
+            });
+            if (changed.length) this.callback(changed.map(target => ({ target })) as unknown as ResizeObserverEntry[], this as unknown as ResizeObserver);
+            return changed.length > 0;
+        }
+    }
+
+    let width = 0;
+    let heights: Record<string, number | (() => number)> = {};
+    let cardWidths: Record<string, () => number> = {};
+    let spies: { mockRestore(): void }[] = [];
+    let offsetReads = 0;
+    let commits = 0;
+
+    beforeEach(() => {
+        width = 800;
+        cardWidths = {};
+        offsetReads = 0;
+        commits = 0;
+        WatchingObserver.live.clear();
+        vi.stubGlobal('ResizeObserver', WatchingObserver);
+        spies = [
+            vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+                const id = this.getAttribute('data-testid') ?? '';
+                return id === 'home-page' ? width : cardWidths[id]?.() ?? 0;
+            }),
+            vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
+                offsetReads += 1;
+                const h = heights[this.getAttribute('data-testid') ?? ''];
+                return typeof h === 'function' ? h() : h ?? 0;
+            }),
+        ];
+    });
+    afterEach(() => { spies.forEach(s => s.mockRestore()); });
+
+    const NEEDS = { items: [{ kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p2', txId: 't1' } }] };
+    const CARDS = {
+        'home-card-needs': 100, 'home-hint': 44, 'home-card-tips': 200, 'home-card-events': 150, 'home-card-market': 120,
+        'home-card-pulse': 80, 'home-card-beans': 90, 'home-card-community': 110,
+    };
+    const card = (id: string) => screen.getByTestId(`home-card-${id}`);
+    /** Every observer that has news, once: what a browser does between two paints. */
+    const deliverOnce = () => {
+        let any = false;
+        act(() => { for (const ro of Array.from(WatchingObserver.live)) any = ro.deliver() || any; });
+        return any;
+    };
+    /** Paint after paint until nothing has news, as the browser would. Gives the number of paints it took, capped. */
+    const settle = (most = 200) => {
+        let rounds = 0;
+        while (rounds < most && deliverOnce()) rounds += 1;
+        return rounds;
+    };
+
+    async function land(cards: HomeAnswer['cards'] = { needs: NEEDS }, h: typeof heights = CARDS) {
+        heights = { ...h };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, cards)));
+        render(<Profiler id="home" onRender={() => { commits += 1; }}><HomePage identity={ME} onNavigate={vi.fn()} /></Profiler>);
+        await screen.findByTestId('home-card-community');
+        settle();
+    }
+
+    async function landWithSafety() {
+        vi.mocked(api.getCommunityMe).mockImplementation(async () => ({ probation: { rules: 'words', keptPosts: 0, ageEndsAt: null } }) as never);
+        await land({ needs: NEEDS, safety: { words: true, signInLinked: false } }, { ...CARDS, 'home-card-safety': 180 });
+        await screen.findByTestId('one-way-back-landing');
+        settle();
+    }
+
+    it('a card that grows after mount takes its new span, and the card under it moves down', async () => {
+        await land();
+        const tips = card('tips');
+        const pulse = card('pulse');
+        expect(tips.style.gridRow).toBe('45 / span 54');
+        expect(pulse.style.gridColumn).toBe('1');
+        expect(pulse.style.gridRow).toBe('99 / span 24');
+
+        heights['home-card-tips'] = 300;
+        settle();
+
+        expect(tips.style.gridRow).toBe('45 / span 79');
+        // Tips now reaches row 124 and the second column only 121, so the next card goes there.
+        expect(pulse.style.gridColumn).toBe('2');
+        expect(pulse.style.gridRow).toBe('121 / span 24');
+    });
+
+    it('a card that shrinks after mount gives the room back', async () => {
+        await land();
+        heights['home-card-tips'] = 60;
+        settle();
+        expect(card('tips').style.gridRow).toBe('45 / span 19');
+        // Column 1 is now the shortest, so the next card goes under Tips: no gap under it.
+        expect(card('market').style.gridColumn).toBe('1');
+        expect(card('market').style.gridRow).toBe('64 / span 34');
+    });
+
+    it('two cards reporting in one batch both land, and the second report of a card wins (the stale-ref finding)', async () => {
+        await land();
+        heights['home-card-tips'] = 240;
+        heights['home-card-events'] = 170;
+        deliverOnce();
+        expect(card('tips').style.gridRow).toBe('45 / span 64');
+        expect(card('events').style.gridRow).toBe('45 / span 47');
+
+        const tips = card('tips');
+        heights['home-card-tips'] = 280;
+        act(() => {
+            for (const ro of Array.from(WatchingObserver.live)) ro.deliver();
+            heights['home-card-tips'] = 320;
+            for (const ro of Array.from(WatchingObserver.live)) ro.deliver();
+        });
+        expect(tips.style.gridRow).toBe('45 / span 84');
+    });
+
+    it('a height that did not change commits nothing', async () => {
+        await land();
+        const before = commits;
+        // The browser reports a width change at the same height: every card is told, and nothing moves.
+        for (const ro of Array.from(WatchingObserver.live)) ro.size.forEach((_, el) => ro.size.set(el, 'other'));
+        settle();
+        expect(commits).toBe(before);
+    });
+
+    it('re-packing keeps every card mounted and the DOM in the saved order', async () => {
+        await land();
+        const before = ['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community'].map(card);
+        heights['home-card-tips'] = 500;
+        settle();
+        expect(card('market').style.gridColumn).toBe('2');
+        expect(['needs', 'tips', 'events', 'market', 'pulse', 'beans', 'community'].map(card)).toEqual(before);
+        const order = Array.from(screen.getByTestId('home-grid').children).map(e => e.getAttribute('data-testid'));
+        expect(order).toEqual(['home-card-needs', 'home-hint', 'home-card-tips', 'home-card-events', 'home-card-market', 'home-card-pulse', 'home-card-beans', 'home-card-community']);
+    });
+
+    it('every packed child is watched: the "One way back" frame re-packs when it grows, with no other change on the page', async () => {
+        await landWithSafety();
+        const frame = card('safety');
+        const start = frame.style.gridRow;
+        expect(start).toMatch(/span 49$/);
+
+        heights['home-card-safety'] = 260;
+        settle();
+
+        expect(frame.style.gridRow).toBe(start.replace('span 49', 'span 69'));
+    });
+
+    it('every packed child is watched: a note that wraps re-packs', async () => {
+        await land();
+        const hint = screen.getByTestId('home-hint');
+        expect(hint.style.gridRow).toBe('30 / span 15');
+
+        heights['home-hint'] = 84;
+        settle();
+
+        expect(hint.style.gridRow).toBe('30 / span 25');
+        expect(card('tips').style.gridRow).toBe('55 / span 54');
+    });
+
+    it('every packed child is watched: the fewer-cards note too, by its own observer and before the paint', async () => {
+        heights = { ...CARDS, 'home-fewer': 44 };
+        nodeV2(answer({}, { needs: NEEDS }), null);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const fewer = await screen.findByTestId('home-fewer');
+        await screen.findByTestId('home-card-community');
+        settle();
+        expect(fewer.parentElement).toBe(screen.getByTestId('home-grid'));
+        expect(fewer.style.gridRow).toBe('30 / span 15');
+
+        heights['home-fewer'] = 84;
+        settle();
+        expect(fewer.style.gridRow).toBe('30 / span 25');
+
+        heights['home-fewer'] = 64;
+        width = 1400;
+        Array.from(WatchingObserver.live).find(ro => Array.from(ro.size.keys()).some(el => el.getAttribute('data-testid') === 'home-page'))!.deliver();
+        await waitFor(() => expect(fewer.style.gridRow).toBe('30 / span 20'));
+    });
+
+    it('the note stands on the packed row, not 4 px above it (no gap over 20 px under it)', async () => {
+        await land();
+        expect(screen.getByTestId('home-hint').style.marginTop).toBe('0px');
+    });
+
+    it('the "One way back" frame keeps its 12 px outside what is measured, as a HomeCard does', async () => {
+        await landWithSafety();
+        expect(card('safety').className.split(' ')).toEqual(expect.arrayContaining(['mb-3', '[&>section]:mb-0']));
+    });
+
+    it('a change of columns reads every card before the paint: no card has to report for the new widths to land', async () => {
+        await land({ needs: NEEDS }, { ...CARDS });
+        heights['home-card-tips'] = 260;
+        heights['home-hint'] = 84;
+        width = 1400;
+        // Only the page's own observer has told the page; the cards' observers have not run.
+        const page = Array.from(WatchingObserver.live).find(ro => Array.from(ro.size.keys()).some(el => el.getAttribute('data-testid') === 'home-page'))!;
+        act(() => { page.deliver(); });
+
+        expect(screen.getByTestId('home-page').dataset.columns).toBe('3');
+        expect(screen.getByTestId('home-hint').style.gridRow).toBe('30 / span 25');
+        expect(card('tips').style.gridRow).toBe('55 / span 69');
+    });
+
+    it('a window resize settles: one commit a step at most, and nothing after it stops', async () => {
+        await land();
+        const before = commits;
+        const steps = 30;
+        for (let i = 1; i <= steps; i += 1) {
+            width = 800 - i;
+            heights['home-card-tips'] = 200 + i * 4;
+            heights['home-card-events'] = 150 + i * 4;
+            deliverOnce();
+        }
+        expect(commits - before).toBeLessThanOrEqual(steps * 2);
+        const after = commits;
+        expect(settle()).toBe(0);
+        expect(commits).toBe(after);
+        expect(card('tips').style.gridRow).toBe(`45 / span ${Math.ceil((200 + steps * 4 + 16) / 4)}`);
+    });
+
+    it('a re-pack that changes the height it measures stops going round: bounded, stood at the taller height, no overlap', async () => {
+        // The one way round (lib/home-layout.ts settleHeights): the page's height brings the scrollbar, the scrollbar
+        // narrows the cards, and a card crossing `wide` goes the other way. Tall page, Tips short; short page, Tips tall.
+        const pageIsTall = () => Number(card('community').style.gridRow.split(' ')[0]) > 160;
+        await land({ needs: NEEDS }, { ...CARDS, 'home-card-tips': () => (pageIsTall() ? 200 : 400) });
+
+        const rounds = settle();
+
+        expect(rounds).toBeLessThan(20);
+        const span = Number(card('tips').style.gridRow.split('span ')[1]);
+        expect(span).toBe(Math.ceil((400 + 16) / 4));
+        const commitsThen = commits;
+        expect(settle()).toBe(0);
+        expect(commits).toBe(commitsThen);
+    });
+
+    it('a card crossing `wide` as the scrollbar comes and goes, through its real width: bounded the same way', async () => {
+        // Tall page: the scrollbar, 470 px, rows. Short page: no scrollbar, 490 px, tiles, which here are the taller.
+        const pageIsTall = () => Number(card('community').style.gridRow.split(' ')[0]) > 160;
+        cardWidths = { 'home-card-tips': () => (pageIsTall() ? 470 : 490) };
+        await land({ needs: NEEDS }, { ...CARDS, 'home-card-tips': () => (card('tips').dataset.cardWide === 'true' ? 400 : 200) });
+
+        const rounds = settle();
+
+        expect(rounds).toBeLessThan(40);
+        expect(Number(card('tips').style.gridRow.split('span ')[1])).toBe(Math.ceil((400 + 16) / 4));
+        // It stood at the taller height, so the page stays tall, the scrollbar stays and the card stays narrow: a gap at worst.
+        expect(card('tips').dataset.cardWide).toBe('false');
+        const commitsThen = commits;
+        expect(settle()).toBe(0);
+        expect(commits).toBe(commitsThen);
+    });
+
+    it('one column measures nothing and keeps nothing: a phone browser runs none of this', async () => {
+        width = 360;
+        await land();
+        expect(screen.getByTestId('home-grid').style.gridAutoRows).toBe('');
+        const before = { commits, offsetReads };
+        heights['home-card-tips'] = 900;
+        for (const ro of Array.from(WatchingObserver.live)) ro.size.forEach((_, el) => ro.size.set(el, 'other'));
+        act(() => { for (const ro of Array.from(WatchingObserver.live)) ro.deliver(); });
+        expect(commits).toBe(before.commits);
+        // The stub's own `deliver` reads each height once; HomeCard adds no read of its own.
+        const observed = Array.from(WatchingObserver.live).reduce((n, ro) => n + ro.size.size, 0);
+        expect(offsetReads - before.offsetReads).toBe(observed);
+        expect(card('tips').style.gridRow).toBe('');
     });
 });
 
@@ -3777,6 +4512,95 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
             expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
         });
     });
+
+    it('calendar-s4: events card links "Calendar ›" to map-calendar and "All events ›" to marketplace events', async () => {
+        const nav = vi.fn();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            events: {
+                items: [{
+                    id: 'e1',
+                    title: 'Community picnic',
+                    startsAt: new Date(Date.now() + 86_400_000).toISOString(),
+                    endsAt: null,
+                    place: 'Park',
+                    rsvp: 'going',
+                }],
+                radiusKm: null,
+            },
+        })));
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        await screen.findByTestId('home-card-events');
+
+        const calLink = screen.getByTestId('home-events-calendar');
+        expect(calLink).toHaveTextContent(/Calendar/);
+        fireEvent.click(calLink);
+        expect(nav).toHaveBeenCalledWith('map-calendar');
+
+        const allLink = screen.getByTestId('home-events-all');
+        expect(allLink).toHaveTextContent(/All events/);
+        fireEvent.click(allLink);
+        expect(nav).toHaveBeenCalledWith('marketplace', 'events');
+    });
 });
 
+describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fable.md §2.2; 320 px wide, light and dark)', () => {
+    const PINNED_CARDS = (): HomeAnswer['cards'] => ({
+        market: { items: [
+            { id: 'p3', type: 'offer', title: 'Pottery lessons', category: 'arts', credits: 20, photoUrl: null, pinned: true },
+            { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', credits: 12, photoUrl: null },
+            { id: 'p4', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null },
+        ], total14d: 3, more: false },
+        events: { items: [
+            { id: 'e9', title: 'Winter fair', startsAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), endsAt: null, place: 'Town Hall', rsvp: null, pinned: true },
+            { id: 'e1', title: 'Seed swap', startsAt: new Date(Date.now() + 86_400_000).toISOString(), endsAt: null, place: null, rsvp: null },
+        ], radiusKm: null },
+        decide: {
+            open: 0, soonestClosesAt: null, polls: 2, pollsMore: false, items: [],
+            poll: { id: 'pol-1', title: 'Market on Sundays?', closesAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), pinned: true },
+        },
+    });
+    afterEach(() => { document.documentElement.classList.remove('dark'); });
+
+    for (const dark of [false, true]) {
+        it(`${dark ? 'dark' : 'light'}: 📌 before the title of a pinned Offer, event and poll, pinned Offer first though the member stars food, on no other row`, async () => {
+            if (dark) document.documentElement.classList.add('dark');
+            vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+            const width = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+                const tid = this.getAttribute('data-testid') ?? '';
+                return tid === 'home-page' ? 320 : tid.startsWith('home-card-') ? 288 : 0;
+            });
+            try {
+                vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, interests: ['food'] } }, PINNED_CARDS())));
+                render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+                await screen.findByTestId('home-card-market');
+                // The Market card: the node's pinned Offer first; the member's stars order the rest, never move the pin.
+                expect(marketTitles()).toEqual(['Offer, Pottery lessons, 20 Beans', 'Offer, Sourdough, 12 Beans', 'Need, Borrow a drill']);
+                const rows = within(screen.getByTestId('home-card-market')).getAllByTestId('home-market-item');
+                expect(rows[0]).toHaveTextContent('📌 Pottery lessons');
+                expect(within(rows[0]).getByTestId('home-pin')).toHaveAttribute('aria-hidden', 'true');
+                expect(rows[1]).not.toHaveTextContent('📌');
+                expect(rows[2]).not.toHaveTextContent('📌');
+                // Coming up: the pinned event first, the pin before its title.
+                const events = within(screen.getByTestId('home-card-events')).getAllByTestId('home-event');
+                expect(events[0]).toHaveTextContent('📌 Winter fair');
+                expect(events[1]).not.toHaveTextContent('📌');
+                // Decide: the first open poll.
+                expect(screen.getByTestId('home-decide-poll')).toHaveTextContent('📌 Poll: Market on Sundays?');
+                // One pin in each of the three cards, none elsewhere; the screen reader hears the rows as it did.
+                expect(screen.getAllByTestId('home-pin')).toHaveLength(3);
+                expect(screen.getByTestId('home-decide-poll')).toHaveAttribute('aria-label', expect.stringMatching(/^Poll: Market on Sundays\?/));
+            } finally {
+                width.mockRestore();
+            }
+        });
+    }
+
+    it('an older node sends no field: no pin anywhere', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        expect(screen.queryByTestId('home-pin')).toBeNull();
+        expect(document.body).not.toHaveTextContent('📌');
+    });
+});
 

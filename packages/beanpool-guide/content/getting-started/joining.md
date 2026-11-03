@@ -43,7 +43,7 @@ To join:
 You can join in the phone app or in a web browser. In a browser, open global.beanpool.org and tap **Join**: see "Using BeanPool in a web browser" for the steps. In the phone app:
 
 - On the first screen, tap **Explore BeanPool worldwide**, right under **Join with an invite**. It is always there. When the global community can't take you right now, a line under it says why: **Can't reach the global community right now. Try again, or join with an invite.**, **Not taking new members right now.**, or **This community is in a private preview. Ask its owner for an invite.** Tapping it asks again.
-- The app opens the global community first, so you can look around before you join: **Home**, the **Market** and the **Map**, with each listing's photo, title and rough area, but not who posted it. A card at the top says **You're looking around as a visitor. Nothing is saved until you join.** Looking makes no account and asks for nothing: no location, no notifications. **Talk**, people's profiles and **Settings** need an account, so they open the way in instead, and so do **Join to post** and **Join to message**. If you close the app while looking, it opens on the first screen again.
+- The app opens the global community first, so you can look around before you join: **Home**, the **Market** and the **Map**, with each listing's photo, title and rough area, but not who posted it. A card at the top says **You're looking around as a visitor. Nothing is saved until you join.** Looking makes no account and asks for nothing: no location, no notifications. **Chat**, people's profiles and **Settings** need an account, so they open the way in instead, and so do **Join to post** and **Join to message**. If you close the app while looking, it opens on the first screen again.
 - When you are ready, tap **Join**: at the top, beside the **?**, or on the card. **← Back** takes you back to looking around.
 - Choose one of the two ways in. **Create an account with 12 secret words** is first. It needs no Google, Apple or Facebook account: your 12 words are the only way back in.
 - **Or sign in** once with Google, Apple (on an iPhone) or Facebook. That sign-in is also a way back if you lose your phone. BeanPool never sees your password and never posts anything for you.
@@ -110,7 +110,18 @@ Any member can invite people, unless the community has chosen that only its admi
 
 A community's admins can turn invites off for the whole community.
 
+**Vouching on an invite.** If you can vouch for people (owners, admins and members the community has appointed to vouch), **Invites** also shows **Vouch for them**: **None**, **25**, **50** or **100**. It starts on **None** every time. Pick an amount and you vouch for that person the moment they join, so you don't have to look out for them under a name you may not recognise. It is the same as vouching from their profile: **Vouched by** shows you, and you can withdraw it the same way.
+
+- If you lose the right to vouch before they join, they still join, with no vouch.
+- The invite doesn't tell them beforehand. Once they have joined, the vouch shows as any vouch does.
+- A ticket made without a connection can't carry a vouch. To make one, choose **None**.
+- There is no vouch where a community has no Beans, so the global community doesn't show this.
+
+**Inviting from a post.** A post or an event also has **Invite and share**, which makes one invite (with the same **Vouch for them** choice) and sends your friend a link that brings them to that post once they have joined. See "Browsing the Market".
+
 **Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. On the web app the **Tree** stays, and so do the codes you made earlier: they still work until they lapse. An owner or admin with no signal can still make a paper ticket, from the last role the community gave them. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge.
+
+**Ask an admin to invite someone.** Where only the admins invite, **Invites** has a small **Ask an admin to invite someone** button for any member in good standing. Give the person's first name and one line on how you know them, and nothing else: no phone number, no email. It goes to the owners and admins, and nobody else reads it. If an admin sends an invite, the code comes back to you under **What you've asked**, to pass on: it works once, for 30 days, like any invite. If an admin says no, you see that there too, with their reason if they gave one. You can take an ask back while it waits. You can have 3 waiting and make 3 a day. An ask is deleted when it is answered, when you take it back, or after 30 days. Its answer stays on your **Invites** for 30 days, with no name in it.
 
 - Invite codes you made before the community chose this still work until their 30 days are up.
 - A ticket you made without a connection doesn't: whoever has it is asked to get a fresh invite from an admin.

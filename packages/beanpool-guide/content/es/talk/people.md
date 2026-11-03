@@ -9,7 +9,7 @@ source-hash: 44b66169497e9909
 
 ## Encontrar personas
 
-Toca **Charlas** y luego **Personas**. En la aplicación web, toca **Personas** en la fila de pestañas. Hay tres botones:
+Toca **Chat** y luego **Personas**. En la aplicación web, toca **Personas** en la fila de pestañas. Hay tres botones:
 
 - **Amigos:** personas que has agregado.
 - **Comunidad:** todos los miembros. Busca por nombre. En el teléfono, ordena por **Más recientes**, **Nombre**, **Amigos**, **De confianza** o **Activos**. En la comunidad global muestra los miembros más cercanos a tu zona: escribe al menos 2 letras de un nombre para encontrar a cualquier otra persona.

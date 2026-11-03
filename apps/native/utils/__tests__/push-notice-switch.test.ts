@@ -407,6 +407,12 @@ describe('the app is the model', () => {
         expect([...at].sort((a, b) => a - b)).toEqual(at);
         // Each of those branches before the landing returns: none reaches the notice.
         expect(body.match(/takeOpenAfterLanding\(/g)).toHaveLength(1);
-        expect(body).toMatch(/const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*const notice = landing === DEFAULT_MEMBER_LANDING \? takeOpenAfterLanding\(identity\.publicKey, nodeUrl\) : null;\n\s*if \(notice\) router\.push\(notice\);\n\s*$/);
+        // After the landing: the notice, or else (invite-and-share) the listing held since the join. Both only over the tabs' index
+        // (`landing === DEFAULT_MEMBER_LANDING`), nothing else (utils/post-after-join.ts).
+        expect(body).toMatch(/const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*const notice = landing === DEFAULT_MEMBER_LANDING \? takeOpenAfterLanding\(identity\.publicKey, nodeUrl\) : null;\n\s*if \(notice\) router\.push\(notice\);(?:\n\s*\/\/.*)*\n\s*else if \(landing === DEFAULT_MEMBER_LANDING\) \{(?:\n\s*\/\/.*)*\n\s*void \(async \(\) => \{[\s\S]*?takePostAfterJoin\(community\);\n\s*if \(route && isComponentMounted\.current\) router\.push\(route as any\);\n\s*\}\)\(\);\n\s*\}\n\s*$/);
+        // Still one replace after the landing line (the landing's own); the only pushes are the notice's and the held listing's.
+        const tail = body.slice(body.indexOf('const landing = memberRedirect('));
+        expect(tail.match(/router\.replace\(/g)).toHaveLength(1);
+        expect(tail.match(/router\.push\(/g)).toHaveLength(2);
     });
 });

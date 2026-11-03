@@ -23,10 +23,11 @@ import { lightColors } from '../../constants/colors';
 import { POST_CATEGORIES } from '../../constants/categories';
 import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
-import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
-import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
+import { sheetStyles } from '../../components/home/sheet-parts';
+import { st as arrangeStyles } from '../../components/home/ArrangeParts';
+import { ADD_CARD_DOT_DP, ADD_CARD_DOT_GAP_DP, ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
 import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
-import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest } from '@beanpool/core';
+import { ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
@@ -115,7 +116,7 @@ describe('a card at 320dp × 1.3', () => {
         expect(s.button.flexShrink).toBe(0);
         expect(s.button.maxWidth).toBe('100%');
         const pad = 2 * num(s.button.paddingHorizontal) + 2 * num(s.button.borderWidth);
-        for (const label of ['Post an Offer', 'Invite someone', 'Open the Market', 'Open Talk', 'Try again', 'Connect']) {
+        for (const label of ['Post an Offer', 'Invite someone', 'Open the Market', 'Open Chat', 'Try again', 'Connect']) {
             expect(textWidth(label, num(s.buttonText.fontSize)) + pad, label).toBeLessThanOrEqual(CARD_INNER);
         }
     });
@@ -186,52 +187,69 @@ describe('a card at 320dp × 1.3', () => {
     });
 });
 
-describe('Edit home at 320dp × 1.3 (CARD-FRAME §1.3)', () => {
-    const e = editHomeStyles as unknown as Record<string, Record<string, unknown>>;
-    it('a card\'s name keeps its longest word beside ↑, ↓ and "…" (about 140dp of the sheet\'s 288)', () => {
-        const room = SCREEN - 2 * num(e.list.paddingHorizontal) - 3 * num(e.arrow.width) - 3 * num(e.row.gap);
-        expect(room).toBeGreaterThanOrEqual(130);
-        for (const name of CARD_NAMES) {
-            expect(longestWord(name, num(e.name.fontSize)), name).toBeLessThan(room);
+describe('Arrange at 320dp × 1.3 (DESIGN-home-layout-fable.md §3.2)', () => {
+    const a = arrangeStyles as unknown as Record<string, Record<string, unknown>>;
+    const home = read('app/(tabs)/index.tsx');
+    const parts = read('components/home/HomeParts.tsx');
+
+    it('the band keeps two 48dp targets, as it has with Tune and "…": a caption\'s longest word keeps its room, Stays here fits, and neither shrinks', () => {
+        const room = CARD_INNER - HOME_TARGET_DP - (HOME_TARGET_DP + num(s.menuButton.marginRight));
+        expect(room).toBeGreaterThanOrEqual(150);
+        for (const name of [...CARD_NAMES, 'The global community']) {
+            const w = longestWord(name.toUpperCase(), num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) });
+            expect(w, name).toBeLessThan(room);
         }
-        for (const sub of ['Nothing to show now', TIPS_ALL_SEEN]) expect(longestWord(sub, num(e.sub.fontSize)), sub).toBeLessThan(room);
-        // A saved search's row leads with its kind, so the first of its two lines shows it however long the words (#1716
-        // confirmation, finding 4): "Needs · " fits a line whole.
-        for (const q of ['organic free range eggs', 'firewood delivery', 'x'.repeat(40)]) {
+        // A saved search's band leads with its kind, so the first of its two lines shows it however long the words.
+        for (const q of ['organic free range eggs', 'x'.repeat(40)]) {
             const name = cardRowName({ type: 'search', settings: { q, kind: 'need' } });
             expect(name.startsWith('Needs · '), name).toBe(true);
-            expect(textWidth('Needs · ', num(e.name.fontSize)), name).toBeLessThan(room);
+            expect(textWidth('NEEDS · ', num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) }), name).toBeLessThan(room);
         }
-        expect(e.rowText).toMatchObject({ flex: 1, minWidth: 0 });
-        expect(e.arrow.flexShrink).toBe(0);
-        expect(num(e.arrow.height)).toBeGreaterThanOrEqual(48);
-        expect(num(e.reset.minHeight)).toBeGreaterThanOrEqual(48);
-        expect(num(e.done.minHeight)).toBeGreaterThanOrEqual(48);
-        expect(num(e.addRow.minHeight)).toBeGreaterThanOrEqual(48);
+        // Beside Stays here, at the same cap as the caption, the longest fixed caption keeps its longest word.
+        const stays = textWidth(ARRANGE_WORDS.stays, num(s.stays.fontSize), { scale: CAPTION_MAX_SCALE });
+        for (const name of ['Needs you', 'Find your community', 'Your community', 'The global community']) {
+            expect(longestWord(name.toUpperCase(), num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) }), name).toBeLessThan(CARD_INNER - stays);
+        }
+        expect(s.captionTargets.flexShrink).toBe(0);
+        expect(num(s.menuButton.width)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(num(s.menuButton.height)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        // The last arrow reaches into the card's edge as the "…" does; the first stands clear of it.
+        expect(s.arrowFirst.marginRight).toBe(0);
     });
 
-    it('each arrow and "…" is a 48dp target both ways, not only in height (PR #1483 review 4165384018); no switch is left', () => {
-        expect(num(e.arrow.width)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
-        expect(num(e.arrow.height)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
-        expect(HOME_TARGET_DP).toBeGreaterThanOrEqual(48);
-        const sheet = read('components/home/EditHomeSheet.tsx');
-        expect(sheet).not.toMatch(/<Switch/);
-        expect(sheet).not.toMatch(/>Hidden</);
-        expect(sheet).toMatch(/testID=\{`edit-home-\$\{c\.id\}-menu`\}/);
+    it('the one line, the bar and the not-on-your-account line keep their longest word; Settings… and Remove wrap whole, each a 48dp target', () => {
+        for (const line of ['Nothing to show now', TIPS_ALL_SEEN, SKY_NO_PLACE_LINE, ...HOME_CARD_TYPES.map(t => t.line)]) {
+            expect(longestWord(line, num(a.line.fontSize)), line).toBeLessThan(CARD_INNER);
+        }
+        for (const line of [ARRANGE_WORDS.bar, NOT_ON_ACCOUNT_LINE]) expect(longestWord(line, num(a.barText.fontSize)), line).toBeLessThan(CARD_INNER);
+        expect(a.words.flexWrap).toBe('wrap');
+        expect(num(a.word.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(num(a.word.minWidth)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
     });
 
-    it('its fixed words fit: the note, ＋ Add a card, Reset to defaults, and the "not on your account yet" line', () => {
-        const inner = SCREEN - 2 * num(e.list.paddingHorizontal);
-        for (const t of [EDIT_HOME_NOTE, NOT_ON_ACCOUNT_LINE, ' Find your community stays near the top for your first 30 days.']) {
-            expect(longestWord(t, num(e.note.fontSize)), t).toBeLessThan(inner);
-        }
-        expect(textWidth('＋ Add a card', num(e.addText.fontSize))).toBeLessThan(inner);
-        expect(textWidth('Reset to defaults', num(e.resetText.fontSize))).toBeLessThan(inner);
+    it('＋ Add a card and Reset to defaults fit whole on 48dp targets, and Done is the floating button\'s box, never stepping aside', () => {
+        const inner = SCREEN - 2 * num(a.tile.marginHorizontal);
+        expect(num(a.tile.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(num(a.reset.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(textWidth('＋ Add a card', num(a.wordText.fontSize))).toBeLessThan(inner);
+        expect(textWidth('Reset to defaults', num(a.resetText.fontSize))).toBeLessThan(inner);
+        expect(home).toMatch(/style=\{\[st\.fab, \{ backgroundColor: colors\.action\.fab \}\]\} onPress=\{endArrange\} testID="home-arrange-done"/);
+        expect(home).toMatch(/\{folded \? \(\s*\/\/ Done takes the floating button's place/);
+        expect(parts).toMatch(/style=\{\(\{ pressed \}\) => \[s\.menuButton, dir === 'up' && s\.arrowFirst/);
+    });
+
+    it('eight folded cards fit under one and a half screens at 320 x 569: the short list a thumb can reach', () => {
+        const lineHeight = num(a.line.lineHeight) * FONT_SCALE;
+        const linesOf = (line: string) => Math.ceil(textWidth(line, num(a.line.fontSize)) / CARD_INNER);
+        const eight = ['steps', 'tips', 'events', 'market', 'pulse', 'beans', 'decide', 'groups'].map(id => HOME_CARD_TYPES.find(t => t.id === id)!);
+        const chrome = HOME_TARGET_DP + num(s.captionFolded.marginBottom) + num(s.cardFolded.paddingBottom) + num(s.cardFolded.marginBottom) + 2 * num(s.card.borderWidth) + num(s.captionRow.marginTop) + num(s.card.paddingTop);
+        const total = eight.reduce((sum, t) => sum + chrome + linesOf(t.line) * lineHeight, 0);
+        expect(total).toBeLessThan(569 * 1.5);
     });
 });
 
 describe('the picker at 320dp × 1.3 (CARD-FRAME §1.2, §1.4)', () => {
-    const e = editHomeStyles as unknown as Record<string, Record<string, unknown>>;
+    const e = sheetStyles as unknown as Record<string, Record<string, unknown>>;
     const a = addCardStyles as unknown as Record<string, Record<string, unknown>>;
     const ADD = Math.max(num(a.add.minWidth), textWidth('Add', num(a.addText.fontSize)) + 2 * num(a.add.paddingHorizontal));
     const ON_HOME = textWidth('On Home', num(a.onHome.fontSize));
@@ -241,6 +259,17 @@ describe('the picker at 320dp × 1.3 (CARD-FRAME §1.2, §1.4)', () => {
         const global = pickerGroups({ profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } }, null, null);
         return [...local.groups, ...global.groups].flatMap(g => g.rows);
     };
+
+    it('the hue dot before a row\'s name (S2) is 10dp, never shrinks, and leaves the name at least 140dp at the floor', () => {
+        expect(a.dot).toMatchObject({ width: 10, height: 10, flexShrink: 0 });
+        expect(ADD_CARD_DOT_DP).toBe(10);
+        expect(a.nameRow).toMatchObject({ flexDirection: 'row', alignItems: 'center', gap: ADD_CARD_DOT_GAP_DP });
+        expect(a.name).toMatchObject({ flexShrink: 1, minWidth: 0 });
+        const nameRoom = room - ADD_CARD_DOT_DP - ADD_CARD_DOT_GAP_DP;
+        expect(nameRoom, 'name room beside the dot').toBeGreaterThanOrEqual(140);
+        // Every name keeps its longest word (and the dot costs it nothing it had spare: the line below still has the whole room).
+        for (const r of everyRow()) expect(longestWord(r.name, num(a.name.fontSize)), r.name).toBeLessThan(nameRoom);
+    });
 
     it('every row\'s name and line keep their longest word beside a 48dp Add (or "On Home")', () => {
         expect(num(a.add.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
@@ -287,7 +316,7 @@ describe('the picker at 320dp × 1.3 (CARD-FRAME §1.2, §1.4)', () => {
 
 describe("a saved search's settings sheet at 320dp × 1.3 (CARD-FRAME §4, §5.2 item 20)", () => {
     it("every chip (kind, category, distance) fits the sheet's width on one line, and is a 48dp target", () => {
-        const sheetInner = SCREEN - 2 * num((editHomeStyles as unknown as Record<string, Record<string, unknown>>).list.paddingHorizontal);
+        const sheetInner = SCREEN - 2 * num((sheetStyles as unknown as Record<string, Record<string, unknown>>).list.paddingHorizontal);
         const labels = [
             ...SEARCH_KIND_CHIPS.map(k => k.label),
             'Any category', ...POST_CATEGORIES.map(c => `${c.emoji} ${c.label}`),
@@ -303,23 +332,22 @@ describe("a saved search's settings sheet at 320dp × 1.3 (CARD-FRAME §4, §5.2
         const row = SEARCH_KIND_CHIPS.reduce((w, k) => w + textWidth(k.label, num(s.chipText.fontSize)) + 2 * num(s.chip.paddingHorizontal) + 2, 0) + 2 * 8;
         expect(row).toBeLessThan(sheetInner);
         // The sheet scrolls: eighteen category chips and a keyboard don't fit 569dp at once.
-        expect(read('components/home/CardSettingsSheet.tsx')).toMatch(/<ScrollView style=\{editHomeStyles\.list\}/);
+        expect(read('components/home/CardSettingsSheet.tsx')).toMatch(/<ScrollView style=\{sheetStyles\.list\}/);
     });
 });
 
 describe('the frame\'s words on Home at 320dp × 1.3', () => {
-    it('"Add a card ›" and "Edit home ›" each fit a row whole, wrap rather than clip, and each is its own 48dp target the floating button steps aside for', () => {
+    it('"Add a card ›" and "Arrange ›" each fit a row whole, wrap rather than clip, and each is its own 48dp target the floating button steps aside for', () => {
         const add = textWidth('Add a card ›', num(s.linkText.fontSize));
-        const edit = textWidth('Edit home ›', num(s.linkText.fontSize));
+        const arrange = textWidth('Arrange ›', num(s.linkText.fontSize));
         expect(add).toBeLessThan(CARD_INNER);
-        expect(edit).toBeLessThan(CARD_INNER);
-        // Together they don't fit at the floor: the row wraps (CARD-FRAME §1.1).
-        expect(add + edit + num(communityLinksStyle.columnGap)).toBeGreaterThan(CARD_INNER);
+        expect(arrange).toBeLessThan(CARD_INNER);
+        // Where they don't fit side by side, a longer language, the row wraps (CARD-FRAME §1.1).
         expect(communityLinksStyle.flexWrap).toBe('wrap');
         expect(num(s.link.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
         const body = read('components/home/HomeCardBodies.tsx');
         expect(body).toMatch(/<HomeLink id="community:add"/);
-        expect(body).toMatch(/<HomeLink id="community:edit"/);
+        expect(body).toMatch(/<HomeLink id="community:arrange"/);
     });
 
     it('the hint and the fewer-cards line keep their longest word beside the ✕; a saved search\'s lines fit the card', () => {
@@ -349,7 +377,7 @@ describe('the frame\'s words on Home at 320dp × 1.3', () => {
 });
 
 describe('sun and moon at 320dp × 1.3 (CARD-FRAME §4, slice F5)', () => {
-    const e = editHomeStyles as unknown as Record<string, Record<string, unknown>>;
+    const e = sheetStyles as unknown as Record<string, Record<string, unknown>>;
     const body = read('components/home/HomeCardBodies.tsx');
     const sky = body.slice(body.indexOf('export function SkyBody'), body.indexOf('export function SearchBody'));
 
@@ -373,9 +401,7 @@ describe('sun and moon at 320dp × 1.3 (CARD-FRAME §4, slice F5)', () => {
         expect(skyToday({ lat: -28.55, lng: 153.5 }, Date.parse('2026-12-21T02:00Z')).label).not.toMatch(/\p{Extended_Pictographic}/u);
     });
 
-    it("Edit home's no-place line and the sheet's place chips fit, each chip a 48dp target whole on a row", () => {
-        const room = SCREEN - 2 * num(e.list.paddingHorizontal) - 3 * num(e.arrow.width) - 3 * num(e.row.gap);
-        expect(longestWord(SKY_NO_PLACE_LINE, num(e.sub.fontSize)), SKY_NO_PLACE_LINE).toBeLessThan(room);
+    it("the sheet's place chips fit, each chip a 48dp target whole on a row", () => {
         const pad = 2 * num(s.chip.paddingHorizontal) + 2 * num(s.chip.borderWidth);
         for (const c of SKY_PLACE_CHIPS) expect(textWidth(c.label, num(s.chipText.fontSize)) + pad, c.label).toBeLessThanOrEqual(CARD_INNER);
         expect(num(s.chip.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
@@ -384,7 +410,7 @@ describe('sun and moon at 320dp × 1.3 (CARD-FRAME §4, slice F5)', () => {
 
 describe("the Decide card's settings sheet at 320dp × 1.3 (My votes)", () => {
     it('its three chips share a row or wrap whole, each a 48dp target; the line under the chosen one wraps at word breaks inside the sheet', () => {
-        const sheetInner = SCREEN - 2 * num((editHomeStyles as unknown as Record<string, Record<string, unknown>>).list.paddingHorizontal);
+        const sheetInner = SCREEN - 2 * num((sheetStyles as unknown as Record<string, Record<string, unknown>>).list.paddingHorizontal);
         const pad = 2 * num(s.chip.paddingHorizontal) + 2 * num(s.chip.borderWidth);
         expect(HOME_DECIDE_CHOICES.map(c => c.show)).toEqual(['counts', 'open', 'mine']);
         for (const c of HOME_DECIDE_CHOICES) {
@@ -402,7 +428,7 @@ describe("the Decide card's settings sheet at 320dp × 1.3 (My votes)", () => {
     });
 });
 
-describe('the tab strip: Home · Market · Map · Talk · Commons · Ledger', () => {
+describe('the tab strip: Home · Market · Map · Chat · Commons · Ledger', () => {
     const layout = read('app/(tabs)/_layout.tsx');
     const screens = [...layout.matchAll(/<Tabs\.Screen\s+name="([^"]+)"([\s\S]*?)\/>\s*(?=<Tabs\.Screen|\{\/\*|<\/Tabs>)/g)].map(m => ({ name: m[1], body: m[2] }));
     const onStrip = screens.filter(x => !/href: null/.test(x.body) || /hiddenTabs\.includes/.test(x.body));
@@ -433,7 +459,7 @@ describe('the tab strip: Home · Market · Map · Talk · Commons · Ledger', ()
     it('"Home" is no wider than "Commons", the label measured to fit at 320dp under the strip\'s 1.1x cap', () => {
         expect(layout).toMatch(/const LABEL_MAX_SCALE = 1\.1;/);
         const labels = onStrip.map(x => labelOf(x.body));
-        expect(labels).toEqual(['Home', 'Market', 'Map', 'Talk', 'Commons', 'Ledger']);
+        expect(labels).toEqual(['Home', 'Market', 'Map', 'Chat', 'Commons', 'Ledger']);
         for (const l of labels) expect(textWidth(l!, 10, { scale: 1.1 })).toBeLessThanOrEqual(textWidth('Commons', 10, { scale: 1.1 }));
     });
 });

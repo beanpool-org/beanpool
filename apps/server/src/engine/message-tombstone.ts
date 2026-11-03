@@ -10,11 +10,12 @@
 // `metadata.removedBy`: the author's own key reads "This message was deleted", anyone else's "Removed by a
 // convenor"; `metadata.accountDeleted` marks the third, which reads "This message was deleted" in an event or
 // enterprise chat too, where every other tombstone is the host's or a keeper's removal. Everything hung off the
-// message goes with it — reactions, mentions, the reply it quoted, and any attachment blob, which is node-local
-// and so is hard-deleted rather than tombstoned.
+// message goes with it — reactions, mentions, the reply it quoted, and any attachment, whose row is hard-deleted with a
+// tombstone (a standby copies chat photos, a plain table: engine/replication-manifest.ts message_attachments, gap G4), so
+// the standby deletes the row and its object too.
 
 import type Database from 'better-sqlite3';
-import { db, afterTransactionCommit } from '../db/db.js';
+import { db, afterTransactionCommit, writeTombstone } from '../db/db.js';
 import { deleteStoredObjects } from '../storage/image-columns.js';
 
 /** What a line reads once its author has deleted their account, in every kind of chat (blankMessagesOf). */
@@ -26,7 +27,7 @@ export interface MessageTombstone {
     removedAt: string;
 }
 
-interface TombstoneStatements { write: Database.Statement; photo: Database.Statement; dropPhoto: Database.Statement }
+interface TombstoneStatements { write: Database.Statement; photo: Database.Statement; dropPhoto: Database.Statement; photoGone: Database.Statement }
 
 function prepareTombstone(): TombstoneStatements {
     return {
@@ -35,6 +36,9 @@ function prepareTombstone(): TombstoneStatements {
         write: db.prepare(`UPDATE messages SET type = 'removed', ciphertext = ?, nonce = 'plaintext-v1', metadata = ? WHERE id = ?`),
         photo: db.prepare('SELECT storage_key FROM message_attachments WHERE message_id = ?'),
         dropPhoto: db.prepare('DELETE FROM message_attachments WHERE message_id = ?'),
+        // writeTombstone's statement, prepared once for a member with years of lines (blankMessagesOf).
+        photoGone: db.prepare(`INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at)
+                               VALUES ('message_attachments', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`),
     };
 }
 
@@ -71,7 +75,7 @@ function tombstoneRow(
     // The row inside the transaction, the stored object after it commits (storage design §7): the route
     // reads the row, so the object being a moment behind can never make a removed photo servable.
     const photoKey = (s.photo.get(messageId) as any)?.storage_key as string | undefined;
-    s.dropPhoto.run(messageId);
+    if (s.dropPhoto.run(messageId).changes > 0) s.photoGone.run(messageId);
     return { tombstone: { ciphertext, metadata, removedAt }, photoKey };
 }
 
@@ -148,11 +152,14 @@ export function blankMessagesOf(authorPubkey: string): number {
         }
         // A photo still hung off a line that was already down: nothing in this release leaves one, but the event and
         // enterprise removals never looked.
-        const stray = db.prepare(`SELECT storage_key FROM message_attachments
-                                  WHERE message_id IN (SELECT id FROM messages WHERE author_pubkey = ?)`).all(authorPubkey) as { storage_key: string | null }[];
+        const stray = db.prepare(`SELECT message_id, storage_key FROM message_attachments
+                                  WHERE message_id IN (SELECT id FROM messages WHERE author_pubkey = ?)`).all(authorPubkey) as { message_id: string; storage_key: string | null }[];
         if (stray.length > 0) {
             db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE author_pubkey = ?)').run(authorPubkey);
-            for (const { storage_key } of stray) if (storage_key) photoKeys.push(storage_key);
+            for (const { message_id, storage_key } of stray) {
+                writeTombstone('message_attachments', message_id);
+                if (storage_key) photoKeys.push(storage_key);
+            }
         }
         if (photoKeys.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, photoKeys));
     })();

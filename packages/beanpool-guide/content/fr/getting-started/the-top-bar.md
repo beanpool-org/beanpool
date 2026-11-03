@@ -39,8 +39,8 @@ Entre le haricot et les boutons de droite, de petites icônes apparaissent uniqu
 
 - **Une poignée de main :** un accord vous attend. Quelqu'un attend que vous acceptiez sa demande, ou un accord dans lequel vous êtes engagé n'est pas encore terminé. S'il n'y en a qu'un, le geste ouvre cet accord. S'il y en a plusieurs, il ouvre **Mes accords**.
 - **Une urne :** un vote auquel vous n'avez pas encore pris part. Le geste ouvre les **Communs**, à **Décider**. Si le premier vote a lieu dans un groupe ou s'il s'agit d'un vote de gestionnaires dans une entreprise, le geste ouvre ce groupe ou cette entreprise à la place. Un vote auquel vous ne pouvez pas encore participer ne compte pas ici, par exemple un vote qui nécessite de conclure un premier échange.
-- **Une bulle de discussion :** un message non lu d'une personne. S'il provient d'une seule personne, le geste ouvre cette discussion. S'il provient de plusieurs personnes, il ouvre **Échanges**, à **Messages**, en n'affichant que les messages non lus.
-- **Un groupe de personnes :** de nouveaux messages dans vos groupes, discussions d'entreprises ou échanges d'événements. Les discussions que vous avez mises en sourdine restent discrètes ici. Le geste ouvre la discussion, ou **Échanges**, à **Groupes**, s'il y en a plusieurs.
+- **Une bulle de discussion :** un message non lu d'une personne. S'il provient d'une seule personne, le geste ouvre cette discussion. S'il provient de plusieurs personnes, il ouvre **Chat**, à **Messages**, en n'affichant que les messages non lus.
+- **Un groupe de personnes :** de nouveaux messages dans vos groupes, discussions d'entreprises ou échanges d'événements. Les discussions que vous avez mises en sourdine restent discrètes ici. Le geste ouvre la discussion, ou **Chat**, à **Groupes**, s'il y en a plusieurs.
 - **Un bouclier :** réservé aux personnes qui participent à la gestion de votre communauté. Il s'affiche lorsqu'un travail d'administration est en attente, comme un signalement à examiner ou un échange interrompu nécessitant un arbitrage. Le geste vous demande le verrouillage de l'écran de votre téléphone, puis ouvre les paramètres de votre communauté à cette tâche. Si les paramètres de votre communauté utilisent un code de connexion, il vous le demande également.
 
 Les icônes s'empilent depuis la droite. La plus importante se place à côté de l'icône ?, et conserve sa place tandis que d'autres apparaissent et disparaissent.
@@ -83,6 +83,6 @@ Parfois, un bandeau vert apparaît sous la barre du haut :
 
 ## Les onglets
 
-Sous la barre du haut se trouvent les onglets : **Accueil**, **Marché**, **Carte**, **Échanges**, **Communs** et **Registre**. Le nom de chaque onglet se trouve au-dessus de son icône. Sur le téléphone, une communauté locale sans haricots n'affiche ni les **Communs** ni le **Registre**. La communauté globale affiche les deux, avec des exemples issus d'une communauté locale. Voir « Haricots et communauté globale ».
+Sous la barre du haut se trouvent les onglets : **Accueil**, **Marché**, **Carte**, **Chat**, **Communs** et **Registre**. Le nom de chaque onglet se trouve au-dessus de son icône. Sur le téléphone, une communauté locale sans haricots n'affiche ni les **Communs** ni le **Registre**. La communauté globale affiche les deux, avec des exemples issus d'une communauté locale. Voir « Haricots et communauté globale ».
 
 Sur une longue page, touchez l'onglet sur lequel vous vous trouvez déjà pour remonter directement tout en haut. Cela fonctionne sur tous les onglets sauf **Carte**.

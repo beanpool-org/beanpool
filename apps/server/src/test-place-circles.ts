@@ -225,7 +225,11 @@ async function main(): Promise<void> {
         await call('GET', null, `/api/global/home?lat=48.1&lng=11.5`),
         await call('GET', outsider, `/api/global/home?lat=48.1&lng=11.5`),
     ];
-    assert(sweep.every(s => !cellText.some(t => s.text.includes(t))), "no read carries a member's cell or the circle's");
+    // Stamps go first: ':10.612Z' holds '10.6', and these reads carry many, which went red about once in dozens of runs.
+    const carriesCell = (text: string) => { const bare = text.replace(/\d{4}-\d\d-\d\dT[\d:.]+Z/g, ''); return cellText.some(t => bare.includes(t)); };
+    assert(!carriesCell('{"at":"2026-11-02T17:12:10.612Z"}') && carriesCell('{"lat":10.6,"at":"2026-11-02T17:12:10.612Z"}'), 'a stamp is no cell, and a cell beside a stamp still is');
+    const carrying = sweep.findIndex(s => carriesCell(s.text));
+    assert(carrying === -1, `no read carries a member's cell or the circle's${carrying === -1 ? '' : ` (read ${carrying})`}`);
     assert(sweep.every(s => !s.text.includes('place_cell') && !s.text.includes('placeCell')), 'no read names the column');
     assert((await call('GET', outsider, `/api/groups/${circle.id}`)).status === 404, 'an outsider reads a circle as no group at all');
     assert((await call('GET', null, `/api/groups/${circle.slug}`)).status !== 200, 'nor by its slug, unsigned');

@@ -14,10 +14,10 @@ import {
     SEARCH_OFFLINE_LINE, searchEmptyLine, searchFirstLine,
     RSVP_SAID, RSVP_WORDS, beansAmount, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventLine,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence, DECIDE_HREF, formatBeans,
-    communitiesListed, decideOnNode, timeAgoInWords,
+    communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -334,8 +334,12 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
                     />
                 );
             })}
-            <HomeLink id="events:all" colors={colors} text={t('All events')} a11y={t('All events, in the Market')}
-                onPress={() => router.push({ pathname: '/(tabs)/market', params: { filter: 'events' } })} testID="home-events-all" />
+            <View style={communityLinksStyle}>
+                <HomeLink id="events:calendar" colors={colors} text={t('Calendar')} a11y={t('Calendar')}
+                    onPress={() => router.push('/calendar')} testID="home-events-calendar" />
+                <HomeLink id="events:all" colors={colors} text={t('All events')} a11y={t('All events, in the Market')}
+                    onPress={() => router.push({ pathname: '/(tabs)/market', params: { filter: 'events' } })} testID="home-events-all" />
+            </View>
         </>
     );
 }
@@ -400,7 +404,7 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
     return (
         <HomeRow
             colors={colors}
-            text={p.title}
+            text={withPin(p.title, p)}
             sub={facts || category}
             a11y={a11y}
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
@@ -444,7 +448,7 @@ export function DecideBody({ card, features, colors, now }: { card: NonNullable<
                 {card.poll && (
                     <HomeRow
                         colors={colors}
-                        text={t('Poll: {title}', { title: card.poll.title })}
+                        text={withPin(t('Poll: {title}', { title: card.poll.title }), card.poll)}
                         sub={closesInWords(card.poll.closesAt, now)}
                         a11y={t('Poll: {title} {closes} Opens the poll.', {
                             title: sentence(card.poll.title),
@@ -514,7 +518,7 @@ export function GroupsBody({ card, colors }: { card: NonNullable<HomeCards['grou
                 );
             })}
             {card.total > card.items.length && (
-                <HomeLink id="groups:all" colors={colors} text={tn(card.total, 'All {n} group', 'All {n} groups')} a11y={tn(card.total, 'Your {n} group, in Talk', 'All {n} of your groups, in Talk')}
+                <HomeLink id="groups:all" colors={colors} text={tn(card.total, 'All {n} group', 'All {n} groups')} a11y={tn(card.total, 'Your {n} group, in Chat', 'All {n} of your groups, in Chat')}
                     onPress={() => router.push({ pathname: '/(tabs)/chats', params: { view: 'groups' } })} testID="home-groups-all" />
             )}
         </>
@@ -638,9 +642,10 @@ export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans
 
 export function NoticesBody({ card, colors, onOpen }: { card: NonNullable<HomeCards['notices']>; colors: AppColors; onOpen: (id: string) => void }) {
     const more = card.unseen - 1;
-    const values = { title: sentence(card.first.title), line: sentence(card.first.line) };
+    const [title, line] = [inviteAskNoticeHere(card.first.title), inviteAskNoticeHere(card.first.line)];
+    const values = { title: sentence(title), line: sentence(line) };
     return (
-        <HomeRow colors={colors} text={card.first.title} sub={more > 0 ? tn(more, '{line} · {n} more', '{line} · {n} more', { line: card.first.line }) : card.first.line} strong
+        <HomeRow colors={colors} text={title} sub={more > 0 ? tn(more, '{line} · {n} more', '{line} · {n} more', { line }) : line} strong
             a11y={more > 0 ? tn(more, '{title} {line} {n} more unread. Opens it.', '{title} {line} {n} more unread. Opens it.', values) : t('{title} {line} Opens it.', values)}
             onPress={() => onOpen(card.first.id)} testID="home-notice-line" />
     );
@@ -656,10 +661,10 @@ export function InviteBody({ colors }: { colors: AppColors }) {
 }
 
 /**
- * The community's card, last on Home, with the frame's two ways in (CARD-FRAME §1.1): "Add a card ›" and "Edit home ›",
+ * The community's card, last on Home, with the frame's two ways in (CARD-FRAME §1.1): "Add a card ›" and "Arrange ›",
  * each its own 48 dp target in a row that wraps (at 320 dp with text at 1.3× they stand on two rows, right-aligned).
  */
-export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onEdit }: {
+export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onArrange, arrangeRef }: {
     card: HomeCards['community'] | undefined;
     profile: string;
     invitesOn: boolean;
@@ -668,7 +673,9 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
     onOpenShape?: () => void;
     /** Absent for a visitor, who tailors nothing here (utils/home-cards.ts `canTailor`). */
     onAdd?: () => void;
-    onEdit?: () => void;
+    onArrange?: () => void;
+    /** Arrange ›, where Done gives focus back. */
+    arrangeRef?: React.RefObject<View | null>;
 }) {
     const shapeSummary = communityShapeSummary(features);
     const isFirstMember = profile !== 'global' && (card?.members ?? 0) <= 1;
@@ -711,10 +718,10 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
                 {row2Text && <HomeRow colors={colors} text={row2Text} a11y={row2Text} lines={2} testID="home-community-row-trades" />}
                 {row3Text && <HomeRow colors={colors} text={row3Text} a11y={row3Text} lines={2} testID="home-community-row-listings" />}
                 {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
-                {(onAdd || onEdit) && (
+                {(onAdd || onArrange) && (
                     <View style={communityLinksStyle}>
                         {onAdd && <HomeLink id="community:add" colors={colors} text={t('Add a card')} a11y={t('Add a card to Home')} onPress={onAdd} testID="home-add-card" />}
-                        {onEdit && <HomeLink id="community:edit" colors={colors} text={t('Edit home')} a11y={t('Edit home: move or remove cards')} onPress={onEdit} testID="home-edit" />}
+                        {onArrange && <HomeLink id="community:arrange" colors={colors} text={t(ARRANGE_WORDS.name)} a11y={t(ARRANGE_WORDS.link)} onPress={onArrange} testID="home-arrange-open" linkRef={arrangeRef} />}
                     </View>
                 )}
             </>
@@ -725,10 +732,10 @@ export function CommunityBody({ card, profile, invitesOn, features, colors, onOp
         <>
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
             {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
-            {(onAdd || onEdit) && (
+            {(onAdd || onArrange) && (
                 <View style={communityLinksStyle}>
                     {onAdd && <HomeLink id="community:add" colors={colors} text={t('Add a card')} a11y={t('Add a card to Home')} onPress={onAdd} testID="home-add-card" />}
-                    {onEdit && <HomeLink id="community:edit" colors={colors} text={t('Edit home')} a11y={t('Edit home: move or remove cards')} onPress={onEdit} testID="home-edit" />}
+                    {onArrange && <HomeLink id="community:arrange" colors={colors} text={t(ARRANGE_WORDS.name)} a11y={t(ARRANGE_WORDS.link)} onPress={onArrange} testID="home-arrange-open" linkRef={arrangeRef} />}
                 </View>
             )}
         </>
@@ -824,7 +831,7 @@ export function SearchBody({ settings, card, nodeUrl, showsBeans, colors, onMore
 /**
  * Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1): a newcomer's Home until the tour ends. Its
  * words, Look around › (or "Pick up the tour at step 3 ›" while one is part way) and Skip. It blocks nothing: every tab,
- * Add a card and Edit home work with it sitting there. No "…": Skip is its remove.
+ * Add a card and Arrange work with it sitting there. No "…": Skip is its remove.
  */
 export function StartBody({ words, button, colors, onLookAround, onSkip }: {
     words: string;

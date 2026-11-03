@@ -196,7 +196,7 @@ async function main(): Promise<void> {
         const tokens = [OWNER_TOKEN, m90.body.token];
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
-        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs, events and polls as that owner, and suggest actions it cannot take\./.test(d)),
+        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs, events and polls and start groups and enterprises as that owner, and suggest actions it cannot take\./.test(d)),
             `owners are told an owner connected one (${told.join(' | ').slice(0, 300)})`);
         assert(told.some(d => d === "An AI assistant (Olive's Cursor) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take.")
             && m90.body?.grant?.canPost === false && mOwner.body?.grant?.canPost === true,

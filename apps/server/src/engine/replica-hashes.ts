@@ -73,10 +73,40 @@ export interface TableHashes {
  * 11: posts gains shown_price (DESIGN-reaching-across-fable.md §1 row 4, slice G1′). Raised for the same reason as 8.
  */
 /**
+ * 13: poll_votes gains other_answer_id, and a poll's answers are hashed too (a typed Other, REPLICA_FORMAT 13). Raised for
+ * the same reason as 4.
+ */
+/**
  * 12: confirmations gains stepped_back_owing (the balance rule, S1). Raised for the same reason as 4: a standby updated before
  * its main server hashes `confirmations` over one more column. Every community with a known floor has rows there.
  */
-export const TABLE_HASHES_VERSION = 12;
+/**
+ * 14: posts gains shown_takes_questions (DESIGN-reaching-across-fable.md §1 row 5, slice GD). Raised for the same reason as 8.
+ */
+/**
+ * 15: posts gains pinned_until and pinned_at (DESIGN-pinning-fable.md §4, slice 1). Raised for the same reason as 8. REPLICA_FORMAT
+ * stays: what an older importer drops is a pin, a week at most, and it ages out by itself, so it is worth no re-seed.
+ */
+/**
+ * 16: invite_codes gains vouch_level (a quick vouch on an invite). Raised for the same reason as 8: a standby updated before
+ * its main server hashes `invite_codes` over one more column. REPLICA_FORMAT stays: what an older importer drops is the vouch
+ * on an invite nobody has used yet, and after a takeover from such a copy that person still joins, with no vouch.
+ */
+/**
+ * 17: a new table, invite_asks (a member asks an admin to invite someone). Raised for the same reason as 8: a standby updated
+ * before its main server hashes one more table. REPLICA_FORMAT stays: what an older importer drops is an ask still waiting,
+ * which its member can see is unanswered and ask again.
+ */
+/**
+ * 18: message_attachments becomes a copied table (chat photos, gap G4: REPLICA_FORMAT 14), with three new columns (sha256,
+ * bytes, updated_at). Raised for the same reason as 8: a standby updated before its main server hashes one more table.
+ */
+/**
+ * 19: a new table, decision_jury_pools (the pool a removal jury was drawn from, DESIGN-removal-jury-fable.md slice J1). Raised
+ * for the same reason as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: no
+ * community has a jury until its owners choose one, and a vote's pool comes with it once both sides run this release.
+ */
+export const TABLE_HASHES_VERSION = 19;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

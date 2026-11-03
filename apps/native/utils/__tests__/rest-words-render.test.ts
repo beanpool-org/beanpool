@@ -40,7 +40,7 @@ vi.mock('react-native-safe-area-context', async () => {
 vi.mock('react-native-keyboard-controller', async () => {
     const { createElement: h } = await import('react');
     const pass = ({ children }: { children?: unknown }) => h('div', null, children as any);
-    return { KeyboardAwareScrollView: pass, KeyboardAvoidingView: pass };
+    return { KeyboardAwareScrollView: pass, KeyboardAvoidingView: pass, useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }) };
 });
 const nav = vi.hoisted(() => ({ params: {} as Record<string, string>, pushed: [] as unknown[] }));
 vi.mock('expo-router', async () => {

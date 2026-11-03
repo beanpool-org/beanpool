@@ -22,7 +22,7 @@ Silenciar está disponible solo en la app del teléfono por ahora.
 - Detiene las alertas de ese chat. En el chat de un grupo, alguien que te mencione con @ aún podrá comunicarse contigo. Consulta «Menciones».
 - El chat de un emprendimiento no envía alertas, por lo que no hay ninguna que detener. Silenciarlo lo excluye de los números que figuran a continuación.
 - El chat sigue mostrando mensajes nuevos.
-- En **Charlas**, bajo **Grupos**, un chat silenciado muestra una campana con una línea que la cruza. Su número de no leídos aparece en gris y no se suma al número en **Grupos**.
+- En **Chat**, bajo **Grupos**, un chat silenciado muestra una campana con una línea que la cruza. Su número de no leídos aparece en gris y no se suma al número en **Grupos**.
 - En el chat de un grupo o de un emprendimiento, la barra superior tampoco avisa sobre él. Un chat silenciado con una persona sigue contando allí.
 - La opción de silenciar se mantiene cuando sales del chat. Cuando vuelves a abrir el chat de un grupo o de un emprendimiento, la parte superior dice **silenciado**.
 

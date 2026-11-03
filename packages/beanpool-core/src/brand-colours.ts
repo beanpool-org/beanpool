@@ -273,7 +273,7 @@ export const INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
     ],
     dark: [
         '#0a0a0a', // phone surface.app
-        '#1a1a1a', // phone surface.card
+        '#222822', // phone surface.card
         '#262626', // phone surface.subtle
         '#141a1a', // phone pattern ground
         '#1d231d', // web --bg-primary (nature-950)

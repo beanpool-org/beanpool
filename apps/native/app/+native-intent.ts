@@ -3,6 +3,7 @@ import { DeviceEventEmitter, Platform } from 'react-native';
 import { linkRoutePath, isReturnFromSettings } from '../utils/settings-return';
 import { postIdFromLink } from '../utils/event-extras';
 import { isAuthReturnLink } from '../utils/auth-return';
+import { linkCarriesInvite } from '../utils/welcome-invite';
 import { claimRouteFromSystemPath } from '../utils/claim-link';
 import { pairRouteFromSystemPath } from '../utils/pair-link';
 import { holdStartUpLinkRoute } from '../utils/member-landing';
@@ -185,7 +186,9 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     // app links claim on every node host, so a link a member sends from the event screen opens the event
     // here rather than the home tab. Last, and only when `post=` is actually in the URL, so the foreground
     // link, a Settings return, an invite and an OAuth callback all keep the behaviour they had.
-    const sharedPostId = postIdFromLink(path);
+    // Never one that carries an invite (invite-and-share, `/?invite=…&post=…`): that link is the invite's. The friend is no member
+    // yet, so it opens no post; the root layout and the first screen read the invite, and the listing opens after the join.
+    const sharedPostId = linkCarriesInvite(path) ? null : postIdFromLink(path);
     if (sharedPostId) return `/post/${encodeURIComponent(sharedPostId)}`;
 
     // A community's bare address, `https://<community>/`, or `beanpool://community-card?node=…` from its card's Ask to join

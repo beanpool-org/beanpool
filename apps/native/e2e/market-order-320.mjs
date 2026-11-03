@@ -9,6 +9,8 @@
  * Cases:
  *   local    a local community: Pinned block, then TODAY with an event that came back (posted weeks ago, starting within a day),
  *            then YESTERDAY. No Upcoming events heading.
+ *   newsince / newsince-day   New since you last looked (S4): the line above the first post at or before the stamp, one line, whole, under
+ *            Today or above the Yesterday heading; and not drawn in the other cases.
  *   global   the worldwide community with an area: the line "Newest within 250 km of your area." (two lines at most, none cut),
  *            each listing's and event's distance, nothing beyond 250 km.
  *
@@ -46,7 +48,7 @@ const STUB_FILES = [
     'components/ExampleListings', 'components/MarketCircleLine', 'components/NoAreaLine', 'components/LookAroundCard',
     'components/SaveSearchButton', 'components/FilterChipRow', 'components/FilterChipPicker', 'components/QuickReturn',
     'components/PageTitle', 'components/PollCard', 'components/PostAuthorTrust', 'components/MarketCardPicture', 'components/CategoryTile',
-    'components/ListingCopyLine', 'components/CurrencyDisplay',
+    'components/ListingCopyLine', 'components/CurrencyDisplay', 'components/keyboardAwareList',
 ];
 const STUB_PACKAGES = ['expo-secure-store', 'expo-router', 'expo-location', 'expo-image', '@expo/vector-icons', '@react-native-async-storage/async-storage', 'react-native-safe-area-context'];
 
@@ -90,6 +92,7 @@ const OVERRIDES = {
         getPosts: `async () => globalThis.__posts`,
         getBalance: `async () => ({ isBlockedFromTrading: false })`,
         isRouteMissing: `() => false`,
+        getNearbyKeptPostIds: `async () => new Set()`,
     },
     'utils/use-node-profile': { useNodeProfile: `() => globalThis.__profile` },
     'utils/use-reader-features': { useReaderFeatures: `() => globalThis.__profile.features` },
@@ -124,6 +127,8 @@ const OVERRIDES = {
     'components/FilterChipRow': { FilterChipRow: `() => null`, FilterChipBar: `() => null` },
     'components/FilterChipPicker': { FilterChipButton: `() => null`, FilterChipPanel: `() => null` },
     'components/CategoryTile': { CategoryTile: `() => null` },
+    // The keyboard library's scroll view needs the phone: here a plain one (the list's own scroll view).
+    'components/keyboardAwareList': { keyboardAwareList: `(props) => React.createElement(RN.ScrollView, props)` },
     'components/ListingCopyLine': { ListingCopyLine: `() => null` },
     'expo-router': {
         useFocusEffect: `(cb) => React.useEffect(() => cb(), [cb])`, router: `{ push() {}, navigate() {}, setParams() {}, back() {} }`,
@@ -226,6 +231,18 @@ if (c === 'local') {
         post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana' }),
         post('y', 'Someone to mind two goats', { type: 'need', category: 'pets', created_at: ago(60 * 26), author_callsign: 'Mo' }),
     ];
+} else if (c === 'newsince' || c === 'newsince-day') {
+    // New since you last looked (Market order S4): the stamp is a post's own listed time. 'newsince' stops inside Today; 'newsince-day'
+    // stops at the first post of Yesterday, so the line sits above that heading.
+    globalThis.__profile = { profile: 'local', features: { beans: true } };
+    const rows = [
+        post('a', 'Lemons, a bucket', { created_at: ago(8), author_callsign: 'Sam' }),
+        post('b', 'Lift to Lismore Thursday', { type: 'need', category: 'transport', created_at: ago(20), author_callsign: 'Mo' }),
+        post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana' }),
+        post('y', 'Someone to mind two goats', { type: 'need', category: 'pets', created_at: ago(60 * 26), author_callsign: 'Mo' }),
+    ];
+    globalThis.__posts = rows;
+    globalThis.__storage = { bp_market_seen_listed: String(Date.parse(rows[c === 'newsince' ? 2 : 3].created_at)) };
 } else {
     globalThis.__profile = { profile: 'global', features: { beans: false, distanceSearch: true, nearbyListings: { radiusKm: 250, max: 500 } } };
     const URL = 'https://global.example';
@@ -275,7 +292,7 @@ const browser = await chromium.launch();
 let failures = 0;
 const fail = (msg) => { failures++; console.log('  FAIL', msg); };
 for (const scheme of ['light', 'dark']) {
-    for (const which of ['local', 'global']) {
+    for (const which of ['local', 'global', 'newsince', 'newsince-day']) {
         const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 2 });
         const errors = [];
         page.on('pageerror', e => errors.push(String(e)));
@@ -292,7 +309,11 @@ for (const scheme of ['light', 'dark']) {
                 if (r.width > 0 && r.height > 0 && r.right > W + 1 && getComputedStyle(el).position !== 'fixed') past++;
             }
             const line = Array.from(document.querySelectorAll('[data-testid="market-newest-within"]'))[0];
+            const since = Array.from(document.querySelectorAll('[data-testid="new-since-line"]'));
             return {
+                sinceCount: since.length, sinceText: since[0] ? since[0].textContent : null,
+                sinceCut: since[0] ? Array.from(since[0].querySelectorAll('*')).some(e => e.scrollHeight > e.clientHeight + 1 && e.clientHeight > 0) : false,
+                sinceHeight: since[0] ? since[0].getBoundingClientRect().height : null,
                 text, past, sideways: document.documentElement.scrollWidth > W,
                 lineText: line ? line.textContent : null, lineHeight: line ? line.getBoundingClientRect().height : null,
                 lineScrollH: line ? line.scrollHeight : null, lineClientH: line ? line.clientHeight : null,
@@ -303,7 +324,17 @@ for (const scheme of ['light', 'dark']) {
         if (result.sideways) fail('sideways scroll');
         if (result.past) fail(`${result.past} element(s) drawn past the ${WIDTH}dp edge`);
         for (const gone of ['UPCOMING EVENTS', 'NEAREST FIRST']) if (result.text.includes(gone)) fail(`heading still drawn: ${gone}`);
-        if (which === 'local') {
+        if (which !== 'newsince' && which !== 'newsince-day' && result.sinceCount) fail(`the New since line is drawn where there is no stamp: ${result.sinceCount}`);
+        if (which === 'newsince' || which === 'newsince-day') {
+            const t = result.text;
+            if (result.sinceCount !== 1 || result.sinceText !== 'NEW SINCE YOU LAST LOOKED') fail(`the line: ${result.sinceCount} x ${result.sinceText}`);
+            if (result.sinceCut) fail('the line is cut at 320dp and 1.3x');
+            const order = (which === 'newsince'
+                ? ['TODAY', 'Lemons', 'Lift to Lismore', 'NEW SINCE YOU LAST LOOKED', 'Firewood', 'YESTERDAY', 'Someone to mind']
+                : ['TODAY', 'Lemons', 'Firewood', 'NEW SINCE YOU LAST LOOKED', 'YESTERDAY', 'Someone to mind']).map(x => t.indexOf(x));
+            if (order.some(i => i < 0) || order.some((v, i) => i && v < order[i - 1])) fail(`order wrong: ${order}`);
+            console.log('  line height', result.sinceHeight);
+        } else if (which === 'local') {
             const t = result.text;
             const order = ['PINNED', 'TODAY', 'Repair Café', 'YESTERDAY'].map(s => t.indexOf(s));
             if (order.some(i => i < 0) || order.some((v, i) => i && v < order[i - 1])) fail(`local order wrong: ${order}`);

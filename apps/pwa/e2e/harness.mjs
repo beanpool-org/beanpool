@@ -72,7 +72,7 @@ export async function launch() {
  * scheme and the stored Settings choice), `textScale` is the 1.3x font setting, and `posts` is the feed to answer
  * with (fixtures.POSTS unless a caller wants the poll somewhere else). Returns once the feed has drawn.
  */
-export async function openMarket(browser, origin, { width, height = 1200, dark = false, textScale = 1, posts } = {}) {
+export async function openMarket(browser, origin, { width, height = 1200, dark = false, textScale = 1, posts, storage = {} } = {}) {
     const context = await browser.newContext({
         viewport: { width, height },
         colorScheme: dark ? 'dark' : 'light',
@@ -82,12 +82,14 @@ export async function openMarket(browser, origin, { width, height = 1200, dark =
     // The app is LIGHT by default whatever the device is set to (useTheme, #930 and the day after): dark only
     // arrives from a stored Settings choice. So seed the choice itself, exactly as Settings would have written
     // it, rather than relying on the emulated colour scheme — otherwise every "dark" picture comes out light.
-    await context.addInitScript(([mode]) => {
+    // `storage`: other keys a picture needs on the device, as the app would have written them (the view mode, a stamp).
+    await context.addInitScript(([mode, extra]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
             localStorage.setItem('beanpool-theme-default-light-v1', 'done');
+            for (const [k, v] of Object.entries(extra)) localStorage.setItem(k, v);
         } catch { /* a picture of the default theme is still a picture */ }
-    }, [dark ? 'dark' : 'light']);
+    }, [dark ? 'dark' : 'light', storage]);
 
     const unrouted = [];
     await context.route('**/api/**', async (route) => {

@@ -6,7 +6,7 @@
  * Tapping a post opens a full detail view.
  */
 
-import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, type ReactElement, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { useCoversScreen } from '../lib/screen-cover';
@@ -4063,7 +4063,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     if (viewMode === 'grid') {
                         // The grid has no headings: the line spans the row it starts, and the tiles carry on beneath it.
                         const gridLineAt = fillHeading || !seenEligible ? -1 : newSinceIndex(filtered, seenListed, orderNow);
-                        const withNewSinceLine = (at: number, id: string, tile: JSX.Element) =>
+                        const withNewSinceLine = (at: number, id: string, tile: ReactElement) =>
                             at === gridLineAt ? <Fragment key={id}>{newSinceLine('col-span-full mt-1')}{tile}</Fragment> : tile;
                         return (
                             // `grid-flow-row-dense`: the poll below takes two columns from `md` up, and a

@@ -42,9 +42,12 @@ export async function holdPostAfterJoin(community: string, postId: unknown, now:
 
 /**
  * The route of the kept listing, taken out: once, then never again. Null when none is kept, when it was kept for another
- * community or longer ago than a join takes, or when the slot holds anything but a community, an id and a time.
+ * community or longer ago than a join takes, or when the slot holds anything but a community, an id and a time. With no
+ * community to compare (not heard yet) nothing is read and nothing is lost.
  */
 export async function takePostAfterJoin(community: string | null, now: number = Date.now(), store: PostStore = AsyncStorage): Promise<`/post/${string}` | null> {
+    // The community in use isn't known yet (the phone is still asking): leave it for the next landing, never read it away.
+    if (!community) return null;
     let raw: string | null;
     try {
         raw = await store.getItem(POST_AFTER_JOIN_KEY);

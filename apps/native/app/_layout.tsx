@@ -873,7 +873,13 @@ function RootLayoutNav() {
         if (notice) router.push(notice);
         // Or the listing an invite-and-share link was sent from, held since the join (utils/post-after-join.ts), once.
         else if (landing === DEFAULT_MEMBER_LANDING) {
-            void takePostAfterJoin(nodeUrl).then((route) => { if (route && isComponentMounted.current) router.push(route as any); });
+            // The community in use: the node status's, else the phone's own record of it (the status may not have answered yet, and
+            // this landing is the only one the member gets).
+            void (async () => {
+                const community = nodeUrl ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+                const route = await takePostAfterJoin(community);
+                if (route && isComponentMounted.current) router.push(route as any);
+            })();
         }
     }, [identity, isLoading, segments, recognition, pendingOnboarding, noCommunity]);
 

@@ -50,8 +50,14 @@ describe('the listing kept from the join to the landing', () => {
         await holdPostAfterJoin(NODE, POST, 1_000, store);
         expect(await takePostAfterJoin('https://castlemaine.beanpool.org', 2_000, store)).toBeNull();
         expect(await takePostAfterJoin(NODE, 2_000, store)).toBeNull();
+    });
+
+    it('is left alone, not lost, while the community in use is not known yet', async () => {
+        const store = memory();
         await holdPostAfterJoin(NODE, POST, 1_000, store);
         expect(await takePostAfterJoin(null, 2_000, store)).toBeNull();
+        expect(store.map.has(POST_AFTER_JOIN_KEY)).toBe(true);
+        expect(await takePostAfterJoin(NODE, 3_000, store)).toBe(`/post/${POST}`);
     });
 
     it('is dropped when it waited longer than a join takes, or is dated in the future', async () => {

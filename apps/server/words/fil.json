@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -34,5 +34,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "{n} beses ka nang humiling ngayon. Puwede kang humiling ulit bukas.",
   "Please keep this to {n} characters.": "Panatilihin ito sa {n} character.",
   "Please fill in their first name and how you know them.": "Pakilagay ang unang pangalan niya at kung paano mo siya kilala.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Huwag ilagay ang mga numero ng telepono at email address. Unang pangalan at kung paano mo siya kilala lang ang kailangan ng admin."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Huwag ilagay ang mga numero ng telepono at email address. Unang pangalan at kung paano mo siya kilala lang ang kailangan ng admin.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "Isang hurado ng mga miyembrong pinili nang random ang magpapasya sa botohang ito. Hindi ka napili, kaya hindi ka makakaboto rito.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "Binago ng mga may-ari ng iyong komunidad kung paano ito gumagana: kapag sapat na ang laki nito, isang hurado ng mga miyembrong pinili nang random ang magpapasya kung aalisin ang isang tao. Hanggang doon, makakaboto ang bawat miyembro.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "Binago ng mga may-ari ng iyong komunidad kung paano ito gumagana: makakaboto ang bawat miyembro kung aalisin ang isang tao.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "Binago ng mga may-ari ng iyong komunidad kung paano ito gumagana: isang hurado ng mga miyembrong pinili nang random ang nagpapasya kung aalisin ang isang tao."
 }

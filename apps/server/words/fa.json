@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -34,5 +34,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "امروز {n} بار درخواست داده‌اید. فردا می‌توانید دوباره درخواست کنید.",
   "Please keep this to {n} characters.": "لطفاً این را به {n} نویسه محدود کنید.",
   "Please fill in their first name and how you know them.": "لطفاً نام کوچک او و اینکه او را چطور می‌شناسید بنویسید.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "لطفاً شماره تلفن و نشانی ایمیل ننویسید. برای مدیر، نام کوچک و اینکه او را چطور می‌شناسید کافی است."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "لطفاً شماره تلفن و نشانی ایمیل ننویسید. برای مدیر، نام کوچک و اینکه او را چطور می‌شناسید کافی است.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "این رأی‌گیری را هیئتی از اعضایی که به‌طور تصادفی انتخاب شده‌اند تعیین می‌کند. شما انتخاب نشده‌اید، پس نمی‌توانید در آن رأی دهید.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "مالکان جامعهٔ شما شیوهٔ کار آن را تغییر دادند: وقتی جامعه به اندازهٔ کافی بزرگ شود، هیئتی از اعضایی که به‌طور تصادفی انتخاب می‌شوند تصمیم می‌گیرد که کسی حذف شود یا نه. تا آن زمان هر عضوی می‌تواند رأی دهد.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "مالکان جامعهٔ شما شیوهٔ کار آن را تغییر دادند: هر عضوی می‌تواند دربارهٔ حذف شدن یا نشدن کسی رأی دهد.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "مالکان جامعهٔ شما شیوهٔ کار آن را تغییر دادند: هیئتی از اعضایی که به‌طور تصادفی انتخاب می‌شوند تصمیم می‌گیرد که کسی حذف شود یا نه."
 }

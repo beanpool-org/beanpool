@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -34,5 +34,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "طلبت {n} مرات اليوم. يمكنك الطلب مجددًا غدًا.",
   "Please keep this to {n} characters.": "يرجى ألا يتجاوز هذا {n} حرفًا.",
   "Please fill in their first name and how you know them.": "يرجى كتابة الاسم الأول للشخص وكيف تعرفه.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "يرجى عدم كتابة أرقام هواتف أو عناوين بريد إلكتروني. يكفي المشرف الاسم الأول وكيف تعرف هذا الشخص."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "يرجى عدم كتابة أرقام هواتف أو عناوين بريد إلكتروني. يكفي المشرف الاسم الأول وكيف تعرف هذا الشخص.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "تقرر هذا التصويت هيئةُ محلَّفين من أعضاء اختيروا عشوائيًا. لم يقع عليك الاختيار، لذا لا يمكنك التصويت فيه.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "غيّر مالكو مجتمعك طريقة عمله: عندما يصبح كبيرًا بما يكفي، ستقرر هيئة محلَّفين من أعضاء يُختارون عشوائيًا ما إذا كان أحدٌ سيُزال. وحتى ذلك الحين يمكن لكل عضو أن يصوّت.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "غيّر مالكو مجتمعك طريقة عمله: يمكن لكل عضو أن يصوّت على ما إذا كان أحدٌ سيُزال.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "غيّر مالكو مجتمعك طريقة عمله: تقرر هيئة محلَّفين من أعضاء يُختارون عشوائيًا ما إذا كان أحدٌ سيُزال."
 }

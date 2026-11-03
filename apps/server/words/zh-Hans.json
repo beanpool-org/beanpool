@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -34,5 +34,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "你今天已请求 {n} 次。明天可以再次请求。",
   "Please keep this to {n} characters.": "请控制在 {n} 个字符以内。",
   "Please fill in their first name and how you know them.": "请填写对方的名字和你们如何认识。",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "请不要填写电话号码和邮箱地址。管理员只需要名字和你们如何认识。"
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "请不要填写电话号码和邮箱地址。管理员只需要名字和你们如何认识。",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "这次投票由随机抽选的成员组成的陪审团决定。你没有被抽中，因此不能参与这次投票。",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "你所在社区的所有者更改了社区的运作方式：社区规模足够大后，将由随机抽选的成员组成的陪审团决定是否移除某人。在此之前，每位成员都可以投票。",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "你所在社区的所有者更改了社区的运作方式：每位成员都可以就是否移除某人投票。",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "你所在社区的所有者更改了社区的运作方式：由随机抽选的成员组成的陪审团决定是否移除某人。"
 }

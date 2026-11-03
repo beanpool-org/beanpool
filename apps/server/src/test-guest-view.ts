@@ -1281,6 +1281,7 @@ async function main(): Promise<void> {
             'GET /api/blocks', 'POST /api/blocks', 'POST /api/blocks/clear', 'POST /api/blocks/remove',
             'POST /api/channels/mine', 'GET /api/channels/options',
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
+            'GET /api/commons/decisions/:id/jury',
             'POST /api/commons/decisions/:id/vote', 'POST /api/commons/decisions/:id/reply', 'POST /api/commons/decisions/:id/report',
             'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
             'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',

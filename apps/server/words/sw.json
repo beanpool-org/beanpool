@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -34,5 +34,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "Umeomba mara {n} leo. Unaweza kuomba tena kesho.",
   "Please keep this to {n} characters.": "Tafadhali weka hili chini ya herufi {n}.",
   "Please fill in their first name and how you know them.": "Tafadhali jaza jina lake la kwanza na jinsi unavyomjua.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Tafadhali usiweke nambari za simu au anwani za barua pepe. Jina la kwanza na jinsi unavyomjua vinamtosha msimamizi."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Tafadhali usiweke nambari za simu au anwani za barua pepe. Jina la kwanza na jinsi unavyomjua vinamtosha msimamizi.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "Baraza la wanachama waliochaguliwa kwa bahati nasibu linaamua kura hii. Hukuchaguliwa, kwa hiyo huwezi kupiga kura hii.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "Wamiliki wa jumuiya yako wamebadilisha jinsi inavyofanya kazi: ikishakuwa kubwa vya kutosha, baraza la wanachama waliochaguliwa kwa bahati nasibu litaamua kama mtu aondolewe. Hadi wakati huo kila mwanachama anaweza kupiga kura.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "Wamiliki wa jumuiya yako wamebadilisha jinsi inavyofanya kazi: kila mwanachama anaweza kupiga kura kama mtu aondolewe.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "Wamiliki wa jumuiya yako wamebadilisha jinsi inavyofanya kazi: baraza la wanachama waliochaguliwa kwa bahati nasibu linaamua kama mtu aondolewe."
 }

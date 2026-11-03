@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -34,5 +34,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "آپ آج {n} بار پوچھ چکے ہیں۔ کل دوبارہ پوچھ سکتے ہیں۔",
   "Please keep this to {n} characters.": "براہ کرم اسے {n} حروف تک رکھیں۔",
   "Please fill in their first name and how you know them.": "براہ کرم ان کا پہلا نام اور یہ لکھیں کہ آپ انہیں کیسے جانتے ہیں۔",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "براہ کرم فون نمبر اور ای میل پتے نہ لکھیں۔ ایڈمن کے لیے پہلا نام اور یہ کہ آپ انہیں کیسے جانتے ہیں کافی ہے۔"
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "براہ کرم فون نمبر اور ای میل پتے نہ لکھیں۔ ایڈمن کے لیے پہلا نام اور یہ کہ آپ انہیں کیسے جانتے ہیں کافی ہے۔",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "اس ووٹ کا فیصلہ بے ترتیب طور پر چنے گئے ارکان کی ایک جیوری کرتی ہے۔ آپ نہیں چنے گئے، اس لیے آپ اس میں ووٹ نہیں دے سکتے۔",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "آپ کی کمیونٹی کے مالکان نے اس کے کام کرنے کا طریقہ بدل دیا ہے: جب کمیونٹی کافی بڑی ہو جائے گی تو بے ترتیب طور پر چنے گئے ارکان کی ایک جیوری فیصلہ کرے گی کہ کسی کو نکالا جائے یا نہیں۔ تب تک ہر رکن ووٹ دے سکتا ہے۔",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "آپ کی کمیونٹی کے مالکان نے اس کے کام کرنے کا طریقہ بدل دیا ہے: ہر رکن اس پر ووٹ دے سکتا ہے کہ کسی کو نکالا جائے یا نہیں۔",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "آپ کی کمیونٹی کے مالکان نے اس کے کام کرنے کا طریقہ بدل دیا ہے: بے ترتیب طور پر چنے گئے ارکان کی ایک جیوری فیصلہ کرتی ہے کہ کسی کو نکالا جائے یا نہیں۔"
 }

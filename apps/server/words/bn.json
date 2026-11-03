@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -34,5 +34,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "আপনি আজ {n} বার চেয়েছেন। আগামীকাল আবার চাইতে পারবেন।",
   "Please keep this to {n} characters.": "অনুগ্রহ করে এটি {n} অক্ষরের মধ্যে রাখুন।",
   "Please fill in their first name and how you know them.": "অনুগ্রহ করে তাঁর প্রথম নাম আর আপনি তাঁকে কীভাবে চেনেন লিখুন।",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "অনুগ্রহ করে ফোন নম্বর ও ইমেল ঠিকানা বাদ দিন। একজন অ্যাডমিনের জন্য প্রথম নাম আর আপনি তাঁকে কীভাবে চেনেন, এটুকুই যথেষ্ট।"
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "অনুগ্রহ করে ফোন নম্বর ও ইমেল ঠিকানা বাদ দিন। একজন অ্যাডমিনের জন্য প্রথম নাম আর আপনি তাঁকে কীভাবে চেনেন, এটুকুই যথেষ্ট।",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "এই ভোটের সিদ্ধান্ত নেয় এলোমেলোভাবে বেছে নেওয়া সদস্যদের একটি জুরি। আপনি বাছাই হননি, তাই আপনি এতে ভোট দিতে পারবেন না।",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "আপনার কমিউনিটির মালিকরা এটি কীভাবে চলে তা বদলেছেন: কমিউনিটি যথেষ্ট বড় হলে, এলোমেলোভাবে বেছে নেওয়া সদস্যদের একটি জুরি ঠিক করবে কাউকে সরানো হবে কি না। ততদিন পর্যন্ত প্রত্যেক সদস্য ভোট দিতে পারবেন।",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "আপনার কমিউনিটির মালিকরা এটি কীভাবে চলে তা বদলেছেন: কাউকে সরানো হবে কি না, তা নিয়ে প্রত্যেক সদস্য ভোট দিতে পারবেন।",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "আপনার কমিউনিটির মালিকরা এটি কীভাবে চলে তা বদলেছেন: এলোমেলোভাবে বেছে নেওয়া সদস্যদের একটি জুরি ঠিক করে কাউকে সরানো হবে কি না।"
 }

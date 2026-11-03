@@ -2541,12 +2541,25 @@ CREATE TABLE IF NOT EXISTS decision_electors (
     decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     role_at_open  TEXT NOT NULL,
-    status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left')),
+    -- 'stood_aside' and 'silent': a removal jury's (role_at_open 'juror', engine/removal-jury.ts): passed over at the draw
+    -- or by the juror, and seated but no vote in 72 hours (slice J2). db.ts rebuilds a table from before for this CHECK.
+    status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left', 'stood_aside', 'silent')),
     created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (decision_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_decision_electors_member ON decision_electors(member_pubkey);
+
+-- The pool a removal jury was drawn from (scratch/fable-design/DESIGN-removal-jury-fable.md §3; engine/removal-jury.ts): its
+-- public keys, sorted and joined by newlines, exactly as @beanpool/core juryDraw hashed them. Written once, when the pause
+-- opens the vote; no member row is referenced and a re-key moves nothing here, so what Check the draw is served is what
+-- the draw was made from. A plain table: copied to a standby verbatim (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS decision_jury_pools (
+    decision_id   TEXT PRIMARY KEY REFERENCES decisions(id) ON DELETE CASCADE,
+    pool          TEXT NOT NULL,
+    created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
 
 -- A chat group its members closed by a Decision (close_group, DESIGN-group-decisions §2.3, slice S3). The group's row stays,
 -- so "Your groups" and its history stay honest: it is shown closed, its chat is read-only, it takes nobody new and no new

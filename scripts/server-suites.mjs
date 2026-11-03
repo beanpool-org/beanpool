@@ -523,6 +523,7 @@ export const SUITES = [
     'test-removal-fairness',
     'test-removal-chain',
     'test-removal-small',
+    'test-removal-jury',
     'test-removal-branch',
     'test-viewer-helpers',
     'test-visitors-cant-act',

@@ -24,7 +24,7 @@
  *      member has no message to open
  *   7. the author deletes the line after the report: the view says it is gone
  *   8. a standby copy carries the row with its message and its key exactly; on a server that took over, the words open
- *      and the photo reads unavailable (chat photos are not copied, G4)
+ *      and the photo opens verified too (chat photos are copied to a standby, G4)
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-group-chat-report node scripts/run-server-suites.mjs
  */
@@ -500,7 +500,8 @@ async function main(): Promise<void> {
     const lateCarried = (delta.abuseReports ?? []).find((r: any) => r.id === lateRep.body?.report?.id);
     assert(!!lateCarried && lateCarried.targetMessageId === late.id && typeof lateCarried.disclosure === 'string', 'and a delta carries a new one the same');
     emptyCopiedTables(db);
-    // A standby never holds a chat photo (G4: message_attachments is local), so a server that took over has none.
+    // This server holds no chat photo of its own: the row and the object are removed here, so that what opens after the
+    // take-over is what the copy carried (chat photos are copied to a standby, G4).
     for (const a of db.prepare('SELECT message_id FROM message_attachments').all() as { message_id: string }[]) {
         try { getImageStore().delete(`attachments/${a.message_id}.bin`); } catch { /* gone already */ }
     }
@@ -515,8 +516,8 @@ async function main(): Promise<void> {
     v = await viewOf(repId);
     assert(v.status === 200 && v.body?.message?.words?.state === 'verified' && v.body?.message?.words?.text === photo.text,
         `on a server that took over, the words open, verified (got ${show(v)})`);
-    assert(v.body?.message?.photo?.state === 'unavailable' && v.body?.message?.photo?.dataUri === undefined,
-        `and the photo reads unavailable: chat photos are not copied to a standby (got ${JSON.stringify(v.body?.message?.photo)})`);
+    assert(v.body?.message?.photo?.state === 'verified' && v.body?.message?.photo?.dataUri === photo.uri,
+        `and the photo opens, verified the same: the copy carried it (got ${v.body?.message?.photo?.state})`);
     // A report changed to Child safety on the main server reaches a standby that holds it already (the review of #2470):
     // the delta carries the new reason with its updated_at, and the copy takes both, so a server that took over lists it
     // first. The change is made here as the main server makes it, then this copy is put back to the standby's.

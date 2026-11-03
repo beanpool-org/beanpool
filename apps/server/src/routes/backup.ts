@@ -1709,6 +1709,7 @@ router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
         return;
     }
     const store = getImageStore();
+    const what = chat ? 'chat photo' : 'listing photo';
     let failure: unknown = null;
     let unreadable = false;
     for (const row of rows) {
@@ -1734,19 +1735,19 @@ router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
         return;
     }
     if (failure) {
-        console.error(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, and the image store did not answer:`, (failure as Error)?.message || failure);
+        console.error(`[Backup] A standby asked for ${what} ${sha256.slice(0, 12)}…, and the image store did not answer:`, (failure as Error)?.message || failure);
         ctx.status = 503;
         ctx.body = { error: 'the image store did not answer' };
         return;
     }
     if (unreadable) {
         ctx.status = 410;
-        ctx.body = { error: 'this server\'s object of that listing photo is not the photo its row names: its next copy leaves it out', why: 'not-its-photo' };
+        ctx.body = { error: `this server's object of that ${what} is not the ${what} its row names: ${chat ? 'its row goes as it is' : 'its next copy leaves it out'}`, why: 'not-its-photo' };
         return;
     }
-    console.warn(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, whose object this server's image store does not hold.`);
+    console.warn(`[Backup] A standby asked for ${what} ${sha256.slice(0, 12)}…, whose object this server's image store does not hold.`);
     ctx.status = 404;
-    ctx.body = { error: 'this server cannot find that listing photo\'s object', why: 'unreadable' };
+    ctx.body = { error: `this server cannot find that ${what}'s object`, why: 'unreadable' };
 });
 
 // Restore (sealed-keys.md §6.2; design case 18 §3, the hardened restore). Takes a `.bpsealed` backup ONLY, opened with

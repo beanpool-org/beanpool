@@ -16,8 +16,18 @@
  * directory switches tell no member: they change what strangers see, not members' rules.
  *
  * Who: an owner (design Q5; the route's requireAdminRole: an admin 403, an automation token 403, the phone's hand-off
- * within its step-up). A standby changes nothing (409 `standby`). No fresh proof: that is only for turning the private
- * preview off (Q13), which is not a setting here yet (slice S7).
+ * within its step-up). A standby changes nothing (409 `standby`).
+ *
+ * ## Core settings (config/core-settings.ts; DESIGN-core-settings-fable.md §8.3, slice C1)
+ * `lock: true` is Confirm and lock: the request's changes (Core settings only, or none) and the `core_settings_lock` row
+ * in one transaction, a line per change and then a `core.lock` line, one owner alert; members are told only of what
+ * changed. Refused once locked (409 `core_locked`), and on a local community with no place set (409 `place_needed`). No
+ * fresh proof: nothing is undone.
+ * Once locked, a change to a Core setting is made only with the owner's fresh proof (the route asks requireFreshProof
+ * and says so in `freshProof`; without it, 403 `core_proof_needed` and nothing written), each Core setting's lines
+ * after a `core.unlock` line stamped alike, and one owner alert naming each change. Everyday settings ask nothing, locked
+ * or not. While locked (or confirming), a request changes one kind: Core settings, or everyday ones (400
+ * `one_kind_per_request`), so the proof is asked for exactly the request that needs it.
  *
  * ## What takes a change, and which locks refuse it
  *   join        'members' | 'admins' | 'paused': the door row and the `invites` override (design §3.1; un-pausing keeps
@@ -69,6 +79,7 @@ import { directoryUnlistedByEnv, initDirectoryPublisher, listedSwitchedOff } fro
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { closeCopyDoors } from '../engine/event-copy.js';
 import { stopAllPeekTickets } from '../engine/peek-tickets.js';
+import { CORE_SETTINGS_LOCK_KEY, coreLockRow, isCoreChange } from './core-settings.js';
 
 const { t: tr } = wordsFor('en');
 
@@ -80,7 +91,7 @@ export const SHAPE_STANDBY = 'This server is a standby copy of the community, no
 
 /** A refusal: the status, a code the page reads, and the sentence it shows (a lock's own why, for a 409). */
 export class ShapeChangeError extends Error {
-    constructor(readonly status: 400 | 409, readonly code: string, message: string, readonly setting?: string, readonly unlock?: string) {
+    constructor(readonly status: 400 | 403 | 409, readonly code: string, message: string, readonly setting?: string, readonly unlock?: string) {
         super(message);
         this.name = 'ShapeChangeError';
     }
@@ -238,18 +249,178 @@ function noteOf(v: unknown): string | null {
     return note || null;
 }
 
+/** A request read and checked whole against the shape as it is, before anything is written (planShapeChanges). */
+interface ShapePlan {
+    before: Shape;
+    note: string | null;
+    /** Confirm and lock (`lock: true`). */
+    lock: boolean;
+    planned: PlannedChange[];
+    /** The planned changes that are Core (config/core-settings.ts isCoreChange), in order. */
+    core: PlannedChange[];
+    switches: [ProfileSwitch, boolean][];
+    share: Partial<NodeConfig>;
+    door: CommunityDoor | null;
+    floorPlan: KnownFloorPlan | null;
+    copies: RecoveryCopies | null;
+    decider: RemovalDecider | null;
+    beansAfter: boolean;
+}
+
+/** Ends the fresh proof's sentence "… to <action>" (admin-auth.ts requireFreshProof). */
+export const CORE_PROOF_ACTION = 'change a core setting';
+export const CORE_LOCKED_ALREADY = 'The core settings are already confirmed and locked. Change one on its own, with Unlock to change: it asks for your proof each time.';
+export const CORE_PLACE_NEEDED = 'Set where your community is first (Settings → Appliance & Data → Node Identity, the map pin): a community confirms its core settings with its place set.';
+const coreProofNeeded = (names: string) => `The core settings are locked: changing ${names} asks for your proof each time (Unlock to change). Nothing was saved.`;
+const oneKindWhileLocked = (core: string, everyday: string) =>
+    `Change a core setting on its own: this request changes ${core}, which ${core.includes(', ') ? 'are core settings' : 'is a core setting'}, and ${everyday}, which ${everyday.includes(', ') ? 'are' : 'is'} not. Nothing was saved.`;
+const oneKindToLock = (everyday: string) =>
+    `Confirm and lock takes the core settings only: change ${everyday} on ${everyday.includes(', ') ? 'their' : 'its'} own. Nothing was saved.`;
+
+/**
+ * Whether this request is a change to a Core setting while the core settings are locked, so that the route asks the
+ * owner's fresh proof before it is written (routes/settings.ts). Checked whole as applyShapeChanges checks it, so a request
+ * refused anyway is refused here, in the same words, and never spends a code. Writes nothing.
+ */
+export function shapeChangeAsksFreshProof(body: unknown): boolean {
+    const plan = planShapeChanges(body);
+    return plan.before.core.lock !== null && plan.core.length > 0;
+}
+
 /**
  * The owner's change to how this community works, all or nothing: checked whole against the shape as it is, then written,
- * logged, told to the owners and, for members' rules, to every member. Throws ShapeChangeError (400, 409) with nothing
- * written. `body`: `{ changes: { <setting>: <value>, … }, note? }`.
+ * logged, told to the owners and, for members' rules, to every member. Throws ShapeChangeError (400, 403, 409) with nothing
+ * written. `body`: `{ changes: { <setting>: <value>, … }, note?, lock? }`. `freshProof`: the route has the owner's fresh
+ * proof for this request (requireFreshProof), which a change to a Core setting needs once they are locked.
  */
-export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape; told: 'members' | 'nobody'; changed: string[] } {
+export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshProof?: boolean } = {}): { shape: Shape; told: 'members' | 'nobody'; changed: string[] } {
+    const plan = planShapeChanges(body);
+    const { before, note, planned, core, switches, share, door, floorPlan, copies, decider, beansAfter } = plan;
+    const S = before.settings;
+    const locked = before.core.lock !== null;
+    // Read here, with the write that follows, whatever the route found: a lock written meanwhile still asks the proof.
+    if (locked && core.length > 0 && !opts.freshProof) {
+        throw new ShapeChangeError(403, 'core_proof_needed', coreProofNeeded(namesOf(core)), core[0].setting.split('.')[0]);
+    }
+
+    if (planned.length === 0 && !plan.lock) {
+        // Nothing changed that anyone reads. Only a default chosen as itself is kept, as its row.
+        if (!decider) return { shape: before, told: 'nobody', changed: [] };
+        setRemovalDecider(decider);
+        return { shape: readShape(), told: 'nobody', changed: [] };
+    }
+
+    // ── Written, all of it or none ──
+    const at = new Date().toISOString();
+    const insertLine = db.prepare(`INSERT INTO community_settings_log (actor_pubkey, actor_role, setting, old_value, new_value, note, at)
+                                   VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    const unlocked = locked && core.length > 0;
+    db.transaction(() => {
+        for (const [name, on] of switches) setSwitchOverride(name, on);
+        // Outside sharing turned off stops every link shared until now: turned on again later, none of them reopens.
+        if (switches.some(([name, on]) => name === 'shareOutside' && on === false)) stopAllPeekTickets(at);
+        // Requests off leaves nothing to hold a stranger's first line through a copy's door, so the doors close with them.
+        if (switches.some(([name, on]) => name === 'dmRequests' && on === false)) closeCopyDoors(at);
+        if (door) setDoor(door);
+        if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
+        if (Object.keys(share).length > 0) updateNodeConfig(share);
+        if (copies) setRecoveryCopies(copies);
+        if (decider) setRemovalDecider(decider);
+        // A Core setting changed while locked: its lines follow a `core.unlock` line naming it, stamped alike (§8.5).
+        let lastUnlocked: string | null = null;
+        for (const line of planned) {
+            const base = line.setting.split('.')[0];
+            if (unlocked && core.includes(line) && base !== lastUnlocked) {
+                insertLine.run(by.actor, 'owner', 'core.unlock', null, base, null, at);
+                lastUnlocked = base;
+            }
+            insertLine.run(by.actor, 'owner', line.setting, line.from, line.to, note, at);
+        }
+        // Confirm and lock: the row, then its line. A plain INSERT: a row written meanwhile fails the whole transaction.
+        if (plan.lock) {
+            db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CORE_SETTINGS_LOCK_KEY, coreLockRow(at, by.actor));
+            insertLine.run(by.actor, 'owner', 'core.lock', null, 'locked', null, at);
+        }
+    })();
+
+    // ── Then the node, the owners and the members ──
+    const changedSettings = [...new Set(planned.map((c) => c.setting.split('.')[0] as ShapeSettingName))];
+    if (changedSettings.includes('listed')) initDirectoryPublisher();
+    // Listed switched off: the community's row leaves the public directory now, not when it goes stale in 7 days (front
+    // doors S13). One signed withdraw, only if this server has pushed; not awaited (services/directory-publisher.ts).
+    if (switches.some(([name, on]) => name === 'publishToDirectory' && on === false)) listedSwitchedOff();
+    const shape = readShape();
+    if (planned.length > 0) console.log(`🧭 How this community works: ${planned.map((c) => `${c.setting} ${c.from} → ${c.to}`).join(', ')}, set by ${by.actor}.`);
+    if (plan.lock) console.log(`🔒 Core settings confirmed and locked by ${by.actor}.`);
+    noteSecurityEvent({
+        key: 'sec.settings',
+        detail: plan.lock ? OWNER_ALERT_WORDS.coreLocked(changedSettings.map((s) => SETTING_NAMES[s]).join(', '))
+            : unlocked ? OWNER_ALERT_WORDS.coreUnlocked(core.map(lineWords).join('; '))
+            : OWNER_ALERT_WORDS.shapeChanged(changedSettings.map((s) => SETTING_NAMES[s]).join(', ')),
+        actor: by.actor,
+        actorRole: by.actorRole,
+    });
+    // The 12-words door set on behind a shut open door takes nobody yet, and Beans set on where a moved ledger already runs
+    // them were on all along: members are told only of a door, or Beans, that changed.
+    const wordsDoorMoved = shape.settings.wordsDoor?.value !== S.wordsDoor?.value;
+    const beansMoved = shape.settings.beans.value !== S.beans.value;
+    const sentences = [
+        ...planned.filter((c) => !c.setting.startsWith('knownFloor.') && (c.setting !== 'wordsDoor' || wordsDoorMoved)
+            && (c.setting !== 'beans' || beansMoved)).map(memberSentence),
+        floorPlan ? floorSentence(floorPlan, S.knownFloor.value.on, (floorPlan.confirmation ?? S.knownFloor.configured.on) && beansAfter) : null,
+    ].filter((s): s is string => !!s);
+    let told: 'members' | 'nobody' = 'nobody';
+    if (sentences.length > 0) {
+        for (const body of memberNoticeBodies(sentences, note)) {
+            noticeToEveryMember(tr(NOTICE.title), body, { kind: 'community_shape', version: shape.version });
+        }
+        told = 'members';
+    }
+    return { shape, told, changed: planned.map((c) => c.setting) };
+}
+
+/**
+ * The Core changes of a request made while the core settings are locked, or with Confirm and lock (`lock`), where a
+ * request changes one kind only: refused 400 `one_kind_per_request` when it changes Core settings and everyday ones, and,
+ * with the lock, when it changes any everyday one. Before the lock, a request mixes them as it always could.
+ */
+function oneKindOnly(planned: PlannedChange[], before: Shape, lock: boolean): PlannedChange[] {
+    const core = planned.filter((c) => isCoreChange(c.setting, c.to, before.settings.join.door));
+    const everyday = planned.filter((c) => !core.includes(c));
+    if (everyday.length > 0 && (lock || core.length > 0)) {
+        const first = everyday[0].setting.split('.')[0];
+        throw new ShapeChangeError(400, 'one_kind_per_request', lock ? oneKindToLock(namesOf(everyday)) : oneKindWhileLocked(namesOf(core), namesOf(everyday)), first);
+    }
+    return core;
+}
+
+/** The settings' names, once each, for the sentences above. */
+function namesOf(lines: readonly PlannedChange[]): string {
+    return [...new Set(lines.map((c) => SETTING_NAMES[c.setting.split('.')[0] as ShapeSettingName]))].join(', ');
+}
+
+/** One Core change as the owners' alert says it: the setting, and from what to what (a known-floor line names its part). */
+function lineWords(c: PlannedChange): string {
+    const [base, part] = c.setting.split('.');
+    const name = SETTING_NAMES[base as ShapeSettingName];
+    const what = part === 'on' ? 'the dial' : part === 'floor' ? 'the floor' : part === 'cap' ? 'the cap' : null;
+    return `${name}${what ? `, ${what}` : ''} (${c.from ?? 'not set'} → ${c.to})`;
+}
+
+/** The request read and checked whole, as applyShapeChanges writes it: every refusal thrown, nothing written. */
+function planShapeChanges(body: unknown): ShapePlan {
     if (getNodeRole() !== 'primary') throw new ShapeChangeError(409, 'standby', SHAPE_STANDBY);
-    const { changes, note: rawNote } = (body && typeof body === 'object' ? body : {}) as { changes?: unknown; note?: unknown };
-    if (!changes || typeof changes !== 'object' || Array.isArray(changes) || Object.keys(changes).length === 0) {
+    const { changes, note: rawNote, lock: rawLock } = (body && typeof body === 'object' ? body : {}) as { changes?: unknown; note?: unknown; lock?: unknown };
+    // Only `true`: the group is never unlocked (DESIGN-core-settings-fable.md Q2).
+    if (rawLock !== undefined && rawLock !== true) bad(undefined, 'lock is true (Confirm and lock), or left out: core settings are never unlocked as a group.', 'bad_lock');
+    const lockAsked = rawLock === true;
+    // Confirm and lock may change nothing: it confirms the settings as they are.
+    const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+    if (!(lockAsked && (changes === undefined || (isObj(changes) && Object.keys(changes).length === 0)))
+        && (!isObj(changes) || Object.keys(changes).length === 0)) {
         bad(undefined, 'Send changes: at least one setting and its new value.', 'no_changes');
     }
-    const asked = changes as Record<string, unknown>;
+    const asked = (changes ?? {}) as Record<string, unknown>;
     for (const key of Object.keys(asked)) {
         if ((SETTINGS_IN_ORDER as readonly string[]).includes(key)) continue;
         // Its own keys only: `in` reads Object.prototype too, so `constructor` would answer a function's source (#2415 review r4360595004).
@@ -457,62 +628,16 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         }
     }
 
-    if (planned.length === 0) {
-        // Nothing changed that anyone reads. Only a default chosen as itself is kept, as its row.
-        if (!decider) return { shape: before, told: 'nobody', changed: [] };
-        setRemovalDecider(decider);
-        return { shape: readShape(), told: 'nobody', changed: [] };
+    // Core settings (config/core-settings.ts): while locked, or confirming, one kind per request; confirmed only once, and
+    // only with the community's place where its kind needs one.
+    const core = lockAsked || before.core.lock !== null
+        ? oneKindOnly(planned, before, lockAsked)
+        : planned.filter((c) => isCoreChange(c.setting, c.to, S.join.door));
+    if (lockAsked) {
+        if (before.core.lock) throw new ShapeChangeError(409, 'core_locked', CORE_LOCKED_ALREADY);
+        if (before.core.place.needed && !before.core.place.set) throw new ShapeChangeError(409, 'place_needed', CORE_PLACE_NEEDED);
     }
-
-    // ── Written, all of it or none ──
-    const at = new Date().toISOString();
-    const insertLine = db.prepare(`INSERT INTO community_settings_log (actor_pubkey, actor_role, setting, old_value, new_value, note, at)
-                                   VALUES (?, ?, ?, ?, ?, ?, ?)`);
-    db.transaction(() => {
-        for (const [name, on] of switches) setSwitchOverride(name, on);
-        // Outside sharing turned off stops every link shared until now: turned on again later, none of them reopens.
-        if (switches.some(([name, on]) => name === 'shareOutside' && on === false)) stopAllPeekTickets(at);
-        // Requests off leaves nothing to hold a stranger's first line through a copy's door, so the doors close with them.
-        if (switches.some(([name, on]) => name === 'dmRequests' && on === false)) closeCopyDoors(at);
-        if (door) setDoor(door);
-        if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
-        if (Object.keys(share).length > 0) updateNodeConfig(share);
-        if (copies) setRecoveryCopies(copies);
-        if (decider) setRemovalDecider(decider);
-        for (const line of planned) insertLine.run(by.actor, 'owner', line.setting, line.from, line.to, note, at);
-    })();
-
-    // ── Then the node, the owners and the members ──
-    const changedSettings = [...new Set(planned.map((c) => c.setting.split('.')[0] as ShapeSettingName))];
-    if (changedSettings.includes('listed')) initDirectoryPublisher();
-    // Listed switched off: the community's row leaves the public directory now, not when it goes stale in 7 days (front
-    // doors S13). One signed withdraw, only if this server has pushed; not awaited (services/directory-publisher.ts).
-    if (switches.some(([name, on]) => name === 'publishToDirectory' && on === false)) listedSwitchedOff();
-    const shape = readShape();
-    console.log(`🧭 How this community works: ${planned.map((c) => `${c.setting} ${c.from} → ${c.to}`).join(', ')}, set by ${by.actor}.`);
-    noteSecurityEvent({
-        key: 'sec.settings',
-        detail: OWNER_ALERT_WORDS.shapeChanged(changedSettings.map((s) => SETTING_NAMES[s]).join(', ')),
-        actor: by.actor,
-        actorRole: by.actorRole,
-    });
-    // The 12-words door set on behind a shut open door takes nobody yet, and Beans set on where a moved ledger already runs
-    // them were on all along: members are told only of a door, or Beans, that changed.
-    const wordsDoorMoved = shape.settings.wordsDoor?.value !== S.wordsDoor?.value;
-    const beansMoved = shape.settings.beans.value !== S.beans.value;
-    const sentences = [
-        ...planned.filter((c) => !c.setting.startsWith('knownFloor.') && (c.setting !== 'wordsDoor' || wordsDoorMoved)
-            && (c.setting !== 'beans' || beansMoved)).map(memberSentence),
-        floorPlan ? floorSentence(floorPlan, S.knownFloor.value.on, (floorPlan.confirmation ?? S.knownFloor.configured.on) && beansAfter) : null,
-    ].filter((s): s is string => !!s);
-    let told: 'members' | 'nobody' = 'nobody';
-    if (sentences.length > 0) {
-        for (const body of memberNoticeBodies(sentences, note)) {
-            noticeToEveryMember(tr(NOTICE.title), body, { kind: 'community_shape', version: shape.version });
-        }
-        told = 'members';
-    }
-    return { shape, told, changed: planned.map((c) => c.setting) };
+    return { before, note, lock: lockAsked, planned, core, switches, share, door, floorPlan, copies, decider, beansAfter };
 }
 
 /** The notice's title, as every member reads it. */

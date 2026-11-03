@@ -541,6 +541,8 @@ export interface SyncCommunitySettings {
         recovery_copies?: string | null;
         /** Who decides a removal: `automatic`, `everyone` or `jury`, or null for the default (apps/server config/removal-decider.ts). */
         removal_decider?: string | null;
+        /** The core settings confirmed and locked, `{ at, by }` as JSON text, or null for never (apps/server config/core-settings.ts). */
+        core_settings_lock?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {

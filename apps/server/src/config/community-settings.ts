@@ -50,6 +50,7 @@ import { cleanPromiseRow } from '../engine/directory-promise.js';
 import { REMOVED_GATEWAY_SWITCHES } from './gateway.js';
 import { upgradeLegacyShape, type ShapeUpgrade } from './community-shape-upgrade.js';
 import { readRuleInstant } from './balance-rule.js';
+import { parseCoreLockRow } from './core-settings.js';
 
 export type { SyncCommunitySettings };
 
@@ -64,7 +65,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 export const COMMUNITY_NODE_CONFIG_KEYS = [
     'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
     'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl',
-    'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider',
+    'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock',
 ] as const;
 
 /** Fields of the `node_config` row's object that are the community's. */
@@ -247,6 +248,9 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     balance_rule_from: orNull((v) => readRuleInstant(v) === null ? BAD : v as string),
     // Who decides a removal (config/removal-decider.ts): every rule an owner chose is stored, the default included.
     removal_decider: orNull(oneOf('automatic', 'everyone', 'jury')),
+    // The core settings confirmed and locked (config/core-settings.ts): `{ at, by }` as JSON text, or null for never. A
+    // standby promoted with it is locked from its first boot as a main server.
+    core_settings_lock: orNull((v) => (parseCoreLockRow(v) ? v as string : BAD)),
 };
 
 /**

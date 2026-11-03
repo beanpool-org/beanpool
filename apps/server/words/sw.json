@@ -2,11 +2,17 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ Chapisho lako limeondolewa",
+  "🛡️ Your posts were taken down": "🛡️ Machapisho yako yameondolewa",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Wasimamizi wa jamii wameondoa chapisho lako {title}. Sababu: {reason}. Limefichwa kwa wengine wote; lisiporudishwa ndani ya siku 7, litafutwa.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Wasimamizi wa jamii wameondoa chapisho lako. Sababu: {reason}. Limefichwa kwa wengine wote; lisiporudishwa ndani ya siku 7, litafutwa.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Wasimamizi wa jamii wameondoa machapisho yako {n}. Sababu: {reason}. Yamefichwa kwa wengine wote; yasiporudishwa ndani ya siku 7, yatafutwa.",
   "Only an owner or admin can pin a post.": "Mmiliki au msimamizi pekee ndiye anayeweza kubandika chapisho.",
   "Only an owner, an admin or the post's author can take a pin off.": "Mmiliki, msimamizi au mwandishi wa chapisho pekee ndiye anayeweza kuondoa ubandikaji.",
   "A pin lasts 1 day, 3 days or 1 week.": "Ubandikaji hudumu siku 1, siku 3 au wiki 1.",

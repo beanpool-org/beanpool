@@ -8,6 +8,8 @@ import { setKeySessionCsrfToken, setTfaSessionToken } from '../../lib/node-clien
 // The AI assistants' suggestions card lists from the node on mount (its own tests: AgentSuggestionsPanel.test.tsx); these
 // tests count the moderation calls alone.
 vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));
+// So does "Taken down by assistants" (its own tests: AssistantTakedownsPanel.test.tsx).
+vi.mock('./AssistantTakedownsPanel', () => ({ AssistantTakedownsPanel: () => null }));
 // So does the card of who reports stopped from sending message requests (its own tests: RequestLimitsCard.test.tsx).
 vi.mock('./RequestLimitsCard', () => ({ RequestLimitsCard: () => <div data-testid="request-limits-card" /> }));
 

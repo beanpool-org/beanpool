@@ -26,6 +26,10 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  * limit" (first "Assistant posts a day"; Marty, 31 Oct: owners' and admins' own content limits in the apps too, server
  * engine/owner-admin-limit.ts) is the owners' number (100 unless an owner sets 1 to 1,000), shown to every viewer, changed
  * by an owner with a fresh proof each time (FreshProofBox: a code, or the phone's Manage).
+ *
+ * "May take down posts for me" (server agent/owner-takedowns.ts) is its own tick on the token form, off by default, with the same fresh
+ * proof; each row says whether it was ticked and how many posts it took down today. What they took down is on Moderation
+ * (AssistantTakedownsPanel).
  */
 
 interface AgentGrantRow {
@@ -46,6 +50,9 @@ interface AgentGrantRow {
     /** "May post for me", ticked when it was connected (a server older than it sends none). */
     canPost?: boolean;
     postsToday?: number;
+    /** "May take down posts for me", ticked when it was connected (a server older than it sends none). */
+    canModerate?: boolean;
+    takedownsToday?: number;
     /** Its posts still up (slice S2), which "Remove its posts" takes down (a server older than it sends none). */
     madePosts?: number;
 }
@@ -124,7 +131,10 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
     const [days, setDays] = useState(30);
     // "May post for me": off until ticked, and off again after each connect.
     const [canPost, setCanPost] = useState(false);
+    // "May take down posts for me": the same, its own tick.
+    const [canModerate, setCanModerate] = useState(false);
     const [shownCanPost, setShownCanPost] = useState(false);
+    const [shownCanModerate, setShownCanModerate] = useState(false);
     const [perDayDraft, setPerDayDraft] = useState('');
     const [perDayMessage, setPerDayMessage] = useState('');
     // Changing the "Owner and admin limit" asks an owner's fresh proof each time (server agent/grants-route.ts).
@@ -216,19 +226,21 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         }
         setBusy(true);
         try {
-            const { res, json } = await post(GRANTS, { name: trimmed, days, canPost, ...proofField(code) });
+            const { res, json } = await post(GRANTS, { name: trimmed, days, canPost, ...(canModerate ? { canModerate } : {}), ...proofField(code) });
             // A ticked connect asks the owner's fresh proof: the box opens and says how (a code, the phone, or Manage again). An
             // unticked one keeps its own answer below (a stale phone session: "press Manage again").
-            if (canPost) {
+            if (canPost || canModerate) {
                 throwIfFreshProof(res.status, json);
                 makeProof.close();
             }
             if (res.ok && typeof json.token === 'string') {
                 setShownToken(json.token);
                 setShownCanPost(json.grant?.canPost === true);
+                setShownCanModerate(json.grant?.canModerate === true);
                 setCopied(null);
                 setName('');
                 setCanPost(false);
+                setCanModerate(false);
                 await load();
             } else {
                 // The node's own words, including its "press Manage again" for a stale phone session.
@@ -596,7 +608,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
                             <p className="text-[11px] text-amber-300 m-0 break-words">
-                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads{shownCanPost ? ', and can post as you' : ''}.
+                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads{shownCanPost ? ', and can post as you' : ''}{shownCanModerate ? ', and can take posts down' : ''}.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2">
                                 <button
@@ -679,6 +691,18 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                     asked, and suggests moderation steps for you to approve.
                                 </span>
                             </label>
+                            <label className="flex items-start gap-2 min-h-[48px] text-xs text-nature-200 break-words">
+                                <input
+                                    type="checkbox"
+                                    checked={canModerate}
+                                    onChange={(e) => setCanModerate(e.target.checked)}
+                                    className="w-5 h-5 mt-0.5 shrink-0"
+                                    data-testid="agent-can-moderate"
+                                />
+                                <span className="min-w-0">
+                                    May take down posts for me: it hides spam and reported posts at once, events included, up to the owner and admin limit a day. You can put them back under Moderation for 7 days; after that they are removed. It never moves Beans, and it can&apos;t dismiss a report, put a post back, lift a mute, or remove or suspend a member. Leave it off and it can take nothing down.
+                                </span>
+                            </label>
                             <button
                                 type="button"
                                 onClick={() => void handleMake()}
@@ -731,6 +755,11 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                                     {g.canPost
                                                         ? `May post for me · ${g.postsToday ?? 0} post${g.postsToday === 1 ? '' : 's'} today`
                                                         : 'Reads only: not ticked to post'}
+                                                </p>
+                                            )}
+                                            {g.role === 'owner' && g.canModerate === true && (
+                                                <p className="text-[11px] text-nature-400 m-0 break-words" data-testid="agent-grant-moderates">
+                                                    May take down · {g.takedownsToday ?? 0} today
                                                 </p>
                                             )}
                                             {typeof g.madePosts === 'number' && g.madePosts > 0 && (

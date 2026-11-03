@@ -32,7 +32,7 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 
 ## What each action does
 
-- **Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was "reviewed and kept". If its author had already taken it down, they are told instead that it "is no longer up".
+- **Dismiss Flag**: marks the report reviewed. Nothing happens to the person. If the report was about a post or an event, the member who reported it is told it was "reviewed and kept". If its author had already taken it down, or an assistant's takedown has it on hold, they are told instead that it "is no longer up". A dismissal doesn't bring a post on hold back: **Put back**, under **Taken down by assistants**, does.
 - **Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.
 - **Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.
 - To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on removing them.
@@ -48,7 +48,7 @@ You open Settings from the app's **🛡️ Moderate** button (it reads "Moderate
 - A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind; once handled it stays marked, and under **All** it takes its place by date. That covers a member who picked **Child safety**, and one whose words say it (from an older app). The owners' alert asks you to look at these first.
 - **Remove the post**: choose a reason (or none) and press **Remove it**. The post comes down exactly as below, and the report is marked handled.
 - **Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.
-- **Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.
+- **Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept. The exception is a post marked **on hold**: an owner's assistant took it down, and it goes for good unless an owner or admin puts it back. The button then reads **Dismiss**. The post stays hidden, its removal goes ahead, and whoever reported it is told it is no longer up. Only an owner or admin can bring it back, with **Put back** under **Taken down by assistants**, so if you think it should stay, ask one of them before you dismiss.
 - **Mark handled** (for a report about a member, a group chat message, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.
 - **Who joined with them** (on the global community, on an open report): the accounts that joined from the same internet connection within a day of the reported one. You can hide all their posts in one go, and undo that. Removing them is for the owners and admins. See "On the global community: accounts that joined together" below.
 
@@ -125,7 +125,7 @@ So established members from three circles can hide a newcomer's spam, but not th
 
 A post by someone who joined with **12 words** and is still on the new-account limits needs only **one circle**: one report from an established member hides it. Their account cost nothing to make, so what protects the community is how cheaply a real member can hide its spam. Once its author is past the limits, or adds a sign-in, it needs three circles like anyone's.
 
-A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above.
+A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above. A post on hold is the exception: no dismissal brings it back, only an owner or admin with **Put back**.
 
 When **Repeat offenders muted automatically** is on (by default on the global community, or switched on for a local community under How this community works), a member whose posts moderators have removed 3 times in 30 days is muted. They can still read, but cannot post, edit a post or send messages until a moderator lifts it, and they are told. Pruning stale posts never counts towards this. Settings has no button to lift a mute yet.
 

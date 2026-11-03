@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
+import { POST_ON_HOLD_WORDS } from '../../lib/post-on-hold-words';
 import type { RolesViewer } from './NodeRolesPanel';
 
 /**
@@ -29,6 +30,7 @@ interface Original {
     author: string | null;
     postRemoved: boolean;
     hiddenByReports: boolean;
+    postOnHold?: boolean;
 }
 
 export interface SuggestionCard {
@@ -121,7 +123,7 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
                     Suggested by an AI assistant ({items.length})
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-1 break-words">
-                    An assistant cannot act: it suggests, and nothing changes until its member approves. Read the report itself, not only the assistant&apos;s words.
+                    A suggestion changes nothing until its member approves. Read the report itself, not only the assistant&apos;s words.
                 </p>
             </div>
             {message && <p role="status" className="text-sm text-nature-200 m-0 break-words">{message}</p>}
@@ -138,6 +140,7 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
                                 {s.report.title && <p className="text-sm text-white m-0 break-words">{s.report.title}</p>}
                                 {s.report.description && <p className="text-sm text-nature-200 m-0 break-words whitespace-pre-wrap">{s.report.description}</p>}
                                 {s.report.author && <p className="text-xs text-nature-400 m-0 break-words">By {s.report.author}</p>}
+                                {s.report.postOnHold && <p className="text-sm font-semibold text-nature-100 m-0 break-words" data-testid="suggestion-post-on-hold">{POST_ON_HOLD_WORDS}</p>}
                                 {s.report.reason && (
                                     <p className="text-sm text-nature-100 m-0 break-words whitespace-pre-wrap">
                                         <span className="text-nature-400">Why it was reported: </span>{s.report.reason}

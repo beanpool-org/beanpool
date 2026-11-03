@@ -3,7 +3,7 @@
  * Lists the facts from Table 4.2 as paragraphs with bold tokens.
  * "Read more in the guide" button links to `/guide/how-your-community-works`.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import {
@@ -12,8 +12,11 @@ import {
     splitBold,
     t,
     type CommunityShapeFeatures,
+    type KnownRule,
 } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
+import { anchorUrl } from '../utils/node-post';
+import { fetchKnownRule } from '../utils/known-rule';
 import type { AppColors } from '../constants/colors';
 
 export function CommunityShapeSheet({
@@ -27,7 +30,16 @@ export function CommunityShapeSheet({
 }) {
     const { colors } = useTheme();
     const s = sheetStyles(colors);
-    const lines = communityShapeLines(features);
+    // The date on a tightened line: `features` carries the numbers, not when they apply. Only where there is a rule to date.
+    const [rule, setRule] = useState<KnownRule | null>(null);
+    const known = typeof features?.knownFloor === 'number';
+    useEffect(() => {
+        if (!visible || !known) return;
+        let live = true;
+        void anchorUrl().catch(() => null).then((url) => (url ? fetchKnownRule(url) : null)).then((r) => { if (live) setRule(r); });
+        return () => { live = false; };
+    }, [visible, known]);
+    const lines = communityShapeLines(features, rule);
 
     const onReadMore = () => {
         onClose();

@@ -56,7 +56,7 @@ import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-cha
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
-import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
+import { closeOpenReportsOnPost, ensureChildSafetyFn, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
@@ -85,9 +85,13 @@ import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledge
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
-    evaluateAutoMute, liftMute as liftMuteEngine,
+    evaluateAutoMute, liftMute as liftMuteEngine, onHold,
 } from './engine/auto-moderation.js';
 import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
+import {
+    forgetTakedownsOf, hasOpenChildSafetyReport, hasPendingDeal, markTakedownFinal, putBackTakedowns as putBackTakedownsEngine, setTakedownRemoval, takeDownPosts as takeDownPostsEngine,
+    type PutBackResult, type PutBackScope, type TakeDownInput, type TakeDownResult,
+} from './engine/agent-takedowns.js';
 import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
 import { getPulseTreasuryPubkey } from './daily-pulse.js';
 import {
@@ -609,6 +613,11 @@ export interface AbuseReport {
     postRemoved?: boolean | null;
     /** The reported post is hidden by reports, waiting for a moderator (global profile, G3). */
     postHiddenByReports?: boolean | null;
+    /**
+     * The reported post is a takedown on hold (engine/auto-moderation.ts onHold): hidden, and going for good unless an owner or admin
+     * puts it back. Dismissing a report doesn't keep it, so no screen may say so. A flag only, beside the report. Null when no post is reported.
+     */
+    postOnHold?: boolean | null;
     /** The reported post was made by an owner's AI assistant (posts.created_via, agent/owner-posts.ts); null when no post is reported. */
     postMadeByAssistant?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
@@ -715,6 +724,9 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
+    // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
+    setTakedownRemoval(makeTakedownFinal);
     pollWordsGoWithThePoll();
     // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
     // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
@@ -7572,18 +7584,12 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
     return row?.owner_pubkey ?? null;
 }
 
-/** The databases that have report_is_child_safety() (a test may open more than one in a process). */
-const childSafetyFnOn = new WeakSet<object>();
-
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
     // Open child-safety reports first, read as the alerts read them, in SQL so a page of the queue holds the right ones
     // (the alert says "look at it first, in the Manager's Reports queue": the follow-up to #1895). Once handled, one takes
     // its date's place, so "All" never keeps a dismissed one (a false positive among them) above open ordinary reports
     // (director, 14 Oct, on the review of #1912). It stays marked (childSafety) wherever it is listed.
-    if (!childSafetyFnOn.has(db)) {
-        db.function('report_is_child_safety', { deterministic: true }, (reason: unknown) => (reportKind(reason) === 'child safety' ? 1 : 0));
-        childSafetyFnOn.add(db);
-    }
+    ensureChildSafetyFn();
     let whereClause = '';
     const params: any[] = [];
 
@@ -7607,7 +7613,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                mt.callsign as target_callsign,
                p.title as post_title, substr(p.description, 1, 500) as post_description,
                p.id as post_row_id, p.active as post_active, p.status as post_status,
-               p.hidden_by_reports_at as post_hidden_at, p.created_via as post_created_via,
+               p.hidden_by_reports_at as post_hidden_at, p.removed_by_moderator_at as post_removed_by_moderator_at, p.created_via as post_created_via,
                mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign,
@@ -7671,6 +7677,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
         // Hidden by reports, waiting for a moderator (G3): restore it or remove it.
         postHiddenByReports: r.post_row_id ? !!r.post_hidden_at : null,
+        // A takedown on hold: "kept" is no longer on offer, whatever a dismissal does.
+        postOnHold: r.post_row_id ? onHold({ active: r.post_active, status: r.post_status, hidden_by_reports_at: r.post_hidden_at, removed_by_moderator_at: r.post_removed_by_moderator_at }) : null,
         // Made by an owner's AI assistant (agent/owner-posts.ts): moderators see it; members never do.
         postMadeByAssistant: r.post_row_id ? (typeof r.post_created_via === 'string' && r.post_created_via.startsWith('assistant:')) : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
@@ -7753,13 +7761,14 @@ export function dismissReport(reportId: string): boolean {
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
     // Its reporter hears the post was reviewed and kept — once, when an open report is dismissed. If the
-    // author had already taken it down, "kept" would be untrue: they hear it is no longer up.
-    const post = report?.target_post_id ? db.prepare('SELECT active, status FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
+    // author had already taken it down, "kept" would be untrue: they hear it is no longer up. The same for a takedown on hold: a
+    // dismissal doesn't bring it back (recheckHiddenPost refuses), here or on a standby that took over.
+    const post = report?.target_post_id ? db.prepare('SELECT active, status, hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?').get(report.target_post_id) as any : null;
     // A hidden post whose remaining reports no longer add up to a hide is visible again (G3), before the reporter
     // is told it was kept.
     if (res.changes > 0 && report?.target_post_id) recheckHiddenPost(moderationNoticeCb, report.target_post_id);
     if (res.changes > 0 && post && (report.status === 'pending' || report.status == null)) {
-        notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id, post.active === 1 && post.status !== 'cancelled');
+        notifyReportDismissed(moderationNoticeCb, report.reporter_pubkey, report.target_post_id, post.active === 1 && post.status !== 'cancelled' && !onHold(post));
     }
     return res.changes > 0;
 }
@@ -7785,6 +7794,16 @@ export function hideBurst(anchor: string, keys: string[], byRole: BurstActorRole
 /** A moderator undoes a burst hide (engine/burst-cleanup.ts). */
 export function undoBurst(actionId: string): UndoOutcome {
     return undoBurstHide(moderationNoticeCb, actionId);
+}
+
+/** An owner's AI assistant takes posts down (engine/agent-takedowns.ts). */
+export function takeDownPosts(input: TakeDownInput): TakeDownResult {
+    return takeDownPostsEngine(moderationNoticeCb, input);
+}
+
+/** A person puts an assistant's takedowns back (engine/agent-takedowns.ts). */
+export function putBackTakedowns(scope: PutBackScope): PutBackResult {
+    return putBackTakedownsEngine(moderationNoticeCb, scope);
 }
 
 /**
@@ -8765,7 +8784,27 @@ function removePostByAdmin(postId: string, onRefundShortfall?: (s: EscrowRefundS
         onRefundShortfall,
     });
     if (ok && before && takedown && before.wasLive) recordModeratorRemoval(postId);
+    // Removed by a person while an assistant's takedown held it: it is final now, and the sweep has nothing to do.
+    if (ok) markTakedownFinal(postId);
     return ok && before ? before : null;
+}
+
+/**
+ * What makes an assistant's takedown final (engine/agent-takedowns.ts sweepTakedowns). Never on a post with a pending deal, and
+ * with no transfer function, so adminDeletePost has no way to move a Bean: removePostByAdmin's refund is a person's, on a
+ * person's account. Never on a post with a Child safety report open either: this closes what is open, and that one waits for a
+ * person. The takedown stamped the removal and told the author, so neither happens again here; an event is cancelled
+ * and its goers told now, unless it ended during the hold: they heard nothing of the takedown, so it may well have gone ahead, and
+ * no push says otherwise. A report filed while it was hidden closes, and its reporter hears the post was removed.
+ */
+function makeTakedownFinal(postId: string): boolean {
+    if (hasPendingDeal(postId) || hasOpenChildSafetyReport(postId)) return false;
+    const before = postBeforeTakedown(postId);
+    const end = (db.prepare('SELECT event_end_at FROM posts WHERE id = ?').get(postId) as { event_end_at: string | null } | undefined)?.event_end_at;
+    const ended = !!end && Date.parse(end) <= Date.now();
+    if (!before || !adminDeletePostEngine(broadcast, postId, undefined, undefined, ended ? undefined : dispatchPushNotification)) return false;
+    notifyPostTakedown(moderationNoticeCb, { ...before, wasLive: false }, closeOpenReportsOnPost(postId));
+    return true;
 }
 
 /**
@@ -9257,6 +9296,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             // With their connection label goes every record of a burst action that names them (engine/burst-cleanup.ts).
             forgetBurstActionsOf(publicKey);
         }
+        // Their posts leave what an assistant took down, whatever else their leaving keeps (engine/agent-takedowns.ts).
+        if (!closed) forgetTakedownsOf(publicKey);
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {

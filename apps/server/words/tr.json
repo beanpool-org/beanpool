@@ -2,11 +2,17 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ Gönderiniz kaldırıldı",
+  "🛡️ Your posts were taken down": "🛡️ Gönderileriniz kaldırıldı",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Topluluk moderatörleri {title} gönderinizi kaldırdı. Neden: {reason}. Herkesten gizlendi; 7 gün içinde geri getirilmezse silinecek.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Topluluk moderatörleri gönderinizi kaldırdı. Neden: {reason}. Herkesten gizlendi; 7 gün içinde geri getirilmezse silinecek.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Topluluk moderatörleri {n} gönderinizi kaldırdı. Neden: {reason}. Herkesten gizlendiler; 7 gün içinde geri getirilmezlerse silinecekler.",
   "Only an owner or admin can pin a post.": "Bir gönderiyi yalnızca sahip veya yönetici sabitleyebilir.",
   "Only an owner, an admin or the post's author can take a pin off.": "Sabitlemeyi yalnızca sahip, yönetici veya gönderinin yazarı kaldırabilir.",
   "A pin lasts 1 day, 3 days or 1 week.": "Sabitleme 1 gün, 3 gün veya 1 hafta sürer.",

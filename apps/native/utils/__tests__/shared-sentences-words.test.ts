@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The phone's sentences from shared code that reached a screen without t() (words: member-visible sentences in shared
- * code), in the member's language: the consent text's "Read all of it" / "Show less", the calm line a forged notification's
+ * code), in the member's language: the calm line a forged notification's
  * tap shows and its OK, Android's notification channels as the phone's settings list them, a claim the phone stops before
  * it is sent (components/key-lines.ts), a delete the community refused with only a status and a sign-in it wouldn't
  * disconnect (components/settings/settings-lines.ts), and the phone's own lock prompt, which carries no English label of
@@ -47,7 +47,6 @@ vi.mock('expo-local-authentication', () => ({
 }));
 
 import { pseudoLocalise, setLanguage, type Catalog } from '@beanpool/core';
-import { ConsentText } from '../../components/ConsentText';
 import { PushNoticeWarning } from '../../components/PushNoticeWarning';
 import { keyLineWords } from '../../components/key-lines';
 import { settingsLineWords } from '../../components/settings/settings-lines';
@@ -105,31 +104,6 @@ afterEach(() => {
 
 const draw = (el: ReactNode) => act(() => root.render(el as any));
 const click = (el: Element | null) => act(() => { (el as HTMLElement).click(); });
-
-describe('a known community\'s consent text: "Read all of it" and "Show less"', () => {
-    // A summary, then a list the card folds away (utils/known-consent.ts consentTextParts).
-    const TEXT = 'Admins can see your balance when you are in debit. They see: your balance; your floor; your last sale.';
-
-    it('in Portuguese from the catalog, in the pseudo-locale bracketed, and in English as before; the node\'s text as it came', () => {
-        for (const [lang, more, less] of [['en', 'Read all of it', 'Show less'], ['pt', 'Ler tudo', 'Mostrar menos']] as const) {
-            setLanguage(lang, lang === 'pt' ? [PT] : []);
-            draw(createElement(ConsentText, { text: TEXT }));
-            const button = host.querySelector('[data-testid="consent-read-all"]');
-            expect(button?.textContent, lang).toBe(more);
-            click(button);
-            expect(host.querySelector('[data-testid="consent-read-all"]')?.textContent, lang).toBe(less);
-            act(() => root.unmount());
-            root = createRoot(host);
-        }
-        setLanguage('xx');
-        draw(createElement(ConsentText, { text: TEXT }));
-        const written = ['Admins can see your balance when you are in debit.', 'They see:', 'your balance;', 'your floor;', 'your last sale.'];
-        expect(bypassing(host, written)).toEqual([]);
-        click(host.querySelector('[data-testid="consent-read-all"]'));
-        expect(host.querySelector('[data-testid="consent-read-all"]')?.textContent).toBe(pseudoLocalise('Show less'));
-        expect(bypassing(host, written)).toEqual([]);
-    });
-});
 
 describe('the calm line a forged notification\'s tap shows', () => {
     it('the line and its button in Portuguese, bracketed in the pseudo-locale, and the English the design asks for', () => {

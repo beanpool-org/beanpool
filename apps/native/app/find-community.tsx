@@ -34,6 +34,7 @@ import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords, findTownSearchWords, nearWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
+import { DoorRuleLine } from '../components/DoorRuleLine';
 
 export { ErrorBoundary };
 
@@ -510,6 +511,8 @@ export default function FindCommunityScreen() {
             return (
                 <View>
                     <Text style={styles.note}>{findLineWords(state.note)}</Text>
+                    {/* The rule, where this community confirms its members: the sentence its join screen says (Marty, 3 Nov). */}
+                    <DoorRuleLine url={url} testID="find-join-rule" />
                     <View style={styles.actions}>
                         <Pressable
                             style={[styles.primary, joining === url && { opacity: 0.6 }]}

@@ -34,7 +34,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers, createDecision } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
-    exceptionRows, departedRows, healthLogSections, readHealthTotals, totalsRows, notOnThisNode, exceptionsFailureText, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
+    exceptionRows, departedRows, healthLogSections, readHealthTotals, readWaitingLines, totalsRows, notOnThisNode, exceptionsFailureText, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
 } from '../utils/community-health';
 import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthLog, fetchHealthSummary, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
@@ -50,7 +50,7 @@ import {
     DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, beans, type NamesDebt,
 } from '../utils/names-debts';
 import { keyLineWords } from '../components/key-lines';
-import { formatNumber, t, tn } from '@beanpool/core';
+import { formatNumber, ruleStartsLine, t, tn, waitingLineSentences, type WaitingLines } from '@beanpool/core';
 import { signedRequestWords } from '../components/signed-request-lines';
 
 /**
@@ -81,7 +81,7 @@ type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?
     // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
     // The totals (any community) and the two access-log lists: looks at a balance, looks at trades and alerts (#1608).
     // `totalsMissing`: why there are no totals (a node from before #1599 needs an update; otherwise "just now").
-    | { kind: 'health'; body: HealthExceptionsBody | null; totals: HealthTotals | null; totalsMissing: string; logs: { balance: HealthLogSection; trades: HealthLogSection }; refused: string | null };
+    | { kind: 'health'; body: HealthExceptionsBody | null; waiting: WaitingLines | null; totals: HealthTotals | null; totalsMissing: string; logs: { balance: HealthLogSection; trades: HealthLogSection }; refused: string | null };
 
 export default function NamesListScreen() {
     const { theme, colors } = useTheme();
@@ -561,6 +561,7 @@ export default function NamesListScreen() {
         setMode({
             kind: 'health',
             body: ex.ok ? ex.value : null,
+            waiting: summary.ok ? readWaitingLines(summary.value) : null,
             totals: summary.ok ? readHealthTotals(summary.value) : null,
             totalsMissing: notOnThisNode(summary) ? HEALTH_COPY.totalsNotOnThisNode : HEALTH_COPY.totalsMissing,
             // A log the phone couldn't read says so in both lists, never "nobody has looked".
@@ -773,10 +774,13 @@ export default function NamesListScreen() {
                     <>
                         <Text style={styles.body}>
                             {tn(mode.body.settings.quietDays,
-                                'Only members who agreed to what the admins can see, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.',
-                                'Only members who agreed to what the admins can see, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.',
+                                'Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.',
+                                'Only confirmed members, past {pct}% of their floor or in debit with no sale for {n} days. Their trades are never shown.',
                                 { pct: mode.body.settings.debtLinePct })}
                         </Text>
+                        {[ruleStartsLine(mode.body.rule), ...waitingLineSentences(mode.waiting)].filter((line): line is string => !!line).map((line) => (
+                            <Text key={line} style={styles.body} testID="health-rule-date">{line}</Text>
+                        ))}
                         <Text style={styles.label}>{t('PAST A LINE')}</Text>
                         {rows.length === 0 ? <Text style={styles.hint}>{t('Nobody is past a line.')}</Text> : null}
                         {rows.map((r) => (

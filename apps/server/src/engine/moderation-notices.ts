@@ -9,8 +9,9 @@
 // None of them names the admin or moderator who acted, or anyone who reported: the author hears "the community's
 // moderators", and each reporter hears only about their own report.
 
-import { wordsFor, type PushNoticeKind } from '@beanpool/core';
+import { word, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { reportKind } from '../services/report-kind.js';
 import { keepNotice } from './kept-notices.js';
 
 // English's own t(): a refusal with a value in it, which member-words.ts finds again by its catalog sentence.
@@ -125,6 +126,56 @@ export function closeOpenReportsOnPost(postId: string): string[] {
 }
 
 /**
+ * What a takedown closes (engine/agent-takedowns.ts): every open report on the post but a Child safety one, which waits for a person,
+ * first in the Open queue, and whose reporter hears nothing yet. Read as the alerts read it (`reportKind`). Returns the ids it closed,
+ * so Put back can open them again, and who to tell: never a reporter whose Child safety report on this post is the one still waiting.
+ */
+export function closeReportsForTakedown(postId: string): { ids: string[]; reporters: string[] } {
+    const open = db.prepare(
+        `SELECT id, reporter_pubkey, reason FROM abuse_reports
+          WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
+    ).all(postId) as { id: string; reporter_pubkey: string; reason: string | null }[];
+    const isWaiting = (r: { reason: string | null }) => reportKind(r.reason) === 'child safety';
+    const closing = open.filter(r => !isWaiting(r));
+    const close = db.prepare(
+        `UPDATE abuse_reports SET status = 'actioned', suspended_member = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`
+    );
+    for (const r of closing) close.run(r.id);
+    const stillWaiting = new Set(open.filter(isWaiting).map(r => r.reporter_pubkey));
+    return { ids: closing.map(r => r.id), reporters: [...new Set(closing.map(r => r.reporter_pubkey))].filter(pk => !stillWaiting.has(pk)) };
+}
+
+/** The databases that have report_is_child_safety() (a test may open more than one in a process). */
+const childSafetyFnOn = new WeakSet<object>();
+
+/** report_is_child_safety(reason) on this connection, for a query (never the file schema): `reportKind`, read as the alerts read it. */
+export function ensureChildSafetyFn(): void {
+    if (childSafetyFnOn.has(db)) return;
+    db.function('report_is_child_safety', { deterministic: true }, (reason: unknown) => (reportKind(reason) === 'child safety' ? 1 : 0));
+    childSafetyFnOn.add(db);
+}
+
+/** SQL: a Child safety report is open on `post`, a column or a `?`. A Pulse report is about its item, so it is never one of them. */
+export function childSafetyOpenOn(post: string): string {
+    ensureChildSafetyFn();
+    return `EXISTS (SELECT 1 FROM abuse_reports cs WHERE cs.target_post_id = ${post} AND cs.target_pulse_item_id IS NULL
+        AND (cs.status = 'pending' OR cs.status IS NULL) AND report_is_child_safety(cs.reason) = 1)`;
+}
+
+/**
+ * Reports a takedown closed, back in the moderators' queue as they were (engine/agent-takedowns.ts): an undo nobody read a post on is
+ * no dismissal. Only a report still as `closeReportsForTakedown` left it: one a person dismissed since, or acted on to suspend its
+ * member, stays as they left it. Nobody is told (the reporters' notice stands: scratch/fable-design/DESIGN-mcp-moderation-fable.md §3.5).
+ */
+export function reopenClosedReports(reportIds: string[]): number {
+    const reopen = db.prepare(
+        `UPDATE abuse_reports SET status = 'pending', suspended_member = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+          WHERE id = ? AND status = 'actioned' AND suspended_member = 0`
+    );
+    return reportIds.reduce((n, id) => n + reopen.run(id).changes, 0);
+}
+
+/**
  * The admins removed a post. The author is told (only when the post was live — removing an already-removed
  * post tells them nothing new), and so is each member whose report on it this closed.
  */
@@ -146,7 +197,7 @@ export function notifyPostTakedown(
 
 /**
  * An admin dismissed a report on a post: its reporter hears the post was reviewed and kept — or, when its
- * author had already taken it down, only that it is no longer up.
+ * author had already taken it down or a takedown has it on hold, only that it is no longer up.
  */
 export function notifyReportDismissed(cb: ModerationNoticeCallbacks, reporterPubkey: string, postId: string, postIsLive = true): void {
     if (postIsLive) {
@@ -181,17 +232,7 @@ export function notifyPostsCleared(
         const days = a.youngestMs === null ? null : Math.floor((now - a.youngestMs) / 86_400_000);
         tell(cb, [author], POSTS_CLEARED_TITLE, postsClearedBody(a.count, days), { kind: 'posts_cleared', count: a.count });
     }
-    const authorOf = new Map(removed.map(p => [p.id, p.authorPubkey]));
-    const byReporter = new Map<string, number>();
-    for (const [postId, reporters] of reportersByPost) {
-        for (const r of new Set(reporters)) {
-            if (r === authorOf.get(postId)) continue;
-            byReporter.set(r, (byReporter.get(r) ?? 0) + 1);
-        }
-    }
-    for (const [reporter, n] of byReporter) {
-        tell(cb, [reporter], REPORT_OUTCOME_TITLE, reportedPostsRemovedBody(n), { kind: 'report_outcome', outcome: 'removed' });
-    }
+    notifyReportersRemoved(cb, reportersByPost, new Map(removed.map(p => [p.id, p.authorPubkey])));
 }
 
 // ── Auto-moderation on the global profile (engine/auto-moderation.ts) ────────────────────────────
@@ -248,6 +289,46 @@ export function notifyPostHidden(cb: ModerationNoticeCallbacks, post: { id: stri
 export function notifyPostBack(cb: ModerationNoticeCallbacks, post: { id: string; title: string | null; authorPubkey: string | null }): void {
     if (!post.authorPubkey) return;
     tell(cb, [post.authorPubkey], POST_BACK_TITLE, postBackBody(post.title), { kind: 'post_restored', screen: 'post', postId: post.id });
+}
+
+// ── An owner's AI assistant took posts down (engine/agent-takedowns.ts) ──────────────────────────
+
+export const POST_TAKEN_DOWN_TITLE = word('🛡️ Your post was taken down');
+export const POSTS_TAKEN_DOWN_TITLE = word('🛡️ Your posts were taken down');
+
+/**
+ * The closed list's label, never the assistant's own words, and never that an assistant did it: "the community's moderators", as
+ * a moderator's removal never names the moderator. `count` above 1 is a batch's one notice.
+ */
+export function postTakenDownBody(title: string | null | undefined, reasonCategory: string, count = 1): string {
+    const reason = REMOVAL_REASON_LABELS[reasonCategory] ?? REMOVAL_REASON_LABELS.rules;
+    if (count > 1) return tr("{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.", { n: count, reason });
+    return title && title.trim()
+        ? tr("Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.", { title: quoted(title), reason })
+        : tr("Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.", { reason });
+}
+
+/** One notice to the author, however many of their posts the call took down. The post is theirs to open while it is hidden. */
+export function notifyPostsTakenDown(cb: ModerationNoticeCallbacks, authorPubkey: string, posts: { id: string; title: string | null }[], reasonCategory: string): void {
+    if (posts.length === 0) return;
+    if (posts.length > 1) {
+        tell(cb, [authorPubkey], POSTS_TAKEN_DOWN_TITLE, postTakenDownBody(null, reasonCategory, posts.length), { kind: 'post_hidden', reason: 'taken_down', count: posts.length });
+        return;
+    }
+    const [post] = posts;
+    tell(cb, [authorPubkey], POST_TAKEN_DOWN_TITLE, postTakenDownBody(post.title, reasonCategory), { kind: 'post_hidden', reason: 'taken_down', screen: 'post', postId: post.id });
+}
+
+/** Each reporter hears once, with the count, in the words a removal uses, never about a report of their own post. */
+export function notifyReportersRemoved(cb: ModerationNoticeCallbacks, reportersByPost: Map<string, string[]>, authorOf: Map<string, string | null>): void {
+    const byReporter = new Map<string, number>();
+    for (const [postId, reporters] of reportersByPost) {
+        for (const r of new Set(reporters)) {
+            if (r === authorOf.get(postId)) continue;
+            byReporter.set(r, (byReporter.get(r) ?? 0) + 1);
+        }
+    }
+    for (const [reporter, n] of byReporter) tell(cb, [reporter], REPORT_OUTCOME_TITLE, reportedPostsRemovedBody(n), { kind: 'report_outcome', outcome: 'removed' });
 }
 
 // ── Clean-up by burst (engine/burst-cleanup.ts) ─────────────────────────────────────────────────

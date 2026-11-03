@@ -33,6 +33,7 @@ import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
 import { AutomationTokensPanel } from './AutomationTokensPanel';
 import { ConnectedAssistantsPanel } from './ConnectedAssistantsPanel';
 import { RetirePasswordPanel } from './RetirePasswordPanel';
+import { LightsOutCard } from './LightsOutCard';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { RestorePointsPanel } from './RestorePointsPanel';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
@@ -1421,6 +1422,10 @@ export function ApplianceSection({
             {/* Subtab: Addresses */}
             {subTab === 'network' && (
                 <div className="space-y-6">
+                    {/* Lights-out (LightsOutCard): the owner's switch for the hall, first, where an owner in the hall looks. */}
+                    <SectionErrorBoundary sectionName="Lights-out" resetKey={activeNode.id}>
+                        <LightsOutCard key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
                     <SectionErrorBoundary sectionName="Addresses" resetKey={activeNode.id}>
                         <AddressesPanel
                             key={activeNode.id}

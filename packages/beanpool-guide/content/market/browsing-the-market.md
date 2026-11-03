@@ -83,7 +83,15 @@ You cannot save a post yet.
 
 ## Sharing a post
 
-Open a post and tap **Share with members**. Your phone's share sheet opens with the post's title and a link; on a computer the link is copied for you to paste. Anyone in your community who taps it opens the post. Someone who isn't a member lands on your community's own page, with how to ask to join.
+Before you tap, a plain line under the buttons tells you what the link will do, based on your community's rules and your standing:
+
+- **Sharing outside allowed:** You see **Share with members** and **Share outside the community**. Under **Share with members**, the line reminds you that this link opens for members only. Under **Share outside the community**, it tells you that anyone can read this listing for 7 days, then ask to join.
+- **Sharing outside off, any member may invite:** You see **Share with members**, the line that it opens for members only, and an **Invite someone** button to send an invite directly.
+- **Sharing outside off, only admins invite:** Members see **Share with members** and the line that it opens for members only and only admins invite here. Owners and admins also see the **Invite someone** button.
+- **On an open community:** The link already opens for anyone, so no extra line is shown.
+- **In a private preview:** Only owners and admins invite, so members see that only admins invite here.
+
+When you tap **Share with members**, your phone's share sheet opens with the post's title and a link; on a computer the link is copied for you to paste. Anyone in your community who taps it opens the post. Someone who isn't a member lands on your community's front door.
 
 Where your community allows it, you can also tap **Share outside the community**. It is for showing one listing to a friend or a neighbour who isn't in BeanPool yet, in a chat or a message:
 

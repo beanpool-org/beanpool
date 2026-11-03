@@ -6,7 +6,7 @@
  * - Two franchises:
  *     - 1m1v (one member, one vote) for member decisions.
  *     - Quadratic on earned trade standing for pool/treasury decisions.
- * - Who votes: active, unfrozen members who joined BEFORE the Decision opened (no mid-vote stacking).
+ * - Who votes: active members (a freeze moves no vote) who joined BEFORE the Decision opened (no mid-vote stacking).
  * - Ballots are secret: only totals and the caller's own vote are ever served; votes stay stored against
  *   keys for dedup and verification.
  * - Quorum: 30% of the Decision's electorate active in the last 30 days (any signed activity), floor 3
@@ -495,7 +495,7 @@ function withCaseHidden(decision: Decision, shown: PublicDecision): PublicDecisi
 /**
  * A Decision as `reader`, the verified signer, sees it: publicDecision, and for a Decision about a member that records
  * their balance, that balance and debt to those who may vote in it (checkVoterEligibility for this Decision: active,
- * not frozen, joined before it opened) and to the member themselves. Nowhere else: not the list's other cards, not a
+ * joined before it opened; a freeze moves no vote) and to the member themselves. Nowhere else: not the list's other cards, not a
  * broadcast, not a visitor, a non-member or an unsigned reader.
  */
 export function decisionForReader(decision: Decision, reader: string | null | undefined): PublicDecision {
@@ -900,7 +900,7 @@ export const JURY_ONLY_VOTE_ERROR = word("A jury of members drawn at random deci
  * `asOfTime` — any signed activity, not only trades.
  *
  * "Could vote" is the same test checkVoterEligibility applies: active, or paused and held by nothing but their pause's
- * own vote (pausedOnlyByOpenVoteSql); unfrozen, not an enterprise, not a visitor's row; when `joinedBefore` is given (a
+ * own vote (pausedOnlyByOpenVoteSql); not an enterprise, not a visitor's row (a freeze moves no vote); when `joinedBefore` is given (a
  * Decision's opensAt) joined before the Decision opened; and not `notCounting`, a removal's subject, who never votes on it.
  *
  * Activity signal: `members.last_active_at`, stamped from the verified signer of every signed write
@@ -923,7 +923,6 @@ export function getActiveMembersCount30d(asOfTime?: number, joinedBefore?: strin
         WHERE (m.status = 'active' OR ${pausedOnlyByOpenVoteSql('m')})
           AND m.public_key NOT IN (SELECT value FROM json_each(@notCounting))
           AND COALESCE(m.is_treasury, 0) = 0
-          AND COALESCE(m.credit_frozen, 0) = 0
           AND m.is_visitor = 0
           AND m.public_key NOT IN ('SYSTEM', 'COMMONS_POOL')
           AND m.public_key NOT LIKE 'escrow_%'
@@ -1019,7 +1018,7 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
 
 /**
  * Check if a member is eligible to vote on decisions (§3.3, answer J):
- * - Account active, not frozen, not an enterprise. Paused, and held by nothing but their pause's own vote, counts as
+ * - Account active, not an enterprise (a freeze moves no vote: it is about Beans, not citizenship). Paused, and held by nothing but their pause's own vote, counts as
  *   active (removal by vote S2, design §3.3): a paused member keeps their vote on every Decision but the one about them,
  *   so pausing someone can't move a vote (pausedOnlyByOpenVoteSql).
  * - Never the subject of a vote on removing them, a pause's or one a member proposed (design §5 point 2).
@@ -1043,8 +1042,8 @@ export function checkVoterEligibility(
     if (member.status !== 'active' && !(member.status === 'disabled' && pausedOnlyByOpenVote(voterPubkey))) {
         return { ok: false, error: word('Voter account is not active') };
     }
-    const row = db.prepare("SELECT COALESCE(credit_frozen, 0) as credit_frozen, joined_at FROM members WHERE public_key = ?").get(voterPubkey) as any;
-    if (row?.credit_frozen === 1) return { ok: false, error: word('Voter credit is frozen') };
+    // A freeze is about Beans, not citizenship (DESIGN-removal-jury-j2-calls-fable.md, Call 1, RV-S7): it stops no vote.
+    const row = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(voterPubkey) as any;
     if (member.isTreasury) return { ok: false, error: word('Enterprise accounts cannot vote') };
     if (decision) {
         const joined = parseDbTime(row?.joined_at);
@@ -3677,8 +3676,8 @@ function notePauseForOwners(decisionId: string, actor: string | null, heldRole: 
 
 /**
  * Everyone who may vote on this removal now, as checkVoterEligibility judges each: an account active, or paused and held
- * by nothing but its own pause's vote (pausedOnlyByOpenVoteSql); unfrozen, not an enterprise, not a visitor's row; joined
- * before the vote opened; never its subject. Not only those active in the last 30 days, whom its turnout is measured
+ * by nothing but its own pause's vote (pausedOnlyByOpenVoteSql); not an enterprise, not a visitor's row (a freeze moves no
+ * vote); joined before the vote opened; never its subject. Not only those active in the last 30 days, whom its turnout is measured
  * against: anyone who may vote is told.
  */
 function removalVoters(decision: Decision): string[] {
@@ -3689,7 +3688,6 @@ function removalVoters(decision: Decision): string[] {
         WHERE (m.status = 'active' OR ${pausedOnlyByOpenVoteSql('m')})
           AND m.public_key NOT IN (SELECT value FROM json_each(@subjects))
           AND COALESCE(m.is_treasury, 0) = 0
-          AND COALESCE(m.credit_frozen, 0) = 0
           AND m.is_visitor = 0
           AND m.public_key NOT IN ('SYSTEM', 'COMMONS_POOL')
           AND m.public_key NOT LIKE 'escrow_%'

@@ -52,7 +52,8 @@ describe('AddCardDialog', () => {
             expect(d.style.width).toBe('10px');
             expect(d.style.height).toBe('10px');
             expect(d.className).toContain('shrink-0');
-            // The name beside it can shrink and wrap, so the dot costs the row's words only its own 10px and gap.
+            // The name beside it can shrink and wrap; the gap is 6 CSS px whatever the text size (not rem), so the dot costs 16px.
+            expect(d.parentElement!.style.gap).toBe('6px');
             expect(d.nextElementSibling!.className).toContain('min-w-0');
         }
     });

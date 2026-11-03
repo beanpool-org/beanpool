@@ -92,7 +92,7 @@ export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPo
                             <li key={r.type} data-testid={`home-add-row-${r.type}`}
                                 className="flex items-center gap-2 px-3 py-2 border-b border-nature-100 dark:border-nature-800 last:border-b-0 min-w-0">
                                 <span className="flex-1 min-w-0 break-words">
-                                    <span className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center min-w-0" style={{ gap: 6 }}>
                                         {/* The colour the card will have on Home, before it is there: decoration, hidden from a screen reader. */}
                                         <span aria-hidden="true" data-testid={`home-add-dot-${r.type}`} className="shrink-0 rounded-full"
                                             style={{ width: 10, height: 10, backgroundColor: `var(--bp-card-${homeCardHue({ type: r.type })}-ink)` }} />

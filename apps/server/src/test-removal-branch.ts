@@ -23,7 +23,7 @@
  * 10. A re-key of an account on the list (engine/key-move.ts) moves it on the vote, mid-vote and mid-grace: No lifts its new
  *     key's pause, Yes removes its new key, a halt gives it back, and Offboard settling the others leaves the window open.
  * 11. The community's own vote to bring one account back (unsuspend_member), passed in the window, takes it off the list:
- *     the window's end removes the others, never them, and the record names them.
+ *     the window's end removes the others, never them, and the record names them. Passed while the vote is open, the same.
  *
  * Boots the real server; the routes go over HTTPS through the real admin sessions and the real signature middleware.
  * Expo is answered here: nothing leaves this machine.
@@ -505,6 +505,17 @@ async function main() {
     assert(statusOf(b1.b) === 'active' && [b1.root, b1.a, b1.c].every(i => statusOf(i) === 'pruned')
         && /Brought back by a community vote, so not removed: BackB/.test(row(idB1).execution_reason ?? ''),
         `the window's end removes the others, never them, and the record says so ("${row(idB1).execution_reason}")`);
+    // Passed while the branch's vote is still open: they leave its list as well, and it runs on for the others.
+    const b2 = branchOf('Early');
+    const idB2 = await pauseBranchNow(b2.root);
+    const bringBackEarly = de.createDecision({ authorPubkey: ada.pubKeyHex, title: 'Bring EarlyA back', description: 'EarlyA is a real neighbour; we know them',
+        touches: 'member', effect: 'unsuspend_member', subject: b2.a.pubKeyHex });
+    vote(bringBackEarly.id, voters, []);
+    closeNow(bringBackEarly.id);
+    assert(row(bringBackEarly.id).status === 'executed' && statusOf(b2.a) === 'active' && row(idB2).status === 'open'
+        && !listedKeys(idB2).includes(b2.a.pubKeyHex) && row(idB2).title === 'Remove these 3 accounts?'
+        && JSON.parse(row(idB2).params).lifted?.some((l: any) => l.pubkey === b2.a.pubKeyHex && l.byVote === bringBackEarly.id),
+        `passed while the branch's vote is open, they leave its list and it runs on for the other 3 (${row(idB2).status}, "${row(idB2).title}")`);
 
     assert(offMachine.length === 0, `nothing was asked of a server off this machine (${offMachine.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} passed`);

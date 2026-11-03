@@ -1763,7 +1763,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject!);
                     // A branch's vote that lists them (its subject null: pauseBranch), still open or in its grace window:
                     // they leave its list, its record naming this vote (dropFromBranch), and it runs on for the others, so it
-                    // never removes them. Their last account, it is cancelled as one member's removal is, below.
+                    // never removes them. Their last account, it is cancelled as one member's removal is, below; an open one
+                    // ends now, so the chain rules read when it ended (votesEndedWithoutRemoving reads its closes_at).
                     const branchRemovals = (db.prepare(`
                         SELECT * FROM decisions d
                         WHERE d.subject IS NULL AND ${namesMemberSql('d', '@pk')} AND d.status IN ('open', 'execution_pending_grace')
@@ -1772,9 +1773,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         cancelledDecisionIds.push(b.id);
                         if (dropFromBranch(b, decision.subject!, now, decision.id)) continue;
                         db.prepare(`
-                            UPDATE decisions SET status = 'failed', execution_reason = 'Cancelled by member reinstatement decision', updated_at = ?
+                            UPDATE decisions SET status = 'failed', execution_reason = 'Cancelled by member reinstatement decision',
+                                closes_at = CASE WHEN status = 'open' THEN ? ELSE closes_at END, updated_at = ?
                             WHERE id = ? AND status IN ('open', 'execution_pending_grace')
-                        `).run(now, b.id);
+                        `).run(now, now, b.id);
                     }
                     // Cancel any pending removal grace periods for this subject
                     const cancelledDecisions = db.prepare(
@@ -2687,18 +2689,19 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
     return { success: true };
 }
 
-/** What a branch's vote records for an account an admin lifted out of it (dropFromBranch): their name, and when. */
+/** What a branch's vote records for an account that left its list (dropFromBranch): their name, when, and which vote if one did. */
 export interface BranchLifted {
     pubkey: string;
     name: string;
     at: string;
-    /** The community's own vote that brought them back (unsuspend_member / reinstate_member), in its grace window. */
+    /** The community's own vote that brought them back (unsuspend_member / reinstate_member), while this vote was open or in its window. */
     byVote?: string;
 }
 
 /**
  * An account leaves a branch's list: an admin lifted its pause on the open vote (adminLiftSuspension), or the community's
- * own vote brought it back in the grace window (executeDecision's unsuspend_member / reinstate_member, `byVote`). Its vote
+ * own vote brought it back while it was open or in its grace window (executeDecision's unsuspend_member / reinstate_member,
+ * `byVote`). Its vote
  * no longer names them nor removes them, and its record keeps their name and when (`lifted`). What the list owes is counted
  * again, and the title and description say the count left. The vote runs on for the others; returns false when nobody is
  * left on it, writing nothing, for the caller to close it. Rows only, inside the caller's transaction.

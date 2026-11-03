@@ -38,6 +38,7 @@ vi.mock('react-native', () => {
 });
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', { 'data-kav': 'padding' }, children as any),
+    KeyboardAwareScrollView: ({ children, keyboardShouldPersistTaps }: { children?: unknown; keyboardShouldPersistTaps?: string }) => createElement('div', { 'data-kav': 'scroll', 'data-taps': keyboardShouldPersistTaps }, children as any),
 }));
 vi.mock('expo-image', () => ({ Image: () => null }));
 vi.mock('expo-router', () => ({ router: { canGoBack: () => false, back: vi.fn(), replace: vi.fn(), push: vi.fn() } }));

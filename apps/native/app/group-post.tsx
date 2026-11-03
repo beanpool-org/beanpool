@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TextInput, Pressable, Alert, ActivityIndicator, Platform } from 'react-native';
+import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -45,6 +45,8 @@ export default function GroupPostScreen() {
     const { identity } = useIdentity();
     const { theme, colors } = useTheme();
 
+    const insets = useSafeAreaInsets();
+    const [footerHeight, setFooterHeight] = useState(0);
     const [type, setType] = useState<'offer' | 'need'>('offer');
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState('general');
@@ -293,10 +295,12 @@ export default function GroupPostScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
-                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-                <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            {/* The scroll view owns keyboard avoidance (as treasury-post does): it scrolls the field being typed in, and the
+                caret of a growing multiline one, above the keyboard AND the footer (bottomOffset is the footer's measured
+                height, which grows with the font scale). The footer rides the keyboard in a KeyboardStickyView. This replaced
+                a KeyboardAvoidingView around a plain ScrollView, which shrank the list but never scrolled to the field. */}
+            <View style={{ flex: 1 }}>
+                <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={footerHeight + 16}>
                     {/* Unmistakable Scope Banner */}
                     <View style={styles.audienceBanner}>
                         <View style={styles.audienceBadgeRow}>
@@ -463,27 +467,31 @@ export default function GroupPostScreen() {
                             <Text style={styles.toggleHint}>{t('At cost for fuel or materials (agreed in chat)')}</Text>
                         </View>
                     </Pressable>
-                </ScrollView>
+                </KeyboardAwareScrollView>
 
-                {/* Inside the KeyboardAvoidingView (as on treasury-post) so the Post button rides above the keyboard
-                    instead of being hidden behind it while typing. */}
-                <View style={styles.footer}>
-                    <Pressable
-                        style={styles.submitBtn}
-                        onPress={handleSubmit}
-                        disabled={submitting}
-                        accessibilityRole="button"
-                        accessibilityLabel={submitting ? t('Posting...') : t('Post to {name}', { name: groupName })}
-                        accessibilityState={{ disabled: submitting, busy: submitting }}
-                    >
-                        {submitting ? (
-                            <ActivityIndicator color={colors.text.inverse} />
-                        ) : (
-                            <Text style={styles.submitBtnText} numberOfLines={1}>{t('Post to {name}', { name: groupName })}</Text>
-                        )}
-                    </Pressable>
-                </View>
-            </KeyboardAvoidingView>
+                {/* Rides above the keyboard instead of being hidden behind it while typing. This screen keeps the 'bottom' safe-area
+                    edge, so at rest the footer sits above the home indicator; iOS reports the keyboard's height WITH that strip, so
+                    without `opened: insets.bottom` the footer would stop that far above the keyboard and cover the bottom of the
+                    field being typed in. Android is left as it was: its library already subtracts the navigation bar. */}
+                <KeyboardStickyView offset={{ opened: Platform.OS === 'ios' ? insets.bottom : 0 }} onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
+                    <View style={styles.footer}>
+                        <Pressable
+                            style={styles.submitBtn}
+                            onPress={handleSubmit}
+                            disabled={submitting}
+                            accessibilityRole="button"
+                            accessibilityLabel={submitting ? t('Posting...') : t('Post to {name}', { name: groupName })}
+                            accessibilityState={{ disabled: submitting, busy: submitting }}
+                        >
+                            {submitting ? (
+                                <ActivityIndicator color={colors.text.inverse} />
+                            ) : (
+                                <Text style={styles.submitBtnText} numberOfLines={1}>{t('Post to {name}', { name: groupName })}</Text>
+                            )}
+                        </Pressable>
+                    </View>
+                </KeyboardStickyView>
+            </View>
 
             <CategoryPickerSheet
                 visible={showCategoryPicker}

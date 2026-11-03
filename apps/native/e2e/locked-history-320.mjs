@@ -63,6 +63,17 @@ const STUBS = {
     'ThemeContext': `export const useTheme = () => globalThis.__theme;`,
     'expo-router': `export const router = { back() {}, push() {}, replace() {} }; export const ErrorBoundary = () => null; export const useIsFocused = () => true;`,
     'react-native-safe-area-context': `export const useSafeAreaInsets = () => ({ top: 24, bottom: 16, left: 0, right: 0 });`,
+    // The keyboard library's scroll view is built on Reanimated worklets, which need the Babel worklets transform Metro runs and
+    // this esbuild bundle does not (unstubbed it throws "global is not defined", then "not a worklet", and the screen draws
+    // nothing). There is no keyboard in headless Chromium either, so it stands in as the plain scroll view it wraps: the
+    // layout, the 320 edge, the text sizes and the button heights measured here are the same. bottomOffset only matters
+    // while a keyboard is up, so it is dropped.
+    'react-native-keyboard-controller': `
+        import React from 'react';
+        import { ScrollView, View } from 'react-native-web';
+        export const KeyboardAwareScrollView = React.forwardRef(({ bottomOffset, ...p }, ref) => React.createElement(ScrollView, { ...p, ref }));
+        export const KeyboardStickyView = ({ offset, ...p }) => React.createElement(View, p);
+    `,
     'expo-clipboard': `export const getStringAsync = async () => '';`,
     'WordsOnScreen': `export const NoScreenCapture = ({ children }) => children; export const WordsOutsideScreens = ({ children }) => children;`,
     'useYourGroups': `export const yourGroupsStore = { getState: () => ({ items: [] }) };`,

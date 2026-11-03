@@ -11,9 +11,9 @@
  * Its author can stop from here too: a new phone holds no pair to tick (utils/show-on-global.ts).
  */
 import React, { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { askButton, askLine, copyAsk, copyCardLine, copyPriceLine, eventCopyOf, listingFreeTags, t } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
@@ -101,9 +101,8 @@ export function ListingCopyDetail({ post }: { post: any }) {
                 <Text style={styles.backText}>{t('← Back')}</Text>
             </Pressable>
             {/* The report box's words and Send are the last things here, and under edge-to-edge the window doesn't resize for the
-                keyboard: as EventDetail, drawn from the same route. No keyboardVerticalOffset: this screen draws its own header. */}
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                keyboard: as EventDetail, drawn from the same route, so the scroll view scrolls the words above it. */}
+            <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                 {photos.length > 0 && <PhotoCarousel photos={photos} height={220} borderRadius={14} />}
                 <Text style={styles.kind}>{post.type === 'need' ? t('NEED') : t('OFFER')}</Text>
                 <Text style={styles.title}>{post.title}</Text>
@@ -141,8 +140,7 @@ export function ListingCopyDetail({ post }: { post: any }) {
                         {reporting && <ReportReasonBox onSubmit={report} onCancel={() => setReporting(false)} />}
                     </>
                 )}
-            </ScrollView>
-            </KeyboardAvoidingView>
+            </KeyboardAwareScrollView>
         </View>
     );
 }

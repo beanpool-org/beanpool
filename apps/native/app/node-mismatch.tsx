@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ActivityIndicator, Alert } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, ErrorBoundary } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -337,8 +337,8 @@ export default function NodeMismatchScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style={dark ? 'light' : 'dark'} />
-            <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-                <ScrollView contentContainerStyle={styles.scroll}>
+            {/* The scroll view scrolls the field being typed in above the keyboard (it replaced a KeyboardAvoidingView around a plain ScrollView, which shrank the page but never scrolled to the field). */}
+            <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                     <View style={styles.card}>
                         <Text style={styles.emoji}>{emoji}</Text>
                         <Text style={styles.title} accessibilityRole="header">{title}</Text>
@@ -546,8 +546,7 @@ export default function NodeMismatchScreen() {
                             </View>
                         )}
                     </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+            </KeyboardAwareScrollView>
         </SafeAreaView>
     );
 }

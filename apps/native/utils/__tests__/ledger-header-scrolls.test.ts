@@ -73,6 +73,9 @@ describe('the Ledger header scrolls with the page', () => {
         expect(src).toMatch(/onListScroll = \(e[^)]*\) => \{[\s\S]*?pageTitle\.onScroll\(e\);/);
         expect(fixed).toContain('onScroll={onListScroll}');
         expect(fixed).toContain('keyboardShouldPersistTaps="handled"');
-        expect(fixed).toContain('paddingBottom: keyboardHeight > 0 ? keyboardHeight + 48 : 48');
+        // Keyboard room comes from the library's scroll view (it pads the list and scrolls the send form's field into view), not hand-made padding.
+        expect(fixed).toContain('renderScrollComponent={keyboardAwareList}');
+        expect(fixed).toContain('paddingBottom: 48');
+        expect(src).not.toMatch(/keyboardHeight/);
     });
 });

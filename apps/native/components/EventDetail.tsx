@@ -16,10 +16,10 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Linking, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Linking, Platform, DeviceEventEmitter } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { copyFromLine, eventCopyOf, t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@beanpool/core';
@@ -341,11 +341,10 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
 
             {/*
               * The report box's words and Submit are the last things here: under edge-to-edge the window does not resize
-              * for the keyboard, so this view moves them up (review of #1912, finding 2; the post screen's pattern). No
-              * keyboardVerticalOffset: the screen draws its own header, and keyboard-controller measures this view's frame.
+              * for the keyboard, so the scroll view scrolls the words above it (review of #1912, finding 2). It replaced a
+              * KeyboardAvoidingView around a plain ScrollView, which shrank the page but never scrolled to the field.
               */}
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
+            <KeyboardAwareScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                 {photos.length > 0 && (
                     <View style={{ marginBottom: 14 }}>
                         <PhotoCarousel photos={photos} height={200} borderRadius={14} />
@@ -595,8 +594,7 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                         {reporting && <ReportReasonBox onSubmit={report} onCancel={() => setReporting(false)} />}
                     </>
                 )}
-            </ScrollView>
-            </KeyboardAvoidingView>
+            </KeyboardAwareScrollView>
 
             <NewEventModal
                 visible={!!copyDraft}

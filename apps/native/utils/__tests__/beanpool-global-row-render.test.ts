@@ -13,6 +13,7 @@
  * Nothing is contacted: fetch answers the global community's info and membership probe only, from the scene below.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('react-native-keyboard-controller', () => ({ KeyboardAwareScrollView: ({ children }: any) => children, KeyboardAvoidingView: ({ children }: any) => children, KeyboardStickyView: ({ children }: any) => children })); // the real one needs the keyboard library's native side
 import Module from 'node:module';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

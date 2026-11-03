@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -273,7 +274,7 @@ export default function ProfileSetupScreen() {
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style={dark ? 'light' : 'dark'} />
-            <ScrollView contentContainerStyle={styles.scroll}>
+            <KeyboardAwareScrollView contentContainerStyle={styles.scroll} bottomOffset={24}>
                 {/* Step indicator */}
                 <View style={styles.steps}>
                     {stepOrder.map((s, i) => (
@@ -424,7 +425,7 @@ export default function ProfileSetupScreen() {
                         </>
                     )}
                 </View>
-            </ScrollView>
+            </KeyboardAwareScrollView>
 
             <AvatarPickerSheet
                 visible={showAvatarPicker}

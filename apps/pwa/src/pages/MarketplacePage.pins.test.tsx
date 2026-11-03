@@ -180,6 +180,22 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
         expect(new Set(allTitles).size).toBe(6);
     });
 
+    it('a pin that has ended leaves the block at the next draw, in a tab left open', async () => {
+        const ends = Date.now() + 60_000;
+        const pin = makePost('pin-1', 'Ending Pin', { pinnedUntil: new Date(ends).toISOString(), pinnedAt: new Date(Date.now() - 1000).toISOString() });
+        stubNode([pin, makePost('reg-1', 'Regular Post 1')]);
+        const { rerender } = render(<MarketplacePage identity={identity} isMember={true} />);
+        await waitFor(() => expect(screen.getByTestId('market-pinned-block')).toBeInTheDocument());
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date(ends + 1000));
+        try {
+            rerender(<MarketplacePage identity={identity} isMember={true} />);
+            expect(screen.queryByTestId('market-pinned-block')).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('suppresses the Pinned block under search narrowing', async () => {
         const pin1 = makePost('pin-1', 'Pinned Post', {
             pinnedAt: new Date(NOW - 1000).toISOString(),

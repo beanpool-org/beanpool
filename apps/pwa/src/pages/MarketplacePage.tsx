@@ -3849,7 +3849,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // Under search, tags, or member-picked distance (near.from === 'setting' or radiusSettings),
                 // the pinned block is suppressed (departure 3 from PR #2754).
                 const isUnderNarrowing = Boolean(searchQuery.trim()) || searchResults !== null || Boolean(selectedTag) || Boolean(selectedFree) || Boolean(radiusSettings) || near?.from === 'setting';
-                const livePins = !isUnderNarrowing ? filtered.filter(p => pinLive(p as any, clockNow)) : [];
+                // The time now, not the timer's clock: that stands still in a tab with no pin ahead of it.
+                const drawnAt = Date.now();
+                const livePins = !isUnderNarrowing ? filtered.filter(p => pinLive(p as any, drawnAt)) : [];
                 livePins.sort((a, b) => {
                     const timeA = Date.parse((a as any).pinnedAt || (a as any).pinned_at || a.createdAt || '') || 0;
                     const timeB = Date.parse((b as any).pinnedAt || (b as any).pinned_at || b.createdAt || '') || 0;

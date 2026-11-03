@@ -125,7 +125,7 @@ export function PostPinDetail({
                             onClick={handleUnpin}
                             disabled={unpinning}
                             data-testid="take-pin-off-inline-btn"
-                            className="text-xs font-bold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-900/40 bg-white/70 dark:bg-nature-950/70 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50 min-h-[36px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                            className="text-xs font-bold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-900/40 bg-white/70 dark:bg-nature-950/70 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50 min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                         >
                             {unpinning ? t('Updating…') : t('Take the pin off')}
                         </button>

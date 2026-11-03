@@ -137,16 +137,45 @@ export type EnterResult =
     | { kind: 'moved'; carried: CopyCarry | null }
     /** Already on this laptop. */
     | { kind: 'here' }
-    /** The poster names another community than the phone's. */
+    /** The laptop is another community (its statement names another key), and the poster named another name. */
     | { kind: 'other-community'; named: string; home: string }
     /** No community on this phone to bring to the hall. */
     | { kind: 'no-community' }
     | { kind: 'refused'; why: Exclude<LaptopCheck, 'same'> };
 
+// ─── A move under way ───────────────────────────────────────────────────────────────────────
+//
+// While the copy is carried (into the hall or home), the anchor and the hall record disagree on purpose: enterHall keeps
+// the record before the move, and the carry writes the address last (community-copy-carry.ts step 3). A banner tick in
+// that window must not read the disagreement as "the phone left the hall another way" and forget the record (the phone
+// would then sign for the number at the number, with no way home), nor start a second move home.
+
+/** Moves under way, and how many have started this run (a tick that saw a move start or end while it read judges nothing). */
+let moving = 0;
+let movesStarted = 0;
+
+async function whileMoving<T>(move: () => Promise<T>): Promise<T> {
+    moving++;
+    movesStarted++;
+    try {
+        return await move();
+    } finally {
+        moving--;
+    }
+}
+
+/** No move is under way, and none started since `seen` was read. */
+function stillSettled(seen: number): boolean {
+    return moving === 0 && movesStarted === seen;
+}
+
 /**
- * Open the hall door: check the laptop, then move to it with the copy (the file's steps 1 and 2). The audience kept is
- * the phone's own address's host; the link's `for` only has to agree with it. A phone already on a hall laptop goes from
- * that laptop's home, so a second laptop (a new number) is checked against the same community.
+ * Open the hall door: check the laptop, then move to it with the copy (the file's steps 1 and 2). The check decides,
+ * whatever name the poster gives: a community with two names (Byron's phones saved under mullum.beanpool.org, its
+ * poster naming byron.beanpool.org) is the same node key, and the nonce proof is what tells it from a stranger. The
+ * audience kept is always the phone's own address's host, never the poster's; the poster's name is only said back when
+ * the laptop turns out to be another community. A phone already on a hall laptop goes from that laptop's home, so a
+ * second laptop (a new number) is checked against the same community.
  */
 export async function enterHall(link: HallLink, deps: HallDeps): Promise<EnterResult> {
     const anchor = await deps.anchor().catch(() => null);
@@ -159,22 +188,26 @@ export async function enterHall(link: HallLink, deps: HallDeps): Promise<EnterRe
     if (!audience) return { kind: 'no-community' };
     if (link.at === current) return { kind: 'here' };
     if (link.at === home) return { kind: 'here' };
-    if (link.for && link.for !== audience) return { kind: 'other-community', named: link.for, home: audience };
     const verdict = await checkHallLaptop(link.at, home, deps);
+    if (verdict === 'not-same' && link.for && link.for !== audience) {
+        return { kind: 'other-community', named: link.for, home: audience };
+    }
     if (verdict !== 'same') return { kind: 'refused', why: verdict };
     // Kept before the move, so the first signed request at the number is already for the community's name.
     const record: HallRecord = { at: link.at, for: audience, home, since: new Date(deps.now()).toISOString() };
-    await writeHall(record);
-    try {
-        const carried = await deps.switchTo(link.at, current);
-        forgetHallRun();
-        return { kind: 'moved', carried: carried ?? null };
-    } catch (e) {
-        // Nothing moved (the carry says so and leaves the phone where it was): the hall the phone was in, if any, stays.
-        if (inHall && hall) await writeHall(hall);
-        else await clearHall();
-        throw e;
-    }
+    return whileMoving(async () => {
+        await writeHall(record);
+        try {
+            const carried = await deps.switchTo(link.at, current);
+            forgetHallRun();
+            return { kind: 'moved', carried: carried ?? null };
+        } catch (e) {
+            // Nothing moved (the carry says so and leaves the phone where it was): the hall the phone was in, if any, stays.
+            if (inHall && hall) await writeHall(hall);
+            else await clearHall();
+            throw e;
+        }
+    });
 }
 
 // ─── While in the hall, and the way home ────────────────────────────────────────────────────
@@ -183,6 +216,7 @@ export async function enterHall(link: HallLink, deps: HallDeps): Promise<EnterRe
 export interface LightsOutField {
     on: boolean;
     recordAsOf: string | null;
+    /** The community's main address (H1 homeAddress). Read, never gone to: the phone goes back to its own (hall.home). */
     home: string | null;
 }
 
@@ -227,37 +261,45 @@ async function homeIsSame(hall: HallRecord, deps: HallDeps): Promise<boolean> {
     return !!kept && !!there && sameCommunity(kept, there);
 }
 
-export type HomeResult = 'moved' | 'not-same' | 'not-in-hall';
+/** 'moving': another move (into the hall or home) is under way; nothing was done. */
+export type HomeResult = 'moved' | 'not-same' | 'not-in-hall' | 'moving';
 
 /**
- * Go back to the address the phone came from, the copy carried back. Checked first (statement at the address, the kept
- * identity, no fewer take-overs). The hall record goes only once the phone is home.
+ * Go back to the address the phone came from (`hall.home`), the copy carried back. Checked first (statement at the
+ * address, the kept identity, no fewer take-overs). The hall record goes only once the phone is home. One move at a
+ * time: a tap on the card while a tick is already carrying the copy home does nothing.
  */
 export async function goHome(deps: HallDeps): Promise<HomeResult> {
-    const hall = await readHall();
-    const anchor = await deps.anchor().catch(() => null);
-    const current = anchor && isPlainNodeAddress(anchor) ? plainOriginOf(anchor) : null;
-    if (!hall || current !== hall.at) return 'not-in-hall';
-    if (!(await homeIsSame(hall, deps))) return 'not-same';
-    await deps.switchTo(hall.home, hall.at);
-    await clearHall();
-    forgetHallRun();
-    run.backHome = audienceOf(hall.home);
-    return 'moved';
+    if (moving > 0) return 'moving';
+    return whileMoving(async () => {
+        const hall = await readHall();
+        const anchor = await deps.anchor().catch(() => null);
+        const current = anchor && isPlainNodeAddress(anchor) ? plainOriginOf(anchor) : null;
+        if (!hall || current !== hall.at) return 'not-in-hall';
+        if (!(await homeIsSame(hall, deps))) return 'not-same';
+        await deps.switchTo(hall.home, hall.at);
+        await clearHall();
+        forgetHallRun();
+        run.backHome = audienceOf(hall.home);
+        return 'moved';
+    });
 }
 
 /**
  * One look while in the hall (the banner's tick: at its start, each return to the app, and each minute while shown).
  * Asks nothing at all when the phone is not on a hall laptop. A hall record the phone has left by another way (a switch in
- * Settings) is forgotten.
+ * Settings) is forgotten. While a move is under way (or one started while this tick read), nothing is judged: the record
+ * and the address disagree until the carry has written the address.
  */
 export async function hallTick(deps: HallDeps): Promise<HallView | null> {
+    if (moving > 0) return null;
+    const seen = movesStarted;
     const hall = await readHall();
     if (!hall) return run.backHome ? { kind: 'back-home', host: run.backHome } : null;
     const anchor = await deps.anchor().catch(() => null);
     const current = anchor && isPlainNodeAddress(anchor) ? plainOriginOf(anchor) : null;
     if (current !== hall.at) {
-        await clearHall();
+        if (stillSettled(seen)) await clearHall();
         return null;
     }
     const health = await deps.health(hall.at).catch(() => null);
@@ -270,9 +312,11 @@ export async function hallTick(deps: HallDeps): Promise<HallView | null> {
             run.recordAsOf = lo.recordAsOf;
             return { kind: 'in-hall', recordAsOf: lo.recordAsOf };
         }
-        // The switch is off. The node's `home` is a signal, never a destination: one naming another community moves nothing.
-        const named = lo.home ? audienceOf(lo.home.includes('://') ? lo.home : `https://${lo.home}`) : null;
-        if (named && named !== hall.for) return null;
+        // The switch is off: the phone goes back to the address it came from (hall.home), checked by its statement. The
+        // node's `home` is never a destination and needn't be the phone's own name: a community with two names (Byron)
+        // gives its main name while phones saved under the other stay there. A `home` naming another community is never
+        // asked, let alone followed.
+        if (!stillSettled(seen)) return null;
         const moved = await goHome(deps).catch(() => 'not-same' as const);
         return moved === 'moved' ? { kind: 'back-home', host: hall.for } : null;
     }

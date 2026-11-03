@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "BeanPool dùng quyền này để kết nối với máy tính xách tay của cộng đồng bạn qua Wi-Fi của hội trường khi mất internet."
+  "ios": {
+    "NSLocalNetworkUsageDescription": "BeanPool dùng quyền này để kết nối với máy tính xách tay của cộng đồng bạn qua Wi-Fi của hội trường khi mất internet."
+  }
 }

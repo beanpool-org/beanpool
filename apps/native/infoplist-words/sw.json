@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "BeanPool hutumia hii kufikia kompyuta mpakato ya jumuiya yako kwenye Wi-Fi ya ukumbi wakati intaneti haipo."
+  "ios": {
+    "NSLocalNetworkUsageDescription": "BeanPool hutumia hii kufikia kompyuta mpakato ya jumuiya yako kwenye Wi-Fi ya ukumbi wakati intaneti haipo."
+  }
 }

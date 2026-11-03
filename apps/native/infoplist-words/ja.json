@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "インターネットが使えないとき、BeanPool はこれを使ってホールの Wi-Fi にあるコミュニティのノートパソコンにつなぎます。"
+  "ios": {
+    "NSLocalNetworkUsageDescription": "インターネットが使えないとき、BeanPool はこれを使ってホールの Wi-Fi にあるコミュニティのノートパソコンにつなぎます。"
+  }
 }

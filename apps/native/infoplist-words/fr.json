@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "BeanPool s'en sert pour joindre l'ordinateur portable de votre communauté sur le Wi-Fi de la salle quand Internet est coupé."
+  "ios": {
+    "NSLocalNetworkUsageDescription": "BeanPool s'en sert pour joindre l'ordinateur portable de votre communauté sur le Wi-Fi de la salle quand Internet est coupé."
+  }
 }

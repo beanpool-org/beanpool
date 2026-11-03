@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "İnternet kesildiğinde BeanPool bunu, salonun Wi-Fi ağındaki topluluğunuzun dizüstü bilgisayarına ulaşmak için kullanır."
+  "ios": {
+    "NSLocalNetworkUsageDescription": "İnternet kesildiğinde BeanPool bunu, salonun Wi-Fi ağındaki topluluğunuzun dizüstü bilgisayarına ulaşmak için kullanır."
+  }
 }

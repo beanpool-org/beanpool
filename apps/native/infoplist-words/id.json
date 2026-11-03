@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "BeanPool memakai ini untuk menjangkau laptop komunitas Anda di Wi-Fi aula saat internet mati."
+  "ios": {
+    "NSLocalNetworkUsageDescription": "BeanPool memakai ini untuk menjangkau laptop komunitas Anda di Wi-Fi aula saat internet mati."
+  }
 }

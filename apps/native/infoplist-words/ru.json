@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "BeanPool использует это, чтобы связаться с ноутбуком вашего сообщества через Wi-Fi в зале, когда нет интернета."
+  "ios": {
+    "NSLocalNetworkUsageDescription": "BeanPool использует это, чтобы связаться с ноутбуком вашего сообщества через Wi-Fi в зале, когда нет интернета."
+  }
 }

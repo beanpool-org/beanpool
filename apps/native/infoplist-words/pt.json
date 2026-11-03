@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "O BeanPool usa isto para chegar ao computador portátil da sua comunidade no Wi-Fi do salão quando a internet está fora do ar."
+  "ios": {
+    "NSLocalNetworkUsageDescription": "O BeanPool usa isto para chegar ao computador portátil da sua comunidade no Wi-Fi do salão quando a internet está fora do ar."
+  }
 }

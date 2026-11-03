@@ -1,3 +1,5 @@
 {
-  "NSLocalNetworkUsageDescription": "斷網時，BeanPool 用它在會堂的 Wi-Fi 上連線到你們社區的筆記型電腦。"
+  "ios": {
+    "NSLocalNetworkUsageDescription": "斷網時，BeanPool 用它在會堂的 Wi-Fi 上連線到你們社區的筆記型電腦。"
+  }
 }

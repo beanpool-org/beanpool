@@ -42,6 +42,7 @@ const moves = vi.hoisted(() => [] as { url: string; from: string; audienceThen: 
 vi.mock('../reconnect', () => ({ switchPhoneTo: vi.fn() }));
 vi.mock('../node-post', () => ({ anchorUrl: vi.fn(async () => mem.get('beanpool_anchor_url') ?? null) }));
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sign as memberKeySign } from '@noble/ed25519';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -50,9 +51,9 @@ import { switchPhoneTo } from '../reconnect';
 import { COMMUNITY_IDENTITY_KEY } from '../address-follow';
 import {
     attestationProves, enterHall, forgetHallRun, goHome, hallAddressOf, hallDepsWith, hallRouteFromSystemPath, hallTick,
-    parseHallLink, type HallLink,
+    parseHallLink, type HallDeps, type HallLink,
 } from '../hall';
-import { HALL_KEY, forgetHallCache, hallAudienceFor, readHall } from '../hall-state';
+import { HALL_KEY, forgetHallCache, hallAudienceFor, readHall, writeHall } from '../hall-state';
 import { buildSignedHeaders, buildSignedWsParams } from '../crypto';
 import { rememberRequestSigning } from '../request-signing-version';
 
@@ -282,12 +283,24 @@ describe('in the hall the phone signs for its community\'s name, never one a nod
         expect((await buildSignedHeaders('GET', `${HOME}/api/x`, '', me.priv, me.pub))['X-Signed-For']).toBe(NAME);
     });
 
-    it('the poster naming another community moves nothing and asks nothing', async () => {
+    it('the poster naming another community: the laptop is checked, and one that is another community moves nothing', async () => {
+        phoneAtHome();
+        hallLaptop(nodeKey());
+        expect(await enterHall({ ...LINK, for: 'evil.example' }, await deps())).toEqual({ kind: 'other-community', named: 'evil.example', home: NAME });
+        // Plain reads only: its statement (another key), and nothing after it.
+        expect(net.log.map((r) => new URL(r.url).pathname)).toEqual(['/api/node/identity-epoch']);
+        expect(signedRequests()).toEqual([]);
+        expect(memberKeySign).not.toHaveBeenCalled();
+        expect(switchPhoneTo).not.toHaveBeenCalled();
+        expect(mem.has(HALL_KEY)).toBe(false);
+    });
+
+    it('the poster\'s name is never what the phone signs for: a laptop that proves the community\'s key is joined, signing for the phone\'s own name', async () => {
         phoneAtHome();
         hallLaptop();
-        expect(await enterHall({ ...LINK, for: 'evil.example' }, await deps())).toEqual({ kind: 'other-community', named: 'evil.example', home: NAME });
-        expect(net.log).toEqual([]);
-        expect(switchPhoneTo).not.toHaveBeenCalled();
+        expect(await enterHall({ ...LINK, for: 'evil.example' }, await deps())).toEqual({ kind: 'moved', carried: 'carried' });
+        expect(moves).toEqual([{ url: HALL, from: HOME, audienceThen: NAME }]);
+        expect(await hallAudienceFor(`${HALL}/api/x`)).toBe(NAME);
     });
 
     it('with no name on the poster, the name signed for is still the phone\'s own', async () => {
@@ -297,15 +310,20 @@ describe('in the hall the phone signs for its community\'s name, never one a nod
         expect(await hallAudienceFor(`${HALL}/api/x`)).toBe(NAME);
     });
 
-    it('a health answer naming another home moves nothing and changes nothing signed', async () => {
+    it('a health answer naming another home is never followed: the phone only ever goes to its own address, checked', async () => {
         phoneAtHome();
         hallLaptop();
         await enterHall(LINK, await deps());
         net.nodes.get(HALL)!.health = { lightsOut: { on: false, home: 'https://evil.example' } };
         net.nodes.set('https://evil.example', { statement: statement(COMMUNITY_KEY, COMMUNITY, 5) });
+        // Its own address doesn't answer yet: nothing moves, nothing signed changes.
         expect(await hallTick(await deps())).toBeNull();
         expect(moves).toHaveLength(1);
         expect(await hallAudienceFor(`${HALL}/api/x`)).toBe(NAME);
+        // Its own address answers as the community: the phone goes there, never to the address the node named.
+        net.nodes.set(HOME, { statement: statement(COMMUNITY_KEY, COMMUNITY, 0) });
+        expect(await hallTick(await deps())).toEqual({ kind: 'back-home', host: NAME });
+        expect(moves).toEqual([moves[0], { url: HOME, from: HALL, audienceThen: null }]);
         expect(net.log.some((r) => r.url.startsWith('https://evil.example'))).toBe(false);
     });
 
@@ -392,5 +410,188 @@ describe('while in the hall, and the way home', () => {
         mem.set('beanpool_anchor_url', HOME);
         expect(await hallTick(await deps())).toBeNull();
         expect(await readHall()).toBeNull();
+    });
+});
+
+// ─── A community with two names ────────────────────────────────────────────────────────────────
+
+describe('a community with two names (Byron: mullum.beanpool.org and byron.beanpool.org, one node key)', () => {
+    // Phones that never tapped the follow card stay on mullum for good; the poster and health name the main name, byron.
+    const MULLUM = 'https://mullum.beanpool.org';
+    const MULLUM_NAME = 'mullum.beanpool.org';
+    const me = { pub: bytesToHex(ed25519.getPublicKey(new Uint8Array(32).fill(7))), priv: bytesToHex(new Uint8Array(32).fill(7)) };
+
+    function phoneAtMullum(epoch = 0) {
+        mem.set('beanpool_anchor_url', MULLUM);
+        mem.set(COMMUNITY_IDENTITY_KEY, JSON.stringify({ [MULLUM]: { peerId: COMMUNITY_KEY.peerId, communityId: COMMUNITY, epoch } }));
+        rememberRequestSigning(MULLUM, 2);
+    }
+
+    it('the poster names the main name: the laptop is checked, and the phone moves signing for its own name', async () => {
+        phoneAtMullum();
+        hallLaptop();
+        expect(await enterHall(LINK, await deps())).toEqual({ kind: 'moved', carried: 'carried' });
+        expect(net.log.map((r) => new URL(r.url).pathname)).toEqual(['/api/node/identity-epoch', '/api/attest']);
+        expect(signedRequests()).toEqual([]);
+        expect(memberKeySign).not.toHaveBeenCalled();
+        expect(moves).toEqual([{ url: HALL, from: MULLUM, audienceThen: MULLUM_NAME }]);
+        expect(await readHall()).toEqual({ at: HALL, for: MULLUM_NAME, home: MULLUM, since: new Date(clock).toISOString() });
+        const h = await buildSignedHeaders('POST', `${HALL}/api/ledger/transfer`, '{"to":"b"}', me.priv, me.pub);
+        expect(h['X-Signed-For']).toBe(MULLUM_NAME);
+    });
+
+    it('the poster names the main name but the laptop fails the check: refused, nothing signed, nothing moved', async () => {
+        phoneAtMullum();
+        hallLaptop(nodeKey());
+        expect(await enterHall(LINK, await deps())).toEqual({ kind: 'other-community', named: NAME, home: MULLUM_NAME });
+        const stranger = nodeKey();
+        hallLaptop(stranger, { statementKey: COMMUNITY_KEY, attestSigner: stranger });
+        expect(await enterHall(LINK, await deps())).toEqual({ kind: 'refused', why: 'not-proved' });
+        expect(signedRequests()).toEqual([]);
+        expect(memberKeySign).not.toHaveBeenCalled();
+        expect(switchPhoneTo).not.toHaveBeenCalled();
+        expect(mem.has(HALL_KEY)).toBe(false);
+    });
+
+    it('the switch goes off and health names the main name: the phone goes back to its own saved name, checked', async () => {
+        phoneAtMullum();
+        hallLaptop();
+        expect((await enterHall({ at: HALL, for: null, id: null }, await deps())).kind).toBe('moved');
+        net.log = [];
+        net.nodes.get(HALL)!.health = { lightsOut: { on: false, home: HOME } };
+        net.nodes.set(MULLUM, { statement: statement(COMMUNITY_KEY, COMMUNITY, 0) });
+        net.nodes.set(HOME, { statement: statement(COMMUNITY_KEY, COMMUNITY, 0) });
+        expect(await hallTick(await deps())).toEqual({ kind: 'back-home', host: MULLUM_NAME });
+        expect(moves[1]).toEqual({ url: MULLUM, from: HALL, audienceThen: null });
+        expect(mem.get('beanpool_anchor_url')).toBe(MULLUM);
+        expect(await readHall()).toBeNull();
+        // The name health gave is never asked, let alone gone to.
+        expect(net.log.some((r) => r.url.startsWith(HOME))).toBe(false);
+    });
+
+    it('its own saved name not the community (or not answering): the phone stays, whatever name health gives', async () => {
+        phoneAtMullum();
+        hallLaptop();
+        await enterHall(LINK, await deps());
+        net.nodes.get(HALL)!.health = { lightsOut: { on: false, home: HOME } };
+        net.nodes.set(HOME, { statement: statement(COMMUNITY_KEY, COMMUNITY, 0) });
+        expect(await hallTick(await deps())).toBeNull();
+        net.nodes.set(MULLUM, { statement: statement(nodeKey(), COMMUNITY, 0) });
+        expect(await hallTick(await deps())).toBeNull();
+        expect(moves).toHaveLength(1);
+        expect((await readHall())?.at).toBe(HALL);
+    });
+});
+
+// ─── A banner tick while the phone is moving ───────────────────────────────────────────────────
+
+describe('a banner tick while the copy is being carried judges nothing', () => {
+    const me = { pub: bytesToHex(ed25519.getPublicKey(new Uint8Array(32).fill(7))), priv: bytesToHex(new Uint8Array(32).fill(7)) };
+
+    /** The carry writes the address last (community-copy-carry.ts step 3): one banner tick lands before it. */
+    function switchThatTicksOnce(ticks: unknown[]) {
+        let ticked = false;
+        vi.mocked(switchPhoneTo).mockImplementation(async (url: string, from?: string) => {
+            if (!ticked) {
+                ticked = true;
+                ticks.push(await hallTick(await deps()));
+            }
+            moves.push({ url, from: from ?? '', audienceThen: await hallAudienceFor(`${url}/api/x`) });
+            mem.set('beanpool_anchor_url', url);
+            return 'carried';
+        });
+    }
+
+    it('into the hall: the record stays, the phone signs for the name at the number, and the way home is still there', async () => {
+        phoneAtHome();
+        hallLaptop();
+        const ticks: unknown[] = [];
+        switchThatTicksOnce(ticks);
+        expect(await enterHall(LINK, await deps())).toEqual({ kind: 'moved', carried: 'carried' });
+        expect(ticks).toEqual([null]);
+        expect(mem.get('beanpool_anchor_url')).toBe(HALL);
+        expect(await readHall()).toEqual({ at: HALL, for: NAME, home: HOME, since: new Date(clock).toISOString() });
+        expect(mem.has(HALL_KEY)).toBe(true);
+        expect(await hallAudienceFor(`${HALL}/api/ledger/transfer`)).toBe(NAME);
+        expect((await buildSignedHeaders('POST', `${HALL}/api/ledger/transfer`, '{"to":"b"}', me.priv, me.pub))['X-Signed-For']).toBe(NAME);
+        net.nodes.get(HALL)!.health = { lightsOut: { on: false, home: HOME } };
+        net.nodes.set(HOME, { statement: statement(COMMUNITY_KEY, COMMUNITY, 0) });
+        expect(await hallTick(await deps())).toEqual({ kind: 'back-home', host: NAME });
+        expect(moves.map((m) => m.url)).toEqual([HALL, HOME]);
+    });
+
+    it('a tick that began before the move and whose reads straddle it (record new, address old) judges nothing', async () => {
+        phoneAtHome();
+        hallLaptop();
+        let openRead!: () => void;
+        const readGate = new Promise<void>((r) => { openRead = r; });
+        let openAnchor!: () => void;
+        const anchorGate = new Promise<void>((r) => { openAnchor = r; });
+        let anchorAsked!: () => void;
+        const anchorAskedNow = new Promise<void>((r) => { anchorAsked = r; });
+        // The tick's read of the record is answered after the record is kept; its read of the address is made before the
+        // carry writes it and answered after the move has ended.
+        forgetHallCache();
+        vi.mocked(AsyncStorage.getItem).mockImplementationOnce(async (k: string) => { await readGate; return mem.get(k) ?? null; });
+        const tickDeps: HallDeps = {
+            ...(await deps()),
+            anchor: async () => { const then = mem.get('beanpool_anchor_url') ?? null; anchorAsked(); await anchorGate; return then; },
+        };
+        const tick = hallTick(tickDeps);
+        vi.mocked(switchPhoneTo).mockImplementationOnce(async (url: string, from?: string) => {
+            openRead();
+            await anchorAskedNow;
+            moves.push({ url, from: from ?? '', audienceThen: await hallAudienceFor(`${url}/api/x`) });
+            mem.set('beanpool_anchor_url', url);
+            return 'carried';
+        });
+        expect(await enterHall(LINK, await deps())).toEqual({ kind: 'moved', carried: 'carried' });
+        openAnchor();
+        expect(await tick).toBeNull();
+        expect(mem.has(HALL_KEY)).toBe(true);
+        expect(await readHall()).toEqual({ at: HALL, for: NAME, home: HOME, since: new Date(clock).toISOString() });
+        expect(await hallAudienceFor(`${HALL}/api/x`)).toBe(NAME);
+    });
+
+    it('a carry into the hall that fails: the tick during it changes nothing, and the record goes', async () => {
+        phoneAtHome();
+        hallLaptop();
+        const ticks: unknown[] = [];
+        vi.mocked(switchPhoneTo).mockImplementation(async () => {
+            ticks.push(await hallTick(await deps()));
+            throw new Error('carry failed');
+        });
+        await expect(enterHall(LINK, await deps())).rejects.toThrow('carry failed');
+        expect(ticks).toEqual([null]);
+        expect(mem.get('beanpool_anchor_url')).toBe(HOME);
+        expect(await readHall()).toBeNull();
+        expect(mem.has(HALL_KEY)).toBe(false);
+    });
+
+    it('home again: a tick during the carry home starts no second move', async () => {
+        phoneAtHome();
+        hallLaptop();
+        expect((await enterHall(LINK, await deps())).kind).toBe('moved');
+        net.nodes.get(HALL)!.health = { lightsOut: { on: false, home: HOME } };
+        net.nodes.set(HOME, { statement: statement(COMMUNITY_KEY, COMMUNITY, 0) });
+        const ticks: unknown[] = [];
+        switchThatTicksOnce(ticks);
+        expect(await hallTick(await deps())).toEqual({ kind: 'back-home', host: NAME });
+        expect(ticks).toEqual([null]);
+        expect(moves.map((m) => m.url)).toEqual([HALL, HOME]);
+        expect(mem.get('beanpool_anchor_url')).toBe(HOME);
+        expect(await readHall()).toBeNull();
+        // A tap on the card while a move is under way does nothing either.
+        mem.set('beanpool_anchor_url', HALL);
+        await writeHall({ at: HALL, for: NAME, home: HOME, since: '2026-11-04T00:00:00.000Z' });
+        vi.mocked(switchPhoneTo).mockImplementationOnce(async (url: string, from?: string) => {
+            ticks.push(await goHome(await deps()));
+            moves.push({ url, from: from ?? '', audienceThen: null });
+            mem.set('beanpool_anchor_url', url);
+            return 'carried';
+        });
+        expect(await goHome(await deps())).toBe('moved');
+        expect(ticks).toEqual([null, 'moving']);
+        expect(moves.map((m) => m.url)).toEqual([HALL, HOME, HOME]);
     });
 });

@@ -47,7 +47,7 @@ export interface ShareSaysResult {
 
 export function shareSays(features: ShareSaysFeatures | null | undefined, role?: ShareSaysRole): ShareSaysResult {
     // If a community's settings can't be read, show today's buttons and no line. Never guess.
-    if (!features || (features.door === undefined && features.shareOutside === undefined && features.openJoin === undefined && features.privatePreview === undefined)) {
+    if (!features || (features.door == null && features.shareOutside == null && features.openJoin == null && features.privatePreview == null)) {
         return {
             membersLine: null,
             outsideLine: null,

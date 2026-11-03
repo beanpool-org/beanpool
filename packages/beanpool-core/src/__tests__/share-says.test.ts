@@ -90,5 +90,12 @@ describe('shareSays table rules', () => {
             showInviteButton: false,
             showShareOutside: false,
         });
+
+        expect(shareSays({ door: null, shareOutside: null })).toEqual({
+            membersLine: null,
+            outsideLine: null,
+            showInviteButton: false,
+            showShareOutside: false,
+        });
     });
 });

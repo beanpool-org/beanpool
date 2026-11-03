@@ -5963,5 +5963,20 @@
     "other": "{community}에 새 메시지 {n}개 · 전환"
   },
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "저장된 모든 커뮤니티의 알림이 휴대전화로 전송됩니다. BeanPool 시트에서 커뮤니티별로 알림을 끌 수 있습니다.",
-  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "이 휴대폰에서는 알림이 꺼져 있어요. 그 커뮤니티에서 알림을 멈추도록 아직 연결하지 못했고, 휴대폰이 다시 시도해요."
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "이 휴대폰에서는 알림이 꺼져 있어요. 그 커뮤니티에서 알림을 멈추도록 아직 연결하지 못했고, 휴대폰이 다시 시도해요.",
+  "Pinned": "고정됨",
+  "📌 PINNED": "📌 고정됨",
+  "Pin to the top…": "상단에 고정…",
+  "Pin to the top": "상단에 고정",
+  "Take the pin off": "고정 해제",
+  "For 1 day": "1일 동안",
+  "For 3 days": "3일 동안",
+  "For 1 week": "1주일 동안",
+  "Pinned by your community · until {date}": "커뮤니티에서 고정함 · {date}까지",
+  "Choose how long to pin this post to the top of the Market:": "장터 상단에 이 게시물을 고정할 기간을 선택하세요:",
+  "Post options": "게시물 옵션",
+  "Event options": "이벤트 옵션",
+  "Poll options": "투표 옵션",
+  "Failed to pin post": "게시물 고정 실패",
+  "Failed to unpin post": "고정 해제 실패"
 }

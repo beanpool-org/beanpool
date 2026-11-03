@@ -13,8 +13,11 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
-    fetchGroupDetails, deleteGroupPostApi
+    fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode
 } from '../../utils/db';
+import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../../utils/pins';
+import { usePinRole } from '../../utils/use-pin-role';
+import { PinSheet } from '../../components/PinSheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
 import { loadIdentity } from '../../utils/identity';
@@ -550,6 +553,45 @@ export default function PostDetailModal() {
     const [isBlocking, setIsBlocking] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
     const [showDealsSheet, setShowDealsSheet] = useState(false);
+    const [showPinSheet, setShowPinSheet] = useState(false);
+    const [unpinning, setUnpinning] = useState(false);
+    // The "···" is for an owner or admin (Pin, Take the pin off) and for a pinned post's author (Take the pin off).
+    const pinsOn = Boolean(nodeProfile?.features?.pins);
+    const pinRole = usePinRole(pinsOn, identity?.publicKey);
+
+    const handlePostOptions = () => {
+        const pinned = isPostPinned(post);
+        if (pinned) {
+            Alert.alert(t('Post options'), undefined, [
+                {
+                    text: t('Take the pin off'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (unpinning) return;
+                        setUnpinning(true);
+                        try {
+                            await unpinPostOnNode(post.id);
+                            const updated = await getPost(post.id);
+                            if (updated) setPost(updated);
+                        } catch (e: any) {
+                            Alert.alert(t('Error'), pinFailureText(e, t('Failed to unpin post')));
+                        } finally {
+                            setUnpinning(false);
+                        }
+                    },
+                },
+                { text: t('Cancel'), style: 'cancel' },
+            ]);
+        } else {
+            Alert.alert(t('Post options'), undefined, [
+                {
+                    text: t('Pin to the top…'),
+                    onPress: () => setShowPinSheet(true),
+                },
+                { text: t('Cancel'), style: 'cancel' },
+            ]);
+        }
+    };
 
     // Request Rejection Modal State
     const [rejectModalTxId, setRejectModalTxId] = useState<string | null>(null);
@@ -902,7 +944,7 @@ export default function PostDetailModal() {
 
     // Events have their own screen: no price, no escrow, RSVP instead of accept (docs/events-on-the-map.md §3).
     if (post.type === 'event') {
-        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} />;
+        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} pinsOn={pinsOn} />;
     }
     // A member's copy on the global community has its own screen, so nothing of a deal or a person can be drawn on one: no
     // price card, no author, no Message, no Accept (@beanpool/core eventCopyOf). The node refuses them all the same.
@@ -1337,7 +1379,20 @@ export default function PostDetailModal() {
                     <Text style={{ color: colors.text.body, fontSize: 16, fontWeight: 'bold', marginLeft: 4, flexShrink: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Back')}</Text>
                 </Pressable>
                 <Text style={[styles.headerTitle, { flex: 1, textAlign: 'center' }]} numberOfLines={1}>{isOffer ? t('Offer') : t('Need')}</Text>
-                <View style={{ width: 68 }} />
+                <View style={{ width: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {showPinMenu({ pinsOn, role: pinRole, pinned: isPostPinned(post), isAuthor: isOwnPost }) && (
+                        <Pressable
+                            testID="post-menu-btn"
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Post options')}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
+                            onPress={handlePostOptions}
+                        >
+                            <Text style={{ fontSize: 22, color: colors.text.body, fontWeight: '900' }}>···</Text>
+                        </Pressable>
+                    )}
+                </View>
             </View>
 
             {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
@@ -1356,6 +1411,37 @@ export default function PostDetailModal() {
                     </View>
                     <Text style={styles.timeAgo} numberOfLines={1}>{getTimeAgo(post.created_at)}</Text>
                 </View>
+                {isPostPinned(post) && (
+                    <View style={{ marginHorizontal: 20, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} testID="pinned-detail-line">
+                        <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600', flex: 1 }} numberOfLines={2}>
+                            {pinnedDetailLine(post)}
+                        </Text>
+                        {isOwnPost && (
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Take the pin off')}
+                                testID="author-unpin-btn"
+                                onPress={async () => {
+                                    if (unpinning) return;
+                                    setUnpinning(true);
+                                    try {
+                                        await unpinPostOnNode(post.id);
+                                        const updated = await getPost(post.id);
+                                        if (updated) setPost(updated);
+                                    } catch (e: any) {
+                                        Alert.alert(t('Error'), pinFailureText(e, t('Failed to unpin post')));
+                                    } finally {
+                                        setUnpinning(false);
+                                    }
+                                }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                            >
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg }}>{t('Take the pin off')}</Text>
+                            </Pressable>
+                        )}
+                    </View>
+                )}
                 {/* #108: the detail view is where the terms get discussed, so say what the flag means
                     rather than just badging it. No amount — that's agreed in chat. */}
                 {post.cash_also_needed === 1 && (
@@ -2466,6 +2552,17 @@ export default function PostDetailModal() {
                         </Pressable>
                     </Pressable>
                 </View>
+            )}
+            {showPinSheet && (
+                <PinSheet
+                    visible
+                    postId={post.id}
+                    onClose={() => setShowPinSheet(false)}
+                    onPinned={async () => {
+                        const updated = await getPost(post.id);
+                        if (updated) setPost(updated);
+                    }}
+                />
             )}
         </View>
     );

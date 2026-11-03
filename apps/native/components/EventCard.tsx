@@ -18,6 +18,7 @@ import { router } from 'expo-router';
 import { CategoryTile } from './CategoryTile';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { rsvpEvent } from '../utils/db';
+import { isPostPinned } from '../utils/pins';
 import { hapticTick } from '../utils/haptics';
 import {
     formatEventWhenFor, eventWhen, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
@@ -166,6 +167,11 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                 )}
                 <View style={styles.photoRowText}>
                     <View style={styles.whenRow}>
+                        {isPostPinned(post) && (
+                            <View testID="pinned-chip" style={[styles.badge, { backgroundColor: colors.surface.subtle, borderColor: colors.border.default }]}>
+                                <Text style={[styles.badgeText, { color: colors.text.heading, fontSize: 10, fontWeight: '700' }]} numberOfLines={1}>{t('📌 PINNED')}</Text>
+                            </View>
+                        )}
                         {badge && (
                             <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
                                 <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : colors.event.ink }]} numberOfLines={1}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>

@@ -6203,5 +6203,20 @@
     "other": "{n} νέα μηνύματα στο {community} · Αλλαγή"
   },
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Οι ειδοποιήσεις φτάνουν στο τηλέφωνό σας από κάθε κοινότητα που διατηρείτε. Μπορείτε να τις απενεργοποιήσετε για μια κοινότητα στην καρτέλα BeanPool.",
-  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Οι ειδοποιήσεις είναι απενεργοποιημένες σε αυτό το τηλέφωνο. Δεν μπόρεσε να φτάσει ακόμη σε αυτή την κοινότητα για να τις σταματήσει εκεί και θα ξαναδοκιμάσει."
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Οι ειδοποιήσεις είναι απενεργοποιημένες σε αυτό το τηλέφωνο. Δεν μπόρεσε να φτάσει ακόμη σε αυτή την κοινότητα για να τις σταματήσει εκεί και θα ξαναδοκιμάσει.",
+  "Pinned": "Καρφιτσωμένο",
+  "📌 PINNED": "📌 ΚΑΡΦΙΤΣΩΜΕΝΟ",
+  "Pin to the top…": "Καρφίτσωμα στην κορυφή…",
+  "Pin to the top": "Καρφίτσωμα στην κορυφή",
+  "Take the pin off": "Βγάλτε το καρφίτσωμα",
+  "For 1 day": "Για 1 ημέρα",
+  "For 3 days": "Για 3 ημέρες",
+  "For 1 week": "Για 1 εβδομάδα",
+  "Pinned by your community · until {date}": "Καρφιτσώθηκε από την κοινότητά σας · μέχρι {date}",
+  "Choose how long to pin this post to the top of the Market:": "Επιλέξτε πόσο καιρό θα παραμείνει καρφιτσωμένη αυτή η ανάρτηση στην κορυφή της Αγοράς:",
+  "Post options": "Επιλογές ανάρτησης",
+  "Event options": "Επιλογές εκδήλωσης",
+  "Poll options": "Επιλογές δημοσκόπησης",
+  "Failed to pin post": "Αποτυχία καρφιτσώματος ανάρτησης",
+  "Failed to unpin post": "Αποτυχία αφαίρεσης καρφιτσώματος"
 }

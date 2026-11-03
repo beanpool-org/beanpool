@@ -1,5 +1,5 @@
 // Where the web Market and Map read from (S5): the pure rule, every branch.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { nearRead, nearParams, listingDistanceKm, nearestInCircle, readNearestInCircle, sentCentre, NEAR_PAGES_MAX, NODE_PAGE_MAX } from './listings-near';
 import { haversineDistance } from './geo';
 
@@ -344,6 +344,34 @@ describe('order: recent, the Market\'s read', () => {
         expect(kept).toHaveLength(50);
         // The newest created of everything read, newest first.
         expect(kept.slice(0, 3).map(p => p.id)).toEqual(['in-0001', 'in-0002', 'in-0003']);
+    });
+
+    describe('the cut is by core listedAt, not by creation (review of #2805)', () => {
+        afterEach(() => { vi.useRealTimers(); });
+        // A weekly event created 5 weeks ago, rolled (changed) 2 h ago, starting 9.5 h from now: listed again at start - 24 h, 14.5 h ago.
+        const rolled = () => ({
+            ...at('event-weekly', 153.61, 5 * 7 * 24, 2), type: 'event', status: 'active',
+            eventStartAt: new Date(T0 + 9.5 * HOUR).toISOString(),
+        });
+
+        it('keeps an old event that came back the day before, among 60 newer posts in the circle', async () => {
+            vi.useFakeTimers(); vi.setSystemTime(T0);
+            const rows = [rolled(), ...Array.from({ length: 60 }, (_, i) => inside(i, i + 1))];
+            const node = pagedNode(rows);
+            const kept = await readNearestInCircle(near, 50, node.read);
+            expect(node.reads).toEqual([{ limit: 100 }]);
+            expect(kept).toHaveLength(50);
+            // Listed 14.5 h ago: after the posts created 1 to 14 h ago, before the one created 15 h ago.
+            expect(kept.map(p => p.id).indexOf('event-weekly')).toBe(14);
+        });
+
+        it('cuts the same event once it is not within 24 h of its start (listed when created: oldest, past the 50)', async () => {
+            vi.useFakeTimers(); vi.setSystemTime(T0);
+            const far = { ...rolled(), eventStartAt: new Date(T0 + 40 * HOUR).toISOString() };
+            const node = pagedNode([far, ...Array.from({ length: 60 }, (_, i) => inside(i, i + 1))]);
+            const kept = await readNearestInCircle(near, 50, node.read);
+            expect(kept.map(p => p.id)).not.toContain('event-weekly');
+        });
     });
 
     it('never more than NEAR_PAGES_MAX pages', async () => {

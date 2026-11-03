@@ -15,6 +15,7 @@
  * verdict-privacy.md §6, N5). The stored area is a 0.1° cell by design (apps/server/src/engine/member-area.ts), and a
  * query string is what proxies, tunnels and CDNs log by default.
  */
+import { listedAt } from '@beanpool/core';
 import { haversineDistance, type RadiusSettings } from './geo';
 
 export interface Circle { lat: number; lng: number; radiusKm: number }
@@ -188,9 +189,12 @@ const timeOf = (v: string | null | undefined): number => {
 /**
  * The same read, newest first (the Market's order, core market-order). The node answers newest CHANGED first (updated_at,
  * engine posts.ts RECENT_ORDER), and a post is never created after it was last changed, so a row not yet read was created
- * no later than the page's last row was changed. The list is the `keep` newest CREATED of what the cut kept, and the read
- * stops once the last of them is newer than that: nothing unread can take its place. A page that comes back short is the
- * whole circle. A last row with no time to bound by reads on, NEAR_PAGES_MAX at most.
+ * no later than the page's last row was changed. The list is the `keep` newest LISTED (core `listedAt`, as the Market
+ * orders: created, except an event within 24 h of its start, which is listed at that mark) of what the cut kept, and the
+ * read stops once the last of them is newer than that: nothing unread can take its place, because an ordinary unread post
+ * is listed when it was created. A page that comes back short is the whole circle. A last row with no time to bound by
+ * reads on, NEAR_PAGES_MAX at most. Cutting by creation instead would drop a weekly event created weeks ago that came
+ * back the day before (review of #2805).
  */
 async function readNewestInCircle<T extends { id: string; lat?: number | null; lng?: number | null; createdAt?: string | null; updatedAt?: string | null }>(
     near: NearRead,
@@ -201,16 +205,20 @@ async function readNewestInCircle<T extends { id: string; lat?: number | null; l
     // A listing that moved between two pages' reads comes back on both: kept once.
     const byId = new Map<string, T>();
     let kept: T[] = [];
+    const now = Date.now();
     for (let page = 0; page < NEAR_PAGES_MAX; page++) {
         const rows = await read(page === 0 ? { limit } : { limit, offset: page * limit });
         for (const p of rows) if (!byId.has(p.id)) byId.set(p.id, p);
+        // Newest listed first, then created, then id: the order core marketOrder gives before its two-a-day bound.
+        const listed = new Map<string, number>();
+        for (const p of byId.values()) listed.set(p.id, listedAt(p, now));
         kept = nearestInCircle([...byId.values()], near)
-            .sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+            .sort((a, b) => listed.get(b.id)! - listed.get(a.id)! || timeOf(b.createdAt) - timeOf(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
         if (rows.length < limit) break;
         const last = rows[rows.length - 1];
         const lastChanged = timeOf(last.updatedAt ?? last.createdAt);
         const oldestKept = kept[keep - 1];
-        if (oldestKept && lastChanged > 0 && timeOf(oldestKept.createdAt) > lastChanged) break;
+        if (oldestKept && lastChanged > 0 && listed.get(oldestKept.id)! > lastChanged) break;
     }
     return kept.slice(0, keep);
 }

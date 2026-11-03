@@ -90,7 +90,7 @@ import { publicArchetype, type QuizResult } from '@beanpool/core';
 import { retireParkedPickAfterPublish } from '../avatar-value';
 import { blockSyncsEndedForTests, blockUser, syncBlocks } from '../blocklist';
 import { getCanonicalProfile, saveCanonicalProfile } from '../canonical-profile';
-import { closeDB, getDb, getMemberProfile, pushProfileToServer, pushWaitingArchetype, updateMemberProfile } from '../db';
+import { applyDelta, closeDB, getDb, getMemberProfile, pushProfileToServer, pushWaitingArchetype, updateMemberProfile } from '../db';
 import { addSavedNode, clearGuestNode, isGuestNode, markGuestNode, removeSavedNode } from '../nodes';
 import {
     carryPendingProfileChange, clearPendingProfileChange, clearWaitingArchetype, keepCarriedArchetype, keepPendingProfileChange, keepWaitingArchetype,
@@ -1118,6 +1118,80 @@ describe('Remove my working style', () => {
             expect(sentTo(B)).toEqual([{ publicKey: ME, archetype: null }]);
         });
 
+        it('a copy that could not be cleared at the removal is cleared at the community\'s turn: the next start finds nothing to adopt', async () => {
+            await holdingOldResult();
+            // A's copy can't be opened for the clearing (busy past 30 s): its row keeps the result.
+            const sqlite = await import('expo-sqlite');
+            const open = vi.mocked(sqlite.openDatabaseAsync);
+            const real = open.getMockImplementation()!;
+            // (getDb sets its busy timeout in a block of statements; the clearing sets it alone, and that is what fails here.)
+            open.mockImplementation(async (name: string, opts?: any) => {
+                const handle = await (real as any)(name, opts);
+                if (name !== 'beanpool_a.beanpool.org.db') return handle;
+                return new Proxy(handle, {
+                    get: (t, k) => k === 'execAsync'
+                        ? async (q: string) => {
+                            if (q.trim() === 'PRAGMA busy_timeout = 30000;') throw new Error('database is locked');
+                            return t.execAsync(q);
+                        }
+                        : t[k],
+                });
+            });
+            await removeWorkingStyle(ME);
+            open.mockImplementation(real);
+            await openCommunity(A);
+            expect((await getMemberProfile(ME))?.archetype).toBe(publicOf(OLD));
+
+            // A's turn: the null goes in, and the row is cleared before the removal stops waiting.
+            expect((await performSync()).success).toBe(true);
+            expect(sentTo(A)).toEqual([{ publicKey: ME, archetype: null }]);
+            expect(await waitingRemoval(A, ME)).toBeNull();
+            expect((await getMemberProfile(ME))?.archetype ?? null).toBeNull();
+
+            // The next start adopts nothing and carries nothing to B.
+            await firstRunWorkingStyle();
+            expect((await getCanonicalProfile())?.archetype).toBeNull();
+            expect(await waitingArchetype(B, ME)).toBeNull();
+        });
+
+        it('a copy still locked at the community\'s turn keeps the removal waiting, and clears when it opens', async () => {
+            await holdingOldResult();
+            const sqlite = await import('expo-sqlite');
+            const open = vi.mocked(sqlite.openDatabaseAsync);
+            const real = open.getMockImplementation()!;
+            // (getDb sets its busy timeout in a block of statements; the clearing sets it alone, and that is what fails here.)
+            open.mockImplementation(async (name: string, opts?: any) => {
+                const handle = await (real as any)(name, opts);
+                if (name !== 'beanpool_a.beanpool.org.db') return handle;
+                return new Proxy(handle, {
+                    get: (t, k) => k === 'execAsync'
+                        ? async (q: string) => {
+                            if (q.trim() === 'PRAGMA busy_timeout = 30000;') throw new Error('database is locked');
+                            return t.execAsync(q);
+                        }
+                        : t[k],
+                });
+            });
+            await removeWorkingStyle(ME);
+            await openCommunity(A);
+            await performSync();
+            // The null went in, but the row could not be cleared: the removal is not dropped.
+            expect(sentTo(A)).toEqual([{ publicKey: ME, archetype: null }]);
+            expect(await waitingRemoval(A, ME)).not.toBeNull();
+            // Nothing is adopted meanwhile.
+            await firstRunWorkingStyle();
+            expect((await getCanonicalProfile())?.archetype).toBeNull();
+            expect(await waitingArchetype(B, ME)).toBeNull();
+
+            open.mockImplementation(real);
+            await performSync();
+            expect(await waitingRemoval(A, ME)).toBeNull();
+            expect((await getMemberProfile(ME))?.archetype ?? null).toBeNull();
+            await firstRunWorkingStyle();
+            expect((await getCanonicalProfile())?.archetype).toBeNull();
+            expect(await waitingArchetype(B, ME)).toBeNull();
+        });
+
         it('a result taken on another device after the removal stands: no null is sent, and the phone takes it', async () => {
             await holdingOldResult();
             await removeWorkingStyle(ME);
@@ -1131,6 +1205,46 @@ describe('Remove my working style', () => {
             // and it is carried to A, over A's waiting removal.
             expect(await waitingArchetype(A, ME)).toBe(publicOf(later));
         });
+    });
+});
+
+describe('another member\'s removal reaches this phone (archetype-s3)', () => {
+    const THEIRS = publicOf(quiz('2026-11-01', 'guardian'));
+    async function holdingTheirResult() {
+        await addSavedNode(A);
+        await openCommunity(A);
+        await updateMemberProfile(SOMEONE_ELSE, { callsign: 'Sam', archetype: THEIRS });
+        expect((await getMemberProfile(SOMEONE_ELSE))?.archetype).toBe(THEIRS);
+    }
+
+    it('a delta that names them with a null drops the result from their row', async () => {
+        await holdingTheirResult();
+        await applyDelta({ members: [{ publicKey: SOMEONE_ELSE, callsign: 'Sam', archetype: null }] });
+        expect((await getMemberProfile(SOMEONE_ELSE))?.archetype ?? null).toBeNull();
+    });
+
+    it('a keys= answer and a complete list do the same', async () => {
+        await holdingTheirResult();
+        await applyDelta({ members: [{ publicKey: SOMEONE_ELSE, callsign: 'Sam', archetype: null }], membersByKey: true });
+        expect((await getMemberProfile(SOMEONE_ELSE))?.archetype ?? null).toBeNull();
+        await updateMemberProfile(SOMEONE_ELSE, { callsign: 'Sam', archetype: THEIRS });
+        await applyDelta({ members: [{ publicKey: SOMEONE_ELSE, callsign: 'Sam', archetype: null }], membersComplete: true });
+        expect((await getMemberProfile(SOMEONE_ELSE))?.archetype ?? null).toBeNull();
+    });
+
+    it('a delta that leaves the field out keeps what the phone holds', async () => {
+        await holdingTheirResult();
+        await applyDelta({ members: [{ publicKey: SOMEONE_ELSE, callsign: 'Sam' }] });
+        expect((await getMemberProfile(SOMEONE_ELSE))?.archetype).toBe(THEIRS);
+        await applyDelta({ members: [{ publicKey: SOMEONE_ELSE, callsign: 'Sam', archetype: undefined }], membersComplete: true });
+        expect((await getMemberProfile(SOMEONE_ELSE))?.archetype).toBe(THEIRS);
+    });
+
+    it('a delta carrying a new result replaces the old', async () => {
+        await holdingTheirResult();
+        const newer = publicOf(quiz('2026-11-02', 'spark'));
+        await applyDelta({ members: [{ publicKey: SOMEONE_ELSE, callsign: 'Sam', archetype: newer }] });
+        expect((await getMemberProfile(SOMEONE_ELSE))?.archetype).toBe(newer);
     });
 });
 

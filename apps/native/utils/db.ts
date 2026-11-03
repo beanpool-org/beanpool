@@ -29,7 +29,7 @@ import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
 import { clearPendingProfileChange, clearWaitingArchetype, clearWaitingRemoval, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype, waitingRemoval } from './pending-profile-sync';
-import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, healGuestMark, removalToSend } from './working-style';
+import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, finishRemoval, healGuestMark, removalToSend } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
@@ -4268,6 +4268,12 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             let arch = m.archetype || null;
             let finalArch = arch;
+            // The node SAYING a member has no working style: the field is there, and null. A removal reaches other members'
+            // phones this way (the node bumps profile_updated_at, so the next delta names the member with null), and the
+            // COALESCE below would keep the cached result and go on typing them (Chemistry tips) while the web shows none.
+            // A delta that leaves the field out (an older node, a trimmed row) says nothing, and keeps it, as a partial
+            // list keeps an avatar. Not this member's own row: that has its own rule (a retake not yet sent stands, below).
+            const archetypeNullClears = m.archetype === null && pk !== selfPubkey;
             if (pk === selfPubkey) {
                 selfMemberFound = true;
                 const localRow = await txn.getFirstAsync<{ archetype?: string | null }>(
@@ -4307,10 +4313,11 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
                    elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                   archetype = COALESCE(excluded.archetype, members.archetype)`,
-                // The CASE placeholder is the 9th `?` in the statement text, so it binds AFTER
+                   archetype = CASE WHEN ? THEN excluded.archetype
+                                    ELSE COALESCE(excluded.archetype, members.archetype) END`,
+                // The CASE placeholders are the 9th and 10th `?` in the statement text, so they bind AFTER
                 // the eight VALUES parameters.
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, avatarNullClears ? 1 : 0]
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, avatarNullClears ? 1 : 0, archetypeNullClears ? 1 : 0]
             );
         }
 
@@ -7649,7 +7656,10 @@ export async function pushWaitingArchetype(opts: { community: string }): Promise
         } catch {
             return false;
         }
-        await clearWaitingRemoval(anchorUrl, removal.removedOn);
+        // The null is in. The row here goes before the removal stops waiting: a row left holding the result, with no removal
+        // to judge it against, is what the next start adopts and carries to every other community. A copy that won't
+        // clear keeps the removal waiting (the next turn finds the node holding none and tries again).
+        await finishRemoval(anchorUrl, identity.publicKey, removal.removedOn);
         return true;
     }
     const archetype = await archetypeToSend(anchorUrl, identity, row?.archetype);

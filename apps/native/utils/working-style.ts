@@ -215,17 +215,54 @@ export async function removeWorkingStyle(publicKey: string): Promise<void> {
 
 /** The working style off this key's row in `community`'s copy on the phone. The copy may not exist: nothing to clear. */
 async function clearOwnRow(community: string, publicKey: string): Promise<void> {
+    try {
+        await clearOwnRowOrThrow(community, publicKey, null);
+    } catch {
+        // No copy yet, or one that can't be opened now: its row is judged against the removal when it syncs (db.ts applyDelta),
+        // and a removal is not dropped while the row still holds the result (finishRemoval).
+    }
+}
+
+/**
+ * The row's working style off, throwing when the copy can't be opened or written. With `removedOn`, only a result taken on or
+ * before that day goes (one taken after it is a retake, which stands). A copy with no members table has no row: nothing to clear.
+ */
+async function clearOwnRowOrThrow(community: string, publicKey: string, removedOn: string | null): Promise<void> {
     let handle: any = null;
     try {
         const SQLite = await import('expo-sqlite');
         handle = await SQLite.openDatabaseAsync(getDatabaseFilenameForNode(community), { useNewConnection: true });
         await handle.execAsync('PRAGMA busy_timeout = 30000;');
+        if (removedOn) {
+            let row: { archetype?: string | null } | null = null;
+            try {
+                row = await handle.getFirstAsync('SELECT archetype FROM members WHERE public_key = ?', [publicKey]);
+            } catch (e) {
+                if (/no such table/i.test(String((e as Error)?.message ?? e))) return;
+                throw e;
+            }
+            if (!row?.archetype || archetypeIsAfter(row.archetype, removedOn)) return;
+        }
         await handle.runAsync('UPDATE members SET archetype = NULL WHERE public_key = ?', [publicKey]);
-    } catch {
-        // No copy yet, or one that can't be opened now: its row is judged against the removal when it syncs (db.ts applyDelta).
     } finally {
         await handle?.closeAsync().catch(() => {});
     }
+}
+
+/**
+ * Ends a removal's wait at `community`, once the row the phone holds there no longer holds the removed result. The removal is
+ * what keeps that row from being adopted (applyDelta, firstRunWorkingStyle), so it may only go once the row is clean:
+ * removeWorkingStyle clears it too, but a copy busy past 30 s or unopenable then is cleared here, at the community's turn.
+ * False when the copy still can't be cleared: the removal keeps waiting and the next turn tries again.
+ */
+export async function finishRemoval(community: string, publicKey: string, removedOn: string): Promise<boolean> {
+    try {
+        await clearOwnRowOrThrow(community, publicKey, removedOn);
+    } catch {
+        return false;
+    }
+    await clearWaitingRemoval(community, removedOn);
+    return true;
 }
 
 /**
@@ -246,7 +283,12 @@ export async function removalToSend(community: string, identity: Signer): Promis
     if (member !== true) return false;
     const held = await heldThere(community, identity);
     if (held === undefined) return false;
-    if (!held || archetypeIsAfter(held, removal.removedOn)) {
+    if (!held) {
+        // Nothing to send, but the row on the phone may still hold what was taken off: it goes before the removal does.
+        await finishRemoval(community, identity.publicKey, removal.removedOn);
+        return false;
+    }
+    if (archetypeIsAfter(held, removal.removedOn)) {
         await clearWaitingRemoval(community, removal.removedOn);
         return false;
     }

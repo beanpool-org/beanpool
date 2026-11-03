@@ -13,6 +13,7 @@ import {
     updatedBaseline,
 } from './words.mjs';
 import './draft.test.mjs';
+import './constants.test.mjs';
 
 const pkgOf = (file, text, extra = {}) => {
     const { calls, found, problems } = extractFromSource(file, text);

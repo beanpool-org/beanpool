@@ -1,6 +1,6 @@
 /**
- * MEASURES the web's invite screen at the floor, 320 px with 1.3x text, light and dark, in English and the pseudo-locale
- * `xx` (every sentence ~35 % longer), for someone who can vouch and a plain member. The real page in a real Chromium layout
+ * MEASURES the web's invite screen at the floor, 320 px with 1.3x text, light and dark, in English, the pseudo-locale `xx`
+ * (every sentence ~35 % longer) and Tamil (the longest None), for someone who can vouch and a plain member. The real page in a real Chromium layout
  * (e2e/invite-vouch-harness.tsx). Nothing here touches a node: every /api request is answered by the page route below.
  *
  * Checks: nothing past the screen, nothing scrolls sideways, no words cut, every target 44 px or more; the voucher sees four
@@ -47,6 +47,7 @@ const MEASURE = () => {
         const cuts = (cs.overflow === 'hidden' || cs.overflowX === 'hidden' || cs.overflow === 'clip') && el.scrollWidth > el.clientWidth + 1;
         if (!hidden && cuts && cs.textOverflow !== 'ellipsis' && /\p{L}/u.test(el.textContent || '')) out.push(`${name(el)} cuts its words (${el.scrollWidth} > ${el.clientWidth})`);
         if (el.matches('fieldset label') && r.height < 44) out.push(`the choice ${name(el)} is ${Math.round(r.height)} px tall, under 44`);
+        if (el.matches('fieldset label span') && el.scrollWidth > el.clientWidth) out.push(`the words of ${name(el)} spill out of it (${el.scrollWidth} > ${el.clientWidth})`);
     }
     const radios = [...document.querySelectorAll('input[type="radio"]')];
     return {
@@ -64,7 +65,7 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 const browser = await chromium.launch();
 const failures = [];
 try {
-    for (const lang of ['en', 'xx']) {
+    for (const lang of ['en', 'xx', 'ta']) {
         for (const theme of ['light', 'dark']) {
             for (const who of ['voucher', 'member']) {
                 const canVouch = who === 'voucher';
@@ -116,4 +117,4 @@ if (failures.length) {
     console.error(`\n✗ ${failures.length} problem(s):\n  ${failures.join('\n  ')}`);
     process.exit(1);
 }
-console.log('\n✓ the invite screen at 320 px with 1.3x text, en and xx, light and dark: a voucher sees the choice with None on, a plain member sees the screen as it was');
+console.log('\n✓ the invite screen at 320 px with 1.3x text, en, xx and ta, light and dark: a voucher sees the choice with None on, a plain member sees the screen as it was');

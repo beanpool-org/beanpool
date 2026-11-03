@@ -7,7 +7,8 @@
  *
  * Checks: no sideways scroll; nothing past the 320dp edge; text whole; every target at least 44dp tall; text contrast at
  * least 4.5:1 (3:1 for large text); four radios named None, 25, 50 and 100 Beans with None on, and tapping one turns it on
- * alone; a plain member sees no radio. Screenshots with --shots <dir>.
+ * alone; a plain member sees no radio; and in Tamil, the longest None, every choice still holds its words. Screenshots with
+ * --shots <dir>.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -53,12 +54,14 @@ fs.writeFileSync(entry, `
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { View, ScrollView, Text, TextInput, Pressable } from 'react-native';
-import { t } from '@beanpool/core';
+import { setLanguage, t } from '@beanpool/core';
+import ta from ${JSON.stringify(path.join(ROOT, 'packages/beanpool-core/words/ta.json'))};
 import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { InviteVouchChoice } from ${JSON.stringify(path.join(NATIVE, 'components/InviteVouchChoice'))};
 
 const q = new URLSearchParams(location.search);
 const colors = q.get('scheme') === 'dark' ? darkColors : lightColors;
+if (q.get('lang') === 'ta') setLanguage('ta', [ta]);
 
 function Screen() {
     const [level, setLevel] = useState(null);
@@ -170,6 +173,7 @@ try {
                 }
                 for (const el of document.querySelectorAll('[role="button"], [role="radio"]')) {
                     const r = el.getBoundingClientRect();
+                    if (el.scrollWidth > el.clientWidth) out.push(`the words of "${el.textContent.trim().slice(0, 40)}" spill out of it (${el.scrollWidth} > ${el.clientWidth})`);
                     if (r.height < 43.5) out.push(`"${el.getAttribute('aria-label') || el.textContent.trim().slice(0, 40)}" is ${Math.round(r.height)}dp tall`);
                 }
                 return out;
@@ -195,6 +199,24 @@ try {
             }
             console.log(`${found.length ? '✗' : '✓'} ${label}: ${shown.join(', ') || 'no control'}`);
         }
+        // Tamil, the longest None: the same row has to hold it, wrapping if it must.
+        const label = `invite-phone-voucher-ta-${scheme}`;
+        await page.goto(`${base}/?scheme=${scheme}&who=voucher&lang=ta`);
+        await page.getByTestId('invite-screen').waitFor();
+        await page.waitForTimeout(250);
+        const fit = await page.evaluate(({ WIDTH }) => {
+            const out = [];
+            for (const el of document.querySelectorAll('[role="radio"]')) {
+                const r = el.getBoundingClientRect();
+                if (r.right > WIDTH + 0.5) out.push(`"${el.textContent.trim()}" runs past the edge (${Math.round(r.right)})`);
+                if (r.height < 43.5) out.push(`"${el.textContent.trim()}" is ${Math.round(r.height)}dp tall`);
+                if (el.scrollWidth > el.clientWidth) out.push(`the words of "${el.textContent.trim()}" spill out of it (${el.scrollWidth} > ${el.clientWidth})`);
+            }
+            return out;
+        }, { WIDTH });
+        for (const p of fit) problems.push(`${label}: ${p}`);
+        if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${label}.png`) });
+        console.log(`${fit.length ? '✗' : '✓'} ${label}: ${(await page.evaluate(radios)).join(', ')}`);
     }
 } finally {
     await browser.close();

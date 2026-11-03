@@ -13,7 +13,7 @@ export function InviteVouchChoice({ value, onChange }: { value: VouchLevel | nul
             <legend className="p-0 mb-2 text-[14px] font-bold text-nature-950 dark:text-white">{t(INVITE_VOUCH_WORDS.label)}</legend>
             <div className="flex flex-wrap gap-2">
                 {INVITE_VOUCH_CHOICES.map(({ level, amount }) => (
-                    <label key={String(level)} className="relative flex-1 min-w-[56px] cursor-pointer">
+                    <label key={String(level)} className="relative flex-auto min-w-[56px] cursor-pointer">
                         <input
                             type="radio"
                             name="invite-vouch"

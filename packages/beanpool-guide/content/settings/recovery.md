@@ -24,12 +24,13 @@ Your account's key is not in your phone's backups. A new phone needs your 12 wor
 
 This works only if you linked one before (see below). BeanPool's key vault keeps the locked copy, and your sign-in finds it: you don't type your name or your community's address.
 
+- Under **Which community?**, tap **Global community**, or one of the communities this phone has had, or **another address**. Your sign-in then opens your account there once it is back.
 - Tap **Recover with** and the account you linked: Google or Facebook, or Apple on an iPhone.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.
 - For your safety, getting back in with a sign-in waits a day. The app says when your account comes back. It checks by itself while it is open, and **Check now** asks straight away.
 - If you still have another phone with your account on it, open BeanPool there and tap **Yes, it's me** (see "If someone else tries"). Your account comes back within a minute.
-- When your account is back, choose the community to open it in. The global community is filled in; to use your own, type its name or address, or tap it under **Your communities on this phone**. Tap **Continue**. Your name and photo come back from that community.
-- **Use my 12 words instead** works any time, with no wait. **Start again** starts over with a sign-in.
+- When your account is back, check the community it opens in. The one you tapped first is filled in (if you tapped none, the first community in your copy, else the global community); to use another, type its name or address, or tap it under **Your communities on this phone**. Tap **Continue**. Your name and photo come back from that community.
+- **Use my 12 words instead** works any time, with no wait, and is there under the sign-in buttons from the start. **Start again** starts over with a sign-in.
 
 If the app says **Getting back in with a sign-in is paused for a little while**, BeanPool's key vault has restarted and is waiting for the people who look after it to open it again. Nothing is lost: try again later. Your 12 words work any time.
 

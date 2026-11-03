@@ -25,7 +25,9 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteVouchRefusalWords, offersInviteAsk, offersInviteVouch, t, tn, word, type VouchLevel, type WordKey } from '@beanpool/core';
+import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, inviteVouchRefusalWords, offersInviteAsk, offersInviteVouch, shareAddress, t, tn, word, type VouchLevel, type WordKey } from '@beanpool/core';
+import { fetchPeekCommunityName } from '../../utils/peek';
+import { shareCommunityName } from '../../utils/invite-share-name';
 import { InviteVouchChoice } from '../../components/InviteVouchChoice';
 import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
@@ -622,8 +624,12 @@ export default function PeopleScreen() {
         if (invitesPreview) return;
         const magicLink = `${anchorUrl}/?invite=${codeToShare}`;
         
-        // One message, whole, in the member's language: the person they invite most likely reads it too.
-        const message = t('Join my private BeanPool Node! ✨\n\nClick this secure link to join automatically:\n{link}\n\nOr if you prefer, you can download the BeanPool App at https://beanpool.org and enter this Invite Code manually:\n{code}\n\nNode URL: {url}', { link: magicLink, code: codeToShare, url: anchorUrl });
+        // One message, whole, in the member's language: the person they invite most likely reads it too. Plain words for a
+        // friend (no "node", no "URL"; front doors S10, core inviteShareText), naming the community as its card does.
+        // The card is waited for two seconds at most (utils/invite-share-name.ts): offline, the address names the community.
+        const address = shareAddress(anchorUrl);
+        const name = await shareCommunityName(address, () => fetchPeekCommunityName(anchorUrl));
+        const message = inviteShareText({ name, link: magicLink, code: codeToShare, address });
 
         await Share.share({ message });
     };

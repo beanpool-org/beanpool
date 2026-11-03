@@ -14,10 +14,17 @@ import { chosenRestoreChoice, restoreCommunityChoices } from '../utils/restore-c
  *
  * Chips wrap, so at 320 dp with text at 1.3× a long community name takes its own line rather than running off the edge.
  */
-export function RestoreCommunityChips({ saved, value, onChoose, onAnother, disabled }: {
+export function RestoreCommunityChips({ saved, value, pick, onChoose, onAnother, disabled }: {
     saved: readonly SavedNode[];
     /** What the address field holds now. */
     value: string;
+    /**
+     * What the member did last, for a screen whose field comes and goes (Recover with Social): `another` while they are
+     * typing an address of their own, whatever the text now spells (a bare `global` is the Global chip's address, but a
+     * member halfway through `globalvillage.net` has not chosen it); `chip` after a chip; null before either, when the
+     * text alone says which is chosen. A screen whose field is always drawn leaves it out.
+     */
+    pick?: 'chip' | 'another' | null;
     /** A chip was tapped: the field's new text. */
     onChoose(text: string): void;
     /** "another address" was tapped: the field's new text (emptied of a chip's address, else as it was), then the keyboard. */
@@ -28,7 +35,8 @@ export function RestoreCommunityChips({ saved, value, onChoose, onAnother, disab
     const { colors, dark } = useOnboardingColors();
     const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const choices = useMemo(() => restoreCommunityChoices(saved), [saved]);
-    const chosen = chosenRestoreChoice(value, choices);
+    const typing = pick === 'another';
+    const chosen = typing ? 'another' : chosenRestoreChoice(value, choices);
     const chip = (key: string, label: string, selected: boolean, onPress: () => void) => (
         <Pressable
             key={key}
@@ -52,7 +60,7 @@ export function RestoreCommunityChips({ saved, value, onChoose, onAnother, disab
                     chosen !== null && chosen !== 'another' && chosen.url === c.url,
                     () => onChoose(c.fills),
                 ))}
-                {chip('another', t('another address'), chosen === 'another', () => onAnother(chosen === 'another' ? value : ''))}
+                {chip('another', t('another address'), chosen === 'another', () => onAnother(typing || chosen === 'another' ? value : ''))}
             </View>
         </View>
     );

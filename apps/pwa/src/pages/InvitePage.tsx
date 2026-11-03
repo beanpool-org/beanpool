@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { buildOfflineInviteCode, generateInvite, getBalance, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
+import { buildOfflineInviteCode, generateInvite, getBalance, getCommunityCard, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
@@ -20,7 +20,7 @@ import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type Loc
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
 import { InviteVouchChoice } from '../components/InviteVouchChoice';
 import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
-import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, inviteVouchRefusalWords, offersInviteAsk, offersInviteVouch, t, tn, type VouchLevel } from '@beanpool/core';
+import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, inviteShareText, inviteVouchRefusalWords, offersInviteAsk, offersInviteVouch, shareAddress, t, tn, type VouchLevel } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -64,6 +64,16 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     };
 
     const [invites, setInvites] = useState<InviteCode[]>([]);
+    const [cardName, setCardName] = useState<string | null>(null);
+    useEffect(() => {
+        let alive = true;
+        const address = shareAddress(window.location.origin);
+        getCommunityCard().then(card => {
+            const claimed = card?.host?.replace(/:443$/, '') ?? null;
+            if (alive && card?.name && claimed === address) setCardName(card.name);
+        }).catch(() => { /* the address names it */ });
+        return () => { alive = false; };
+    }, []);
     const [generating, setGenerating] = useState(false);
     const [newCode, setNewCode] = useState<string | null>(null);
     const [intendedFor, setIntendedFor] = useState('');
@@ -317,17 +327,19 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     }
 
     async function handleShare(code: string) {
-        const invite = invites.find(i => i.code === code);
-        const namePhrase = invite?.intendedFor ? `Hey ${invite.intendedFor}, ` : '';
-        
         const inviteUrl = `${window.location.origin}/?invite=${code}`;
-        const messageText = t('Join my BeanPool community node: {url}', { url: inviteUrl });
-        
+        // Plain words for a friend (no "node", no "URL"; front doors S10, core inviteShareText), naming the community as
+        // its card does (read when the page opened: a share must start inside the tap, or Safari refuses it), else by
+        // its address.
+        const address = shareAddress(window.location.origin);
+        const name = cardName ?? address;
+        const messageText = inviteShareText({ name, link: inviteUrl, code, address });
+
         const shareData = {
-            title: t('Join BeanPool Node'),
+            title: t('Join me on BeanPool'),
             text: messageText,
         };
-        
+
         if (navigator.share) {
             try { await navigator.share(shareData); } catch { /* cancelled */ }
         } else {

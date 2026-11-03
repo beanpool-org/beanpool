@@ -58,7 +58,7 @@ import { LanguageProvider } from '../../components/LanguageProvider';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import { GLOBAL_NODE_URL } from '../global-node-url';
 import { normalizeNodeUrl } from '../node-url';
-import { chosenRestoreChoice, fieldTextFor, restoreCommunityChoices, withCopyCommunities } from '../restore-community-choices';
+import { addressFieldShown, chosenRestoreChoice, fieldTextFor, restoreCommunityChoices, withCopyCommunities } from '../restore-community-choices';
 import type { SavedNode } from '../nodes';
 
 const SAVED: SavedNode[] = [
@@ -212,6 +212,95 @@ describe('the choices themselves (utils/restore-community-choices.ts)', () => {
     });
 });
 
+describe('the address field follows what the member did, not what the text spells (Recover with Social; Opus review of #2807)', () => {
+    const choices = restoreCommunityChoices(SAVED);
+
+    it('addressFieldShown: typing or "another address" keeps it, a chip hides it, and before either the text decides', () => {
+        // Nothing done yet: an empty field is drawn; a field filled in for the member (the copy's first community) is not.
+        expect(addressFieldShown(null, '', choices)).toBe(true);
+        expect(addressFieldShown(null, 'global.beanpool.org', choices)).toBe(false);
+        expect(addressFieldShown(null, 'bris.example.org', choices)).toBe(true);
+        // A chip was tapped: it is an address, so no field.
+        expect(addressFieldShown('chip', 'global.beanpool.org', choices)).toBe(false);
+        // The member is typing: whatever the text spells, even a chip's address, the field stays.
+        for (const typed of ['g', 'global', 'global.beanpool.org', 'mullum', 'globalvillage.net', '']) {
+            expect(addressFieldShown('another', typed, choices), typed).toBe(true);
+        }
+    });
+
+    /** The screen's own wiring in miniature: the real chips, the real rule, and a field that must stay mounted and focused. */
+    function Harness({ start = '', startPick = null as 'chip' | 'another' | null }) {
+        const [url, setUrl] = ReactAll.useState(start);
+        const [pick, setPick] = ReactAll.useState<'chip' | 'another' | null>(startPick);
+        const ref = ReactAll.useRef<HTMLInputElement>(null);
+        return createElement('div', null,
+            createElement(RestoreCommunityChips, {
+                saved: SAVED, value: url, pick,
+                onChoose: (text: string) => { setPick('chip'); setUrl(text); },
+                onAnother: (text: string) => { setPick('another'); setUrl(text); setTimeout(() => ref.current?.focus(), 0); },
+            }),
+            addressFieldShown(pick, url, choices) && createElement('input', {
+                'data-field': 'address', ref, value: url,
+                onChange: (e: any) => { setPick('another'); setUrl(e.target.value); },
+            }));
+    }
+    const field = () => host.querySelector('[data-field="address"]') as HTMLInputElement | null;
+    async function type(el: HTMLInputElement, text: string) {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        set.call(el, text);
+        await act(async () => { el.dispatchEvent(new Event('input', { bubbles: true })); });
+    }
+
+    it('typing the bare name "global" letter by letter keeps the same field mounted and focused, and so does "mullum"', async () => {
+        for (const name of ['global', 'mullum']) {
+            await act(async () => { root.render(createElement(Harness) as any); });
+            const input = field()!;
+            expect(input, 'drawn before anything is chosen').not.toBeNull();
+            input.focus();
+            for (let i = 1; i <= name.length; i++) {
+                await type(field()!, name.slice(0, i));
+                expect(field(), `${name.slice(0, i)}`).toBe(input);
+                expect(document.activeElement, `${name.slice(0, i)}`).toBe(input);
+            }
+            // The text now reads back as a chip's address, yet the member chose "another address" by typing.
+            expect(chosen()).toEqual(['another address']);
+            // ...and they can go on: "globalvillage.net" is typed to the end without the field ever leaving.
+            const more = name === 'global' ? 'globalvillage.net' : 'mullumbimby.example.org';
+            for (let i = name.length + 1; i <= more.length; i++) await type(field()!, more.slice(0, i));
+            expect(field()).toBe(input);
+            expect(field()!.value).toBe(more);
+            expect(document.activeElement).toBe(input);
+        }
+    });
+
+    it('tapping "another address" while "global" is typed keeps what was typed (it is not emptied)', async () => {
+        await act(async () => { root.render(createElement(Harness) as any); });
+        await type(field()!, 'global');
+        await act(async () => { chips().at(-1)!.click(); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+        expect(field()!.value).toBe('global');
+        expect(chosen()).toEqual(['another address']);
+    });
+
+    it('a chip hides the field; "another address" after a chip draws it empty, with the keyboard', async () => {
+        await act(async () => { root.render(createElement(Harness) as any); });
+        await act(async () => { chips()[0]!.click(); });
+        expect(field()).toBeNull();
+        expect(chosen()).toEqual(['Global community']);
+        await act(async () => { chips().at(-1)!.click(); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+        expect(field()).not.toBeNull();
+        expect(field()!.value).toBe('');
+        expect(document.activeElement).toBe(field());
+    });
+
+    it('a field filled in for the member (the copy\'s first community) starts hidden, with its chip chosen', async () => {
+        await act(async () => { root.render(createElement(Harness, { start: 'global.beanpool.org' }) as any); });
+        expect(field()).toBeNull();
+        expect(chosen()).toEqual(['Global community']);
+    });
+});
+
 describe('the 12-words restore screen draws the chips above its address field (app/welcome.tsx)', () => {
     it('in `recover`, between the words and the field, which they hand the keyboard', () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
@@ -275,6 +364,8 @@ describe("a restored copy's list of communities (vault rethink VR5)", () => {
     it("the sign-in restore offers them, and starts Which community? at the copy's first (app/welcome.tsx)", () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
         expect(src).toContain('nodes={withCopyCommunities(savedNodes, ssoReleased.communities)}');
-        expect(src).toMatch(/const first = result\.restored\.communities\?\.\[0\];\s*if \(first\) setSsoCommunity\(fieldTextFor\(first\.url\)\);/);
+        // Starts at the copy's first community, unless the member already tapped one before signing in (front doors S10:
+        // Which community? is asked first, and a tap is the member's word over the copy's list).
+        expect(src).toMatch(/const first = result\.restored\.communities\?\.\[0\];\s*if \(first && !ssoCommunityPicked\.current\) setSsoCommunity\(fieldTextFor\(first\.url\)\);/);
     });
 });

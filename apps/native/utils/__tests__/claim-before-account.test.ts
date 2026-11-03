@@ -147,17 +147,21 @@ describe('the model is the app', () => {
         expect(state).not.toMatch(/interface PendingClaim|setPendingClaim|getPendingClaim|handOverPendingClaim|PENDING_CLAIM_TTL_MS/);
     });
 
-    it('app/welcome.tsx offers the claim as one quiet link below the fold, after Restore, never between the title and the doors', () => {
+    it('app/welcome.tsx offers the claim as one quiet link below the fold, after the doors (which now hold Restore), never between the title and the doors', () => {
         const welcome = read('../../app/welcome.tsx');
         const doors = welcome.indexOf('<WelcomeDoors door={globalDoor}');
         const about = welcome.indexOf('<Text style={styles.homeAbout}>');
-        const restore = welcome.indexOf("{t('🔑 Already a Member? Restore Account →')}");
         const claim = welcome.indexOf("{t('Installed BeanPool on a server? Claim it →')}");
         expect(doors).toBeGreaterThan(0);
         expect(about).toBeGreaterThan(doors);
-        expect(restore).toBeGreaterThan(about);
-        expect(claim).toBeGreaterThan(restore);
+        expect(claim).toBeGreaterThan(about);
+        // Front doors S10: Restore is the doors' third button (the old "Already a Member?" link under the doors is gone),
+        // so the claim comes after the doors, which carry Restore.
+        const doorsTag = welcome.slice(doors, welcome.indexOf('/>', doors));
+        expect(doorsTag).toContain("restore={() => setMode('member')}");
+        expect(welcome).not.toContain("{t('🔑 Already a Member? Restore Account →')}");
+        expect(read('../../components/WelcomeDoors.tsx')).toContain("{t('🔑 Already a Member? Restore Account →')}");
         // It opens the claim screen with no server, which scans the server's QR or takes its address.
-        expect(welcome.slice(restore, claim)).toMatch(/onPress=\{\(\) => router\.push\(CLAIM_NEW_SERVER_ROUTE\)\}/);
+        expect(welcome.slice(about, claim)).toMatch(/onPress=\{\(\) => router\.push\(CLAIM_NEW_SERVER_ROUTE\)\}/);
     });
 });

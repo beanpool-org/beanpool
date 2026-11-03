@@ -15,6 +15,7 @@ vi.mock('../lib/api', async (importOriginal) => {
         ...actual,
         generateInvite: vi.fn(async () => ({ success: true, invite: { code: 'INV-NEW1-CODE', createdBy: 'me', createdAt: at, usedBy: null, usedAt: null } })),
         buildOfflineInviteCode: vi.fn(async () => 'BP-offline-ticket'),
+        getCommunityCard: vi.fn(async () => ({ name: 'Mullum', host: window.location.host, members: null, area: null, joining: 'invite', askUrl: null, globalUrl: null })),
         getMyInvites: vi.fn(async () => ({ invites: [
             { code: 'INV-OLD1-CODE', createdBy: 'me', createdAt: at, usedBy: null, usedAt: null, intendedFor: 'Kim' },
             { code: 'INV-USED-CODE', createdBy: 'me', createdAt: at, usedBy: 'x', usedAt: at, intendedFor: 'Lou' },
@@ -71,8 +72,13 @@ describe('the Invites page in the pseudo-locale', () => {
         fireEvent.click(screen.getAllByRole('button', { name: xx('Share invite link') })[0]);
         await waitFor(() => expect(share).toHaveBeenCalled());
         const sent = share.mock.calls[0][0];
-        expect(sent.title).toBe(xx('Join BeanPool Node'));
-        expect(sent.text).toBe(xx('Join my BeanPool community node: {url}').replace('{url}', `${window.location.origin}/?invite=INV-NEW1-CODE`));
+        expect(sent.title).toBe(xx('Join me on BeanPool'));
+        // Front doors S10: plain words, the community's name from its card, the link, the code, the address; no "node", no "URL".
+        expect(sent.text).toBe(
+            xx("Join my BeanPool community, {name}:\n{link}\n\nIf the link doesn't open, install BeanPool from beanpool.org and paste this code:\n{code}\n\nCommunity address: {address}")
+                .replace('{name}', 'Mullum').replace('{link}', `${window.location.origin}/?invite=INV-NEW1-CODE`)
+                .replace('{code}', 'INV-NEW1-CODE').replace('{address}', window.location.host),
+        );
 
         fireEvent.click(screen.getByRole('button', { name: xx('🌳 Tree') }));
         expect(await screen.findByText(xx('🌳 Community Tree'))).toBeInTheDocument();

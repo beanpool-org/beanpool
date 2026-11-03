@@ -91,12 +91,15 @@ const doorStyles = StyleSheet.create({
     inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
     memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12 },
     memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700', textAlign: 'center' },
+    // Already a member? Restore, the third button (front doors S10; e2e/front-doors-s10-320.mjs checks it at the fold).
+    restoreBtn: { width: '100%', minHeight: 48, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+    restoreBtnText: { color: scheme === 'dark' ? palette.blue400 : palette.blue600, fontSize: 15, fontWeight: '700', textAlign: 'center' },
 });
 const c = q.get('case');
 const Page = () => {
     if (c === 'doors') return (
         <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={{ padding: 16 }}>
-            <WelcomeDoors door="open" joinWithInvite={() => {}} openGlobalDoor={() => {}} exploring={q.get('exploring') === '1'} styles={doorStyles} />
+            <WelcomeDoors door="open" joinWithInvite={() => {}} openGlobalDoor={() => {}} restore={() => {}} exploring={q.get('exploring') === '1'} styles={doorStyles} />
         </ScrollView>
     );
     if (c === 'card') return (

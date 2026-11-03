@@ -57,7 +57,7 @@ import { setLanguage, type UiLang } from '@beanpool/core';
 import type { GlobalDoorState } from '../global-entry';
 import { onboardingColors } from '../onboarding-colors';
 
-const STYLES = { homeDoors: {}, memberBtn: {}, memberBtnText: {}, doorLine: {}, inviteOnlyHint: {} };
+const STYLES = { homeDoors: {}, memberBtn: {}, memberBtnText: {}, doorLine: {}, inviteOnlyHint: {}, restoreBtn: {}, restoreBtnText: {} };
 const LINE: Record<GlobalDoorState, string | null> = {
     unknown: null,
     open: null,
@@ -69,13 +69,14 @@ const HINT = 'No invite? Explore BeanPool worldwide and find a community near yo
 
 let host: HTMLDivElement;
 let root: Root;
-const taps = { invite: 0, explore: 0 };
+const taps = { invite: 0, explore: 0, restore: 0 };
 beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
     taps.invite = 0;
     taps.explore = 0;
+    taps.restore = 0;
     setLanguage('en');
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
@@ -85,6 +86,7 @@ async function draw(door: GlobalDoorState, initial?: UiLang): Promise<void> {
         door,
         joinWithInvite: () => { taps.invite++; },
         openGlobalDoor: () => { taps.explore++; },
+        restore: () => { taps.restore++; },
         styles: STYLES,
     });
     await act(async () => {
@@ -96,12 +98,16 @@ const buttons = () => Array.from(host.querySelectorAll('[role="button"]')) as HT
 /** Everything a member reads, top to bottom. */
 const reading = () => Array.from(host.querySelectorAll('span')).filter((s) => s.children.length === 0).map((s) => s.textContent ?? '');
 
-describe('both doors, in order, in every state of the global community\'s door', () => {
+describe('both doors and Restore, in order, in every state of the global community\'s door', () => {
     for (const door of ['unknown', 'open', 'unreachable', 'closed', 'preview'] as GlobalDoorState[]) {
-        it(`${door}: Join with an invite, then Explore BeanPool worldwide, both working${LINE[door] ? ', and the line says why' : ''}`, async () => {
+        it(`${door}: Join with an invite, then Explore BeanPool worldwide, then Restore, all working${LINE[door] ? ', and the line says why' : ''}`, async () => {
             await draw(door);
-            const [invite, explore, ...more] = buttons();
+            const [invite, explore, restore, ...more] = buttons();
             expect(more).toEqual([]);
+            // Front doors S10: Already a member? Restore is the third button, full width, under the two doors and above the hint.
+            expect(restore.getAttribute('aria-label')).toBe('Already a Member? Restore Account');
+            expect(restore.textContent).toBe('🔑 Already a Member? Restore Account →');
+            expect(explore.compareDocumentPosition(restore) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
             expect(invite.getAttribute('aria-label')).toBe('Join with an invite');
             expect(invite.textContent).toBe('🎟️ Join with an invite');
             expect(explore.getAttribute('aria-label')).toBe('Explore BeanPool worldwide');
@@ -109,11 +115,11 @@ describe('both doors, in order, in every state of the global community\'s door',
             // Invite first: drawn before Explore, as a screen reader meets them.
             expect(invite.compareDocumentPosition(explore) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
             // Never a gate: both are live whatever the door said (the door asks again fresh when Explore is tapped).
-            for (const b of [invite, explore]) expect(b.getAttribute('data-disabled')).toBeNull();
-            await act(async () => { invite.click(); explore.click(); });
-            expect(taps).toEqual({ invite: 1, explore: 1 });
-            // What is read, in order: the two buttons, the state's line if any, then the hint.
-            expect(reading()).toEqual(['🎟️ Join with an invite', '🌍 Explore BeanPool worldwide', ...(LINE[door] ? [LINE[door]!] : []), HINT]);
+            for (const b of [invite, explore, restore]) expect(b.getAttribute('data-disabled')).toBeNull();
+            await act(async () => { invite.click(); explore.click(); restore.click(); });
+            expect(taps).toEqual({ invite: 1, explore: 1, restore: 1 });
+            // What is read, in order: the two doors, the state's line if any (Explore's), Restore, then the hint.
+            expect(reading()).toEqual(['🎟️ Join with an invite', '🌍 Explore BeanPool worldwide', ...(LINE[door] ? [LINE[door]!] : []), '🔑 Already a Member? Restore Account →', HINT]);
             // TalkBack reads the state with the button, and announces the line when it appears.
             expect(explore.getAttribute('data-hint')).toBe(LINE[door]);
             const line = Array.from(host.querySelectorAll('span[aria-live="polite"]'));
@@ -194,6 +200,49 @@ describe('above the fold at 320 dp with text at 1.3×', () => {
         return y;
     }
 
+    // Front doors S10 (DESIGN-entry-points-fable.md §3.5 item 1): Already a member? Restore is the third button, full width, under
+    // the two doors and above the hint. The three buttons end above the fold at 320 dp × 1.3 in every language, and the hint
+    // starts above it. (The hint's last lines were already under the fold before this change, measured below: a sentence under
+    // the buttons, which the screen scrolls to; the design's "the hint still sits above the fold" does not hold at these sizes.)
+    const restoreStyle = style(welcome, 'restoreBtn');
+    const restoreText = style(welcome, 'restoreBtnText');
+    const hintStyle = style(welcome, 'inviteOnlyHint');
+    const RESTORE_LINE = COLUMN - 2 * restoreStyle('paddingHorizontal');
+    type Words = { title: string; invite: string; explore: string; restore: string; hint: string };
+    /** Where Restore's bottom edge is: after Explore's margin, two lines at most (shrinking first), at least 48 dp. */
+    function restoreBottom(words: Words): number {
+        const lines = Math.min(2, linesOf(words.restore, restoreText('fontSize'), RESTORE_LINE));
+        return exploreBottom(words) + btn('marginBottom')
+            + Math.max(restoreStyle('minHeight'), 2 * restoreStyle('paddingVertical') + lines * lineBox(restoreText('fontSize')));
+    }
+    const hintTop = (words: Words) => restoreBottom(words) + restoreStyle('marginBottom') + hintStyle('marginTop');
+    const hintHeight = (words: Words) => linesOf(words.hint, hintStyle('fontSize'), COLUMN) * hintStyle('lineHeight') * FONT_SCALE;
+
+    it('the hint\'s tail was under the fold before Restore moved up, in English (measured, not assumed)', () => {
+        const en: Words = {
+            title: 'Welcome to BeanPool', invite: '🎟️ Join with an invite', explore: '🌍 Explore BeanPool worldwide',
+            restore: '🔑 Already a Member? Restore Account →', hint: 'No invite? Explore BeanPool worldwide and find a community near you.',
+        };
+        const before = exploreBottom(en) + btn('marginBottom') + hintStyle('marginTop') + hintHeight(en);
+        expect(before).toBeGreaterThan(VISIBLE);
+        // And now its first line is still above the fold.
+        expect(hintTop(en) + hintStyle('lineHeight') * FONT_SCALE).toBeLessThanOrEqual(VISIBLE);
+    });
+
+    it('Restore is drawn by WelcomeDoors, between the doors and the hint, and the old link under the fold is gone', () => {
+        const doorsSrc = read('components/WelcomeDoors.tsx');
+        const code = doorsSrc.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+        expect(code.indexOf('styles.restoreBtn')).toBeGreaterThan(code.indexOf('openGlobalDoor'));
+        expect(code.indexOf('styles.restoreBtn')).toBeLessThan(code.indexOf('styles.inviteOnlyHint'));
+        expect(welcome).toContain('restore={() => setMode(\'member\')}');
+        // Not drawn twice: the quiet link that sat under the fold on the home is gone (the waiting screen keeps its own).
+        const home = welcome.slice(welcome.indexOf('// --- MAIN WELCOME SCREEN ---'), welcome.indexOf('function makeStyles('));
+        expect(home).not.toContain('styles.restoreSecondaryBtn');
+        // Full width, a 48 dp target.
+        expect(welcome).toMatch(/\n\s*restoreBtn: \{[^}]*width: '100%'/);
+        expect(restoreStyle('minHeight')).toBeGreaterThanOrEqual(48);
+    });
+
     it('the home draws the switch, the title, then the doors: nothing else between them', () => {
         const home = welcome.slice(welcome.indexOf('// --- MAIN WELCOME SCREEN ---'), welcome.indexOf('function makeStyles('));
         const code = home.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/^\s*\/\/.*$/gm, '');
@@ -213,6 +262,17 @@ describe('above the fold at 320 dp with text at 1.3×', () => {
             const words = { title: say('Welcome to BeanPool'), invite: say('🎟️ Join with an invite'), explore: say('🌍 Explore BeanPool worldwide') };
             for (const w of Object.values(words)) expect(typeof w).toBe('string');
             expect(exploreBottom(words), JSON.stringify(words)).toBeLessThanOrEqual(VISIBLE);
+        });
+        it(`${lang}: the three buttons end above the fold`, async () => {
+            const { pseudoLocalise } = await import('@beanpool/core');
+            const cat = lang === 'en' || lang === 'xx' ? {} : JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8')) as Record<string, string>;
+            const say = (k: string) => (lang === 'en' ? k : lang === 'xx' ? pseudoLocalise(k) : cat[k]);
+            const words = {
+                title: say('Welcome to BeanPool'), invite: say('🎟️ Join with an invite'), explore: say('🌍 Explore BeanPool worldwide'),
+                restore: say('🔑 Already a Member? Restore Account →'), hint: say('No invite? Explore BeanPool worldwide and find a community near you.'),
+            };
+            for (const w of Object.values(words)) expect(typeof w).toBe('string');
+            expect(restoreBottom(words), JSON.stringify(words)).toBeLessThanOrEqual(VISIBLE);
         });
     }
 

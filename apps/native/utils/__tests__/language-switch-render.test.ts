@@ -382,13 +382,14 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     const draftedKeys = new Set(ALL_LANGS.filter((l) => l !== 'xx').flatMap((l) => Object.keys(catalog(NATIVE_WORDS, l))));
     const drafted = (key: string) => draftedKeys.has(key);
 
-    it('the screens\' sentences are through t(), and the two big buttons are the only lines with a limit (two lines)', () => {
+    it('the screens\' sentences are through t(), and the two big buttons and Restore are the only lines with a limit (two lines)', () => {
         for (const key of ONE_LINE_BUTTONS) expect(keys).toContain(key);
         expect(keys.length).toBeGreaterThanOrEqual(40);
         const home = source.slice(source.indexOf('// --- MAIN WELCOME SCREEN ---'), source.indexOf('function makeStyles(')) + doorsSource;
-        expect((home.match(/numberOfLines=\{\d\}/g) ?? []).length).toBe(2);
-        expect((home.match(/numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}/g) ?? []).length).toBe(2);
-        expect((home.match(/adjustsFontSizeToFit minimumFontScale=\{0\.6\}/g) ?? []).length).toBe(2);
+        // The two doors and, since front doors S10, Already a member? Restore under them (components/WelcomeDoors.tsx).
+        expect((home.match(/numberOfLines=\{\d\}/g) ?? []).length).toBe(3);
+        expect((home.match(/numberOfLines=\{2\} adjustsFontSizeToFit minimumFontScale=\{0\.6\}/g) ?? []).length).toBe(3);
+        expect((home.match(/adjustsFontSizeToFit minimumFontScale=\{0\.6\}/g) ?? []).length).toBe(3);
         expect(home).toContain('<LanguageSwitch />');
         // A wrapped label's two lines sit in the middle of the button (review of #1954, N5).
         expect(source).toMatch(/memberBtnText: \{[^}]*textAlign: 'center'/);

@@ -9,11 +9,15 @@ export interface WelcomeDoorsStyles {
     memberBtnText: object;
     doorLine: object;
     inviteOnlyHint: object;
+    /** Already a member? Restore: full width and quiet, the third button (front doors S10). */
+    restoreBtn: object;
+    restoreBtnText: object;
 }
 
 /**
  * The first screen's two doors (DESIGN-global-entry-fable.md §B.3, decision 2): **Join with an invite** first and
- * primary, **Explore BeanPool worldwide** right under it, then the hint. Both are always drawn, whatever the global
+ * primary, **Explore BeanPool worldwide** right under it, then **Already a Member? Restore Account** as a full-width quiet
+ * third button (front doors S10, DESIGN-entry-points-fable.md §3.5 item 1: it was a small link under the fold), then the hint. Both are always drawn, whatever the global
  * community has said or not said yet: no fade, nothing that waits on an answer, and a new member offline still sees both
  * ways in. They sit right under the title, so at 320 dp with text at 1.3× both are above the fold
  * (utils/__tests__/welcome-doors-render.test.ts measures it). The home is drawn from the top (app/welcome.tsx), so the
@@ -30,10 +34,12 @@ export interface WelcomeDoorsStyles {
  * `exploring`: the second door is asking whether this phone may look around first (slice S12, app/welcome.tsx
  * exploreWorldwide). The line under it says so, and a second tap waits; the invite button works all the while.
  */
-export function WelcomeDoors({ door, joinWithInvite, openGlobalDoor, exploring = false, styles }: {
+export function WelcomeDoors({ door, joinWithInvite, openGlobalDoor, restore, exploring = false, styles }: {
     door: GlobalDoorState;
     joinWithInvite(): void;
     openGlobalDoor(): void;
+    /** Already a member: the ways back (the restore menu). */
+    restore(): void;
     exploring?: boolean;
     styles: WelcomeDoorsStyles;
 }) {
@@ -52,6 +58,9 @@ export function WelcomeDoors({ door, joinWithInvite, openGlobalDoor, exploring =
                 <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🌍 Explore BeanPool worldwide')}</Text>
             </Pressable>
             {line && <Text style={styles.doorLine} accessibilityLiveRegion="polite">{line}</Text>}
+            <Pressable style={styles.restoreBtn} onPress={restore} accessibilityRole="button" accessibilityLabel={t('Already a Member? Restore Account')}>
+                <Text style={styles.restoreBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🔑 Already a Member? Restore Account →')}</Text>
+            </Pressable>
             <Text style={styles.inviteOnlyHint}>{t('No invite? Explore BeanPool worldwide and find a community near you.')}</Text>
         </View>
     );

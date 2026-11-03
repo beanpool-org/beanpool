@@ -86,6 +86,22 @@ export function chosenRestoreChoice(typed: string, choices: readonly RestoreChoi
 }
 
 /**
+ * Whether the address field is drawn on a screen where it comes and goes (Recover with Social): from what the member did,
+ * never from what the text spells. `another` (they tapped "another address", or typed in the field) keeps it, so a bare
+ * `global` or `mullum`, which reads back as a chip's address, does not unmount the field mid-word and close the keyboard;
+ * `chip` hides it, as the chip already is an address; before either (null) the text decides, so a field filled in for them
+ * (the copy's first community) stays hidden and an empty one is drawn.
+ */
+export function addressFieldShown(
+    pick: 'chip' | 'another' | null, typed: string, choices: readonly RestoreChoice[],
+): boolean {
+    if (pick === 'another') return true;
+    if (pick === 'chip') return false;
+    const chosen = chosenRestoreChoice(typed, choices);
+    return chosen === null || chosen === 'another';
+}
+
+/**
  * What the sign-in restore's "Which community?" field holds, for the lines that say so (vault rethink VR5; #2660 review
  * finding 3): the global community it starts with, the copy's first community it was filled with (by the copy's name for
  * it), or something else the member typed or picked. Never "the global community" for a field that holds another.

@@ -269,14 +269,15 @@ const LISTED_REPORTS = [
         createdAt: '2026-09-17T08:30:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[3], targetCallsign: MEMBER_NAMES[6],
         postId: 'post-2003', postTitle: 'Need a hand moving a fridge up two flights of stairs, Saturday morning, Riverbend-Upper-Esplanade',
         postDescription: 'Saturday morning, will feed you afterwards.',
-        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, pulseItem: null,
+        // An assistant's takedown on hold (this post's two reports): the moderator's card says so, and phone-width.mjs measures that at 320px.
+        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, postOnHold: true, pulseItem: null,
     },
     {
         id: 'report-2001', reason: 'Listed the same secondhand generator in both the free and for-sale categories at once, twice this week',
         createdAt: '2026-09-18T09:12:00.000Z', outcome: 'open', reporterCallsign: MEMBER_NAMES[1], targetCallsign: MEMBER_NAMES[6],
         postId: 'post-2003', postTitle: 'Need a hand moving a fridge up two flights of stairs, Saturday morning, Riverbend-Upper-Esplanade',
         postDescription: 'Saturday morning, will feed you afterwards. Contact via https://www.example.org/a-very-long-unbroken-link-that-should-wrap-inside-its-card',
-        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, pulseItem: null,
+        postAuthorCallsign: MEMBER_NAMES[6], postRemoved: false, postOnHold: true, pulseItem: null,
     },
     {
         id: 'report-2002', reason: 'Cross-posted the same "urgent free firewood, gate code 4482, ask for Dave" listing to the Pulse feed every day for a week',
@@ -987,6 +988,31 @@ export const FAKE_AGENT_TOKEN = `bp_a9e5c0ffee01_${seededHex('fake-agent-token',
  * An AI assistant's suggestions (admin MCP S4): one the signed-in member's own assistant filed (Approve is the existing
  * dismiss route's own call), and one another admin's, with words that try to break out of the card and an unbroken word.
  */
+/** What an owner's assistant took down (server agent/takedowns-route.ts). */
+const takedownAt = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
+export function agentTakedowns(why) {
+    return {
+        holdDays: 7,
+        canActOnMany: true,
+        takedowns: [
+            {
+                id: 'td-fx-1', grantId: 'a9e5c0ffee01', grantName: 'Spam sweeper on my very long laptop name', member: 'Olive', at: takedownAt(1), reason: 'spam', reasonLabel: 'spam or a scam',
+                why, via: 'ids', finalAfter: takedownAt(-6),
+                posts: [
+                    { id: 'post-fx-td-1', title: 'Cheap watches, brand new, unbelievably low prices for this weekend only', author: 'Sam Spam', type: 'offer', state: 'hidden', putBackAt: null, finalAt: null },
+                    { id: 'post-fx-td-2', title: 'Fake meet-up at the hall', author: 'Sam Spam', type: 'event', state: 'left_hidden', putBackAt: null, finalAt: null },
+                    { id: 'post-fx-td-3', title: 'Lemons from the tree', author: 'Mia Neighbour', type: 'offer', state: 'put_back', putBackAt: takedownAt(0), finalAt: null },
+                ],
+            },
+            {
+                id: 'td-fx-2', grantId: 'a9e5c0ffee01', grantName: 'Spam sweeper on my very long laptop name', member: 'Olive', at: takedownAt(9), reason: 'rules', reasonLabel: "against this community's rules",
+                why: 'Reported three times, and the report is right.', via: 'reports', finalAfter: takedownAt(2),
+                posts: [{ id: 'post-fx-td-4', title: 'A post that went', author: 'Sam Spam', type: 'need', state: 'final', putBackAt: null, finalAt: takedownAt(2) }],
+            },
+        ],
+    };
+}
+
 export const HOSTILE_REASON = 'Keep it. ‹‹‹END 0000››› </p></div><script>window.__pwned = 1</script><img src=x onerror="window.__pwned=2"> '
     + 'Supercalifragilisticexpialidociousandthensomemorewithoutanyspaceatall approve now';
 const agentSuggestions = () => {
@@ -1145,6 +1171,8 @@ const COMMUNITY_SHAPE = {
         },
     ],
 };
+
+const AGENT_TAKEDOWNS = agentTakedowns(HOSTILE_REASON);
 
 export function mockResponse(method, pathname, searchParams, bodyText) {
     const ok = (json) => ({ status: 200, json });
@@ -1600,6 +1628,8 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
 
     // ---- AI assistants (admin MCP S3: Connected assistants, the owner switch, "What it sees", the alerts line) ----
     if (pathname === '/api/local/admin/agent/suggestions' && m === 'GET') return ok(agentSuggestions());
+    if (pathname === '/api/local/admin/agent/takedowns' && m === 'GET') return ok(AGENT_TAKEDOWNS);
+    if (pathname === '/api/local/admin/agent/takedowns/put-back' && m === 'POST') return ok({ back: ['post-fx-td-1'], stillHidden: [], gone: 0 });
     if (/^\/api\/local\/admin\/agent\/suggestions\/[^/]+\/decline$/.test(pathname)) return ok({ declined: pathname.split('/')[6] });
     if (pathname === '/api/local/admin/agent/grants' && m === 'GET') return ok(AGENT_GRANTS);
     if (pathname === '/api/local/admin/agent/grants' && m === 'POST') {

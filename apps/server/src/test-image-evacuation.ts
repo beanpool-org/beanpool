@@ -90,7 +90,9 @@ function photoTableBytes(conn: { prepare(sql: string): { get(): unknown } }): nu
 }
 
 /** How many inline photos the fixture carries. Enough for the size measurement to mean something. */
-const FIXTURE_PHOTOS = 30;
+// Enough that the last section's "less than half" weighs photos: every table the schema gains adds to the database it measures and
+// nothing to what it halves. 30 went over by one 4 KB page when agent_takedowns came in; the assertion stood and this rose.
+const FIXTURE_PHOTOS = 32;
 const FIXTURE_ATTACHMENTS = 10;
 
 /**

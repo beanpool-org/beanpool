@@ -580,6 +580,11 @@ export const TABLES: Record<string, TableEntry> = {
     // server that takes over keeps them hidden, and its moderators restore them one at a time.
     burst_actions: { kind: 'local', reason: "this server's record of the moderators' burst actions, for their undo, 30 days: the posts a hide hid travel hidden in posts, and after a take-over are restored one at a time (engine/burst-cleanup.ts)" },
     burst_action_posts: { kind: 'local', reason: "the posts each burst hide hid, for its undo on this server (engine/burst-cleanup.ts)" },
+    // What an owner's assistant took down (engine/agent-takedowns.ts). As a burst's record: the posts travel hidden in posts, so
+    // after a take-over they stay hidden. A person removes one from the posts screen or a report on it; bringing one back takes an
+    // assistant's suggestion to restore it, approved: no screen does that by itself.
+    agent_takedowns: { kind: 'local', reason: "this server's record of what its owners' AI assistants took down, for Put back and the 7-day sweep: the posts travel hidden in posts, and after a take-over a person restores them (engine/agent-takedowns.ts)" },
+    agent_takedown_posts: { kind: 'local', reason: "the posts each assistant's takedown hid, for Put back and the sweep on this server (engine/agent-takedowns.ts)" },
     // The note on Beans sent to someone who had blocked its sender, kept for the sender alone; the ledger row, which is
     // copied, stores none (engine/withheld-notes.ts).
     withheld_notes: { kind: 'local', reason: 'the note on Beans sent to someone who had blocked its sender, kept for the sender alone: never in a copy, so no standby can show it to them (engine/withheld-notes.ts)' },

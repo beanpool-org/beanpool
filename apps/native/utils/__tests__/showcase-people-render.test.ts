@@ -26,9 +26,12 @@ const sent = vi.hoisted(() => ({ shares: [] as unknown[], clips: [] as unknown[]
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button' };
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID, placeholder, value, onChangeText } = props;
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
+        if (placeholder) attrs.placeholder = placeholder;
+        // A field the member types in (People's invite box): what they type reaches the screen.
+        if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (onPress) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress({ stopPropagation() {} }); };
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -290,5 +293,85 @@ describe("a phone that has never heard the worldwide community's profile", () =>
         await settle();
         expect(text()).not.toContain('OWN-CODE-7731');
         expect(text()).toContain(LOCAL_COMMUNITY_LINES.invites);
+    });
+});
+
+/**
+ * The rule on People's Join Another Community (Marty, board card balance-rule-other-doors, 3 Nov 2026: "Yes, show the
+ * sentence"): an invite typed for another community draws, above Join Community, the one sentence that community's join
+ * screen and rules page say, where it confirms its members, read from it once the typing stops. Nothing to tick or tap.
+ * Never for the member's own community, and nothing before a code is typed. Before this the form said nothing of the
+ * rule: the "rule on" test fails there.
+ */
+describe("the joined community's rule on People's Join Another Community", () => {
+    const OTHER = 'https://riverside.example';
+    const RULE = { known: true, knownFloor: 100, debtLinePct: 30, quietDays: 21, debtLineFrom: null, quietDaysFrom: null };
+    const SENTENCE = "The admins can see a confirmed member's balance if they owe more than 30% of their credit line, or are in debit and haven't made a sale for 21 days. Each look is logged.";
+    const rules = { by: new Map<string, unknown>() };
+    beforeEach(() => {
+        rules.by.clear();
+        rememberProfile('local', { invites: true, showcase: false });
+        const others = recordingFetch(false);
+        globalThis.fetch = vi.fn((url: unknown, init?: RequestInit) => {
+            const u = String(url);
+            if (u.endsWith('/api/community/known-rule')) {
+                net.calls.push(`fetch ${u}`);
+                const body = rules.by.get(u.replace('/api/community/known-rule', ''));
+                return Promise.resolve(body ? new Response(JSON.stringify(body), { status: 200 }) : new Response('{"error":"Not found"}', { status: 404 }));
+            }
+            return others(url as any, init);
+        }) as typeof fetch;
+    });
+    const typeInvite = async (v: string) => {
+        const box = host.querySelector('input[placeholder="Invite URL or token"]') as HTMLInputElement | null;
+        expect(box, "People's invite box").not.toBeNull();
+        const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        await act(async () => { setValue.call(box, v); box!.dispatchEvent(new Event('input', { bubbles: true })); });
+        // The typing stops: the read waits 600 ms, as the join screen's does.
+        await act(async () => { await new Promise((r) => setTimeout(r, 700)); });
+        await settle();
+    };
+    const ruleLine = () => host.querySelector('[data-testid="people-join-rule"]')?.textContent ?? null;
+    const ruleReads = () => net.calls.filter((c) => c.endsWith('/api/community/known-rule'));
+
+    it('nothing typed: no sentence, and nothing read for it', async () => {
+        rules.by.set(NODE, RULE);
+        await render(createElement(PeopleScreen));
+        expect(host.querySelector('input[placeholder="Invite URL or token"]')).not.toBeNull();
+        expect(ruleLine()).toBeNull();
+        expect(ruleReads()).toEqual([]);
+    });
+
+    it("rule on: an invite link to another community draws that community's sentence, read from it", async () => {
+        rules.by.set(OTHER, RULE);
+        await render(createElement(PeopleScreen));
+        await typeInvite(`${OTHER}/?invite=INV-ABCD-EFGH`);
+        expect(ruleLine()).toBe(SENTENCE);
+        expect(ruleReads()).toEqual([`fetch ${OTHER}/api/community/known-rule`]);
+        expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+    });
+
+    it('rule off there: no sentence', async () => {
+        rules.by.set(OTHER, { known: false });
+        await render(createElement(PeopleScreen));
+        await typeInvite(`${OTHER}/?invite=INV-ABCD-EFGH`);
+        expect(ruleReads()).toEqual([`fetch ${OTHER}/api/community/known-rule`]);
+        expect(ruleLine()).toBeNull();
+    });
+
+    it("a bare code joins nowhere new (the member's own community): no sentence, even where it has the rule", async () => {
+        rules.by.set(NODE, RULE);
+        await render(createElement(PeopleScreen));
+        await typeInvite('INV-ABCD-EFGH');
+        expect(ruleLine()).toBeNull();
+        expect(ruleReads()).toEqual([]);
+    });
+
+    it('an invite naming an address that is not plain: no sentence, and the screen still draws', async () => {
+        await render(createElement(PeopleScreen));
+        await typeInvite('https://user@riverside.example/?invite=INV-ABCD-EFGH');
+        expect(host.querySelector('input[placeholder="Invite URL or token"]')).not.toBeNull();
+        expect(ruleLine()).toBeNull();
+        expect(ruleReads()).toEqual([]);
     });
 });

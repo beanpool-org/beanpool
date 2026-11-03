@@ -3,7 +3,7 @@
  * Generates the member-facing facts from `features` (+ `door`), the Home summary line,
  * and handles an old node that says nothing (produces no line).
  */
-import { formatCount, t, word } from './words.js';
+import { formatCount, formatDate, t, tn, word } from './words.js';
 
 export interface CommunityShapeFeatures {
     beans?: boolean;
@@ -19,7 +19,22 @@ export interface CommunityShapeFeatures {
     autoMute?: boolean;
     dmRequests?: boolean;
     knownFloor?: number;
+    /** The rule's two lines, beside the floor (S1): absent from a node older than the rule, which then draws no rule line. */
+    debtLinePct?: number;
+    quietDays?: number;
     showcase?: boolean;
+}
+
+/** A known community's two lines, as the owner set them. */
+export interface KnownRuleLines {
+    debtLinePct?: number;
+    quietDays?: number;
+}
+
+/** A tightened line's date while it waits (GET /api/community/known-rule). Null: it applies now. */
+export interface WaitingLines extends KnownRuleLines {
+    debtLineFrom?: string | null;
+    quietDaysFrom?: string | null;
 }
 
 /**
@@ -52,6 +67,14 @@ export const COMMUNITY_SHAPE_CARD_WORDS = {
     beansOnLine: word('**Beans:** on — trades, credit and the Commons'),
     beansOffLine: word('**Beans:** off — no prices, no credit here'),
     knownFloorLine: word('**Confirmed members** can owe up to {amount} Beans (the known floor)'),
+    // The rule (DESIGN-balance-rule-fable.md §2). "Half" when the line is 50, as the design's Q-D; {days} is "60 days" in
+    // the language's own plural, so each line is one sentence to translate however long the gap. {days} is since the last
+    // sale, never how long the debit has lasted: nothing records when a debit began (openExceptions), so a member who
+    // has bought and not sold is listed from their first Bean of debit, and no wording may promise them a wait.
+    ruleLineHalf: word("The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for {days}. Each look is logged."),
+    ruleLinePct: word("The admins can see a confirmed member's balance if they owe more than {pct}% of their credit line, or are in debit and haven't made a sale for {days}. Each look is logged."),
+    debtLineFrom: word('The line of {pct}% applies from {date}.'),
+    quietDaysFrom: word('The line of {days} applies from {date}.'),
     dmRequestsOnLine: word('**Messages:** a first message from someone new waits until you accept it'),
     dmRequestsOffLine: word('**Messages:** arrive straight away'),
     decisionsOnLine: word('**Decisions:** members vote; anyone who has completed a trade, and the admins, can propose'),
@@ -81,12 +104,53 @@ export function isOldNodeWithoutShape(features: CommunityShapeFeatures | null | 
         && features.privatePreview === undefined;
 }
 
+/** "60 days", in the language's own plural. */
+function daysWords(n: number): string {
+    return tn(n, '{n} days', '{n} days', { n: formatCount(n) });
+}
+
+/**
+ * The rule in the community's own numbers, on the join screen and "How this community works"; null from a node that
+ * doesn't state both lines, which draws no rule line (DESIGN-balance-rule-fable.md §2, §5).
+ */
+export function knownRuleLine(lines: KnownRuleLines | null | undefined): string | null {
+    const pct = lines?.debtLinePct;
+    const quiet = lines?.quietDays;
+    if (typeof pct !== 'number' || typeof quiet !== 'number') return null;
+    const days = daysWords(quiet);
+    return pct === 50
+        ? t(COMMUNITY_SHAPE_CARD_WORDS.ruleLineHalf, { days })
+        : t(COMMUNITY_SHAPE_CARD_WORDS.ruleLinePct, { pct: formatCount(pct), days });
+}
+
+/** The join screen's lines: the floor, then the rule that comes with it. Both or neither: a floor alone isn't the rule. */
+export function joinRuleLines(rule: KnownRuleLines & { knownFloor?: number } | null | undefined): string[] {
+    const line = knownRuleLine(rule);
+    if (!line || typeof rule?.knownFloor !== 'number') return [];
+    return [t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatCount(rule.knownFloor) }), line];
+}
+
+/** "The line of 30% applies from 16 November.", one per line waiting out its notice (design §4). */
+export function waitingLineSentences(rule: WaitingLines | null | undefined): string[] {
+    const on = (iso: string | null | undefined) => {
+        const at = iso ? Date.parse(iso) : NaN;
+        return Number.isFinite(at) ? formatDate(new Date(at), 'day-month', { width: 'long' }) : null;
+    };
+    const debt = on(rule?.debtLineFrom);
+    const quiet = on(rule?.quietDaysFrom);
+    const lines: string[] = [];
+    if (debt && typeof rule?.debtLinePct === 'number') lines.push(t(COMMUNITY_SHAPE_CARD_WORDS.debtLineFrom, { pct: formatCount(rule.debtLinePct), date: debt }));
+    if (quiet && typeof rule?.quietDays === 'number') lines.push(t(COMMUNITY_SHAPE_CARD_WORDS.quietDaysFrom, { days: daysWords(rule.quietDays), date: quiet }));
+    return lines;
+}
+
 /**
  * The full list of member-facing community facts (design §4.2 Table 4.2).
  * One line per fact; only facts that are true are drawn; nothing is drawn as locked.
- * An old node that says nothing returns an empty array.
+ * An old node that says nothing returns an empty array. `waiting`: GET /api/community/known-rule's answer, for the date
+ * on a tightened line; `features` carries no dates.
  */
-export function communityShapeLines(features: CommunityShapeFeatures | null | undefined): string[] {
+export function communityShapeLines(features: CommunityShapeFeatures | null | undefined, waiting?: WaitingLines | null): string[] {
     if (isOldNodeWithoutShape(features)) return [];
 
     const lines: string[] = [];
@@ -132,6 +196,8 @@ export function communityShapeLines(features: CommunityShapeFeatures | null | un
     // 4. Known floor (only drawn when present, i.e. dial and beans are on)
     if (typeof features?.knownFloor === 'number') {
         lines.push(t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatCount(features.knownFloor) }));
+        const rule = knownRuleLine(features);
+        if (rule) lines.push(rule, ...waitingLineSentences(waiting));
     }
 
     // 5. Messages / dmRequests

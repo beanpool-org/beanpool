@@ -114,6 +114,7 @@ export * from './refresh-gate.js';
 export * from './dm-requests.js';
 export * from './messaging.js';
 export * from './community-shape-card.js';
+export * from './known-rule.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which checks neither who made
 // a wrap nor the key inside it) stays out of the apps' reach; openGroupKeyWrap checks the key against its record's
 // commitment. A new export from group-crypto.ts is added here on purpose or not at all.

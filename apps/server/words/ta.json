@@ -2,11 +2,17 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ உங்கள் பதிவு அகற்றப்பட்டது",
+  "🛡️ Your posts were taken down": "🛡️ உங்கள் பதிவுகள் அகற்றப்பட்டன",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "சமூகத்தின் நெறியாளர்கள் உங்கள் பதிவு {title} ஐ அகற்றினர். காரணம்: {reason}. இது மற்ற அனைவரிடமிருந்தும் மறைக்கப்பட்டுள்ளது; 7 நாட்களுக்குள் மீட்டமைக்கப்படாவிட்டால் நீக்கப்படும்.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "சமூகத்தின் நெறியாளர்கள் உங்கள் பதிவை அகற்றினர். காரணம்: {reason}. இது மற்ற அனைவரிடமிருந்தும் மறைக்கப்பட்டுள்ளது; 7 நாட்களுக்குள் மீட்டமைக்கப்படாவிட்டால் நீக்கப்படும்.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "சமூகத்தின் நெறியாளர்கள் உங்கள் {n} பதிவுகளை அகற்றினர். காரணம்: {reason}. அவை மற்ற அனைவரிடமிருந்தும் மறைக்கப்பட்டுள்ளன; 7 நாட்களுக்குள் மீட்டமைக்கப்படாவிட்டால் நீக்கப்படும்.",
   "Only an owner or admin can pin a post.": "உரிமையாளர் அல்லது நிர்வாகி மட்டுமே ஒரு இடுகையைப் பொருத்த முடியும்.",
   "Only an owner, an admin or the post's author can take a pin off.": "உரிமையாளர், நிர்வாகி அல்லது இடுகையின் ஆசிரியர் மட்டுமே பொருத்தலை நீக்க முடியும்.",
   "A pin lasts 1 day, 3 days or 1 week.": "ஒரு பொருத்தல் 1 நாள், 3 நாட்கள் அல்லது 1 வாரம் நீடிக்கும்.",

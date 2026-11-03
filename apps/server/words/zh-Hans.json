@@ -2,11 +2,17 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
     "updated": "2026-11-03",
-    "note": "Keys are the English sentences; a key that is missing shows the English."
+    "note": "Keys are the English sentences; a key that is missing shows the English.",
+    "review": "machine"
   },
+  "🛡️ Your post was taken down": "🛡️ 你的帖子已被撤下",
+  "🛡️ Your posts were taken down": "🛡️ 你的帖子已被撤下",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "社区管理员撤下了你的帖子 {title}。原因：{reason}。它已对其他人隐藏；如果 7 天内没有恢复，它将被删除。",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "社区管理员撤下了你的帖子。原因：{reason}。它已对其他人隐藏；如果 7 天内没有恢复，它将被删除。",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "社区管理员撤下了你的 {n} 个帖子。原因：{reason}。它们已对其他人隐藏；如果 7 天内没有恢复，它们将被删除。",
   "Only an owner or admin can pin a post.": "只有所有者或管理员可以置顶帖子。",
   "Only an owner, an admin or the post's author can take a pin off.": "只有所有者、管理员或帖子作者可以取消置顶。",
   "A pin lasts 1 day, 3 days or 1 week.": "置顶可持续 1 天、3 天或 1 周。",

@@ -2,9 +2,9 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down)",
     "reviewed": false,
-    "updated": "2026-10-15",
+    "updated": "2026-11-02",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -22,6 +22,11 @@
   "That typed answer is not here": "Cette réponse écrite n'est pas ici",
   "This community has a new address": "Cette communauté a une nouvelle adresse",
   "This community is also at {address}. The old address keeps working.": "Cette communauté est aussi à l'adresse {address}. L'ancienne adresse continue de fonctionner.",
+  "🛡️ Your post was taken down": "🛡️ Votre annonce a été retirée",
+  "🛡️ Your posts were taken down": "🛡️ Vos annonces ont été retirées",
+  "Your post {title} was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Les modérateurs de la communauté ont retiré votre annonce {title}. Motif : {reason}. Elle est masquée pour les autres ; si elle n'est pas rétablie sous 7 jours, elle sera supprimée.",
+  "Your post was taken down by the community's moderators. Reason: {reason}. It is hidden from everyone else; if it is not put back within 7 days it is removed.": "Les modérateurs de la communauté ont retiré votre annonce. Motif : {reason}. Elle est masquée pour les autres ; si elle n'est pas rétablie sous 7 jours, elle sera supprimée.",
+  "{n} of your posts were taken down by the community's moderators. Reason: {reason}. They are hidden from everyone else; if they are not put back within 7 days they are removed.": "Les modérateurs de la communauté ont retiré {n} de vos annonces. Motif : {reason}. Elles sont masquées pour les autres ; si elles ne sont pas rétablies sous 7 jours, elles seront supprimées.",
   "This poll already offers Other: leave it out of the answers": "Ce sondage propose déjà Autre : retirez-le des réponses",
   "To answer Other, type your answer. If there is nowhere to type, update the app.": "Pour répondre Autre, écrivez votre réponse. S'il n'y a nulle part où écrire, mettez l'application à jour.",
   "You have already answered this poll, and nothing links your answer to you, so it cannot be changed.": "Vous avez déjà répondu à ce sondage, et rien ne relie votre réponse à vous : elle ne peut donc pas être modifiée.",

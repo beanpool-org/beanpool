@@ -14,6 +14,16 @@
  * The call stays synchronous-looking (returns void; nobody awaits it). `NativeAlert.alert` is looked up when the Alert is
  * opened, because App Lock's cover (AppLock.tsx installLockCovers) replaces `Alert.alert` in place.
  *
+ * A double tap during the wait (4 Nov, Opus review of #2804, round 2): while an Alert waits for the hide, the screen behind
+ * it still takes taps, so a second tap on the same button queued a second, identical dialog. On Pay the Commons each
+ * dialog's Pay mints a fresh payment id, so that could pay twice. So while an Alert from here is waiting, a call with the
+ * same title and message is dropped: the member gets one dialog. Any other Alert raised in that window still opens.
+ * Keyed on what the member reads, not on "anything while one waits": a double tap runs the same handler on the same
+ * screen, so it raises the same title and message (none of the 36 screens builds an Alert's words from the clock), and
+ * dropping every call instead would also swallow a different message (a request's failure arriving during the wait). Buttons are not in the key: each render makes new
+ * onPress closures, and a dialog that reads the same is the same to the member. Once the waiting Alert has opened, it
+ * covers the screen, and the next call goes through as usual; with no keyboard up and nothing waiting, nothing changes.
+ *
  * keyboard-controller is required when an Alert is raised, not at import: its native side does not load in node, and
  * ~36 screens (and their tests) import this file. A runtime or test without it just means nobody to wait for: the Alert
  * always goes ahead. `makeKeyboardAlert` takes its three parts so the order is tested without a device.
@@ -35,9 +45,21 @@ type Parts = {
     timeoutMs?: number;
 };
 
+/** What the member reads in an Alert: its title and message. Two calls with the same key show the same dialog. */
+function alertKey(args: any[]): string {
+    const text = (v: unknown) => (v === undefined || v === null ? '' : String(v));
+    return JSON.stringify([text(args[0]), text(args[1])]);
+}
+
 export function makeKeyboardAlert(parts: Parts) {
+    /** The Alerts waiting for the keyboard to close, by alertKey: each is opened once, when its wait ends. */
+    const waiting = new Set<string>();
     return {
         alert(...args: any[]): void {
+            const key = alertKey(args);
+            // A double tap while this same Alert waits: the dialog is already on its way. Checked before the keyboard is,
+            // so it holds even if the controller already reads the keyboard closed while the first is still waiting.
+            if (waiting.has(key)) return;
             let controller: KeyboardLike | null = null;
             let up = false;
             try {
@@ -53,7 +75,11 @@ export function makeKeyboardAlert(parts: Parts) {
                 return;
             }
             const kb = controller;
-            void dismissKeyboardWithin(() => kb.dismiss(), parts.timeoutMs).then(() => parts.openAlert(...args));
+            waiting.add(key);
+            void dismissKeyboardWithin(() => kb.dismiss(), parts.timeoutMs).then(() => {
+                waiting.delete(key); // first, so an Alert that throws as it opens doesn't drop its copies for good
+                parts.openAlert(...args);
+            });
         },
     };
 }

@@ -112,6 +112,128 @@ describe('makeKeyboardAlert: order of the hide and the Alert', () => {
     });
 });
 
+// The 4 Nov Opus review of #2804 (round 2): while the Alert waits for the hide, the screen behind still takes taps, so a
+// double tap queued two identical Alerts (on Pay the Commons, two payments). While one is waiting, the same title + message
+// is dropped; any other Alert still opens.
+describe('makeKeyboardAlert: a double tap during the wait opens one Alert', () => {
+    const held = () => {
+        let finish!: () => void;
+        const hide = new Promise<void>((r) => { finish = r; });
+        const opened: any[][] = [];
+        let hides = 0;
+        let visible = true;
+        const alert = makeKeyboardAlert({
+            openAlert: (...a: any[]) => { opened.push(a); },
+            keyboard: () => ({ isVisible: () => visible, dismiss: () => { hides += 1; return hide; } }),
+            blurNow: () => {},
+        });
+        return { alert, opened, finish, hides: () => hides, setVisible: (v: boolean) => { visible = v; } };
+    };
+
+    it('the same Alert raised twice before the hide is reported opens exactly once, with the first call\'s buttons', async () => {
+        const { alert, opened, finish, hides } = held();
+        const first = [{ text: 'Cancel' }, { text: 'Pay', onPress: () => {} }];
+        const second = [{ text: 'Cancel' }, { text: 'Pay', onPress: () => {} }];
+        alert.alert('Pay the Commons', 'Pay 5 Beans?', first);
+        alert.alert('Pay the Commons', 'Pay 5 Beans?', second);
+        await new Promise((r) => setTimeout(r, 0)); // the dismiss starts a microtask after the call
+        expect(hides()).toBe(1); // the second call did not start a wait of its own
+        expect(opened).toHaveLength(0);
+        finish();
+        await vi.waitFor(() => expect(opened).toHaveLength(1));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(opened).toHaveLength(1);
+        expect(opened[0]).toEqual(['Pay the Commons', 'Pay 5 Beans?', first]);
+        expect(opened[0][2]).toBe(first);
+    });
+
+    it('a hide that never reports: the duplicate is still dropped, and the one Alert opens at the time limit', async () => {
+        vi.useFakeTimers();
+        try {
+            const opened: string[] = [];
+            const alert = makeKeyboardAlert({
+                openAlert: (...a: any[]) => { opened.push(String(a[0])); },
+                keyboard: () => ({ isVisible: () => true, dismiss: () => new Promise(() => {}) }),
+                blurNow: () => {},
+                timeoutMs: 400,
+            });
+            alert.alert('Delete?', 'This can’t be undone.');
+            await vi.advanceTimersByTimeAsync(150);
+            alert.alert('Delete?', 'This can’t be undone.');
+            await vi.advanceTimersByTimeAsync(260);
+            expect(opened).toEqual(['Delete?']);
+            await vi.advanceTimersByTimeAsync(1000);
+            expect(opened).toEqual(['Delete?']);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('two different Alerts in a row both open, in order', async () => {
+        const { alert, opened, finish } = held();
+        alert.alert('Couldn’t save', 'Try again.');
+        alert.alert('Saved');
+        finish();
+        await vi.waitFor(() => expect(opened.map((a) => a[0])).toEqual(['Couldn’t save', 'Saved']));
+    });
+
+    it('the same title with a different message is a different Alert: both open', async () => {
+        const { alert, opened, finish } = held();
+        alert.alert('Pay the Commons', 'Pay 5 Beans?');
+        alert.alert('Pay the Commons', 'Pay 50 Beans?');
+        finish();
+        await vi.waitFor(() => expect(opened.map((a) => a[1])).toEqual(['Pay 5 Beans?', 'Pay 50 Beans?']));
+    });
+
+    it('a duplicate behind another waiting Alert is still dropped (each waiting Alert is remembered, not just the last)', async () => {
+        const { alert, opened, finish } = held();
+        alert.alert('A', 'one');
+        alert.alert('B', 'two');
+        alert.alert('A', 'one');
+        alert.alert('B', 'two');
+        finish();
+        await vi.waitFor(() => expect(opened.map((a) => a[0])).toEqual(['A', 'B']));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(opened.map((a) => a[0])).toEqual(['A', 'B']);
+    });
+
+    it('once the waiting Alert has opened, the same Alert raised later opens again', async () => {
+        const { alert, opened, finish, setVisible } = held();
+        alert.alert('Saved');
+        finish();
+        await vi.waitFor(() => expect(opened).toHaveLength(1));
+        alert.alert('Saved'); // keyboard still reported up: waits on the (already finished) hide, then opens
+        await vi.waitFor(() => expect(opened).toHaveLength(2));
+        setVisible(false);
+        alert.alert('Saved'); // no keyboard: at once
+        expect(opened).toHaveLength(3);
+    });
+
+    it('a duplicate raised after the controller already reads the keyboard closed, while the first still waits, is dropped too', async () => {
+        const { alert, opened, finish, setVisible } = held();
+        alert.alert('Pay the Commons', 'Pay 5 Beans?');
+        setVisible(false);
+        alert.alert('Pay the Commons', 'Pay 5 Beans?');
+        expect(opened).toHaveLength(0);
+        finish();
+        await vi.waitFor(() => expect(opened).toHaveLength(1));
+        await new Promise((r) => setTimeout(r, 20));
+        expect(opened).toHaveLength(1);
+    });
+
+    it('no keyboard up and nothing waiting: each call opens at once, as before (no wait, nothing dropped)', () => {
+        const opened: string[] = [];
+        const alert = makeKeyboardAlert({
+            openAlert: (...a: any[]) => { opened.push(String(a[0])); },
+            keyboard: () => ({ isVisible: () => false, dismiss: () => Promise.resolve() }),
+            blurNow: () => {},
+        });
+        alert.alert('Now');
+        alert.alert('Now');
+        expect(opened).toEqual(['Now', 'Now']);
+    });
+});
+
 describe('App Lock cover: NativeAlert.alert is looked up when the Alert opens', () => {
     it('an Alert.alert replaced after import (installLockCovers) is the one that runs', async () => {
         const { Alert } = await import('../keyboard-alert');

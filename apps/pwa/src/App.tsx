@@ -275,6 +275,12 @@ export function App() {
     // The calendar door on Home ("Calendar ›") and Market's calendar button: opens the calendar on MapPage.
     const [openMapCalendar, setOpenMapCalendar] = useState(false);
     const clearOpenMapCalendar = useCallback(() => setOpenMapCalendar(false), []);
+    // The tab a door opened the calendar from: ✕ or Esc on the calendar returns the member there, as Back does on the phone.
+    const [calendarReturnTab, setCalendarReturnTab] = useState<Tab | null>(null);
+    const closeCalendarBack = useCallback(() => {
+        if (calendarReturnTab) setActiveTab(calendarReturnTab);
+        setCalendarReturnTab(null);
+    }, [calendarReturnTab]);
     // Doors to the Market's filter (e.g. Home's "All events ›" opens the Events pill).
     const [openMarketFilter, setOpenMarketFilter] = useState<PostType | 'all' | 'for-you' | null>(null);
     const clearOpenMarketFilter = useCallback(() => setOpenMarketFilter(null), []);
@@ -465,21 +471,21 @@ export function App() {
             if (contextId) setEditEventPostId(contextId);
             return;
         }
-        if (tab === 'map-calendar' || tab === 'calendar') {
+        if (tab === 'map-calendar') {
+            // The member asked for it from another tab: closing it takes them back there (Back, as on the phone).
+            setCalendarReturnTab(activeTab !== 'map' ? activeTab : null);
             setActiveTab('map');
             setOpenMapCalendar(true);
             return;
         }
-        if (tab === 'marketplace-events' || (tab === 'marketplace' && (contextId === 'events' || contextId === 'event'))) {
+        if (tab === 'marketplace' && contextId === 'events') {
             setActiveTab('marketplace');
             setOpenMarketFilter('event');
             return;
         }
         if (tab === 'map') {
             setActiveTab('map');
-            if (contextId === 'calendar') {
-                setOpenMapCalendar(true);
-            } else if (contextId) {
+            if (contextId) {
                 setOpenNewPost(true);
                 setOpenNewPostGroupId(contextId);
             }
@@ -1238,6 +1244,7 @@ export function App() {
                                         onEditEventHandled={clearEditEventPost}
                                         openCalendar={openMapCalendar}
                                         onOpenCalendarHandled={clearOpenMapCalendar}
+                                        onCalendarClosedBack={closeCalendarBack}
                                     />
                                 </Suspense>
                             )}

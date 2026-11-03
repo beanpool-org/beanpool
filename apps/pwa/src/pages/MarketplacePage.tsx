@@ -131,8 +131,7 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
     onRefreshTransactions?: () => void;
-    /** Initial type filter or filter override (e.g. 'event' from Home's "All events ›"). */
-    initialFilter?: PostType | 'all' | 'for-you';
+    /** A door to a type filter (e.g. 'event' from Home's "All events ›"): taken once, then onFilterOpened. */
     openFilter?: PostType | 'all' | 'for-you' | null;
     onFilterOpened?: () => void;
     /**
@@ -316,11 +315,11 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor, initialFilter, openFilter, onFilterOpened }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor, openFilter, onFilterOpened }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
-    const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>(() => initialFilter ?? 'all');
+    const [typeFilter, setTypeFilter] = useState<PostType | 'all' | 'for-you'>('all');
     // The date chips under the Events pill — the map's chips, as on the phone's feed (#895).
     const [feedEventWindow, setFeedEventWindow] = useState<EventWindow>('all');
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,

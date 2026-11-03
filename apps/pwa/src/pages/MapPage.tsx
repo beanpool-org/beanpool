@@ -234,6 +234,8 @@ interface Props {
     /** Open the event calendar overlay/panel (e.g. from Home's "Calendar ›" or Market's calendar button). */
     openCalendar?: boolean;
     onOpenCalendarHandled?: () => void;
+    /** ✕ or Esc on a calendar a door opened: the member goes back to the tab the door was on. */
+    onCalendarClosedBack?: () => void;
     /**
      * A visitor to the global lobby (G9b): the node's guest view of each listing, pinned where the node puts it (the
      * centre of its area); a pin's card has the title, "near here" and the way to its detail sheet, and nothing on the
@@ -246,7 +248,7 @@ interface Props {
 const EVENT_PLACE_NAME_MAX = 80;
 const EVENT_PRIVATE_NOTE_MAX = 1000;
 
-export function MapPage({ identity, openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, openCalendar, onOpenCalendarHandled, visitor = false }: Props) {
+export function MapPage({ identity, openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, openCalendar, onOpenCalendarHandled, onCalendarClosedBack, visitor = false }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     /**
@@ -410,6 +412,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const stackListRef = useRef(stackList);
     stackListRef.current = stackList;
     const [calendarOpen, setCalendarOpen] = useState(false);
+    // Whether a door on another tab opened the calendar: only then does ✕ or Esc take the member back there.
+    const calendarFromDoor = useRef(false);
     // Every row gone is the list gone: it does not come back by itself when a date chip brings those pins back.
     useEffect(() => {
         if (stackKeys && !stackOpen && pinsFromPosts) setStackList(stackDropped);
@@ -2035,6 +2039,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // Open the calendar overlay/panel when requested by a door (Home "Calendar ›", Market's calendar button).
     useEffect(() => {
         if (!openCalendar) return;
+        calendarFromDoor.current = true;
         setCalendarOpen(true);
         setPreviewPost(null);
         setStackList(stackShut);
@@ -2282,6 +2287,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         aria-label={t('Calendar')}
                         aria-pressed={calendarOpen}
                         onClick={() => {
+                            calendarFromDoor.current = false;
                             setCalendarOpen(open => !open);
                             setPreviewPost(null);
                             setStackList(stackShut);
@@ -2375,11 +2381,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             <MapCalendar
                 posts={posts.filter((p) => !blockedSet.has(p.authorPublicKey) && !inactiveEnterpriseKeys.has(p.authorPublicKey))}
                 covered={covered}
-                onClose={() => setCalendarOpen(false)}
+                onClose={() => {
+                    setCalendarOpen(false);
+                    if (calendarFromDoor.current) onCalendarClosedBack?.();
+                    calendarFromDoor.current = false;
+                }}
                 onOpenPost={(post) => {
+                    calendarFromDoor.current = false;
                     if (onNavigate) onNavigate('marketplace', post.id);
                 }}
                 onStartEvent={visitor ? undefined : () => {
+                    calendarFromDoor.current = false;
                     setCalendarOpen(false);
                     setNewPostType('event');
                     tryOpenComposer();

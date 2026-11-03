@@ -12,10 +12,13 @@ import {
     t,
 } from '@beanpool/core';
 import { useStyles } from './ThemeContext';
-import { MonthGrid } from '../components/MonthGrid';
+import { MONTH_NAV_HEIGHT, MONTH_WEEKDAY_HEIGHT, MONTH_WEEK_HEIGHT, MonthGrid } from '../components/MonthGrid';
 import { MapStackList } from '../components/MapStackList';
 import { getPosts } from '../utils/db';
 import { eventStateOf } from '../utils/events';
+
+/** The screen's own header row (dp): the month sits under it. */
+const HEADER_MIN_HEIGHT = 52;
 
 export default function CalendarScreen() {
     const { height: screenHeight } = useWindowDimensions();
@@ -58,7 +61,7 @@ export default function CalendarScreen() {
             alignItems: 'center',
             justifyContent: 'space-between',
             paddingHorizontal: 8,
-            minHeight: 52,
+            minHeight: HEADER_MIN_HEIGHT,
             borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.border.default,
             backgroundColor: colors.surface.chrome,
@@ -142,10 +145,10 @@ export default function CalendarScreen() {
         if (!parsed) return;
         const firstWeekday = (new Date(Date.UTC(parsed.year, parsed.month - 1, 1)).getUTCDay() + 6) % 7;
         const weekIndex = Math.floor((firstWeekday + parsed.day - 1) / 7);
-        // In MonthGrid: navHeader (minHeight 48) + weekdayRow (minHeight 28) + weekRows (minHeight 44-48dp each with scaling).
-        const dayBottom = 48 + 28 + (weekIndex + 1) * 48;
+        // In MonthGrid: the nav row, the weekday row, then a row of MONTH_WEEK_HEIGHT for each week down to this one.
+        const dayBottom = MONTH_NAV_HEIGHT + MONTH_WEEKDAY_HEIGHT + (weekIndex + 1) * MONTH_WEEK_HEIGHT;
         const listHeight = Math.ceil(screenHeight * STACK_LIST_SHARE);
-        const visibleHeight = screenHeight - listHeight - 52 - insets.top;
+        const visibleHeight = screenHeight - listHeight - HEADER_MIN_HEIGHT - insets.top;
         const clearBottom = dayBottom + 24;
         if (clearBottom > visibleHeight) {
             const targetY = clearBottom - visibleHeight;
@@ -155,10 +158,14 @@ export default function CalendarScreen() {
         }
     }, [screenHeight, insets.top]);
 
+    // However a day came to be selected (a tap, a jump, the next event's day on opening, or ‹ ›), the month scrolls it clear of the list.
+    useEffect(() => {
+        if (selectedDate) scrollDayClear(selectedDate);
+    }, [selectedDate, scrollDayClear]);
+
     const handleSelectDate = (date: string) => {
         setSelectedDate(date);
         setDismissedMonthKey(null);
-        scrollDayClear(date);
     };
 
     const handlePrevMonth = () => {
@@ -183,7 +190,6 @@ export default function CalendarScreen() {
             setMonth(parsed.month);
             setSelectedDate(targetDate);
             setDismissedMonthKey(null);
-            scrollDayClear(targetDate);
         }
     };
 
@@ -207,12 +213,12 @@ export default function CalendarScreen() {
                 <Pressable
                     testID="calendar-back"
                     accessibilityRole="button"
-                    accessibilityLabel={t('Map', undefined, 'tab')}
+                    accessibilityLabel={t('Back')}
                     onPress={handleGoBack}
                     style={styles.backButton}
                 >
                     <Text style={styles.backButtonArrow}>‹</Text>
-                    <Text style={styles.backButtonText}>{t('Map', undefined, 'tab')}</Text>
+                    <Text style={styles.backButtonText}>{t('Back')}</Text>
                 </Pressable>
                 <Text style={styles.title} accessibilityRole="header">
                     {calendarTitle()}

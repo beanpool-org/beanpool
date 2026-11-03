@@ -110,6 +110,11 @@ describe('the image line: the owner\'s note of the laptop\'s pull', () => {
         expect(l.state).toBe('amber');
         expect(l.text).toBe('Not noted yet.');
         expect(l.hint).toMatch(/docker compose pull/);
+        expect(l.hint).toMatch(/docker compose up -d/);
+    });
+    it('tells the owner to recreate the standby after a pull: a pull alone leaves it on the old image and its copies stop', () => {
+        const old = imageLine({ imagePulledAt: NOW - IMAGE_AMBER_AFTER_MS - MIN }, NOW);
+        expect(old.hint).toMatch(/docker compose pull and then docker compose up -d/);
     });
     it('is ok within 60 days, amber after, and names the date as the owner\'s own note', () => {
         const ok = imageLine({ imagePulledAt: NOW - IMAGE_AMBER_AFTER_MS }, NOW);

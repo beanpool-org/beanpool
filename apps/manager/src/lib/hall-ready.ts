@@ -147,11 +147,11 @@ export function imageLine(notes: HallNotes, now: number): ReadyLine {
     const at = notes.imagePulledAt;
     if (at === undefined) {
         return { id: 'image', title, state: 'amber', text: 'Not noted yet.',
-            hint: 'On the laptop, in the BeanPool folder, run docker compose pull. Then tap "I pulled it today" here. This page cannot see the laptop, so this is your note.' };
+            hint: 'On the laptop, in the BeanPool folder, run docker compose pull and then docker compose up -d. Then tap "I pulled it today" here. This page cannot see the laptop, so this is your note.' };
     }
     const text = `Pulled on the laptop ${dayWords(at)} (${agoWords(at, now)}), as you noted in this browser.`;
     if (now - at > IMAGE_AMBER_AFTER_MS) {
-        return { id: 'image', title, state: 'amber', text, hint: 'Pull again after each release: docker compose pull on the laptop, then note it here.' };
+        return { id: 'image', title, state: 'amber', text, hint: 'After each release, on the laptop run docker compose pull and then docker compose up -d: a main server copies nothing to a standby older than itself. Then note it here.' };
     }
     return { id: 'image', title, state: 'ok', text };
 }

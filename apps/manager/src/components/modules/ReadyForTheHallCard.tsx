@@ -194,8 +194,8 @@ export function ReadyForTheHallCard({ activeNode, diag, viewer = { kind: 'passwo
                     <ol id="hall-pair-steps" data-testid="hall-pair-steps" className="m-0 pl-5 text-sm text-nature-200 space-y-3 leading-relaxed break-words">
                         <li>
                             On the laptop, install Docker and get the BeanPool folder, as for any server. In its <Command>.env</Command> file
-                            add <Command>NODE_ROLE=backup</Command>. Then, in that folder, run <Command>docker compose pull</Command> and
-                            then <Command>docker compose up -d</Command>.
+                            add <Command>NODE_ROLE=backup</Command>. Then, in that folder, run <Command>docker network create beanpool-shared</Command> (once
+                            per laptop), <Command>docker compose pull</Command> and then <Command>docker compose up -d</Command>.
                         </li>
                         <li>
                             Here, make a pairing code under <strong className="text-white">Replication Access</strong>, a little further down

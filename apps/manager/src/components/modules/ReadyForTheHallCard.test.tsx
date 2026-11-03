@@ -96,6 +96,8 @@ describe('ReadyForTheHallCard (Settings → Backups & Restore)', () => {
         expect(textOf('copy')).toBe('No standby has copied this server yet.');
         const steps = screen.getByTestId('hall-pair-steps');
         expect(steps.textContent).toMatch(/NODE_ROLE=backup/);
+        // The compose file's network is external: a fresh laptop must create it before up -d.
+        expect(steps.textContent).toMatch(/docker network create beanpool-shared/);
         expect(steps.textContent).toMatch(/docker compose exec beanpool-node beanpool pair/);
         expect(steps.textContent).toMatch(/Replication Access/);
         expect(steps.textContent).toMatch(/Never type the code on the command line/);

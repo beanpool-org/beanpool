@@ -7,8 +7,8 @@ import { readNodeProfile } from '../node-profile';
 /**
  * Vouch for them on the phone's invite screen (Marty, 3 Nov). The node's word on whether an invite can carry a vouch has to
  * survive the phone's reading of it, or the control never shows. The control itself is measured in e2e/invite-vouch-320.mjs,
- * and the web's InvitePage.vouch.test.tsx drives the same rules through a real page; people.tsx is too wide to mount here, so
- * what it must do with a level is read off its source, as NewEventModal's is in event-times.test.ts.
+ * and invite-vouch-screen.test.ts drives the whole screen for real; what that mount can't reach, such as a tab coming back, is
+ * read off people.tsx's source here, as NewEventModal's is in event-times.test.ts.
  */
 const people = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/people.tsx'), 'utf8');
 

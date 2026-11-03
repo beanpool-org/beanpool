@@ -113,6 +113,15 @@ test('each page is built with a table per translated language; a translation con
     }
 });
 
+test('a translation that looks like a placeholder is put in the page as written, once', () => {
+    const odd = { es: { [WORDS.open]: 'Abrir {{PROVIDER_ID}} {{TITLE}} $& $1' } };
+    const html = renderAuthPage(google, { catalogs: odd });
+    const table = JSON.parse(/var WORDS = (\{.*\});/.exec(html)[1]);
+    assert.equal(table.es.open, 'Abrir {{PROVIDER_ID}} {{TITLE}} $& $1');
+    // And no placeholder of the template is left unfilled anywhere else.
+    assert.equal(html.replace(/var WORDS = \{.*\};/, '').includes('{{'), false);
+});
+
 test('a catalog that gained a translation fails --check until the pages are rebuilt', () => {
     const errors = checkAuthPages({ catalogs: catalogsFor(['es']) });
     assert.equal(errors.length, 5);

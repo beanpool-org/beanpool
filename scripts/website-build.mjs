@@ -671,9 +671,12 @@ export function renderAuthPage(page, { words = readAuthWords(), catalogs = readC
         PROVIDER_JSON: scriptJson(page.provider),
         PROVIDER_ID: page.id,
     };
-    let out = fs.readFileSync(AUTH_TEMPLATE, 'utf8').replace(/\r\n/g, '\n');
-    for (const [name, value] of Object.entries(fills)) out = out.split(`{{${name}}}`).join(value);
-    return out;
+    // One pass over the template: what a placeholder is replaced with is never read for placeholders again (a translation
+    // that contains "{{PROVIDER_ID}}" stays as written).
+    return fs.readFileSync(AUTH_TEMPLATE, 'utf8').replace(/\r\n/g, '\n').replace(/\{\{([A-Z_]+)\}\}/g, (whole, name) => {
+        if (!Object.hasOwn(fills, name)) throw new Error(`apps/website-src/auth/bounce.html has a placeholder this build does not know: ${whole}`);
+        return fills[name];
+    });
 }
 
 /** Writes the five pages (only the ones that changed). Returns the paths it wrote. */

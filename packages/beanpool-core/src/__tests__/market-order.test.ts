@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RELIST_BEFORE_MS, daySections, listedAt, marketOrder } from '../market-order.js';
+import { MARKET_SEEN_KEY, NEW_SINCE_LINE, RELIST_BEFORE_MS, daySections, listedAt, marketOrder, newSinceIndex, newestListed, parseSeenListed } from '../market-order.js';
 
 const H = 60 * 60 * 1000;
 // Tuesday 3 Nov 2026, 17:00 in the machine's own time zone: the headings are LOCAL days.
@@ -206,5 +206,53 @@ describe('daySections', () => {
         const dayAgo = (d: number) => ({ id: `d${d}`, type: 'offer', created_at: new Date(2026, 10, 3 - d, 12, 0, 0).toISOString() });
         const s = daySections([dayAgo(6), dayAgo(7)], NOW);
         expect(s.map(x => [x.id, ids(x.posts)])).toEqual([['thisweek', ['d6']], ['older', ['d7']]]);
+    });
+});
+
+describe('New since you last looked (slice 4)', () => {
+    const board = () => marketOrder([post('a', 1), post('b', 3), post('c', 30), post('d', 100)], NOW);
+
+    it('stamps the newest listed time on screen, and none for an empty board', () => {
+        expect(newestListed(board(), NOW)).toBe(NOW - 1 * H);
+        expect(newestListed([], NOW)).toBeNull();
+        // an event that came back counts at its second listing, not its creation
+        const ev = post('ev', 24 * 35, { type: 'event', event_start_at: ahead(24) });
+        expect(newestListed([ev, post('x', 2)], NOW)).toBe(NOW);
+    });
+
+    it('puts the line above the first post listed at or before the stamp, and an equal time is already seen', () => {
+        // b set the stamp when the Market was last left; a arrived since. The line is above b (index 1), not above a.
+        expect(newSinceIndex(board(), NOW - 3 * H, NOW)).toBe(1);
+        expect(newSinceIndex(board(), NOW - 2 * H, NOW)).toBe(1);
+        expect(newSinceIndex(board(), NOW - 31 * H, NOW)).toBe(3);
+    });
+
+    it('has no line on the first visit, when nothing is newer, or when nothing is at or before the stamp', () => {
+        expect(newSinceIndex(board(), null, NOW)).toBe(-1);
+        expect(newSinceIndex(board(), NOW - 1 * H, NOW)).toBe(-1); // the newest is the stamp: nothing newer
+        expect(newSinceIndex(board(), NOW + H, NOW)).toBe(-1); // a stamp ahead of everything
+        expect(newSinceIndex(board(), 5, NOW)).toBe(-1); // everything is newer than a stamp from long ago
+        expect(newSinceIndex([], NOW, NOW)).toBe(-1);
+    });
+
+    it('lists a post that arrived after the stamp, and an event that came back, above the line', () => {
+        const stamp = NOW - 6 * H;
+        const ev = post('ev', 24 * 35, { type: 'event', event_start_at: ahead(23) }); // listed again 1 h ago
+        const ordered = marketOrder([post('old', 9), ev, post('mid', 5)], NOW);
+        const at = newSinceIndex(ordered, stamp, NOW);
+        expect(at).toBe(2);
+        expect(ids(ordered.slice(0, at))).toEqual(['ev', 'mid']);
+        expect(ordered[at].id).toBe('old');
+    });
+
+    it('reads a stored stamp tolerantly: a number or a digit string, else none', () => {
+        expect(parseSeenListed(String(NOW))).toBe(NOW);
+        expect(parseSeenListed(NOW)).toBe(NOW);
+        for (const bad of [null, undefined, '', 'x', '-5', '0', 0, -1, NaN, '1.5e3', '{}', {}]) expect(parseSeenListed(bad)).toBeNull();
+    });
+
+    it('keeps its key beside the fresh banner and its words as one catalog key', () => {
+        expect(MARKET_SEEN_KEY).toBe('bp_market_seen_listed');
+        expect(NEW_SINCE_LINE).toBe('New since you last looked');
     });
 });

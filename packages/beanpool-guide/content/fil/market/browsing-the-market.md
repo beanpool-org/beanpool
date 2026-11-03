@@ -4,7 +4,7 @@ title: Pag-browse sa merkado
 summary: Maghanap ng Mga Alok at Mga Kahilingan gamit ang paghahanap, mga filter at distansya.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Mga Alok at Kahilingan sa malapit. Maghanap, mag-filter ayon sa kategorya o distansya, o i-tap ang + MAGDAGDAG NG POST upang mag-post ng sarili.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## Ang tab ng Merkado
@@ -15,6 +15,7 @@ I-tap ang **Merkado** sa hanay ng mga tab. Makikita mo kung ano ang iniaalok at 
 - **Isang beses ding bumabalik ang botohan**, sa araw bago ito magsara.
 - **Walang kukuha ng higit sa dalawang puwesto sa isang araw.** Ang ikatlong post ng isang tao sa isang araw, at ang mga kasunod nito, ay nasa likod ng mga post ng lahat ng iba pa sa araw na iyon.
 - **Hindi iniaakyat ng pag-edit ang isang post.** Ganoon din ang pag-pause dito, o ang sagot dito. Para makitang muli, mag-post muli.
+- **Isang linya ang nagpapakita kung saan ka huminto.** Ang **Bago mula noong huli kang tumingin** ay nasa ibabaw ng unang post na nakalista na noong huli kang umalis sa Merkado sa teleponong ito o sa browser na ito; wala ito sa unang beses, kapag walang mas bago, o habang naghahanap o nagfi-filter ka, at hindi ito iginuguhit ng grid ng telepono.
 - **Ang post na ipinin ng may-ari** ay nasa pinakaitaas, sa ilalim ng **Naka-pin**, gaano man ito katagal na.
 
 Sa listahan at mga compact view, makikita mo ang mga heading ng araw. Ipinapakita ng grid ang parehong pagkakasunod-sunod nang wala ang mga ito. Sa telepono, nagbubukas ang Merkado bilang listahan; sa web app, bilang mga card. Pinapanatili ng **Para sa Iyo** ang sarili nitong pagkakasunod-sunod. Sa ilalim ng **Mga Event**, nauuna ang pinakamaaga, kasama ang **Ngayong araw**, **Ngayong weekend** at **Susunod na 7 araw**. Ipinapakita ng paghahanap ang mga post na pinakaangkop sa iyong mga salita. Sa telepono, hilahin pababa ang listahan upang i-refresh ito.

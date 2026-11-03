@@ -4,7 +4,7 @@ title: Menjelajahi pasar
 summary: Cari Penawaran dan Permintaan dengan pencarian, filter, dan jarak.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Penawaran dan Permintaan dari orang di dekatmu. Cari, filter menurut kategori atau jarak, atau ketuk + TAMBAH POSTINGAN untuk pasang sendiri.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## Tab Pasar
@@ -15,6 +15,7 @@ Ketuk **Pasar** di baris tab. Kamu akan melihat apa yang ditawarkan dan dicari o
 - **Jajak pendapat juga kembali sekali**, sehari sebelum ditutup.
 - **Tak seorang pun mengambil lebih dari dua tempat sehari.** Postingan ketiga seseorang dalam sehari, dan yang sesudahnya, muncul setelah postingan semua orang lain pada hari itu.
 - **Mengedit postingan tidak menaikkannya.** Menjedanya, atau sebuah jawaban atasnya, juga tidak. Agar terlihat lagi, posting lagi.
+- **Satu baris menunjukkan di mana Anda berhenti.** **Baru sejak terakhir kali Anda melihat** berada di atas postingan pertama yang sudah terdaftar saat Anda terakhir meninggalkan Pasar di ponsel atau peramban ini; baris ini tidak muncul pada kunjungan pertama, saat tidak ada yang lebih baru, atau saat Anda mencari atau memfilter, dan kisi di ponsel tidak menampilkannya.
 - **Postingan yang disematkan pemilik** berada paling atas, di bawah **Disematkan**, berapa pun umurnya.
 
 Dalam tampilan daftar dan ringkas, kamu melihat judul hari. Tampilan kisi menunjukkan urutan yang sama tanpa judul itu. Di ponsel, Pasar terbuka sebagai daftar; di web app, sebagai kartu. **Untuk Anda** mempertahankan urutannya sendiri. Di bawah **Acara**, yang paling cepat dimulai muncul pertama, dengan **Hari ini**, **Akhir pekan ini**, dan **7 hari ke depan**. Pencarian menampilkan postingan yang paling cocok dengan kata-katamu. Di ponsel, tarik daftar ke bawah untuk menyegarkannya.

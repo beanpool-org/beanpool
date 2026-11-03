@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation, AppState } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { keyboardAwareList } from '../../components/keyboardAwareList';
 import * as SecureStore from 'expo-secure-store';
@@ -63,7 +63,7 @@ import { exampleListingsOn, showExampleListings } from '../../utils/example-list
 import { MarketCircleLine } from '../../components/MarketCircleLine';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, freshBanner, recordFreshBannerDismissal, type WordKey } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, freshBanner, recordFreshBannerDismissal, MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, type WordKey } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
 import { isPostPinned, anyLivePin, marketPins } from '../../utils/pins';
 
@@ -95,6 +95,8 @@ const MIN_FEED_UNDER_PANEL = 48;
 
 /** The headings the list view draws between its rows: word() keys, shown through t() (renderItem). */
 const YOUR_EVENTS_HEADING = word('Your events');
+/** The "New since you last looked" line's words (core's key, shown through t()). */
+const NEW_SINCE_WORDS = { line: NEW_SINCE_LINE };
 const FOR_YOU_HEADING = word('★ For You Feed');
 
 /** A listing's type badge, in the member's language (the listing branch only: polls and events have cards of their own). */
@@ -595,6 +597,30 @@ export default function MarketScreen() {
             }
         }).catch(() => {});
     }, []);
+
+    // "New since you last looked" (DESIGN-market-order-fable.md §2.9): one stamp on this phone, beside the fresh banner's: the
+    // newest listed time that was on screen, with no search or filter, when the Market was last left. It is read as the Market
+    // comes into view and written as it goes out of view, so the line is where the member stopped, whatever came in since.
+    const [seenListed, setSeenListed] = useState<number | null>(null);
+    const newestOnScreen = useRef<number | null>(null);
+    useFocusEffect(useCallback(() => {
+        let live = true;
+        AsyncStorage.getItem(MARKET_SEEN_KEY).then(val => { if (live) setSeenListed(parseSeenListed(val)); }).catch(() => {});
+        const save = () => {
+            const newest = newestOnScreen.current;
+            if (newest !== null) AsyncStorage.setItem(MARKET_SEEN_KEY, String(newest)).catch(() => {});
+        };
+        // Leaving by Home or by swiping the app away never blurs the screen, so the stamp is also written as the app goes to
+        // the background (or inactive), as the web writes on pagehide; else a member who closes the app from the Market
+        // keeps an old stamp and the seen posts pile up above the line.
+        const appState = AppState.addEventListener('change', (state) => { if (state === 'background' || state === 'inactive') save(); });
+        return () => {
+            live = false;
+            appState.remove();
+            setSeenListed(null);
+            save();
+        };
+    }, []));
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
     // A `#tag` tapped: the Market with exactly that typed tag (DESIGN-tags-free-entry-fable.md §4). One filter by tag at a time.
@@ -1159,6 +1185,13 @@ export default function MarketScreen() {
 
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
     const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0 || !!selectedTag || !!selectedFree;
+    // What the stamp is taken from, and where the line may show: the whole Market, under no search and no filter.
+    const seenEligible = !hasActiveFilters && !isSearching && searchResults === null;
+    const newestListedOnScreen = useMemo(
+        () => (seenEligible ? newestListed(filteredPosts, Date.now()) : null),
+        [seenEligible, filteredPosts, nowMinute],
+    );
+    useEffect(() => { if (newestListedOnScreen !== null) newestOnScreen.current = newestListedOnScreen; }, [newestListedOnScreen]);
 
     // A few example cards while the Market is nearly empty, where the node asks for them (utils/example-listings.ts):
     // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
@@ -1640,9 +1673,21 @@ export default function MarketScreen() {
                 listData.push(...filteredPosts);
             } else {
                 // Newest listed first under Today / Yesterday / This Week / Older Listings, by the local day each was listed.
-                for (const section of sectionsOfOrdered(filteredPosts, Date.now())) {
+                // "New since you last looked": one line above the first post listed at or before this phone's stamp. Where that post
+                // starts a day, the line is above its heading.
+                const nowForList = Date.now();
+                const sections = sectionsOfOrdered(filteredPosts, nowForList);
+                const lineAt = seenEligible ? newSinceIndex(sections.flatMap(s => s.posts), seenListed, nowForList) : -1;
+                const newLine = { isNewSince: true, id: 'new-since-line' };
+                let flat = 0;
+                for (const section of sections) {
+                    if (lineAt === flat) listData.push(newLine);
                     listData.push({ isHeader: true, title: section.title, id: section.id });
-                    listData.push(...section.posts);
+                    section.posts.forEach((post, i) => {
+                        if (i > 0 && lineAt === flat + i) listData.push(newLine);
+                        listData.push(post);
+                    });
+                    flat += section.posts.length;
                 }
             }
         }
@@ -1658,6 +1703,14 @@ export default function MarketScreen() {
     };
 
     const renderItem = ({ item }: { item: any }) => {
+        if (item.isNewSince) {
+            return (
+                <View style={styles.sectionHeader} testID="new-since-line">
+                    <Text style={styles.sectionHeaderText}>{upperCase(t(NEW_SINCE_WORDS.line))}</Text>
+                    <View style={styles.sectionHeaderLine} />
+                </View>
+            );
+        }
         if (item.isHeader) {
             const heading: { title: WordKey } = item;
             return (

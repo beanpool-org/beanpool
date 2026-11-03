@@ -4,7 +4,7 @@ title: Esplorare il mercato
 summary: Trova Offerte e Richieste tramite ricerca, filtri e distanza.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Offerte e Richieste dalle persone vicine. Cerca, filtra per categoria o distanza, oppure tocca + PUBBLICA per inserire il tuo annuncio.
-source-hash: 24606918c00ac034
+source-hash: bead66070bddc246
 ---
 
 ## La scheda Mercato
@@ -15,6 +15,7 @@ Tocca **Mercato** nella riga delle schede. Vedi cosa offrono e cercano le person
 - **Anche un sondaggio torna una volta**, il giorno prima che si chiuda.
 - **Nessuno occupa più di due posti al giorno.** Il terzo post di una persona in un giorno, e quelli successivi, vengono dopo quelli di tutti gli altri di quel giorno.
 - **Modificare un post non lo fa salire.** Neppure metterlo in pausa, né una risposta. Per essere visto di nuovo, pubblica di nuovo.
+- **Una riga mostra dove ti sei fermato.** **Novità dall'ultima volta che hai guardato** sta sopra il primo post che era già elencato l'ultima volta che hai lasciato il Mercato su questo telefono o in questo browser; non c'è la prima volta, quando nulla è più recente, né mentre cerchi o filtri, e la griglia del telefono non la mostra.
 - **Un post fissato da un proprietario** sta in cima, sotto **Fissato**, a prescindere da quanto sia vecchio.
 
 Nelle visualizzazioni a elenco e compatta vedi i titoli dei giorni. La griglia mostra lo stesso ordine senza. Sul telefono il Mercato si apre come elenco; nell'app web, a schede. **Per Te** mantiene il proprio ordine. Sotto **Eventi** viene per primo il più vicino nel tempo, con **Oggi**, **Questo fine settimana** e **Prossimi 7 giorni**. Una ricerca mostra i post che corrispondono meglio alle tue parole. Sul telefono, trascina l'elenco verso il basso per aggiornarlo.

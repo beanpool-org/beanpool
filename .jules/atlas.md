@@ -294,3 +294,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `carriesHandoff`, `handoffRefusedMessage`, `handoffResumedMessage`, `otherSessionMessage`, and `HANDOFF_SECTIONS` in `apps/manager/src/lib/key-session.ts` lacked direct unit test assertions.
 **Learning:** Testing `otherSessionMessage` verifies notice distinctions when `who` is password vs member callsign or unknown account fallback, as well as `sure` flag boolean branching.
 **Action:** Check remaining utility files in `apps/manager/src/lib/` (e.g. `community-shape.ts`) for unasserted constants or helper functions.
+
+## 2026-11-04 - [manager tests] checkRecoveryCodeApi helper unit tests
+**Gap:** `checkRecoveryCodeApi` in `apps/manager/src/lib/node-client.ts` was untested directly.
+**Learning:** Testing `checkRecoveryCodeApi` verified matching recovery code response parsing, non-matching code handling (`matches: false, codeId: null`), typo status 400 responses (`typo: true` with error message), and unexpected server error rethrowing.
+**Action:** Continue identifying helper functions in `apps/manager/src/lib/node-client.ts` or other utilities for direct unit test coverage.

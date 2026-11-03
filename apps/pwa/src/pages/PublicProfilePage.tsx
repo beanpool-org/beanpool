@@ -11,7 +11,7 @@ import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, listPhotoUrl, t, tn, word, type QuizResult } from '@beanpool/core';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
-import { deliverRemoval, keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
+import { keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
 import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
@@ -150,11 +150,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             setIsBlocking(false);
         }
     };
-
-    // A removal still waiting to reach this community goes when the member opens their own profile (lib/working-style.ts).
-    useEffect(() => {
-        if (isSelf) void deliverRemoval(identity.publicKey, undefined);
-    }, [isSelf, identity.publicKey]);
 
     const handleQuizComplete = async (quizResult: QuizResult) => {
         keepQuizResult(identity.publicKey, quizResult);

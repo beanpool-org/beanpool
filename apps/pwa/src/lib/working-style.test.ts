@@ -12,7 +12,7 @@ import { endAccountEpoch, resetAccountEpochForTest } from './account-epoch';
 import { resetGroupChatLockStoreForTest } from './group-chat-lock-store';
 import { PROFILE_SAVED_EVENT } from './profile-saved';
 import { useOwnAvatar } from './useOwnAvatar';
-import { adoptWorkingStyle, keepQuizResult, publishQuizResult, readWorkingStyle, workingStyleToCarry } from './working-style';
+import { adoptWorkingStyle, deliverRemoval, keepQuizResult, publishQuizResult, readWorkingStyle, removeWorkingStyle, shownWorkingStyle, workingStyleToCarry } from './working-style';
 import * as api from './api';
 
 vi.mock('./api', async (importOriginal) => ({
@@ -138,5 +138,139 @@ describe('at web open', () => {
         answers(row('2026-11-04'));
         act(() => { window.dispatchEvent(new Event(PROFILE_SAVED_EVENT)); });
         await waitFor(() => expect(takenOn()).toBe('2026-11-04'));
+    });
+
+    it('a removal still waiting to reach the community goes when the row is read at open', async () => {
+        vi.useFakeTimers({ now: new Date('2026-11-03T10:00:00Z'), toFake: ['Date'] });
+        try {
+            keepQuizResult(ME, quiz('2026-11-01'));
+            vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: ME, avatar: null, bio: '', contact: null, archetype: row('2026-11-01') } as any);
+            vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+            await removeWorkingStyle(ME);
+            expect(api.updateMemberProfile).toHaveBeenCalledTimes(1);
+            vi.useRealTimers();
+            renderHook(() => useOwnAvatar(ME));
+            await waitFor(() => expect(api.updateMemberProfile).toHaveBeenCalledTimes(2));
+            expect(api.updateMemberProfile).toHaveBeenLastCalledWith(ME, { archetype: null });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+// ─── S3: Remove my working style ─────────────────────────────────────────────────────────────────────────────────────────
+describe('Remove my working style (the browser)', () => {
+    const holds = (archetype: string | null) => vi.mocked(api.getMemberProfile).mockResolvedValue({ publicKey: ME, avatar: null, bio: '', contact: null, archetype } as any);
+    beforeEach(() => {
+        vi.useFakeTimers({ now: new Date('2026-11-03T10:00:00Z'), toFake: ['Date'] });
+        vi.mocked(api.getMemberProfile).mockClear();
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('takes the browser copy off and tells the community with a null, where it holds a result', async () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        holds(row('2026-11-01'));
+        await removeWorkingStyle(ME);
+        expect(readWorkingStyle(ME)).toBeNull();
+        expect(api.updateMemberProfile).toHaveBeenCalledTimes(1);
+        expect(api.updateMemberProfile).toHaveBeenCalledWith(ME, { archetype: null });
+        // Done: nothing waits, and the row is shown as it is.
+        expect(shownWorkingStyle(ME, row('2026-11-01'))).toBe(row('2026-11-01'));
+    });
+
+    it('sends nothing where the community holds none', async () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        holds(null);
+        await removeWorkingStyle(ME);
+        expect(readWorkingStyle(ME)).toBeNull();
+        expect(api.updateMemberProfile).not.toHaveBeenCalled();
+    });
+
+    it('a browser that is only looking around as a guest sends nothing, and keeps no removal waiting', async () => {
+        vi.mocked(api.checkMembership).mockResolvedValue({ isMember: false } as any);
+        keepQuizResult(ME, quiz('2026-11-01'));
+        await removeWorkingStyle(ME);
+        expect(api.updateMemberProfile).not.toHaveBeenCalled();
+        expect(shownWorkingStyle(ME, row('2026-11-01'))).toBe(row('2026-11-01'));
+    });
+
+    it('a community that cannot be reached keeps the removal waiting: the old row is not shown, and the next read of the row sends it', async () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        holds(row('2026-11-01'));
+        vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+        await removeWorkingStyle(ME);
+        expect(api.updateMemberProfile).toHaveBeenCalledTimes(1);
+        // The card shows nothing, though the community still holds the result.
+        expect(shownWorkingStyle(ME, row('2026-11-01'))).toBeNull();
+        expect(adoptWorkingStyle(ME, row('2026-11-01'))).toBe(false);
+        expect(readWorkingStyle(ME)).toBeNull();
+
+        expect(await deliverRemoval(ME, row('2026-11-01'))).toBe(false);
+        expect(api.updateMemberProfile).toHaveBeenCalledTimes(2);
+        expect(api.updateMemberProfile).toHaveBeenLastCalledWith(ME, { archetype: null });
+        expect(shownWorkingStyle(ME, row('2026-11-01'))).toBe(row('2026-11-01'));
+    });
+
+    it('a community that will not say who is a member keeps it waiting', async () => {
+        vi.mocked(api.checkMembership).mockResolvedValue({ isMember: null } as any);
+        keepQuizResult(ME, quiz('2026-11-01'));
+        await removeWorkingStyle(ME);
+        expect(api.updateMemberProfile).not.toHaveBeenCalled();
+        expect(await deliverRemoval(ME, row('2026-11-01'))).toBe(true);
+    });
+
+    it('a result taken after the removal, on another device, stands: no null, and the browser takes it', async () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        holds(row('2026-11-01'));
+        vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+        await removeWorkingStyle(ME);
+
+        expect(await deliverRemoval(ME, row('2026-11-04'))).toBe(false);
+        expect(api.updateMemberProfile).toHaveBeenCalledTimes(1);
+        expect(adoptWorkingStyle(ME, row('2026-11-04'))).toBe(true);
+        expect(shownWorkingStyle(ME, row('2026-11-04'))).toBe(row('2026-11-04'));
+    });
+
+    it('a retake after the removal replaces it, and a Save carries the retake, not a null', async () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        holds(row('2026-11-01'));
+        vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+        await removeWorkingStyle(ME);
+        keepQuizResult(ME, quiz('2026-11-03', 'spark'));
+        expect(await deliverRemoval(ME, row('2026-11-01'))).toBe(false);
+        expect(api.updateMemberProfile).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(workingStyleToCarry(ME, row('2026-11-01'))!)).toMatchObject({ primary: 'spark', takenOn: '2026-11-03' });
+    });
+
+    it('a browser signed out in another tab removes nothing', async () => {
+        keepQuizResult(ME, quiz('2026-11-01'));
+        endAccountEpoch('signed-out');
+        await removeWorkingStyle(ME);
+        expect(api.updateMemberProfile).not.toHaveBeenCalled();
+    });
+
+    it('goes with the account: a removal still waiting is cleared by every sign-out', async () => {
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        resetGroupChatLockStoreForTest();
+        keepQuizResult(ME, quiz('2026-11-01'));
+        vi.mocked(api.updateMemberProfile).mockRejectedValueOnce(new Error('offline'));
+        holds(row('2026-11-01'));
+        await removeWorkingStyle(ME);
+        expect(shownWorkingStyle(ME, row('2026-11-01'))).toBeNull();
+        await clearAccountStorage();
+        expect(shownWorkingStyle(ME, row('2026-11-01'))).toBe(row('2026-11-01'));
+    });
+});
+
+describe('a date from a bad clock or a node (the browser)', () => {
+    it('a far-future row is taken as undated: a retake today is newer than it', () => {
+        vi.useFakeTimers({ now: new Date('2026-11-03T10:00:00Z'), toFake: ['Date'] });
+        try {
+            keepQuizResult(ME, quiz('2026-11-03', 'spark'));
+            expect(workingStyleToCarry(ME, row('2099-01-01'))).not.toBeNull();
+            expect(adoptWorkingStyle(ME, row('2099-01-01'))).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

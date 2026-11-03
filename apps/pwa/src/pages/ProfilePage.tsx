@@ -13,7 +13,7 @@ import { AvatarPresetPicker } from '../components/AvatarPresetPicker';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { parseArchetype, ARCHETYPES, AVATAR_PICTURE, CONTACT_VALUE_LIMIT, t, word, type QuizResult } from '@beanpool/core';
-import { adoptWorkingStyle, deliverRemoval, keepQuizResult, publishQuizResult, shownWorkingStyle, workingStyleToCarry } from '../lib/working-style';
+import { adoptWorkingStyle, keepQuizResult, publishQuizResult, shownWorkingStyle, workingStyleToCarry } from '../lib/working-style';
 import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 
 /** Who can see the contact details: the phone's Settings → Profile options and words (word() keys, shown through t()). */
@@ -66,8 +66,6 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     setContactVisibility(profile.contact.visibility);
                 }
                 setRowRead(true);
-                // A removal still waiting to reach this community goes now that the row is read (lib/working-style.ts).
-                void deliverRemoval(identity.publicKey, profile.archetype ?? null);
                 if (profile.archetype) {
                     setArchetype(profile.archetype);
                     adoptWorkingStyle(identity.publicKey, profile.archetype);

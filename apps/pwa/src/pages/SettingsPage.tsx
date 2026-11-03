@@ -56,7 +56,7 @@ import { ModerationPauseCard } from '../components/ModerationPauseCard';
 import { KnownConsentCard } from '../components/KnownConsentCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
-import { adoptWorkingStyle, deliverRemoval, keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
+import { adoptWorkingStyle, keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
 import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
@@ -710,8 +710,6 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     useEffect(() => {
         getMemberProfile(identity.publicKey).then(p => {
             setProfile(p);
-            // A removal still waiting to reach this community goes now that the row is read (lib/working-style.ts).
-            void deliverRemoval(identity.publicKey, p?.archetype ?? null);
             if (p?.archetype) adoptWorkingStyle(identity.publicKey, p.archetype);
         }).catch(() => {});
     }, [identity.publicKey, mode]);

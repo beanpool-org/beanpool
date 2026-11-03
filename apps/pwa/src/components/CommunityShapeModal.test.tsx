@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, render, screen, fireEvent } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CommunityShapeModal } from './CommunityShapeModal';
 import type { CommunityShapeFeatures } from '@beanpool/core';
 
@@ -61,6 +61,43 @@ describe('CommunityShapeModal', () => {
 
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    describe('the rule, on "How this community works"', () => {
+        const SOURCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+        const stubRule = (rule: unknown) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(rule), { status: rule ? 200 : 404, headers: { 'Content-Type': 'application/json' } })));
+        afterEach(() => vi.unstubAllGlobals());
+
+        it('states it right under the floor, in the numbers features carries, with nothing to tap', async () => {
+            stubRule({ known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null });
+            render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={{ ...FULL_FEATURES, debtLinePct: 50, quietDays: 60 }} />);
+            const line = screen.getByText(SOURCE);
+            expect(line.previousElementSibling?.textContent).toMatch(/\(the known floor\)/);
+            expect(screen.getByRole('dialog').querySelector('input')).toBeNull();
+            expect(screen.getAllByRole('button').map(b => b.getAttribute('data-testid'))).toEqual(['community-shape-close', 'community-shape-read-more']);
+        });
+
+        it('a tightened line says when it applies, from the public route', async () => {
+            stubRule({ known: true, knownFloor: 1000, debtLinePct: 30, quietDays: 60, debtLineFrom: '2026-11-16T04:00:00.000Z', quietDaysFrom: null });
+            render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={{ ...FULL_FEATURES, debtLinePct: 30, quietDays: 60 }} />);
+            expect(await screen.findByText('The line of 30% applies from 16 November.')).toBeInTheDocument();
+        });
+
+        it('an older node states no lines: the floor stays, no rule line, and nothing is asked', async () => {
+            stubRule(null);
+            render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={{ door: 'members', beans: true }} />);
+            await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+            expect(screen.queryByText(SOURCE)).toBeNull();
+            expect(fetch).not.toHaveBeenCalled();
+        });
+
+        it('a node with the floor but no lines: the floor line alone, and an answer of 404 changes nothing', async () => {
+            stubRule(null);
+            render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={FULL_FEATURES} />);
+            expect(await screen.findByText('Confirmed members')).toBeInTheDocument();
+            await new Promise(r => setTimeout(r, 0));
+            expect(screen.queryByText(/admins can see/)).toBeNull();
+        });
     });
 
     it('handles old node that says nothing gracefully', () => {

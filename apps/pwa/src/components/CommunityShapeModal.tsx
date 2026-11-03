@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { COMMUNITY_SHAPE_CARD_WORDS, communityShapeLines, t, type CommunityShapeFeatures } from '@beanpool/core';
+import { useEffect, useState } from 'react';
+import { COMMUNITY_SHAPE_CARD_WORDS, communityShapeLines, t, type CommunityShapeFeatures, type KnownRule } from '@beanpool/core';
+import { fetchKnownRule } from '../lib/known-rule';
 import { BoldWords } from './BoldWords';
 
 interface Props {
@@ -19,9 +20,19 @@ export function CommunityShapeModal({ isOpen, onClose, features, onOpenGuide }: 
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose]);
 
+    // The date on a tightened line: `features` carries the numbers, not when they apply. Only where there is a rule to date.
+    const [rule, setRule] = useState<KnownRule | null>(null);
+    const known = typeof features?.knownFloor === 'number';
+    useEffect(() => {
+        if (!isOpen || !known) return;
+        let live = true;
+        void fetchKnownRule().then((r) => { if (live) setRule(r); });
+        return () => { live = false; };
+    }, [isOpen, known]);
+
     if (!isOpen) return null;
 
-    const lines = communityShapeLines(features);
+    const lines = communityShapeLines(features, rule);
 
     return (
         <div

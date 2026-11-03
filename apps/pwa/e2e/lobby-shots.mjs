@@ -62,9 +62,9 @@ const VISITOR_READS_EXACT = new Set([
     '/api/invite/check', '/api/attest', '/api/marketplace/posts', '/api/federation/reachable-peers', '/api/pricing-guide',
     '/api/pair/poll', '/api/channels/options', '/api/pulse/oauth/config', '/api/node/info',
     '/api/node/identity-epoch', '/api/global/communities', '/api/global/home', '/api/join/knock/status',
-    // The visitors' Home in one read (HOME_READ_EXACT, public with the visitors' view on, as here), and the consent a
-    // known community asks for at joining, which screen 1 reads: both on the node's list since this copy was made.
-    '/api/home', '/api/community/consent-terms',
+    // The visitors' Home in one read (HOME_READ_EXACT, public with the visitors' view on, as here), and a known
+    // community's rule, which screen 1 reads: both on the node's list since this copy was made.
+    '/api/home', '/api/community/known-rule',
 ]);
 const VISITOR_READS_PATTERNS = [
     /^\/api\/community\/membership\/[^/]+$/, /^\/api\/members\/callsign-available\/[^/]+$/, /^\/api\/recovery\/lookup\/[^/]+$/,

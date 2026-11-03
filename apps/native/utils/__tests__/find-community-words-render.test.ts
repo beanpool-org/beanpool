@@ -213,3 +213,89 @@ describe('the listing promise under a community\'s name (mothership A3)', () => 
         expect(promised(await render(), 'a')).toBe('Tient sa promesse d’inscription · Accepte des membres');
     });
 });
+
+/**
+ * The rule on Find a community's yes (Marty, board card balance-rule-other-doors, 3 Nov 2026: "Yes, show the sentence"):
+ * a community that said yes offers Join, and above it, where that community confirms its members, the one sentence its
+ * join screen and rules page say, read from the community itself. Nothing to tick or tap. Before this the yes said
+ * nothing of the rule: the "rule on" tests fail there.
+ */
+describe("the community's rule on Find a community's yes", () => {
+    const RULE = { known: true, knownFloor: 100, debtLinePct: 50, quietDays: 60, debtLineFrom: null, quietDaysFrom: null };
+    const SENTENCE = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+    const ruleAnswer = { body: null as Record<string, unknown> | null, asked: [] as string[] };
+    const realFetch = globalThis.fetch;
+    beforeEach(async () => {
+        ruleAnswer.body = null;
+        ruleAnswer.asked = [];
+        globalThis.fetch = vi.fn(async (input: unknown) => {
+            const u = String(input);
+            ruleAnswer.asked.push(u);
+            if (u.endsWith('/api/community/known-rule')) {
+                return ruleAnswer.body
+                    ? new Response(JSON.stringify(ruleAnswer.body), { status: 200 })
+                    : new Response('{"error":"Not found"}', { status: 404 });
+            }
+            throw new TypeError(`Network request failed: ${u}`);
+        }) as typeof fetch;
+        const knock = await import('../knock');
+        vi.mocked(knock.knockCardState).mockReturnValue({ kind: 'invited', note: 'A member invited you. Join now to become a member.', invite: 'BP-LISA-0001' } as any);
+    });
+    afterEach(async () => {
+        globalThis.fetch = realFetch;
+        const knock = await import('../knock');
+        vi.mocked(knock.knockCardState).mockReturnValue({ kind: 'ask' } as any);
+    });
+    const yes = async () => {
+        listing.communities = [lismore('a', 12)];
+        const host = await render();
+        for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 1)); });
+        return host;
+    };
+
+    it('rule on: the sentence above Join, read from that community, and nothing to tick', async () => {
+        ruleAnswer.body = RULE;
+        const host = await yes();
+        expect(host.querySelector('[aria-label="Join Lismore a"]')).not.toBeNull();
+        expect(line(host, 'find-join-rule')).toBe(SENTENCE);
+        expect(ruleAnswer.asked).toContain('https://a.example/api/community/known-rule');
+        expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+    });
+
+    it("rule on, in the member's language: the catalog's sentence, its numbers filled", async () => {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const coreDe = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/de.json'), 'utf8'));
+        setLanguage('de', [coreDe]);
+        ruleAnswer.body = RULE;
+        const said = line(await yes(), 'find-join-rule');
+        expect(said).not.toBeNull();
+        expect(said).not.toBe(SENTENCE);
+        expect(said).toContain('60');
+        expect(said).not.toMatch(/[{}]/);
+    });
+
+    it('rule off: Join, and no sentence', async () => {
+        ruleAnswer.body = { known: false };
+        const host = await yes();
+        expect(host.querySelector('[aria-label="Join Lismore a"]')).not.toBeNull();
+        expect(line(host, 'find-join-rule')).toBeNull();
+    });
+
+    it('an older node (404): no sentence', async () => {
+        ruleAnswer.body = null;
+        const host = await yes();
+        expect(host.querySelector('[aria-label="Join Lismore a"]')).not.toBeNull();
+        expect(line(host, 'find-join-rule')).toBeNull();
+    });
+
+    it('a community not yet asked: Ask to join, and nothing read for the rule', async () => {
+        const knock = await import('../knock');
+        vi.mocked(knock.knockCardState).mockReturnValue({ kind: 'ask' } as any);
+        ruleAnswer.body = RULE;
+        const host = await yes();
+        expect(host.querySelector('[aria-label="Ask to join Lismore a"]')).not.toBeNull();
+        expect(line(host, 'find-join-rule')).toBeNull();
+        expect(ruleAnswer.asked.filter((u) => u.endsWith('/known-rule'))).toEqual([]);
+    });
+});

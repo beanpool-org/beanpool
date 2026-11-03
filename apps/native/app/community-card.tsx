@@ -23,6 +23,7 @@ import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
+import { DoorRuleLine } from '../components/DoorRuleLine';
 
 export { ErrorBoundary };
 
@@ -260,6 +261,8 @@ export default function CommunityCardScreen() {
                 {!!facts.members && <Text style={styles.fact} testID="community-card-members">{facts.members}</Text>}
                 {!!facts.area && <Text style={styles.fact} testID="community-card-area">{facts.area}</Text>}
                 <View style={styles.chip}><Text style={styles.chipText} testID="community-card-joining">{facts.joining}</Text></View>
+                {/* The rule, where this community confirms its members: the sentence its join screen says (Marty, 3 Nov). */}
+                <DoorRuleLine url={origin} testID="community-card-rule" />
 
                 {memberHere ? (
                     <View>

@@ -3,7 +3,7 @@
  * The welcome screen and onboarding in the member's language (words slice S3, sweep B9): app/welcome.tsx rendered for
  * real inside the real LanguageProvider, step by step, with the components welcome draws that this sweep took drawn for
  * real too (KeeperProtectionPanel, SsoEnrolSheet, RecoveryKitButtons, WordsOnScreen's notes, and the ones S1 and P4 took:
- * WelcomeDoors, LanguageSwitch, RestoreCommunityChips, ConsentText). React Native's host components are plain tags
+ * WelcomeDoors, LanguageSwitch, RestoreCommunityChips). React Native's host components are plain tags
  * carrying their accessibility props and placeholders; the node, the key vault, the sign-ins and the phone's key store
  * are stubbed: nothing here is contacted.
  *
@@ -733,6 +733,60 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
  * the global community's: each case gives the two communities opposite rules. The add-a-sign-in sheet a 12-words member
  * opens there links at that community and names it, as does the notice once linked, never "the global community".
  */
+describe("a known community's rule on Join BeanPool (Marty, 2 Nov: a sentence, nothing to tick)", () => {
+    const HALF = "The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.";
+    const KNOWN = { known: true, knownFloor: 1000, debtLinePct: 50, quietDays: 60, ruleFrom: '2026-11-16T04:00:00.000Z', debtLineFrom: null, quietDaysFrom: null };
+    afterEach(() => vi.unstubAllGlobals());
+
+    /** Answers the rule's route as a node would; `seen` is what was asked. */
+    function node(rule: unknown, status = 200) {
+        const seen: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
+            seen.push(String(url));
+            return new Response(JSON.stringify(rule), { status });
+        }));
+        return seen;
+    }
+    async function atTheJoinStep(lang: UiLang, seen: string[]) {
+        clip.has = true; clip.text = 'hello';
+        await mount(lang);
+        await press('📋 Been sent an invite? Tap to check your clipboard', lang);
+        await act(async () => { alerts.buttons.find((b) => b.text === (lang === 'xx' ? pseudoLocalise('OK') : 'OK'))!.onPress!(); });
+        await settle();
+        await press('Next →', lang);
+        await type('Paste your invite link or code', 'BP-ABCD-1234', lang);
+        await type('Community name or address (e.g. mullum)', 'https://mullum.example', lang);
+        await vi.waitFor(() => expect(seen).toContain('https://mullum.example/api/community/known-rule'), { timeout: 3000 });
+        await settle();
+    }
+    const box = () => host!.querySelector('[data-testid="join-rule"]');
+
+    it('states it in the community\'s numbers, with nothing to tick and no button of its own', async () => {
+        await atTheJoinStep('en', node(KNOWN));
+        expect(box()?.textContent).toContain('Confirmed members can owe up to 1,000 Beans (the known floor)');
+        expect(box()?.textContent).toContain(HALF);
+        expect(box()?.querySelectorAll('[role="checkbox"], button').length).toBe(0);
+    });
+
+    it('in the pseudo-locale, every word through t(), and it holds at 320 dp with 1.3× text', async () => {
+        await atTheJoinStep('xx', node({ ...KNOWN, debtLinePct: 30, quietDays: 90 }));
+        // Read whole: a bold word is drawn in its own Text, its bracket in the sentence's.
+        expect(box()?.textContent).toContain(pseudoLocalise('Each look is logged.').slice(1, -1));
+        expect(outsideBrackets(box()!.textContent!)).toBe('');
+        buttonsFit('Join BeanPool, the rule');
+        rowsWrap('Join BeanPool, the rule');
+    });
+
+    for (const [name, rule, status] of [['an older node (404)', { error: 'Not found' }, 404], ['a plain community', { known: false }, 200]] as const) {
+        it(`${name}: no rule, and the step stands as it was`, async () => {
+            await atTheJoinStep('en', node(rule, status));
+            expect(box()).toBeNull();
+            expect(host!.textContent).not.toContain('admins can see');
+            expect(host!.textContent).toContain('Join BeanPool');
+        });
+    }
+});
+
 describe("Safety Backup after another community's open door (S2), in the pseudo-locale", () => {
     const DOOR = 'https://open.riverbend.example';
     const GLOBAL = 'https://global.beanpool.org';

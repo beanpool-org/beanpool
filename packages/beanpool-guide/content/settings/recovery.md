@@ -13,6 +13,7 @@ Your account's key is not in your phone's backups. A new phone needs your 12 wor
 - Install BeanPool and open it.
 - Tap **Already a Member? Restore Account**.
 - Choose **Recover with 12 Words** or **Recover with Social**.
+- Still using BeanPool in a web browser? Choose **Scan from a browser** instead and scan the code the browser shows: see "Putting your web account on a phone" in the web app page.
 
 ## With your 12 words
 

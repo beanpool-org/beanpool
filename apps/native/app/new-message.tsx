@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-    View, Text, StyleSheet, FlatList, Pressable, TextInput,
-    Platform, Image, ActivityIndicator, Animated, Alert
+    View,
+    Text,
+    StyleSheet,
+    FlatList,
+    Pressable,
+    TextInput,
+    Platform,
+    Image,
+    ActivityIndicator,
+    Animated,
 } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';

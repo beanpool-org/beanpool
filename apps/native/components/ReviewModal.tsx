@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Modal, ActivityIndicator, Alert, StyleSheet, ScrollView, Platform, Keyboard } from 'react-native';
+import { View, Text, TextInput, Pressable, Modal, ActivityIndicator, StyleSheet, ScrollView, Platform, Keyboard } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { submitRating, getDb } from '../utils/db';
 import { useIdentity } from '../app/IdentityContext';

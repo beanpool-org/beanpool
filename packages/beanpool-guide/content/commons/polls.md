@@ -14,7 +14,7 @@ On the global community each poll says **An informal poll; it decides nothing**.
 
 When an anonymous poll there has closed, it also says how many of its votes came from **new or 12-word accounts**, for example "5 of 12 votes came from new or 12-word accounts". Each vote counts as the account was when it voted: a new account is one that still had the new-account limits, and a 12-word account is one made with 12 words that had not added a sign-in. When at least 3 votes came from new or 12-word accounts, and the other votes are either none or at least 3, each answer also says how many of its own did. Every vote still counts, and nothing shows who voted.
 
-A poll there stays on the board, closed, for a week after it closes, and then comes off it. The person who started it can still open it after that, with its result and its typed answers. See "The global community's limits".
+A poll there stays on the board, closed, for a week after it closes, so its result, and what it says about where its votes came from, can be read for that week. Then it comes off the board. The person who started it can still open it after that, with its result and its typed answers. See "The global community's limits".
 
 While a poll is open it says nothing about this. If it did, someone checking the poll after each vote could tell what kind of account each vote came from, and how it chose. An open vote never says it, open or closed: it shows who voted, so the count would say which kind of account each voter has. A group's poll doesn't say it either, and nor does a poll on a local community.
 

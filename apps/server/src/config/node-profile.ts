@@ -522,8 +522,8 @@ export const LISTING_ARCHIVE_DAYS_DEFAULT = 90;
  *  would mean nothing and a shorter one would take photos the people who went still look at. */
 export const EVENT_ARCHIVE_DAYS = 7;
 /** A closed poll leaves the board this many days after it closed, where `retention` is on: as an ended event's week (the
- *  director, 3 Nov, for Marty; reversible). Its result, its typed Other answers and, on the global node, where its votes
- *  came from show only once it has closed, so the week is when members read them. Not an env, as EVENT_ARCHIVE_DAYS. */
+ *  director, 3 Nov, for Marty; reversible). Its result, an anonymous poll's typed Other answers (for its maker) and, on the
+ *  global node, where an anonymous poll's votes came from show only once it has closed, so the week is when they are read. Not an env, as EVENT_ARCHIVE_DAYS. */
 export const POLL_ARCHIVE_DAYS = 7;
 /** LISTING_ARCHIVE_DAYS's range: under a month would take listings their authors still mean; ten years is "keep them". */
 const LISTING_ARCHIVE_DAYS_MIN = 30;

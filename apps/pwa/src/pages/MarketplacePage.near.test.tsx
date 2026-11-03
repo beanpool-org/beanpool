@@ -97,11 +97,11 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         info.current = GLOBAL;
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance' }]);
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'recent' }]);
         // The viewer's own listings wherever they are: no point on that read.
         expect(ownReads()).toEqual([{ types: CLIENT_POST_TYPES, author: 'member-me' }]);
         expect(screen.getByTestId('card-distance')).toHaveTextContent('12 km');
-        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest to your area first, within 250 km.');
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Newest within 250 km of your area.');
     });
 
     it('beside a read by radius, reads online events wherever they are, and shows them (DESIGN-event-times §9)', async () => {
@@ -123,29 +123,30 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         await screen.findByText('Bicycle Repair');
         // The node is asked for a tenth more than the setting (lib/listings-near nearRead), and for twice the 50 the list
         // keeps (readNearestInCircle); the line says the setting.
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -37.1, lng: 144.2, radiusKm: 33, sort: 'distance', limit: 100 }]);
-        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 30 km of the place you picked.');
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -37.1, lng: 144.2, radiusKm: 33, sort: 'recent', limit: 100 }]);
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Newest within 30 km of the place you picked.');
     });
 
-    it('a precise distance centre goes to the node only as precisely as its radius needs; the list is cut, ordered and measured from the exact centre (N5)', async () => {
+    it('a precise distance centre goes to the node only as precisely as its radius needs; the list is cut and measured from the exact centre, newest first (N5)', async () => {
         info.current = GLOBAL;
         const real = await vi.importActual<typeof import('../lib/geo')>('../lib/geo');
         vi.mocked(haversineDistance).mockImplementation(real.haversineDistance);
         vi.mocked(loadRadiusSettings).mockReturnValue({ lat: -28.612345, lng: 153.598765, radiusKm: 5, label: '5km radius' });
         // The node ordered and measured from the rounded centre it was sent; here its order and numbers are deliberately
-        // unlike the exact ones. From the exact centre: 2.07 km, 5.20 km (past the 5 km edge), 1.10 km.
-        const at = (id: string, title: string, lng: number, distanceKm: number) => ({ ...offer, id, title, lat: -28.612345, lng, distanceKm });
+        // unlike the exact ones. From the exact centre: 2.07 km, 5.20 km (past the 5 km edge), 1.10 km. The order is the newest
+        // listed (market order S2): Garden help, the nearest, was posted last, so it is first by its time and not its distance.
+        const at = (id: string, title: string, lng: number, distanceKm: number, createdAt: string) => ({ ...offer, id, title, lat: -28.612345, lng, distanceKm, createdAt, updatedAt: createdAt });
         vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.author ? [] : [
-            at('offer-two', 'Bicycle Repair', 153.62, 9.9), at('offer-ring', 'Ring offer', 153.652, 4.4), at('offer-one', 'Garden help', 153.61, 0.5),
+            at('offer-two', 'Bicycle Repair', 153.62, 9.9, '2026-10-01T10:00:00.000Z'), at('offer-ring', 'Ring offer', 153.652, 4.4, '2026-10-03T10:00:00.000Z'), at('offer-one', 'Garden help', 153.61, 0.5, '2026-10-02T10:00:00.000Z'),
         ]) as any);
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.612, lng: 153.599, radiusKm: 5.5, sort: 'distance', limit: 100 }]);
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.612, lng: 153.599, radiusKm: 5.5, sort: 'recent', limit: 100 }]);
         expect(screen.queryByText('Ring offer')).toBeNull();
         const shown = screen.getAllByTestId('card-distance').map(e => e.textContent?.replace('📍', '').trim());
         expect(shown).toEqual(['1.1 km', '2.1 km']);
         // The setting's radius, not the 5.5 km the node was asked for (lib/events formatDistance writes 5 as 5.0).
-        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 5.0 km of the place you picked.');
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Newest within 5.0 km of the place you picked.');
     });
 
     describe('no listing inside the circle is lost when the node\'s page fills with ones past its edge (review of #2363)', () => {
@@ -167,7 +168,7 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
             render(<MarketplacePage identity={identity} />);
             await screen.findByText('Inside 0');
             await waitFor(() => expect(cards()).toHaveLength(45));
-            expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.61, lng: 153.6, radiusKm: 11, sort: 'distance', limit: 100 }]);
+            expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.61, lng: 153.6, radiusKm: 11, sort: 'recent', limit: 100 }]);
             for (let i = 0; i < 45; i++) expect(screen.getByText(`Inside ${i}`)).toBeInTheDocument();
             expect(screen.queryByText(/^Ring /)).toBeNull();
         });
@@ -178,7 +179,7 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
             render(<MarketplacePage identity={identity} />);
             await screen.findByText('Inside 0');
             await waitFor(() => expect(cards()).toHaveLength(45));
-            const read = { types: CLIENT_POST_TYPES, lat: -28.61, lng: 153.6, radiusKm: 11, sort: 'distance', limit: 100 };
+            const read = { types: CLIENT_POST_TYPES, lat: -28.61, lng: 153.6, radiusKm: 11, sort: 'recent', limit: 100 };
             expect(feedReads()).toEqual([read, { ...read, offset: 100 }]);
             expect(screen.queryByText(/^Ring /)).toBeNull();
         });
@@ -204,7 +205,7 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         await waitFor(() => expect(feedReads().at(-1)).toEqual({ types: CLIENT_POST_TYPES }));
         await waitFor(() => expect(screen.queryByTestId('card-distance')).toBeNull());
         fireEvent.click(screen.getByRole('button', { name: 'Near your area' }));
-        await waitFor(() => expect(feedReads().at(-1)).toEqual({ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance' }));
+        await waitFor(() => expect(feedReads().at(-1)).toEqual({ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'recent' }));
     });
 
     it('a local node reads exactly as before, asks for no area, and says nothing about where', async () => {
@@ -212,7 +213,8 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         vi.mocked(loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: 'Castlemaine' });
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES }]);
+        // The list, and the events beside it (market order S2: an event posted weeks ago must be in the page to come back).
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES }, { type: 'event' }]);
         expect(api.getCommunityMe).not.toHaveBeenCalled();
         expect(screen.queryByTestId('market-near-line')).toBeNull();
         expect(screen.queryByTestId('card-distance')).toBeNull();
@@ -236,7 +238,7 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         const onPostOpened = vi.fn();
         render(<MarketplacePage identity={identity} openPostId="offer-1" onPostOpened={onPostOpened} />);
         await waitFor(() => expect(onPostOpened).toHaveBeenCalledTimes(1));
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance' }]);
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'recent' }]);
         expect(vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.id))
             .toEqual([{ id: 'offer-1', types: CLIENT_POST_TYPES }]);
         expect(await screen.findByText('Bicycle Repair')).toBeInTheDocument();
@@ -273,8 +275,8 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         expect(screen.getByTestId('market-near-line')).toHaveTextContent("Couldn't check your area just now, so this is the newest from everywhere.");
         expect(screen.queryByRole('button', { name: "See what's near you" })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-        await waitFor(() => expect(feedReads().at(-1)).toEqual({ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'distance' }));
-        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest to your area first, within 250 km.');
+        await waitFor(() => expect(feedReads().at(-1)).toEqual({ types: CLIENT_POST_TYPES, lat: -28.5, lng: 153.5, radiusKm: 250, sort: 'recent' }));
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Newest within 250 km of your area.');
     });
 
     it('when the area check meets private_preview, the line shows the node sentence, never "Couldn\'t check your area"', async () => {
@@ -315,6 +317,6 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         vi.mocked(gate.communityInfoOnce).mockImplementationOnce(() => new Promise(() => {}));
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES }]);
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES }, { type: 'event' }]);
     });
 });

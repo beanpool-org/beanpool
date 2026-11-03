@@ -26,7 +26,11 @@ export interface NearRead {
     lng: number;
     /** The radius the node is asked for: a setting's a tenth wider, so the exact circle is inside it. */
     radiusKm: number;
-    sort: 'distance';
+    /**
+     * The order the node is asked for. The Map reads nearest first; the Market reads `recent` (newest changed first), because
+     * its order is the newest listed (core market-order), so the page it fills must be the newest in the circle, not the nearest.
+     */
+    sort: 'distance' | 'recent';
     /** Which point it measures from: the member's distance setting, or their stored area. */
     from: 'setting' | 'area';
     /**
@@ -46,6 +50,8 @@ export interface NearInputs {
     visitor: boolean;
     /** The member asked to see listings from everywhere for now. */
     everywhere?: boolean;
+    /** Which order the node is asked for: the Map's nearest first (the default), or the Market's newest. */
+    order?: 'distance' | 'recent';
 }
 
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
@@ -80,21 +86,21 @@ export function sentCentre(centre: { lat: number; lng: number }, radiusKm: numbe
 }
 
 /** The point and radius to read from, or null to read as before. */
-export function nearRead({ nearbyListings, setting, area, visitor, everywhere }: NearInputs): NearRead | null {
+export function nearRead({ nearbyListings, setting, area, visitor, everywhere, order = 'distance' }: NearInputs): NearRead | null {
     if (visitor || everywhere || !nearbyListings) return null;
     if (setting && finite(setting.lat) && finite(setting.lng) && finite(setting.radiusKm) && setting.radiusKm > 0) {
         const circle = { lat: setting.lat, lng: wrapLng(setting.lng), radiusKm: setting.radiusKm };
-        return { ...sentCentre(circle, circle.radiusKm), radiusKm: widened(circle.radiusKm), sort: 'distance', from: 'setting', circle };
+        return { ...sentCentre(circle, circle.radiusKm), radiusKm: widened(circle.radiusKm), sort: order, from: 'setting', circle };
     }
     if (area && finite(area.lat) && finite(area.lng) && finite(nearbyListings.radiusKm) && nearbyListings.radiusKm > 0) {
         const circle = { lat: area.lat, lng: area.lng, radiusKm: nearbyListings.radiusKm };
-        return { ...circle, sort: 'distance', from: 'area', circle };
+        return { ...circle, sort: order, from: 'area', circle };
     }
     return null;
 }
 
 /** The listings-read parameters of a NearRead, or none. Never the exact circle. */
-export function nearParams(near: NearRead | null): { lat?: number; lng?: number; radiusKm?: number; sort?: 'distance' } {
+export function nearParams(near: NearRead | null): { lat?: number; lng?: number; radiusKm?: number; sort?: 'distance' | 'recent' } {
     return near ? { lat: near.lat, lng: near.lng, radiusKm: near.radiusKm, sort: near.sort } : {};
 }
 
@@ -115,17 +121,18 @@ export function listingDistanceKm(
 }
 
 /**
- * What a read from the distance setting brought back, cut to the exact circle and nearest first from its centre: the
- * node was asked for a wider circle round a rounded centre, and ordered from that. Any other read as the node sent it.
+ * What a read from the distance setting brought back, cut to the exact circle: the node was asked for a wider circle round a
+ * rounded centre. Read nearest first (the Map's), the cut is ordered by the exact centre; read newest first (the Market's),
+ * the node's order stands. Any other read as the node sent it.
  */
 export function nearestInCircle<T extends { lat?: number | null; lng?: number | null }>(posts: T[], near: NearRead | null): T[] {
     if (near?.from !== 'setting') return posts;
     const { lat, lng, radiusKm } = near.circle;
-    return posts
+    const inside = posts
         .flatMap(p => (p.lat != null && p.lng != null ? [{ p, km: haversineDistance(lat, lng, p.lat, p.lng) }] : []))
-        .filter(x => x.km <= radiusKm)
-        .sort((a, b) => a.km - b.km)
-        .map(x => x.p);
+        .filter(x => x.km <= radiusKm);
+    if (near.sort === 'recent') return inside.map(x => x.p);
+    return inside.sort((a, b) => a.km - b.km).map(x => x.p);
 }
 
 /** How many listings the node answers a read without a limit, and the most it answers any read (apps/server clampLimit). */
@@ -145,13 +152,14 @@ export const NEAR_PAGES_MAX = 3;
  * fill the list with listings on the rounded centre's side and leave a nearer one on the far side for the next (review
  * of #2363, the stop rule). Any other read is `read({})` once, as the node sent it.
  */
-export async function readNearestInCircle<T extends { id: string; lat?: number | null; lng?: number | null }>(
+export async function readNearestInCircle<T extends { id: string; lat?: number | null; lng?: number | null; createdAt?: string | null; updatedAt?: string | null }>(
     near: NearRead | null,
     keep: number,
     read: (page: { limit?: number; offset?: number }) => Promise<T[]>,
 ): Promise<T[]> {
     if (near?.from !== 'setting') return read({});
     const limit = Math.min(NODE_PAGE_MAX, keep * 2);
+    if (near.sort === 'recent') return readNewestInCircle(near, keep, limit, read);
     const { circle } = near;
     const shiftKm = haversineDistance(circle.lat, circle.lng, near.lat, near.lng);
     // A row's place is the point the node measured it from (its neighbourhood where it is read so, engine posts.ts
@@ -168,6 +176,41 @@ export async function readNearestInCircle<T extends { id: string; lat?: number |
         if (rows.length < limit) break;
         const furthestKept = kept[keep - 1];
         if (furthestKept && haversineDistance(circle.lat, circle.lng, furthestKept.lat!, furthestKept.lng!) <= unreadNoNearerThan(rows[rows.length - 1])) break;
+    }
+    return kept.slice(0, keep);
+}
+
+const timeOf = (v: string | null | undefined): number => {
+    const t = Date.parse(v ?? '');
+    return Number.isFinite(t) ? t : 0;
+};
+
+/**
+ * The same read, newest first (the Market's order, core market-order). The node answers newest CHANGED first (updated_at,
+ * engine posts.ts RECENT_ORDER), and a post is never created after it was last changed, so a row not yet read was created
+ * no later than the page's last row was changed. The list is the `keep` newest CREATED of what the cut kept, and the read
+ * stops once the last of them is newer than that: nothing unread can take its place. A page that comes back short is the
+ * whole circle. A last row with no time to bound by reads on, NEAR_PAGES_MAX at most.
+ */
+async function readNewestInCircle<T extends { id: string; lat?: number | null; lng?: number | null; createdAt?: string | null; updatedAt?: string | null }>(
+    near: NearRead,
+    keep: number,
+    limit: number,
+    read: (page: { limit?: number; offset?: number }) => Promise<T[]>,
+): Promise<T[]> {
+    // A listing that moved between two pages' reads comes back on both: kept once.
+    const byId = new Map<string, T>();
+    let kept: T[] = [];
+    for (let page = 0; page < NEAR_PAGES_MAX; page++) {
+        const rows = await read(page === 0 ? { limit } : { limit, offset: page * limit });
+        for (const p of rows) if (!byId.has(p.id)) byId.set(p.id, p);
+        kept = nearestInCircle([...byId.values()], near)
+            .sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+        if (rows.length < limit) break;
+        const last = rows[rows.length - 1];
+        const lastChanged = timeOf(last.updatedAt ?? last.createdAt);
+        const oldestKept = kept[keep - 1];
+        if (oldestKept && lastChanged > 0 && timeOf(oldestKept.createdAt) > lastChanged) break;
     }
     return kept.slice(0, keep);
 }

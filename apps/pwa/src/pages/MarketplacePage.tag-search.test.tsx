@@ -299,7 +299,9 @@ describe('Beans only where its chip is hidden', () => {
 });
 
 describe('a #tag the member typed (DESIGN-tags-free-entry-fable.md §4)', () => {
-    const laptop = listing('laptop', 'A laptop', { freeTags: ['2nd hand'] });
+    // Posted a minute after the phone: with the filter off the list is the newest listed first (market order S2), not the node's order.
+    const NEWER = new Date(Date.parse(AT) + 60_000).toISOString();
+    const laptop = listing('laptop', 'A laptop', { freeTags: ['2nd hand'], createdAt: NEWER, updatedAt: NEWER });
     const phone = listing('phone', 'A phone');
     async function filterByTyped(props: Record<string, unknown> = {}) {
         node.feed = [laptop, phone];

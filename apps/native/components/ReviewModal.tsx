@@ -7,6 +7,7 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { t, tn } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { signedRequestWords } from './signed-request-lines';
 
 interface ReviewModalProps {
@@ -20,6 +21,7 @@ interface ReviewModalProps {
 
 export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClose, onSuccess }: ReviewModalProps) {
     const { colors } = useTheme();
+    const fieldScroll = useScrollFieldIntoView();
     const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
     const [stars, setStars] = useState(5);
@@ -90,6 +92,7 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
                 behavior="padding"
             >
                 <ScrollView
+                    {...fieldScroll.scrollProps}
                     contentContainerStyle={[
                         styles.scrollContent,
                         keyboardShown && { justifyContent: 'flex-start', paddingTop: Platform.OS === 'ios' ? 80 : 50 }
@@ -113,6 +116,7 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
                         </View>
 
                         <TextInput
+                            {...fieldScroll.inputProps}
                             style={styles.input}
                             accessibilityLabel={t('Review comment')}
                             placeholder={t('Write a short review (optional)...')}

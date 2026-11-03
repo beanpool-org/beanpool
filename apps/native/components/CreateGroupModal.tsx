@@ -15,6 +15,7 @@ import {
 // (useModalKeyboardLift): lifted by the keyboard's height.
 import { KeyboardController } from 'react-native-keyboard-controller';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
@@ -54,6 +55,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
     const insets = useSafeAreaInsets();
     // Lifted by the keyboard's height, not a KeyboardAvoidingView: see components/useModalKeyboardLift.
     const lift = useModalKeyboardLift(insets.top + 8);
+    const fieldScroll = useScrollFieldIntoView();
     // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to it on a community with Beans off.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
@@ -271,7 +273,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
 
                     {/* flexShrink: at 320dp x 569dp with the keyboard up the sheet has ~250dp; without it the ScrollView
                         kept its content height, the sheet overflowed, and only the title showed, under the status bar. */}
-                    <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                    <ScrollView {...fieldScroll.scrollProps} style={{ flexShrink: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                         <View style={styles.infoNotice}>
                             <MaterialCommunityIcons name="information-outline" size={18} color={colors.text.secondary} />
                             <Text style={styles.infoNoticeText}>
@@ -301,6 +303,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
 
                         <Text style={styles.fieldLabel}>{t('Group Name *')}</Text>
                         <TextInput
+                            {...fieldScroll.inputProps}
                             style={styles.input}
                             placeholder={t('e.g. Bindarrabi Garden Crew, Solar Guild')}
                             placeholderTextColor={colors.text.muted}
@@ -311,6 +314,7 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: CreateGroupModa
 
                         <Text style={styles.fieldLabel}>{t('Purpose / Description')}</Text>
                         <TextInput
+                            {...fieldScroll.inputProps}
                             style={[styles.input, styles.textArea]}
                             placeholder={t('What does this group discuss or coordinate?')}
                             placeholderTextColor={colors.text.muted}

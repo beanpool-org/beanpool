@@ -14,6 +14,8 @@ import type { AppColors } from '../../constants/colors';
 import { HOME_TARGET_DP, homeStyles } from '../home/HomeParts';
 import { sheetStyles } from '../home/sheet-parts';
 import { useModalKeyboardLift } from '../useModalKeyboardLift';
+import { useScrollFieldIntoView } from '../useScrollFieldIntoView';
+import { ScrollFieldContext, useScrollFieldContext } from '../ScrollFieldContext';
 import { backOnChoices, shopCategoryLabel, type BackOnChoice, type ShopListing } from '../../utils/shop';
 
 /** A refusal as a sheet shows it: the node's sentence, and its code (open deals offer the way to them). */
@@ -29,6 +31,7 @@ function Sheet({ visible, title, colors, onClose, testID, children }: {
 }) {
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8);
+    const fieldScroll = useScrollFieldIntoView();
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
             <View style={sheetStyles.backdrop}>
@@ -39,7 +42,7 @@ function Sheet({ visible, title, colors, onClose, testID, children }: {
                             <Text style={[sheetStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
                         </Pressable>
                     </View>
-                    <ScrollView contentContainerStyle={sheetStyles.list} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+                    <ScrollView {...fieldScroll.scrollProps} contentContainerStyle={sheetStyles.list} keyboardShouldPersistTaps="handled"><ScrollFieldContext.Provider value={fieldScroll}>{children}</ScrollFieldContext.Provider></ScrollView>
                 </View>
             </View>
         </Modal>
@@ -96,6 +99,31 @@ function Choice({ text, on, onPress, colors, testID }: { text: string; on: boole
 
 export type ShopTextField = 'name' | 'blurb' | 'howToDeal';
 
+/** The sheet's text box. A child of the Sheet, so it can read the sheet's scroll helper from context: the helper keeps the box, and the end of a growing note, in view above the keyboard. */
+function ShopTextBox({ value, onChangeText, maxLength, multiline, style, accessibilityLabel }: {
+    value: string;
+    onChangeText: (text: string) => void;
+    maxLength: number;
+    multiline: boolean;
+    style: React.ComponentProps<typeof TextInput>['style'];
+    accessibilityLabel: string;
+}) {
+    const fieldScroll = useScrollFieldContext();
+    return (
+        <TextInput
+            {...fieldScroll?.inputProps}
+            value={value}
+            onChangeText={onChangeText}
+            maxLength={maxLength}
+            multiline={multiline}
+            textAlignVertical={multiline ? 'top' : 'center'}
+            style={style}
+            accessibilityLabel={accessibilityLabel}
+            testID="shop-text-input"
+        />
+    );
+}
+
 /** Each field's words and bound (core text-limits.ts, the node's own). */
 function fieldWords(field: ShopTextField, defaultName: string): { title: string; note: string; limit: number; multiline: boolean } {
     if (field === 'name') return { title: t("Your shop's name"), note: t('Leave it empty and it is called "{name}".', { name: defaultName }), limit: SHOP_NAME_LIMIT.chars, multiline: false };
@@ -122,15 +150,13 @@ export function ShopTextSheet({ field, value, defaultName, busy, refusal, colors
     const w = fieldWords(field ?? 'name', defaultName);
     return (
         <Sheet visible={!!field} title={w.title} colors={colors} onClose={onClose} testID="shop-text-sheet">
-            <TextInput
+            <ShopTextBox
                 value={text}
                 onChangeText={setText}
                 maxLength={w.limit}
                 multiline={w.multiline}
-                textAlignVertical={w.multiline ? 'top' : 'center'}
                 style={[sheet.input, w.multiline && sheet.inputTall, { color: colors.text.body, borderColor: colors.border.strong, backgroundColor: colors.surface.app }]}
                 accessibilityLabel={w.title}
-                testID="shop-text-input"
             />
             <Text style={[s.note, { marginTop: 8 }]}>{w.note}</Text>
             <Go text={busy ? t('Saving…') : t('Save')} onPress={() => onSave(text.trim() ? text.trim() : null)} disabled={busy} colors={colors} testID="shop-text-save" />

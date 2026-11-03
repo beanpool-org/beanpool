@@ -7,6 +7,7 @@ import { dismissKeyboardWithin } from '../utils/keyboard-dismiss';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { signedRequestWords } from './signed-request-lines';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 
 /** As long as the node takes a reply: as long as the case it answers may be (server decisions-engine REMOVAL_REPLY_MAX_CHARS). */
 export const REMOVAL_REPLY_MAX_CHARS = 1000;
@@ -28,6 +29,7 @@ interface RemovalReplySheetProps {
  */
 export function RemovalReplySheet({ decisionId, current, onClose, onSent }: RemovalReplySheetProps) {
     const { colors } = useTheme();
+    const fieldScroll = useScrollFieldIntoView();
     const styles = useStyles(makeStyles);
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
@@ -58,11 +60,12 @@ export function RemovalReplySheet({ decisionId, current, onClose, onSent }: Remo
     return (
         <Modal visible={!!decisionId} transparent animationType="slide" onRequestClose={() => { if (!sending) onClose(); }}>
             <KeyboardAvoidingView style={styles.overlay} behavior="padding">
-                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <ScrollView {...fieldScroll.scrollProps} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                     <View style={styles.card} testID="removal-reply-sheet">
                         <Text style={styles.title} accessibilityRole="header">{current ? t('Change your reply') : t('Reply to this case')}</Text>
                         <Text style={styles.hint}>{t('Everyone who reads this vote sees your reply beside the case.')}</Text>
                         <TextInput
+                            {...fieldScroll.inputProps}
                             style={styles.input}
                             accessibilityLabel={current ? t('Change your reply') : t('Reply to this case')}
                             placeholderTextColor={colors.text.muted}

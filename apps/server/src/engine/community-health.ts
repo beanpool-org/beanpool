@@ -15,8 +15,9 @@
  *
  * It is a rule of being confirmed, not a consent: the oversight belongs to the known floor, and a member who wants neither
  * steps back (engine/names-list.ts stepBack). Nobody is listed on a basis they weren't told about, so:
- *  - the rule starts 14 days after a node first runs it (config/balance-rule.ts), or after the dial last went on, and until
- *    then only members confirmed since are listed ({@link ruleStart}); a start this can't read lists nobody;
+ *  - the rule starts at once, when a node first runs it (config/balance-rule.ts) or the dial goes on, with no notice: the
+ *    rule sentence on the join screen and the rules page is the telling. A node whose stamp this can't read lists nobody
+ *    ({@link ruleStarted});
  *  - a tightened line waits 14 days and a loosened one applies at once ({@link effectiveLines});
  *  - a member is listed for debt past their ordinary line only if they stepped back owing it, as the step-back says.
  */
@@ -29,7 +30,7 @@ import { firstTradeFunnel } from './time-to-first-trade.js';
 import { stepBack } from './names-list.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
-import { BALANCE_RULE_FROM_KEY, RULE_NOTICE_MS, readRuleInstant } from '../config/balance-rule.js';
+import { BALANCE_RULE_FROM_KEY, LINE_NOTICE_MS, readRuleInstant } from '../config/balance-rule.js';
 
 export const DEBT_LINE_PCT_KEY = 'health_debt_line_pct';
 export const QUIET_DAYS_KEY = 'health_quiet_days';
@@ -65,18 +66,14 @@ export function isKnownCommunity(): boolean {
 }
 
 /**
- * When the rule starts here, and since when a confirmation counts as made under it: null when the stamp can't be read, and
- * then nobody is listed on the rule (fails closed). Turning the dial on is the rule arriving for a community that had none,
- * for whoever an admin confirmed while it was off and was never told, so it starts the same notice.
+ * Whether the rule has started here: it has once the stamp (the first boot's moment) can be read, and not before. There is
+ * no start notice: a stamp from the days of a 14-day one holds a time in the future, and is read as started now. A stamp
+ * this can't read (none, or not the exact form the boot writes) is false, and then nobody is listed on the rule (fails
+ * closed). Turning the dial on is the rule arriving too, at once.
  */
-export function ruleStart(): { from: number; since: number } | null {
+export function ruleStarted(): boolean {
     const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(BALANCE_RULE_FROM_KEY) as { value: string } | undefined;
-    const stamped = readRuleInstant(row?.value);
-    if (stamped === null) return null;
-    const dial = db.prepare("SELECT MAX(at) AS at FROM known_floor_log WHERE action = 'confirmation' AND new_value = 'on'").get() as { at: string | null };
-    const dialOn = dial.at ? Date.parse(dial.at) : NaN;
-    const from = Number.isFinite(dialOn) ? Math.max(stamped, dialOn + RULE_NOTICE_MS) : stamped;
-    return { from, since: from - RULE_NOTICE_MS };
+    return readRuleInstant(row?.value) !== null;
 }
 
 /**
@@ -87,12 +84,12 @@ export function ruleStart(): { from: number; since: number } | null {
 export function effectiveLines(now = Date.now()) {
     const { debtLinePct, quietDays } = healthSettings();
     const rows = db.prepare("SELECT action, old_value, at FROM known_floor_log WHERE action IN ('health_debt_line', 'health_quiet_days') AND at > ?")
-        .all(new Date(now - RULE_NOTICE_MS).toISOString()) as Array<{ action: string; old_value: string | null; at: string }>;
+        .all(new Date(now - LINE_NOTICE_MS).toISOString()) as Array<{ action: string; old_value: string | null; at: string }>;
     const line = (action: string, current: number) => {
         const waiting = rows.filter(r => r.action === action && Number(r.old_value) > current);
         return {
             value: Math.max(current, ...waiting.map(r => Number(r.old_value))),
-            from: waiting.length ? new Date(Math.max(...waiting.map(r => Date.parse(r.at))) + RULE_NOTICE_MS).toISOString() : null,
+            from: waiting.length ? new Date(Math.max(...waiting.map(r => Date.parse(r.at))) + LINE_NOTICE_MS).toISOString() : null,
         };
     };
     const pct = line('health_debt_line', debtLinePct);
@@ -100,10 +97,9 @@ export function effectiveLines(now = Date.now()) {
     return { debtLinePct: pct.value, quietDays: days.value, debtLineFrom: pct.from, quietDaysFrom: days.from };
 }
 
-/** The rule as the panel and the exceptions state it: when it starts, whether it has, and the lines the list reads now. */
+/** The rule as the panel and the exceptions state it: whether it has started, and the lines the list reads now. */
 function ruleNow(now = Date.now()) {
-    const start = ruleStart();
-    return { from: start ? new Date(start.from).toISOString() : null, started: !!start && now >= start.from, ...effectiveLines(now) };
+    return { started: ruleStarted(), ...effectiveLines(now) };
 }
 
 /**
@@ -113,8 +109,8 @@ function ruleNow(now = Date.now()) {
 export function knownRule(now = Date.now()) {
     if (!isKnownCommunity()) return { known: false as const };
     const { debtLinePct, quietDays } = healthSettings();
-    const { from, debtLineFrom, quietDaysFrom } = ruleNow(now);
-    return { known: true as const, knownFloor: knownFloor(db), debtLinePct, quietDays, ruleFrom: from, debtLineFrom, quietDaysFrom };
+    const { debtLineFrom, quietDaysFrom } = ruleNow(now);
+    return { known: true as const, knownFloor: knownFloor(db), debtLinePct, quietDays, debtLineFrom, quietDaysFrom };
 }
 
 /**
@@ -216,10 +212,9 @@ export function openExceptions(actor: string, now = Date.now()) {
     db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action) VALUES (?, ?, 'exceptions_opened')").run(crypto.randomBytes(16).toString('hex'), actor);
     const rule = ruleNow(now);
     const { debtLinePct, quietDays } = rule;
-    const start = ruleStart();
-    // Told: the rule has started, or they were confirmed under it. No readable start, nobody: a member is never listed on
-    // a basis they weren't told about.
-    const told = (confirmedAt: string) => !!start && (now >= start.from || Date.parse(confirmedAt) > start.since);
+    // Told: the rule sentence on the join screen and the rules page, once the rule has started. No readable stamp, nobody: a
+    // member is never listed on a basis they weren't told about.
+    const told = rule.started;
     const rows = db.prepare(`SELECT c.member_pubkey, c.entry_id, c.confirmed_at FROM confirmations c
         JOIN members m ON m.public_key = c.member_pubkey AND m.status = 'active'
         WHERE c.revoked_at IS NULL AND (c.needs_second = 0 OR c.seconded_at IS NOT NULL)`).all() as
@@ -228,7 +223,7 @@ export function openExceptions(actor: string, now = Date.now()) {
     const quietSince = new Date(now - quietDays * 86_400_000).toISOString();
     const exceptions: HealthException[] = [];
     for (const r of rows) {
-        if (!told(r.confirmed_at) || !isConfirmed(db, r.member_pubkey) || isVisitorKey(r.member_pubkey)) continue;
+        if (!told || !isConfirmed(db, r.member_pubkey) || isVisitorKey(r.member_pubkey)) continue;
         const b = getBalance(r.member_pubkey);
         if (!(b.balance < 0)) continue;
         const floor = Math.abs(b.floor);
@@ -252,7 +247,7 @@ export function openExceptions(actor: string, now = Date.now()) {
         const b = getBalance(r.member_pubkey);
         // Back within it, they are off the list for good: a line that falls later is no reason to see them again.
         if (b.balance >= b.floor) { db.prepare('UPDATE confirmations SET stepped_back_owing = 0 WHERE id = ?').run(r.id); continue; }
-        if (told(r.confirmed_at)) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance, floor: Math.abs(b.floor), reasons: ['stepped_back_owing'] });
+        if (told) exceptions.push({ memberPubkey: r.member_pubkey, entryId: r.entry_id, balance: b.balance, floor: Math.abs(b.floor), reasons: ['stepped_back_owing'] });
     }
     const departed = listDebts().filter(d => d.status === 'open')
         .map(d => ({ id: d.id, entryId: d.entry_id, amount: d.amount, reason: d.reason, removedAt: d.removed_at, repaid: d.repaid, repaying: !!d.repaying_pubkey }));

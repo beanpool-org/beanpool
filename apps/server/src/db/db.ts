@@ -10,7 +10,6 @@ import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isPastDeadline, isSe
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
-import { RULE_NOTICE_MS } from '../config/balance-rule.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
@@ -2550,9 +2549,9 @@ export function initSchema() {
 }
 
 /**
- * The day the rule on what the admins can see starts here (config/balance-rule.ts), written once on a main server and
- * never moved: INSERT OR IGNORE, so a restart or a later boot changes nothing. Writes node_config only and reads no
- * balance (a read at boot, before the exemptions, destroys Beans: #2313). A standby writes none: its take-over brings its
+ * The moment the rule on what the admins can see started here (config/balance-rule.ts): this first boot, no notice. Written
+ * once on a main server and never moved: INSERT OR IGNORE, so a restart or a later boot changes nothing. Writes node_config
+ * only and reads no balance (a read at boot, before the exemptions, destroys Beans: #2313). A standby writes none: its take-over brings its
  * main server's (config/community-settings.ts), or, from a main server older than the rule, this runs as it takes over.
  * A failure leaves no row, which lists nobody on the rule (engine/community-health.ts), and the next boot tries again.
  */
@@ -2560,7 +2559,7 @@ function stampBalanceRuleFrom(): void {
     if (getNodeRole() === 'backup') return;
     try {
         db.prepare(`INSERT OR IGNORE INTO node_config (key, value) VALUES ('balance_rule_from', ?)`)
-            .run(new Date(Date.now() + RULE_NOTICE_MS).toISOString());
+            .run(new Date().toISOString());
     } catch (e) {
         console.error('[DB] ❌ Could not stamp when the rule on what the admins can see starts (nobody is listed on it until it does):', e);
     }

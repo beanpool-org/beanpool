@@ -74,23 +74,22 @@ export function confirmShareOutside(
 }
 
 /** "Share outside the community", where the community allows it and the post may go: otherwise nothing at all. */
-export function ShareOutsideButton({ post, outsideLine }: { post: any; outsideLine?: WordKey | null }) {
+export function ShareOutsideButton({ post }: { post: any }) {
     const styles = useStyles(makeStyles);
     const profile = useNodeProfile();
     const [busy, setBusy] = useState(false);
     const unsent = useRef<UnsentPeekLink | null>(null);
     if (!shareOutsideOn(profile?.features) || !shareableOutside(post)) return null;
     const says = shareSays(profile?.features);
-    const line = outsideLine !== undefined ? outsideLine : says.outsideLine;
     return (
         <View style={styles.outsideBlock}>
             <Pressable onPress={() => confirmShareOutside({ id: post.id, title: post.title }, setBusy, unsent)} disabled={busy}
                 style={[styles.btn, busy && { opacity: 0.6 }]} accessibilityRole="button" testID="share-outside-button">
                 <Text style={styles.btnText}>{t(W.shareOutside)}</Text>
             </Pressable>
-            {line && (
+            {says.outsideLine && (
                 <Text style={styles.note} testID="share-outside-note">
-                    {t(line)}
+                    {t(says.outsideLine)}
                 </Text>
             )}
         </View>
@@ -163,7 +162,7 @@ export function SharePostButtons({ post }: { post: any }) {
                     <Text style={styles.btnText}>{t('Invite someone')}</Text>
                 </Pressable>
             )}
-            {says.showShareOutside && <ShareOutsideButton post={post} outsideLine={says.outsideLine} />}
+            {says.showShareOutside && <ShareOutsideButton post={post} />}
         </View>
     );
 }

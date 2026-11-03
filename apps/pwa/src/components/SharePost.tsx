@@ -69,7 +69,7 @@ async function handOver(title: string, link: string): Promise<'shared' | 'copied
  * again (or the button again) hands the same link over inside that tap, with no wait before it; no second link is made.
  * A share sheet the member closed leaves one too: it is kept the same way, unshown, for the next tap.
  */
-export function ShareOutsideButton({ post, outsideLine }: { post: MarketplacePost; outsideLine?: WordKey | null }) {
+export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
     const info = useCommunityInfo();
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
@@ -80,7 +80,6 @@ export function ShareOutsideButton({ post, outsideLine }: { post: MarketplacePos
     const keptLink = kept?.postId === post.id ? kept.link : null;
     const shownLink = kept?.postId === post.id && kept.failed ? kept.link : null;
     const says = shareSays(info?.features);
-    const line = outsideLine !== undefined ? outsideLine : says.outsideLine;
 
     const handOverNow = async (link: string) => {
         const how = await handOver(post.title, link);
@@ -116,7 +115,7 @@ export function ShareOutsideButton({ post, outsideLine }: { post: MarketplacePos
             <button type="button" data-testid="share-outside-button" onClick={share} disabled={busy} className={BUTTON}>
                 {t(W.shareOutside)}
             </button>
-            {line && <p data-testid="share-outside-note" className="m-0 text-xs text-text-secondary break-words">{t(line)}</p>}
+            {says.outsideLine && <p data-testid="share-outside-note" className="m-0 text-xs text-text-secondary break-words">{t(says.outsideLine)}</p>}
             {note && (
                 <p role="status" data-testid="share-outside-status" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
                     {note.text}
@@ -172,7 +171,7 @@ export function SharePostButtons({ post, onNavigate }: { post: MarketplacePost; 
                     {t('Invite someone')}
                 </button>
             )}
-            {says.showShareOutside && <ShareOutsideButton post={post} outsideLine={says.outsideLine} />}
+            {says.showShareOutside && <ShareOutsideButton post={post} />}
         </div>
     );
 }

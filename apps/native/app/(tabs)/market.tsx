@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
 import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -9,7 +9,7 @@ import { marketCardPicture } from '../../utils/market-card-picture';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { refusalHere, type Refusal } from '../../utils/members-only-listings';
 import { marketEmptyState, refusalLines } from '../../utils/market-empty-state';
-import { noAreaLineHere } from '../../utils/nearby-area';
+import { noAreaLineHere, memberAreaHere, type NearbyArea } from '../../utils/nearby-area';
 import { NoAreaLine } from '../../components/NoAreaLine';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { useGlobalGuestVisit } from '../../utils/use-global-guest-visit';
@@ -47,10 +47,11 @@ import {
     marketSearchQuery, marketAnswerStands, marketSearchMatches, marketSearchToSave, saveSearchParam,
 } from '../../utils/market-filters';
 import { SaveSearchButton } from '../../components/SaveSearchButton';
-import { localDaysAgo } from '../../utils/feed-sections';
+import { localDaysAgo, sectionsOfOrdered } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
-import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
+import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketStream, nearbyCircle, newestWithinLine, distancesFrom } from '../../utils/market-global';
+import { formatDistance } from '../../utils/events';
 import { readPhoneInterests, saveInterests } from '../../utils/home-store';
 import { anchorUrl } from '../../utils/node-post';
 import { ExampleListings } from '../../components/ExampleListings';
@@ -529,7 +530,9 @@ export default function MarketScreen() {
     const [viewMode, setViewMode] = useState<'list' | 'grid' | 'compact'>('list');
     const [favCategories, setFavCategories] = useState<string[]>([]);
     const [isCustomizerExpanded, setIsCustomizerExpanded] = useState(true);
-    const [, setNowTick] = useState(Date.now()); // A live pin redraws the screen; each draw reads the time itself.
+    // The clock of the Market's order (a live pin ends by it, an event comes back by it): every draw reads the time itself, and the
+    // order is worked out again when this changes or the minute does.
+    const [nowTick, setNowTick] = useState(Date.now());
 
     // "Your events" under ★ For You: the signer's own upcoming RSVPs (decision 1). Its own read, only while
     // that pill is chosen. Empty on anything that goes wrong — a node without the route answers 404, and a
@@ -626,9 +629,14 @@ export default function MarketScreen() {
     // newest listings worldwide, and one line above the feed says so, with the way to Settings → Your area. After each
     // sync, which is when the phone learns the area.
     const [noArea, setNoArea] = useState(false);
+    // The member's own area on such a community (utils/nearby-area.ts memberAreaHere): the Market's circle and each card's distance.
+    const [memberArea, setMemberArea] = useState<NearbyArea | null>(null);
     useFocusEffect(useCallback(() => {
         let live = true;
-        const read = () => { noAreaLineHere(identity?.publicKey).then(v => { if (live) setNoArea(v); }); };
+        const read = () => {
+            noAreaLineHere(identity?.publicKey).then(v => { if (live) setNoArea(v); });
+            memberAreaHere(identity?.publicKey).then(v => { if (live) setMemberArea(prev => (prev && v && prev.lat === v.lat && prev.lng === v.lng) || (!prev && !v) ? prev : v); });
+        };
         read();
         const ended = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, read);
         return () => { live = false; ended.remove(); };
@@ -1035,66 +1043,71 @@ export default function MarketScreen() {
     // No answer has no words, whatever the last one was for: a failed read leaves the phone's copy, which the words must narrow.
     const answerStands = marketAnswerStands(searchQuery, searchResults !== null ? searchResultsWords : null);
 
-    let filteredPosts = basePosts.filter(p => {
-        // Type pills, the category chip, the date chips, Distance, Trust, Beans only, groups (utils/market-filters.ts)
-        if (!feedPostVisible(p, filterState, filterCtx)) return false;
+    // The Market's list: what passes the filters, the live pins taken out (utils/pins.ts marketPins), and the rest in the Market's order
+    // (core market-order via utils/market-global.ts marketStream). Worked out again only when an input changes: the posts, the
+    // filters, the search, the circle, the pin clock (nowTick) or the minute, not on every draw, because at eight thousand posts
+    // a sort per draw is felt.
+    const nowMinute = Math.floor(Date.now() / 60_000);
+    const market = useMemo(() => {
+        const nowMs = Date.now();
+        const state: MarketFilterState = {
+            type: filter, category: categoryFilter, eventWindow, trust: trustFilter, beansOnly, radiusKm, center: locationCenter, groupId: groupFilter,
+        };
+        const ctx = { blockedUsers, favCategories, nowMs };
+        const isPulse = (p: any) => (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
 
-        // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
-        if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
+        let passing = basePosts.filter(p => {
+            // Type pills, the category chip, the date chips, Distance, Trust, Beans only, groups (utils/market-filters.ts)
+            if (!feedPostVisible(p, state, ctx)) return false;
 
-        // The node's answer stands for its words, as on the web. Synonym-aware local search for everything else: the phone's
-        // copy, and an answer until the read for these words lands.
-        if (searchQuery.trim() && !answerStands && !marketSearchMatches(p, searchQuery)) return false;
+            // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
+            if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
 
-        // Tag filter (§4.4 post detail tap)
-        if (selectedTag) {
-            const pTags = postTagsOf(p.tags);
-            if (!pTags.some(t => t === selectedTag || t.startsWith(selectedTag + '.'))) return false;
-        }
-        if (selectedFree && !listingFreeTags(p).includes(selectedFree)) return false;
-        return true;
-    });
+            // The node's answer stands for its words, as on the web. Synonym-aware local search for everything else: the phone's
+            // copy, and an answer until the read for these words lands.
+            if (searchQuery.trim() && !answerStands && !marketSearchMatches(p, searchQuery)) return false;
 
-    // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
-    const realMemberListingsCount = posts.filter(p => {
-        const isPulse = (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
-        return !isPulse && p.type !== 'poll' && p.type !== 'event' && p.status === 'active';
-    }).length;
-    if (realMemberListingsCount >= 2) {
-        filteredPosts = filteredPosts.filter(p => !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode));
-    }
+            // Tag filter (§4.4 post detail tap)
+            if (selectedTag) {
+                const pTags = postTagsOf(p.tags);
+                if (!pTags.some(t => t === selectedTag || t.startsWith(selectedTag + '.'))) return false;
+            }
+            if (selectedFree && !listingFreeTags(p).includes(selectedFree)) return false;
+            return true;
+        });
 
-    // Pin Daily Pulse to the top of the feed (local only)
-    filteredPosts.sort((a, b) => {
-        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse' && !a.origin_node && !a.originNode;
-        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse' && !b.origin_node && !b.originNode;
-        if (isPulseA && !isPulseB) return -1;
-        if (!isPulseA && isPulseB) return 1;
-        return 0;
-    });
+        // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
+        const realMemberListingsCount = posts.filter(p => !isPulse(p) && p.type !== 'poll' && p.type !== 'event' && p.status === 'active').length;
+        if (realMemberListingsCount >= 2) passing = passing.filter(p => !isPulse(p));
 
-    // Pins on the Market (DESIGN-pinning-fable.md §0.2, §2.2, §2.9):
-    // Up to 3 live pins matching current filters, newest pin first.
-    // Absent under search, tag, or distance narrowing.
-    const isNarrowed = Boolean(
-        (searchQuery && searchQuery.trim().length > 0) ||
-        isSearching ||
-        searchResults !== null ||
-        selectedTag !== null ||
-        selectedFree !== null ||
-        radiusKm !== null
-    );
+        // Pins on the Market (DESIGN-pinning-fable.md §0.2, §2.2, §2.9):
+        // Up to 3 live pins matching current filters, newest pin first.
+        // Absent under search, tag, or distance narrowing.
+        const searching = Boolean(
+            (searchQuery && searchQuery.trim().length > 0) || isSearching || searchResults !== null || selectedTag !== null || selectedFree !== null,
+        );
+        const narrowed = searching || radiusKm !== null;
 
-    // The rule is utils/pins.ts marketPins, which a test holds: the screen only says what passes the member's filters.
-    const pinsRead = marketPins<any>({
-        basePosts, filtered: filteredPosts, narrowed: isNarrowed, now: Date.now(),
-        visible: p => feedPostVisible(p, filterState, filterCtx)
-            && !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode),
-    });
-    const pinnedPosts = pinsRead.pinned;
-    filteredPosts = pinsRead.rest;
-    const allMatchingPosts = pinsRead.allMatching;
-    const realMatchingCount = pinsRead.realMatchingCount;
+        // The rule is utils/pins.ts marketPins, which a test holds: the screen only says what passes the member's filters.
+        const pinsRead = marketPins<any>({
+            basePosts, filtered: passing, narrowed, now: nowMs,
+            visible: p => feedPostVisible(p, state, ctx) && !isPulse(p),
+        });
+        // The worldwide community: the same order, cut to the circle round the member's area. Not under Events, a search or a
+        // Distance, which have their own say.
+        const circle = !narrowed && filter !== 'events' ? nearbyCircle(nodeProfile, memberArea) : null;
+        const stream = marketStream(pinsRead.rest, nowMs, {
+            eventsOnly: filter === 'events', narrowedBySearch: searching, circle, ownKey: identity?.publicKey,
+        });
+        const distances = circle ? distancesFrom(stream, circle.area) : null;
+        return { pinned: pinsRead.pinned, stream, allMatching: pinsRead.allMatching, realMatchingCount: pinsRead.realMatchingCount, circle, distances };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [basePosts, posts, filter, categoryFilter, eventWindow, trustFilter, beansOnly, radiusKm, locationCenter, groupFilter, blockedUsers, favCategories,
+        searchQuery, answerStands, selectedTag, selectedFree, isSearching, searchResults, nodeProfile, memberArea, identity?.publicKey, nowTick, nowMinute]);
+    const pinnedPosts = market.pinned;
+    const filteredPosts = market.stream;
+    const allMatchingPosts = market.allMatching;
+    const realMatchingCount = market.realMatchingCount;
 
     // The fill (utils/market-fill.ts, core market-fill): fewer than FILL_BELOW shown near the member, under their filters, and the
     // newest from elsewhere come beneath, read as the search reads the node. The same filters apply to both parts.
@@ -1613,14 +1626,27 @@ export default function MarketScreen() {
                 listData.push(...filteredPosts);
             }
         } else {
-            // Events under their own heading, soonest first; listings by the local day they were posted.
-            // By the day posted, or nearest first where the node sorts by distance (utils/market-global.ts).
-            for (const section of marketFeedSections(filteredPosts, nodeProfile, myLocation)) {
-                listData.push({ isHeader: true, title: section.title, id: section.id });
-                listData.push(...section.posts);
+            if (filter === 'events') {
+                // The Events pill is a date list: soonest first, under no heading.
+                listData.push(...filteredPosts);
+            } else {
+                // Newest listed first under Today / Yesterday / This Week / Older Listings, by the local day each was listed.
+                for (const section of sectionsOfOrdered(filteredPosts, Date.now())) {
+                    listData.push({ isHeader: true, title: section.title, id: section.id });
+                    listData.push(...section.posts);
+                }
             }
         }
     }
+
+    // How far from the member's area, on each card of the worldwide community's circle (market.distances; none elsewhere).
+    const distanceLine = (item: any) => {
+        const km = market.distances?.get(String(item.id));
+        const words = km == null ? null : formatDistance(km);
+        return words ? (
+            <Text testID="card-distance" numberOfLines={1} style={{ fontSize: 12, fontWeight: '600', color: colors.text.secondary, marginTop: 2 }}>{`📍 ${words}`}</Text>
+        ) : null;
+    };
 
     const renderItem = ({ item }: { item: any }) => {
         if (item.isHeader) {
@@ -1638,7 +1664,7 @@ export default function MarketScreen() {
                 <EventCard
                     post={item}
                     currentPubkey={identity?.publicKey}
-                    myLocation={myLocation}
+                    myLocation={market.circle ? market.circle.area : myLocation}
                     onRsvpChanged={() => { loadPosts(); if (filter === 'for-you') loadMyEvents(); }}
                 />
             );
@@ -1768,6 +1794,7 @@ export default function MarketScreen() {
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
                         {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />}
+                        {distanceLine(item)}
                         {!!item.repeatable && !isOwn && item.status !== 'pending' && (
                             <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
                                 <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('↻ RECURRING')}</Text>
@@ -1812,6 +1839,7 @@ export default function MarketScreen() {
                             <Text style={styles.compactAuthor} numberOfLines={copy ? 3 : 1}>
                                 {copy ? copyPriceLine(copy) : byLine(cardAuthor, elderCard, isOwn)}
                             </Text>
+                            {distanceLine(item)}
                             {groupScopeBadgeText && (
                                 <View style={{ marginTop: 2, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 }}>
                                     <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
@@ -1947,11 +1975,21 @@ export default function MarketScreen() {
                         </Text>
 
                         {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />}
+                        {distanceLine(item)}
                     </View>
                 </View>
             </Pressable>
         );
     };
+
+    // The worldwide community's one line above the list, under the Pinned block: the list is the newest, inside the circle round the member's area.
+    const newestLine = market.circle && filteredPosts.length > 0 ? (
+        <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
+            <Text testID="market-newest-within" numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: colors.text.secondary }}>
+                {newestWithinLine(market.circle)}
+            </Text>
+        </View>
+    ) : null;
 
     // The fill beneath the nearby listings (see fillRows): in the list's footer so every view mode has it. A grid takes its cards
     // two to a row, as its FlatList does.
@@ -2026,7 +2064,7 @@ export default function MarketScreen() {
                 data={listData}
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
-                ListHeaderComponent={<>{ListHeader}{pinnedCards}</>}
+                ListHeaderComponent={<>{ListHeader}{pinnedCards}{newestLine}</>}
                 ListFooterComponent={fillFooter || (showExamples && realMatchingCount > 0) ? (
                     <>
                         {fillFooter}

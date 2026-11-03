@@ -16,8 +16,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 import * as path from 'node:path';
 import {
-    marketShowsBeans, marketExtras, marketSearchDistanceParams, nearestFirst, marketFeedSections, sortsByDistance, POLLS_HEADING,
-    NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, NEAREST_FIRST_HEADING,
+    marketShowsBeans, marketExtras, marketSearchDistanceParams, nearestFirst, marketFeedSections, sortsByDistance,
+    nearbyCircle, newestWithinLine, distancesFrom, marketStream,
+    NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE,
     postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, type PostFormState,
 } from '../market-global';
 import { readNodeProfile, nodeProfileIsFresh, NODE_PROFILE_FRESH_MS, type NodeProfile } from '../node-profile';
@@ -138,40 +139,87 @@ describe('nearest first', () => {
         { id: 'byron', type: 'need', lat: -28.64, lng: 153.61, created_at: '2026-09-20T08:00:00Z' },
         { id: 'zero', type: 'offer', lat: 0, lng: 0, created_at: '2026-09-26T08:00:00Z' },
         { id: 'brisbane', type: 'offer', lat: -27.47, lng: 153.03, created_at: '2026-09-25T08:00:00Z' },
-        { id: 'event', type: 'event', lat: -28.55, lng: 153.5, event_start_at: '2026-10-01T08:00:00Z' },
+        { id: 'event', type: 'event', lat: -28.55, lng: 153.5, created_at: '2026-09-26T08:00:00Z', event_start_at: '2026-10-01T08:00:00Z' },
     ];
 
     it('orders by distance from the member, places unknown (or 0,0) last in their own order', () => {
         expect(nearestFirst(posts.filter(p => p.type !== 'event'), here).map(p => p.id)).toEqual(['byron', 'brisbane', 'melbourne', 'noplace', 'zero']);
     });
 
-    it('the global feed: events first as everywhere, then every listing nearest first under one heading', () => {
-        const sections = marketFeedSections(posts, GLOBAL, here, Date.parse('2026-09-26T12:00:00Z'));
-        expect(sections.map(s => s.title)).toEqual(['Upcoming events', NEAREST_FIRST_HEADING]);
-        expect(sections[1].posts.map(p => p.id)).toEqual(['byron', 'brisbane', 'melbourne', 'noplace', 'zero']);
+    // The headings Upcoming events, Polls and Nearest first are gone (Market order, DESIGN-market-order-fable.md): every
+    // community is newest listed first under the day headings, and the worldwide one is that order inside a circle.
+    const BY_AREA = readNodeProfile({ profile: 'global', features: { beans: false, distanceSearch: true, nearbyListings: { radiusKm: 250, max: 500 } } })!;
+    const now = Date.parse('2026-09-26T12:00:00Z');
+    const idsOf = (sections: Array<{ posts: Array<{ id: string }> }>) => sections.flatMap(s => s.posts.map(p => p.id));
+
+    it('the worldwide feed is the same newest-listed order under the day headings, with no nearest-first heading', () => {
+        const sections = marketFeedSections(posts, GLOBAL, here, now);
+        // Newest listed first (ties by id, newest first), under the day headings and no others.
+        expect(idsOf(sections)).toEqual(['zero', 'noplace', 'melbourne', 'event', 'brisbane', 'byron']);
+        for (const gone of ['Polls', 'Upcoming events', 'Nearest first']) expect(sections.map(s => s.title)).not.toContain(gone);
+        expect(sections.every(s => ['Today', 'Yesterday', 'This Week', 'Older Listings'].includes(s.title))).toBe(true);
     });
 
-    it('polls have no place: on the nearest-first feed they get their own heading after events, in feed order, not sunk below every listing', () => {
+    it('polls and events are in the days they were listed, not under headings of their own', () => {
         const withPolls = [
             ...posts,
             { id: 'poll-new', type: 'poll', lat: null, lng: null, created_at: '2026-09-26T09:00:00Z' },
             { id: 'poll-old', type: 'poll', lat: null, lng: null, created_at: '2026-09-20T09:00:00Z' },
         ];
-        const sections = marketFeedSections(withPolls, GLOBAL, here, Date.parse('2026-09-26T12:00:00Z'));
-        expect(sections.map(s => s.title)).toEqual(['Upcoming events', POLLS_HEADING, NEAREST_FIRST_HEADING]);
-        expect(sections[1].posts.map(p => p.id)).toEqual(['poll-new', 'poll-old']);
-        expect(sections[2].posts.map(p => p.id)).toEqual(['byron', 'brisbane', 'melbourne', 'noplace', 'zero']);
-        // polls only (a feed filtered to Polls): no empty "Nearest first" heading
-        const onlyPolls = marketFeedSections(withPolls.filter(p => p.type === 'poll'), GLOBAL, here);
-        expect(onlyPolls.map(s => s.title)).toEqual([POLLS_HEADING]);
+        const sections = marketFeedSections(withPolls, GLOBAL, here, now);
+        for (const gone of ['Polls', 'Upcoming events', 'Nearest first']) expect(sections.map(s => s.title)).not.toContain(gone);
+        const all = idsOf(sections);
+        expect(all).toHaveLength(withPolls.length);
+        expect(all.indexOf('poll-new')).toBeLessThan(all.indexOf('poll-old'));
     });
 
-    it('a local community, or no location yet: the day headings, as before', () => {
-        const now = Date.parse('2026-09-26T12:00:00Z');
-        const byDay = ['Upcoming events', 'Today', 'Yesterday', 'This Week'];
-        expect(marketFeedSections(posts, LOCAL, here, now).map(s => s.title)).toEqual(byDay);
-        expect(marketFeedSections(posts, GLOBAL, null, now).map(s => s.title)).toEqual(byDay);
-        expect(marketFeedSections(posts, null, here, now).map(s => s.title)).toEqual(byDay);
+    it("on a node that gives phones the listings near an area, the order is cut to the radius of the member's area", () => {
+        const ids = idsOf(marketFeedSections(posts, BY_AREA, here, now));
+        // Melbourne is about 1,200 km away. No place (and 0,0), an event here, Brisbane (about 100 km) and Byron stay.
+        expect(ids).not.toContain('melbourne');
+        expect([...ids].sort()).toEqual(['brisbane', 'byron', 'event', 'noplace', 'zero']);
+        // No area known: no cut. A node without the feature: no cut.
+        expect(idsOf(marketFeedSections(posts, BY_AREA, null, now))).toContain('melbourne');
+        expect(idsOf(marketFeedSections(posts, GLOBAL, here, now))).toContain('melbourne');
+    });
+
+    it("the member's own listing is never cut, however far", () => {
+        const mine = { id: 'mine', type: 'offer', author_pubkey: 'me', lat: -37.81, lng: 144.96, created_at: '2026-09-26T08:00:00Z' };
+        const ids = idsOf(marketFeedSections([mine, ...posts], BY_AREA, here, now, 'me'));
+        expect(ids).toContain('mine');
+        expect(ids).not.toContain('melbourne');
+    });
+
+    it('a local community, or no area yet, keeps every post', () => {
+        for (const profile of [LOCAL, GLOBAL, null]) {
+            expect(idsOf(marketFeedSections(posts, profile, here, now))).toHaveLength(posts.length);
+        }
+    });
+
+    it('the circle is there only where the node has the feature and the member an area', () => {
+        expect(nearbyCircle(BY_AREA, here)).toEqual({ area: here, radiusKm: 250 });
+        expect(nearbyCircle(BY_AREA, null)).toBeNull();
+        expect(nearbyCircle(GLOBAL, here)).toBeNull();
+        expect(nearbyCircle(LOCAL, here)).toBeNull();
+        expect(nearbyCircle(null, here)).toBeNull();
+    });
+
+    it('says the line in English with the radius, and measures each placed post from the area', () => {
+        expect(newestWithinLine({ area: here, radiusKm: 250 })).toBe('Newest within 250 km of your area.');
+        const d = distancesFrom(posts, here);
+        expect(d.get('event')).toBeCloseTo(0, 5);
+        expect(d.get('byron')).toBeGreaterThan(5);
+        expect(d.get('byron')).toBeLessThan(20);
+        expect(d.has('noplace')).toBe(false);
+        expect(d.has('zero')).toBe(false);
+    });
+
+    it('under Events it is soonest first, under a search the order given stands, and the Daily Pulse leads either way', () => {
+        const ev = (id: string, start: string) => ({ id, type: 'event', created_at: '2026-09-01T00:00:00Z', event_start_at: start });
+        const pulse = { id: 'pulse', type: 'offer', author_callsign: 'Daily Pulse', created_at: '2026-09-01T00:00:00Z' };
+        const listed = [ev('later', '2026-10-05T10:00:00Z'), ev('soon', '2026-09-28T10:00:00Z'), pulse];
+        expect(marketStream(listed, now, { eventsOnly: true }).map(p => p.id)).toEqual(['pulse', 'soon', 'later']);
+        expect(marketStream(listed, now, { narrowedBySearch: true }).map(p => p.id)).toEqual(['pulse', 'later', 'soon']);
     });
 
     it('the Market search asks for distance order only where the node sorts by it and the phone knows where it is', () => {

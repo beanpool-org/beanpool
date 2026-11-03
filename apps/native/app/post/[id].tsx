@@ -15,7 +15,8 @@ import {
     treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
     fetchGroupDetails, deleteGroupPostApi, unpinPostOnNode
 } from '../../utils/db';
-import { isPostPinned, pinnedDetailLine } from '../../utils/pins';
+import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../../utils/pins';
+import { usePinRole } from '../../utils/use-pin-role';
 import { PinSheet } from '../../components/PinSheet';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
@@ -554,6 +555,9 @@ export default function PostDetailModal() {
     const [showDealsSheet, setShowDealsSheet] = useState(false);
     const [showPinSheet, setShowPinSheet] = useState(false);
     const [unpinning, setUnpinning] = useState(false);
+    // The "···" is for an owner or admin (Pin, Take the pin off) and for a pinned post's author (Take the pin off).
+    const pinsOn = Boolean(nodeProfile?.features?.pins);
+    const pinRole = usePinRole(pinsOn, identity?.publicKey);
 
     const handlePostOptions = () => {
         const pinned = isPostPinned(post);
@@ -570,7 +574,7 @@ export default function PostDetailModal() {
                             const updated = await getPost(post.id);
                             if (updated) setPost(updated);
                         } catch (e: any) {
-                            Alert.alert(t('Error'), e?.message || t('Failed to unpin post'));
+                            Alert.alert(t('Error'), pinFailureText(e, t('Failed to unpin post')));
                         } finally {
                             setUnpinning(false);
                         }
@@ -940,7 +944,7 @@ export default function PostDetailModal() {
 
     // Events have their own screen: no price, no escrow, RSVP instead of accept (docs/events-on-the-map.md §3).
     if (post.type === 'event') {
-        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} />;
+        return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} pinsOn={pinsOn} />;
     }
     // A member's copy on the global community has its own screen, so nothing of a deal or a person can be drawn on one: no
     // price card, no author, no Message, no Accept (@beanpool/core eventCopyOf). The node refuses them all the same.
@@ -1376,7 +1380,7 @@ export default function PostDetailModal() {
                 </Pressable>
                 <Text style={[styles.headerTitle, { flex: 1, textAlign: 'center' }]} numberOfLines={1}>{isOffer ? t('Offer') : t('Need')}</Text>
                 <View style={{ width: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
-                    {Boolean(nodeProfile?.features?.pins) && (
+                    {showPinMenu({ pinsOn, role: pinRole, pinned: isPostPinned(post), isAuthor: isOwnPost }) && (
                         <Pressable
                             testID="post-menu-btn"
                             accessibilityRole="button"
@@ -1409,7 +1413,7 @@ export default function PostDetailModal() {
                 </View>
                 {isPostPinned(post) && (
                     <View style={{ marginHorizontal: 20, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} testID="pinned-detail-line">
-                        <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                        <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600', flex: 1 }} numberOfLines={2}>
                             {pinnedDetailLine(post)}
                         </Text>
                         {isOwnPost && (
@@ -1425,7 +1429,7 @@ export default function PostDetailModal() {
                                         const updated = await getPost(post.id);
                                         if (updated) setPost(updated);
                                     } catch (e: any) {
-                                        Alert.alert(t('Error'), e?.message || t('Failed to unpin post'));
+                                        Alert.alert(t('Error'), pinFailureText(e, t('Failed to unpin post')));
                                     } finally {
                                         setUnpinning(false);
                                     }
@@ -2549,15 +2553,17 @@ export default function PostDetailModal() {
                     </Pressable>
                 </View>
             )}
-            <PinSheet
-                visible={showPinSheet}
-                postId={post.id}
-                onClose={() => setShowPinSheet(false)}
-                onPinned={async () => {
-                    const updated = await getPost(post.id);
-                    if (updated) setPost(updated);
-                }}
-            />
+            {showPinSheet && (
+                <PinSheet
+                    visible
+                    postId={post.id}
+                    onClose={() => setShowPinSheet(false)}
+                    onPinned={async () => {
+                        const updated = await getPost(post.id);
+                        if (updated) setPost(updated);
+                    }}
+                />
+            )}
         </View>
     );
 }

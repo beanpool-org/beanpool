@@ -63,7 +63,7 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { copyPriceLine, eventCopyOf, listingChips, listingChipWords, listingFreeTags, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, postTagsOf, searchTagsFor, tagIndex, freshBanner, recordFreshBannerDismissal, type WordKey } from '@beanpool/core';
 import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
-import { isPostPinned, comparePinsNewestFirst, PINS_MAX } from '../../utils/pins';
+import { isPostPinned, anyLivePin, marketPins } from '../../utils/pins';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
 export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
@@ -529,10 +529,6 @@ export default function MarketScreen() {
     const [favCategories, setFavCategories] = useState<string[]>([]);
     const [isCustomizerExpanded, setIsCustomizerExpanded] = useState(true);
     const [nowTick, setNowTick] = useState(Date.now());
-    useEffect(() => {
-        const timer = setInterval(() => setNowTick(Date.now()), 30000);
-        return () => clearInterval(timer);
-    }, []);
 
     // "Your events" under ★ For You: the signer's own upcoming RSVPs (decision 1). Its own read, only while
     // that pill is chosen. Empty on anything that goes wrong — a node without the route answers 404, and a
@@ -600,6 +596,15 @@ export default function MarketScreen() {
     const [selectedFree, setSelectedFree] = useState<string | null>(null);
     const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
     const [posts, setPosts] = useState<any[]>([]);
+    // The clock that ends a pin on screen by the time, without a sync. It runs only while a pin is live in the list: a
+    // Market with none (most of them) wakes nothing every 30 seconds. A pin that arrives with a sync changes `posts`.
+    const hasLivePin = anyLivePin(posts);
+    useEffect(() => {
+        if (!hasLivePin) return;
+        setNowTick(Date.now());
+        const timer = setInterval(() => setNowTick(Date.now()), 30000);
+        return () => clearInterval(timer);
+    }, [hasLivePin]);
     // First-run loading: until posts load or a pillar sync completes THIS session, show a
     // loading state rather than the "no items" empty state (which reads as broken/empty).
     const [firstSyncDone, setFirstSyncDone] = useState(false);
@@ -1079,26 +1084,16 @@ export default function MarketScreen() {
         radiusKm !== null
     );
 
-    const pinnedPosts: any[] = [];
-    if (!isNarrowed) {
-        const livePins = basePosts.filter(p => {
-            if (!isPostPinned(p, nowTick)) return false;
-            if (!feedPostVisible(p, filterState, filterCtx)) return false;
-            const isPulse = (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
-            if (isPulse) return false;
-            return true;
-        });
-        livePins.sort(comparePinsNewestFirst);
-        pinnedPosts.push(...livePins.slice(0, PINS_MAX));
-    }
-
-    const pinnedIds = new Set(pinnedPosts.map(p => p.id));
-    if (pinnedPosts.length > 0) {
-        filteredPosts = filteredPosts.filter(p => !pinnedIds.has(p.id));
-    }
-
-    const allMatchingPosts = [...filteredPosts, ...pinnedPosts];
-    const realMatchingCount = allMatchingPosts.length;
+    // The rule is utils/pins.ts marketPins, which a test holds: the screen only says what passes the member's filters.
+    const pinsRead = marketPins<any>({
+        basePosts, filtered: filteredPosts, narrowed: isNarrowed, now: nowTick,
+        visible: p => feedPostVisible(p, filterState, filterCtx)
+            && !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode),
+    });
+    const pinnedPosts = pinsRead.pinned;
+    filteredPosts = pinsRead.rest;
+    const allMatchingPosts = pinsRead.allMatching;
+    const realMatchingCount = pinsRead.realMatchingCount;
 
     // The fill (utils/market-fill.ts, core market-fill): fewer than FILL_BELOW shown near the member, under their filters, and the
     // newest from elsewhere come beneath, read as the search reads the node. The same filters apply to both parts.
@@ -1645,6 +1640,7 @@ export default function MarketScreen() {
                     onVoteSuccess={() => loadPosts()}
                     informal={pollsInformal(nodeProfile)}
                     decisionsPreview={decisionsPreview}
+                    pinsOn={Boolean(nodeProfile?.features?.pins)}
                 />
             );
         }

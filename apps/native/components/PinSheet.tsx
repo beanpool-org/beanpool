@@ -9,6 +9,7 @@ import { Modal, Pressable, StyleSheet, Text, View, ActivityIndicator, Alert } fr
 import { t, PIN_CHOICES, type PinDays } from '@beanpool/core';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { pinPostOnNode } from '../utils/db';
+import { pinFailureText } from '../utils/pins';
 
 export interface PinSheetProps {
     visible: boolean;
@@ -30,7 +31,7 @@ export function PinSheet({ visible, postId, onClose, onPinned }: PinSheetProps) 
             await onPinned?.();
             onClose();
         } catch (err: any) {
-            Alert.alert(t('Error'), err?.message || t('Failed to pin post'));
+            Alert.alert(t('Error'), pinFailureText(err, t('Failed to pin post')));
         } finally {
             setSubmitting(false);
         }

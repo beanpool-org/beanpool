@@ -9,7 +9,10 @@
  * - No horizontal overflow at 320dp width
  * - PinSheet choices >= 48dp minimum touch target
  * - Detail line truncated and styled with central tokens
- * - Screenshots saved to scratch/screenshots/
+ * - The REAL PollCard header (components/PollCard.tsx) for a poll's author who is an owner, pinned: 📌 PINNED, 🗳️ POLL, the
+ *   status badge, "···", Close Poll and the pinned-until line (whole, not cut), in a 288 dp card (the Market's 16 each side; 256 dp of content) at 1.3× text: each drawn, whole, inside the card, none over
+ *   another, wrapping rather than overflowing (fix round 1 of #2769, finding 3)
+ * - Screenshots saved to scratch/screenshots/ (md5 in the PR body; not committed)
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -53,13 +56,28 @@ const STUBS = {
     '../utils/db': `
         export const pinPostOnNode = async () => ({ success: true, pinnedUntil: '2026-11-06T12:00:00Z', pinnedAt: '2026-11-03T12:00:00Z' });
         export const unpinPostOnNode = async () => ({ success: true });
+        export const votePoll = async () => ({});
+        export const closePoll = async () => ({});
+        export const isOwnerHere = async () => true;
+        export const getPost = async () => null;
     `,
+    // The real PollCard's other neighbours, as stand-ins that draw nothing of the header.
+    '../utils/use-pin-role': `export const usePinRole = () => 'owner';`,
+    '../utils/node-profile': `export const INFORMAL_POLL_NOTE = 'An informal poll; it decides nothing';`,
+    './MemberAvatar': `export const MemberAvatar = () => null;`,
+    './PollOtherAnswers': `export const PollOtherAnswers = () => null;`,
+    './showcase/LocalCommunityMark': `export const LocalCommunityMark = () => null;`,
 };
 
 const stubFor = (spec) => {
     if (STUBS[spec]) return spec;
     if (spec.endsWith('ThemeContext')) return '../app/ThemeContext';
     if (spec.endsWith('utils/db')) return '../utils/db';
+    if (spec.endsWith('utils/use-pin-role')) return '../utils/use-pin-role';
+    if (spec.endsWith('utils/node-profile')) return '../utils/node-profile';
+    if (spec.endsWith('/MemberAvatar')) return './MemberAvatar';
+    if (spec.endsWith('/PollOtherAnswers')) return './PollOtherAnswers';
+    if (spec.endsWith('/LocalCommunityMark')) return './showcase/LocalCommunityMark';
     return null;
 };
 
@@ -71,6 +89,7 @@ import { View, ScrollView, Text, Pressable, StyleSheet } from 'react-native';
 import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { PinSheet } from ${JSON.stringify(path.join(NATIVE, 'components/PinSheet'))};
 import { pinnedDetailLine } from ${JSON.stringify(path.join(NATIVE, 'utils/pins'))};
+import { PollCard } from ${JSON.stringify(path.join(NATIVE, 'components/PollCard'))};
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
@@ -133,9 +152,26 @@ function Harness() {
     );
 }
 
+// The real poll card, for a poll its author made: an owner, pinned, open. Page padding 16 as the Market's list: a 288 dp card.
+function PollHarness() {
+    const day = 86400000;
+    const post = {
+        id: 'poll-1', type: 'poll', title: 'Which night suits the working bee?', status: 'active',
+        author_pubkey: 'author-key', author_callsign: 'Mo',
+        pollClosesAt: new Date(Date.now() + 3 * day + 3600000).toISOString(),
+        pollOptions: [{ id: 'o1', text: 'Friday', votes: 3, percentage: 60 }, { id: 'o2', text: 'Saturday', votes: 2, percentage: 40 }],
+        totalVotes: 5, pinnedUntil: new Date(Date.now() + 3 * day).toISOString(), pinnedAt: new Date().toISOString(),
+    };
+    return (
+        <ScrollView style={{ flex: 1, backgroundColor: colors.surface.page }} contentContainerStyle={{ padding: 16 }}>
+            <PollCard post={post} currentPubkey="author-key" pinsOn />
+        </ScrollView>
+    );
+}
+
 createRoot(document.getElementById('root')).render(
     <View style={{ height: '100vh', backgroundColor: colors.surface.app }}>
-        <Harness />
+        {q.get('view') === 'poll' ? <PollHarness /> : <Harness />}
     </View>
 );
 `);
@@ -218,6 +254,47 @@ try {
         if (small.length > 0) throw new Error(`${scheme}: touch target under 44dp: ${JSON.stringify(small)}`);
 
         console.log(`${scheme}: verified 320dp width, touch targets >= 44dp`);
+
+        // The real poll card's header, for a poll's author who is an owner, pinned.
+        await page.goto(`${base}/?scheme=${scheme}&view=poll`);
+        await page.waitForSelector('[data-testid="poll-header"]', { timeout: 10000 });
+        await page.waitForSelector('[data-testid="poll-menu-btn"]', { timeout: 10000 });
+        const pollShot = path.join(OUT_DIR, `phone-poll-header-pinned-owner-${scheme}-320.png`);
+        await page.screenshot({ path: pollShot, fullPage: false });
+        hashes[`phone-poll-header-pinned-owner-${scheme}-320.png`] = crypto.createHash('md5').update(fs.readFileSync(pollShot)).digest('hex');
+        console.log(`Saved poll header shot: ${pollShot} (md5: ${hashes[`phone-poll-header-pinned-owner-${scheme}-320.png`]})`);
+
+        const m = await page.evaluate(() => {
+            const rect = (sel) => { const el = document.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height, clipped: el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1, text: el.textContent }; };
+            const parts = {
+                pinned: rect('[data-testid="pinned-chip"]'), poll: rect('[data-testid="poll-badge"]'), status: rect('[data-testid="poll-status"]'),
+                menu: rect('[data-testid="poll-menu-btn"]'), close: rect('[aria-label="Close poll"]'), detail: rect('[data-testid="pinned-detail-line"] > *'),
+            };
+            return { card: rect('[data-testid="poll-card"]'), header: rect('[data-testid="poll-header"]'), parts, scroll: document.documentElement.scrollWidth };
+        });
+        const problems = [];
+        const inner = { left: m.card.left + 16, right: m.card.right - 16 };
+        if (Math.round(m.card.w) !== 288) problems.push(`card is ${m.card.w} dp wide, expected 288 (320 less the Market's 16 each side); its content is ${inner.right - inner.left}`);
+        for (const [name, r] of Object.entries(m.parts)) {
+            if (!r) { problems.push(`${name}: not drawn`); continue; }
+            if (r.w < 8 || r.h < 8) problems.push(`${name}: collapsed (${r.w}x${r.h})`);
+            if (r.left < inner.left - 0.5 || r.right > inner.right + 0.5) problems.push(`${name}: outside the card's 256 dp of content (${r.left.toFixed(1)}..${r.right.toFixed(1)} vs ${inner.left}..${inner.right})`);
+            if (r.clipped) problems.push(`${name}: its text is cut (${r.text})`);
+        }
+        const names = Object.keys(m.parts);
+        for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
+            const a = m.parts[names[i]], b = m.parts[names[j]];
+            if (!a || !b) continue;
+            const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+            const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+            if (overlapX > 0.5 && overlapY > 0.5) problems.push(`${names[i]} overlaps ${names[j]}`);
+        }
+        if (m.parts.menu && (m.parts.menu.w < 44 || m.parts.menu.h < 44)) problems.push(`"···" is ${m.parts.menu.w}x${m.parts.menu.h}, under 44 dp`);
+        if (m.parts.close && m.parts.close.h < 44) problems.push(`Close Poll is ${m.parts.close.h} dp high, under 44`);
+        if (m.scroll > WIDTH) problems.push(`page scrolls sideways: ${m.scroll} > ${WIDTH}`);
+        console.log(`${scheme}: poll header ${m.header.w.toFixed(0)}x${m.header.h.toFixed(0)} dp; pieces: ` + names.map((n) => `${n} ${m.parts[n]?.w.toFixed(0)}x${m.parts[n]?.h.toFixed(0)}@${m.parts[n]?.top.toFixed(0)}`).join(', '));
+        if (problems.length) throw new Error(`${scheme}: poll header: ${problems.join('; ')}`);
+        console.log(`${scheme}: poll header verified: PINNED, POLL, status, ···, Close Poll all whole inside the 288 dp card (256 dp of content), none over another`);
         await context.close();
     }
 } finally {

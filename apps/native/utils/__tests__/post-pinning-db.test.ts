@@ -49,7 +49,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { applyDelta, getDb, getPosts, getPost, pinPostOnNode, unpinPostOnNode } from '../db';
-import { isPostPinned, pinnedDetailLine } from '../pins';
+import { isPostPinned, pinnedDetailLine, pinFailureText } from '../pins';
 
 describe('post pinning: phone columns, sync, and db operations', () => {
     beforeEach(async () => {
@@ -234,5 +234,55 @@ describe('post pinning: phone columns, sync, and db operations', () => {
         } finally {
             vi.unstubAllGlobals();
         }
+    });
+
+    // Fix round 1 (#2769 finding 2): both go through the shared signed request, so the node answers in the member's language.
+    describe('the shared signed request (language, body, refusals)', () => {
+        const fetchOf = (res: Record<string, unknown>) => vi.fn().mockResolvedValue(res);
+
+        it('pinPostOnNode sends X-Language beside the signature, so a refusal comes back in the member\'s language', async () => {
+            const f = fetchOf({ ok: true, status: 200, json: async () => ({ success: true, postId: 'x', pinnedUntil: null, pinnedAt: null }) });
+            vi.stubGlobal('fetch', f);
+            try {
+                await pinPostOnNode('x', 1);
+                const init = f.mock.calls[0][1];
+                expect(init.headers).toEqual({ 'X-Signed': 'POST https://test.beanpool.org/api/marketplace/posts/x/pin', 'X-Language': 'en' });
+            } finally { vi.unstubAllGlobals(); }
+        });
+
+        it('unpinPostOnNode sends X-Language and a {} body, as every other phone POST does', async () => {
+            const f = fetchOf({ ok: true, status: 200, json: async () => ({ success: true, postId: 'x' }) });
+            vi.stubGlobal('fetch', f);
+            try {
+                await unpinPostOnNode('x');
+                const init = f.mock.calls[0][1];
+                expect(init.body).toBe('{}');
+                expect(init.headers).toEqual({ 'X-Signed': 'POST https://test.beanpool.org/api/marketplace/posts/x/unpin', 'X-Language': 'en' });
+            } finally { vi.unstubAllGlobals(); }
+        });
+
+        it("a refusal's sentence reaches the caller exactly as the node wrote it, marked as the node's answer", async () => {
+            const f = fetchOf({ ok: false, status: 403, json: async () => ({ error: 'Seul un propriétaire ou un administrateur peut épingler.', code: 'pin_not_allowed' }) });
+            vi.stubGlobal('fetch', f);
+            try {
+                const err: any = await pinPostOnNode('x', 1).catch(e => e);
+                expect(err.message).toBe('Seul un propriétaire ou un administrateur peut épingler.');
+                expect(err.nodeAnswered).toBe(true);
+                expect(err.code).toBe('pin_not_allowed');
+                const off: any = await unpinPostOnNode('x').catch(e => e);
+                expect(off.message).toBe('Seul un propriétaire ou un administrateur peut épingler.');
+            } finally { vi.unstubAllGlobals(); }
+        });
+
+        it('a refusal with no sentence leaves the caller to word its own fallback through t()', async () => {
+            const f = fetchOf({ ok: false, status: 500, json: async () => ({}) });
+            vi.stubGlobal('fetch', f);
+            try {
+                const err: any = await pinPostOnNode('x', 1).catch(e => e);
+                expect(err.nodeAnswered).toBe(false);
+                // db.ts's own English is wrapped by the screens' pinFailureText → signedRequestWords, not shown raw.
+                expect(pinFailureText(err, 'Failed to pin post')).toBe('Server returned 500');
+            } finally { vi.unstubAllGlobals(); }
+        });
     });
 });

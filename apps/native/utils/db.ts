@@ -2761,32 +2761,9 @@ export async function closePoll(postId: string) {
  * Signed member route: role check happens on the node, refusal returns node's words.
  */
 export async function pinPostOnNode(postId: string, days: PinDays): Promise<{ success: boolean; postId: string; pinnedUntil: string; pinnedAt: string }> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('You are currently offline.');
-    const identity = await loadIdentity();
-    if (!identity) throw new Error('No identity found.');
-
-    const body = { days };
-    const bodyString = JSON.stringify(body);
-    const pinUrl = `${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/pin`;
-    const headers = await buildSignedHeaders('POST', pinUrl, bodyString, identity.privateKey, identity.publicKey);
-    const res = await fetch(pinUrl, {
-        method: 'POST',
-        headers,
-        body: bodyString,
-    });
-    if (!res.ok) {
-        const txt = await res.text();
-        let errMsg = 'Failed to pin post';
-        try {
-            const j = JSON.parse(txt);
-            if (j.error) errMsg = j.error;
-        } catch {
-            if (txt) errMsg = txt;
-        }
-        throw new Error(errMsg);
-    }
-    const json = await res.json();
+    // The shared signed request: it signs, sends X-Language so a refusal comes back in the member's language, and throws
+    // the node's own sentence (with `nodeAnswered` set) for the screen to show (utils/pins.ts pinFailureText).
+    const json = await _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/pin`, { days });
     try {
         const database = await waitForInit();
         await database.runAsync(
@@ -2805,31 +2782,8 @@ export async function pinPostOnNode(postId: string, days: PinDays): Promise<{ su
  * Signed member route: owners, admins, or the post's author may unpin.
  */
 export async function unpinPostOnNode(postId: string): Promise<{ success: boolean; postId: string }> {
-    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-    if (!anchorUrl) throw new Error('You are currently offline.');
-    const identity = await loadIdentity();
-    if (!identity) throw new Error('No identity found.');
-
-    const bodyString = '';
-    const unpinUrl = `${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/unpin`;
-    const headers = await buildSignedHeaders('POST', unpinUrl, bodyString, identity.privateKey, identity.publicKey);
-    const res = await fetch(unpinUrl, {
-        method: 'POST',
-        headers,
-        body: bodyString,
-    });
-    if (!res.ok) {
-        const txt = await res.text();
-        let errMsg = 'Failed to unpin post';
-        try {
-            const j = JSON.parse(txt);
-            if (j.error) errMsg = j.error;
-        } catch {
-            if (txt) errMsg = txt;
-        }
-        throw new Error(errMsg);
-    }
-    const json = await res.json();
+    // `{}` as every other phone POST sends; the signed actor is the only input the node reads.
+    const json = await _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/unpin`, {});
     try {
         const database = await waitForInit();
         await database.runAsync(

@@ -5,6 +5,7 @@ import {
     comparePinsNewestFirst,
     PINS_MAX,
     PIN_CHOICES,
+    marketPins,
 } from '../pins';
 import { t, formatDate, elsewhereFill, FILL_BELOW, FILL_MAX } from '@beanpool/core';
 import { feedPostVisible, type MarketFilterState } from '../market-filters';
@@ -132,91 +133,42 @@ describe('post-pinning-market (slice 2 pure rules and logic)', () => {
             { id: 'reg1', type: 'offer', status: 'active', active: 1, created_at: '2026-11-03T05:00:00Z' },
         ];
 
+        const filterCtx = { blockedUsers: [] as string[], favCategories: [] as string[] };
+        const stateOf = (over: Partial<MarketFilterState> = {}): MarketFilterState => ({
+            type: 'all', category: 'all', eventWindow: 'all', trust: 'all', beansOnly: false, radiusKm: null, center: null, groupId: 'all', ...over,
+        });
+        // The screen's rule itself (utils/pins.ts marketPins), not a copy of it.
+        const run = (over: Partial<MarketFilterState> = {}, narrowed = false, feed: any[] = posts) =>
+            marketPins<any>({ basePosts: feed, filtered: feed, narrowed, now, visible: p => feedPostVisible(p, stateOf(over), filterCtx) });
+
         it('selects up to 3 live pins newest pin first under All filter', () => {
-            const filterState: MarketFilterState = {
-                type: 'all',
-                category: 'all',
-                eventWindow: 'all',
-                trust: 'all',
-                beansOnly: false,
-                radiusKm: null,
-                center: null,
-                groupId: 'all',
-            };
-            const filterCtx = { blockedUsers: [] as string[], favCategories: [] as string[] };
-
-            const livePins = posts.filter(p => isPostPinned(p, now) && feedPostVisible(p, filterState, filterCtx));
-            livePins.sort(comparePinsNewestFirst);
-            const pinned = livePins.slice(0, PINS_MAX);
-
-            // Should have 3 pins, newest first (p2 at 11:00, p3 at 10:00, p1 at 09:00; p4 is 4th so excluded)
-            expect(pinned.length).toBe(3);
-            expect(pinned.map(p => p.id)).toEqual(['p2', 'p3', 'p1']);
+            // p2 at 11:00, p3 at 10:00, p1 at 09:00; p4 is 4th so stays in the list
+            expect(run().pinned.map(p => p.id)).toEqual(['p2', 'p3', 'p1']);
         });
 
         it('respects type filters: only offers under Offers pill', () => {
-            const filterState: MarketFilterState = {
-                type: 'offers',
-                category: 'all',
-                eventWindow: 'all',
-                trust: 'all',
-                beansOnly: false,
-                radiusKm: null,
-                center: null,
-                groupId: 'all',
-            };
-            const filterCtx = { blockedUsers: [] as string[], favCategories: [] as string[] };
-
-            const livePins = posts.filter(p => isPostPinned(p, now) && feedPostVisible(p, filterState, filterCtx));
-            livePins.sort(comparePinsNewestFirst);
-            const pinned = livePins.slice(0, PINS_MAX);
-
-            // Only offers: p1 and p4 (p2 is need, p3 is event)
-            expect(pinned.map(p => p.id)).toEqual(['p1', 'p4']);
+            expect(run({ type: 'offers' }).pinned.map(p => p.id)).toEqual(['p1', 'p4']);
         });
 
         it('disables pinned block under search, tag, or distance narrowing', () => {
-            // Search query active
-            const isNarrowedSearch = Boolean('carrots'.trim().length > 0);
-            expect(isNarrowedSearch).toBe(true);
-
-            // Tag active
-            const isNarrowedTag = Boolean('food');
-            expect(isNarrowedTag).toBe(true);
-
-            // Distance active
-            const radiusKm: number | null = 25;
-            const isNarrowedDistance = Boolean(radiusKm != null);
-            expect(isNarrowedDistance).toBe(true);
+            const r = run({}, true);
+            expect(r.pinned).toEqual([]);
+            expect(r.rest.length).toBe(posts.length);
         });
 
         it('deduplicates pinned posts from main feed', () => {
-            const pinned = [posts[0], posts[1]];
-            const pinnedIds = new Set(pinned.map(p => p.id));
-            const remaining = posts.filter(p => !pinnedIds.has(p.id));
-
-            expect(remaining.find(p => p.id === 'p1')).toBeUndefined();
-            expect(remaining.find(p => p.id === 'p2')).toBeUndefined();
-            expect(remaining.find(p => p.id === 'reg1')).toBeDefined();
+            const r = run();
+            expect(r.rest.find(p => p.id === 'p1')).toBeUndefined();
+            expect(r.rest.find(p => p.id === 'p2')).toBeUndefined();
+            expect(r.rest.find(p => p.id === 'reg1')).toBeDefined();
         });
 
         it('suppresses empty state and accounts for pinned count when all matching posts are pinned', () => {
-            const feedPosts = [posts[0]]; // p1 is pinned
-            const livePins = feedPosts.filter(p => isPostPinned(p, now));
-            const pinnedIds = new Set(livePins.map(p => p.id));
-            const filteredPosts = feedPosts.filter(p => !pinnedIds.has(p.id));
-
-            expect(filteredPosts.length).toBe(0);
-            expect(livePins.length).toBe(1);
-
-            // Empty state is suppressed when pinnedPosts.length > 0
-            const shouldSuppressEmpty = livePins.length > 0;
-            expect(shouldSuppressEmpty).toBe(true);
-
-            // Real in view counts both filtered and pinned posts
-            const fillRows: any[] = [];
-            const realInView = filteredPosts.length + livePins.length + fillRows.length;
-            expect(realInView).toBe(1);
+            const r = run({}, false, [posts[0]]);
+            expect(r.rest.length).toBe(0);
+            expect(r.pinned.length).toBe(1);
+            // The empty state is suppressed when there are pins; the count the fill and examples weigh holds them.
+            expect(r.realMatchingCount).toBe(1);
         });
 
         it('prevents duplication of pinned posts in elsewhere fill and accounts for them in feed capacity', () => {
@@ -273,19 +225,13 @@ describe('post-pinning-market (slice 2 pure rules and logic)', () => {
         });
 
         it('suppresses empty distance notice and preserves example listings when all matching posts are pinned', () => {
-            const pinnedPosts = [posts[0]]; // p1
-            const filteredPosts: any[] = [];
-            const realMatchingCount = filteredPosts.length + pinnedPosts.length;
+            const r = run({}, false, [posts[0]]);
             const fillRows: any[] = [];
             const showExamples = true;
 
-            // Notice is suppressed because realMatchingCount > 0 even though filteredPosts is empty
-            const showNearEmptyNotice = realMatchingCount === 0;
-            expect(showNearEmptyNotice).toBe(false);
-
-            // Example listings footer condition evaluates to true when realMatchingCount > 0
-            const shouldRenderFooterExamples = showExamples && realMatchingCount + fillRows.length > 0;
-            expect(shouldRenderFooterExamples).toBe(true);
+            // The notice is off because the real count is above 0 even though the list itself is empty
+            expect(r.realMatchingCount === 0).toBe(false);
+            expect(showExamples && r.realMatchingCount + fillRows.length > 0).toBe(true);
         });
     });
 

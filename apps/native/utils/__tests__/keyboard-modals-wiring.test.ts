@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const src = (rel: string) => readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), 'utf8');
+const src = (rel: string) => readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url).href), 'utf8');
 const code = (rel: string) => src(rel).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 describe('group C: React Native\'s own KeyboardAvoidingView is gone from the pop-ups', () => {

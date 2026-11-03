@@ -58,3 +58,26 @@ export function scrollTargetForCaret(a: CaretVisibleArgs): number | null {
     target = Math.min(Math.max(target, 0), maxY);
     return Math.abs(target - a.scrollY) < 1 ? null : target;
 }
+
+/**
+ * Is this the focused input of THIS scroll view, and (when an event is being judged) is the event about that input?
+ *
+ * The hook sees every focused input in the app, including one in a Modal that a form renders inside its own
+ * ScrollView (the TagPicker's search box). measureLayout on that field answers in the modal's own coordinates, so
+ * acting on it scrolls the form behind the modal. react-native-keyboard-controller's own KeyboardAwareScrollView
+ * guards the same way: the input's parentScrollViewTarget must be this scroll view's native handle.
+ *
+ * `scrollHandle` is findNodeHandle(scrollRef.current), or -1/0 before the scroll view has been laid out (then
+ * nothing is "in" it). `eventTarget` is the `target` of a caret/selection event; omit it to judge the input alone.
+ * Runs inside worklets, hence the directive.
+ */
+export function inputIsInScroll(
+    input: { target: number; parentScrollViewTarget: number } | null | undefined,
+    scrollHandle: number,
+    eventTarget?: number,
+): boolean {
+    'worklet';
+    if (!input || scrollHandle <= 0) return false;
+    if (input.parentScrollViewTarget !== scrollHandle) return false;
+    return eventTarget === undefined || eventTarget === input.target;
+}

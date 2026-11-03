@@ -17,14 +17,18 @@
  * cause the double lift that a second resetter caused in the chats (memory keyboard-avoidance-pattern).
  * No second KeyboardProvider either: the root one feeds these hooks.
  *
+ * Only inputs that sit directly in THIS ScrollView count (inputIsInScroll): a TagPicker's Modal renders inside the
+ * form's ScrollView but its search box is measured in the modal's own coordinates, so acting on it would scroll the
+ * form behind the modal. Same guard as the library's KeyboardAwareScrollView (parentScrollViewTarget).
+ *
  * Spread `scrollProps` onto the ScrollView and pass `scrollRef` as its ref.
  */
 import { useCallback, useEffect, useRef } from 'react';
-import { TextInput, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
-import { useAnimatedReaction } from 'react-native-reanimated';
+import { findNodeHandle, TextInput, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView } from 'react-native';
+import { useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
 import { useFocusedInputHandler, useReanimatedFocusedInput } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
-import { scrollTargetForCaret } from '../utils/scroll-caret-visible';
+import { inputIsInScroll, scrollTargetForCaret } from '../utils/scroll-caret-visible';
 
 const GAP = 24;
 const LINE_HEIGHT = 22;
@@ -37,10 +41,14 @@ export function useKeepCaretVisible(existingRef?: React.RefObject<ScrollView | n
     const contentHeight = useRef(0);
     const caretBottom = useRef<number | null>(null);
     const caretTarget = useRef<number | null>(null);
+    // The focused input, but only while it belongs to this ScrollView (-1: none, or one elsewhere, e.g. in a Modal).
+    const ownInput = useRef(-1);
+    const scrollHandle = useSharedValue(-1);
     const pending = useRef<number | null>(null);
     const { input } = useReanimatedFocusedInput();
 
     const ensure = useCallback(() => {
+        if (ownInput.current === -1) return;
         const field: any = (TextInput as any).State?.currentlyFocusedInput?.();
         const scroll: any = scrollRef.current;
         const content: any = scroll?.getInnerViewRef?.() ?? scroll?.getInnerViewNode?.();
@@ -83,11 +91,15 @@ export function useKeepCaretVisible(existingRef?: React.RefObject<ScrollView | n
     const onCaret = useCallback((target: number, bottomInField: number) => {
         // A caret from another field is not this field's caret: remember whose it is.
         if (caretTarget.current !== target) caretTarget.current = target;
+        ownInput.current = target;
         caretBottom.current = bottomInField > 0 ? bottomInField : null;
         schedule();
     }, [schedule]);
 
+    // -1: the focus left this ScrollView's inputs (blur, or a field in a Modal): stop acting until one is back.
     const onFocusOrResize = useCallback((target: number) => {
+        ownInput.current = target;
+        if (target === -1) return;
         if (caretTarget.current !== target) {
             caretTarget.current = target;
             caretBottom.current = null;
@@ -99,22 +111,24 @@ export function useKeepCaretVisible(existingRef?: React.RefObject<ScrollView | n
     useFocusedInputHandler({
         onSelectionChange: (e) => {
             'worklet';
+            // Another ScrollView's or a Modal's caret, or one that is not the focused input's: not ours.
+            if (!inputIsInScroll(input.value, scrollHandle.value, e.target)) return;
             scheduleOnRN(onCaret, e.target, e.selection.end.y);
         },
-    }, [onCaret]);
+    }, [onCaret, input, scrollHandle]);
 
     // A different field was focused: look at it.
     useAnimatedReaction(
-        () => (input.value ? input.value.target : -1),
+        () => (input.value && inputIsInScroll(input.value, scrollHandle.value) ? input.value.target : -1),
         (cur, prev) => {
-            if (cur !== -1 && cur !== prev) scheduleOnRN(onFocusOrResize, cur);
+            if (cur !== prev) scheduleOnRN(onFocusOrResize, cur);
         },
         [onFocusOrResize],
     );
 
     // The focused field changed height (typing, pasting): look again.
     useAnimatedReaction(
-        () => (input.value ? Math.round(input.value.layout.height) : -1),
+        () => (input.value && inputIsInScroll(input.value, scrollHandle.value) ? Math.round(input.value.layout.height) : -1),
         (cur, prev) => {
             if (cur !== -1 && cur !== prev) scheduleOnRN(schedule);
         },
@@ -122,10 +136,12 @@ export function useKeepCaretVisible(existingRef?: React.RefObject<ScrollView | n
     );
 
     const onLayout = useCallback((e: LayoutChangeEvent) => {
+        // The handle the library reports as an input's parentScrollViewTarget; known once the ScrollView is laid out.
+        scrollHandle.value = findNodeHandle(scrollRef.current) ?? -1;
         viewportHeight.current = e.nativeEvent.layout.height;
         // The keyboard came or went and the sheet resized: the focused field may now be under the edge.
         schedule();
-    }, [schedule]);
+    }, [schedule, scrollRef, scrollHandle]);
 
     const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
         scrollY.current = e.nativeEvent.contentOffset.y;

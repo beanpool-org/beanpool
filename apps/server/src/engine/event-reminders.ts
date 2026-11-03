@@ -274,11 +274,14 @@ const AN_EVENT = word('An event');
 /** The language a reminder to this member is written in: the phone they most recently registered, from its push-token row. */
 export function reminderLangOf(memberPubkey: string): Lang | null {
     try {
-        // Each registration names the language again, so the newest row is the one the member's app last wrote in. A row from
-        // before the column, or one a hand wrote with a tag BeanPool has no version in, is English (as getPushTokens reads it).
+        // Each registration names the language again, so the newest phone is the one the member's app last wrote in (a row
+        // with no registration time sorts last; ties go to the row made later). A row from before the column, or one a hand
+        // wrote with a tag BeanPool has no version in, is English (as getPushTokens reads it). The notice's details are one
+        // per member, so a member with phones in two languages is told in the newest phone's; each phone's lock screen
+        // is still in its own (dispatchPushNotification).
         const row = db.prepare(
-            `SELECT lang FROM push_tokens WHERE public_key = ? AND lang IS NOT NULL ORDER BY registered_at DESC, rowid DESC LIMIT 1`
-        ).get(memberPubkey) as { lang: string } | undefined;
+            `SELECT lang FROM push_tokens WHERE public_key = ? ORDER BY registered_at DESC, rowid DESC LIMIT 1`
+        ).get(memberPubkey) as { lang: string | null } | undefined;
         return row && isLang(row.lang) ? row.lang : null;
     } catch {
         return null; // no `lang` column on an older schema
@@ -457,9 +460,10 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
         if (claim.run(d.postId, d.memberPubkey, d.offsetMin, d.occurrenceAt, sentAt).changes === 0) continue;
         if (!langOfMember.has(d.memberPubkey)) langOfMember.set(d.memberPubkey, reminderLangOf(d.memberPubkey));
         const lang = langOfMember.get(d.memberPubkey)!;
-        const key = `${d.postId}|${d.offsetMin}|${lang ?? ''}`;
+        // English is English whether the row says `en` or says nothing: one batch for both.
+        const key = `${d.postId}|${d.offsetMin}|${lang && lang !== 'en' ? lang : ''}`;
         if (!batches.has(key)) {
-            batches.set(key, { postId: d.postId, title: d.title, offsetMin: d.offsetMin, placeTime: d.placeTime, lang, targets: [] });
+            batches.set(key, { postId: d.postId, title: d.title, offsetMin: d.offsetMin, placeTime: d.placeTime, lang: lang === 'en' ? null : lang, targets: [] });
         }
         batches.get(key)!.targets.push(d.memberPubkey);
     }

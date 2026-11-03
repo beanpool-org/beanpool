@@ -5,7 +5,7 @@ import { communityHostOf, lastPhotoOffer, photoCanTravel, type LastPhoto } from 
  * scratch/fable-design/DESIGN-per-community-profile-fable.md §3-§4; Marty, 29 Oct 2026). The phone keeps the same
  * (apps/native/utils/canonical-profile.ts getLastPhoto) and both ask core's one rule (lastPhotoOffer).
  *
- * Nothing draws it and nothing publishes it unasked: the Re-run Setup wizard (components/ProfileSetup.tsx) shows it as a
+ * Nothing shows it as the member's photo and nothing publishes it unasked: the Re-run Setup wizard (components/ProfileSetup.tsx) shows it as a
  * tickbox that starts off, only while the community the browser talks to holds no photo for the member. It lives in
  * localStorage, so signing out or deleting the account (lib/device-prefs.ts clearAccountStorage) takes it away with the
  * rest of the account's storage.

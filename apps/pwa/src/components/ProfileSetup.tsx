@@ -32,7 +32,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
     const [callsign, setCallsign] = useState(identity.callsign ?? '');
     const [avatar, setAvatar] = useState<string | null>(null);
     // The photo the member used last, in another community, offered while this one holds none for them (Profile S3,
-    // lib/last-photo.ts). A tickbox that starts OFF: ticking it makes it the pick, and only then is it shown or sent.
+    // lib/last-photo.ts). A tickbox that starts OFF: ticking it makes it the pick, and only then is it shown as the photo or sent (left off, the offer row shows it small).
     const [photoOffer, setPhotoOffer] = useState<{ avatar: string; from: string | null } | null>(null);
     // Preserved so saving the avatar doesn't blank an existing bio/contact.
     const [bio, setBio] = useState('');

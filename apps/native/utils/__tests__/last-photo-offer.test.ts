@@ -44,6 +44,12 @@ describe('the picture I used last', () => {
         expect(await getLastPhoto()).toEqual({ avatar: 'bundled://leaf', from: HERE });
     });
 
+    it('a new photo with no known community drops the old photo\'s community: it is not offered as from there', async () => {
+        await saveCanonicalProfile({ avatar: PHOTO, avatarFrom: FIRST });
+        await saveCanonicalProfile({ avatar: 'bundled://leaf', avatarFrom: null });
+        expect(await getLastPhoto()).toEqual({ avatar: 'bundled://leaf', from: null });
+    });
+
     it('reads a copy kept before the community was recorded as "not known", and a store with no photo as none', async () => {
         mem.store.set(CANONICAL_PROFILE_STORE_KEY, JSON.stringify({ avatar: PHOTO, bio: 'old' }));
         expect(await getLastPhoto()).toEqual({ avatar: PHOTO, from: null });

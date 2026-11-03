@@ -2107,7 +2107,9 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
             }
             await saveCanonicalProfile({
                 avatar: portablePhoto ? data.avatar_url : undefined,
-                avatarFrom: photoSetIn,
+                // A new photo always writes its community, `null` when the phone has none: undefined would keep the OLD photo's
+                // community beside the new photo (the merge-save keeps any key left undefined).
+                avatarFrom: portablePhoto ? (photoSetIn ?? null) : undefined,
                 bio: data.bio,
                 contactValue: data.contact_value,
                 contactVisibility: data.contact_visibility,

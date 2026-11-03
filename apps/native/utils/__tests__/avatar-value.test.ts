@@ -453,11 +453,12 @@ describe('updateMemberProfile canonical mirror', () => {
         }
     });
 
-    it('still keeps the photo when the phone has no community address to record with it', async () => {
+    it('still keeps the photo when the phone has no community address, and records its community as not known', async () => {
         await updateMemberProfile(SELF_PK, { callsign: 'Damo', avatar_url: PHOTO });
         const saved = h.saveCanonicalProfile.mock.calls[0][0];
         expect(saved.avatar).toBe(PHOTO);
-        expect(saved.avatarFrom).toBeUndefined();
+        // null, not undefined: undefined would keep the previous photo's community beside this new photo.
+        expect(saved.avatarFrom).toBeNull();
     });
 });
 

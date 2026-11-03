@@ -47,7 +47,8 @@ export async function getCanonicalAvatar(): Promise<string | null> {
 /**
  * "The picture I used last", and the community it was set in. Profile S3: the one thing this store is for. It is
  * OFFERED, as a tickbox that starts off, when the member joins a community that holds no photo for them
- * (utils/last-photo-offer.ts); no screen draws it and no publish sends it unasked.
+ * (utils/last-photo-offer.ts); no screen shows it as this community's photo (the offer row shows it small, beside the tickbox) and no publish sends
+ * it unasked.
  */
 export async function getLastPhoto(): Promise<{ avatar: string; from: string | null } | null> {
     const p = await getCanonicalProfile();

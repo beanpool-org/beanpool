@@ -84,7 +84,7 @@ export default function ProfileSetupScreen() {
     const [nodeAvatar, setNodeAvatar] = useState<string | null>(null);
     // The photo the member used last, in another community, offered while this one holds none for them (Profile S3,
     // utils/last-photo-offer.ts). It is a tickbox that starts OFF: ticking makes it this session's pick, which is what
-    // gets shown and sent; left off, nothing of it is either.
+    // gets shown and sent; left off, it shows only as the offer's small thumbnail and nothing of it is sent.
     const [photoOffer, setPhotoOffer] = useState<PhotoOffer | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [loading, setLoading] = useState(false);

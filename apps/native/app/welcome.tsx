@@ -3484,6 +3484,7 @@ export default function WelcomeScreen() {
                             onWords={() => { setMode('recover'); setError(null); }}
                             onCommunity={() => { setError(null); router.push({ pathname: '/rekey-code', params: { bringBack: '1' } }); }}
                             onRekey={() => { setError(null); router.push('/rekey-code'); }}
+                            onBrowser={() => { setError(null); router.push('/pair-in'); }}
                         />
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>

@@ -285,17 +285,19 @@ describe('above the fold at 320 dp with text at 1.3×', () => {
     });
 });
 
-describe('Restore your account: four rows, at 320 dp with text at 1.3× (vault rethink VR4)', () => {
+describe('Restore your account: five rows, at 320 dp with text at 1.3× (vault rethink VR4; front doors S9 adds the fifth)', () => {
     const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
     const restoreMenu = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/RestoreMenu.tsx'), 'utf-8');
-    const LABELS = ['🌐 Recover with Social', '🔑 Recover with 12 Words', '🤝 My community can bring me back', '🪪 An admin gave me a re-key code'];
+    const LABELS = ['🌐 Recover with Social', '🔑 Recover with 12 Words', '🤝 My community can bring me back', '🪪 An admin gave me a re-key code', '💻 Scan from a browser'];
     const HINT_LINE = 'For members of a local community.';
-    const menuTaps = { social: 0, words: 0, community: 0, rekey: 0 };
+    const BROWSER_HINT = 'For an account you use in a web browser.';
+    const menuTaps = { social: 0, words: 0, community: 0, rekey: 0, browser: 0 };
     async function drawMenu(initial?: UiLang): Promise<void> {
         const menu = createElement(RestoreMenu, {
             ...onboardingColors('light'), logos: null,
             onSocial: () => { menuTaps.social++; }, onWords: () => { menuTaps.words++; },
             onCommunity: () => { menuTaps.community++; }, onRekey: () => { menuTaps.rekey++; },
+            onBrowser: () => { menuTaps.browser++; },
         });
         await act(async () => {
             root.render((initial ? createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial }, menu) : menu) as any);
@@ -303,14 +305,19 @@ describe('Restore your account: four rows, at 320 dp with text at 1.3× (vault r
         await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     }
 
-    it('draws the four rows in order, each working, the third with its hint', async () => {
+    it('draws the five rows in order, each working, the third and the fifth with their hints', async () => {
         await drawMenu();
         const rows = buttons();
-        expect(rows).toHaveLength(4);
-        expect(reading()).toEqual([LABELS[0], LABELS[1], LABELS[2], HINT_LINE, LABELS[3]]);
+        expect(rows).toHaveLength(5);
+        expect(reading()).toEqual([LABELS[0], LABELS[1], LABELS[2], HINT_LINE, LABELS[3], LABELS[4], BROWSER_HINT]);
         expect(rows[2].getAttribute('data-hint')).toBe(HINT_LINE);
+        expect(rows[4].getAttribute('data-hint')).toBe(BROWSER_HINT);
         for (const r of rows) await act(async () => { r.click(); });
-        expect(menuTaps).toEqual({ social: 1, words: 1, community: 1, rekey: 1 });
+        expect(menuTaps).toEqual({ social: 1, words: 1, community: 1, rekey: 1, browser: 1 });
+    });
+
+    it('the fifth row opens Scan from a browser, a screen a phone with no account may stay on', () => {
+        expect(welcome).toMatch(/onBrowser=\{\(\) => \{ setError\(null\); router\.push\('\/pair-in'\); \}\}/);
     });
 
     it('no label has a line limit, so a long one wraps and none is cut', async () => {
@@ -320,7 +327,7 @@ describe('Restore your account: four rows, at 320 dp with text at 1.3× (vault r
         expect(restoreMenu).toMatch(/recoverBtnText: \{[^}]*textAlign: 'center'/);
     });
 
-    it('every word is through t(): in the pseudo-locale all four are their translations', async () => {
+    it('every word is through t(): in the pseudo-locale all five are their translations', async () => {
         await drawMenu('xx');
         for (const piece of reading()) expect(piece, `"${piece}" bypassed t()`).toMatch(/^\[.*\]$/s);
     });

@@ -88,11 +88,13 @@ export function setupRedirect(segments: readonly string[], { hasIdentity, pendin
     // `find-community`: ask a community to let you in, by its address or its code (DESIGN-account-without-global-fable.md
     // §2.4, slice S3). The knock makes the account, at Send: a stranger who knows a community needs nothing of ours. With no
     // account the directory of communities near you is not read.
+    // `pair-in`: Already a member → Scan from this browser (front doors S9, app/pair-in.tsx): the account a member's
+    // browser holds comes to a phone with none, restored from its 12 words at the member's tap.
     if (!hasIdentity) {
         // These stay ahead of the look's check, looking around or not: another community's door link opened while the
         // phone looks around global goes to that door, not global's (S2), a community's card stays (S15), a shared post's
         // peek stays (S6), and so does asking a community by its address (S3; the first screen's quiet row opens it).
-        if (root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' || root === 'community-card'
+        if (root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'pair-in' || root === 'claim-community' || root === 'community-card'
             || root === 'join-open-door' || root === 'peek' || root === 'find-community') return null;
         // The bare root is the app's start: the first screen, looking around or not (a restart lands there).
         if (lookingAround && root !== undefined) return isLookRoute(segments) ? null : LOOK_DOOR;

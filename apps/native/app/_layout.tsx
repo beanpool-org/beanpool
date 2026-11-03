@@ -61,6 +61,7 @@ import { retryCommunityRemovals } from '../utils/vault-move';
 import { attestOwnRekeys, declineRekey, operatorContact, rekeyToAsk } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import { isPairLink } from '../utils/pair-link';
+import { isPairInLink } from '../utils/pair-in';
 import { isGlobalLink } from '../utils/global-link';
 import { doorLinkFromSystemPath } from '../utils/open-door';
 import { isCommunityCardPath } from '../utils/community-card-link';
@@ -376,6 +377,9 @@ function RootLayoutNav() {
         // The web app's pairing QR opened from the camera app: routed to app/pair-device.tsx by +native-intent.ts. Not an
         // invite: its `node=` host could otherwise be read as one (extractInviteToken looks for BP-xxxx-xxxx anywhere).
         if (isPairLink(currentUrl)) return;
+        // The other way's code (front doors S9, a browser bringing its account to this phone): routed to app/pair-in.tsx
+        // by +native-intent.ts. Not an invite, for the same reason.
+        if (isPairInLink(currentUrl)) return;
         // The global community's link (utils/global-link.ts): routed to a door by +native-intent.ts. Not an invite. One that
         // carries an invite is not this, and goes on below as an invite.
         if (isGlobalLink(currentUrl)) return;
@@ -1053,6 +1057,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="shared-outside" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="claim-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="rekey-code" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="pair-in" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="join-global" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="join-open-door" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="start-community" options={{ animation: 'slide_from_right' }} />

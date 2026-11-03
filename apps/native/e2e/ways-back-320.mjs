@@ -328,14 +328,14 @@ const WaysPage = () => {
     );
 };
 
-/** welcome.tsx's Restore your account: its page and card, its title and line, its four rows. */
+/** welcome.tsx's Restore your account: its page and card, its title and line, its five rows. */
 const RestorePage = () => {
     const { colors: oc, dark } = onboardingColors(scheme);
     return (
         <View style={{ backgroundColor: oc.surface.page, padding: 24 }}>
             <View style={{ width: '100%', backgroundColor: oc.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: oc.border.default }}>
                 <Text style={{ fontSize: 20, fontWeight: 'bold', color: oc.text.heading, marginBottom: 8 }}>{t('🔑 Restore your account')}</Text>
-                <RestoreMenu colors={oc} dark={dark} logos={<View style={{ width: 48, height: 16 }} />} onSocial={noop} onWords={noop} onCommunity={noop} onRekey={noop} />
+                <RestoreMenu colors={oc} dark={dark} logos={<View style={{ width: 48, height: 16 }} />} onSocial={noop} onWords={noop} onCommunity={noop} onRekey={noop} onBrowser={noop} />
             </View>
         </View>
     );
@@ -585,11 +585,11 @@ try {
         await page.getByText(/Not finished: tap to try again/).waitFor();
         await measure(`${scheme} · Account Protection, your community's admins, half and half, a Remove that stopped halfway`);
 
-        // Restore your account's four rows (VR4).
+        // Restore your account's five rows (VR4; S9 adds Scan from a browser).
         await open(`place=restore&scheme=${scheme}`);
         await page.getByText('My community can bring me back').first().waitFor();
-        if ((await page.getByRole('button').count()) !== 4) problems.push(`${scheme} · Restore your account: not four rows`);
-        await measure(`${scheme} · Restore your account, four rows`);
+        if ((await page.getByRole('button').count()) !== 5) problems.push(`${scheme} · Restore your account: not five rows`);
+        await measure(`${scheme} · Restore your account, five rows`);
     }
     for (const e of errors) problems.push(`page error: ${e}`);
 } finally {

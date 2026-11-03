@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazil-leaning, neutral forms)",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
     "reviewed": false,
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
@@ -48,5 +48,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "Pediu {n} vezes hoje. Pode pedir de novo amanhã.",
   "Please keep this to {n} characters.": "Use no máximo {n} caracteres.",
   "Please fill in their first name and how you know them.": "Preencha o primeiro nome e como conhece a pessoa.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Não inclua números de telefone nem endereços de e-mail. Um primeiro nome e como conhece a pessoa é tudo o que um administrador precisa."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Não inclua números de telefone nem endereços de e-mail. Um primeiro nome e como conhece a pessoa é tudo o que um administrador precisa.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "Um júri de membros sorteados decide esta votação. Você não foi sorteado, por isso não pode votar nela.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "Os donos da sua comunidade mudaram como ela funciona: quando ela for grande o bastante, um júri de membros sorteados decidirá se alguém é removido. Até lá, todos os membros podem votar.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "Os donos da sua comunidade mudaram como ela funciona: todos os membros podem votar se alguém é removido.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "Os donos da sua comunidade mudaram como ela funciona: um júri de membros sorteados decide se alguém é removido."
 }

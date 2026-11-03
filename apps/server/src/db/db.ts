@@ -1902,6 +1902,36 @@ export function initSchema() {
         console.error("[DB] ❌ Failed to migrate group_members for the 'removed' status:", err?.message || err);
     }
 
+    // decision_electors: the status CHECK gains a removal jury's 'stood_aside' and 'silent' (engine/removal-jury.ts,
+    // DESIGN-removal-jury-fable.md §4). Rebuilt as group_members is above, BEFORE the schema.sql exec, which re-creates
+    // its index against the new table; stampPlainTables re-creates its touch trigger at the end of the boot.
+    try {
+        const deSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='decision_electors'").get() as any;
+        if (deSql?.sql && !deSql.sql.includes("'stood_aside'")) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS decision_electors_migration;
+                    CREATE TABLE decision_electors_migration (
+                        decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+                        member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+                        role_at_open  TEXT NOT NULL,
+                        status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left', 'stood_aside', 'silent')),
+                        created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                        PRIMARY KEY (decision_id, member_pubkey)
+                    );
+                    INSERT INTO decision_electors_migration (decision_id, member_pubkey, role_at_open, status, created_at, updated_at)
+                        SELECT decision_id, member_pubkey, role_at_open, status, created_at, updated_at FROM decision_electors;
+                    DROP TABLE decision_electors;
+                    ALTER TABLE decision_electors_migration RENAME TO decision_electors;
+                `);
+            })();
+            console.log("[DB] ✅ Migrated decision_electors CHECK constraint to allow a removal jury's 'stood_aside' and 'silent'");
+        }
+    } catch (err: any) {
+        console.error("[DB] ❌ Failed to migrate decision_electors for a removal jury's statuses:", err?.message || err);
+    }
+
     // groups.lead_pubkey: the group's LEAD convenor (2026-09-23). A plain ADD COLUMN, on purpose — a fourth value
     // in group_members.role would mean rebuilding that table for its CHECK constraint. Before the schema.sql exec
     // so anything the exec re-creates already sees the column. The backfill is further down, behind a marker.

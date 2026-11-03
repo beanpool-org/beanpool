@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -28,5 +28,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "आप आज {n} बार पूछ चुके हैं। कल फिर पूछ सकते हैं।",
   "Please keep this to {n} characters.": "कृपया इसे {n} अक्षरों तक रखें।",
   "Please fill in their first name and how you know them.": "कृपया उनका पहला नाम और आप उन्हें कैसे जानते हैं, लिखें।",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "कृपया फ़ोन नंबर और ईमेल पते न लिखें। व्यवस्थापक के लिए पहला नाम और आप उन्हें कैसे जानते हैं, इतना काफ़ी है।"
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "कृपया फ़ोन नंबर और ईमेल पते न लिखें। व्यवस्थापक के लिए पहला नाम और आप उन्हें कैसे जानते हैं, इतना काफ़ी है।",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "इस वोट का फ़ैसला बेतरतीब ढंग से चुने गए सदस्यों की एक जूरी करती है। आप नहीं चुने गए, इसलिए आप इसमें वोट नहीं दे सकते।",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "आपके समुदाय के मालिकों ने इसके काम करने का तरीका बदल दिया है: जब समुदाय काफ़ी बड़ा हो जाएगा, तब बेतरतीब ढंग से चुने गए सदस्यों की एक जूरी तय करेगी कि किसी को हटाया जाए या नहीं। तब तक हर सदस्य वोट दे सकता है।",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "आपके समुदाय के मालिकों ने इसके काम करने का तरीका बदल दिया है: किसी को हटाया जाए या नहीं, इस पर हर सदस्य वोट दे सकता है।",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "आपके समुदाय के मालिकों ने इसके काम करने का तरीका बदल दिया है: बेतरतीब ढंग से चुने गए सदस्यों की एक जूरी तय करती है कि किसी को हटाया जाए या नहीं।"
 }

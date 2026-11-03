@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
     "reviewed": false,
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
@@ -48,5 +48,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "Vous avez demandé {n} fois aujourd’hui. Vous pourrez redemander demain.",
   "Please keep this to {n} characters.": "Limitez ce texte à {n} caractères.",
   "Please fill in their first name and how you know them.": "Indiquez son prénom et comment vous connaissez cette personne.",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Ne mettez ni numéro de téléphone ni adresse e-mail. Un prénom et la façon dont vous connaissez cette personne suffisent à un administrateur."
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Ne mettez ni numéro de téléphone ni adresse e-mail. Un prénom et la façon dont vous connaissez cette personne suffisent à un administrateur.",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "Un jury de membres tirés au sort décide de ce vote. Vous n’avez pas été tiré au sort, vous ne pouvez donc pas y voter.",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "Les propriétaires de votre communauté ont changé son fonctionnement : dès qu’elle sera assez grande, un jury de membres tirés au sort décidera si quelqu’un est exclu. D’ici là, chaque membre peut voter.",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "Les propriétaires de votre communauté ont changé son fonctionnement : chaque membre peut voter pour décider si quelqu’un est exclu.",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "Les propriétaires de votre communauté ont changé son fonctionnement : un jury de membres tirés au sort décide si quelqu’un est exclu."
 }

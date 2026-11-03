@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -28,5 +28,9 @@
   "You’ve asked {n} times today. You can ask again tomorrow.": "今日はすでに{n}回依頼しました。明日また依頼できます。",
   "Please keep this to {n} characters.": "{n}文字以内にしてください。",
   "Please fill in their first name and how you know them.": "その人の下の名前と知り合った経緯を入力してください。",
-  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "電話番号やメールアドレスは書かないでください。管理者に必要なのは下の名前と知り合った経緯だけです。"
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "電話番号やメールアドレスは書かないでください。管理者に必要なのは下の名前と知り合った経緯だけです。",
+  "A jury of members drawn at random decides this vote. You weren't drawn, so you can't vote on it.": "この投票は、無作為に選ばれたメンバーによる陪審が決めます。あなたは選ばれていないため、この投票には参加できません。",
+  "Your community's owners changed how it works: once it is large enough, a jury of members drawn at random decides whether someone is removed. Until then every member can vote on it.": "コミュニティのオーナーが運営方法を変更しました。コミュニティが十分な規模になると、無作為に選ばれたメンバーによる陪審が、誰かを除名するかどうかを決めます。それまでは、すべてのメンバーが投票できます。",
+  "Your community's owners changed how it works: every member can vote on whether someone is removed.": "コミュニティのオーナーが運営方法を変更しました。誰かを除名するかどうかは、すべてのメンバーが投票できます。",
+  "Your community's owners changed how it works: a jury of members drawn at random decides whether someone is removed.": "コミュニティのオーナーが運営方法を変更しました。誰かを除名するかどうかは、無作為に選ばれたメンバーによる陪審が決めます。"
 }

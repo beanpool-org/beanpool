@@ -68,6 +68,7 @@ export * from './request-signing.js';
 export * from './cleartext-address.js';
 export * from './public-ipv4.js';
 export * from './claim-proof.js';
+export * from './jury-draw.js';
 export * from './push-notice.js';
 export * from './vault-wire.js';
 export * from './door-work.js';

@@ -34,10 +34,14 @@ describe('the phone\'s invite screen', () => {
         expect(people).toMatch(/vouchLevel: vouch \?\? undefined/);
     });
     it('opens on None however it is reached: the view, a tab coming back, the +person button, and after each invite', () => {
-        expect(people).toMatch(/if \(view !== 'invites'\) return;\s+setVouchLevel\(null\);/);
-        expect(people).toMatch(/useFocusEffect\(useCallback\(\(\) => \{ setVouchLevel\(null\); \}, \[\]\)\);/);
+        expect(people).toMatch(/useFocusEffect\(useCallback\(\(\) => \{\s+setVouchLevel\(null\);\s+if \(view !== 'invites'\) return;/);
+        expect(people).toMatch(/\}, \[view, identity\?\.publicKey, nodeProfile\?\.features\.inviteVouch\]\)\);/);
         expect(people).toMatch(/if \(data\.view === 'invites'\) setVouchLevel\(null\);/);
         expect(people).toMatch(/setNewCode\(code\);\s+setVouchLevel\(null\);/);
+    });
+    it('asks the node each time it opens, through askCanVouch (invite-vouch-right.test.ts), never only this phone\'s copy', () => {
+        expect(people).toMatch(/askCanVouch\(me\)\.then\(can => \{ if \(alive\) setCanVouch\(can\); \}\)/);
+        expect(people).not.toMatch(/getBalance\(/);
     });
     it('makes no offline ticket in place of a vouch: a refusal and no connection both stop before the ticket', () => {
         const refused = people.indexOf("if (vouch !== null) {\n                        Alert.alert(t('Could not vouch')");

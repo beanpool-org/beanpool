@@ -3,7 +3,7 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { AddedYouLines } from '../../components/AddedYouLines';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { getBalance, getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
+import { askCanVouch, getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { useIdentity } from '../IdentityContext';
 import { buildSignedHeaders } from '../../utils/crypto';
@@ -280,15 +280,15 @@ export default function PeopleScreen() {
     // when the invite is made. An offline ticket carries no vouch, so it isn't offered while this phone is offline; the
     // button says Offline Ticket then.
     const offersVouch = !isGuest && !invitesPreview && makesInvites && mayInvite && isOnline && offersInviteVouch(nodeProfile?.features, canVouch);
-    useEffect(() => {
-        if (view !== 'invites') return;
+    useFocusEffect(useCallback(() => {
         setVouchLevel(null);
-        if (!identity?.publicKey || nodeProfile?.features.inviteVouch !== true) { setCanVouch(false); return; }
+        if (view !== 'invites') return;
+        const me = identity?.publicKey;
+        if (!me || nodeProfile?.features.inviteVouch !== true) { setCanVouch(false); return; }
         let alive = true;
-        getBalance(identity.publicKey).then(b => { if (alive) setCanVouch(b?.canVouch === true); }).catch(() => { if (alive) setCanVouch(false); });
+        askCanVouch(me).then(can => { if (alive) setCanVouch(can); }).catch(() => { if (alive) setCanVouch(false); });
         return () => { alive = false; };
-    }, [view, identity?.publicKey, nodeProfile?.features.inviteVouch]);
-    useFocusEffect(useCallback(() => { setVouchLevel(null); }, []));
+    }, [view, identity?.publicKey, nodeProfile?.features.inviteVouch]));
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {

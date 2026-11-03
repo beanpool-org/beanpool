@@ -951,5 +951,7 @@
   "Vouch for them": "Se porter garant pour cette personne",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Impossible de se porter garant sur un ticket hors ligne. Choisissez Aucun pour en créer un, ou réessayez une fois connecté.",
   "None": "Aucun",
-  "{amount} Beans": "{amount} haricots"
+  "{amount} Beans": "{amount} haricots",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Une garantie sur une invitation est de 25, 50 ou 100 haricots, ou aucune.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Seuls les propriétaires, les admins et les garants désignés peuvent se porter garants de quelqu’un sur une invitation."
 }

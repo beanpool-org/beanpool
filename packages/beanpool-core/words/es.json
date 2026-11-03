@@ -979,5 +979,7 @@
   "Vouch for them": "Avalar a esta persona",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "No puedes avalar en un boleto sin conexión. Elige Ninguno para crearlo, o inténtalo de nuevo cuando tengas conexión.",
   "None": "Ninguno",
-  "{amount} Beans": "{amount} frijoles"
+  "{amount} Beans": "{amount} frijoles",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Un aval en una invitación es de 25, 50 o 100 frijoles, o ninguno.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Solo los dueños, los administradores y los avalistas designados pueden avalar a alguien en una invitación."
 }

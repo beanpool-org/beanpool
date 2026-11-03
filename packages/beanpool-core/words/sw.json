@@ -936,5 +936,7 @@
   "Vouch for them": "Mdhamini mtu huyu",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Huwezi kudhamini kwenye tiketi ya nje ya mtandao. Chagua Hakuna ili kuitengeneza, au jaribu tena ukiunganishwa.",
   "None": "Hakuna",
-  "{amount} Beans": "Maharagwe {amount}"
+  "{amount} Beans": "Maharagwe {amount}",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Udhamini kwenye mwaliko ni Maharagwe 25, 50 au 100, au hakuna.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Wamiliki, wasimamizi na wadhamini walioteuliwa pekee ndio wanaweza kumdhamini mtu kwenye mwaliko."
 }

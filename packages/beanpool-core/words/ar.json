@@ -1096,5 +1096,7 @@
   "Vouch for them": "تزكية هذا الشخص",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "لا يمكنك التزكية في تذكرة دون اتصال. اختر «بلا» لإنشائها، أو حاول مرة أخرى عند الاتصال.",
   "None": "بلا",
-  "{amount} Beans": "{amount} فاصوليا"
+  "{amount} Beans": "{amount} فاصوليا",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "التزكية في الدعوة هي 25 أو 50 أو 100 فاصوليا، أو بلا تزكية.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "يمكن للمالكين والمشرفين والمزكّين المعيّنين فقط تزكية شخص في دعوة."
 }

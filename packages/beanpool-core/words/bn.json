@@ -936,5 +936,7 @@
   "Vouch for them": "এঁর জন্য প্রত্যয়ন করুন",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "অফলাইন টিকিটে প্রত্যয়ন করা যায় না। টিকিট বানাতে «কিছুই নয়» বেছে নিন, অথবা সংযুক্ত হলে আবার চেষ্টা করুন।",
   "None": "কিছুই নয়",
-  "{amount} Beans": "{amount} শিম"
+  "{amount} Beans": "{amount} শিম",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "আমন্ত্রণে প্রত্যয়ন হয় 25, 50 বা 100 শিম, অথবা কিছুই নয়।",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "শুধু মালিক, অ্যাডমিন এবং নিযুক্ত প্রত্যয়নকারীরাই আমন্ত্রণে কারও জন্য প্রত্যয়ন করতে পারেন।"
 }

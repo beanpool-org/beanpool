@@ -936,5 +936,7 @@
   "Vouch for them": "இவருக்குச் சான்றளி",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "ஆஃப்லைன் டிக்கெட்டில் சான்றளிக்க முடியாது. டிக்கெட்டை உருவாக்க «எதுவுமில்லை» என்பதைத் தேர்ந்தெடுக்கவும், அல்லது இணைந்த பிறகு மீண்டும் முயலவும்.",
   "None": "எதுவுமில்லை",
-  "{amount} Beans": "{amount} பயறுகள்"
+  "{amount} Beans": "{amount} பயறுகள்",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "அழைப்பில் சான்றளிப்பு 25, 50 அல்லது 100 பயறுகள், அல்லது எதுவுமில்லை.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "உரிமையாளர்கள், நிர்வாகிகள், நியமிக்கப்பட்ட சான்றளிப்பவர்கள் மட்டுமே அழைப்பில் ஒருவருக்குச் சான்றளிக்க முடியும்."
 }

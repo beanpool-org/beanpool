@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INVITE_VOUCH_CHOICES, offersInviteVouch } from './invite-vouch.js';
+import { INVITE_VOUCH_CHOICES, INVITE_VOUCH_WORDS, inviteVouchRefusalWords, offersInviteVouch } from './invite-vouch.js';
 import { isVouchLevel, vouchCreditForLevel } from './protocol.js';
 
 describe('a vouch on an invite', () => {
@@ -18,6 +18,11 @@ describe('a vouch on an invite', () => {
         for (const bad of [0, 4, -1, 1.5, 1e21, Number.MAX_SAFE_INTEGER, NaN, Infinity, '1', '2', '', true, false, null, undefined, [1], { level: 1 }]) {
             expect(isVouchLevel(bad)).toBe(false);
         }
+    });
+
+    it('leaves any other words from the node as they came', () => {
+        expect(inviteVouchRefusalWords('Something else from the node')).toBe('Something else from the node');
+        expect(inviteVouchRefusalWords(INVITE_VOUCH_WORDS.notAVoucher)).toBe(INVITE_VOUCH_WORDS.notAVoucher);
     });
 
     it('shows the control only where the node says it can and this member can give one', () => {

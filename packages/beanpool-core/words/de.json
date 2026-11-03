@@ -951,5 +951,7 @@
   "Vouch for them": "Für diese Person bürgen",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Auf einem Offline-Ticket kannst du nicht bürgen. Wähle „Keine“, um eines zu erstellen, oder versuche es erneut, wenn du verbunden bist.",
   "None": "Keine",
-  "{amount} Beans": "{amount} Bohnen"
+  "{amount} Beans": "{amount} Bohnen",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Eine Bürgschaft auf einer Einladung beträgt 25, 50 oder 100 Bohnen oder keine.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Nur Eigentümer, Admins und ernannte Bürgen können bei einer Einladung für jemanden bürgen."
 }

@@ -896,5 +896,7 @@
   "Vouch for them": "Bảo lãnh cho người này",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Bạn không thể bảo lãnh trên vé ngoại tuyến. Hãy chọn Không có để tạo vé, hoặc thử lại khi có kết nối.",
   "None": "Không có",
-  "{amount} Beans": "{amount} đậu"
+  "{amount} Beans": "{amount} đậu",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Bảo lãnh trên lời mời là 25, 50 hoặc 100 đậu, hoặc không có.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Chỉ chủ sở hữu, quản trị viên và người bảo lãnh được chỉ định mới có thể bảo lãnh cho ai đó trên lời mời."
 }

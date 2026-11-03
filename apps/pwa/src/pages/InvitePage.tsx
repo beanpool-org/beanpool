@@ -19,7 +19,7 @@ import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
 import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
 import { InviteVouchChoice } from '../components/InviteVouchChoice';
-import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, offersInviteVouch, t, tn, type VouchLevel } from '@beanpool/core';
+import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, inviteVouchRefusalWords, offersInviteVouch, t, tn, type VouchLevel } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -241,7 +241,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 // turned down leaves the page as it is, so the member can choose None or ask why.
                 const refusedVouch = vouch !== null && typeof (e as { status?: unknown } | null)?.status === 'number';
                 if (refusedVouch) {
-                    setNotice((e as Error).message);
+                    setNotice(inviteVouchRefusalWords((e as Error).message));
                     return;
                 }
                 /* node unreachable — offline fallback below */

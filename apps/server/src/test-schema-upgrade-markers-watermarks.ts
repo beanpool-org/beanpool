@@ -265,7 +265,7 @@ runSchemaSuite('the tables, columns and markers added since, and the watermarks'
         const freshTriggers = [...triggersOn(d, 'invite_codes'), ...triggersOn(d, 'deferred_wage_claims')];
         assert(freshTriggers.length === 4 && columns(d, 'invite_codes').includes('updated_at'),
             `a fresh install stamps both tables' writes (${freshTriggers.join(', ')})`);
-        d.exec(`DROP TABLE invite_codes; ${legacyDdl('invite_codes', ['updated_at'])}`);
+        d.exec(`DROP TABLE invite_codes; ${legacyDdl('invite_codes', ['updated_at', 'vouch_level'])}`);
         d.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('OLD-CODE', 'x', '2025-01-01T00:00:00.000Z')`).run();
         d.exec(`DROP TABLE deferred_wage_claims;
                 CREATE TABLE deferred_wage_claims (id TEXT PRIMARY KEY, enterprise_pubkey TEXT NOT NULL, keeper_pubkey TEXT NOT NULL,
@@ -274,7 +274,8 @@ runSchemaSuite('the tables, columns and markers added since, and the watermarks'
         d.prepare(`INSERT INTO deferred_wage_claims (id, enterprise_pubkey, keeper_pubkey, transaction_id, amount, created_at)
                    VALUES ('w1', 'e', 'k', 't1', 2, '2025-01-01T00:00:00.000Z')`).run();
         assert(!columns(d, 'invite_codes').includes('updated_at') && !columns(d, 'deferred_wage_claims').includes('updated_at')
-            && triggersOn(d, 'invite_codes').length === 0, 'the fixture genuinely lacks the column and the triggers');
+            && !columns(d, 'invite_codes').includes('vouch_level')
+            && triggersOn(d, 'invite_codes').length === 0, 'the fixture genuinely lacks the columns and the triggers');
         d.close();
 
         const result = bootInto(dir);
@@ -282,6 +283,10 @@ runSchemaSuite('the tables, columns and markers added since, and the watermarks'
         if (!result.ok) console.error(result.output.split('\n').slice(-20).join('\n'));
         const after = new Database(path.join(dir, 'state.db'));
         after.pragma('foreign_keys = OFF');
+        // An invite already out carries no vouch: the column arrives empty (a quick vouch on an invite).
+        assert(columns(after, 'invite_codes').includes('vouch_level')
+            && (after.prepare(`SELECT vouch_level AS v FROM invite_codes WHERE code = 'OLD-CODE'`).get() as any)?.v === null,
+            'invite_codes gains vouch_level, empty on a code it already held');
         const wages = (after.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'deferred_wage_claims'`).get() as any).sql as string;
         assert(!/transaction_id\s+TEXT UNIQUE/.test(wages) && columns(after, 'deferred_wage_claims').includes('updated_at'),
             'the old wage claims table is rebuilt, and keeps the column');

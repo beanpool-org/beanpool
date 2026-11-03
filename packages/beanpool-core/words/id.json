@@ -896,5 +896,7 @@
   "Vouch for them": "Jamin orang ini",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Kamu tidak bisa menjamin di tiket offline. Pilih Tidak ada untuk membuatnya, atau coba lagi saat tersambung.",
   "None": "Tidak ada",
-  "{amount} Beans": "{amount} Kacang"
+  "{amount} Beans": "{amount} Kacang",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Jaminan pada undangan adalah 25, 50, atau 100 Kacang, atau tidak ada.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Hanya pemilik, admin, dan penjamin yang ditunjuk yang dapat menjamin seseorang pada undangan."
 }

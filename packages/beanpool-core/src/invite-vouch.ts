@@ -3,14 +3,24 @@
  * (apps/server state-engine.ts readInviteVouch); these only say what to show, and the same on both apps.
  */
 import { VOUCH_LEVELS, vouchCreditForLevel, type VouchLevel } from './protocol.js';
-import { word } from './words.js';
+import { t, word } from './words.js';
 
 export const INVITE_VOUCH_WORDS = {
     label: word('Vouch for them'),
     none: word('None'),
     beans: word('{amount} Beans'),
     noOfflineVouch: word('You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.'),
+    // The node's own two refusals (apps/server state-engine.ts readInviteVouch), which it sends in English.
+    badLevel: word('A vouch on an invite is 25, 50 or 100 Beans, or none.'),
+    notAVoucher: word('Only owners, admins and appointed vouchers can vouch for someone on an invite.'),
 };
+
+/** A refusal of a vouch as the member reads it: the node's two sentences in their language, anything else as it came. */
+export function inviteVouchRefusalWords(said: string): string {
+    if (said === INVITE_VOUCH_WORDS.badLevel) return t(INVITE_VOUCH_WORDS.badLevel);
+    if (said === INVITE_VOUCH_WORDS.notAVoucher) return t(INVITE_VOUCH_WORDS.notAVoucher);
+    return said;
+}
 
 /** None first, selected every time the screen opens, then the three levels with the Beans each hands out. */
 export const INVITE_VOUCH_CHOICES: readonly { level: VouchLevel | null; amount: number | null }[] = [

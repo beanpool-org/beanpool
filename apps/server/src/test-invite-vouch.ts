@@ -174,15 +174,15 @@ async function main(): Promise<void> {
     assert(getBalance(nell.who.pk).floor === -50, `3. her floor is -50 (${getBalance(nell.who.pk).floor})`);
     const seen = await call(owen, 'GET', `/api/profile/${nell.who.pk}`);
     assert(seen.status === 200 && seen.body?.elderVouchedBy === vic.pk, `3. "Vouched by" shows on her profile (${show(seen)})`);
-    const notTheirs = await call(ada, 'POST', '/api/profile/unvouch', { targetPubkey: nell.who.pk });
     const other = await generate(vic, 1);
     const nora = await joinWith(other.body.invite.code, 'Nora');
-    const owenTries = await call(eld, 'POST', '/api/profile/unvouch', { targetPubkey: nora.who.pk });
-    assert(owenTries.status === 400 && memberRow(nora.who.pk)?.elder_vouched_by === vic.pk, `3. a member who didn't vouch can't withdraw it (${show(owenTries)})`);
+    const eldTries = await call(eld, 'POST', '/api/profile/unvouch', { targetPubkey: nora.who.pk });
+    assert(eldTries.status === 400 && memberRow(nora.who.pk)?.elder_vouched_by === vic.pk, `3. a member who didn't vouch can't withdraw it (${show(eldTries)})`);
     const withdrawn = await call(vic, 'POST', '/api/profile/unvouch', { targetPubkey: nora.who.pk });
     assert(withdrawn.status === 200 && memberRow(nora.who.pk)?.elder_vouched_by === null && memberRow(nora.who.pk)?.vouch_credit === 0 && getBalance(nora.who.pk).floor === 0,
         `3. Vic withdraws it the same way: floor back to 0 (${show(withdrawn)})`);
-    assert(notTheirs.status === 200, `3. an admin may withdraw any, as by hand (${show(notTheirs)})`);
+    const byAdmin = await call(ada, 'POST', '/api/profile/unvouch', { targetPubkey: nell.who.pk });
+    assert(byAdmin.status === 200 && memberRow(nell.who.pk)?.elder_vouched_by === null, `3. an admin may withdraw any, as by hand (${show(byAdmin)})`);
     for (const [level, credit] of [[1, 25], [3, 100]] as const) {
         const made = await generate(owen, level);
         const joined = await joinWith(made.body.invite.code, `L${level}`);

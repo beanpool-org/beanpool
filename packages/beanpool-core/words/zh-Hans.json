@@ -896,5 +896,7 @@
   "Vouch for them": "为此人担保",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "离线凭证无法附带担保。选择“无”即可生成，或在连接后重试。",
   "None": "无",
-  "{amount} Beans": "{amount} 颗豆子"
+  "{amount} Beans": "{amount} 颗豆子",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "邀请中的担保为 25、50 或 100 颗豆子，或者无。",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "只有所有者、管理员和指定担保人才能在邀请中为他人担保。"
 }

@@ -936,5 +936,7 @@
   "Vouch for them": "Bu kişiye kefil ol",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Çevrimdışı bilette kefil olamazsın. Bilet oluşturmak için Hiçbiri’ni seç veya bağlandığında tekrar dene.",
   "None": "Hiçbiri",
-  "{amount} Beans": "{amount} Fasulye"
+  "{amount} Beans": "{amount} Fasulye",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Davetteki kefalet 25, 50 veya 100 Fasulye’dir ya da hiç yoktur.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Davette birine yalnızca sahipler, yöneticiler ve atanmış kefiller kefil olabilir."
 }

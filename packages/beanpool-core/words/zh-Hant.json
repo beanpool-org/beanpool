@@ -896,5 +896,7 @@
   "Vouch for them": "為此人擔保",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "離線憑證無法附帶擔保。選擇「無」即可建立，或在連線後重試。",
   "None": "無",
-  "{amount} Beans": "{amount} 顆豆子"
+  "{amount} Beans": "{amount} 顆豆子",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "邀請中的擔保為 25、50 或 100 顆豆子，或者無。",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "只有擁有者、管理員和指定擔保人才能在邀請中為他人擔保。"
 }

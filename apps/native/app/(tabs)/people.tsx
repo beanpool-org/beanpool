@@ -25,7 +25,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, formatNumber, offersInviteVouch, t, tn, word, type VouchLevel, type WordKey } from '@beanpool/core';
+import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteVouchRefusalWords, offersInviteVouch, t, tn, word, type VouchLevel, type WordKey } from '@beanpool/core';
 import { InviteVouchChoice } from '../../components/InviteVouchChoice';
 import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
@@ -563,7 +563,7 @@ export default function PeopleScreen() {
                     }
                     // The node refused the vouch: its words, and no ticket, which would quietly carry none.
                     if (vouch !== null) {
-                        Alert.alert(t('Could not vouch'), typeof body?.error === 'string' ? body.error : t('Please try again.'));
+                        Alert.alert(t('Could not vouch'), typeof body?.error === 'string' ? inviteVouchRefusalWords(body.error) : t('Please try again.'));
                         return;
                     }
                 }

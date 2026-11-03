@@ -936,5 +936,7 @@
   "Vouch for them": "Magpatunay para sa kanila",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "Hindi ka makakapagpatunay sa offline ticket. Piliin ang Wala para makagawa nito, o subukang muli kapag konektado ka na.",
   "None": "Wala",
-  "{amount} Beans": "{amount} Munggo"
+  "{amount} Beans": "{amount} Munggo",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Ang patunay sa imbitasyon ay 25, 50 o 100 Munggo, o wala.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Ang mga may-ari, admin at itinalagang tagapagpatunay lang ang makakapagpatunay para sa isang tao sa imbitasyon."
 }

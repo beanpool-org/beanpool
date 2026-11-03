@@ -1016,5 +1016,7 @@
   "Vouch for them": "Поручитися за цю людину",
   "You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.": "На офлайн-квитку не можна поручитися. Виберіть «Жодного», щоб створити його, або спробуйте знову, коли буде зв’язок.",
   "None": "Жодного",
-  "{amount} Beans": "{amount} бобів"
+  "{amount} Beans": "{amount} бобів",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Порука в запрошенні — це 25, 50 або 100 бобів чи жодної.",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Поручитися за когось у запрошенні можуть лише власники, адміністратори та призначені поручителі."
 }

@@ -25,8 +25,9 @@
  *   vanish on their next read (#1403 review); the line itself, which the other person sees, never changes.
  *
  * A promoted standby has none of these: the sender's own copies of lines nobody else ever saw are what a take-over
- * loses. A line's photo is kept in the image store as a chat photo is, its key in the row (a chat photo isn't copied
- * either; replication-manifest message_attachments), and its object goes with the line.
+ * loses. A line's photo is kept in the image store as a chat photo is, its key in the row (a chat photo is copied to
+ * a standby, replication-manifest message_attachments, but a withheld line's photo is not: the line never is), and its object
+ * goes with the line.
  * Gone with their sender on a prune or a self-deletion (dropWithheldOf); a re-key moves them (engine/key-move.ts).
  */
 import { avatarUrlOf } from '@beanpool/core';

@@ -426,8 +426,9 @@ describe('TakeoverPanel', () => {
         stubFetch({ '/api/local/admin/takeover/progress': () => 'network' });
         render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
-        expect(screen.getByText('photos sent in chats')).toBeInTheDocument();
         expect(screen.getByText('Commons project proposals still waiting for a decision')).toBeInTheDocument();
+        // Chat photos are copied to a standby now (gap G4): no longer among what a take-over lacks.
+        expect(screen.queryByText('photos sent in chats')).not.toBeInTheDocument();
     });
 });
 

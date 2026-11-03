@@ -76,7 +76,7 @@ A group's chat is end-to-end encrypted: your server stores it but cannot read it
 - **Verified**, the message's words, its photo if it has one, and whose key signed it: the message is exactly what its author sent.
 - **Could not be verified**, with no words: the key does not open the message, or the message is not signed by the member it names. A reporter can't make up a message, or change one, and have it read as someone else's. Judge the report on the reporter's words alone.
 - **Photo could not be verified**: the words check out, but the photo stored with them is not the one their author sent.
-- **Image unavailable**: the words check out, but this server holds no copy of the photo. Photos in chats are not copied to a standby, so a server that took over from another has none of them.
+- **Image unavailable**: the words check out, but this server holds no copy of the photo. A standby copies photos in chats, so this happens only when it took over before it had copied that photo, or the photo was lost from the server's storage.
 - That its author deleted it, or a convenor removed it, after it was reported: then there is nothing left to open.
 
 The key opens that message and nothing else: no other message in the chat, and no other photo. Nobody in the group is told who reported it. Settings has no button to take a group chat message down: a convenor removes it in the chat, and the owners and admins can suspend its author.

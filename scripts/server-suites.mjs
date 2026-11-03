@@ -277,6 +277,7 @@ export const SUITES = [
     'test-nearby-set-memory',
     'test-posts-sync-paged-cost',
     'test-takeover-keeps-listing-times',
+    'test-standby-chat-photos',
     'test-profile-takeover',
     'test-open-join-failover',
     'test-open-join-key-file',

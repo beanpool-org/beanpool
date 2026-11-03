@@ -535,9 +535,14 @@ export const TABLES: Record<string, TableEntry> = {
     dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by state_before reached_out_at reach_out_withdrawn_at updated_at', { rows: REAL_CONVERSATIONS }),
     // A limit on sending message requests (engine/request-limits.ts), so a standby that takes over refuses and clears the same.
     request_limits: plain('id sender_pubkey made_at until how lifted_at updated_at'),
-
-    // ── Not copied today, and the design says they should be ──
-    message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
+    // A chat photo, DM or group alike (engine/messaging.ts, engine/group-thread.ts): ciphertext the node can't open, its
+    // nonce and mime, verbatim, so a server that takes over serves the photos its lines name to who may read them
+    // (routes/marketplace.ts, by the copied conversations, participants and group rosters). Its object goes by reference,
+    // as a listing photo's does: the row names it by `sha256` and `bytes`, and the standby fetches only the objects its store
+    // lacks (services/backup-puller.ts fetchPhotoObjects, routes/backup.ts sync-object), under the same key
+    // (storage/image-store.ts attachmentKey). Every delete (the line deleted or removed, its author's account, a
+    // conversation, a withdrawn request) writes a tombstone, and the standby deletes the row and its object.
+    message_attachments: plain('message_id data nonce mime created_at storage_key sha256 bytes updated_at'),
 
     // ── Local by design ──
     sync_cursors: { kind: 'local', reason: "this server's own pull cursors" },

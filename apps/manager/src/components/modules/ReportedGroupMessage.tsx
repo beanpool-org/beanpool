@@ -96,8 +96,8 @@ export function ReportedGroupMessage({ nodeUrl, reportId, groupName, adminPasswo
                     )}
                     {photo?.state === 'unavailable' && (
                         <p className="text-sm text-nature-300 m-0">
-                            Image unavailable. Photos in chats are not copied to a standby server, so a server that took over
-                            from another has none of them. The message's words are still verified.
+                            Image unavailable. This server holds no copy of the photo: it took over from another server
+                            before it had copied it, or the photo was lost from its storage. The message's words are still verified.
                         </p>
                     )}
                     {words.text ? (

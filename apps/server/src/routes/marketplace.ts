@@ -251,6 +251,16 @@ function mayReadAttachmentOf(id: string, viewer: string): boolean {
     return !!db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(line.conv, viewer);
 }
 
+/** Storage keys whose missing object has been logged already (bounded: emptied when it grows past a few hundred). */
+const missingAttachmentLogged = new Set<string>();
+function noteMissingAttachmentOnce(key: string | null | undefined): boolean {
+    const k = key || '';
+    if (missingAttachmentLogged.has(k)) return false;
+    if (missingAttachmentLogged.size >= 500) missingAttachmentLogged.clear();
+    missingAttachmentLogged.add(k);
+    return true;
+}
+
 // Lazy-load an encrypted message attachment (image). Returns ciphertext only —
 // the node can't read it; the recipient decrypts with the DM key + nonce, or a group line's photo with its epoch's key.
 // Only to the people in its conversation, as its words go (GET /api/messages/:conversationId), and a withheld line's
@@ -308,7 +318,9 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
                 return;
             }
         }
-        console.error(`[Attachments] ${id}:`, e);
+        // A chat photo whose object never arrived on a server that took over (gap G4) is opened by its members again and
+        // again: it is logged once per object, not on every open. Any other failure is logged each time.
+        if (!(e instanceof MissingObjectError) || noteMissingAttachmentOnce(row.storage_key)) console.error(`[Attachments] ${id}:`, e);
         ctx.status = 503;
         ctx.body = { error: word('This attachment is temporarily unavailable') };
         return;

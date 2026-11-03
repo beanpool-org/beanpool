@@ -289,9 +289,9 @@ async function main(): Promise<void> {
         assert(pv.addressWarning === null, `a community with a name (testtown.beanpool.org): no address warning (${pv.addressWarning})`);
         assert(pv.recoverySealKey === true && !pv.missing.some((m: string) => /sign-in recovery copies/.test(m)),
             `S2: the preview says the keys carry the key that opens members' sign-in recovery copies (${pv.recoverySealKey})`);
-        assert(pv.missing.some((m: string) => /photos sent in chats/.test(m)) && pv.missing.some((m: string) => /Commons project proposals/.test(m))
-            && !pv.missing.some((m: string) => /Decisions|invites|keeper changes|notifications on|muted chats|activity list|pricing guide/.test(m)),
-            'the preview lists what will be missing (chat photos, Commons proposals, …), and no longer Decisions, invites or keeper changes, nor the phones members get notifications on, muted chats, the activity list or the pricing guide, which the standby copies');
+        assert(pv.missing.some((m: string) => /Commons project proposals/.test(m)) && pv.missing.some((m: string) => /price reports sent without signing in/.test(m))
+            && !pv.missing.some((m: string) => /Decisions|invites|keeper changes|notifications on|muted chats|activity list|pricing guide|photos sent in chats/.test(m)),
+            'the preview lists what will be missing (Commons proposals, price reports, …), and no longer Decisions, invites or keeper changes, nor the phones members get notifications on, muted chats, the activity list, the pricing guide or chat photos, which the standby copies');
         assert(!JSON.stringify(opened.body).includes(TUNNEL_TOKEN) && !/adminHash|totpSecret|libp2p_key/.test(JSON.stringify(opened.body)),
             'the preview carries no secret from inside the keys');
 

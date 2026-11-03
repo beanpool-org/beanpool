@@ -24,9 +24,9 @@ Joining with a code is signed by the new member's own key, from the app or the w
 Someone who opens your community's address in a browser, and has no account there, sees its card: what a stranger may read about your community, and the ways in. The website's map links it as **See** and your community's name. Each line on it follows a setting you already have:
 
 - **The name**: your **Community name** (Settings → Node Identity). With none of your own, the card shows your address instead.
-- **How many members**: only while **Share member count** is on (How this community works).
-- **The town or area**: only while **Share location & radius** is on (How this community works), and only what you type in **Town or area (optional)** under the service radius in Node Identity, with the radius. A town, never a street: the pin itself is never on the card.
-- **Takes requests to join**, while requests to join are on (How this community works), any member may invite, and your community has a public address; otherwise **Takes new members by invite**.
+- **How many members**: only while **Share member count** is on (Appliance & Data → Node Identity → Being found).
+- **The town or area**: only while **Share location & radius** is on (Appliance & Data → Node Identity → Being found), and only what you type in **Town or area (optional)** under the service radius in Node Identity, with the radius. A town, never a street: the pin itself is never on the card.
+- **Takes requests to join**, while requests to join are on (Invites & QR → Taking new members), any member may invite, and your community has a public address; otherwise **Takes new members by invite**.
 - **Ask to join**: on an Android phone, it opens your card in the BeanPool app, where the person sends their request. Elsewhere, it opens the global community with your community first, but only while your community is listed in the directory (Listed on, named, and told at least once), because that is the list the global community shows. Otherwise the card says **Ask to join from the BeanPool app.**
 - **Look around the global community**: the global community your server names.
 
@@ -54,11 +54,11 @@ A standby copies these records (all but the connection's reference), and so does
 
 ## Who may invite
 
-Open **How it works** in the left menu (the page is titled **How this community works**). Under **Who can join**, pick one of three choices for who can bring people into the community (make an invite, or answer someone who asks to join) and save it:
+Open **Core settings**, the last item in the left menu. Under **Who can join**, pick one of two doors for who can bring people into the community (make an invite, or answer someone who asks to join). Once the core settings are locked, press **Unlock to change** first; it asks for your proof. Pausing new members is separate and needs no unlocking: it is under **People & Safety → Invites & QR**, in **Taking new members**.
 
 - **Invite: any member invites**: Every local community starts this way. Any member can make an invite in the app or the web app, and answer a request to join.
 - **Known: only admins invite**: Only owners and admins can make invites and answer requests to join. A member's **Invites** shows **Bring someone here** instead of the invite maker (the invite tree and the codes they made earlier stay), says that only the admins invite people here and to ask one, and offers the community's link where it takes requests to join. Members don't see the requests, and the server refuses a member who tries anyway. Owners and admins can also keep a names list of who the members are, in the app on their own phones: see "Running a known community".
-- **Paused: nobody new for now**: Stops all new joins. No member or admin can generate an invite, existing unused invites are refused, and requests to join are turned off while paused. Members see that joining is paused on their card and in the guide.
+- **Paused** (a switch under Invites & QR, not a door): Stops all new joins. No member or admin can generate an invite, existing unused invites are refused, and requests to join are turned off while paused. Members see that joining is paused on their card and in the guide.
 
 Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, nobody can answer a request to join, or make an invite in the app. You can still save it.
 
@@ -92,7 +92,7 @@ A community with Beans can't open its door to anyone with a sign-in: strangers w
 
 ## Where members' copies go
 
-When a member links Google, Apple or Facebook as a way back into their account, the app locks a copy of their key (and their 12 words, when the phone has them) to that sign-in, so signing in brings the account back on a new phone. Your community decides where those copies go. Open **How this community works** in Settings: **Where members' copies go** is under **Ways back**. Only an owner can change it. The first-time setup shows it too, before the founding invites.
+When a member links Google, Apple or Facebook as a way back into their account, the app locks a copy of their key (and their 12 words, when the phone has them) to that sign-in, so signing in brings the account back on a new phone. Your community decides where those copies go. Open **Core settings** in Settings: **Where members' copies go** is there. Only an owner can change it, and once the core settings are locked, with **Unlock to change**. The first-time setup shows it too, before the founding invites.
 
 - **BeanPool's key vault.** Every community starts here. Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open (the members' guide says who can open a copy). Nothing on your server needs the vault: a member's phone deposits there with its own key, and your server never calls it. The web app has no key vault client, so a copy a web-app member's join made stays on your server. Where a member turns on **Your community's admins** (see Bring back), your server keeps half of a locked copy and the vault the other half, and neither can open it alone.
 - **This server.** Your server keeps members' copies, locked with its recovery seal (data/recovery-seal.key). The people who run it can open them. If this server is lost, those copies are lost; members' 12 words still work. The copies are in your backups and in a standby's copy (see Backups and replicas). A sign-in a member links from this community's screens keeps its copy here, and the app doesn't ask the vault for it. The app does still ask the vault, from the member's phone and with their own key, whether it holds a copy of their account, when the app or Settings opens: that is how it can offer to move one here. It contacts the vault again when a member moves or removes that copy. Your server never calls the vault.

@@ -333,23 +333,34 @@ describe('HomeScreen Component', () => {
         });
     });
 
-    describe('How this community works card', () => {
-        it('renders the one-line summary matching shape settings and navigates to shape on click', () => {
+    describe('Core settings card and the Action required item', () => {
+        const baseShape = (core: any): any => ({
+            standby: false,
+            settings: { join: { value: 'members' }, beans: { value: true }, decisions: { value: true }, knocks: { value: true } },
+            ...(core === undefined ? {} : { core }),
+        });
+        const UNLOCKED = { settings: [], lock: null, place: { needed: true, set: true } };
+        const LOCKED = { settings: [], lock: { at: '2026-11-03T10:00:00.000Z', by: 'k', byCallsign: 'ada' }, place: { needed: true, set: true } };
+        const read = { members: [{ publicKey: 'a', isTreasury: false }], reportCount: 0, escrowDisputesCount: 0, tradeTotals: { deals: 0, volume: 0, cancelled: 0 }, commonsBalance: 0 };
+        const diag: any = { activeWsConnections: 1, dbSizeBytes: 1, walSizeBytes: 0, serverAlerts: { count: 0, items: [] } };
+        const OWNER = { kind: 'key', memberPubkey: 'o', role: 'owner' } as const;
+        const ADMIN = { kind: 'key', memberPubkey: 'a', role: 'admin' } as const;
+
+        it('renders the one-line summary and navigates to Core settings on click', () => {
             const onNavigate = vi.fn();
-            const shape: any = {
-                settings: {
-                    join: { value: 'members' },
-                    beans: { value: true },
-                    decisions: { value: true },
-                    knocks: { value: true },
-                },
-            };
-            render(<HomeScreen {...defaultProps} onNavigate={onNavigate} shape={shape} />);
+            render(<HomeScreen {...defaultProps} onNavigate={onNavigate} shape={baseShape(LOCKED)} />);
             const card = screen.getByTestId('home-community-shape-card');
-            expect(card).toBeInTheDocument();
-            expect(card).toHaveTextContent('🧭 How this community works · any member invites · Beans on · votes on · requests to join on · Change ›');
+            expect(card).toHaveTextContent('🧭 Core settings · any member invites · Beans on · votes on · locked 3 Nov ›');
             fireEvent.click(card);
             expect(onNavigate).toHaveBeenCalledWith('shape');
+        });
+
+        it('says not confirmed yet while there is no lock, and nothing about a lock on a server from before them', () => {
+            const { unmount } = render(<HomeScreen {...defaultProps} shape={baseShape(UNLOCKED)} />);
+            expect(screen.getByTestId('home-community-shape-card')).toHaveTextContent('🧭 Core settings · any member invites · Beans on · votes on · not confirmed yet ›');
+            unmount();
+            render(<HomeScreen {...defaultProps} shape={baseShape(undefined)} />);
+            expect(screen.getByTestId('home-community-shape-card')).toHaveTextContent('🧭 Core settings · any member invites · Beans on · votes on ›');
         });
 
         it('an answer without the settings (an older node, an error body) draws no line and Home still renders', () => {
@@ -359,6 +370,51 @@ describe('HomeScreen Component', () => {
                 expect(screen.getByText('Action Required')).toBeInTheDocument();
                 unmount();
             }
+        });
+
+        it('an owner is offered the walkthrough: one setting a line, five minutes, and All clear stays hidden', () => {
+            const onNavigate = vi.fn();
+            render(<HomeScreen {...defaultProps} viewer={OWNER} nodeData={read as any} diag={diag} onNavigate={onNavigate} shape={baseShape(UNLOCKED)} />);
+            const panel = screen.getByTestId('home-action-required');
+            expect(panel).toHaveTextContent('Core settings not confirmed yet · six settings, about five minutes ›');
+            expect(panel).not.toHaveTextContent(/All clear/);
+            fireEvent.click(screen.getByRole('button', { name: /Core settings not confirmed yet/ }));
+            expect(onNavigate).toHaveBeenCalledWith('shape', 'walk', undefined);
+        });
+
+        it('with members it counts them and opens the review', () => {
+            const onNavigate = vi.fn();
+            const withMembers = { ...read, members: [{ publicKey: 'a', isTreasury: false }, { publicKey: 'b', isTreasury: false }, { publicKey: 'c', isTreasury: false }, { publicKey: 'e', isTreasury: true }] };
+            render(<HomeScreen {...defaultProps} viewer={OWNER} nodeData={withMembers as any} diag={diag} onNavigate={onNavigate} shape={baseShape(UNLOCKED)} />);
+            expect(screen.getByTestId('home-action-required')).toHaveTextContent('3 members joined under core settings nobody confirmed yet · confirm and lock them ›');
+            fireEvent.click(screen.getByRole('button', { name: /3 members joined under core settings/ }));
+            expect(onNavigate).toHaveBeenCalledWith('shape', 'review', undefined);
+        });
+
+        it('the password owner is offered it too', () => {
+            render(<HomeScreen {...defaultProps} viewer={{ kind: 'password' }} nodeData={read as any} diag={diag} shape={baseShape(UNLOCKED)} />);
+            expect(screen.getByRole('button', { name: /Core settings not confirmed yet/ })).toBeInTheDocument();
+        });
+
+        it('an admin gets a grey line and no button; All clear is hidden', () => {
+            render(<HomeScreen {...defaultProps} viewer={ADMIN} nodeData={read as any} diag={diag} shape={baseShape(UNLOCKED)} />);
+            expect(screen.getByTestId('home-core-admin-line')).toHaveTextContent("The owners haven't confirmed the core settings yet. You can read them.");
+            expect(screen.queryByRole('button', { name: /Core settings not confirmed yet/ })).toBeNull();
+            expect(screen.getByTestId('home-action-required')).not.toHaveTextContent(/All clear/);
+        });
+
+        it('once locked the item is gone and All clear returns; a server from before them shows no item', () => {
+            const { unmount } = render(<HomeScreen {...defaultProps} viewer={OWNER} nodeData={read as any} diag={diag} shape={baseShape(LOCKED)} />);
+            expect(screen.queryByRole('button', { name: /Core settings not confirmed yet/ })).toBeNull();
+            expect(screen.getByText(/All clear/)).toBeInTheDocument();
+            unmount();
+            render(<HomeScreen {...defaultProps} viewer={OWNER} nodeData={read as any} diag={diag} shape={baseShape(undefined)} />);
+            expect(screen.queryByRole('button', { name: /Core settings not confirmed yet/ })).toBeNull();
+        });
+
+        it('a standby is told nothing: the main server confirms', () => {
+            render(<HomeScreen {...defaultProps} viewer={OWNER} nodeData={read as any} diag={diag} shape={{ ...baseShape(UNLOCKED), standby: true }} />);
+            expect(screen.queryByRole('button', { name: /Core settings not confirmed yet/ })).toBeNull();
         });
     });
 

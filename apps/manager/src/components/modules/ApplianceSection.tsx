@@ -20,6 +20,7 @@ import {
 } from '../../lib/node-client';
 import { restoreDoneWords } from '../../lib/restore-words';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
+import { EverydayRuleRows } from './EverydayRuleRows';
 import { ListingPromisePanel } from './ListingPromisePanel';
 import { AddressesPanel } from './AddressesPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
@@ -1397,6 +1398,14 @@ export function ApplianceSection({
                         onSaveGateway={onSaveGateway}
                     />
 
+                    <EverydayRuleRows
+                        key={`connections-${activeNode.id}`}
+                        activeNode={activeNode}
+                        viewer={rolesViewer}
+                        group="connections"
+                        title="Connections to other communities"
+                    />
+
                     {/* Connected Peers & Connectors */}
                     <SectionErrorBoundary sectionName="Peer Connectors" resetKey={activeNode.id}>
                         <PeerConnectorsPanel
@@ -1432,6 +1441,16 @@ export function ApplianceSection({
                         diag={diag}
                         onRefreshDiag={onRefreshDiag}
                     />
+                    <div className="mt-6">
+                        <EverydayRuleRows
+                            key={`found-${activeNode.id}`}
+                            activeNode={activeNode}
+                            viewer={rolesViewer}
+                            group="found"
+                            title="Being found"
+                            intro="What the public directory and the map show, and what visitors see."
+                        />
+                    </div>
                     {/* The listing promise (Mothership A3): its four lines and the closing day, under Directory Publishing. */}
                     <ListingPromisePanel key={`promise-${activeNode.id}`} activeNode={activeNode} viewer={rolesViewer} />
                 </SectionErrorBoundary>

@@ -101,7 +101,7 @@ A report on a line in a circle's chat reaches you like a report on any group's c
 
 ## Automated safety and reports
 
-On the global community, automated safety rules are on by default. On a local community, an owner can choose to turn them on under **How this community works** (under Safety):
+On the global community, automated safety rules are on by default. On a local community, an owner can choose to turn them on under **People & Safety → Triage & Moderation** (**Rules the server applies**):
 
 - **Limits on new accounts (probation)**: New accounts have small daily posting and messaging limits during their first days, protecting the community from rapid spam.
 - **Reported posts hidden and message requests cleared automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Reports clear a sender's message requests by the same switch. Off by default on local communities (where reports wait for a moderator to review).
@@ -109,7 +109,7 @@ On the global community, automated safety rules are on by default. On a local co
 
 ### How posts are hidden by reports
 
-When automatic hiding is on (by default on the global community, or switched on for a local community under How this community works), reports can hide a post before anyone looks at it. Off, every report waits for a moderator to review.
+When automatic hiding is on (by default on the global community, or switched on for a local community under Triage & Moderation → Rules the server applies), reports can hide a post before anyone looks at it. Off, every report waits for a moderator to review.
 
 A post is hidden when reporters from **three independent circles** count towards it. A reporter counts when all of these hold:
 
@@ -127,7 +127,7 @@ A post by someone who joined with **12 words** and is still on the new-account l
 
 A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above. A post on hold is the exception: no dismissal brings it back, only an owner or admin with **Put back**.
 
-When **Repeat offenders muted automatically** is on (by default on the global community, or switched on for a local community under How this community works), a member whose posts moderators have removed 3 times in 30 days is muted. They can still read, but cannot post, edit a post or send messages until a moderator lifts it, and they are told. Pruning stale posts never counts towards this. Settings has no button to lift a mute yet.
+When **Repeat offenders muted automatically** is on (by default on the global community, or switched on for a local community under Triage & Moderation → Rules the server applies), a member whose posts moderators have removed 3 times in 30 days is muted. They can still read, but cannot post, edit a post or send messages until a moderator lifts it, and they are told. Pruning stale posts never counts towards this. Settings has no button to lift a mute yet.
 
 ## On the global community: accounts that joined together
 

@@ -3,7 +3,7 @@
  * Reads GET /api/local/admin/community-shape (slice S1) and writes POST /api/local/admin/community-shape (slice S2).
  */
 import { buildAdminHeaders, passwordField, resolveNodeApiUrl } from './node-client';
-import { t } from './fresh-proof';
+import { t, proofField, throwIfFreshProof } from './fresh-proof';
 
 export type ShapeSource = 'owner' | 'profile' | 'default' | 'server';
 
@@ -38,7 +38,8 @@ export interface KnownFloorShape {
 }
 
 export interface ShapeSettings {
-    join: ShapeSetting<JoinState>;
+    /** `door`: the door the community stores, paused or not: what un-pausing goes back to (server C1, core settings). */
+    join: ShapeSetting<JoinState> & { door?: 'members' | 'admins' };
     openDoor: ShapeSetting<boolean>;
     wordsDoor?: ShapeSetting<boolean>;
     doorCheck?: ShapeSetting<boolean>;
@@ -84,15 +85,51 @@ export interface ShapeLogLine {
     note: string | null;
 }
 
+/**
+ * Core settings (server config/core-settings.ts; DESIGN-core-settings-fable.md §8.2). Absent on a server from before them:
+ * the page then shows every Core row as it always did, with no lock.
+ */
+export interface CoreShape {
+    settings: string[];
+    lock: { at: string | null; by: string | null; byCallsign: string | null } | null;
+    place?: { needed: boolean; set: boolean };
+}
+
 export interface Shape {
     kind: 'local' | 'global';
     standby: boolean;
     copiedAt?: string | null;
     version: number;
     settings: ShapeSettings;
+    core?: CoreShape;
     kindOnly: KindOnlySetting[];
     log: ShapeLogLine[];
 }
+
+/**
+ * The Core settings, in the shape's names. The server sends its own list (`core.settings`); this one is the page's, and
+ * lib/community-shape.test.ts holds the two equal. Everything else on the shape is everyday and lives where it is used.
+ */
+export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
+export type CoreSettingKey = (typeof CORE_SETTINGS)[number];
+export const isCoreSetting = (k: string): k is CoreSettingKey => (CORE_SETTINGS as readonly string[]).includes(k);
+
+/** The three one-way changes: once locked, Save waits until this word is typed (design §4.2). */
+export function typedWordFor(setting: string, to: unknown): string | null {
+    if (setting === 'beans' && to === false) return 'off';
+    if (setting === 'shareOutside' && to === false) return 'stop';
+    if (setting === 'recoveryCopies' && to === 'none') return 'nowhere';
+    return null;
+}
+
+/** Whether an owner has confirmed and locked the core settings. A server from before them says nothing: not locked. */
+export const coreLocked = (shape: Shape | null | undefined): boolean => Boolean(shape?.core?.lock);
+/**
+ * What the menu's "!" on Core settings means: an OWNER, on the main server (not a standby), on a server that has the core
+ * block (not one from before it), whose core settings are not confirmed and locked yet. Admins never see it.
+ */
+export const coreAwaitsOwner = (shape: Shape | null | undefined, isOwner: boolean): boolean =>
+    isOwner && Boolean(shape) && !shape!.standby && Boolean(shape!.core) && !shape!.core!.lock;
 
 /** 40 Beans is an hour of work (PROTOCOL_CONSTANTS.REFERENCE_RATE). */
 export const BEANS_PER_HOUR = 40;
@@ -232,6 +269,7 @@ export async function updateCommunityShape(
     changes: Record<string, unknown>,
     note?: string,
     tfaToken?: string,
+    code?: string,
 ): Promise<{ shape: Shape; told: 'members' | 'nobody' }> {
     const keys = Object.keys(changes);
     if (keys.length !== 1) {
@@ -246,18 +284,71 @@ export async function updateCommunityShape(
             ...passwordField(credential),
             changes,
             ...(note && note.trim() ? { note: note.trim() } : {}),
+            ...proofField(code),
         }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-        const err: any = new Error(body.error || `HTTP ${res.status}`);
-        err.status = res.status;
-        err.code = body.code;
-        err.setting = body.setting;
-        err.unlock = body.unlock;
-        throw err;
+        // A locked Core change asks the owner's fresh proof: the page opens the FreshProofBox for it.
+        throwIfFreshProof(res.status, body);
+        throw shapeError(res.status, body);
     }
     return body;
+}
+
+function shapeError(status: number, body: any): Error {
+    const err: any = new Error(body.error || `HTTP ${status}`);
+    err.status = status;
+    err.code = body.code;
+    err.setting = body.setting;
+    err.unlock = body.unlock;
+    return err;
+}
+
+/**
+ * Confirm and lock the core settings (POST community-shape with `lock: true`): the changes that differ from what the
+ * community has now (none is fine) and the lock row, in one transaction. Asks no fresh proof: nothing is undone.
+ * Refused with nothing written: 409 core_locked (already), 409 place_needed (a local community with no place yet).
+ */
+export async function confirmCoreSettings(
+    nodeUrl: string,
+    credential: string | undefined,
+    changes: Record<string, unknown>,
+    tfaToken?: string,
+): Promise<{ shape: Shape; told: 'members' | 'nobody' }> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/community-shape');
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(credential, tfaToken),
+        credentials: 'same-origin',
+        body: JSON.stringify({ ...passwordField(credential), changes, lock: true }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw shapeError(res.status, body);
+    return body;
+}
+
+/**
+ * Save the community's place (the walkthrough's mandatory step on a local community; the same route Node Identity uses).
+ * Only when none is set yet: Node Identity is where a place already set is changed.
+ */
+export async function saveCommunityPlace(
+    nodeUrl: string,
+    credential: string | undefined,
+    place: { lat: number; lng: number },
+    tfaToken?: string,
+): Promise<void> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/node/config');
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(credential, tfaToken),
+        credentials: 'same-origin',
+        body: JSON.stringify({ ...passwordField(credential), serviceRadius: { lat: place.lat, lng: place.lng, radiusKm: 0 } }),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw shapeError(res.status, body);
+    }
 }
 
 /**

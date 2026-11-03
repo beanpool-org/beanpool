@@ -224,7 +224,7 @@ export function GatewayModule({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* The web app: on, or a headless node. Who can join, chat, the Market and federation have no switch here
-                    (How this community works S3): the server refuses a save that names one. */}
+                    (Core settings S3): the server refuses a save that names one. */}
                 <div className="space-y-3">
                     <h4 className="text-xs font-extrabold text-nature-300 uppercase tracking-wider">Web App</h4>
                     <div className="space-y-3 bg-nature-950/60 p-4 rounded-xl border border-nature-800/80 text-xs">
@@ -243,7 +243,7 @@ export function GatewayModule({
                             />
                         </label>
                         <p className="text-[11px] text-nature-400 leading-normal m-0 break-words">
-                            Off, this node serves the API and Settings but not the web app. Who can join is set under How this community works, and connections to other communities on the server (ENABLE_PEER_CONNECTORS).
+                            Off, this node serves the API and Settings but not the web app. Who can join is set under Core settings, and connections to other communities on the server (ENABLE_PEER_CONNECTORS).
                         </p>
                     </div>
                 </div>

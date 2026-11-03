@@ -5,6 +5,8 @@ import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
 import { setKeySessionCsrfToken, setTfaSessionToken } from '../../lib/node-client';
 
+// The everyday rules card reads the community's shape on mount (its own tests: EverydayRuleRows.test.tsx); this file counts other calls.
+vi.mock('./EverydayRuleRows', () => ({ EverydayRuleRows: () => null }));
 // The AI assistants' suggestions card lists from the node on mount (its own tests: AgentSuggestionsPanel.test.tsx); these
 // tests count the moderation calls alone.
 vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));

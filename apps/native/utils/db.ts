@@ -4068,6 +4068,27 @@ async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: an
 }
 
 /**
+ * The member's own listings and the ones tied to them on this phone (posts-nearby.ts "kept"): one they took, any deal on it, a
+ * conversation about it, their own answer or vote, or an id the node named `tied`. Four `?` in order: the member's key, four times.
+ * One rule for the copy's pruning (keepPostsNearby) and for the Market's circle (getNearbyKeptPostIds), so they cannot drift.
+ */
+const NEARBY_KEPT_SQL = `(p.author_pubkey = ? OR p.accepted_by = ?
+                 OR EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id)
+                 OR EXISTS (SELECT 1 FROM conversations c WHERE c.post_id = p.id)
+                 OR EXISTS (SELECT 1 FROM event_rsvps r WHERE r.post_id = p.id AND r.member_pubkey = ?)
+                 OR EXISTS (SELECT 1 FROM poll_votes v WHERE v.post_id = p.id AND v.voter_pubkey = ?)
+                 OR EXISTS (SELECT 1 FROM nearby_tied n WHERE n.id = p.id))`;
+
+/** The ids of the listings this phone keeps whatever their distance (NEARBY_KEPT_SQL): the Market's circle never cuts them. */
+export async function getNearbyKeptPostIds(selfPubkey: string | null | undefined): Promise<Set<string>> {
+    if (!selfPubkey) return new Set();
+    const database = await waitForInit();
+    const rows = await database.getAllAsync<{ id: string }>(
+        `SELECT p.id FROM posts p WHERE ${NEARBY_KEPT_SQL}`, [selfPubkey, selfPubkey, selfPubkey, selfPubkey]);
+    return new Set(rows.map(r => r.id));
+}
+
+/**
  * On a community that syncs listings by area (utils/posts-nearby.ts says the rules): the held listings its member's set
  * no longer names go (`set`, when this write carries one), then all but the `max` others nearest `area` (or the newest,
  * without one), each with its poll votes and RSVPs. Never the member's own or one tied to them on this phone: one they
@@ -4119,12 +4140,7 @@ async function keepPostsNearby(
     const rows = await txn.getAllAsync<{ id: string; lat: number | null; lng: number | null; at: string | null; kept: number; off: number; online: number }>(
         `SELECT p.id, p.lat, p.lng, COALESCE(p.updated_at, p.created_at) AS at, (p.active = 0 OR p.status = 'cancelled') AS off,
                 (p.type = 'event' AND COALESCE(p.event_online, 0) = 1) AS online,
-                (p.author_pubkey = ? OR p.accepted_by = ?
-                 OR EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id)
-                 OR EXISTS (SELECT 1 FROM conversations c WHERE c.post_id = p.id)
-                 OR EXISTS (SELECT 1 FROM event_rsvps r WHERE r.post_id = p.id AND r.member_pubkey = ?)
-                 OR EXISTS (SELECT 1 FROM poll_votes v WHERE v.post_id = p.id AND v.voter_pubkey = ?)
-                 OR EXISTS (SELECT 1 FROM nearby_tied n WHERE n.id = p.id)) AS kept
+                ${NEARBY_KEPT_SQL} AS kept
          FROM posts p`,
         [selfPubkey, selfPubkey, selfPubkey, selfPubkey]);
     const held: NearbyHeld[] = rows.map(r => ({ id: r.id, lat: r.lat, lng: r.lng, at: r.at, kept: !!r.kept, off: !!r.off, online: !!r.online }));

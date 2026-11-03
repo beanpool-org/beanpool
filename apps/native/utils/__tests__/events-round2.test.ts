@@ -4,7 +4,7 @@ import {
     type EventEditValues,
 } from '../events';
 import { eventFitCoordinates, eventFitPadding, EVENT_PIN_HEIGHT_DP } from '../map-filters';
-import { feedSections, localDaysAgo, UPCOMING_EVENTS_HEADING } from '../feed-sections';
+import { feedSections, localDaysAgo } from '../feed-sections';
 import { NEW_POST_TYPES } from '../compose-options';
 
 // Local-time constructors keep these independent of the runner's time zone.
@@ -180,13 +180,18 @@ describe('feed headings (B6)', () => {
     const needMonday = { id: 'n-mon', type: 'need', created_at: at(21, 12) };
     const pollOld = { id: 'p-old', type: 'poll', created_at: at(10, 12) };
 
-    it('puts events under their own heading, soonest first — never under TODAY', () => {
+    // The old "Upcoming events" heading is gone (Market order, DESIGN-market-order-fable.md): events are in the day they were
+    // listed, and come back once the day before they start. The new order's tests are market-order-phone.test.ts and core's.
+    it('puts an event in the day it was listed, never under a heading of its own', () => {
         const sections = feedSections([offerThisMorning, saturdayEvent, offerLastNight, tomorrowEvent, needMonday, pollOld], now.getTime());
+        expect(sections.map(s => s.title)).not.toContain('Upcoming events');
+        // Saturday's event was posted this morning, so it is under Today as a post, in its order of posting (8 am, after the 7 am
+        // offer). Thursday's event is not yet within 24 hours of starting (18:00 on the 24th: it comes back at 18:00 today), so it
+        // sits where it was posted, on the 20th.
         expect(sections.map(s => [s.title, s.posts.map((p: any) => p.id)])).toEqual([
-            [UPCOMING_EVENTS_HEADING, ['ev-thu', 'ev-sat']],
-            ['Today', ['o-today']],
+            ['Today', ['ev-sat', 'o-today']],
             ['Yesterday', ['o-lastnight']],
-            ['This Week', ['n-mon']],
+            ['This Week', ['n-mon', 'ev-thu']],
             ['Older Listings', ['p-old']],
         ]);
     });
@@ -201,7 +206,7 @@ describe('feed headings (B6)', () => {
 
     it('leaves out empty headings', () => {
         expect(feedSections([], now.getTime())).toEqual([]);
-        expect(feedSections([saturdayEvent], now.getTime()).map(s => s.title)).toEqual([UPCOMING_EVENTS_HEADING]);
+        expect(feedSections([saturdayEvent], now.getTime()).map(s => s.title)).toEqual(['Today']);
     });
 });
 

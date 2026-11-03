@@ -104,6 +104,7 @@ export * from './deal-step.js';
 export * from './enterprise-pledge.js';
 export * from './needs-you.js';
 export * from './market-fill.js';
+export * from './market-order.js';
 export * from './pins.js';
 export * from './fresh-banner.js';
 export * from './map-stack.js';

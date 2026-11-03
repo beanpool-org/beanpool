@@ -89,7 +89,7 @@ vi.mock('react-native-safe-area-context', () => ({
     SafeAreaView: ({ children }: any) => createElement('div', null, children),
 }));
 vi.mock('react-native-keyboard-controller', () => ({
-    KeyboardAvoidingView: ({ children }: any) => createElement('div', null, children),
+    KeyboardAvoidingView: ({ children }: any) => createElement('div', null, children), KeyboardAwareScrollView: ({ children }: any) => createElement('div', null, children), KeyboardStickyView: ({ children }: any) => createElement('div', null, children),
     KeyboardController: { dismiss() {} },
 }));
 

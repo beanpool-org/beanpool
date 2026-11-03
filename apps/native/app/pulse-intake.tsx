@@ -16,7 +16,7 @@
  *
  * Rules:
  * - Must render at 320dp width and 1.3x font scale without horizontal scroll.
- * - Keyboard avoidance: KeyboardAvoidingView from react-native-keyboard-controller (behavior="padding", no keyboardVerticalOffset — no navigation header).
+ * - Keyboard avoidance: KeyboardAwareScrollView from react-native-keyboard-controller (scrolls the focused field above the keyboard).
  * - SafeAreaView from react-native-safe-area-context.
  * - Uses flexGrow/flexBasis, never fixed percentages.
  */
@@ -28,11 +28,10 @@ import {
     StyleSheet,
     Pressable,
     TextInput,
-    ScrollView,
     ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -345,12 +344,7 @@ export default function PulseIntakeScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-            {/* No keyboardVerticalOffset: the header is inside this view and there is no navigation header, so an
-                offset only adds blank space above the keyboard (it hid the Share to Pulse button at 320dp). */}
-            <KeyboardAvoidingView
-                style={styles.keyboardAvoid}
-                behavior="padding"
-            >
+            <View style={styles.keyboardAvoid}>
                 {/* Screen Header */}
                 <View style={styles.header}>
                     <Pressable
@@ -371,10 +365,12 @@ export default function PulseIntakeScreen() {
                     <View style={styles.headerSpacer} />
                 </View>
 
-                <ScrollView
+                {/* The scroll view scrolls the field being typed in above the keyboard (it replaced a KeyboardAvoidingView around a plain ScrollView, which shrank the page but never scrolled to the field). */}
+                <KeyboardAwareScrollView
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
+                    bottomOffset={24}
                 >
                     {/* Intro subtitle */}
                     <Text style={styles.introText}>
@@ -593,8 +589,8 @@ export default function PulseIntakeScreen() {
                             )}
                         </Pressable>
                     </View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+                </KeyboardAwareScrollView>
+            </View>
         </SafeAreaView>
     );
 }

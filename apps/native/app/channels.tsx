@@ -21,7 +21,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-    View, Text, StyleSheet, Pressable, TextInput, ScrollView,
+    View, Text, StyleSheet, Pressable, TextInput,
     ActivityIndicator, Switch, Alert,
 } from 'react-native';
 // react-native's own SafeAreaView is iOS-only — on Android it is a plain View, so under SDK 55's
@@ -30,7 +30,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 // The house keyboard pattern: RN's own KeyboardAvoidingView is broken under Android edge-to-edge.
 // KeyboardProvider already wraps the app in _layout.tsx, so a pushed screen needs no provider.
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller';
 import { router, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -119,7 +119,7 @@ export default function ChannelsScreen() {
 
     // A list-level error renders above the cards, which is off-screen once the member has scrolled
     // to the form at the bottom — so the view is scrolled back to it rather than reporting silently.
-    const scrollRef = useRef<ScrollView>(null);
+    const scrollRef = useRef<KeyboardAwareScrollViewRef>(null);
     // Mirrors `channels` for callbacks that would otherwise read a stale render closure — the
     // same draftRef pattern used for the offer composer, and for the same class of bug.
     const channelsRef = useRef<Channel[]>([]);
@@ -476,10 +476,8 @@ export default function ChannelsScreen() {
                 <Text style={styles.title}>{t('Channels & Showcase')}</Text>
             </View>
 
-            {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
-                already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
-            <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-                <ScrollView ref={scrollRef} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+            {/* The scroll view scrolls the field being typed in above the keyboard (it replaced a KeyboardAvoidingView around a plain ScrollView, which shrank the page but never scrolled to the field). */}
+            <KeyboardAwareScrollView ref={scrollRef} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                     {loading ? (
                         <ActivityIndicator style={{ marginTop: 32 }} color={colors.brand.primary} />
                     ) : (
@@ -807,8 +805,7 @@ export default function ChannelsScreen() {
                             )}
                         </>
                     )}
-                </ScrollView>
-            </KeyboardAvoidingView>
+            </KeyboardAwareScrollView>
         </SafeAreaView>
     );
 }

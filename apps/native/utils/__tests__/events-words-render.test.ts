@@ -29,7 +29,7 @@ vi.mock('react-native', async () => {
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('react-native-keyboard-controller', async () => {
     const { createElement: h } = await import('react');
-    return { KeyboardAvoidingView: ({ children }: { children?: unknown }) => h('div', null, children as any) };
+    return { KeyboardAvoidingView: ({ children }: { children?: unknown }) => h('div', null, children as any), KeyboardAwareScrollView: ({ children }: { children?: unknown }) => h('div', null, children as any), KeyboardStickyView: ({ children }: { children?: unknown }) => h('div', null, children as any) };
 });
 vi.mock('expo-router', () => ({ router: { canGoBack: () => true, back: () => {}, replace: () => {}, push: () => {} }, ErrorBoundary: () => null }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));

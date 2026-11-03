@@ -72,7 +72,7 @@ vi.mock('react-native-safe-area-context', () => ({
 
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardController: { dismiss: vi.fn(async () => {}) },
-    KeyboardAvoidingView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
+    KeyboardAvoidingView: ({ children }: { children?: ReactNode }) => createElement('div', null, children), KeyboardAwareScrollView: ({ children }: { children?: ReactNode }) => createElement('div', null, children), KeyboardStickyView: ({ children }: { children?: ReactNode }) => createElement('div', null, children),
     useKeyboardState: (fn: (s: { isVisible: boolean }) => boolean) => fn({ isVisible: false }),
 }));
 

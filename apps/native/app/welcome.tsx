@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity, StoredKeyUnreadableError, readStoredIdentity } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
@@ -3026,11 +3026,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAvoidingView
-                    behavior="padding"
-                    style={{ flex: 1 }}
-                >
-                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
                     <OnboardingStepper step={1} />
                     <View style={styles.card}>
                         <Text style={styles.title}>{t('🎟️ Join BeanPool')}</Text>
@@ -3208,8 +3204,7 @@ export default function WelcomeScreen() {
                             />
                         </Text>
                     </View>
-                </ScrollView>
-                </KeyboardAvoidingView>
+                </KeyboardAwareScrollView>
             </SafeAreaView>
         );
     }
@@ -3234,8 +3229,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-                    <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <OnboardingStepper step={1} />
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">{t('🌍 Explore BeanPool worldwide')}</Text>
@@ -3441,8 +3435,7 @@ export default function WelcomeScreen() {
                                 />
                             </Text>
                         </View>
-                    </ScrollView>
-                </KeyboardAvoidingView>
+                    </KeyboardAwareScrollView>
                 {doorCheck.sheet}
             </SafeAreaView>
         );
@@ -3498,8 +3491,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
                         <View style={styles.card}>
                             <Text style={styles.title}>{t("⚠️ Replace this phone's account?")}</Text>
                             <Text style={styles.subtitle}>
@@ -3603,8 +3595,7 @@ export default function WelcomeScreen() {
                                 <Text style={styles.backBtnText}>{t('← Keep {name}, go back', { name: outCallsign })}</Text>
                             </Pressable>
                         </View>
-                    </ScrollView>
-                </KeyboardAvoidingView>
+                    </KeyboardAwareScrollView>
             </SafeAreaView>
         );
     }
@@ -3613,12 +3604,8 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAvoidingView
-                    behavior="padding"
-                    style={{ flex: 1 }}
-                >
-                    {/* "handled": with the keyboard up from the words, one tap on a community chip chooses it. */}
-                    <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                {/* "handled": with the keyboard up from the words, one tap on a community chip chooses it. */}
+                    <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                     <View style={styles.card}>
                         <Text style={styles.title}>{t('🔑 Recover Identity')}</Text>
                         <RecoveryWordsEntry words={recoveryWords} onChange={setRecoveryWords} labelStyle={styles.subtitle} colors={colors} />
@@ -3674,8 +3661,7 @@ export default function WelcomeScreen() {
                             <Text style={styles.backBtnText}>{t('← Back to Restore Options')}</Text>
                         </Pressable>
                     </View>
-                </ScrollView>
-                </KeyboardAvoidingView>
+                </KeyboardAwareScrollView>
             </SafeAreaView>
         );
     }
@@ -3688,11 +3674,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAvoidingView
-                    behavior="padding"
-                    style={{ flex: 1 }}
-                >
-                    <ScrollView key={mode} contentContainerStyle={styles.scroll}>
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} bottomOffset={24}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
                                 {t('🌐 Recover with Social Sign-In')}
@@ -3852,8 +3834,7 @@ export default function WelcomeScreen() {
                                 <Text style={styles.backBtnText}>{t('← Back to Restore Options')}</Text>
                             </Pressable>
                         </View>
-                    </ScrollView>
-                </KeyboardAvoidingView>
+                    </KeyboardAwareScrollView>
             </SafeAreaView>
         );
     }
@@ -3864,11 +3845,7 @@ export default function WelcomeScreen() {
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
-                <KeyboardAvoidingView
-                    behavior="padding"
-                    style={{ flex: 1 }}
-                >
-                    <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                <KeyboardAwareScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                         <View style={styles.card}>
                             <Text style={styles.title} accessibilityRole="header">
                                 {t('🌐 Recover with Social Sign-In')}
@@ -4009,8 +3986,7 @@ export default function WelcomeScreen() {
                                 </Pressable>
                             )}
                         </View>
-                    </ScrollView>
-                </KeyboardAvoidingView>
+                    </KeyboardAwareScrollView>
             </SafeAreaView>
         );
     }

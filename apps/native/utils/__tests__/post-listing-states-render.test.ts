@@ -108,7 +108,7 @@ vi.mock('expo-local-authentication', () => ({ SecurityLevel: { NONE: 0 }, hasHar
 vi.mock('expo-image-picker', () => ({}));
 vi.mock('expo-image-manipulator', () => ({}));
 vi.mock('expo-location', () => ({ getForegroundPermissionsAsync: async () => ({ status: 'denied' }), getLastKnownPositionAsync: async () => null }));
-vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
+vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardStickyView: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('@react-native-picker/picker', () => ({
     Picker: Object.assign(({ children }: { children?: unknown }) => createElement('select', null, children as any), {

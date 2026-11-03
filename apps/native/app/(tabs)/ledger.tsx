@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Image,
-    DeviceEventEmitter, Alert, ScrollView, Keyboard, Platform, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+    DeviceEventEmitter, Alert, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { keyboardAwareList } from '../../components/keyboardAwareList';
 import { useFocusEffect, router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -115,7 +115,6 @@ export default function LedgerScreen() {
     // Each load's answers land only while it is the latest: one begun under another mode never draws over the sample.
     const loadGen = useRef(0);
     const [sheetOpen, setSheetOpen] = useState(false);
-    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
     // `min` = the credit that earns the tier (what they did, never the known grant). Levels are merit badges, not
@@ -143,11 +142,6 @@ export default function LedgerScreen() {
         });
     }, [colors]);
 
-    React.useEffect(() => {
-        const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
-        const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
-        return () => { showSub.remove(); hideSub.remove(); };
-    }, []);
     const [heldTxns, setTxns] = useState<any[]>(NO_TXNS);
     // This phone's block list for this account: Beans from someone on it show the neutral line, not their note.
     const [blocked, setBlocked] = useState<ReadonlySet<string>>(new Set());
@@ -1195,11 +1189,7 @@ export default function LedgerScreen() {
 
     return (
         <View style={styles.root}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={88}
-                style={{ flex: 1 }}
-            >
+            <View style={{ flex: 1 }}>
 
             <PageTitle title={t('Ledger')} collapsed={pageTitle.collapsed} testID="page-title-ledger" />
 
@@ -1215,14 +1205,18 @@ export default function LedgerScreen() {
                 extraData={blocked}
                 keyExtractor={item => item.id}
                 renderItem={renderTxn}
+                // The send form (amount, memo) is in the list's header: the library's scroll view scrolls the field being typed in
+                // above the keyboard and pads the list itself. It replaced a KeyboardAvoidingView (iOS only) plus a hand-made
+                // keyboard-height padding that scrolled nothing.
+                renderScrollComponent={keyboardAwareList}
                 ListHeaderComponent={<View>{renderLedgerHeader()}{activeTab === 'trust' ? renderTrustTab() : renderActivityHeader()}</View>}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ padding: 16, paddingBottom: keyboardHeight > 0 ? keyboardHeight + 48 : 48 }}
+                contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
                 showsVerticalScrollIndicator={false}
                 ListEmptyComponent={activeTab === 'financials' ? <Text style={{ textAlign: 'center', color: colors.text.muted, paddingTop: 32, fontSize: 14 }}>{t('No transactions yet.')}</Text> : null}
             />
 
-            </KeyboardAvoidingView>
+            </View>
             <BalanceInfoModal isOpen={showBalanceInfo} onClose={() => setShowBalanceInfo(false)} />
             <CommonsInfoModal isOpen={showCommonsInfo} onClose={() => setShowCommonsInfo(false)} commonsBalance={balanceState.commons} />
             <CirculationInfoModal isOpen={showCirculationInfo} onClose={() => setShowCirculationInfo(false)} />

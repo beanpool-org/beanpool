@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator, DeviceEventEmitter } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from '../../components/useKeepCaretVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
@@ -2502,7 +2502,9 @@ export default function PostDetailModal() {
             {rejectModalTxId && (
                 <View style={StyleSheet.absoluteFill}>
                     <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.modalOverlay} onPress={() => setRejectModalTxId(null)}>
-                        <KeyboardAvoidingView behavior="padding" style={{ width: '100%' }}>
+                        {/* A scroll view, not a second KeyboardAvoidingView stacked on the page's own: it scrolls the message box above
+                            the keyboard, and flexGrow 0 keeps the card centred (and no taller than the overlay) when there is no keyboard. */}
+                        <KeyboardAwareScrollView style={{ width: '100%', flexGrow: 0 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                             <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
                                 <Text style={styles.modalTitle}>{t('Decline Offer')}</Text>
                                 <Text style={styles.modalSubtext}>{t('Are you sure you want to decline this offer?')}</Text>
@@ -2525,7 +2527,7 @@ export default function PostDetailModal() {
                                     </Pressable>
                                 </View>
                             </Pressable>
-                        </KeyboardAvoidingView>
+                        </KeyboardAwareScrollView>
                     </Pressable>
                 </View>
             )}

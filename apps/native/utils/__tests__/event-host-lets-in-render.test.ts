@@ -39,6 +39,7 @@ vi.mock('react-native', () => {
 });
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', { 'data-kav': 'padding' }, children as any),
+    KeyboardAwareScrollView: ({ children, keyboardShouldPersistTaps }: { children?: unknown; keyboardShouldPersistTaps?: string }) => createElement('div', { 'data-kav': 'scroll', 'data-taps': keyboardShouldPersistTaps }, children as any),
 }));
 vi.mock('expo-router', () => ({ router: { canGoBack: () => false, back: vi.fn(), replace: vi.fn(), push: vi.fn() } }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));

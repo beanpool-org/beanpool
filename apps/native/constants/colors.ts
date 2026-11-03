@@ -67,6 +67,7 @@ export const palette = {
     neutral800: '#262626',
     neutral900: '#1a1a1a',
     neutral950: '#0a0a0a',
+    charcoal850: '#222822', // the dark card: a sage-tinted charcoal that lifts off the doodle ground (#141a1a)
 
     // Emerald — brand / offer / success
     emerald50: '#ecfdf5',
@@ -349,11 +350,13 @@ export const darkColors = {
         app: palette.neutral950, // screen background (dark)
         page: palette.neutral950 as string, // page background; 'transparent' when the doodle pattern is on
         chrome: palette.neutral950 as string, // bars and floating control blocks; the pattern's ground when it is on
-        card: palette.neutral900, // card background (dark gray)
+        // Card background. #1a1a1a was 1.01:1 on the doodle ground, so cards did not lift off the page; #222822 is 1.17
+        // there and 1.31 on surface.app, and every text ink still reads 4.5 on it (home look S4, Marty's yes 2 Nov).
+        card: palette.charcoal850,
         subtle: palette.neutral800, // chips, sunken rows (dark neutral)
     },
     border: {
-        default: palette.neutral800,
+        default: palette.neutral600, // 1.19:1 on the card (#262626 vanished on the lifted card, 1.01)
         strong: palette.neutral700,
     },
 

@@ -26,7 +26,8 @@ export const JURY_CONFLICT_DAYS = 90;
  *  - the member reported them, or something they posted, in the last 90 days;
  *  - the member blocked them;
  *  - the member invited them, or was invited by them;
- *  - a deal between the two was completed in the last 90 days, whoever opened it;
+ *  - a deal between the two was completed in the last 90 days that the member took part in: they bought from the subject,
+ *    or it was on a listing of the subject's (the subject accepting and confirming a member's Offer alone doesn't count);
  *  - a deal still open that the member opened: one on a listing of the subject's (the side that isn't a deal's listing's
  *    author is the side that asked for it: engine/escrow.ts);
  *  - a direct conversation the member opened with them.
@@ -48,9 +49,11 @@ export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set
         UNION SELECT invited_by FROM members WHERE public_key = @s AND invited_by IS NOT NULL
         UNION SELECT public_key FROM members WHERE invited_by = @s
         UNION SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey = @s
-        UNION SELECT CASE WHEN buyer_pubkey = @s THEN seller_pubkey ELSE buyer_pubkey END FROM marketplace_transactions
-         WHERE (buyer_pubkey = @s OR seller_pubkey = @s) AND status = 'completed'
-           AND julianday(COALESCE(completed_at, updated_at, created_at)) >= julianday(@since)
+        UNION SELECT CASE WHEN t.buyer_pubkey = @s THEN t.seller_pubkey ELSE t.buyer_pubkey END FROM marketplace_transactions t
+          LEFT JOIN posts p ON p.id = t.post_id
+         WHERE (t.buyer_pubkey = @s OR t.seller_pubkey = @s) AND t.status = 'completed'
+           AND julianday(COALESCE(t.completed_at, t.updated_at, t.created_at)) >= julianday(@since)
+           AND (t.seller_pubkey = @s OR p.author_pubkey = @s)
         UNION SELECT CASE WHEN t.buyer_pubkey = @s THEN t.seller_pubkey ELSE t.buyer_pubkey END FROM marketplace_transactions t
           JOIN posts p ON p.id = t.post_id AND p.author_pubkey = @s
          WHERE (t.buyer_pubkey = @s OR t.seller_pubkey = @s) AND t.status IN ('requested', 'pending', 'disputed')

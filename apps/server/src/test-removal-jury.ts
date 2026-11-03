@@ -290,6 +290,12 @@ async function main() {
     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
                 VALUES (?, 'offer', 'food', 'Pears', '', 5, ?, 'active', 1, ?, ?, 'pears')`).run(theirPost, at(14).pk, ago(DAY), ago(DAY));
     deal.run(crypto.randomUUID(), theirPost, sam.pk, at(14).pk, 'requested', ago(DAY), null, ago(DAY));
+    // And Sam accepts at(17)'s free Offer in one step and confirms it as the buyer (acceptPost, completePostTransaction): a
+    // completed deal Sam made alone (review of #2793 round 2). It stands nobody aside.
+    const freeOffer = crypto.randomUUID();
+    db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at, search_keywords)
+                VALUES (?, 'offer', 'food', 'Free lemons', '', 0, ?, 'active', 1, ?, ?, 'lemons')`).run(freeOffer, at(17).pk, ago(DAY), ago(DAY));
+    deal.run(crypto.randomUUID(), freeOffer, sam.pk, at(17).pk, 'completed', ago(DAY), ago(DAY), ago(DAY));
     // A chat a member opened with Sam while Sam blocks them is kept for them alone (engine/withheld-lines.ts); it stands them
     // aside as at(7)'s does, or who stood aside would say who Sam blocks. at(15)'s is still kept; at(16)'s became the real one
     // when Sam, the block lifted, opened a chat with them, under Sam's name: at(16)'s line kept from before is older than it.
@@ -322,6 +328,8 @@ async function main() {
         `Sam blocked five of the first the draw would seat, and the draw seats all five anyway (${samBlocks.filter(b => seated.includes(b.pk)).length} of 5)`);
     assert(seated.includes(at(13).pk) && seated.includes(at(14).pk),
         'a chat Sam opened that nobody answered, and a deal Sam asked for that nobody answered, stand nobody aside');
+    assert(seated.includes(at(17).pk),
+        "a deal Sam completed alone, accepting and confirming a member's free Offer as the buyer, stands nobody aside");
     assert(aside.includes(at(7).pk) && aside.includes(at(15).pk) && aside.includes(at(16).pk),
         'a chat the member opened with Sam stands them aside, kept for them alone because Sam blocks them or not');
     assert(JSON.stringify([...seated].sort()) === JSON.stringify(keysAt(seatedAt)) && seated.includes(at(9).pk),

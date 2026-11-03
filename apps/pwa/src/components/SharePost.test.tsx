@@ -35,6 +35,7 @@ const samplePost: MarketplacePost = {
     status: 'active',
     active: true,
     audienceScope: 'public',
+    repeatable: false,
 };
 
 describe('SharePostButtons — share-says table rows (web)', () => {

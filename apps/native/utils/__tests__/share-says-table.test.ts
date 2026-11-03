@@ -133,7 +133,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         };
 
         await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }));
+            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
         });
 
         expect(get('share-members-button')).not.toBeNull();
@@ -150,7 +150,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         };
 
         await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }));
+            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
         });
 
         expect(get('share-members-button')).not.toBeNull();
@@ -175,7 +175,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         mockState.role = null;
 
         await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }));
+            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
         });
 
         expect(get('share-members-button')).not.toBeNull();
@@ -192,7 +192,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         mockState.role = 'admin';
 
         await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }));
+            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
         });
 
         expect(get('share-members-button')).not.toBeNull();
@@ -208,7 +208,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         };
 
         await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }));
+            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
         });
 
         expect(get('share-members-button')).not.toBeNull();
@@ -226,7 +226,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         mockState.role = null;
 
         await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }));
+            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
         });
 
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
@@ -239,7 +239,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         // Admin member
         mockState.role = 'owner';
         await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }));
+            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
         });
 
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
@@ -250,7 +250,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         mockState.profile = null;
 
         await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }));
+            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
         });
 
         expect(get('share-members-button')).not.toBeNull();

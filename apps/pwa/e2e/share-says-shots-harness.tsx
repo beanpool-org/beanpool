@@ -71,6 +71,7 @@ const samplePost: MarketplacePost = {
     createdAt: new Date().toISOString(),
     authorPublicKey: 'pk-sample-author',
     authorCallsign: 'Alice',
+    repeatable: false,
 };
 
 function Harness() {

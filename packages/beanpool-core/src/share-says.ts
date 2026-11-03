@@ -30,10 +30,9 @@ export interface ShareSaysFeatures {
     invites?: boolean | null;
     shareOutside?: boolean | null;
     privatePreview?: boolean | null;
-    [key: string]: unknown;
 }
 
-export type ShareSaysRole = 'owner' | 'admin' | 'moderator' | null | undefined;
+export type ShareSaysRole = string | null | undefined;
 
 export interface ShareSaysResult {
     /** Plain line under Share with members, or null if no line. */

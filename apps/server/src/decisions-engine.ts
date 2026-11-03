@@ -3781,8 +3781,18 @@ export type RemovalVotePush = (
     category: 'chat' | 'recovery', kind: 'decision.removal' | 'account.removal-vote' | 'account.reply-taken-down' | JuryPushKind,
 ) => unknown;
 
-/** The pushes a removal jury's members get (slice J2b; @beanpool/core PUSH_NOTICE_KINDS holds their words). */
-export type JuryPushKind = Extract<PushNoticeKind, 'decision.jury' | 'decision.jury-late' | 'decision.jury-reminder' | 'decision.jury-last-day' | 'decision.jury-reply'>;
+/**
+ * The pushes a removal jury's members get (slice J2b; @beanpool/core PUSH_NOTICE_KINDS holds their words): seated, seated
+ * with less than two days left, the answer reminder, the last day's, and the member answering the case. Sent by pushJury.
+ */
+const JURY_PUSH_KINDS = [
+    'decision.jury',
+    'decision.jury-late',
+    'decision.jury-reminder',
+    'decision.jury-last-day',
+    'decision.jury-reply',
+] as const satisfies readonly PushNoticeKind[];
+export type JuryPushKind = typeof JURY_PUSH_KINDS[number];
 
 /** What the member a vote on removing them is about is told at once (noticeRemovalVoteOpened): no case, no name. */
 export const REMOVAL_VOTE_NOTICE_TITLE = 'A vote about your account';

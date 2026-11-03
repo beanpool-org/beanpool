@@ -21,7 +21,7 @@
  * modal: Tab stays inside it, and when the last one is put away focus goes back to where the member was.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { t, requestsClearedNotice } from '@beanpool/core';
+import { inviteAskNoticeHere, requestsClearedNotice, t } from '@beanpool/core';
 import { onSystemAnnouncement, onSocketOpen } from '../lib/sync';
 import { getUnseenNotices, markNoticesSeen, type KeptNotice } from '../lib/api';
 
@@ -67,8 +67,8 @@ function fromKept(n: KeptNotice): ShownAlert | null {
     const own = requestsClearedNotice(n.data);
     return {
         key: n.id,
-        title: own?.title ?? text(n.title),
-        body: own?.body ?? text(n.body),
+        title: own?.title ?? inviteAskNoticeHere(text(n.title)),
+        body: own?.body ?? inviteAskNoticeHere(text(n.body)),
         severity: text(n.severity) || 'info',
         noticeId: n.id,
         kind: text(n.data?.kind) || undefined,

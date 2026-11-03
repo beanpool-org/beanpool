@@ -324,6 +324,7 @@ export interface CommunityInfo {
         /** This node carries online events (DESIGN-event-times §9). Absent (a node from before): the form offers no "Online". */
         onlineEvents?: boolean;
         inviteVouch?: boolean;
+        inviteAsks?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
         /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */
@@ -3303,7 +3304,8 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     // S2, components/WantsToJoin): `people` gets "N people asked to join" as its own line landing there ({ to: 'people' }),
     // for owners and admins out of the admin line (whose settings page has no list of them), and for any member where any
     // member may answer, once a request has waited 3 days.
-    q.set('lands', 'enterprise,group,invite,people');
+    // `asks`: and a member's ask that an admin invite someone (components/InviteAsks).
+    q.set('lands', 'enterprise,group,invite,people,asks');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

@@ -500,6 +500,9 @@ export const TABLES: Record<string, TableEntry> = {
     // server (state-engine.ts PUSH_LEAVE_PRUNE_SQL; the age rule). Only members' (MEMBERS_OWN).
     push_token_leaves: plain('public_key token_id left_at applied_at updated_at', { rows: MEMBERS_OWN, agedOut: { column: 'applied_at', days: 1 } }),
     chat_mutes: plain('conversation_id member_pubkey muted_until created_at updated_at'),
+    // A member's ask that an admin invite someone (engine/invite-asks.ts): a promoted standby still has it to answer, and
+    // every delete (answered, taken back, 30 days old, the member gone) goes with a tombstone, so it leaves the standby too.
+    invite_asks: plain('id asker_pubkey first_name how_known asked_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
     // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the

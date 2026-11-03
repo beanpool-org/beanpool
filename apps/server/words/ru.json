@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
@@ -36,5 +36,17 @@
   "This post has ended, so it can't be pinned.": "Эта публикация завершена, поэтому её нельзя закрепить.",
   "Three posts are pinned already. Take one off first.": "Уже закреплены три публикации. Сначала снимите одну.",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Поручительство в приглашении — это 25, 50 или 100 бобов либо ничего.",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Поручиться за кого-то в приглашении могут только владельцы, администраторы и назначенные поручители."
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Поручиться за кого-то в приглашении могут только владельцы, администраторы и назначенные поручители.",
+  "Only a member of this community can ask an admin to invite someone.": "Только участник этого сообщества может попросить администратора пригласить человека.",
+  "Your account here is paused for now, so you can’t ask for an invite.": "Ваш аккаунт здесь сейчас приостановлен, поэтому вы не можете просить о приглашении.",
+  "Only this community’s owners and admins read and answer these.": "Эти просьбы читают и на них отвечают только владельцы и администраторы сообщества.",
+  "This ask is no longer waiting. It may have been answered or taken back.": "Эта просьба уже не ждёт ответа. Возможно, на неё ответили или её отозвали.",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "Этот сервер — резервная копия сообщества, поэтому он не может это принять. Попробуйте ещё раз по адресу самого сообщества.",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "Здесь просить не о чем: в этом сообществе приглашать могут не только администраторы.",
+  "You’re an owner or admin here, so you can make the invite yourself.": "Вы здесь владелец или администратор, поэтому можете создать приглашение сами.",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "У вас {n} просьбы ждут ответа. Отзовите одну или дождитесь ответа.",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "Сегодня вы уже просили {n} раза. Снова попросить можно завтра.",
+  "Please keep this to {n} characters.": "Сократите это до {n} символов.",
+  "Please fill in their first name and how you know them.": "Укажите имя человека и откуда вы его знаете.",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "Не указывайте номера телефонов и адреса почты. Администратору достаточно имени и того, откуда вы знаете этого человека."
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -16,5 +16,17 @@
   "This post has ended, so it can't be pinned.": "此帖子已结束，无法置顶。",
   "Three posts are pinned already. Take one off first.": "已有三个帖子置顶。请先取消一个。",
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "邀请中的担保为 25、50 或 100 颗豆子，或者无。",
-  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "只有所有者、管理员和指定担保人才能在邀请中为他人担保。"
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "只有所有者、管理员和指定担保人才能在邀请中为他人担保。",
+  "Only a member of this community can ask an admin to invite someone.": "只有此社区的成员才能请管理员邀请某人。",
+  "Your account here is paused for now, so you can’t ask for an invite.": "你在此处的账号目前已暂停，因此无法请求邀请。",
+  "Only this community’s owners and admins read and answer these.": "只有此社区的所有者和管理员可以阅读并回复这些请求。",
+  "This ask is no longer waiting. It may have been answered or taken back.": "此请求已不在等待中。可能已被回复或撤回。",
+  "This server is a standby copy of the community, so it can’t take this. Please try again at the community’s own address.": "此服务器是社区的备用副本，无法接受此操作。请到社区自己的地址重试。",
+  "There’s nothing to ask here: this community doesn’t keep invites to its admins.": "这里无需请求：此社区的邀请不限于管理员。",
+  "You’re an owner or admin here, so you can make the invite yourself.": "你是这里的所有者或管理员，可以自己创建邀请。",
+  "You have {n} asks waiting. Take one back, or wait for an answer.": "你有 {n} 个请求在等待。请撤回一个或等待回复。",
+  "You’ve asked {n} times today. You can ask again tomorrow.": "你今天已请求 {n} 次。明天可以再次请求。",
+  "Please keep this to {n} characters.": "请控制在 {n} 个字符以内。",
+  "Please fill in their first name and how you know them.": "请填写对方的名字和你们如何认识。",
+  "Please leave out phone numbers and email addresses. A first name and how you know them is all an admin needs.": "请不要填写电话号码和邮箱地址。管理员只需要名字和你们如何认识。"
 }

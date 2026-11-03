@@ -76,7 +76,7 @@ export type NeedsTarget =
     | { to: 'shop'; id: string }
     | { to: 'shop-mine' };
 /** `knock`: requests to join (front doors S1), only to an app that asks with lands=people (lib/api.ts getHome); People → Invites lists them (S2). */
-export interface NeedsItem { kind: 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
+export interface NeedsItem { kind: 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**
  * A version-1 layout, as the web app before the card frame kept it (on the account and in this browser): read only
@@ -142,6 +142,8 @@ export interface HomeMarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean; shownFrom?: ShownFromLine; shownPrice?: string;
+    /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
+    pinned?: boolean;
 }
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
@@ -153,6 +155,8 @@ export interface HomeEventItem {
     repeat?: RepeatPattern; repeatUntil?: string;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from stands for its place. */
     shownCopy?: boolean; shownFrom?: ShownFromLine;
+    /** A live pin (HomeMarketItem.pinned): the event leads Coming up, whatever its date. */
+    pinned?: boolean;
 }
 
 export interface DealItem {
@@ -228,7 +232,7 @@ export interface HomeCards {
         polls: number;
         pollsMore: boolean;
         items?: DecideItem[];
-        poll?: { id: string; title: string; closesAt: string } | null;
+        poll?: { id: string; title: string; closesAt: string; pinned?: boolean } | null;
     };
     groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean; last?: GroupLastLine | null }[]; total: number };
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
@@ -429,6 +433,11 @@ export function starredFirst<T>(items: readonly T[], categoryOf: (t: T) => strin
     const starred = new Set(interests);
     const isStarred = (t: T) => starred.has(String(categoryOf(t) ?? '').trim().toLowerCase());
     return [...items.filter(isStarred), ...items.filter(t => !isStarred(t))];
+}
+
+/** Live pins first, the rest after, each part in the order it came: the node put the pins first, the stars must not move them. */
+export function pinnedFirst<T extends { pinned?: boolean }>(items: readonly T[]): T[] {
+    return [...items.filter(i => i.pinned), ...items.filter(i => !i.pinned)];
 }
 
 /** A chip tapped: on if it was off, off if it was on; the order they were chosen in kept. */

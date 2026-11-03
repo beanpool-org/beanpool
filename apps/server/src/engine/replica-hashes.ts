@@ -92,7 +92,12 @@ export interface TableHashes {
  * its main server hashes `invite_codes` over one more column. REPLICA_FORMAT stays: what an older importer drops is the vouch
  * on an invite nobody has used yet, and after a takeover from such a copy that person still joins, with no vouch.
  */
-export const TABLE_HASHES_VERSION = 16;
+/**
+ * 17: a new table, invite_asks (a member asks an admin to invite someone). Raised for the same reason as 8: a standby updated
+ * before its main server hashes one more table. REPLICA_FORMAT stays: what an older importer drops is an ask still waiting,
+ * which its member can see is unanswered and ask again.
+ */
+export const TABLE_HASHES_VERSION = 17;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

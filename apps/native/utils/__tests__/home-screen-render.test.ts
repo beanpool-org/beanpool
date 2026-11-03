@@ -102,9 +102,10 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('../pulse-token-store', () => ({ forgetAllPulseTokens: vi.fn(async () => undefined) }));
 const who = vi.hoisted(() => ({ identity: null as any }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: who.identity }) }));
+const scheme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors } = await import('../../constants/colors');
-    return { useTheme: () => ({ colors: lightColors, theme: 'light' }) };
+    const { lightColors, darkColors } = await import('../../constants/colors');
+    return { useTheme: () => ({ colors: scheme.dark ? darkColors : lightColors, theme: scheme.dark ? 'dark' : 'light' }) };
 });
 vi.mock('../../components/PageTitle', () => ({
     PageTitle: ({ title }: { title: string }) => createElement('h1', null, title),
@@ -4231,5 +4232,63 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         const row2 = document.querySelector('[data-testid="home-community-row-trades"]')!;
         expect(row2).not.toBeNull();
         expect(row2.textContent).toBe('42 communities listed');
+    });
+});
+
+describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fable.md §2.2; 320 x 569 dp, text at 1.3x)', () => {
+    afterEach(() => { scheme.dark = false; });
+
+    for (const dark of [false, true]) {
+        it(`${dark ? 'dark' : 'light'}: 📌 before the title of a pinned Offer, event and poll, first in their cards, on no other row`, async () => {
+            scheme.dark = dark;
+            const now = Date.now();
+            const base = localMember();
+            node.answer = {
+                ...base,
+                // The member stars food: the stars would put Garlic first, but a live pin leads.
+                me: { ...base.me!, interests: ['food'] },
+                cards: {
+                    ...base.cards,
+                    market: { items: [
+                        { id: 'p3', type: 'offer', title: 'Garlic', category: 'food', credits: 8, photoUrl: null },
+                        { id: 'p1', type: 'offer', title: 'Sourdough', category: 'goods', credits: 12, photoUrl: null, pinned: true },
+                        { id: 'p2', type: 'need', title: 'Help moving a couch', category: 'labour', photoUrl: null },
+                    ], total14d: 3, more: false },
+                    events: { items: [
+                        { id: 'e9', title: 'Winter fair', startsAt: iso(now + 30 * 24 * H), endsAt: null, place: 'Town Hall', rsvp: null, pinned: true },
+                        { id: 'e1', title: 'Seed swap', startsAt: iso(now + 24 * H), endsAt: null, place: null, rsvp: null },
+                    ], radiusKm: null },
+                    decide: {
+                        open: 0, soonestClosesAt: null, polls: 2, pollsMore: false, items: [],
+                        poll: { id: 'poll1', title: 'Market on Sundays?', closesAt: iso(now + 9 * 24 * H), pinned: true },
+                    },
+                },
+            };
+            mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+            await render();
+            const text = (id: string) => document.querySelector(`[data-testid="${id}"]`)!.textContent!;
+            // The Market card: the pinned Offer first, then the pool as the stars order it.
+            expect(marketOrder()).toEqual(['p1', 'p3', 'p2']);
+            expect(text('home-market-p1')).toContain('📌 Sourdough');
+            expect(text('home-market-p3')).not.toContain('📌');
+            expect(text('home-market-p2')).not.toContain('📌');
+            // Coming up: the pinned event leads, whatever its date, with the pin before its title.
+            const events = Array.from(document.querySelectorAll('[data-testid^="home-event-e"]')).map(e => e.getAttribute('data-testid'));
+            expect(events).toEqual(['home-event-e9', 'home-event-e1']);
+            expect(text('home-event-e9')).toContain('· 📌 Winter fair, Town Hall');
+            expect(text('home-event-e1')).not.toContain('📌');
+            // Decide: the first open poll.
+            expect(text('home-decide-poll')).toMatch(/^📌 Poll: Market on Sundays\?/);
+            // Nothing else is said or drawn: one pin in each of the three cards, none elsewhere.
+            expect((document.body.textContent!.match(/📌/g) ?? []).length).toBe(3);
+            // A screen reader hears the rows as it did.
+            expect(byLabel('Offer: Sourdough. 12 Beans. Goods. Opens the listing.')).not.toBeNull();
+            expect(byLabel('Poll: Market on Sundays? closes in 9 days. Opens the poll.')).not.toBeNull();
+        });
+    }
+
+    it('an older node sends no field: no pin anywhere', async () => {
+        await render();
+        expect(document.body.textContent).not.toContain('📌');
     });
 });

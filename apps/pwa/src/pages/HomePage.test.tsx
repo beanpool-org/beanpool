@@ -4526,4 +4526,64 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
     });
 });
 
+describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fable.md §2.2; 320 px wide, light and dark)', () => {
+    const PINNED_CARDS = (): HomeAnswer['cards'] => ({
+        market: { items: [
+            { id: 'p3', type: 'offer', title: 'Pottery lessons', category: 'arts', credits: 20, photoUrl: null, pinned: true },
+            { id: 'p2', type: 'offer', title: 'Sourdough', category: 'food', credits: 12, photoUrl: null },
+            { id: 'p4', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null },
+        ], total14d: 3, more: false },
+        events: { items: [
+            { id: 'e9', title: 'Winter fair', startsAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), endsAt: null, place: 'Town Hall', rsvp: null, pinned: true },
+            { id: 'e1', title: 'Seed swap', startsAt: new Date(Date.now() + 86_400_000).toISOString(), endsAt: null, place: null, rsvp: null },
+        ], radiusKm: null },
+        decide: {
+            open: 0, soonestClosesAt: null, polls: 2, pollsMore: false, items: [],
+            poll: { id: 'pol-1', title: 'Market on Sundays?', closesAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), pinned: true },
+        },
+    });
+    afterEach(() => { document.documentElement.classList.remove('dark'); });
+
+    for (const dark of [false, true]) {
+        it(`${dark ? 'dark' : 'light'}: 📌 before the title of a pinned Offer, event and poll, pinned Offer first though the member stars food, on no other row`, async () => {
+            if (dark) document.documentElement.classList.add('dark');
+            vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+            const width = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
+                const tid = this.getAttribute('data-testid') ?? '';
+                return tid === 'home-page' ? 320 : tid.startsWith('home-card-') ? 288 : 0;
+            });
+            try {
+                vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, interests: ['food'] } }, PINNED_CARDS())));
+                render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+                await screen.findByTestId('home-card-market');
+                // The Market card: the node's pinned Offer first; the member's stars order the rest, never move the pin.
+                expect(marketTitles()).toEqual(['Offer, Pottery lessons, 20 Beans', 'Offer, Sourdough, 12 Beans', 'Need, Borrow a drill']);
+                const rows = within(screen.getByTestId('home-card-market')).getAllByTestId('home-market-item');
+                expect(rows[0]).toHaveTextContent('📌 Pottery lessons');
+                expect(within(rows[0]).getByTestId('home-pin')).toHaveAttribute('aria-hidden', 'true');
+                expect(rows[1]).not.toHaveTextContent('📌');
+                expect(rows[2]).not.toHaveTextContent('📌');
+                // Coming up: the pinned event first, the pin before its title.
+                const events = within(screen.getByTestId('home-card-events')).getAllByTestId('home-event');
+                expect(events[0]).toHaveTextContent('📌 Winter fair');
+                expect(events[1]).not.toHaveTextContent('📌');
+                // Decide: the first open poll.
+                expect(screen.getByTestId('home-decide-poll')).toHaveTextContent('📌 Poll: Market on Sundays?');
+                // One pin in each of the three cards, none elsewhere; the screen reader hears the rows as it did.
+                expect(screen.getAllByTestId('home-pin')).toHaveLength(3);
+                expect(screen.getByTestId('home-decide-poll')).toHaveAttribute('aria-label', expect.stringMatching(/^Poll: Market on Sundays\?/));
+            } finally {
+                width.mockRestore();
+            }
+        });
+    }
+
+    it('an older node sends no field: no pin anywhere', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        expect(screen.queryByTestId('home-pin')).toBeNull();
+        expect(document.body).not.toHaveTextContent('📌');
+    });
+});
 

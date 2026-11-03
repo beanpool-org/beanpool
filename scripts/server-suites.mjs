@@ -536,6 +536,8 @@ export const SUITES = [
     'test-event-series-http',
     'test-post-pinning',
     'test-post-pinning-global',
+    'test-home-pinned',
+    'test-home-pinned-global',
     'test-event-zone',
     'test-online-events-nearby',
     'test-online-events-set-cap',

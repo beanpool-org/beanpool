@@ -14,7 +14,7 @@ import {
     SEARCH_OFFLINE_LINE, searchEmptyLine, searchFirstLine,
     RSVP_SAID, RSVP_WORDS, beansAmount, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventLine,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence, DECIDE_HREF, formatBeans,
-    communitiesListed, decideOnNode, timeAgoInWords,
+    communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
 import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
@@ -404,7 +404,7 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
     return (
         <HomeRow
             colors={colors}
-            text={p.title}
+            text={withPin(p.title, p)}
             sub={facts || category}
             a11y={a11y}
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
@@ -448,7 +448,7 @@ export function DecideBody({ card, features, colors, now }: { card: NonNullable<
                 {card.poll && (
                     <HomeRow
                         colors={colors}
-                        text={t('Poll: {title}', { title: card.poll.title })}
+                        text={withPin(t('Poll: {title}', { title: card.poll.title }), card.poll)}
                         sub={closesInWords(card.poll.closesAt, now)}
                         a11y={t('Poll: {title} {closes} Opens the poll.', {
                             title: sentence(card.poll.title),

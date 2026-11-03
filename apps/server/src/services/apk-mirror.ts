@@ -115,10 +115,15 @@ function logOutcome(r: RefreshOutcome): void {
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-/** Starts the daily check (unless DISABLE_APK_UPDATE_CHECK=true). Its timers never keep the process alive. */
-export function startApkMirror(): void {
+/**
+ * At the start: a copy in data/apk that the image's APK is as new as (an update brought it) goes, check or no check, so
+ * the node holds one APK; then the daily check (unless DISABLE_APK_UPDATE_CHECK=true). Its timers never keep the process
+ * alive, and nothing here holds the start up (index.ts does not wait for it).
+ */
+export async function startApkMirror(): Promise<void> {
     if (timer) return;
     const served = servedApk();
+    if (served?.from === 'image') await tidy(null).catch(() => undefined);
     logger.info('SYS', served
         ? `[apk] Serving the Android APK ${served.version} (${served.versionCode}) from the ${served.from === 'image' ? 'image' : 'data folder'}, on the local network only`
         : '[apk] No Android APK held yet');

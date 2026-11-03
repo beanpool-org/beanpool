@@ -177,8 +177,19 @@ const a93 = apk('1.2.93');
     await rel.writeApkManifest(imageDir, await rel.checkApkFile(path.join(imageDir, 'BeanPool-1.2.97-319.apk'),
         { tag: 'android-v1.2.97', version: '1.2.97', versionCode: 319, fileName: 'BeanPool-1.2.97-319.apk', size: a97.length, sha256: fx.sha256Hex(a97) }));
     check('B10 an image with a newer APK is served over the copy', mirror.servedApk()?.from === 'image' && mirror.servedApk()?.version === '1.2.97');
+    // With the daily check off, the start still deletes the copy the image has caught up with.
+    fs.mkdirSync(apkDir, { recursive: true });
+    const a96 = apk('1.2.96');
+    fs.writeFileSync(path.join(apkDir, 'BeanPool-1.2.96-318.apk'), a96);
+    check('B10 (a copy older than the image\'s is in data/apk)', held() === 'BeanPool-1.2.96-318.apk,apk.json', held());
+    await mirror.startApkMirror();
+    mirror.stopApkMirror();
+    check('B10 the start deletes it, with the daily check off: one APK on the node', held() === '', held());
+    fs.writeFileSync(path.join(apkDir, 'BeanPool-1.2.96-318.apk'), a96);
+    await rel.writeApkManifest(apkDir, await rel.checkApkFile(path.join(apkDir, 'BeanPool-1.2.96-318.apk'),
+        { tag: 'android-v1.2.96', version: '1.2.96', versionCode: 318, fileName: 'BeanPool-1.2.96-318.apk', size: a96.length, sha256: fx.sha256Hex(a96) }));
     await mirror.refreshApk(source);
-    check('B10 and the next check deletes the copy: one APK on the node', held() === '', held());
+    check('B10 and so does the next check', held() === '', held());
 }
 
 // ── C. serving ────────────────────────────────────────────────────────────────────────────────────────────────────

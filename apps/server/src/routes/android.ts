@@ -40,7 +40,11 @@ function colonHex(hex: string): string {
     return (hex.toUpperCase().match(/../g) ?? []).join(':');
 }
 
+/** Where the file's digest goes in its translated sentence, so it can sit in a left-to-right span in Arabic, Persian and Urdu. */
+const DIGEST_SLOT = '\u0000';
+
 const PAGE_STYLE = `
+h1{font-size:1.4rem;hyphens:auto;-webkit-hyphens:auto}
 .door{margin:1rem 0}
 .steps{margin:0 0 1rem;padding-inline-start:1.25rem;display:grid;gap:.5rem}
 .digest{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;overflow-wrap:anywhere;word-break:break-all}
@@ -57,7 +61,7 @@ export function renderAndroidPage(apk: { version: string; versionCode: number; s
 <p><strong>${e(w.t(W.sameApp))}</strong></p>
 <a class="door primary" data-apk="download" href="${e(`${ANDROID_PAGE}/${encodeURIComponent(apk.fileName)}`)}" download="${e(apk.fileName)}">${e(w.t(W.download, { version: apk.version }))}</a>
 <p data-apk="facts">${e(w.t(W.facts, { version: apk.version, mb: String(Math.round(apk.size / 1_000_000)) }))}</p>
-<p class="digest" data-apk="sha256">${e(w.t(W.fileDigest, { sha256: apk.sha256 }))}</p>
+<p class="digest" data-apk="sha256">${e(w.t(W.fileDigest, { sha256: DIGEST_SLOT })).replace(DIGEST_SLOT, `<span dir="ltr">${e(apk.sha256)}</span>`)}</p>
 <h2>${e(w.t(W.installHeading))}</h2>
 <ol class="steps">
 <li>${e(w.t(W.stepOpen))}</li>
@@ -65,7 +69,7 @@ export function renderAndroidPage(apk: { version: string; versionCode: number; s
 <li>${e(w.t(W.stepConfirm))}</li>
 </ol>
 <p>${e(w.t(W.certificate))}</p>
-<p class="digest" data-apk="cert">${e(colonHex(apk.certSha256))}</p>` : `<p data-apk="none">${e(w.t(W.noneYet))}</p>`;
+<p class="digest" data-apk="cert" dir="ltr">${e(colonHex(apk.certSha256))}</p>` : `<p data-apk="none">${e(w.t(W.noneYet))}</p>`;
     return `<!doctype html>
 <html lang="${e(l)}"${RTL.has(l) ? ' dir="rtl"' : ''}>
 <head>

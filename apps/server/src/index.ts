@@ -237,7 +237,7 @@ async function main() {
     void startWashTradingRefreshAtBoot();
     // Step 6.2: the Android APK served on the local network (lights-out H3): which one is held, and the daily check for a
     // newer one, 10 to 40 minutes from now (DISABLE_APK_UPDATE_CHECK=true leaves it out). Never blocks the start.
-    startApkMirror();
+    void startApkMirror();
 
     // Step 7: libp2p (persistent identity, no auto-discovery)
     const p2pNode = await startP2P(PORT_P2P, PORT_P2P_WS);

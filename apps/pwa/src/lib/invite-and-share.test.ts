@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { inviteAndShareLink, linkedPostAtLoad, makeInviteForShare, offersInviteAndShare } from './invite-and-share';
 import { LINKED_POST_STORAGE_KEY, takeKeptLinkedPost } from './visitor-lobby';
 import { eventLink } from './event-extras';
+import { extractInviteToken, formatInviteCode, normaliseInviteCode } from './invite-code';
 
 const POST = '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34';
 const info = (features: Record<string, unknown> = {}) => ({ features } as any);
@@ -103,5 +104,16 @@ describe('the web app\'s join: the listing is kept for after the join', () => {
         expect(linkedPostAtLoad()).toBe(POST);
         expect(sessionStorage.getItem(LINKED_POST_STORAGE_KEY)).toBeNull();
         expect(window.location.search).toBe('');
+    });
+});
+
+describe('the link, read by a web app that never heard of it', () => {
+    const LINK = `https://mullum.example/?invite=INV-AB12-CD34&post=${POST}`;
+    it('still gives the code to the web join box', () => {
+        expect(extractInviteToken(LINK)).toBe('INV-AB12-CD34');
+        expect(normaliseInviteCode(LINK)).toBe('INV-AB12-CD34');
+        expect(formatInviteCode(LINK)).toBe('INV-AB12-CD34');
+        // As the address bar holds it after the trampoline's Continue in browser.
+        expect(normaliseInviteCode(`?invite=INV-AB12-CD34&webjoin=1&post=${POST}`)).toBe('INV-AB12-CD34');
     });
 });

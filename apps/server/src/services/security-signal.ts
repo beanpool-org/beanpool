@@ -111,6 +111,16 @@ export const OWNER_ALERT_WORDS = {
     contactsChanged: "The community's contact details were changed, by an admin.",
     /** How this community works (config/community-shape-write.ts): every change, the owner's own too, `settings` their names. */
     shapeChanged: (settings: string) => `How this community works was changed, by an owner: ${settings}. Every change is listed under How it works.`,
+    /**
+     * Core settings (config/core-settings.ts, DESIGN-core-settings-fable.md §8.6): confirmed and locked, `changed` the
+     * names of what the same request changed (empty: confirmed as they were). Never who: these leave for the owners'
+     * channel, so "an owner", as every line here (the design's callsign stays in Settings' log).
+     */
+    coreLocked: (changed: string) => `The core settings were confirmed and locked, by an owner${changed ? `, with ${changed} changed` : ''}. `
+        + "Every change to one from now on asks for an owner's proof.",
+    /** A Core setting changed while locked, with an owner's fresh proof: `changes` each "<setting> (<from> → <to>)". */
+    coreUnlocked: (changes: string) => `A core setting was unlocked and changed, by an owner: ${changes}. `
+        + "If that wasn't an owner you know, open Settings: How it works, then People & Safety → Owners & admins.",
     channelChanged: (community: string) => `${community}: the alert channel was changed, by an owner. This is the last alert sent here.`,
     channelRemoved: (community: string) => `${community}: the alert channel was removed, by an owner. This is the last alert sent here.`,
     /** To the same channel, with its old token, when only the token changed (#2033 C1-N2): not "the last alert sent here". */

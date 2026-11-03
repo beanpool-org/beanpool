@@ -35,6 +35,7 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
         Alert: { alert: vi.fn() },
+        useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
 // Decide holds the reply sheet for a vote on removing the member (components/RemovalReplySheet.tsx), which keeps clear of the
@@ -44,6 +45,7 @@ vi.mock('react-native-keyboard-controller', () => {
     const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
     return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
 });
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('expo-router', () => ({ router: { push: vi.fn(), navigate: vi.fn() } }));
 vi.mock('@react-native-async-storage/async-storage', () => ({

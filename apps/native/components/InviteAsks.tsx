@@ -19,6 +19,7 @@ import {
 import { useStyles, useTheme } from '../app/ThemeContext';
 import { InviteVouchChoice } from './InviteVouchChoice';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { askAnAdmin, readAsksToAnswer, readMyAsks, sayNoToAsk, sendInviteForAsk, takeBackAsk } from '../utils/invite-asks';
 import type { BeanPoolIdentity } from '../utils/identity';
 
@@ -124,6 +125,7 @@ export function AskSheet({ anchorUrl, identity, open, onClose, onSent }: {
     const styles = useAskStyles();
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8);
+    const fieldScroll = useScrollFieldIntoView();
     const [firstName, setFirstName] = useState('');
     const [howKnown, setHowKnown] = useState('');
     const [busy, setBusy] = useState(false);
@@ -144,11 +146,12 @@ export function AskSheet({ anchorUrl, identity, open, onClose, onSent }: {
         <Modal visible={open} animationType="slide" transparent onRequestClose={close}>
             <View style={[styles.backdrop, { paddingTop: insets.top + 8 }]}>
                 <View style={[styles.sheet, { paddingBottom: insets.bottom + 16, maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="invite-ask-sheet">
-                    <ScrollView keyboardShouldPersistTaps="handled">
+                    <ScrollView {...fieldScroll.scrollProps} keyboardShouldPersistTaps="handled">
                         <Text style={styles.sheetTitle} accessibilityRole="header">{t(INVITE_ASK_WORDS.button)}</Text>
                         <Text style={styles.help}>{t(INVITE_ASK_WORDS.help)}</Text>
                         <Text style={styles.label}>{t(INVITE_ASK_WORDS.firstName)}</Text>
                         <TextInput
+                            {...fieldScroll.inputProps}
                             style={styles.field}
                             value={firstName}
                             onChangeText={setFirstName}
@@ -161,6 +164,7 @@ export function AskSheet({ anchorUrl, identity, open, onClose, onSent }: {
                         />
                         <Text style={styles.label}>{t(INVITE_ASK_WORDS.howKnown)}</Text>
                         <TextInput
+                            {...fieldScroll.inputProps}
                             style={styles.field}
                             value={howKnown}
                             onChangeText={setHowKnown}

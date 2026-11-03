@@ -9,9 +9,10 @@ import {
     ScrollView,
     Alert,
     ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalKeyboardLift } from './useModalKeyboardLift';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import {
@@ -99,6 +100,11 @@ export function ProposeDecisionModal({
     features,
 }: Props) {
     const { colors } = useTheme();
+    // Lifted by the keyboard's height, never React Native's KeyboardAvoidingView (iOS-only: Android got no lift) and never a
+    // nested KeyboardProvider: see components/useModalKeyboardLift. The form scrolls the field being typed in into view.
+    const insets = useSafeAreaInsets();
+    const lift = useModalKeyboardLift(insets.top + 8);
+    const fieldScroll = useScrollFieldIntoView();
     const showsBeans = beansOn(features);
     const availableTouches = useMemo(() => TOUCH_OPTIONS.filter(opt => decisionTouchesFor(features).includes(opt.id)), [features]);
     const [title, setTitle] = useState('');
@@ -402,11 +408,8 @@ export function ProposeDecisionModal({
 
     return (
         <Modal visible={isOpen} animationType="slide" transparent onRequestClose={onClose}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={styles.overlay}
-            >
-                <View style={styles.sheet}>
+            <View style={styles.overlay}>
+                <View style={[styles.sheet, { maxHeight: lift.maxHeight, marginBottom: lift.lift }]}>
                     <View style={styles.header}>
                         <Text style={styles.headerTitle}>{t('Propose a Community Decision')}</Text>
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Close modal')} onPress={onClose} style={styles.closeBtn}>
@@ -414,7 +417,7 @@ export function ProposeDecisionModal({
                         </Pressable>
                     </View>
 
-                    <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 24 }}>
+                    <ScrollView {...fieldScroll.scrollProps} style={styles.body} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
                         {/* What it touches */}
                         <Text style={styles.sectionLabel}>{inCapitalsOf(t('What does this decision touch? (§3.6)'))}</Text>
                         <View style={styles.segmentRow}>
@@ -440,6 +443,7 @@ export function ProposeDecisionModal({
                         {/* Title & Description */}
                         <Text style={styles.sectionLabel}>{inCapitalsOf(t('Title'))}</Text>
                         <TextInput
+                            {...fieldScroll.inputProps}
                             style={styles.input}
                             placeholder={proposeTitlePlaceholder(features)}
                             placeholderTextColor={colors.text.muted}
@@ -449,6 +453,7 @@ export function ProposeDecisionModal({
 
                         <Text style={styles.sectionLabel}>{inCapitalsOf(t('Description & Case'))}</Text>
                         <TextInput
+                            {...fieldScroll.inputProps}
                             style={[styles.input, styles.textArea]}
                             placeholder={t('Explain why this decision is needed, what will be done, and who is responsible.')}
                             placeholderTextColor={colors.text.muted}
@@ -509,6 +514,7 @@ export function ProposeDecisionModal({
                                     </View>
                                 )}
                                 <TextInput
+                                    {...fieldScroll.inputProps}
                                     style={styles.input}
                                     placeholder={t('Or enter its public key...')}
                                     placeholderTextColor={colors.text.muted}
@@ -525,6 +531,7 @@ export function ProposeDecisionModal({
                                     {inCapitalsOf(effect === 'remove_lead_keeper' ? lead.label : t('Target Member Public Key or Callsign'))}
                                 </Text>
                                 <TextInput
+                                    {...fieldScroll.inputProps}
                                     style={styles.input}
                                     placeholder={effect === 'remove_lead_keeper' ? lead.placeholder : t('Enter member callsign or pubkey...')}
                                     placeholderTextColor={colors.text.muted}
@@ -538,6 +545,7 @@ export function ProposeDecisionModal({
                             <>
                                 <Text style={styles.sectionLabel}>{inCapitalsOf(t('Project or enterprise public key'))}</Text>
                                 <TextInput
+                                    {...fieldScroll.inputProps}
                                     style={styles.input}
                                     placeholder={t('Enter its public key...')}
                                     placeholderTextColor={colors.text.muted}
@@ -546,6 +554,7 @@ export function ProposeDecisionModal({
                                 />
                                 <Text style={styles.sectionLabel}>{inCapitalsOf(t('Grant Amount (Beans)'))}</Text>
                                 <TextInput
+                                    {...fieldScroll.inputProps}
                                     style={styles.input}
                                     placeholder={t('e.g. {amount}', { amount: 250 })}
                                     placeholderTextColor={colors.text.muted}
@@ -560,6 +569,7 @@ export function ProposeDecisionModal({
                             <>
                                 <Text style={styles.sectionLabel}>{inCapitalsOf(t('Recipient Member Public Key'))}</Text>
                                 <TextInput
+                                    {...fieldScroll.inputProps}
                                     style={styles.input}
                                     placeholder={t('Enter recipient pubkey...')}
                                     placeholderTextColor={colors.text.muted}
@@ -568,6 +578,7 @@ export function ProposeDecisionModal({
                                 />
                                 <Text style={styles.sectionLabel}>{inCapitalsOf(t('Hardship Amount (Beans)'))}</Text>
                                 <TextInput
+                                    {...fieldScroll.inputProps}
                                     style={styles.input}
                                     placeholder={t('e.g. {amount}', { amount: 100 })}
                                     placeholderTextColor={colors.text.muted}
@@ -609,7 +620,7 @@ export function ProposeDecisionModal({
                         </Pressable>
                     </ScrollView>
                 </View>
-            </KeyboardAvoidingView>
+            </View>
         </Modal>
     );
 }

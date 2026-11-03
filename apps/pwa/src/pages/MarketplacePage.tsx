@@ -131,6 +131,9 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
     onRefreshTransactions?: () => void;
+    /** A door to a type filter (e.g. 'event' from Home's "All events ›"): taken once, then onFilterOpened. */
+    openFilter?: PostType | 'all' | 'for-you' | null;
+    onFilterOpened?: () => void;
     /**
      * Whether the viewer is a member of this node. False for a guest (a local key the node has no member
      * for), so the viewer's balance is never requested. Null while App is still checking, so the request
@@ -312,7 +315,7 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor, openFilter, onFilterOpened }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -665,6 +668,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         };
     }, [searchQuery, selectedTag, selectedFree, typeFilter, categoryFilter, beansOnly, groupFilter, near, fitsNear]);
     useEffect(() => { searchAgainRef.current?.(); }, [listReads]);
+
+    // Handle filter opening from doors (e.g. Home's "All events ›")
+    useEffect(() => {
+        if (!openFilter) return;
+        setTypeFilter(openFilter);
+        onFilterOpened?.();
+    }, [openFilter, onFilterOpened]);
 
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);
@@ -3634,27 +3644,46 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Under Events: the map's date chips in place of Category and Distance (same as the phone, #895). */}
                 {typeFilter === 'event' && (
                     <div
-                        data-testid="feed-event-window-chips"
                         role="group"
                         aria-label={t('Filter events by date')}
-                        className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain mt-0.5 mb-2.5 pb-0.5"
+                        className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain mt-0.5 mb-2.5 pb-0.5"
                         style={{ scrollbarWidth: 'none' }}
                     >
-                        {EVENT_WINDOWS.map(w => (
-                            <button
-                                key={w.id}
-                                type="button"
-                                aria-pressed={feedEventWindow === w.id}
-                                onClick={() => setFeedEventWindow(w.id)}
-                                className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold transition-colors cursor-pointer ${
-                                    feedEventWindow === w.id
-                                        ? 'bg-violet-700 border-violet-700 text-white'
-                                        : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
-                                }`}
-                            >
-                                {t(EVENT_WINDOW_WORDS[w.id])}
-                            </button>
-                        ))}
+                        <div
+                            data-testid="feed-event-window-chips"
+                            className="flex flex-nowrap items-center gap-2"
+                        >
+                            {EVENT_WINDOWS.map(w => (
+                                <button
+                                    key={w.id}
+                                    type="button"
+                                    aria-pressed={feedEventWindow === w.id}
+                                    onClick={() => setFeedEventWindow(w.id)}
+                                    className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold transition-colors cursor-pointer ${
+                                        feedEventWindow === w.id
+                                            ? 'bg-violet-700 border-violet-700 text-white'
+                                            : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
+                                    }`}
+                                >
+                                    {t(EVENT_WINDOW_WORDS[w.id])}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            data-testid="market-calendar-button"
+                            aria-label={t('Calendar')}
+                            onClick={() => onNavigate?.('map-calendar')}
+                            className="flex-shrink-0 min-h-[48px] min-w-[48px] px-3.5 rounded-full border text-sm font-bold shadow-sm transition-colors flex items-center justify-center cursor-pointer bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50 hover:bg-oat-50 dark:hover:bg-nature-800"
+                        >
+                            <svg data-calendar-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                                <path d="M3.5 10h17M8 3v4M16 3v4" />
+                                <circle cx="8.5" cy="14.5" r="0.6" fill="currentColor" />
+                                <circle cx="12" cy="14.5" r="0.6" fill="currentColor" />
+                                <circle cx="15.5" cy="14.5" r="0.6" fill="currentColor" />
+                            </svg>
+                        </button>
                     </div>
                 )}
 

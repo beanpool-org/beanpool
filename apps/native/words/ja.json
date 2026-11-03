@@ -63,7 +63,7 @@
   "Your account there was closed.": "そこでのあなたのアカウントは閉鎖されました。",
   "Your own community isn't affected.": "あなた自身のコミュニティには影響ありません。",
   "Global community, {state}": "グローバルコミュニティ、{state}",
-  "Switches to this community. Long press to remove it.": "このコミュニティに切り替えます。長押しで削除します。",
+  "Switches to this community. Long press for its options.": "このコミュニティに切り替えます。長押しでオプションを表示します。",
   "Guest": "ゲスト",
   "Explore BeanPool worldwide": "世界のBeanPoolを見る",
   "🌍 Explore BeanPool worldwide": "🌍 世界のBeanPoolを見る",
@@ -5955,5 +5955,13 @@
   "Stop taking questions": "質問の受け付けをやめる",
   "on the global community": "グローバルコミュニティで",
   "Open their requests there": "そこでリクエストを開く",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "ここがあなたのホームです。下からカードを追加するか、カードを長押しして並べ替えてください。"
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "ここがあなたのホームです。下からカードを追加するか、カードを長押しして並べ替えてください。",
+  "Alerts from this community": "このコミュニティからの通知",
+  "Stops notifications and unread message checks from this community": "このコミュニティからの通知と未読メッセージの確認を停止します",
+  "Remove from your saved list": "保存したリストから削除",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "other": "{community} に {n} 件の新しいメッセージ · 切り替え"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "保存しているすべてのコミュニティからの通知がスマートフォンに届きます。BeanPoolシートでコミュニティごとにオフにできます。",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "この端末では通知がオフです。そのコミュニティへの通知を止めるための接続がまだできていないため、端末が再試行します。"
 }

@@ -63,7 +63,7 @@
   "Your account there was closed.": "Isinara ang account mo roon.",
   "Your own community isn't affected.": "Hindi apektado ang sarili mong komunidad.",
   "Global community, {state}": "Pandaigdigang komunidad, {state}",
-  "Switches to this community. Long press to remove it.": "Lilipat sa komunidad na ito. Pindutin nang matagal para alisin ito.",
+  "Switches to this community. Long press for its options.": "Lilipat sa komunidad na ito. Pindutin nang matagal para sa mga opsyon nito.",
   "Guest": "Bisita",
   "Explore BeanPool worldwide": "Tuklasin ang BeanPool sa buong mundo",
   "🌍 Explore BeanPool worldwide": "🌍 Tuklasin ang BeanPool sa buong mundo",
@@ -6194,5 +6194,14 @@
   "Stop taking questions": "Itigil ang pagtanggap ng mga tanong",
   "on the global community": "sa pandaigdigang komunidad",
   "Open their requests there": "Buksan doon ang mga kahilingan nila",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Ito ang Home mo. Magdagdag ng card sa ibaba, o pindutin nang matagal ang card para ayusin."
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Ito ang Home mo. Magdagdag ng card sa ibaba, o pindutin nang matagal ang card para ayusin.",
+  "Alerts from this community": "Mga alerto mula sa komunidad na ito",
+  "Stops notifications and unread message checks from this community": "Ititigil ang mga abiso at pagsusuri ng hindi pa nababasang mensahe mula sa komunidad na ito",
+  "Remove from your saved list": "Alisin sa iyong naka-save na listahan",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} bagong mensahe sa {community} · Lumipat",
+    "other": "{n} mga bagong mensahe sa {community} · Lumipat"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Dumarating ang mga alerto sa iyong telepono mula sa bawat komunidad na iyong pinapanatili. Maaari mong i-off ang mga ito para sa isang komunidad sa BeanPool sheet.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Naka-off ang mga alerto sa teleponong ito. Hindi pa nito naabot ang komunidad na ito para ihinto ang mga ito roon, at susubukan ulit."
 }

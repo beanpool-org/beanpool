@@ -3688,5 +3688,7 @@
   "Event · {from}": "Etkinlik · {from}",
   "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Burası Ana Sayfanız. Alttan kart ekleyin veya sıralamak için bir karta basılı tutun.",
   "Move {card} earlier": "{card} kartını öne taşı",
-  "Move {card} later": "{card} kartını sona taşı"
+  "Move {card} later": "{card} kartını sona taşı",
+  "Messages in your other communities show on your phone, or when you open that community here.": "Diğer topluluklarınızdaki mesajlar telefonunuzda veya o topluluğu burada açtığınızda gösterilir.",
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Bildirimler, kayıtlı tuttuğunuz her topluluktan telefonunuza ulaşır. BeanPool sayfasında bir topluluk için bunları kapatabilirsiniz."
 }

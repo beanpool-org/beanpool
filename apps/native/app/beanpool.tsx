@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Share, TextInput, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Share, TextInput, Platform, DeviceEventEmitter, Modal, Switch } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,6 +15,8 @@ import { openBeanPoolWebsite } from '../utils/beanpool-links';
 import { useCommunities, type CommunityRow, type CommunityStatus } from '../utils/use-communities';
 import { useNoticeCounts } from '../utils/use-notice-counts';
 import { noticeCountFor } from '../utils/notice-counts';
+import { readAlertsOff } from '../utils/push-alerts-off';
+import { sameCommunity } from '../utils/push-pins';
 import { useGlobalEntry } from '../utils/use-global-entry';
 import { useGlobalDoor } from '../utils/use-global-door-open';
 import { isGlobalCommunity } from '../utils/global-join-existing';
@@ -129,6 +132,19 @@ export default function BeanPoolSheet() {
         ctaText: { fontSize: 15, fontWeight: '700', flexShrink: 1 },
         empty: { fontSize: 15, color: colors.text.body, lineHeight: 22, padding: 16 },
         foot: { fontSize: 12, color: colors.text.muted, textAlign: 'center', marginTop: 24, lineHeight: 18 },
+        modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+        optionsCard: { width: '100%', maxWidth: 360, backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default },
+        optionsTitle: { fontSize: 18, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
+        switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, minHeight: 48, gap: 12 },
+        switchTextWrap: { flex: 1, minWidth: 0 },
+        switchLabel: { fontSize: 15, fontWeight: '600', color: colors.text.body },
+        switchNote: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, paddingBottom: 8 },
+        switchSub: { fontSize: 13, color: colors.text.secondary, marginTop: 2, lineHeight: 18 },
+        optionsDivider: { borderTopWidth: 1, borderTopColor: colors.border.default, marginVertical: 8 },
+        removeBtn: { minHeight: 48, justifyContent: 'center' },
+        removeBtnText: { fontSize: 15, fontWeight: '600', color: colors.feedback.danger.fg },
+        optionsDoneBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface.subtle, borderRadius: 12, marginTop: 12 },
+        optionsDoneText: { fontSize: 15, fontWeight: '700', color: colors.text.heading },
     }));
 
     const dotFor = (st: CommunityStatus | 'none') => st === 'online' ? colors.feedback.success.solid
@@ -156,6 +172,52 @@ export default function BeanPoolSheet() {
     // preview; this account closed there). No-domain-lock-in: every state but member and join is "the global community
     // isn't available from here right now", and nothing else on the sheet waits on it.
     const { identity } = useIdentity();
+    const [optionsCommunity, setOptionsCommunity] = useState<CommunityRow | null>(null);
+    const [alertsOff, setAlertsOff] = useState<string[]>([]);
+    const [togglingAlerts, setTogglingAlerts] = useState(false);
+
+    React.useEffect(() => {
+        let alive = true;
+        readAlertsOff(AsyncStorage).then((list) => { if (alive) setAlertsOff(list); }).catch(() => {});
+        return () => { alive = false; };
+    }, []);
+
+    // What the switch has to say beyond its position: it could not be changed, or the community could not be asked to stop
+    // yet. Cleared as the sheet opens or closes and as the switch is touched again.
+    const [alertsNote, setAlertsNote] = useState<string | null>(null);
+
+    // A switch never says more than is so (Marty: never a false success): it moves once the change is written on this phone
+    // and, going off, once the community has answered. Off with the community out of reach moves it too (the phone stops
+    // asking and registering there at once, and the DELETE is owed and tried again: utils/account-leaves-phone.ts
+    // `retryLeavesOwed`) and says so in plain words. A change that can't be written leaves it where it was, and says that.
+    React.useEffect(() => { setAlertsNote(null); }, [optionsCommunity?.url]);
+    const alertsOn = !!optionsCommunity && !alertsOff.some((c) => sameCommunity(c, optionsCommunity.url));
+
+    const toggleAlerts = async () => {
+        if (!optionsCommunity || togglingAlerts) return;
+        setTogglingAlerts(true);
+        setAlertsNote(null);
+        const target = optionsCommunity.url;
+        const isOff = alertsOff.some((c) => sameCommunity(c, target));
+        try {
+            if (isOff) {
+                const { turnAlertsOnAt } = await import('../services/push-notifications');
+                await turnAlertsOnAt(target);
+                setAlertsOff((prev) => prev.filter((c) => !sameCommunity(c, target)));
+            } else {
+                const { turnAlertsOff } = await import('../utils/account-leaves-phone');
+                const reached = await turnAlertsOff(identity, target);
+                setAlertsOff((prev) => [...prev, target]);
+                if (!reached) setAlertsNote(t("Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again."));
+            }
+        } catch (e) {
+            console.warn('[Push] Could not change the alerts switch', e);
+            setAlertsNote(t("Something went wrong. Try again in a moment."));
+        } finally {
+            setTogglingAlerts(false);
+        }
+    };
+
     const globalSaved = communities.rows.find(r => isGlobalCommunity(r.url)) ?? null;
     const globalDoor = useGlobalDoor(!!identity);
     const globalEntry = useGlobalEntry(!!identity, globalDoor.state, !!globalSaved);
@@ -183,7 +245,7 @@ export default function BeanPoolSheet() {
         : globalEntry === 'unreachable' ? globalDoor.retry
         : globalEntry === 'closed' || globalEntry === 'preview' ? openDoor
         : undefined;
-    const globalHint = globalSaved && globalTap === switchToGlobal ? t('Switches to this community. Long press to remove it.') : undefined;
+    const globalHint = globalSaved && globalTap === switchToGlobal ? t('Switches to this community. Long press for its options.') : undefined;
     // The global community can't be reached, and the community in use is another one this account is a member of and that
     // answers (online; a guest's isn't "your own"): say so under the line
     // (DESIGN-global-mothership-fable.md §2.5, pick 1: one community among many, which yours never needs). Not while the
@@ -243,7 +305,7 @@ export default function BeanPoolSheet() {
                 key={saved?.url ?? 'global'}
                 style={({ pressed }) => [styles.row, !first && styles.rowDivider, isCurrent && styles.rowCurrent, pressed && styles.rowPressed]}
                 onPress={globalTap}
-                onLongPress={saved ? () => communities.remove(saved) : undefined}
+                onLongPress={saved ? () => setOptionsCommunity(saved) : undefined}
                 delayLongPress={500}
                 disabled={!globalTap || communities.switching || guestVisit.visiting}
                 accessibilityRole="button"
@@ -343,13 +405,13 @@ export default function BeanPoolSheet() {
                                 key={r.url}
                                 style={({ pressed }) => [styles.row, i > 0 && styles.rowDivider, isCurrent && styles.rowCurrent, pressed && styles.rowPressed]}
                                 onPress={() => communities.switchTo(r.url)}
-                                onLongPress={() => communities.remove(r)}
+                                onLongPress={() => setOptionsCommunity(r)}
                                 delayLongPress={500}
                                 disabled={communities.switching}
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: isCurrent }}
                                 accessibilityLabel={savedRowLabel(r.name, t(STATUS_TEXT[r.status]), isCurrent, notices)}
-                                accessibilityHint={isCurrent ? undefined : t('Switches to this community. Long press to remove it.')}
+                                accessibilityHint={isCurrent ? undefined : t('Switches to this community. Long press for its options.')}
                             >
                                 <View style={[styles.dot, { backgroundColor: dotFor(r.status) }]} />
                                 <View style={styles.rowText}>
@@ -485,6 +547,77 @@ export default function BeanPoolSheet() {
                     </>
                 )}
             </ScrollView>
+
+            {optionsCommunity && (
+                <Modal
+                    visible={!!optionsCommunity}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setOptionsCommunity(null)}
+                >
+                    <View style={styles.modalBackdrop}>
+                        <Pressable
+                            style={StyleSheet.absoluteFill}
+                            onPress={() => setOptionsCommunity(null)}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Done')}
+                        />
+                        <View
+                            style={styles.optionsCard}
+                            testID="community-options-modal"
+                        >
+                            <Text style={styles.optionsTitle} numberOfLines={1}>{optionsCommunity.name}</Text>
+                            <View style={styles.switchRow}>
+                                <View style={styles.switchTextWrap}>
+                                    <Text style={styles.switchLabel}>{t('Alerts from this community')}</Text>
+                                    <Text style={styles.switchSub}>{t('Stops notifications and unread message checks from this community')}</Text>
+                                </View>
+                                <Switch
+                                    value={alertsOn}
+                                    onValueChange={() => void toggleAlerts()}
+                                    disabled={togglingAlerts}
+                                    // Off: the border colour as the track (as Pulse's switch), and a thumb that stands off the card
+                                    // (text.muted, over 5:1 on it in both themes; the subtle fill and the card itself were about 1.1:1).
+                                    trackColor={{ false: colors.border.default, true: colors.brand.primary }}
+                                    thumbColor={alertsOn ? colors.surface.card : colors.text.muted}
+                                    accessibilityRole="switch"
+                                    accessibilityLabel={t('Alerts from this community')}
+                                />
+                            </View>
+                            {alertsNote && (
+                                <Text style={styles.switchNote} accessibilityRole="alert" testID="alerts-switch-note">{alertsNote}</Text>
+                            )}
+                            {communities.active && !sameCommunity(optionsCommunity.url, communities.active) && (
+                                <>
+                                    <View style={styles.optionsDivider} />
+                                    <Pressable
+                                        style={[styles.removeBtn, togglingAlerts && { opacity: 0.5 }]}
+                                        // Not while the switch is changing: a Remove then could leave an alerts-off entry behind.
+                                        disabled={togglingAlerts}
+                                        onPress={() => {
+                                            const target = optionsCommunity;
+                                            setOptionsCommunity(null);
+                                            communities.remove(target);
+                                        }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Remove from your saved list')}
+                                    >
+                                        <Text style={styles.removeBtnText}>{t('Remove from your saved list')}</Text>
+                                    </Pressable>
+                                </>
+                            )}
+                            <Pressable
+                                style={styles.optionsDoneBtn}
+                                onPress={() => setOptionsCommunity(null)}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Done')}
+                            >
+                                <Text style={styles.optionsDoneText}>{t('Done')}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </Modal>
+            )}
         </SafeAreaView>
     );
 }

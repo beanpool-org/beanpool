@@ -63,7 +63,7 @@
   "Your account there was closed.": "Il tuo account lì è stato chiuso.",
   "Your own community isn't affected.": "La tua comunità non ne risente.",
   "Global community, {state}": "Comunità globale, {state}",
-  "Switches to this community. Long press to remove it.": "Passa a questa comunità. Tieni premuto per rimuoverla.",
+  "Switches to this community. Long press for its options.": "Passa a questa comunità. Tieni premuto per le sue opzioni.",
   "Guest": "Ospite",
   "Explore BeanPool worldwide": "Esplora BeanPool nel mondo",
   "🌍 Explore BeanPool worldwide": "🌍 Esplora BeanPool nel mondo",
@@ -6195,5 +6195,14 @@
   "Stop taking questions": "Non ricevere più domande",
   "on the global community": "nella comunità globale",
   "Open their requests there": "Apri lì le loro richieste",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Questa è la tua home. Aggiungi una scheda in basso, oppure tieni premuta una scheda per disporla."
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Questa è la tua home. Aggiungi una scheda in basso, oppure tieni premuta una scheda per disporla.",
+  "Alerts from this community": "Avvisi da questa comunità",
+  "Stops notifications and unread message checks from this community": "Interrompe le notifiche e i controlli dei messaggi non letti da questa comunità",
+  "Remove from your saved list": "Rimuovi dal tuo elenco salvato",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} nuovo messaggio in {community} · Passa",
+    "other": "{n} nuovi messaggi in {community} · Passa"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Gli avvisi raggiungono il tuo telefono da ogni comunità che mantieni. Puoi disattivarli per una comunità nella scheda BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Gli avvisi sono disattivati su questo telefono. Non ha ancora potuto raggiungere questa comunità per fermarli lì, e riproverà."
 }

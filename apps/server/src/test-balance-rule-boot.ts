@@ -19,7 +19,6 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 
 const SCRIPT = fileURLToPath(import.meta.url);
-const DAY = 86_400_000;
 
 let passed = 0;
 let run = 0;
@@ -137,7 +136,7 @@ async function main(): Promise<void> {
     // ── 3. the start, once ──
     const read = () => (db.prepare("SELECT value FROM node_config WHERE key = 'balance_rule_from'").get() as { value: string } | undefined)?.value;
     const stamp = read();
-    check(!!stamp && Date.parse(stamp) >= before + 14 * DAY && Date.parse(stamp) <= Date.now() + 14 * DAY, `12. the boot wrote the start, 14 days on (${stamp})`);
+    check(!!stamp && Date.parse(stamp) >= before && Date.parse(stamp) <= Date.now(), `12. the boot wrote the start: that moment, no notice (${stamp})`);
     initSchema();
     check(read() === stamp, '13. a second boot leaves it where it was');
     runMainServerSchemaPasses();

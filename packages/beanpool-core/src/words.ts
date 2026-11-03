@@ -42,9 +42,11 @@ export function isLang(tag: unknown): tag is Lang {
 }
 
 /**
- * The pseudo-locale: every sentence accented and padded about 35 %, in brackets. Not a language anyone picks; the
- * 320 px render tests run in it so clipped text fails, and any text WITHOUT the brackets bypassed `t()`. Dates are
- * bracketed too (formatDate), so a date is never mistaken for text that bypassed the words layer.
+ * The pseudo-locale: every sentence accented and padded (40 % up to 30 characters, 30 % above: pseudoLocalise), in
+ * brackets. Not a language a member picks: the 320 px render tests run in it so clipped text fails, and any text WITHOUT
+ * the brackets bypassed `t()`. The web switches it on with `?lang=xx`; the phone offers it as "Pseudo (test)" in
+ * Settings → Language in a development build only (never in a release build). Dates are bracketed too (formatDate), so
+ * a date is never mistaken for text that bypassed the words layer.
  */
 export const PSEUDO_LANG = 'xx' as const;
 export type UiLang = Lang | typeof PSEUDO_LANG;
@@ -414,17 +416,36 @@ const PSEUDO_PAD_WORD = 5;
 const ZERO_WIDTH_SPACE = '\u200B';
 
 /**
- * "Save" → "[Šāṽé~~]": accented, padded ~35 % (at least one ~), placeholders and `**bold**` marks kept intact.
+ * How much longer the pseudo-locale makes a sentence (translation tooling design §2.5, slice T4): 40 % for a sentence up
+ * to 30 characters, 30 % above that. Short UI text (a button, a tab) grows most in a real language; a long sentence
+ * grows less. Counted in characters of the English (`{placeholders}` and `**` marks included), in whole tildes, rounded
+ * up. The step at 30 → 31 characters is deliberate: a 30-character sentence gets 12 tildes, a 31-character one 10.
+ */
+export const PSEUDO_SHORT_MAX_CHARS = 30;
+export const PSEUDO_PAD_SHORT_PERCENT = 40;
+export const PSEUDO_PAD_LONG_PERCENT = 30;
+
+/** The tildes the pseudo-locale appends to an English sentence of this many characters (at least one). */
+export function pseudoPadLength(sourceLength: number): number {
+    const percent = sourceLength <= PSEUDO_SHORT_MAX_CHARS ? PSEUDO_PAD_SHORT_PERCENT : PSEUDO_PAD_LONG_PERCENT;
+    // Whole numbers throughout: a product like 100 × 0.3 is not exact in floating point, and a pad must not gain a tilde from that.
+    return Math.max(1, Math.ceil((sourceLength * percent) / 100));
+}
+
+/**
+ * "Save" → "[Šāṽé~~]": accented, padded 40 % up to 30 characters and 30 % above (at least one ~), placeholders and
+ * `**bold**` marks kept intact.
  *
  * A long pad breaks the way the longer words of a real translation do: a zero-width space before it and after every
- * five tildes. Glued to the last word as one run, 35 % of a long sentence is a "word" no screen can wrap (a 100-letter
- * sentence ends in 35 tildes), and a 320 px check then fails on the padding rather than on the layout: the web app's
- * welcome page measured 668 px wide in 320 (apps/pwa/e2e/words-screens-check.mjs). Pads under seven stay one run.
+ * five tildes. Glued to the last word as one run, the pad of a long sentence is a "word" no screen can wrap (a
+ * 100-letter sentence ends in 30 tildes), and a 320 px check then fails on the padding rather than on the layout: the
+ * web app's welcome page measured 668 px wide in 320 at the old 35 % (apps/pwa/e2e/words-screens-check.mjs). Pads under
+ * seven stay one run.
  */
 export function pseudoLocalise(source: string): string {
     const parts = source.split(/(\{[A-Za-z0-9_]+\})/);
     const body = parts.map((part) => (/^\{[A-Za-z0-9_]+\}$/.test(part) ? part : part.replace(/[A-Za-z]/g, (c) => ACCENTED[c] ?? c))).join('');
-    const length = Math.max(1, Math.ceil(source.length * 0.35));
+    const length = pseudoPadLength(source.length);
     const pad = length < PSEUDO_PAD_BREAKS_FROM
         ? '~'.repeat(length)
         : ZERO_WIDTH_SPACE + Array.from({ length: Math.ceil(length / PSEUDO_PAD_WORD) }, (_, i) => '~'.repeat(Math.min(PSEUDO_PAD_WORD, length - i * PSEUDO_PAD_WORD))).join(ZERO_WIDTH_SPACE);

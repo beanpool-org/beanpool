@@ -940,7 +940,9 @@ describe('Settings at 320 dp with 1.3× text, in the pseudo-locale', () => {
             expect(label.getAttribute('data-lines'), text).toBe('2');
             const px = 13 * SCALE * Number(label.getAttribute('data-min-scale'));
             expect(widthOf(longestWord(text), px), longestWord(text)).toBeLessThanOrEqual(third);
-            expect(widthOf(text, px), text).toBeLessThanOrEqual(2 * third * 0.9);
+            // Plus one tilde at the smallest size: the pseudo pad rounds up to whole tildes (slice T4, 4 Nov 2026), so the
+            // 13-letter "Same as phone" carries 6 at 40 % where 35 % gave 5 (132.0 against 129.6 dp; a tilde is 6.3 dp here).
+            expect(widthOf(text, px), text).toBeLessThanOrEqual(2 * third * 0.9 + widthOf('~', px));
         }
     });
 });

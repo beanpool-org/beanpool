@@ -210,6 +210,18 @@ async function main() {
     assert(rollOf(plainVote).length === 0 && poolRowOf(plainVote) === undefined, 'no roll and no pool are kept for it');
     assert(de.tallyDecision(plainVote).decider === undefined && de.tallyDecision(plainVote).quorumRequired >= 3, "its tally is today's: no jury in it");
     de.adminLiftSuspension(plain.pk, ada.pk);
+    // An owner choosing Everyone while Everyone is still the default: kept as a row all the same (review of #2793), so J3's
+    // change of default leaves this community on Everyone. Quietly: no rule changed, so no log line and no notice.
+    const countOf = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
+    const logRowsBefore = countOf('SELECT COUNT(*) AS c FROM community_settings_log');
+    const noticesBefore0 = countOf('SELECT COUNT(*) AS c FROM moderation_notices');
+    const asDefault = await setDecider('everyone');
+    const asRow = readShape().settings.removalDecider;
+    assert(asDefault.status === 200 && asDefault.body?.told === 'nobody' && asRow.configured === 'everyone' && asRow.source === 'owner'
+        && readCommunitySettings().nodeConfig.removal_decider === 'everyone',
+        `an owner choosing Everyone on the default keeps it as a row: 200, source owner (${asDefault.status} ${JSON.stringify(asRow)})`);
+    assert(countOf('SELECT COUNT(*) AS c FROM community_settings_log') === logRowsBefore && countOf('SELECT COUNT(*) AS c FROM moderation_notices') === noticesBefore0,
+        'and quietly: no owner log line, nothing told to members');
 
     // ── 2. Who decides a removal ────────────────────────────────────────────────────────────────────────────────────
     console.log('\n2. Who decides a removal: the owners set it; A jury is locked while fewer than 36 could serve');
@@ -290,6 +302,18 @@ async function main() {
     const onHttp = await signed('POST', `/api/commons/decisions/${samVote}/vote`, notDrawn, { support: true });
     assert(onHttp.status === 400 && onHttp.body?.error === de.JURY_ONLY_VOTE_ERROR, `over the route too, 400 (${onHttp.status} ${onHttp.body?.error})`);
     const jurors = seated.map(k => byKey.get(k)!);
+    // Home's Needs you asks only those who can cast it (review of #2793): never a member not drawn, nor one who stood aside,
+    // whom the vote refuses all week; a juror who hasn't voted is asked.
+    fresh();
+    const voteLine = async (who: Id) => ((await signed('GET', '/api/home?cards=needs', who)).body?.cards?.needs?.items ?? [])
+        .filter((i: any) => i.kind === 'vote');
+    const homeOff = await voteLine(notDrawn);
+    const homeAside = await voteLine(at(0));
+    const homeJuror = await voteLine(jurors[0]);
+    assert(homeOff.length === 0 && homeAside.length === 0,
+        `Home asks no member not drawn, and no one who stood aside, to vote (${JSON.stringify([homeOff, homeAside])})`);
+    assert(homeJuror.length === 1 && homeJuror[0].count === 1 && String(homeJuror[0].label).includes(sam.callsign) && homeJuror[0].target?.to === 'decide',
+        `a juror who hasn't voted is asked, the line naming the member (${JSON.stringify(homeJuror)})`);
     const first = await signed('POST', `/api/commons/decisions/${samVote}/vote`, jurors[0], { support: true });
     assert(first.status === 200 && first.body?.success === true, `a juror votes over the route (${first.status} ${first.body?.error ?? ''})`);
     for (const j of jurors.slice(1, 6)) de.castDecisionVote(samVote, j.pk, true);

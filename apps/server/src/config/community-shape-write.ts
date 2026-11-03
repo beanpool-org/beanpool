@@ -446,14 +446,23 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         }
         const v = asked.removalDecider as RemovalDecider;
         if (v === 'jury' && S.removalDecider.lock) refuse('removalDecider', S.removalDecider.lock);
-        // Stored as a row whatever it is (setRemovalDecider), so a later change of default never overrides a choice.
+        // Stored as a row whatever it is (setRemovalDecider), so a later change of default never overrides a choice: the
+        // default chosen while it is still the default is written too, quietly (review of #2793), with no log line and nothing
+        // told to anyone, since no rule changes today. When J3 moves the default, that community keeps Everyone.
         if (v !== S.removalDecider.configured) {
             planned.push({ setting: 'removalDecider', from: S.removalDecider.configured, to: v });
+            decider = v;
+        } else if (S.removalDecider.source === 'default') {
             decider = v;
         }
     }
 
-    if (planned.length === 0) return { shape: before, told: 'nobody', changed: [] };
+    if (planned.length === 0) {
+        // Nothing changed that anyone reads. Only a default chosen as itself is kept, as its row.
+        if (!decider) return { shape: before, told: 'nobody', changed: [] };
+        setRemovalDecider(decider);
+        return { shape: readShape(), told: 'nobody', changed: [] };
+    }
 
     // ── Written, all of it or none ──
     const at = new Date().toISOString();

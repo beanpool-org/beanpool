@@ -3,7 +3,7 @@
  * The web Market orders held rows newest created first, as the phone does.
  * - A post edited or RSVPed later than a newer post stays below it.
  * - The Daily Pulse post stays first.
- * - On a nearest-first answer the node's distance order stands.
+ * - On a node that reads by area the order is the same newest listed, and the node is asked for it (market order S2).
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -237,7 +237,7 @@ describe('MarketplacePage order (pinning-s0)', () => {
         expect(titles).toEqual(['Daily Pulse Reflection', 'Newer Post']);
     });
 
-    it('on a nearest-first answer the order is the node\'s', async () => {
+    it('on a node that reads by area the order is newest listed first, not nearest first', async () => {
         // Global node with nearbyListings feature and user area -> near is active.
         info.current = { profile: 'global', features: { beans: false, nearbyListings: { radiusKm: 250, max: 500 } } };
         stubNode([postNear, postFar]);
@@ -254,8 +254,12 @@ describe('MarketplacePage order (pinning-s0)', () => {
         });
 
         const titles = screen.getAllByTestId('market-post-card').map(el => el.textContent);
-        // Distance order stands: postNear (nearest) remains first, postFar remains second
-        expect(titles).toEqual(['Near Listing', 'Far Listing']);
+        // Newest listed first (market order S2): postFar is the newer, so it is first though postNear is nearer.
+        expect(titles).toEqual(['Far Listing', 'Near Listing']);
+        // And the node was asked for the newest in the circle, not the nearest.
+        const reads = vi.mocked(api.getMarketplacePosts).mock.calls.map(c => c[0] as any).filter(f => f?.lat != null);
+        expect(reads.length).toBeGreaterThan(0);
+        expect(reads.every(f => f.sort === 'recent')).toBe(true);
     });
 
     it('under the Events tab, event start time order is preserved (soonest first) over creation time', async () => {

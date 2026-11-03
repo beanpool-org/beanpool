@@ -415,9 +415,10 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
                 await vi.advanceTimersByTimeAsync(300);
             });
 
-            // Each refresh of MarketplacePage fetches general posts + viewer own posts (2 calls to getMarketplacePosts)
-            // One refresh cycle = 2 calls. Exactly one refresh cycle ran on becoming visible!
-            expect(postsSpy.mock.calls.length).toBe(initialCalls + 2);
+            // Each refresh of MarketplacePage fetches general posts + the events beside them (a member on a local community:
+            // an event posted weeks ago comes back the day before it starts, market order S2) + viewer own posts
+            // (3 calls to getMarketplacePosts). One refresh cycle = 3 calls (two cycles would be 6): exactly one ran on becoming visible!
+            expect(postsSpy.mock.calls.length).toBe(initialCalls + 3);
         });
     });
 

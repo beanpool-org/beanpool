@@ -28,7 +28,7 @@ import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
-    FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
+    FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive,
 } from '@beanpool/core';
@@ -283,7 +283,7 @@ const FEED_SECTION_WORDS = {
     forYou: word('★ Starred For You'),
     today: word('Today'),
     yesterday: word('Yesterday'),
-    thisWeek: word('This Week'),
+    thisweek: word('This Week'),
     older: word('Older Listings'),
 } as const;
 
@@ -525,10 +525,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Distance chip is off screen there, so nothing on that screen could undo the cut.
     const near = useMemo(
         () => nearKnown && typeFilter !== 'event'
-            ? nearRead({ nearbyListings, setting: radiusSettings, area: memberArea, visitor: isVisitor, everywhere })
+            ? nearRead({ nearbyListings, setting: radiusSettings, area: memberArea, visitor: isVisitor, everywhere, order: 'recent' })
             : null,
         [nearKnown, typeFilter, nearbyListings, radiusSettings, memberArea, isVisitor, everywhere],
     );
+    // A search keeps the node's ranking for the words, and the node ranks a search near a point by distance: the same circle,
+    // asked nearest first (core market-order: searchResults keep the node's order).
+    const nearForSearch = useMemo(() => near ? { ...near, sort: 'distance' as const } : null, [near]);
     // How far a listing is: the node's word when it measured from the member's area, else from the picked centre in the
     // browser (exact: the node was sent it rounded, lib/listings-near).
     const measureFrom = near ? near.circle : radiusSettings;
@@ -669,9 +672,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             out = true;
             const liveMark = liveChangeMark();
             try {
-                const results = await readNearestInCircle(near, 50, page => getMarketplacePosts({
+                const results = await readNearestInCircle(nearForSearch, 50, page => getMarketplacePosts({
                     ...filter,
-                    ...nearParams(near),
+                    ...nearParams(nearForSearch),
                     ...(terms ? { q: terms } : {}),
                     ...(searchTagIds.length > 0 ? { tags: searchTagIds } : {}),
                     ...(selectedFree ? { free: [selectedFree] } : {}),
@@ -699,7 +702,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             offView();
             if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         };
-    }, [searchQuery, selectedTag, selectedFree, typeFilter, categoryFilter, beansOnly, groupFilter, near, fitsNear]);
+    }, [searchQuery, selectedTag, selectedFree, typeFilter, categoryFilter, beansOnly, groupFilter, nearForSearch, fitsNear]);
     useEffect(() => { searchAgainRef.current?.(); }, [listReads]);
 
     // Handle filter opening from doors (e.g. Home's "All events ›")
@@ -962,10 +965,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // Online events have no place, so a read by radius never meets them: read beside it where the feed asks for
                 // events (DESIGN-event-times §9).
                 const wantsEvents = filter.type === 'event' || (filter.types ?? '').split(',').includes('event');
-                const [homeData, myOwnPosts, statusesData, fallbackTreasuries, onlineEvents] = await Promise.all([
-                    // Nearest first within the radius where the node reads by area (lib/listings-near); the viewer's own
-                    // listings wherever they are. Read from the distance setting: cut to the exact circle and nearest
-                    // first from its centre, as many as the node's page without a limit.
+                const [homeData, myOwnPosts, statusesData, fallbackTreasuries, onlineEvents, localEvents] = await Promise.all([
+                    // The newest within the radius where the node reads by area (lib/listings-near, sort=recent); the viewer's
+                    // own listings wherever they are. Read from the distance setting: cut to the exact circle, the newest
+                    // created first, as many as the node's page without a limit.
                     readNearestInCircle(near, NODE_PAGE_DEFAULT, page => getMarketplacePosts({ ...filter, ...nearParams(near), ...page })),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
@@ -973,6 +976,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     // and never where enterprises are a preview or off (lib/features treasuriesFallback).
                     isVisitor ? Promise.resolve(null) : statusesPromise.then(res => res ? null : treasuriesFallback(statusesError)),
                     near && wantsEvents ? getMarketplacePosts({ ...filter, online: true }).catch(() => []) : Promise.resolve([]),
+                    // On a local community the page is the newest CHANGED 50, so an event posted weeks ago is not in it, and
+                    // the day before it starts it comes back among that day's posts (core market-order): the events are read
+                    // beside the listings, and merged by id below. Not under Events, whose read is the events themselves, and
+                    // not for a visitor, whose list is the lobby's. A node that reads by area has its own (above).
+                    !nearbyListings && !isVisitor && wantsEvents && filter.type !== 'event' ? getMarketplacePosts({ ...filter, types: undefined, type: 'event' }).catch(() => []) : Promise.resolve([]),
                 ]);
 
                 const inactiveMap = new Map<string, { paused: boolean; status: string; name: string }>();
@@ -995,6 +1003,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const byId = new Map<string, MarketplacePost>();
                 for (const p of homeData) byId.set(p.id, p);
                 for (const p of (onlineEvents as MarketplacePost[])) if (!byId.has(p.id)) byId.set(p.id, p);
+                for (const p of (localEvents as MarketplacePost[])) if (!byId.has(p.id)) byId.set(p.id, p);
                 for (const p of (myOwnPosts as MarketplacePost[])) byId.set(p.id, p);
                 let allPosts: MarketplacePost[] = Array.from(byId.values());
 
@@ -1036,7 +1045,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity, isVisitor, nearKnown, near, fitsNear]);
+    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity, isVisitor, nearKnown, nearbyListings, near, fitsNear]);
 
     // Fetch peer nodes on mount
     useEffect(() => {
@@ -3859,22 +3868,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     filtered = filtered.filter(p => !isNodePulsePost(p));
                 }
 
-                // Pin Daily Pulse post to the top of the feed (local only).
-                // Sort rows newest created first, as the phone does (apps/native/utils/db.ts:967),
-                // except where the node answered nearest first (byDistance on distanceSortDefault,
-                // which the page knows by `near` being set), or under Events (eventStartAt ASC),
-                // or under active search results (server ranking).
-                filtered.sort((a, b) => {
-                    const isPulseA = isNodePulsePost(a);
-                    const isPulseB = isNodePulsePost(b);
-                    if (isPulseA && !isPulseB) return -1;
-                    if (!isPulseA && isPulseB) return 1;
-                    if (!near && typeFilter !== 'event' && searchResults === null) {
-                        return (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0);
-                    }
-                    return 0;
-                });
-
                 // Pinned block (scratch/fable-design/DESIGN-pinning-fable.md §0.2, §2.4, §2.9):
                 // A pin rises within what the member asked to see (clientFilter already applied).
                 // Under search, tags, or member-picked distance (near.from === 'setting' or radiusSettings),
@@ -3890,7 +3883,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 });
                 const pinnedPosts = livePins.slice(0, PINS_MAX);
                 const pinnedIds = new Set(pinnedPosts.map(p => p.id));
-                const unpinnedFiltered = pinnedPosts.length > 0 ? filtered.filter(p => !pinnedIds.has(p.id)) : filtered;
+
+                // The Market's order, one rule on both apps (core market-order, DESIGN-market-order-fable.md): the newest listed
+                // first, an event or an open poll listed again the day before its moment, no author past two places in a day
+                // until the others have had theirs. Pinned posts are out of the stream, so they never count towards that. The
+                // node's own Daily Pulse first (local only). Where the node's order stands, it is kept: under Events (soonest
+                // first, the date chips) and under a search or a tag (its ranking). The pinned posts follow in `filtered`, for
+                // what counts or fills, and are left out of what the list draws (`unpinnedFiltered`).
+                // A visitor's list draws no pinned block (it is the one list below), so for them pins stay in the stream.
+                const orderNow = Date.now();
+                const outOfStream = visitor ? new Set<string>() : pinnedIds;
+                const pulses = filtered.filter(p => isNodePulsePost(p) && !outOfStream.has(p.id));
+                const rest = filtered.filter(p => !isNodePulsePost(p) && !outOfStream.has(p.id));
+                const unpinnedFiltered = [...pulses, ...(typeFilter === 'event' || searchResults !== null ? rest : marketOrder(rest, orderNow))];
+                filtered = [...unpinnedFiltered, ...(visitor ? [] : pinnedPosts)];
 
                 // The fill beneath a short nearby list (see clientFilter): none of them already shown, and not the node's own
                 // Daily Pulse, which is not from elsewhere. Pending while the read is out; nothing if it failed or came back empty.
@@ -3929,12 +3935,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <p data-testid="market-near-line" className="m-0 mb-2 px-1 text-sm text-nature-600 dark:text-nature-300 flex flex-wrap items-center gap-x-2 gap-y-1">
                         {near?.from === 'area' ? (
                             <>
-                                <span>{t('Nearest to your area first, within {distance}.', { distance: formatDistance(near.circle.radiusKm) })}</span>
+                                <span>{t('Newest within {distance} of your area.', { distance: formatDistance(near.circle.radiusKm) })}</span>
                                 <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">{t('Show everywhere')}</button>
                             </>
                         ) : near ? (
                             // Not the setting's label: the picker sets it to "<n>km radius", never a place's name.
-                            <span>{t('Nearest first, within {distance} of the place you picked.', { distance: formatDistance(near.circle.radiusKm) })}</span>
+                            <span>{t('Newest within {distance} of the place you picked.', { distance: formatDistance(near.circle.radiusKm) })}</span>
                         ) : areaStanding ? (
                             <span>{areaStanding}</span>
                         ) : areaFailed && !everywhere ? (
@@ -4125,31 +4131,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         );
                     }
 
-                    // Group chronologically for List & Compact modes
-                    const today: MarketplacePost[] = [];
-                    const yesterday: MarketplacePost[] = [];
-                    const thisWeek: MarketplacePost[] = [];
-                    const older: MarketplacePost[] = [];
-
-                    const now = Date.now();
-                    filtered.forEach(p => {
-                        const postTime = new Date(p.createdAt).getTime();
-                        const diffDays = Math.floor((now - postTime) / (24 * 60 * 60 * 1000));
-                        if (diffDays === 0) {
-                            today.push(p);
-                        } else if (diffDays === 1) {
-                            yesterday.push(p);
-                        } else if (diffDays < 7) {
-                            thisWeek.push(p);
-                        } else {
-                            older.push(p);
-                        }
-                    });
+                    // The day headings of List & Compact modes: the local calendar day each post was LISTED, as the phone does
+                    // (core daySections). Under a search the node's order stands and the headings are over it, by the same day.
+                    const sections = daySections(filtered, orderNow);
 
                     const renderSection = (title: string, items: MarketplacePost[]) => {
                         if (items.length === 0) return null;
                         return (
                             <div key={title} className="flex flex-col gap-1.5 mb-2">
+                                {title && (
                                 <div className="flex items-center gap-3 mt-2 mb-1">
                                     <span
                                         data-testid={title === t('Pinned') ? 'market-pinned-heading' : undefined}
@@ -4159,6 +4149,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </span>
                                     <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
                                 </div>
+                                )}
                                 <div className="flex flex-col gap-1.5">
                                     {items.map(post => {
                                         if (post.type === 'event') {
@@ -4238,12 +4229,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         return renderSection(t(FEED_SECTION_WORDS.forYou), filtered);
                     }
 
+                    // The Events pill is a date list, as on the phone: soonest first, under no heading.
+                    if (typeFilter === 'event') return renderSection('', filtered);
+
                     return (
                         <>
-                            {renderSection(t(FEED_SECTION_WORDS.today), today)}
-                            {renderSection(t(FEED_SECTION_WORDS.yesterday), yesterday)}
-                            {renderSection(t(FEED_SECTION_WORDS.thisWeek), thisWeek)}
-                            {renderSection(t(FEED_SECTION_WORDS.older), older)}
+                            {sections.map(s => renderSection(t(FEED_SECTION_WORDS[s.id]), s.posts))}
                         </>
                     );
                 };

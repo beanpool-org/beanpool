@@ -77,7 +77,7 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
         expect(screen.queryByTestId('market-see-elsewhere')).toBeNull();
         expect(screen.queryByTestId('market-empty-tiles')).toBeNull();
         // The near line still says where the list was read from.
-        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest to your area first, within 250 km.');
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Newest within 250 km of your area.');
         // The same read "Show everywhere" makes, asked for one page.
         expect(fillReads()).toEqual([{ types: CLIENT_POST_TYPES, limit: FILL_MAX }]);
     });

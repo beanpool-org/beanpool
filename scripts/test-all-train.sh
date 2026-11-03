@@ -289,10 +289,18 @@ run_parts() {
 
 # with_limit <seconds> <command…>: the command, stopped at the limit: a network that hangs must not hold the train. TERM,
 # not alarm: gh is a Go program, and Go ignores a SIGALRM nobody asked for.
+#
+# The train's EXIT/INT/TERM traps are lifted while the two children are forked and put back at once, so no child can hold
+# them: a forked bash that is signalled before it resets its traps runs the parent's (#2734 saw the watcher run cleanup and
+# remove the tree the train was in, and the guard in cleanup did not stop a second one on 3 Nov, run for #2783). The watcher
+# is a plain sh, not a bash subshell, so it has no trap to run at all.
 with_limit() {
-  local limit=$1 pid watcher rc; shift
+  local limit=$1 pid watcher rc saved; shift
+  saved=$(trap -p EXIT INT TERM)
+  trap - EXIT INT TERM
   "$@" & pid=$!
-  ( sleep "$limit"; kill "$pid" ) > /dev/null 2>&1 & watcher=$!
+  sh -c 'sleep "$1"; kill "$2"' sh "$limit" "$pid" > /dev/null 2>&1 & watcher=$!
+  eval "$saved"
   wait "$pid"; rc=$?
   kill "$watcher" 2>/dev/null
   return $rc

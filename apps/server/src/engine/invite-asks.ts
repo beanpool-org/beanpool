@@ -150,11 +150,16 @@ export function answersInviteAsks(pubkey: string): boolean {
     return role === 'owner' || role === 'admin';
 }
 
-/** How many asks can be answered now: none while invites are off, when no screen can list or answer them. */
+/**
+ * How many asks wait for an answer, for Needs you: none while invites are off, when nothing can answer them, nor once the door
+ * is no longer `admins`, when neither app shows the list (any member may invite then; the asks lapse in their 30 days).
+ */
 export function inviteAskCount(now = Date.now()): number {
-    if (!getProfileSwitches().invites) return 0;
-    return (db.prepare(`SELECT COUNT(*) AS n FROM invite_asks WHERE ${LIVE}`).get(liveSince(now)) as { n: number }).n;
+    if (!getProfileSwitches().invites || getDoor() !== 'admins') return 0;
+    return liveCount(now);
 }
+
+const liveCount = (now: number) => (db.prepare(`SELECT COUNT(*) AS n FROM invite_asks WHERE ${LIVE}`).get(liveSince(now)) as { n: number }).n;
 
 /** The asks to answer, oldest first: the longest waiting is the next to read. */
 export function listInviteAsks(limit: number, offset: number, now = Date.now()): { asks: InviteAskToAnswer[]; total: number } {
@@ -162,7 +167,7 @@ export function listInviteAsks(limit: number, offset: number, now = Date.now()):
         .all(liveSince(now), limit, offset) as AskRow[];
     return {
         asks: rows.map((r) => ({ ...toWaiting(r), askerPubkey: r.asker_pubkey, askerCallsign: getMember(db, r.asker_pubkey)?.callsign ?? '' })),
-        total: inviteAskCount(now),
+        total: liveCount(now),
     };
 }
 

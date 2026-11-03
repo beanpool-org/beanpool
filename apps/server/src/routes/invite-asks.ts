@@ -91,8 +91,11 @@ function oneLine(raw: unknown, max: number): string | null {
     return Array.from(line).length > max ? null : line;
 }
 
-/** A phone number or an email address, which a request must not hold: seven digits in a run, or an address. */
-const CONTACT = /(?:\d[\s().-]*){7}|[^\s@]+@[^\s@]+\.[^\s@]+/;
+/**
+ * A phone number or an email address, which a request must not hold: nine digits in a run (spaces, brackets, dots and dashes
+ * between them allowed), or an address. Nine, so a span of years ("friends since 2019-2023", eight) is no phone number.
+ */
+const CONTACT = /(?:\d[\s().-]*){9}|[^\s@]+@[^\s@]+\.[^\s@]+/;
 
 function refusedOnStandby(ctx: any): boolean {
     if (getNodeRole() === 'primary') return false;

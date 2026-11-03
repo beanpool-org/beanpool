@@ -1223,7 +1223,7 @@ export default function PeopleScreen() {
                             {identity && anchorUrl && takesKnocks && (
                                 <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} />
                             )}
-                            {identity && anchorUrl && nodeProfile?.features.inviteAsks === true && mayInvite && (
+                            {identity && anchorUrl && nodeProfile?.features.inviteAsks === true && doorAdminsOnly && mayInvite && (
                                 <InviteAsksToAnswer anchorUrl={anchorUrl} identity={identity} offersVouch={offersVouch} />
                             )}
                             {identity && isGlobalNode && <MyJoinRequests identity={identity} />}

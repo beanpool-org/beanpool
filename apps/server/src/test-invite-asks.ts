@@ -167,6 +167,9 @@ async function main(): Promise<void> {
         const r = await ask(mel, first, how);
         assert(r.status === 400 && r.body?.code === 'contact_details' && rows() === 0, `2. ${label} is left out of a request: refused (${show(r)})`);
     }
+    const years = await ask(mel, 'Sam', 'friends since 2019-2023, met at 12 Main St');
+    assert(years.status === 201, `2. a span of years and a house number are no phone number (${show(years)})`);
+    clear();
     const hidden = await ask(mel, 'S​am‮', '  from\n\nthe  bakery\u0000 ');
     const heldRow = db.prepare('SELECT first_name, how_known FROM invite_asks').get() as { first_name: string; how_known: string } | undefined;
     assert(hidden.status === 201 && heldRow?.first_name === 'Sam' && heldRow?.how_known === 'from the bakery', `2. hidden characters and line breaks go (${JSON.stringify(heldRow)})`);
@@ -207,6 +210,9 @@ async function main(): Promise<void> {
     assert(queue.body?.items?.find((i: any) => i.kind === 'invite_asks')?.count === 1, `4. the header's queue says it (${show(queue)})`);
     const oldQueue = await call(owen, 'GET', '/api/node-admin/queue');
     assert(!oldQueue.body?.items?.some((i: any) => i.kind === 'invite_asks'), "4. an older app's queue doesn't");
+    setDoor('members');
+    assert(!line(await home(owen)) && (await asks(owen)).body?.total === 1, '4. once any member may invite, Needs you stops counting it, and an admin can still read it');
+    setDoor('admins');
     const modQueue = await call(mod, 'GET', '/api/node-admin/queue?asks=1');
     assert(!modQueue.body?.items?.some((i: any) => i.kind === 'invite_asks'), "4. nor a moderator's, whatever it asks");
 

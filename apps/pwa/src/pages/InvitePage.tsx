@@ -466,7 +466,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                         </div>
                     ) : (
                         <>
-                    {!isPreview && nodeInfo?.features?.inviteAsks === true && <InviteAsksToAnswer offersVouch={offersVouch} />}
+                    {!isPreview && doorAdmins && nodeInfo?.features?.inviteAsks === true && <InviteAsksToAnswer offersVouch={offersVouch} />}
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
                         {t('🎟️ Invite Someone')}
                     </h2>

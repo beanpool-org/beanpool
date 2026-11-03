@@ -578,6 +578,7 @@ export const SUITES = [
     'test-door-setting',
     'test-community-shape-read',
     'test-community-shape-write',
+    'test-core-settings-lock',
     'test-shape-upgrade',
     'test-names-list',
     'test-invite-bound-name',

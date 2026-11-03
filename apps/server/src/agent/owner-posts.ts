@@ -595,7 +595,7 @@ export function gate(grant: AgentGrant): string | null {
     return null;
 }
 
-const NOT_TICKED = 'This assistant was connected without "May post for me", so it cannot post. The owner can connect it again with that ticked.';
+export const NOT_TICKED = 'This assistant was connected without "May post for me", so it cannot post. The owner can connect it again with that ticked.';
 
 /** Why this grant can't upload a photo, for a grant that does not post: both upload doors' words, and photo_upload_link's. */
 export function noUploadWords(grant: AgentGrant): string {

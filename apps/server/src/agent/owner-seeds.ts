@@ -42,7 +42,7 @@ import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
 import { admitAgentCreate, agentPostsPerDay, AGENT_LIST_MAX, returnAgentCreate } from './limits.js';
 import {
     AGENT_POST_CATEGORIES, AGENT_POST_PHOTOS_MAX, assertAssistantDay, recordMade, assistantPostsToday, createdViaOf, dayFull, enterpriseRef, enterprisesOff, gate, heldTags,
-    NO_TAGS_HERE, notAFlag, num, OWNERS_POST_WORDS, PHOTO_PROPS, photosFrom, REFUSED_TAG_CHARS, refusalText, statusOf, TAG_PROPS, TAGS_WORDS, withPhotos,
+    NO_TAGS_HERE, NOT_TICKED, notAFlag, num, OWNERS_POST_WORDS, PHOTO_PROPS, photosFrom, REFUSED_TAG_CHARS, refusalText, statusOf, TAG_PROPS, TAGS_WORDS, withPhotos,
     type PhotoRule,
 } from './owner-posts.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
@@ -318,8 +318,10 @@ export const OWNER_SEED_TOOLS: AgentTool[] = [
         inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: AGENT_LIST_MAX } }, additionalProperties: false },
         outputSchema: { type: 'object', properties: { groups: { type: 'array' } }, required: ['groups'] },
         run: (grant, args, boundary) => {
-            const refused = gate(grant);
-            return refused ? { ok: false, error: refused } : myGroups(grant, args, boundary);
+            // A read, as my_enterprises is: an owner's grant ticked "May post for me", never held to the day's posts.
+            if (grant.role !== 'owner') return { ok: false, error: "Only an owner's assistant can post: an admin's cannot." };
+            if (!grant.canPost) return { ok: false, error: NOT_TICKED };
+            return myGroups(grant, args, boundary);
         },
     },
     {

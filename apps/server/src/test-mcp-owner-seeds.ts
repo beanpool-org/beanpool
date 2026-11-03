@@ -300,6 +300,8 @@ async function main(): Promise<void> {
             `with the day's count kept only in the rows (a restart), the next group is refused at the owners' number (${errorText(full1).slice(0, 100)})`);
         const full2 = await tool('create_enterprise', { ...ent, name: 'One too many' });
         assert(full2.isError === true && /try again tomorrow \(UTC\)/.test(errorText(full2)), 'and so is the next enterprise');
+        const readWhenFull = await tool('my_groups', {});
+        assert(!readWhenFull.isError && (structured(readWhenFull)?.groups ?? []).length === 3, `my_groups still reads with the day's posts used up: a read makes nothing (${errorText(readWhenFull).slice(0, 80)})`);
         setAgentPostsPerDay(1000);
         db.prepare("UPDATE members SET moderation_muted_until = ? WHERE public_key = ?").run(new Date(Date.now() + DAY).toISOString(), owner.pub);
         const muted = await tool('create_group', { ...full, name: 'While muted' });

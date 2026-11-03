@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
 import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { DeviceEventEmitter } from 'react-native';
+import { AppState } from 'react-native';
 
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 (globalThis as any).__DEV__ = false;
@@ -43,6 +43,12 @@ vi.mock('react-native', () => {
             ? data.map((item: any, index: number) => createElement(Fragment, { key: keyExtractor ? keyExtractor(item, index) : index }, renderItem({ item, index })))
             : ListEmptyComponent,
         ListFooterComponent);
+    const appBus = new Set<(state: string) => void>();
+    const AppState = {
+        currentState: 'active',
+        addEventListener: (_name: string, cb: (state: string) => void) => { appBus.add(cb); return { remove() { appBus.delete(cb); } }; },
+        emit: (state: string) => { for (const cb of [...appBus]) cb(state); },
+    };
     class Value { constructor(public v = 0) {} setValue() {} interpolate() { return this; } addListener() { return ''; } removeListener() {} }
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
@@ -57,6 +63,7 @@ vi.mock('react-native', () => {
         Alert: { alert() {} },
         Linking: { openURL: async () => {} },
         DeviceEventEmitter,
+        AppState,
         Keyboard: { addListener: listener, dismiss() {} },
         LayoutAnimation: { configureNext() {}, create: () => ({}), Presets: { easeInEaseOut: {} } },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
@@ -219,6 +226,22 @@ describe('the Market on the phone: New since you last looked', () => {
             expect(host.querySelector('[data-testid="new-since-line"]')).toBeNull();
             expect(store.map.get(KEY)).toBeUndefined();
             act(() => root.unmount());
+            expect(store.map.get(KEY)).toBe(String(Date.parse(ago(1))));
+        });
+    });
+
+    it('writes the stamp when the app goes to the background or inactive on the Market, not when it comes back', async () => {
+        await withFixedClock(async () => {
+            holds(board());
+            await render();
+            expect(store.map.get(KEY)).toBeUndefined();
+            // Home, or a swipe away: the screen never loses focus, but the app is no longer in front.
+            await act(async () => { (AppState as any).emit('active'); });
+            expect(store.map.get(KEY)).toBeUndefined();
+            await act(async () => { (AppState as any).emit('background'); });
+            expect(store.map.get(KEY)).toBe(String(Date.parse(ago(1))));
+            store.map.delete(KEY);
+            await act(async () => { (AppState as any).emit('inactive'); });
             expect(store.map.get(KEY)).toBe(String(Date.parse(ago(1))));
         });
     });

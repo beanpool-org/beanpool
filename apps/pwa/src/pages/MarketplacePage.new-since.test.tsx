@@ -113,13 +113,62 @@ describe('MarketplacePage: New since you last looked on the web', () => {
         render(<MarketplacePage identity={identity} isMember={true} />);
         await screen.findByText('Newcomer jam');
         expect(lines()).toHaveLength(1);
-        expect(lines()[0].className).toContain('col-span-full');
+        // Not an item of the dense grid (review on #2811): the tiles before it and the tiles after it are two grids.
+        expect(lines()[0].className).not.toContain('col-span-full');
+        expect(lines()[0].parentElement?.className ?? '').not.toContain('grid');
         // Newcomer (0.5 h) and Ana (1 h) are newer than the stamp (3 h): above the line. Bo is the post that set it: below.
         expect(at('Newcomer jam')).toBeLessThan(at('Ana one'));
         expect(at('Ana one')).toBeLessThan(at(LINE));
         expect(at(LINE)).toBeLessThan(at('Bo bread'));
         const line = lines()[0];
         expect(line.nextElementSibling?.textContent).toContain('Bo bread');
+    });
+
+    it('in the grid, an odd number of new posts leaves no seen tile in the grid above the line (dense placement would pull one up)', async () => {
+        useView('grid');
+        localStorage.setItem(KEY, String(Date.parse(ago(3))));
+        // Three new posts: in a two-column grid the last new tile has an empty cell beside it, which a dense grid fills with the
+        // next item it can, the first seen tile, if the line is an item of that same grid.
+        holds([listing('n1', 'Newcomer jam', 0.2), listing('n2', 'Newcomer tea', 0.4), listing('a1', 'Ana one', 1), listing('b1', 'Bo bread', 3), listing('y1', 'Yesterday goats', 30)]);
+        render(<MarketplacePage identity={identity} isMember={true} />);
+        await screen.findByText('Newcomer jam');
+        expect(lines()).toHaveLength(1);
+        const line = lines()[0];
+        const before = line.previousElementSibling as HTMLElement;
+        const after = line.nextElementSibling as HTMLElement;
+        expect(before.className).toContain('grid-flow-row-dense');
+        expect(after.className).toContain('grid-flow-row-dense');
+        expect(before.textContent).toContain('Ana one');
+        expect(before.textContent).not.toContain('Bo bread');
+        expect(after.textContent).toContain('Bo bread');
+        expect(after.textContent).toContain('Yesterday goats');
+        expect(after.textContent).not.toContain('Ana one');
+        // The two grids sit side by side with the line between them.
+        expect(before.parentElement).toBe(after.parentElement);
+    });
+
+    it('in the grid with no line, the tiles are one grid', async () => {
+        useView('grid');
+        holds(board());
+        render(<MarketplacePage identity={identity} isMember={true} />);
+        await screen.findByText('Ana one');
+        expect(lines()).toHaveLength(0);
+        expect(document.querySelectorAll('.grid-flow-row-dense')).toHaveLength(1);
+    });
+
+    it('writes the stamp when the page is hidden (a backgrounded tab or PWA may never fire pagehide)', async () => {
+        useView('list');
+        holds(board());
+        render(<MarketplacePage identity={identity} isMember={true} />);
+        await screen.findByText('Ana one');
+        expect(localStorage.getItem(KEY)).toBeNull();
+        const state = vi.spyOn(document, 'visibilityState', 'get');
+        state.mockReturnValue('visible');
+        act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+        expect(localStorage.getItem(KEY)).toBeNull();
+        state.mockReturnValue('hidden');
+        act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+        expect(localStorage.getItem(KEY)).toBe(String(Date.parse(ago(1))));
     });
 
     it('is not shown when nothing is newer than the stamp', async () => {

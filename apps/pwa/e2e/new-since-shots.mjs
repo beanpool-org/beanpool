@@ -5,7 +5,7 @@
  * (harness.mjs), every /api call answered from fixtures.mjs, and a stamp on the device as the page would have written it.
  *
  * Checks (each picture): exactly one line, whole on one row; no sideways scroll; the line sits between the posts newer than the
- * stamp and the first one at or before it. Pictures go to e2e/screenshots/new-since (not committed).
+ * stamp and the first one at or before it, by the rects the browser drew (3 new posts: an odd count). Pictures go to e2e/screenshots/new-since (not committed).
  *
  *   node apps/pwa/e2e/new-since-shots.mjs
  */
@@ -22,7 +22,10 @@ fs.mkdirSync(outDir, { recursive: true });
 // Listed over the last few hours, one per 20 minutes, so they are all Today, and the stamp is the fourth post's own time.
 const MIN = 60 * 1000;
 const now = Date.now();
-const posts = POSTS.map((p, i) => ({ ...p, createdAt: new Date(now - (i + 1) * 20 * MIN).toISOString(), authorPublicKey: `member-${i}` }));
+// Three more cards after the fixtures, so there are several already-seen tiles below the line: the 3 new cards are an odd
+// count, which is when a dense grid pulled the first seen card up beside the last new one (review on #2811).
+const more = POSTS.filter(p => p.type !== 'poll').slice(0, 3).map(p => ({ ...p, id: `${p.id}-again`, title: `${p.title} again` }));
+const posts = [...POSTS, ...more].map((p, i) => ({ ...p, createdAt: new Date(now - (i + 1) * 20 * MIN).toISOString(), authorPublicKey: `member-${i}` }));
 const STAMP = String(Date.parse(posts[3].createdAt));
 
 let failures = 0;
@@ -71,6 +74,28 @@ async function run() {
                 if (facts.sideways) fail('sideways scroll');
                 if (facts.right > cfg.width + 1) fail(`the line is drawn past the ${cfg.width}px edge`);
                 if (!facts.before || !facts.after) fail('nothing on one side of the line');
+                // The picture, not the DOM: with 3 new posts (an odd count) a dense grid used to draw the first seen tile beside the
+                // last new one, above the line (review on #2811). Every card that comes before the line in the page must END above
+                // it and every card after it must START below it, in the rects the browser drew.
+                const layout = await page.evaluate(() => {
+                    const el = document.querySelector('[data-testid="market-new-since"]');
+                    const lr = el.getBoundingClientRect();
+                    // Every tile of a grid and every row of a list (a listing, an event or a poll), not the buttons inside them.
+                    const cards = [...document.querySelectorAll('.grid-flow-row-dense > *, div.flex.flex-col.gap-1\\.5.mb-2 > div.flex.flex-col.gap-1\\.5 > *')]
+                        .filter(c => c.getBoundingClientRect().height > 40 && c !== el);
+                    const above = cards.filter(c => el.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_PRECEDING);
+                    const below = cards.filter(c => el.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING);
+                    return {
+                        above: above.length, below: below.length,
+                        lateAbove: above.filter(c => c.getBoundingClientRect().bottom > lr.top + 1).map(c => (c.textContent || '').slice(0, 30)),
+                        earlyBelow: below.filter(c => c.getBoundingClientRect().top < lr.bottom - 1).map(c => (c.textContent || '').slice(0, 30)),
+                    };
+                });
+                console.log('  layout:', JSON.stringify(layout));
+                if (layout.above < 3) fail(`only ${layout.above} cards before the line, want the 3 new posts`);
+                if (layout.below < 1) fail('no card after the line');
+                if (layout.lateAbove.length) fail(`drawn on or below the line though listed before it: ${layout.lateAbove.join(' | ')}`);
+                if (layout.earlyBelow.length) fail(`drawn on or above the line though listed after it: ${layout.earlyBelow.join(' | ')}`);
             }
             await page.screenshot({ path: path.join(outDir, `new-since-${cfg.name}.png`), fullPage: false });
             await context.close();

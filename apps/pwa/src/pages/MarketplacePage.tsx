@@ -6,7 +6,7 @@
  * Tapping a post opens a full detail view.
  */
 
-import { Fragment, type ReactElement, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { useCoversScreen } from '../lib/screen-cover';
@@ -357,8 +357,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             if (newest === null) return;
             try { localStorage.setItem(MARKET_SEEN_KEY, String(newest)); } catch { /* storage full or off: no line next time */ }
         };
+        // A tab or an installed app that is sent to the background and then killed often never fires `pagehide`: write on hidden too.
+        const onVisibility = () => { if (document.visibilityState === 'hidden') save(); };
         window.addEventListener('pagehide', save);
-        return () => { window.removeEventListener('pagehide', save); save(); };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => { window.removeEventListener('pagehide', save); document.removeEventListener('visibilitychange', onVisibility); save(); };
     }, []);
     const [foundingOnlyPicked, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
@@ -4053,7 +4056,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     // "New since you last looked": one line in the heading's style above the first post listed at or before this
                     // browser's stamp (core newSinceIndex). Only the main list: not the pinned block, not the fill.
                     const newSinceLine = (className: string) => (
-                        <div key="new-since" data-testid="market-new-since" className={`flex items-center gap-3 mb-1 ${className}`}>
+                        <div key="new-since" data-testid="market-new-since" className={`flex items-center gap-3 ${className}`}>
                             <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">
                                 {t(NEW_SINCE_WORDS.line)}
                             </span>
@@ -4063,8 +4066,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     if (viewMode === 'grid') {
                         // The grid has no headings: the line spans the row it starts, and the tiles carry on beneath it.
                         const gridLineAt = fillHeading || !seenEligible ? -1 : newSinceIndex(filtered, seenListed, orderNow);
-                        const withNewSinceLine = (at: number, id: string, tile: ReactElement) =>
-                            at === gridLineAt ? <Fragment key={id}>{newSinceLine('col-span-full mt-1')}{tile}</Fragment> : tile;
                         return (
                             // `grid-flow-row-dense`: the poll below takes two columns from `md` up, and a
                             // plain auto-placed grid cannot put it in the last column of a row — it moves to
@@ -4085,8 +4086,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
                                 </div>
                             )}
-                            <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
-                                {filtered.map((post, tileAt) => withNewSinceLine(tileAt, post.id, (() => {
+                            {/* The line is NOT an item of the dense grid: dense placement goes back to the start for every item, so
+                                the first seen tiles would fill the empty cells beside the last new tile, above the line (review on
+                                #2811, measured in Chromium). With a line the grid is two grids, the tiles before it and the tiles
+                                after, each keeping its own back-fill for the poll. */}
+                            {(() => {
+                            const gridClass = 'grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5';
+                            const tiles = filtered.map((post) => (() => {
                                     if (post.type === 'event') {
                                         return (
                                             <div key={post.id} className="h-full">
@@ -4165,8 +4171,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         />
                                     </div>
                                     );
-                                })()))}
-                            </div>
+                            })());
+                            return gridLineAt > 0 ? (
+                                <>
+                                    <div className={gridClass}>{tiles.slice(0, gridLineAt)}</div>
+                                    {newSinceLine('my-3.5')}
+                                    <div className={gridClass}>{tiles.slice(gridLineAt)}</div>
+                                </>
+                            ) : <div className={gridClass}>{tiles}</div>;
+                            })()}
                             </>
                         );
                     }
@@ -4282,10 +4295,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 const title = t(FEED_SECTION_WORDS[s.id]);
                                 const start = seen;
                                 seen += s.posts.length;
-                                if (lineAt === start) return <Fragment key={s.id}>{newSinceLine('mt-2')}{renderSection(title, s.posts)}</Fragment>;
+                                if (lineAt === start) return <Fragment key={s.id}>{newSinceLine('mt-2 mb-1')}{renderSection(title, s.posts)}</Fragment>;
                                 if (lineAt > start && lineAt < seen) {
                                     const k = lineAt - start;
-                                    return <Fragment key={s.id}>{renderSection(title, s.posts.slice(0, k))}{newSinceLine('mt-2')}{renderSection('', s.posts.slice(k))}</Fragment>;
+                                    return <Fragment key={s.id}>{renderSection(title, s.posts.slice(0, k))}{newSinceLine('mt-2 mb-1')}{renderSection('', s.posts.slice(k))}</Fragment>;
                                 }
                                 return renderSection(title, s.posts);
                             })}

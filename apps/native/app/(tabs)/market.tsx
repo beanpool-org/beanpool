@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, LayoutAnimation, AppState } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { keyboardAwareList } from '../../components/keyboardAwareList';
 import * as SecureStore from 'expo-secure-store';
@@ -606,11 +606,19 @@ export default function MarketScreen() {
     useFocusEffect(useCallback(() => {
         let live = true;
         AsyncStorage.getItem(MARKET_SEEN_KEY).then(val => { if (live) setSeenListed(parseSeenListed(val)); }).catch(() => {});
-        return () => {
-            live = false;
-            setSeenListed(null);
+        const save = () => {
             const newest = newestOnScreen.current;
             if (newest !== null) AsyncStorage.setItem(MARKET_SEEN_KEY, String(newest)).catch(() => {});
+        };
+        // Leaving by Home or by swiping the app away never blurs the screen, so the stamp is also written as the app goes to
+        // the background (or inactive), as the web writes on pagehide; else a member who closes the app from the Market
+        // keeps an old stamp and the seen posts pile up above the line.
+        const appState = AppState.addEventListener('change', (state) => { if (state === 'background' || state === 'inactive') save(); });
+        return () => {
+            live = false;
+            appState.remove();
+            setSeenListed(null);
+            save();
         };
     }, []));
     const [searchQuery, setSearchQuery] = useState('');

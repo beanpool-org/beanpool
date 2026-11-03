@@ -137,8 +137,8 @@ export default function PairInScreen() {
         if (!alive.current) return;
         if (res.status !== 200 || !/^\d{4}$/.test(String(res.body?.confirmCode)) || typeof res.body?.phoneSecret !== 'string') {
             phoneKey.current = null;
-            const text = res.status === 409 ? PAIR_IN_WORDS.taken : res.status === 410 ? PAIR_IN_WORDS.expired : PAIR_IN_WORDS.unreadable;
-            setStep({ kind: 'refused', text: t(text) });
+            const text = res.status === 409 ? t(PAIR_IN_WORDS.taken) : res.status === 410 ? t(PAIR_IN_WORDS.expired) : t(PAIR_IN_WORDS.unreadable);
+            setStep({ kind: 'refused', text });
             return;
         }
         session.current = { qr, secret: res.body.phoneSecret };
@@ -174,7 +174,7 @@ export default function PairInScreen() {
                 stop = true;
                 session.current = null;
                 phoneKey.current = null;
-                setStep({ kind: 'refused', text: t(status === 'burned' ? PAIR_IN_WORDS.burned : PAIR_IN_WORDS.expired) });
+                setStep({ kind: 'refused', text: status === 'burned' ? t(PAIR_IN_WORDS.burned) : t(PAIR_IN_WORDS.expired) });
                 return;
             }
             if (status === 'released') setStep((prev) => (prev.kind === 'digits' && !prev.sending ? { ...prev, sending: true } : prev));
@@ -198,7 +198,7 @@ export default function PairInScreen() {
             router.replace('/');
         } catch (err) {
             if (!alive.current) return;
-            setStep({ kind: 'refused', text: t(err instanceof RestoreStopped ? PAIR_IN_WORDS.hasAccount : PAIR_IN_WORDS.badAccount) });
+            setStep({ kind: 'refused', text: err instanceof RestoreStopped ? t(PAIR_IN_WORDS.hasAccount) : t(PAIR_IN_WORDS.badAccount) });
         }
     }, [setIdentity]);
 
@@ -261,7 +261,7 @@ export default function PairInScreen() {
                             <Text style={styles.body}>{t(PAIR_IN_WORDS.typeDigits)}</Text>
                             <Text style={styles.digits} accessibilityLabel={step.code.split('').join(' ')} selectable={false}>{step.code}</Text>
                             <Text style={styles.muted}>{t(PAIR_IN_WORDS.digitsWhy)}</Text>
-                            <Text style={styles.muted}>{t(step.sending ? PAIR_IN_WORDS.sending : PAIR_IN_WORDS.waiting)}</Text>
+                            <Text style={styles.muted}>{step.sending ? t(PAIR_IN_WORDS.sending) : t(PAIR_IN_WORDS.waiting)}</Text>
                         </>
                     )}
 

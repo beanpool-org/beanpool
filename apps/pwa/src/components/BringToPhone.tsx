@@ -14,11 +14,14 @@
  *    to show. Never the private key: the phone makes it from the words.
  *  - Afterwards this browser offers to remove the account here (never forced: two devices are allowed).
  */
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { createPairingSession, nodeOrigin, sealPairingPayloadToPhone, t, word } from '@beanpool/core';
 import { cancelPairingApi, confirmPairingApi, getNodeApiUrl, initPairingToPhoneApi, pollPairingToPhoneApi, sendToPhoneApi } from '../lib/api';
 import { getMnemonic, loadIdentity } from '../lib/identity';
+
+// qrcode.react's types predate this React's JSX types (WelcomePage casts it the same way).
+const QRCode: React.FC<{ value: string; size: number; level: string; marginSize: number }> = QRCodeSVG as any;
 
 export const BRING_TO_PHONE_WORDS = {
     open: word('Put your account on your phone'),
@@ -164,13 +167,13 @@ export function BringToPhone({ isPhone = false, onRemoveHere }: { isPhone?: bool
                     <p className={line}>{t(BRING_TO_PHONE_WORDS.steps)}</p>
                     {/* The code on white in both themes: a camera reads dark on light. */}
                     <div role="img" aria-label={t(BRING_TO_PHONE_WORDS.qrLabel)} className="mt-3 mx-auto w-fit max-w-full p-3 rounded-lg bg-white">
-                        <QRCodeSVG value={qrValue} size={200} level="M" marginSize={2} />
+                        <QRCode value={qrValue} size={200} level="M" marginSize={2} />
                     </div>
                     {isPhone && (
-                        <p className={line}>
-                            {t(BRING_TO_PHONE_WORDS.samePhone)}{' '}
-                            <a href={qrValue} className="font-bold text-emerald-700 dark:text-emerald-400">{t(BRING_TO_PHONE_WORDS.openApp)}</a>
-                        </p>
+                        <>
+                            <p className={line}>{t(BRING_TO_PHONE_WORDS.samePhone)}</p>
+                            <a href={qrValue} className="inline-block mt-2 font-bold text-emerald-700 dark:text-emerald-400">{t(BRING_TO_PHONE_WORDS.openApp)}</a>
+                        </>
                     )}
                 </>
             )}

@@ -8,12 +8,14 @@
  *   1. a node with no certificate of its own answers as it always has, to the Internet too: /api, the trust page at /,
  *      /trust, a live-updates socket;
  *   2. with a certificate of its own: from a public source, /api, /settings, /app, /, /trust, a POST and a live-updates
- *      socket get a 301 to https and nothing else (no body, no cookie, the POST not run): to the same host when it is one of
+ *      socket get a 301 to https and nothing else (no body, no cookie; a POST is answered before any route): to the same host when it is one of
  *      the community's addresses, else to its main one; the path and query kept, `//elsewhere` kept on the host;
  *   3. from loopback (cloudflared in this container, the registrar's watch) all of that is served as before, IPv4-mapped
  *      loopback too;
  *   4. a host-level tunnel (Docker's bridge gateway naming a beanpool.org host) is served as before; the same source
- *      naming any other host is redirected, and a public source naming a beanpool.org host is redirected;
+ *      naming any other host is redirected, and a public source naming a beanpool.org host is redirected; a proxy of the
+ *      operator's own (a private source saying X-Forwarded-Proto: https or Forwarded: proto=https) is served, a public
+ *      source sending the same headers is redirected;
  *   5. IPv6: a public source is redirected, a unique-local one naming a beanpool.org host is served;
  *   6. the ACME challenge route answers from the Internet on a node with a certificate, unknown tokens 404, never a
  *      redirect;
@@ -146,10 +148,10 @@ for (const p of ['/api/version', '/api/community/info?x=1', '/settings', '/app/'
     check('no cookie on the redirect', !cookie.headers['set-cookie']);
     const tunnelHeader = await raw(PUBLIC, `GET /api/version HTTP/1.1\r\nHost: ${OWN}\r\ncf-connecting-ip: 1.2.3.4\r\nConnection: close\r\n\r\n`);
     check('a cf-connecting-ip header from the Internet changes nothing', redirected(tunnelHeader, `https://${OWN}/api/version`), String(tunnelHeader.status));
-    const before = se.getNodeConfig().name;
-    const post = await raw(PUBLIC, `POST /api/local/admin/node-config HTTP/1.1\r\nHost: ${OWN}\r\nContent-Type: application/json\r\n`
-        + `Content-Length: 15\r\nConnection: close\r\n\r\n{"name":"evil"}`);
-    check('a POST is a 301 too, and is not run', post.status === 301 && se.getNodeConfig().name === before, `${post.status}`);
+    // /api/version answers GET only: a POST that reached the app would be a 404/405, so the 301 is the gate's own answer.
+    const post = await raw(PUBLIC, `POST /api/version HTTP/1.1\r\nHost: ${OWN}\r\nContent-Type: application/json\r\n`
+        + `Content-Length: 2\r\nConnection: close\r\n\r\n{}`);
+    check('a POST is a 301 too, answered before any route', redirected(post, `https://${OWN}/api/version`), `${post.status}`);
     const ws = await upgrade(PUBLIC, OWN);
     check('a live-updates socket from the Internet is refused with a 301', ws.status === 301 && ws.headers.location === `https://${OWN}/ws`, `${ws.status} ${ws.headers.location}`);
 }
@@ -182,6 +184,30 @@ console.log('\n4. A host-level tunnel (Docker\'s bridge gateway) naming a beanpo
     check('a public source naming a beanpool.org host is redirected', spoof.status === 301, `${spoof.status}`);
     const wsSpoof = await upgrade('172.18.0.1', OWN);
     check('a live-updates socket from the gateway naming the own domain is refused', wsSpoof.status === 301, `${wsSpoof.status}`);
+}
+
+console.log('\n4b. A web server or proxy of the operator\'s own in front, saying the visitor came over https');
+{
+    const via = (from: string, header: string, host = OWN) =>
+        raw(from, `GET /api/version HTTP/1.1\r\nHost: ${host}\r\n${header}\r\nConnection: close\r\n\r\n`);
+    const xfp = await via('172.18.0.1', 'X-Forwarded-Proto: https');
+    check('the gateway with X-Forwarded-Proto: https is served (no loop)', xfp.status === 200, `${xfp.status}`);
+    const fwd = await via('172.18.0.1', 'Forwarded: for=198.51.100.2;proto=https;host=beans.example.org');
+    check('the gateway with Forwarded: proto=https is served', fwd.status === 200, `${fwd.status}`);
+    const v6 = await via('fd12::3', 'X-Forwarded-Proto: HTTPS', '127.0.0.1:8080');
+    check('a unique-local proxy with X-Forwarded-Proto: HTTPS (nginx\'s Host) is served', v6.status === 200, `${v6.status}`);
+    const http = await via('172.18.0.1', 'X-Forwarded-Proto: http');
+    check('the gateway with X-Forwarded-Proto: http is redirected', http.status === 301, `${http.status}`);
+    const chain = await via('172.18.0.1', 'X-Forwarded-Proto: http, https');
+    check('only the first hop\'s X-Forwarded-Proto counts', chain.status === 301, `${chain.status}`);
+    const pub = await via(PUBLIC, 'X-Forwarded-Proto: https');
+    check('a public source with X-Forwarded-Proto: https is redirected', redirected(pub, `https://${OWN}/api/version`), `${pub.status}`);
+    const pubFwd = await via('2001:db8::7', 'Forwarded: proto=https');
+    check('a public IPv6 source with Forwarded: proto=https is redirected', pubFwd.status === 301, `${pubFwd.status}`);
+    const wsProxy = await raw('172.18.0.1', `GET /ws HTTP/1.1\r\nHost: ${OWN}\r\nX-Forwarded-Proto: https\r\nConnection: Upgrade\r\n`
+        + `Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${Buffer.from('0123456789abcdef').toString('base64')}\r\n\r\n`,
+        '127.0.0.1', true);
+    check('a live-updates socket through the proxy saying https is upgraded', wsProxy.status === 101, `${wsProxy.status}`);
 }
 
 console.log('\n5. IPv6');

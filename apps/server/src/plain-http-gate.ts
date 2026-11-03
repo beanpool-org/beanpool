@@ -18,9 +18,16 @@
  *     gateway (172.16.0.0/12 and the like), never from loopback, so the loopback rule alone would send that tunnel's
  *     requests round a 301 loop on a fleet node that gained a certificate. Its requests name a beanpool.org host, which
  *     a browser only ever reaches through Cloudflare, where TLS for that name ends; so a request from a private-range
- *     source that names a beanpool.org host is let through as well. A private-range source that names any other host
- *     (a LAN member, another stack on beanpool-shared, an IPv6 visitor that Docker's proxy hands on from the gateway) is
- *     redirected; a public source is always redirected, whatever host it names.
+ *     source that names a beanpool.org host is let through as well.
+ *   - a web server or proxy of the operator's own in front (the operator manual, "Behind a web server or proxy of your
+ *     own"), on the host or on a Docker network, that holds the certificate and passes requests on to this port: it too
+ *     arrives from a private range, naming the community's own domain. Where it says the visitor's request came over
+ *     https (X-Forwarded-Proto: https, or Forwarded: proto=https: Caddy and Traefik send it by themselves, nginx when told
+ *     to), it is let through, else it would be sent round the same loop once this server got a certificate of its own.
+ * A private-range source that names any other host and says nothing of https (a LAN member, another stack on
+ * beanpool-shared, an IPv6 visitor that Docker's proxy hands on from the gateway) is redirected. A public source is always
+ * redirected, whatever host or header it sends: what lets a private-range source through is a claim about the leg before
+ * it, which only a machine of the operator's own makes.
  */
 
 import type Koa from 'koa';
@@ -55,18 +62,32 @@ export interface PlainRequest {
     remoteAddress: string | undefined;
     /** The Host header as sent (with or without a port), or undefined. */
     host: string | undefined;
+    /** The X-Forwarded-Proto header, or undefined. */
+    forwardedProto?: string | undefined;
+    /** The Forwarded header (RFC 7239), or undefined. */
+    forwarded?: string | undefined;
+}
+
+/** Whether a proxy's headers say the request before it came over https: the first hop's X-Forwarded-Proto or proto=. */
+export function saysHttpsBefore(req: Pick<PlainRequest, 'forwardedProto' | 'forwarded'>): boolean {
+    const xfp = (req.forwardedProto ?? '').split(',')[0].trim().toLowerCase();
+    if (xfp === 'https') return true;
+    const first = (req.forwarded ?? '').split(',')[0];
+    return /(?:^|;)\s*proto\s*=\s*"?https"?\s*(?:;|$)/i.test(first);
 }
 
 /**
  * Whether the plain listener answers this request as it always has (the tunnel's delegation, the trust page, the
  * CF_RECORD_NAME redirect): on a node with no certificate of its own; from loopback; from a private-range source naming a
- * beanpool.org host (a host-level tunnel). Everything else gets the redirect.
+ * beanpool.org host (a host-level tunnel) or saying the request came over https before it (a proxy of the operator's own).
+ * Everything else gets the redirect.
  */
 export function plainHttpAnswersAsBefore(req: PlainRequest): boolean {
     if (isLoopbackSource(req.remoteAddress)) return true;
     if (!holdsOwnCertificate()) return true;
+    if (!isPrivateSource(req.remoteAddress)) return false;
     const host = req.host ? normalizeAddress(req.host) : null;
-    return !!host && isBeanPoolName(host) && isPrivateSource(req.remoteAddress);
+    return (!!host && isBeanPoolName(host)) || saysHttpsBefore(req);
 }
 
 /**
@@ -88,7 +109,10 @@ export function httpsRedirectTarget(host: string | undefined, url: string): stri
 /** The gate, for the plain listener, right after the ACME challenge route: the redirect, or on to what was there before. */
 export function plainHttpGate(): Koa.Middleware {
     return async (ctx, next) => {
-        if (plainHttpAnswersAsBefore({ remoteAddress: ctx.req.socket.remoteAddress, host: ctx.get('host') || undefined })) {
+        if (plainHttpAnswersAsBefore({
+            remoteAddress: ctx.req.socket.remoteAddress, host: ctx.get('host') || undefined,
+            forwardedProto: ctx.get('x-forwarded-proto') || undefined, forwarded: ctx.get('forwarded') || undefined,
+        })) {
             return next();
         }
         const location = httpsRedirectTarget(ctx.get('host') || undefined, ctx.url);
@@ -108,10 +132,15 @@ export function plainHttpGate(): Koa.Middleware {
  * The same gate for a live-updates socket asked of the plain listener: true when the upgrade may go on as before; else
  * the socket is answered with the redirect (no client follows it; nothing of the app is sent) and closed.
  */
-export function plainUpgradeAllowed(req: { socket: { remoteAddress?: string }; headers: { host?: string }; url?: string },
+export function plainUpgradeAllowed(req: { socket: { remoteAddress?: string }; headers: Record<string, string | string[] | undefined>; url?: string },
     socket: { write: (s: string) => unknown; destroy: () => unknown }): boolean {
-    if (plainHttpAnswersAsBefore({ remoteAddress: req.socket.remoteAddress, host: req.headers.host })) return true;
-    const location = httpsRedirectTarget(req.headers.host, req.url ?? '/');
+    const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v.join(',') : v);
+    const host = one(req.headers.host);
+    if (plainHttpAnswersAsBefore({
+        remoteAddress: req.socket.remoteAddress, host,
+        forwardedProto: one(req.headers['x-forwarded-proto']), forwarded: one(req.headers.forwarded),
+    })) return true;
+    const location = httpsRedirectTarget(host, req.url ?? '/');
     const head = location
         ? `HTTP/1.1 301 Moved Permanently\r\nLocation: ${location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n`
         : 'HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n';

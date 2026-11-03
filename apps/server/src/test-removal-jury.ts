@@ -29,6 +29,10 @@
  *     and the roll still checks out.
  *  7. The line: 99 in the pool is decided by everyone, 100 by a jury; Everyone set is everyone at 150.
  *  8. Votes off: a pause opens no vote and draws nobody.
+ *  9. A node from before: decision_electors' CHECK gains the jury's statuses at boot, its rows kept.
+ * 10. A branch vote with a jury rule (director's call for J1, 3 Nov): the whole community decides an owner's branch pause
+ *     (removal by vote S5) as S5 built it, with no draw, roll or stand-asides; one member's pause in the same community is
+ *     still the jury's.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   SERVER_SUITES_ONLY=test-removal-jury node scripts/run-server-suites.mjs
@@ -142,6 +146,8 @@ async function main() {
     const gen = keypair('GenesisGwen');
     se.seedGenesisMember(gen.pk, gen.callsign);
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(ago(60 * DAY), gen.pk);
+    // A phone, as every member here has: Gwen is in every pool, and a draw that seats her must find a phone to push to.
+    se.registerPushToken(gen.pk, gen.token, 'android');
     const seedMember = (callsign: string, joinedDaysAgo = 60): Id => {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
@@ -541,6 +547,68 @@ async function main() {
         `its index and its triggers are back (${triggers().join(', ') || 'no triggers'})`);
     db.prepare("UPDATE decision_electors SET status = 'stood_aside' WHERE decision_id = ? AND member_pubkey = ?").run(wilVote, rollOf(wilVote)[0].k);
     assert(rollOf(wilVote)[0].status === 'stood_aside', 'and a juror can be stood aside in it');
+
+    // ── 10. A branch vote with a jury rule ──────────────────────────────────────────────────────────────────────────
+    // The director's call for J1 (3 Nov, reversible): a branch's vote (removal by vote S5) is decided by the whole community
+    // as S5 built it, whatever Who decides a removal says; one member's removal in the same community goes to the jury.
+    console.log('\n10. A branch vote with a jury rule: the whole community decides it; one member\'s removal still the jury\'s');
+    assert(readShape().settings.removalDecider.value === 'automatic', 'the rule is still Automatic, at 150');
+    const root = nextSubject();
+    const twigs = [nextSubject(), nextSubject()];
+    for (const tw of twigs) db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(root.pk, tw.pk);
+    const branchKeys = [root, ...twigs].map(m => m.pk);
+    pushes.length = 0;
+    const branched = de.pauseBranch(root.pk, gen.pk, `A crowd of fakes brought in by ${root.callsign}`, { freshProof: true, include: branchKeys });
+    if (!branched.success) throw new Error(`setup: could not pause the branch of ${root.callsign}: ${branched.error}`);
+    const branchVote = branched.decision.id;
+    await settle(500);
+    const branchPushed = new Set(pushes.filter(p => p.k === 'decision.removal').flatMap(p => p.to));
+    const bp = paramsOf(branchVote);
+    assert(JSON.stringify((bp.branch ?? []).map((e: any) => e.pubkey).sort()) === JSON.stringify([...branchKeys].sort()),
+        `the branch vote lists the three accounts (${(bp.branch ?? []).length})`);
+    assert(bp.decider === 'everyone' && !('jury' in bp) && de.juryOf(de.getDecision(branchVote)!) === null,
+        `it records that everyone decides it, and no jury (${JSON.stringify(bp.decider)})`);
+    assert(rollOf(branchVote).length === 0 && poolRowOf(branchVote) === undefined, 'no roll and no pool are kept for it');
+    // One member's pause in the same community, a moment later: still the jury's.
+    const zed = nextSubject();
+    const zedVote = pauseOf(zed);
+    const zedRoll = rollOf(zedVote).filter(r => r.status === 'on').map(r => r.k);
+    assert(paramsOf(zedVote).decider === 'jury' && zedRoll.length === 12 && de.tallyDecision(zedVote).decider === 'jury',
+        `one member's pause in the same community is the jury's: 12 seated (${paramsOf(zedVote).decider}, ${zedRoll.length})`);
+    // Members on neither roll nor list: the jury refuses them, the branch vote takes their votes.
+    const eligible = members.filter(m => m !== gen && m !== ada && statusOf(m) === 'active' && !zedRoll.includes(m.pk) && !branchKeys.includes(m.pk));
+    const outsider = eligible[0];
+    const refusedOnZed = de.castDecisionVote(zedVote, outsider.pk, true);
+    assert(!refusedOnZed.success && refusedOnZed.error === de.JURY_ONLY_VOTE_ERROR,
+        `a member not drawn for it is refused on the one member's vote, in the jury's words (${refusedOnZed.error})`);
+    assert(branchPushed.has(outsider.token) && branchPushed.size > 15,
+        `"a vote opened" on the branch went to every voter, that member among them, not to a jury (${branchPushed.size} phones)`);
+    fresh();
+    const needsCount = async (q: string) => ((await signed('GET', `/api/home?cards=needs${q}`, outsider)).body?.cards?.needs?.items ?? [])
+        .filter((i: any) => i.kind === 'vote').reduce((n: number, i: any) => n + (i.count ?? 0), 0);
+    const withBranch = await needsCount('&lands=branch-vote');
+    fresh();
+    const withoutBranch = await needsCount('');
+    assert(withBranch === withoutBranch + 1,
+        `Home asks that member to vote on the branch (an app that opens it: ${withBranch} votes, an older app: ${withoutBranch})`);
+    const voters15 = eligible.slice(0, 15);
+    const cast = voters15.map(m => de.castDecisionVote(branchVote, m.pk, true));
+    assert(cast.every(c => c.success), `15 members on no jury vote on the branch (${cast.filter(c => c.success).length} of 15)`);
+    const listedVoter = de.castDecisionVote(branchVote, twigs[0].pk, true);
+    assert(!listedVoter.success && listedVoter.error !== de.JURY_ONLY_VOTE_ERROR, `an account on its list may not vote on it, by S5's rule (${listedVoter.error})`);
+    raw.run(branchVote, twigs[1].pk, new Date().toISOString(), new Date().toISOString());
+    const bt = de.tallyDecision(branchVote);
+    assert(bt.decider === undefined && bt.totalVoters === 15 && bt.yesWeight === 15 && bt.noWeight === 0,
+        `its tally is S5's: all 15 count, more than a jury seats, and the listed account's row does not (${bt.totalVoters} voted, ${bt.yesWeight} Yes, decider ${bt.decider})`);
+    assert(bt.electorate > 12 && bt.minYes === 3 && bt.thresholdRequired !== 2 / 3 && bt.quorumRequired >= 3,
+        `over the community, not a roll: electorate ${bt.electorate}, at least ${bt.minYes} Yes, threshold ${bt.thresholdRequired}`);
+    fresh();
+    const branchCard = await signed('GET', `/api/commons/decisions/${branchVote}?draws=branch`, eligible[20]);
+    assert(branchCard.status === 200 && branchCard.body?.tally?.yesWeight === 15 && branchCard.body?.tally?.passed !== undefined,
+        `a member reads its split while it is open, as any community vote's (${JSON.stringify(branchCard.body?.tally?.yesWeight)})`);
+    fresh();
+    const branchJury = await signed('GET', `/api/commons/decisions/${branchVote}/jury`, outsider);
+    assert(branchJury.status === 404, `it has no jury: 404 (${branchJury.status})`);
 
     assert(offMachine.length === 0, `nothing left this machine (${offMachine.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} passed`);

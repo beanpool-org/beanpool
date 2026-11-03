@@ -2664,7 +2664,7 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
         const pausedByName = actor && actor !== 'owner:password' ? callsignOf(actor) : null;
         const secondPause = secondPauseOf(subject.publicKey, now.getTime());
         effect = 'remove_member';
-        draw = drawRemovalJury(subject.publicKey, actor, now.getTime());
+        draw = chooseRemovalDecider({ kind: 'member', subject: subject.publicKey, actor, atMs: now.getTime() }).draw;
         params = {
             ...removalBalanceParams(subject.publicKey), memberName, pausedAt: opensAt, pausedBy: actor, rule: PAUSE_VOTE_RULE, reason,
             ...(pausedByName ? { pausedByName } : {}),
@@ -2711,6 +2711,21 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
 }
 
 interface RemovalJuryDraw { params: JuryParams; pool: string[]; jury: string[]; stoodAside: string[] }
+
+/**
+ * Who decides a removal vote as it opens, chosen here and nowhere else (pauseMember, pauseBranch); everything after goes by
+ * what the vote records (params.decider, juryOf). One member's pause goes by the community's rule, Who decides a removal
+ * (drawRemovalJury: a jury drawn at or over its line, else everyone). A branch's vote (removal by vote S5, pauseBranch) is
+ * decided by the whole community whatever that rule says, exactly as S5 built it: no draw, no roll, no stand-asides, and
+ * every member who may vote on it votes. The director's call for J1 (3 Nov), reversible and recorded for Marty: whether a
+ * jury should decide a branch is open for J2/J3.
+ */
+function chooseRemovalDecider(vote: { kind: 'branch' } | { kind: 'member'; subject: string; actor: string | null; atMs: number }):
+    { decider: 'everyone'; draw: null } | { decider: 'jury'; draw: RemovalJuryDraw } {
+    if (vote.kind === 'branch') return { decider: 'everyone', draw: null };
+    const draw = drawRemovalJury(vote.subject, vote.actor, vote.atMs);
+    return draw ? { decider: 'jury', draw } : { decider: 'everyone', draw: null };
+}
 
 /**
  * The jury for a pause made at `atMs`, or null when everyone decides it (DESIGN-removal-jury-fable.md §2–§6). The pool is
@@ -3076,6 +3091,8 @@ export function pauseBranch(rootPubkey: string, actor: string, reason: string, o
             });
             const params = {
                 rule: PAUSE_VOTE_RULE, pausedBy: actor, pausedAt: opensAt, ...(pausedByName ? { pausedByName } : {}), reason: cleanReason,
+                // The whole community, whatever Who decides a removal says (chooseRemovalDecider): no jury is drawn for a branch.
+                decider: chooseRemovalDecider({ kind: 'branch' }).decider,
                 root: { pubkey: rootPubkey, name: rootName },
                 branch,
                 branchDebt: branchDebtOf(branch),

@@ -201,13 +201,15 @@ export function lightsOutStatus(): LightsOutStatus {
 }
 
 /**
- * What /api/community/health and /api/community/info carry (the fields H2 reads): always present, so a phone can tell a node
- * that knows lights-out from one that doesn't (absent). Public: nothing in it is a secret, and a stranger on the hall Wi-Fi
- * can read the poster anyway.
+ * What /api/community/health and /api/community/info carry (the fields H2 reads), the design's shape (§2.1 item 2):
+ * `{ on, since, address, recordAsOf, home }`. Always present, so a phone tells a node that knows lights-out from one that
+ * doesn't (absent). Public: nothing in it is a secret, and a stranger on the hall Wi-Fi can read the poster anyway. No
+ * epoch here: a phone reads that from the node's signed statement (GET /api/node/identity-epoch) and the sync reads'
+ * epoch header, never from an unsigned field (and a take-over changes it by design: test-takeover-parity).
  */
-export function publicLightsOut(): { on: boolean; since: string | null; address: string | null; recordAsOf: string | null; home: string | null; epoch: number } {
+export function publicLightsOut(): { on: boolean; since: string | null; address: string | null; recordAsOf: string | null; home: string | null } {
     const s = lightsOutStatus();
-    return { on: s.on, since: s.on ? s.since : null, address: s.on ? s.address : null, recordAsOf: s.on ? s.recordAsOf : null, home: s.home, epoch: s.epoch };
+    return { on: s.on, since: s.on ? s.since : null, address: s.on ? s.address : null, recordAsOf: s.on ? s.recordAsOf : null, home: s.home };
 }
 
 export type SwitchOutcome =
@@ -295,10 +297,15 @@ export async function lightsOutGuard(ctx: Koa.Context, next: Koa.Next): Promise<
     }
 }
 
-/** Called by the restore (routes/backup.ts) once a backup replaced this server's record: what lights-out reads later. */
-export function noteRestoredCopy(madeAt: string | null, epoch: unknown): void {
-    const n = Number(epoch);
-    updateLocalConfig({ restoredCopy: { at: new Date().toISOString(), madeAt: validIso(madeAt), epoch: Number.isSafeInteger(n) && n > 0 ? n : 0 } });
+/**
+ * A restore's notice, delivered at the first start on the restored record (services/restore-points.ts
+ * deliverRestoreNotices): this server's record came from a backup made `madeAt`, whose keys carried that take-over count.
+ * What lights-out reads later. Written at the boot, never by the restore itself, so a database-only restore leaves
+ * local-config.json exactly as it was.
+ */
+export function noteRestoredCopy(notice: { at: string; madeAt: string | null; epoch?: unknown }): void {
+    const n = Number(notice.epoch);
+    updateLocalConfig({ restoredCopy: { at: validIso(notice.at) ?? new Date().toISOString(), madeAt: validIso(notice.madeAt), epoch: Number.isSafeInteger(n) && n > 0 ? n : 0 } });
 }
 
 // ── The shell: `beanpool lights-out on|off|status` (lights-out-command.ts) ─────────────────────────────────────────

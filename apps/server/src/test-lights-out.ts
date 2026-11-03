@@ -293,8 +293,8 @@ console.log('\n3. The switch on: the hall Wi-Fi is served; the Internet and the 
 
     const health = await send(LAN, 'GET', '/api/community/health', HALL);
     const hl = health.json?.lightsOut;
-    check('health: lightsOut { on, since, address, recordAsOf, home, epoch }', health.status === 200 && hl?.on === true && typeof hl.since === 'string'
-        && hl.address === ADDRESS && hl.recordAsOf === null && hl.home === `https://${OWN}` && hl.epoch === 0, JSON.stringify(hl));
+    check('health: lightsOut is exactly { on, since, address, recordAsOf, home }', health.status === 200 && hl?.on === true && typeof hl.since === 'string'
+        && hl.address === ADDRESS && hl.recordAsOf === null && hl.home === `https://${OWN}` && Object.keys(hl).sort().join() === 'address,home,on,recordAsOf,since', JSON.stringify(hl));
     const info = await send(LAN, 'GET', '/api/community/info', HALL);
     check('info: the same lightsOut', info.status === 200 && JSON.stringify(info.json?.lightsOut) === JSON.stringify(hl), JSON.stringify(info.json?.lightsOut));
 }
@@ -320,8 +320,12 @@ console.log('\n5. The epoch raise on a restored copy, the record as of, stand do
     check('off after a hall on a server that is no copy: no stand-down offer', off.status === 200 && off.json?.lightsOut?.standDown === null, JSON.stringify(off.json?.lightsOut?.standDown));
     check('the hall page says closed again', (await send(LAN, 'GET', '/hall', HALL)).body.includes('data-hall="closed"'));
 
-    // A restore leaves its note (routes/backup.ts restoreFromTar → noteRestoredCopy): made 1 Nov, its keys at epoch 3.
-    lo.noteRestoredCopy('2026-11-01T10:00:00.000Z', 3);
+    // A restore leaves its notice (routes/backup.ts restoreFromTar), delivered at the next boot (services/restore-points.ts):
+    // made 1 Nov, its keys at epoch 3. The boot's delivery keeps it (index.ts: remember = noteRestoredCopy).
+    const rp = await import('./services/restore-points.js');
+    rp.leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: '2026-11-01T10:00:00.000Z', point: 'p', by: 'shell', epoch: 3 });
+    const delivered = rp.deliverRestoreNotices({ announce: () => {}, log: () => {}, remember: lo.noteRestoredCopy });
+    check('the restore notice is delivered and kept for lights-out', delivered === 1 && getLocalConfig().restoredCopy?.epoch === 3 && getLocalConfig().restoredCopy?.madeAt === '2026-11-01T10:00:00.000Z', JSON.stringify(getLocalConfig().restoredCopy));
     updateLocalConfig({ identityEpoch: 1 });
     const before = Date.now();
     const on = await onPhone();
@@ -332,7 +336,7 @@ console.log('\n5. The epoch raise on a restored copy, the record as of, stand do
     const sigEpoch = await send(LAN, 'GET', '/api/node/identity-epoch', HALL);
     check('the signed statement says 4', sigEpoch.json?.statement?.epoch === 4, JSON.stringify(sigEpoch.json?.statement));
     const health = await send(LAN, 'GET', '/api/community/health', HALL);
-    check('health says epoch 4 and the record as of', health.json?.lightsOut?.epoch === 4 && health.json?.lightsOut?.recordAsOf === '2026-11-01T10:00:00.000Z');
+    check('health says the record as of', health.json?.lightsOut?.recordAsOf === '2026-11-01T10:00:00.000Z', JSON.stringify(health.json?.lightsOut));
     off = await offPhone();
     check('off with no hall writes on a restored copy → the stand-down offer', off.json?.lightsOut?.standDown?.offered === true && off.json.lightsOut.hallWrites === false, JSON.stringify(off.json?.lightsOut));
     await onPhone();

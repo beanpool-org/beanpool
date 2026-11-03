@@ -85,7 +85,7 @@ import { initBackupPuller, registerSwapRestart } from './services/backup-puller.
 import { startStandbyHealthWatch } from './services/standby-health.js';
 import { recordBoot, startServerAlerts } from './services/alerts.js';
 import { migrateStandbyMainAtBoot, startPairRequestWatch } from './services/standby-main.js';
-import { startLightsOutRequestWatch } from './services/lights-out.js';
+import { noteRestoredCopy, startLightsOutRequestWatch } from './services/lights-out.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
@@ -179,6 +179,8 @@ async function main() {
     startRestoreNoticeWatch({
         announce: adminBroadcastAnnouncement,
         log: message => logger.security('ADMIN', message),
+        // Lights-out reads it later: this record came from a backup, made then (services/lights-out.ts, §2.1 item 3, §3.5).
+        remember: noteRestoredCopy,
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
     // (it asks whether there is an owner). Never throws: the admin password works as before either way.

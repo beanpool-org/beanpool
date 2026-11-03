@@ -1097,13 +1097,16 @@ export default function MarketScreen() {
         filteredPosts = filteredPosts.filter(p => !pinnedIds.has(p.id));
     }
 
+    const allMatchingPosts = [...filteredPosts, ...pinnedPosts];
+    const realMatchingCount = allMatchingPosts.length;
+
     // The fill (utils/market-fill.ts, core market-fill): fewer than FILL_BELOW shown near the member, under their filters, and the
     // newest from elsewhere come beneath, read as the search reads the node. The same filters apply to both parts.
     const fillNeeded = marketFillWanted({
         profile: nodeProfile, member: !!identity?.publicKey, ready: firstSyncDone && !refusal, noArea,
         // A tag filter reads as words do, nearest first from anywhere, so there is no elsewhere to fill from.
         searching: searchQuery.trim().length > 0 || !!selectedTag || !!selectedFree, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
-        shownNear: filteredPosts,
+        shownNear: allMatchingPosts,
     });
     const fillKey = `${filter}|${categoryFilter}`;
     const [elsewhere, setElsewhere] = useState<{ key: string; posts: any[] | null } | null>(null);
@@ -1133,7 +1136,7 @@ export default function MarketScreen() {
     const fillPending = fillNeeded && elsewhere?.key !== fillKey;
     const isOwnPulse = (p: any) => (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
     const fillRows: any[] = elsewhereRead
-        ? elsewhereFill(filteredPosts, elsewhereRead.filter(p => feedPostVisible(p, filterState, filterCtx) && !isOwnPulse(p)))
+        ? elsewhereFill(allMatchingPosts, elsewhereRead.filter(p => feedPostVisible(p, filterState, filterCtx) && !isOwnPulse(p)))
         : [];
 
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
@@ -1143,7 +1146,7 @@ export default function MarketScreen() {
     // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
     // empty state's welcome, or after the real listings.
     const showExamples = showExampleListings({
-        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending ? FILL_BELOW : filteredPosts.length + pinnedPosts.length + fillRows.length,
+        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending ? FILL_BELOW : realMatchingCount + fillRows.length,
     });
 
     // Listings posted today, by the local calendar day the TODAY heading uses; events are not listings.
@@ -1978,14 +1981,14 @@ export default function MarketScreen() {
             </View>
         </View>
     ) : null;
-    const fillFooter = fillRows.length > 0 || (fillPending && filteredPosts.length === 0) ? (
-        <View testID="market-fill" style={{ marginTop: filteredPosts.length > 0 ? 8 : 0 }}>
-            {filteredPosts.length === 0 && (
+    const fillFooter = fillRows.length > 0 || (fillPending && realMatchingCount === 0) ? (
+        <View testID="market-fill" style={{ marginTop: realMatchingCount > 0 ? 8 : 0 }}>
+            {realMatchingCount === 0 && (
                 <Text testID="market-near-empty" style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
                     {t('Nothing within 250 km yet.')}
                 </Text>
             )}
-            {filteredPosts.length === 0 && !!identity && <MarketCircleLine identity={identity} colors={colors} />}
+            {realMatchingCount === 0 && !!identity && <MarketCircleLine identity={identity} colors={colors} />}
             {fillRows.length === 0 ? (
                 <ActivityIndicator size="small" color={colors.brand.primary} />
             ) : (
@@ -2016,10 +2019,10 @@ export default function MarketScreen() {
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
                 ListHeaderComponent={<>{ListHeader}{pinnedCards}</>}
-                ListFooterComponent={fillFooter || (showExamples && filteredPosts.length > 0) ? (
+                ListFooterComponent={fillFooter || (showExamples && realMatchingCount > 0) ? (
                     <>
                         {fillFooter}
-                        {showExamples && filteredPosts.length + fillRows.length > 0 ? <ExampleListings /> : null}
+                        {showExamples && realMatchingCount + fillRows.length > 0 ? <ExampleListings /> : null}
                     </>
                 ) : null}
                 contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset }]}
@@ -2040,7 +2043,7 @@ export default function MarketScreen() {
                     />
                 }
                 ListEmptyComponent={
-                    pinnedPosts.length > 0 || fillRows.length > 0 || (fillPending && filteredPosts.length === 0) ? null : emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
+                    pinnedPosts.length > 0 || fillRows.length > 0 || (fillPending && realMatchingCount === 0) ? null : emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
                         // Not a member of this community: its listings are its members'. Not "trouble connecting".
                         <View style={{ padding: 32, alignItems: 'center' }} testID="members-only-listings">
                             <Text style={{ fontSize: 40, opacity: 0.4, marginBottom: 12 }}>🔒</Text>

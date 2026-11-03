@@ -6,8 +6,9 @@ import {
     PINS_MAX,
     PIN_CHOICES,
 } from '../pins';
-import { t, formatDate } from '@beanpool/core';
+import { t, formatDate, elsewhereFill, FILL_BELOW, FILL_MAX } from '@beanpool/core';
 import { feedPostVisible, type MarketFilterState } from '../market-filters';
+import { fillWanted } from '../market-fill';
 
 describe('post-pinning-market (slice 2 pure rules and logic)', () => {
     const now = Date.parse('2026-11-03T12:00:00Z');
@@ -216,6 +217,75 @@ describe('post-pinning-market (slice 2 pure rules and logic)', () => {
             const fillRows: any[] = [];
             const realInView = filteredPosts.length + livePins.length + fillRows.length;
             expect(realInView).toBe(1);
+        });
+
+        it('prevents duplication of pinned posts in elsewhere fill and accounts for them in feed capacity', () => {
+            const pinnedPost = posts[0]; // p1
+            const unpinnedPost = posts[4]; // reg1
+            const filteredPosts = [unpinnedPost];
+            const pinnedPosts = [pinnedPost];
+            const allMatchingPosts = [...filteredPosts, ...pinnedPosts];
+
+            // Global read returns p1 (pinned post) and far1
+            const farPost = { id: 'far1', type: 'offer', status: 'active', active: 1, created_at: '2026-11-03T01:00:00Z' };
+            const elsewhereRead = [pinnedPost, farPost];
+
+            // When passing allMatchingPosts to elsewhereFill, pinnedPost is deduplicated
+            const fillRows = elsewhereFill(allMatchingPosts, elsewhereRead);
+            expect(fillRows.map(p => p.id)).toEqual(['far1']);
+            expect(fillRows.find(p => p.id === 'p1')).toBeUndefined();
+        });
+
+        it('counts pinned posts in fillNeeded calculation so premature elsewhere fill is not requested', () => {
+            const profile = { features: { nearbyListings: true } } as any;
+            // 8 posts, with 3 pinned and 5 unpinned
+            const pinnedPosts = [posts[0], posts[1], posts[2]];
+            const unpinnedPosts = [posts[4], { id: 'u2' }, { id: 'u3' }, { id: 'u4' }, { id: 'u5' }];
+            const allMatchingPosts = [...unpinnedPosts, ...pinnedPosts];
+
+            const fillWithAllMatching = fillWanted({
+                profile,
+                member: true,
+                ready: true,
+                noArea: false,
+                searching: false,
+                filter: 'all',
+                groupFiltered: false,
+                distancePicked: false,
+                shownNear: allMatchingPosts,
+            });
+            // Total is 8 (>= FILL_BELOW 8), so fill is NOT needed
+            expect(fillWithAllMatching).toBe(false);
+
+            // Undercounting without pinned posts would have erroneously requested fill:
+            const fillWithOnlyUnpinned = fillWanted({
+                profile,
+                member: true,
+                ready: true,
+                noArea: false,
+                searching: false,
+                filter: 'all',
+                groupFiltered: false,
+                distancePicked: false,
+                shownNear: unpinnedPosts,
+            });
+            expect(fillWithOnlyUnpinned).toBe(true);
+        });
+
+        it('suppresses empty distance notice and preserves example listings when all matching posts are pinned', () => {
+            const pinnedPosts = [posts[0]]; // p1
+            const filteredPosts: any[] = [];
+            const realMatchingCount = filteredPosts.length + pinnedPosts.length;
+            const fillRows: any[] = [];
+            const showExamples = true;
+
+            // Notice is suppressed because realMatchingCount > 0 even though filteredPosts is empty
+            const showNearEmptyNotice = realMatchingCount === 0;
+            expect(showNearEmptyNotice).toBe(false);
+
+            // Example listings footer condition evaluates to true when realMatchingCount > 0
+            const shouldRenderFooterExamples = showExamples && realMatchingCount + fillRows.length > 0;
+            expect(shouldRenderFooterExamples).toBe(true);
         });
     });
 

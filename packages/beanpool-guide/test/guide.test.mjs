@@ -808,3 +808,166 @@ test("the members' guide: what the key vault keeps says only what the code does 
     assert.ok(!text.includes("the new phone's one-time key"), 'not always a one-time key');
     assert.ok(text.includes("then it is the public half of that account's key"));
 });
+
+// ─── Lights-out mode, slice H0 (scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §3.3-3.7 and §5): the two manual
+// pages for the owner, and the member page for the hall. They are pinned on the pages, as the rest of this file is. ───
+
+const LIGHTS_OUT_PAGES = [
+    { collection: 'manual', slug: 'before-the-lights-go-out' },
+    { collection: 'manual', slug: 'when-the-lights-go-out' },
+    { collection: 'guide', slug: 'in-the-hall' },
+];
+const blockTexts = (page) => page.blocks.flatMap(b => b.type === 'ul' ? b.items : b.type === 'img' ? [b.alt] : [b.text]);
+const wholePage = (page) => [page.title, page.summary, page.help ?? '', ...blockTexts(page)].join('\n');
+const lightsOutPage = ({ collection, slug }) => {
+    const page = sourceGuides()[collection].guides.find(g => g.slug === slug);
+    assert.ok(page, `the ${collection} page "${slug}" exists`);
+    return page;
+};
+const headings = (page) => page.blocks.filter(b => b.type === 'h2' || b.type === 'h3').map(b => b.text);
+/** The blocks between a heading and the next heading of the same or a higher level. */
+const underHeading = (page, heading) => {
+    const start = page.blocks.findIndex(b => (b.type === 'h2' || b.type === 'h3') && b.text === heading);
+    assert.ok(start >= 0, `${page.slug} has the heading "${heading}"`);
+    const level = page.blocks[start].type;
+    const out = [];
+    for (const b of page.blocks.slice(start + 1)) {
+        if (b.type === 'h2' || (b.type === 'h3' && level === 'h3')) break;
+        out.push(b);
+    }
+    return out;
+};
+const textsOf = (blocks) => blocks.flatMap(b => b.type === 'ul' ? b.items : b.text ? [b.text] : []);
+
+test('lights-out: the three pages exist, are listed in their sections, and relate only to pages of their own collection', () => {
+    const sources = sourceGuides();
+    for (const where of LIGHTS_OUT_PAGES) {
+        const page = lightsOutPage(where);
+        const own = new Set(sources[where.collection].guides.map(g => g.slug));
+        for (const r of page.related) assert.ok(own.has(r), `${page.slug} relates to ${r}, a page of the ${where.collection}`);
+        assert.ok(page.related.length >= 1);
+    }
+    const manualServer = sources.manual.sections.find(s => s.id === 'server');
+    assert.ok(manualServer.slugs.includes('before-the-lights-go-out') && manualServer.slugs.includes('when-the-lights-go-out'), "the manual's Running the server section lists both");
+    assert.ok(sources.guide.sections.find(s => s.id === 'getting-started').slugs.includes('in-the-hall'), "the members' Getting started lists In the hall");
+    // The two manual pages point at each other: the checklist is read before, the steps on the day.
+    assert.ok(lightsOutPage(LIGHTS_OUT_PAGES[0]).related.includes('when-the-lights-go-out'));
+    assert.ok(lightsOutPage(LIGHTS_OUT_PAGES[1]).related.includes('before-the-lights-go-out'));
+    // Only First-time setup of the manual is on the website (OPERATOR_PAGES_ON_WEBSITE): neither manual page is.
+    assert.ok(!OPERATOR_PAGES_ON_WEBSITE.includes('before-the-lights-go-out') && !OPERATOR_PAGES_ON_WEBSITE.includes('when-the-lights-go-out'));
+});
+
+test('lights-out: "resilience" and "survival" are in none of the pages, their titles or summaries (Marty)', () => {
+    for (const where of LIGHTS_OUT_PAGES) {
+        const text = wholePage(lightsOutPage(where));
+        const m = /resilien\w*|surviv\w*/i.exec(text);
+        assert.equal(m, null, `${where.slug} says "${m?.[0]}"`);
+    }
+});
+
+test('lights-out: no page claims what is not built yet; each says "Coming with the next release" where it needs the switch, the hall door or the poster page', () => {
+    for (const where of LIGHTS_OUT_PAGES) {
+        assert.ok(/coming with the next release/i.test(wholePage(lightsOutPage(where))), `${where.slug} says what comes with the next release`);
+    }
+    // The member page says it near the top: the first thing a member reads says the hall door is not there yet.
+    const member = lightsOutPage(LIGHTS_OUT_PAGES[2]);
+    assert.ok(/coming with the next release/i.test(textsOf(member.blocks).slice(0, 3).join(' ')), 'In the hall says it near the top');
+    // Nothing is put on the website by this slice: neither manual page is published there.
+    for (const where of LIGHTS_OUT_PAGES.slice(0, 2)) assert.ok(!fs.existsSync(path.join(OPERATORS_WEBSITE_DIR, `${where.slug}.html`)));
+});
+
+test('lights-out, Before the lights go out: the three must-haves come first, in order (the software, a backup on the laptop, the recovery code)', () => {
+    const page = lightsOutPage(LIGHTS_OUT_PAGES[0]);
+    const h = headings(page);
+    const must = h.indexOf('The three things you cannot do without');
+    const then = h.indexOf('Then, in this order');
+    assert.ok(must >= 0 && then > must, 'the must-haves are before everything else');
+    assert.deepEqual(h.slice(must + 1, then), ['1. The software is on the laptop', '2. A backup is on the laptop', '3. The recovery code is on paper']);
+    assert.equal(h.indexOf('Read this first'), 0, 'and the page opens on what it is for');
+    // Each must-have is steps: one action, and what you see.
+    const software = textsOf(underHeading(page, '1. The software is on the laptop')).join('\n');
+    for (const need of ['docker compose pull', 'NODE_ROLE=backup', 'docker compose up -d']) assert.ok(software.includes(need), `step: ${need}`);
+    const backup = textsOf(underHeading(page, '2. A backup is on the laptop')).join('\n');
+    for (const need of ['beanpool pair', 'Replication Access', 'Download Sovereign Database', '.bpsealed']) assert.ok(backup.includes(need), `step: ${need}`);
+    const code = textsOf(underHeading(page, '3. The recovery code is on paper')).join('\n');
+    for (const need of ['Make a recovery code', 'Check a code', 'away from the laptop']) assert.ok(code.includes(need), `step: ${need}`);
+});
+
+test('lights-out: every list of steps on the two manual pages runs Step 1, Step 2, … with no gap', () => {
+    for (const where of LIGHTS_OUT_PAGES.slice(0, 2)) {
+        const page = lightsOutPage(where);
+        let lists = 0;
+        for (const b of page.blocks) {
+            if (b.type !== 'ul') continue;
+            const steps = b.items.map(i => /^\*\*Step (\d+)\.\*\*/.exec(i)?.[1]);
+            if (steps.every(s => s === undefined)) continue;
+            lists++;
+            assert.ok(steps.every(s => s !== undefined), `${where.slug}: a list of steps holds only steps: ${b.items[0]}`);
+            assert.deepEqual(steps.map(Number), steps.map((_, i) => i + 1), `${where.slug}: steps run 1..n in "${b.items[0].slice(0, 40)}"`);
+        }
+        assert.ok(lists >= 3, `${where.slug} has its step lists`);
+    }
+});
+
+test("lights-out: the checklist's four lines are the poster's four lines, word for word (packages/beanpool-core lights-out-poster.ts)", () => {
+    const poster = fs.readFileSync(path.resolve(CONTENT_DIR, '..', '..', 'beanpool-core', 'src', 'lights-out-poster.ts'), 'utf8');
+    const said = {};
+    for (const m of poster.matchAll(/\b(airplane|joinWifi|scanApp|scanAndroid):\s*word\((['"])(.*?)\2\)/g)) said[m[1]] = m[3];
+    assert.deepEqual(Object.keys(said), ['airplane', 'joinWifi', 'scanApp', 'scanAndroid']);
+    const manual = lightsOutPage(LIGHTS_OUT_PAGES[0]);
+    assert.deepEqual(textsOf(underHeading(manual, 'The four lines on the poster')).filter(t => Object.values(said).includes(t)), Object.values(said));
+    // The member page has the same four lines, in bold.
+    const member = blockTexts(lightsOutPage(LIGHTS_OUT_PAGES[2])).join('\n');
+    for (const line of Object.values(said)) assert.ok(member.includes(`**${line}**`), `In the hall has "${line}"`);
+});
+
+test('lights-out, When the lights go out: both paths, the owner step a standby needs, the two rules, the way back and the Byron line', () => {
+    const page = lightsOutPage(LIGHTS_OUT_PAGES[1]);
+    const h = headings(page);
+    for (const want of ['Path A: the laptop was your standby', 'Path B: you have a locked backup file', 'Reaching Settings and the switch with no internet',
+        "Show the poster, and say the record's age", 'What stays refused in the hall', 'When the internet comes back', 'What must never happen']) {
+        assert.ok(h.includes(want), `heading "${want}"`);
+    }
+    const all = wholePage(page);
+    // The two rules of the take-over (design §2.7, §3.6; the Opus L4 warning).
+    assert.ok(all.includes('Two copies must never be live at once.'));
+    assert.ok(all.includes('There is no merging.'));
+    // Path A: a standby has no owner of its own, so the owner step comes BEFORE Settings and the take-over (test-no-mothership step 8).
+    const a = textsOf(underHeading(page, 'Path A: the laptop was your standby'));
+    const at = (needle) => a.findIndex(i => i.includes(needle));
+    assert.ok(at('beanpool recover --key') >= 0 && at('http://127.0.0.1:8080/settings') > at('beanpool recover --key'), 'owner first, then Settings');
+    assert.ok(at('Take over as the main server') > at('http://127.0.0.1:8080/settings'), 'then the take-over');
+    assert.ok(at('The main server is gone, and nobody will start it again') > at('Take over as the main server'), "with the manual's own tick");
+    // Path B needs no phone and no Settings: a stopped node, the restore from the shell, the code typed at the prompt.
+    const b = textsOf(underHeading(page, 'Path B: you have a locked backup file')).join('\n');
+    for (const need of ['docker compose stop beanpool-node', 'beanpool restore /data/FILE.bpsealed', 'Never put it on the command line', 'docker compose up -d']) assert.ok(b.includes(need), `path B: ${need}`);
+    // Reaching the switch: the owner's own ways, the shell and the laptop's loopback, and never a member.
+    const ways = textsOf(underHeading(page, 'Reaching Settings and the switch with no internet')).join('\n');
+    for (const need of ['beanpool lights-out on', 'http://127.0.0.1:8080/settings', "authenticator", 'Manage', "a member's phone is refused"]) assert.ok(ways.includes(need), `reaching the switch: ${need}`);
+    // The way back, with the Byron line: a tunnel on the host moves no address, so the old server is stopped by hand.
+    const back = textsOf(underHeading(page, 'When the internet comes back')).join('\n');
+    for (const need of ['Byron', 'docker compose stop beanpool-node', 'Never start the old main server again', 'read-only', 'one copy is the community, and the other is retired whole']) assert.ok(back.includes(need), `the way back: ${need}`);
+});
+
+test('lights-out, In the hall: what is readable, what is out, the age of the record and the way home', () => {
+    const text = blockTexts(lightsOutPage(LIGHTS_OUT_PAGES[2])).join('\n');
+    for (const need of [
+        "On the hall's Wi-Fi, what you post and your balance can be read by others on that Wi-Fi",
+        '**Your messages stay private.**',
+        'The record is as of Tue 3 Nov, 14:02. Trades made since then on the old server are not here.',
+        'The web app.', 'install the app before the lights go out', 'Your 12 words always work',
+        'Nothing you posted in the hall is lost',
+    ]) assert.ok(text.includes(need), `In the hall says: ${need}`);
+    // The record's age is said as a day and a time, never as "stale" or "out of date" (design §3.5).
+    assert.equal(/\bstale\b|out of date/i.exec(text), null);
+});
+
+test("ROADMAP: no 'Offline Outbox' or 'Offline Queue' is marked done (nothing in the code queues a post to send later; lights-out H0)", () => {
+    const roadmap = fs.readFileSync(path.resolve(CONTENT_DIR, '..', '..', '..', 'ROADMAP.md'), 'utf8').split('\n');
+    const lines = roadmap.filter(l => /Offline (Outbox|Queue)/.test(l));
+    assert.equal(lines.length, 3, 'the three lines are still there, corrected');
+    for (const l of lines) {
+        assert.ok(!/^- (✅|\[x\])/.test(l), `not marked done: ${l.slice(0, 60)}`);
+        assert.ok(/not built/.test(l), `says it is not built: ${l.slice(0, 60)}`);
+    }
+});

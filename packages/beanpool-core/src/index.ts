@@ -38,6 +38,7 @@ export * from './text-limits.js';
 export * from './geo.js';
 export * from './member-area-words.js';
 export * from './community-card.js';
+export * from './lights-out-poster.js';
 export * from './address-reach.js';
 export * from './first-trade-words.js';
 export * from './invite-vouch.js';

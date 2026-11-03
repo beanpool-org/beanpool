@@ -9,7 +9,9 @@ related: before-the-lights-go-out, backups-and-replicas, signing-in, address-and
 
 This is the page for the day itself. One tired person can do it from here: one action in each step, and what you should see after it. If you did not do Before the lights go out, only path B can work, and only if you have a locked backup file and its recovery code.
 
-**What works today, and what comes with the next release.** Today: the laptop becomes your community (path A or path B), and you reach Settings on the laptop itself. **Coming with the next release:** the lights-out switch, the hall door in the BeanPool app, the poster page and the banner on members' phones. Steps marked **Coming with the next release** do not work yet. Until they ship, phones cannot join the hall; the laptop can still hold the community's record.
+**What works today, and what comes with the next release.** Today: the laptop becomes your community (path A or path B), and you reach Settings on the laptop's own screen. **Coming with the next release:** the lights-out switch, the hall door in the BeanPool app, the poster page and the banner on members' phones. Steps marked **Coming with the next release** do not work yet. Until they ship, phones cannot join the hall; the laptop can only hold the community's record.
+
+**One more thing that is true today.** Signing in to the laptop's Settings with no internet needs the admin password. A community that has none, which is every new community, needs the owner's phone to reach the laptop, and that is what the hall door is for. So until it ships, path A cannot be counted on with no internet for such a community, and path B can: it needs no sign-in at all. This is why Before the lights go out asks you to keep a locked backup file on the laptop as well.
 
 **Two rules before you start.**
 
@@ -18,42 +20,50 @@ This is the page for the day itself. One tired person can do it from here: one a
 
 ## Choose your path
 
-- **Path A: the laptop was your standby.** The record is about a minute old. Use it if you did step 2 of Before the lights go out.
-- **Path B: you have a locked backup file.** The record is as old as the file. Use it if the laptop was never your standby.
+- **Path A: the laptop was your standby.** The record is about a minute old. Use it if you made the laptop your standby (the second of the three must-haves in Before the lights go out), and your community still has an admin password or the hall door has shipped.
+- **Path B: you have a locked backup file.** The record is as old as the file. Use it if the laptop was never your standby, or if path A cannot sign in.
 
 Do one, never both. Both start the same way.
 
 ## Both paths start here
 
 - **Step 1.** Plug the laptop in and start its Wi-Fi hotspot, or the travel router. You see: phones list the Wi-Fi.
-- **Step 2.** Find the laptop's address on that Wi-Fi in its network settings, and write it on the poster. You see: four numbers with dots between them, for example 192.168.2.1.
-- **Step 3.** In the folder with docker-compose.yml, run docker compose up -d. You see: docker compose ps lists beanpool-node as running.
+- **Step 2.** Find the laptop's address on that Wi-Fi in its network settings. You see: four numbers with dots between them, for example 192.168.2.1.
+- **Step 3.** Write the address on the poster. You see: the address on the paper.
+- **Step 4.** In the folder with docker-compose.yml, run docker compose up -d. You see: docker compose ps lists beanpool-node as running.
 
 ## Path A: the laptop was your standby
 
-- **Step 1.** Make yourself the laptop's owner. A standby has none of its own. Run docker compose exec beanpool-node beanpool recover --key @callsign, with your callsign or your public key. You must have joined the community before the laptop's last copy. You see: "@callsign is now an owner of this community", then your break-glass code, shown once. Keep the code.
-- **Step 2.** On the laptop, open its browser at http://127.0.0.1:8080/settings. You see: the Settings sign-in page.
-- **Step 3.** Sign in. Reaching Settings with no internet, below, lists the ways. You see: Settings opens.
-- **Step 4.** Open **Appliance & Data**, then **Backups & Restore**, then **Take over as the main server** at the bottom. You see: the first screen, saying what will be missing.
-- **Step 5.** Press **I understand, continue** and type the recovery code, then press **Open the keys**. Or press **I understand: use an owner's phone** and scan the code on the screen with an owner's phone (coming with the next release for a phone on the hall's Wi-Fi). You see: what the keys hold, and whether the main server still answers.
-- **Step 6.** If the screen says the main server answers, stop. Read the first rule above. Otherwise tick **The main server is gone, and nobody will start it again**, then press **Take over now**. You have 10 minutes. You see: the steps one by one, a restart, then **This server is now the community's main server**.
-- **Step 7.** Coming with the next release: turn lights-out on (below).
-- **Step 8.** Show the poster, and say the record's age out loud (below).
+- **Step 1.** Make yourself the laptop's owner, because a standby has none of its own. Run docker compose exec beanpool-node beanpool recover --key @callsign, with your callsign or your public key. You must have joined the community before the laptop's last copy. You see: "@callsign is now an owner of this community", then your break-glass code, shown once.
+- **Step 2.** Keep the break-glass code. You see: the code written down.
+- **Step 3.** On the laptop, open its browser at http://127.0.0.1:8080/settings. You see: the Settings sign-in page.
+- **Step 4.** Sign in. Reaching Settings with no internet, below, lists the ways. You see: Settings opens.
+- **Step 5.** Open **Appliance & Data**, then **Backups & Restore**, then **Take over as the main server** at the bottom. You see: the first screen, saying what will be missing.
+- **Step 6.** Press **I understand, continue**. You see: a box for the recovery code.
+- **Step 7.** Type the recovery code from the paper and press **Open the keys**. You see: what the keys hold, and whether the main server still answers.
+- **Step 8.** Read the screen. If it says in amber that the main server answers, stop, and read the first rule above. You see: no amber warning.
+- **Step 9.** Tick **The main server is gone, and nobody will start it again**. You see: the box ticked.
+- **Step 10.** Press **Take over now**. You have 10 minutes from step 7. You see: the steps one by one, a restart, then **This server is now the community's main server**.
+- **Step 11.** Coming with the next release: turn lights-out on (below).
+- **Step 12.** Show the poster, and say the record's age out loud (below).
+
+With an owner's phone instead of the code, in steps 6 and 7: press **I understand: use an owner's phone** and scan the code on the screen with an owner's BeanPool app. A phone on the hall's Wi-Fi needs the hall door for that. Coming with the next release.
 
 ## Path B: you have a locked backup file
 
-This way needs no phone and no Settings, so it works on a laptop nobody can sign in to yet.
+This way needs no phone and no Settings, so it works on a laptop nobody can sign in to.
 
 - **Step 1.** Put the .bpsealed file in the laptop's data folder, next to docker-compose.yml. You see: the file listed there.
 - **Step 2.** Run docker compose stop beanpool-node. You see: it stops.
 - **Step 3.** Run docker compose run --rm beanpool-node beanpool restore /data/FILE.bpsealed, with the file's real name. You see: the file's community and the machine that locked it, beside this laptop's own, then a request for the recovery code.
 - **Step 4.** Type the recovery code at the prompt. Never put it on the command line. You see: the restore finishes and says what it brought back.
 - **Step 5.** Run docker compose up -d. You see: beanpool-node running again. It is now the community, with the same server key, and with the old admin password and two-factor sign-in if the community had them. Everyone who opens the app is told the community was restored from a backup, and the day it was made.
-- **Step 6.** Sign in to Settings on the laptop as one of the community's owners, who came back with the file (Reaching Settings with no internet, below). If nobody can sign in, run docker compose exec beanpool-node beanpool recover --key @callsign.
-- **Step 7.** Coming with the next release: turn lights-out on (below).
-- **Step 8.** Show the poster, and say the record's age out loud (below).
+- **Step 6.** Coming with the next release: turn lights-out on (below). It needs the owner's way in below, or the laptop's shell.
+- **Step 7.** Show the poster, and say the record's age out loud (below).
 
 If the recovery code is lost but an owner's phone holds the owner key, Settings can open the file with that phone instead: **Backups & Restore**, **Restore from a locked backup**. That needs the phone to reach the laptop, so it waits for the hall door.
+
+The community's owners come back with the file. If nobody can sign in afterwards, make an owner from the laptop's shell: docker compose exec beanpool-node beanpool recover --key @callsign.
 
 ## Reaching Settings and the switch with no internet
 
@@ -78,8 +88,10 @@ The switch is kept in the laptop's local-config.json, which no backup carries, s
 ## Show the poster, and say the record's age
 
 - **Step 1.** Coming with the next release: open the poster page on the laptop's screen. Or hold up the printed poster. You see: the four lines, the two codes and the laptop's address.
-- **Step 2.** Say aloud: "The record is as of (the time) today. If you traded after that on the old server, tell an owner. It is written down for when the internet returns." The record's age is the time of the laptop's last copy (path A), or of the backup file (path B). The words say the day and the time, never "stale".
-- **Step 3.** Write down what people tell you they traded after that time.
+- **Step 2.** Say aloud: "The record is as of (the time) today. If you traded after that on the old server, tell an owner. It is written down for when the internet returns." The record's age is the time of the laptop's last copy (path A), or of the backup file (path B). You see: people nod.
+- **Step 3.** Write down what people tell you they traded after that time. You see: a list on paper.
+
+The words say the day and the time, never "stale".
 
 ## What stays refused in the hall
 
@@ -95,12 +107,12 @@ The switch is kept in the laptop's local-config.json, which no backup carries, s
 
 ### The usual case: the hall traded, and the old server still runs
 
-- **Step 1.** Keep the laptop running as the main server, with lights-out on, until phones have moved home. You see: nothing to do; phones go home by themselves once you switch off (below).
-- **Step 2.** When the internet returns, the laptop's tunnel connects, and your community's name leads to the laptop as well as the old server. The old server asks its own web address when it starts and every hour, sees the laptop's higher take-over count signed with its own key, and goes **read-only** by itself. It stays read-only after a restart. You see: on the old server, "This server was replaced on (date). It is now read-only."
+- **Step 1.** Leave the laptop running as the main server, with lights-out on, until phones have moved home. You see: the hall carrying on.
+- **Step 2.** When the internet is back, open the old server's Settings, then **Appliance & Data**, **Backups & Restore**, **Take over as the main server**. The old server asks its own web address when it starts and every hour, sees the laptop's higher take-over count signed with its own key, and goes read-only by itself. You see: in red, "This server was replaced on (date). It is now read-only." If you do not see it within an hour, do step 3.
 - **Step 3.** Stop the old server yourself in two cases, before members go home. **If you came by path B,** the laptop's count has not gone up until lights-out has been switched on, and that switch is coming with the next release. **If your address is run by a tunnel on the server's own machine** instead of inside BeanPool's container (the way Byron's community runs), the old server never sees the laptop's count at all. On the old server's machine, in the folder with docker-compose.yml, run docker compose stop beanpool-node. You see: it stops. Never start the old main server again.
 - **Step 4.** Coming with the next release: switch lights-out off. The laptop tells phones the internet is back, and each phone checks that your community's own address answers with the same key, then goes home carrying its copy. You see: the banner changes to say the internet is back.
-- **Step 5.** In daylight, set the old machine up from scratch as a standby of the laptop (see If the old main server comes back, in Backups and replicas), and pair it from its shell with a pairing code made on the laptop.
-- **Step 6.** When you want the community back in the cloud, take over on that server by the recovery code, as in path A but the other way. The laptop goes read-only when it sees that, and you set it up again as that server's standby.
+- **Step 5.** In daylight, set the old machine up from scratch as a standby of the laptop (see If the old main server comes back, in Backups and replicas). You see: it copies from the laptop.
+- **Step 6.** When you want the community back in the cloud, take over on that server by the recovery code, as in path A but the other way. The laptop goes read-only when it sees that, and you set it up again as that server's standby. You see: **This server is now the community's main server** on the cloud server.
 
 **What is lost, and said plainly:** anything the old server recorded after the laptop's last copy and before the outage (about a minute with a standby; as much as the file's age without one), and anything members outside the hall did on the old server during the outage. Tell people, and settle trades by hand with ordinary sends.
 

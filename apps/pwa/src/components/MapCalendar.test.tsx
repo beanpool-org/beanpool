@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MapCalendar } from './MapCalendar';
+import { MapCalendar, calendarPanelWidth, CARD_STOPS_AT_CALENDAR_CLASS, CHIPS_STOP_AT_CALENDAR_CLASS } from './MapCalendar';
 import type { MarketplacePost } from '../lib/api';
 
 describe('MapCalendar (DESIGN-map-calendar-fable.md §1, §4, §8 S3)', () => {
@@ -105,6 +105,22 @@ describe('MapCalendar (DESIGN-map-calendar-fable.md §1, §4, §8 S3)', () => {
         expect(classes).toContain('md:w-1/3');
         expect(classes).toContain('md:min-w-[320px]');
         expect(classes).toContain('md:right-0');
+    });
+
+    it('the cards and the filter bar stop where the panel starts: one width rule, as a number and as the classes they use', () => {
+        render(<MapCalendar posts={[localEvent]} covered={false} onClose={vi.fn()} />);
+        const classes = screen.getByTestId('map-calendar').className;
+        // The panel: a third of the map, 320 px at the least, 480 px at the most.
+        expect(classes).toContain('md:w-1/3');
+        expect(classes).toContain('md:min-w-[320px]');
+        expect(classes).toContain('md:max-w-[480px]');
+        expect(calendarPanelWidth(900, true)).toBe(320);
+        expect(calendarPanelWidth(1200, true)).toBe(400);
+        expect(calendarPanelWidth(2000, true)).toBe(480);
+        expect(calendarPanelWidth(500, false)).toBe(500); // below md it covers the whole map
+        // The same numbers in the classes the cards and the bar use.
+        expect(CARD_STOPS_AT_CALENDAR_CLASS).toBe('md:right-[clamp(320px,33.3333%,480px)]');
+        expect(CHIPS_STOP_AT_CALENDAR_CLASS).toBe('md:max-w-[calc(100%-clamp(320px,33.3333%,480px))]');
     });
 
     it('displays weekday headers', () => {

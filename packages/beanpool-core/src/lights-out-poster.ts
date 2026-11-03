@@ -4,7 +4,8 @@
  * Four lines for the phone, one line on what the Wi-Fi shows other people, one on how old the record is, and the places for
  * the two codes (the hall door, and the Android app from the laptop).
  *
- * This file is words and a printable page, and nothing else: it builds no code, signs nothing and asks no address. The
+ * This file is words and a printable page, and nothing else: it encodes no code (the caller's encoder makes the module grid,
+ * and this draws it from the grid alone, so no markup crosses the boundary), signs nothing and asks no address. The
  * lights-out switch and the page that serves this one come with slice H1, the hall door in the app with H2, the Android app
  * from the laptop with H3. They call `lightsOutPosterHtml`; an owner can also print it before the lights go out.
  *
@@ -40,7 +41,15 @@ export function lightsOutPosterLines(w: Pick<Words, 't'>): [string, string, stri
     return [w.t(W.airplane), w.t(W.joinWifi), w.t(W.scanApp), w.t(W.scanAndroid)];
 }
 
-/** What a poster is made from. Every text is shown escaped; the two codes are SVG markup the caller's own code made. */
+/**
+ * A code as data, never as markup: rows of modules from the top, `true` for a dark module and `false` for a light one. It must
+ * be square, 1 to 177 modules a side (version 40 is the largest code there is), without the quiet zone: the poster adds that
+ * and draws the code itself, so nothing a caller passes can become part of the page. The caller turns its encoder's module
+ * grid into this shape; an encoder's own SVG or other markup is never passed in.
+ */
+export type QrMatrix = ReadonlyArray<ReadonlyArray<boolean>>;
+
+/** What a poster is made from. Every text is shown escaped; the two codes are drawn here from their modules (QrMatrix). */
 export interface LightsOutPosterOptions {
     /** The community's name, large under the title. */
     communityName: string;
@@ -53,13 +62,16 @@ export interface LightsOutPosterOptions {
     wifiPassword?: string;
     /** The record's age already written in the reader's language ("Tue 3 Nov, 14:02"). Left out, the line is not printed. */
     recordAsOf?: string;
-    /** The first code (line 3). Left out, an empty frame stands in its place, for the code to be pasted on. */
-    hallQr?: string;
+    /**
+     * The first code (line 3). Left out, or anything that is not a QrMatrix, an empty frame stands in its place, for the code
+     * to be pasted on.
+     */
+    hallQr?: QrMatrix;
     /**
      * The second code (line 4). Left out (undefined), line 4 and its frame are not printed: the laptop does not hold the
-     * Android app. An empty string prints line 4 with an empty frame, for a code to be pasted on.
+     * Android app. `null` prints line 4 with an empty frame, for a code to be pasted on; so does anything that is not a QrMatrix.
      */
-    androidQr?: string;
+    androidQr?: QrMatrix | null;
 }
 
 /** Languages written right to left: the page's direction, which every text on it follows. */
@@ -72,11 +84,45 @@ const PDI = '⁩';
 const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-/** A code's markup is used only if it is an <svg> with no script or handler in it; anything else prints as an empty frame. */
-function safeSvg(markup: string | undefined): string | null {
-    if (!markup || !/^\s*<svg[\s>]/i.test(markup)) return null;
-    if (/<script|<foreignObject|\son[a-z]+\s*=|javascript:|<iframe|<object|<embed/i.test(markup)) return null;
-    return markup;
+/** The largest QR code there is (version 40) is 177 modules a side; scanners need a quiet zone of 4 light modules around it. */
+const QR_MAX_SIDE = 177;
+const QR_QUIET_ZONE = 4;
+
+/**
+ * A code drawn from its modules: a white square, and a black <rect> for each horizontal run of dark modules. What goes into
+ * the page is this function's own tags and attribute names and whole numbers it counted itself; a matrix is read only as
+ * booleans, so no text of the caller's can reach the page. Anything that is not a square matrix of booleans, 1 to 177 a side
+ * (a string of markup, a ragged or oversized grid, numbers for modules), is null, and the poster prints an empty frame.
+ */
+function qrSvg(matrix: unknown): string | null {
+    if (!Array.isArray(matrix) || matrix.length === 0 || matrix.length > QR_MAX_SIDE) return null;
+    const side = matrix.length;
+    // Copied while it is checked, so a caller's getter cannot hand a different answer to the drawing.
+    const rows: boolean[][] = [];
+    for (const row of matrix as unknown[]) {
+        if (!Array.isArray(row) || row.length !== side) return null;
+        const modules: boolean[] = [];
+        for (let x = 0; x < side; x++) {
+            const dark: unknown = row[x];
+            if (typeof dark !== 'boolean') return null;
+            modules.push(dark);
+        }
+        rows.push(modules);
+    }
+    const size = side + 2 * QR_QUIET_ZONE;
+    let rects = '';
+    for (let y = 0; y < side; y++) {
+        let x = 0;
+        while (x < side) {
+            if (!rows[y][x]) { x++; continue; }
+            let run = 1;
+            while (x + run < side && rows[y][x + run]) run++;
+            rects += `<rect x="${x + QR_QUIET_ZONE}" y="${y + QR_QUIET_ZONE}" width="${run}" height="1"/>`;
+            x += run;
+        }
+    }
+    return `<svg viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" aria-hidden="true">`
+        + `<rect width="${size}" height="${size}" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
 }
 
 const CSS = `
@@ -112,8 +158,8 @@ ol { margin: 0; padding: 0; list-style: none; }
 export function lightsOutPosterHtml(w: Pick<Words, 'lang' | 't'>, o: LightsOutPosterOptions): string {
     const W = LIGHTS_OUT_POSTER_WORDS;
     const [airplane, joinWifi, scanApp, scanAndroid] = lightsOutPosterLines(w);
-    const hall = safeSvg(o.hallQr);
-    const android = o.androidQr === undefined ? undefined : safeSvg(o.androidQr);
+    const hall = qrSvg(o.hallQr);
+    const android = o.androidQr === undefined ? undefined : qrSvg(o.androidQr);
     const frame = (svg: string | null) => svg ? `<div class="qr">${svg}</div>` : '<div class="qr empty" aria-hidden="true"></div>';
     const step = (n: number, text: string, code?: string) =>
         `<li class="step"><span class="num" aria-hidden="true">${n}</span><span class="text">${escapeHtml(text)}</span>${code ?? ''}</li>`;

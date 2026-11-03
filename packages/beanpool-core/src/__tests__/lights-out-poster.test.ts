@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { LANGS, wordsFor, type Catalog, type Lang } from '../words.js';
-import { LIGHTS_OUT_POSTER_WORDS, lightsOutPosterHtml, lightsOutPosterLines } from '../lights-out-poster.js';
+import { LIGHTS_OUT_POSTER_WORDS, lightsOutPosterHtml, lightsOutPosterLines, type QrMatrix } from '../lights-out-poster.js';
 
 const WORDS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'words');
 const catalogOf = (lang: Lang): Catalog => JSON.parse(fs.readFileSync(path.join(WORDS_DIR, `${lang}.json`), 'utf8'));
@@ -83,18 +83,27 @@ describe('words the poster must not use', () => {
 
 const OPTS = { communityName: 'Riverbend', address: '192.168.2.1:8080' };
 
+/** A code as data, from rows of '#' (a dark module) and '.' (a light one). */
+const matrix = (...rows: string[]): QrMatrix => rows.map((r) => [...r].map((c) => c === '#'));
+const CODE = matrix('#.#', '.#.', '#.#');
+/** What stands where a code cannot be drawn. */
+const EMPTY_FRAME = '<div class="qr empty" aria-hidden="true"></div>';
+/** Every frame on the page, whole. */
+const framesOf = (html: string) => html.match(/<div class="qr[^"]*"[^>]*>[\s\S]*?<\/div>/g) ?? [];
+
 describe('the printable page', () => {
     it('is one A4 page with no script and nothing fetched', () => {
-        const html = lightsOutPosterHtml(wordsIn('en'), { ...OPTS, hallQr: '<svg viewBox="0 0 1 1"></svg>', androidQr: '<svg viewBox="0 0 1 1"></svg>' });
+        const html = lightsOutPosterHtml(wordsIn('en'), { ...OPTS, hallQr: CODE, androidQr: CODE });
         expect(html).toMatch(/^<!doctype html>/i);
         expect(html).toContain('@page { size: A4;');
-        expect(html).not.toMatch(/<script|<link|\ssrc=|\shref=|url\(|@import/i);
+        // Not even a web address: the codes are drawn here, so no namespace or link is written either.
+        expect(html).not.toMatch(/<script|<link|\ssrc=|\shref=|url\(|@import|https?:|xmlns/i);
         expect(html).not.toMatch(/resilien|surviv/i);
     });
 
     it.each(LANGS)('%s: carries the title, the four lines, the readable line and the trouble line in that language', (lang) => {
         const w = wordsIn(lang);
-        const html = lightsOutPosterHtml(w, { ...OPTS, hallQr: '<svg></svg>', androidQr: '<svg></svg>' });
+        const html = lightsOutPosterHtml(w, { ...OPTS, hallQr: CODE, androidQr: CODE });
         const escaped = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         for (const line of lightsOutPosterLines(w)) expect(html).toContain(escaped(line));
         expect(html).toContain(escaped(w.t(LIGHTS_OUT_POSTER_WORDS.title)));
@@ -105,27 +114,101 @@ describe('the printable page', () => {
 
     it('line 4 and its frame are printed only when the laptop holds the Android app', () => {
         const w = wordsIn('en');
-        const without = lightsOutPosterHtml(w, { ...OPTS, hallQr: '<svg></svg>' });
+        const without = lightsOutPosterHtml(w, { ...OPTS, hallQr: CODE });
         expect(without).toContain(ENGLISH_LINES[2]);
         expect(without).not.toContain('Android');
         expect((without.match(/class="step"/g) ?? []).length).toBe(3);
-        const withApk = lightsOutPosterHtml(w, { ...OPTS, hallQr: '<svg></svg>', androidQr: '<svg></svg>' });
+        const withApk = lightsOutPosterHtml(w, { ...OPTS, hallQr: CODE, androidQr: CODE });
         expect((withApk.match(/class="step"/g) ?? []).length).toBe(4);
         expect(withApk).toContain(ENGLISH_LINES[3]);
-        // An empty string stands for "print line 4 with an empty frame to paste a code on".
-        const empty = lightsOutPosterHtml(w, { ...OPTS, androidQr: '' });
+        // null stands for "print line 4 with an empty frame to paste a code on"; undefined leaves line 4 off.
+        const empty = lightsOutPosterHtml(w, { ...OPTS, androidQr: null });
         expect((empty.match(/class="step"/g) ?? []).length).toBe(4);
-        expect((empty.match(/class="qr empty"/g) ?? []).length).toBe(2);
+        expect(framesOf(empty)).toEqual([EMPTY_FRAME, EMPTY_FRAME]);
     });
 
-    it('a code that is not a plain <svg> is never put on the page; an empty frame stands there', () => {
-        const w = wordsIn('en');
-        for (const bad of ['<img src=x onerror=alert(1)>', '<svg><script>alert(1)</script></svg>', '<svg onload="x()"></svg>', '<svg><foreignObject></foreignObject></svg>', 'javascript:alert(1)']) {
-            const html = lightsOutPosterHtml(w, { ...OPTS, hallQr: bad });
-            expect(html, bad).not.toMatch(/alert\(1\)|onerror|onload|foreignObject/i);
-            expect(html, bad).toContain('class="qr empty"');
+    it('a code is drawn here from its modules: a white page, and one black rectangle for each run of dark modules', () => {
+        const rows = ['###..', '.....', '#.#.#', '.###.', '#...#'];
+        const frame = framesOf(lightsOutPosterHtml(wordsIn('en'), { ...OPTS, hallQr: matrix(...rows) }))[0] ?? '';
+        expect(frame).not.toBe('');
+        // 5 modules and the 4-module quiet zone scanners need on each side: 13 x 13.
+        expect(frame).toContain('<svg viewBox="0 0 13 13" shape-rendering="crispEdges" aria-hidden="true">');
+        expect(frame).toContain('<rect width="13" height="13" fill="#fff"/>');
+        const rects = frame.match(/<rect x="\d+" y="\d+" width="\d+" height="1"\/>/g) ?? [];
+        // Row 0 is one run of 3, row 1 none, row 2 three single modules, row 3 one run of 3, row 4 two single modules.
+        expect(rects).toEqual([
+            '<rect x="4" y="4" width="3" height="1"/>',
+            '<rect x="4" y="6" width="1" height="1"/>', '<rect x="6" y="6" width="1" height="1"/>', '<rect x="8" y="6" width="1" height="1"/>',
+            '<rect x="5" y="7" width="3" height="1"/>',
+            '<rect x="4" y="8" width="1" height="1"/>', '<rect x="8" y="8" width="1" height="1"/>',
+        ]);
+        // Every module is accounted for: the dark ones drawn are the dark ones given, and no others.
+        const drawn = new Set<string>();
+        for (const m of rects) {
+            const [x, y, width] = (m.match(/\d+/g) ?? []).map(Number);
+            for (let i = 0; i < width; i++) drawn.add(`${x - 4 + i},${y - 4}`);
         }
-        expect(lightsOutPosterHtml(w, { ...OPTS, hallQr: '<svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg>' })).toContain('<div class="qr"><svg viewBox="0 0 1 1">');
+        const given = new Set<string>();
+        matrix(...rows).forEach((row, y) => row.forEach((dark, x) => { if (dark) given.add(`${x},${y}`); }));
+        expect(drawn).toEqual(given);
+    });
+
+    it("nothing but the page's own tags and numbers is in a frame: the tags and attributes are an allowlist", () => {
+        const html = lightsOutPosterHtml(wordsIn('en'), { ...OPTS, hallQr: CODE, androidQr: matrix('##', '#.') });
+        const frames = framesOf(html);
+        expect(frames).toHaveLength(2);
+        for (const frame of frames) {
+            const tags = new Set([...frame.matchAll(/<\/?([a-z]+)/gi)].map((m) => m[1]));
+            expect([...tags].sort()).toEqual(['div', 'g', 'rect', 'svg']);
+            for (const m of frame.matchAll(/\s([a-z-]+)="([^"]*)"/gi)) {
+                expect(['class', 'viewBox', 'shape-rendering', 'aria-hidden', 'width', 'height', 'fill', 'x', 'y'], m[1]).toContain(m[1]);
+                // Every value is a number, a fixed word or one of this file's own colours.
+                expect(m[2], `${m[1]}="${m[2]}"`).toMatch(/^(\d+|\d+ \d+ \d+ \d+|qr|crispEdges|true|#fff|#000)$/);
+            }
+        }
+    });
+
+    it('a code that is not a square of booleans is never drawn; an empty frame stands there', () => {
+        const w = wordsIn('en');
+        const big = (n: number) => Array.from({ length: n }, () => Array<boolean>(n).fill(true));
+        const refused: Array<[string, unknown]> = [
+            ['a string of markup (the old way)', '<svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg>'],
+            ['a number', 7], ['an object', { length: 3 }], ['no rows', []], ['no columns', [[]]],
+            ['a ragged matrix', [[true, false, true], [true, false], [true, false, true]]],
+            ['a matrix that is not square', [[true, false, true], [true, false, true]]],
+            ['numbers for modules', [[1, 0], [0, 1]]], ['strings for modules', [['1', '0'], ['0', '1']]],
+            // eslint-disable-next-line no-sparse-arrays
+            ['a hole in a row', [[true, , true], [true, false, true], [true, false, true]]],
+            ['rows that are strings', ['#.#', '.#.', '#.#']],
+            ['one more module a side than version 40 has', big(178)],
+        ];
+        for (const [what, bad] of refused) {
+            const html = lightsOutPosterHtml(w, { ...OPTS, hallQr: bad as QrMatrix, androidQr: bad as QrMatrix });
+            expect(framesOf(html), what).toEqual([EMPTY_FRAME, EMPTY_FRAME]);
+        }
+        // The largest code there is (version 40, 177 modules a side) is drawn.
+        expect(framesOf(lightsOutPosterHtml(w, { ...OPTS, hallQr: big(177) }))[0]).toContain('viewBox="0 0 185 185"');
+    });
+
+    it('markup cannot cross: the inputs the Opus review of #2823 tried, and the older ones, reach no part of the page', () => {
+        const w = wordsIn('en');
+        const MARKUP = [
+            '<svg><img src="x"/onerror="alert(1)"></svg>',
+            '<svg><a href="jav&#x61;script:alert(1)">x</a></svg>',
+            '<svg><image href="https://evil.example/x.png"/></svg>',
+            '<svg><style>@import url(https://evil.example/x.css)</style></svg>',
+            '<img src=x onerror=alert(1)>', '<svg><script>alert(1)</script></svg>', '<svg onload="alert(1)"></svg>',
+            '<svg><foreignObject></foreignObject></svg>', 'javascript:alert(1)',
+        ];
+        const GONE = /alert|onerror|onload|evil\.example|javascript|jav&#x61|foreignObject|<img|<image|<a\b|@import|https?:/i;
+        for (const bad of MARKUP) {
+            // As a code (the old, string, way), as a row, and as modules: only a boolean is ever read from a matrix.
+            for (const hostile of [bad, [bad], [[bad]], [[bad, true], [true, bad]], matrix('#.', '.#').map((r) => [...r, bad])]) {
+                const html = lightsOutPosterHtml(w, { ...OPTS, hallQr: hostile as unknown as QrMatrix, androidQr: hostile as unknown as QrMatrix });
+                expect(html, JSON.stringify(hostile).slice(0, 60)).not.toMatch(GONE);
+                expect(framesOf(html)).toEqual([EMPTY_FRAME, EMPTY_FRAME]);
+            }
+        }
     });
 
     it('every text it is given is escaped', () => {

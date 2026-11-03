@@ -64,7 +64,7 @@ vi.mock('expo-router', async () => {
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-clipboard', () => ({ getStringAsync: async () => '', hasStringAsync: async () => false }));
 vi.mock('react-native-keyboard-controller', () => ({
-    KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
+    KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardStickyView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
 }));
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({

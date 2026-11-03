@@ -58,6 +58,7 @@ vi.mock('../global-requests', () => ({ noteQuestionsOpened: calls.noted }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children, behavior }: { children?: unknown; behavior?: string }) => createElement('div', { 'data-kav': behavior }, children as any),
+    KeyboardAwareScrollView: ({ children, keyboardShouldPersistTaps }: { children?: unknown; keyboardShouldPersistTaps?: string }) => createElement('div', { 'data-kav': 'scroll', 'data-taps': keyboardShouldPersistTaps }, children as any),
 }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
 vi.mock('../../components/PostTagChips', () => ({ PostTagChips: () => null }));
@@ -372,10 +373,10 @@ describe('a copy of an Offer or a Need', () => {
         await draw(createElement(ListingCopyDetail, { post: POST }));
         const kav = host.querySelector('[data-kav]')!;
         expect(kav).not.toBeNull();
-        expect(kav.getAttribute('data-kav')).toBe('padding');
+        // The scroll view itself (the library's KeyboardAwareScrollView) scrolls the words box above the keyboard.
+        expect(kav.getAttribute('data-kav')).toBe('scroll');
         expect(kav.contains(byId('listing-copy-report'))).toBe(true);
-        expect(kav.querySelector('[data-taps]')?.getAttribute('data-taps')).toBe('handled');
-        expect(kav.querySelector('[data-taps]')?.contains(byId('listing-copy-report'))).toBe(true);
+        expect(kav.getAttribute('data-taps')).toBe('handled');
     });
 
     it('by invite: the line, the door\'s words, and no button that goes nowhere', async () => {

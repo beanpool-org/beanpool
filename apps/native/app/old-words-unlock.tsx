@@ -5,12 +5,13 @@
  * when it starts: never sent, never stored.
  */
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { router, ErrorBoundary } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from './ThemeContext';
 import { lockedHistoryRows, unlockGroupHistoryWithWords } from '../utils/db';
 import { yourGroupsStore } from '../components/useYourGroups';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
 import { LOCKED_HISTORY_WORDS } from '../utils/group-history-unlock';
 import { keyLineWords, oldWordsEndWords, oldWordsProgressWords } from '../components/key-lines';
@@ -50,8 +51,9 @@ export default function OldWordsUnlockScreen() {
     };
 
     return (
-        <ScrollView style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={[styles.page, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}
-            keyboardShouldPersistTaps="handled">
+        // The twelve boxes are mid-page: the scroll view keeps the box being typed in above the keyboard.
+        <KeyboardAwareScrollView style={{ flex: 1, backgroundColor: colors.surface.app }} contentContainerStyle={[styles.page, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}
+            keyboardShouldPersistTaps="handled" bottomOffset={24}>
             <Text style={[styles.title, { color: colors.text.heading }]}>{keyLineWords(LOCKED_HISTORY_WORDS)}</Text>
             <Text style={[styles.body, { color: colors.text.secondary }]}>
                 {t('Type the 12 words of the key this account used before you changed phones. They open your earlier messages on this phone and are never sent or kept.')}
@@ -76,7 +78,7 @@ export default function OldWordsUnlockScreen() {
             <Pressable style={styles.secondaryBtn} onPress={() => router.back()} accessibilityRole="button">
                 <Text style={[styles.secondaryText, { color: colors.text.secondary }]}>{t('Back')}</Text>
             </Pressable>
-        </ScrollView>
+        </KeyboardAwareScrollView>
     );
 }
 

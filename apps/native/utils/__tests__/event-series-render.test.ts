@@ -39,7 +39,7 @@ vi.mock('react-native', () => {
 });
 vi.mock('@react-native-community/datetimepicker', () => ({ default: () => createElement('span', { 'data-testid': 'date-picker' }) }));
 vi.mock('react-native-keyboard-controller', () => ({
-    KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
+    KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardStickyView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
 }));
 vi.mock('expo-router', () => ({ router: { canGoBack: () => false, back: vi.fn(), replace: vi.fn(), push: vi.fn() } }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));

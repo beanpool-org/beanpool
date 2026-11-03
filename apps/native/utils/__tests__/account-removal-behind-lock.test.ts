@@ -61,7 +61,7 @@ describe('node-mismatch: Delete this account from this phone', () => {
         expect(confirm).toContain('await deleteAccountFromThisPhone(identity);');
         // handleConfirmWipe is drawn only inside the panel (showWipe).
         expect(count(s, 'onPress={handleConfirmWipe}')).toBe(1);
-        const panel = slice(s, '{!showWipe ? (', '</ScrollView>');
+        const panel = slice(s, '{!showWipe ? (', '</KeyboardAwareScrollView>');
         expect(panel.indexOf('onPress={handleStartWipe}')).toBeLessThan(panel.indexOf(') : ('));
         expect(panel.indexOf('onPress={handleConfirmWipe}')).toBeGreaterThan(panel.indexOf(') : ('));
     });

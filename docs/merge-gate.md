@@ -111,4 +111,6 @@ It closes what it opened and ends `PROVED` or `NOT PROVED`. The test step that g
 
 ## The Mac
 
-`scripts/test-all.sh` still runs on a Mac, for a lane or by hand, and decides nothing. `scripts/merge-queue/tripwire.sh` runs it on main once a day at 05:00: macOS, Node 26, unsharded, which GitHub is not. A red is a journal line and a fix PR. It never holds a merge. `scripts/test-all-train.sh --no-merge` still tests PRs together; without `--no-merge` its `--admin` is refused.
+`scripts/test-all.sh` still runs on a Mac, for a lane or by hand, and decides nothing. `scripts/merge-queue/tripwire.sh` runs it on main once a day at 05:00: macOS, Node 26, unsharded, which GitHub is not. A red is a journal line and a fix PR. It never holds a merge.
+
+The same run then opens every screen of the web app in the pseudo-locale (`pnpm --filter @beanpool/pwa words-screens-all`: the five checks in `apps/pwa/e2e/words-*check.mjs`, at 320 px with 1.3× text) and fails on a page that scrolls sideways, words past an edge or words cut by their own box. It runs whatever the full run said, and has its own journal line (`TRIPWIRE words-screens green` or `red`), so neither hides the other. No pull-request run carries these checks (translation tooling design §2.5, slice T4); a new `words-*check.mjs` must be added to `apps/pwa/e2e/words-screens-all.mjs`, which `scripts/words/pseudo.test.mjs` enforces. `scripts/test-all-train.sh --no-merge` still tests PRs together; without `--no-merge` its `--admin` is refused.

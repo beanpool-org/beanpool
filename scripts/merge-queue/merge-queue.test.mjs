@@ -492,7 +492,8 @@ test('requeue: --run or --why with nothing after it is a usage error: a failed s
     assert.equal(w.calls(), '', 'it asked GitHub nothing');
 }));
 
-const lockIn = (w) => ({ TRIPWIRE_LOCK: join(w.dir, 'heavy.lock'), TRIPWIRE_LOCK_SECS: '0', TRIPWIRE_LOCK_TRIES: '2' });
+// TRIPWIRE_WORDS_RUN stands in for the web app's pseudo-locale run (a browser run, which a test must not start).
+const lockIn = (w) => ({ TRIPWIRE_LOCK: join(w.dir, 'heavy.lock'), TRIPWIRE_LOCK_SECS: '0', TRIPWIRE_LOCK_TRIES: '2', TRIPWIRE_WORDS_RUN: 'true' });
 
 test('tripwire: journals green or red, holds nothing, and gives the lock back', () => world((w) => {
     const env = lockIn(w);
@@ -506,6 +507,31 @@ test('tripwire: journals green or red, holds nothing, and gives the lock back', 
     assert.equal(existsSync(env.TRIPWIRE_LOCK), false);
     assert.equal(w.calls(), '', 'it asks GitHub for nothing and touches no PR');
     assert.equal(w.git(w.clone, 'worktree', 'list').split('\n').length, 1, 'its scratch worktree is gone');
+}));
+
+test('tripwire: the web pseudo-locale run follows the full run, has its own journal line, and neither hides the other (slice T4)', () => world((w) => {
+    const env = lockIn(w);
+    // Both green: two green lines, the full run's first.
+    const green = w.exec('tripwire.sh', [], { ...env, TRIPWIRE_RUN: 'true', TRIPWIRE_WORDS_RUN: 'true' });
+    assert.equal(green.status, 0, green.out);
+    assert.match(w.journal(), /TRIPWIRE green sha=\w+\n[^\n]*TRIPWIRE words-screens green sha=/);
+    // The full run red: the web run still happens (its marker is written) and the exit is the full run's.
+    const marker = join(w.dir, 'words-ran');
+    const redFull = w.exec('tripwire.sh', [], { ...env, TRIPWIRE_RUN: 'false', TRIPWIRE_WORDS_RUN: `touch ${marker}` });
+    assert.equal(redFull.status, 1, redFull.out);
+    assert.equal(existsSync(marker), true, 'the web pseudo-locale run happens although the full run was red');
+    assert.match(w.journal(), /TRIPWIRE red sha=\w+: read the run; this holds no merge\n[^\n]*TRIPWIRE words-screens green sha=/);
+    // The full run green, the web run red: the exit and the journal say so, and the full run's green line stands.
+    const redWords = w.exec('tripwire.sh', [], { ...env, TRIPWIRE_RUN: 'true', TRIPWIRE_WORDS_RUN: 'false' });
+    assert.equal(redWords.status, 1, redWords.out);
+    assert.match(w.journal(), /TRIPWIRE green sha=\w+\n[^\n]*TRIPWIRE words-screens red sha=\w+: read the run; this holds no merge/);
+    // Its exit code is its own when the full run was green.
+    const three = join(w.dir, 'exit-three.sh');
+    writeFileSync(three, 'exit 3\n');
+    const code = w.exec('tripwire.sh', [], { ...env, TRIPWIRE_RUN: 'true', TRIPWIRE_WORDS_RUN: `bash ${three}` });
+    assert.equal(code.status, 3, code.out);
+    assert.equal(existsSync(env.TRIPWIRE_LOCK), false, 'the lock is released after both');
+    assert.equal(w.calls(), '', 'it asks GitHub for nothing and touches no PR');
 }));
 
 test('tripwire: a lock held by another run stays theirs', () => world((w) => {

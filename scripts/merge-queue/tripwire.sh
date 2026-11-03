@@ -4,7 +4,8 @@
 # shows. It holds no merge and touches no PR: a red is a line in the journal, and the director opens a fix.
 #
 # Waits for the machine's heavy-test lock and holds it for the run, as every full run here does. A scratch worktree at
-# origin/main, so the checkout it is called from is never touched. Exit: test-all's, or 1 when it could not start.
+# origin/main, so the checkout it is called from is never touched. After the full run it runs the web app's pseudo-locale
+# checks on every screen (below). Exit: test-all's, else the pseudo-locale run's, or 1 when it could not start.
 set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="${BOARD_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
@@ -37,4 +38,19 @@ ${TRIPWIRE_RUN:-bash scripts/test-all.sh --all}
 RC=$?
 if [ "$RC" = 0 ]; then journal tripwire "TRIPWIRE green sha=$(echo "$SHA" | cut -c1-9)"
 else journal tripwire "TRIPWIRE red sha=$(echo "$SHA" | cut -c1-9): read the run; this holds no merge"; fi
+
+# The web app in the pseudo-locale on every screen (translation tooling design §2.5, slice T4): the daily hook for
+# apps/pwa/e2e/words-screens-all.mjs, which no pull-request run carries (the PR gate runs test-all's checks only). It runs
+# whatever the full run said and has its own journal line, so neither hides the other. Core is built first (the checks
+# read its dist), then the Chromium the browser checks use. TRIPWIRE_WORDS_RUN stands in for it in tests and rehearsals.
+words_screens_run() {
+  pnpm turbo run build --filter=@beanpool/core \
+    && pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium \
+    && pnpm --filter @beanpool/pwa words-screens-all
+}
+${TRIPWIRE_WORDS_RUN:-words_screens_run}
+WRC=$?
+if [ "$WRC" = 0 ]; then journal tripwire "TRIPWIRE words-screens green sha=$(echo "$SHA" | cut -c1-9)"
+else journal tripwire "TRIPWIRE words-screens red sha=$(echo "$SHA" | cut -c1-9): read the run; this holds no merge"; fi
+[ "$RC" = 0 ] && exit "$WRC"
 exit "$RC"

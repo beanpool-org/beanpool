@@ -410,8 +410,13 @@ const ACCENTED: Record<string, string> = {
 export const PSEUDO_OPEN = '[';
 export const PSEUDO_CLOSE = ']';
 
-/** A pad this long or longer may break: see pseudoLocalise. */
-const PSEUDO_PAD_BREAKS_FROM = 7;
+/**
+ * A pad this long or longer breaks: see pseudoLocalise. Six, since the 40 % pad of slice T4: a sentence of 13–15
+ * characters now pads 6, and a 6-tilde pad glued to the last word made a 17-glyph run (the web garden's "Warm temperate"
+ * zone line: 196 px against a 191 px column in apps/pwa/src/tools/__tests__/tools-template.test.tsx) that no real
+ * language's word would be. It was seven at 35 %.
+ */
+const PSEUDO_PAD_BREAKS_FROM = 6;
 const PSEUDO_PAD_WORD = 5;
 const ZERO_WIDTH_SPACE = '\u200B';
 
@@ -440,7 +445,7 @@ export function pseudoPadLength(sourceLength: number): number {
  * five tildes. Glued to the last word as one run, the pad of a long sentence is a "word" no screen can wrap (a
  * 100-letter sentence ends in 30 tildes), and a 320 px check then fails on the padding rather than on the layout: the
  * web app's welcome page measured 668 px wide in 320 at the old 35 % (apps/pwa/e2e/words-screens-check.mjs). Pads under
- * seven stay one run.
+ * six stay one run.
  */
 export function pseudoLocalise(source: string): string {
     const parts = source.split(/(\{[A-Za-z0-9_]+\})/);

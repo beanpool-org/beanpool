@@ -211,13 +211,14 @@ describe('t and tn', () => {
         expect(out.startsWith('[') && out.endsWith(']')).toBe(true);
         expect(out).toContain('{name}');
         expect(out.replace('{name}', '')).not.toMatch(/[A-Za-z]/);
-        // 15 characters, 40 % = 6 tildes: the sentence plus a pad of exactly 6, and the two brackets.
-        expect(out.length - 2).toBe('Save {name} now'.length + 6);
+        // 15 characters, 40 % = 6 tildes: the sentence plus a pad of exactly 6, and the two brackets (the pad's zero-width
+        // breaks, which a 6-tilde pad carries, are not characters a person sees).
+        expect(out.replace(/\u200B/g, '').length - 2).toBe('Save {name} now'.length + 6);
         setLanguage(PSEUDO_LANG);
         expect(t('Save')).toBe('[Ŝāṽé~~]');
         expect(t('Hello {name}', { name: 'Ana' })).toMatch(/^\[Ĥéļļö Ana~+\]$/);
-        // 16 characters: a pad of 7, the first that breaks with a zero-width space (see the boundary test below).
-        expect(tn(3, '{n} new message', '{n} new messages')).toMatch(/^\[3 ñéŵ ɱéššāĝéš[​~]+\]$/);
+        // 16 characters: a pad of 7, which breaks with a zero-width space (see the boundary test below).
+        expect(tn(3, '{n} new message', '{n} new messages')).toMatch(/^\[3 ñéŵ ɱéššāĝéš[\u200B~]+\]$/);
     });
 
     it('a long pseudo-locale pad breaks like words do: never a run a 320 px screen cannot wrap', () => {
@@ -231,9 +232,11 @@ describe('t and tn', () => {
         expect(Math.max(...out.split(/[\s\u200B]/).map((w) => w.length))).toBeLessThanOrEqual(15);
         // Short pads stay one run, as the screens' button checks have always read them.
         expect(pseudoLocalise('Save')).toBe('[Ŝāṽé~~]');
-        // The boundary: 15 characters pad 6 (one run), 16 pad 7 (the first pad that breaks).
-        expect(pseudoLocalise('{n} new message')).not.toContain('\u200B');
-        expect(pseudoLocalise('{n} new messages')).toContain('\u200B');
+        // The boundary: 12 characters pad 5 (one run), 13 pad 6 (the first pad that breaks: a 6-tilde pad glued to a 9-letter
+        // word was a 17-glyph run no real word would be, the web garden's "Warm temperate" zone line).
+        expect(pseudoLocalise('Hello {name}')).not.toContain('\u200B');
+        expect(pseudoLocalise('Hello, {name}!')).toBe('[Ĥéļļö, {name}!\u200B~~~~~\u200B~]');
+        expect(pseudoLocalise('Warm temperate')).toBe('[Ŵāŕɱ ţéɱþéŕāţé\u200B~~~~~\u200B~]');
     });
 
     // Slice T4 (translation tooling design §2.5): 40 % on a short sentence, 30 % on a long one.

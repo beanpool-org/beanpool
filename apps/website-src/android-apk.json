@@ -1,7 +1,7 @@
 {
   "//": "beanpool.org/android's download: the GitHub Release asset of tag android-v<version>. Bump all four with each Android release, then run pnpm website:build (scripts/website-build.mjs, readApkRelease).",
-  "version": "1.2.84",
-  "versionCode": 306,
-  "bytes": 160492001,
-  "sha256": "76dc8a47e74fc8e0f531d678a35a5b94da5c73ec6e3325c0ce395a614fea9f72"
+  "version": "1.2.93",
+  "versionCode": 315,
+  "bytes": 161261991,
+  "sha256": "036c0bd0c8573480df9da89fe67c9f982b9b3c56fc7ff6052a99ea3cbbd1055f"
 }

@@ -59,11 +59,12 @@ import {
     type HomeFind,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, NOT_ON_ACCOUNT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard,
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, NOT_ON_ACCOUNT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderAmong,
     canRemoveCard, cardLabelName, cardLine, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
+import { useArrangeDrag } from '../lib/arrange-drag';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { markHomeInflight, recordHomeAnswer } from '../lib/home-store';
 import { settleInterests, shareInterests } from '../lib/home-interests';
@@ -1674,7 +1675,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         : null;
     const inArrange = !!folded;
     inArrangeNow.current = inArrange;
-    const shownKey = (folded ?? shown).map(c => `${c.id}:${c.type}`).join(',');
+    // Dragging a band (L3): the lifted card's place is live, so the cards are laid out in the order the drop would make.
+    const drag = useArrangeDrag({
+        gridRef, enabled: inArrange, onDrop: dropInArrange,
+        ids: (folded ?? []).filter(c => canMoveCard(c.type, foldedPins)).map(c => c.id),
+    });
+    const liveFolded = folded && drag.lift ? reorderAmong(folded, drag.lift.id, drag.lift.to, foldedPins) : folded;
+    const shownKey = (liveFolded ?? shown).map(c => `${c.id}:${c.type}`).join(',');
 
     // Each child reports its own height at mount and by its own ResizeObserver, but that comes a frame late, so when the
     // columns or the list change every child is read here, before the paint. The grid's direct children are the packed ones.
@@ -1695,7 +1702,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         if (Object.keys(cardHeights).length === 0) return [];
         const items: PackableCard[] = [];
         const tile = { id: ARRANGE_ADD, height: cardHeights[ARRANGE_ADD]?.height ?? 0 };
-        const cards = folded ?? shown;
+        const cards = liveFolded ?? shown;
         for (let i = 0; i < cards.length; i++) {
             const card = cards[i];
             if (!inArrange && card.type === 'safety' && !safetyDrawn) continue;
@@ -1737,6 +1744,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const arrangeBack = useRef<{ quiet: boolean } | null>(null);
     // After a move: the arrow to keep focus on, or its twin once it is off at an end.
     const focusArrow = useRef<{ id: string; dir: 'up' | 'down' } | null>(null);
+    /** A drag let go (L3): the same list an arrow would have made, saved at once; focus and scroll go where the card landed. */
+    function dropInArrange(id: string, to: number) {
+        const card = folded?.find(c => c.id === id);
+        if (!folded || !card) return;
+        focusArrow.current = { id, dir: 'up' };
+        if (!changeLayout((l) => moveCardTo(l, id, to, folded, Date.now(), foldedPins))) { focusArrow.current = null; return; }
+        setLive(arrangeMovedLine(cardLabelName(card, String(answer?.profile)), to + 1, folded.filter(c => canMoveCard(c.type, foldedPins)).length));
+    }
     function startArrange(from?: string) {
         arrangeFrom.current = from ?? null;
         setArranging(true);
@@ -1807,6 +1822,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // The fold shows as a quick settle, and a moved card slides from where it stood (none with reduced motion).
     const stood = useRef(new Map<string, { x: number; y: number }>());
     const wasFolded = useRef(false);
+    const liftedId = drag.lift?.id;
     useLayoutEffect(() => {
         const grid = gridRef.current;
         const calm = reducedMotion();
@@ -1814,22 +1830,28 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             wasFolded.current = inArrange;
             if (!calm) grid?.animate?.([{ opacity: 0.6 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
         }
+        const dropped = drag.settle.current;
+        drag.settle.current = null;
         if (!inArrange || !grid) { stood.current = new Map(); return; }
         const box = grid.getBoundingClientRect();
         const next = new Map<string, { x: number; y: number }>();
         for (const el of Array.from(grid.children) as HTMLElement[]) {
             const id = packIdOf(el);
-            if (!id) continue;
+            // The card in the air follows the pointer; it is back in its slot, or let go from where it was, below.
+            if (!id || id === liftedId) continue;
             const r = el.getBoundingClientRect();
             const at = { x: r.left - box.left, y: r.top - box.top };
-            const was = stood.current.get(id);
+            const was = dropped?.id === id ? dropped : stood.current.get(id);
+            const letGo = was === dropped;
             next.set(id, at);
             if (!calm && was && (was.x !== at.x || was.y !== at.y)) {
-                el.animate?.([{ transform: `translate(${was.x - at.x}px, ${was.y - at.y}px)` }, { transform: 'none' }], { duration: 150, easing: 'ease-out' });
+                const from = `translate(${was.x - at.x}px, ${was.y - at.y}px)${letGo ? ' scale(1.02)' : ''}`;
+                el.animate?.([{ transform: from }, { transform: 'none' }], { duration: 150, easing: 'ease-out' });
             }
         }
         stood.current = next;
-    }, [inArrange, shownKey, packedList]);
+        drag.follow();
+    }, [inArrange, shownKey, packedList, drag.ended]);
 
     // ── "Save this search to Home" from the Market (Marty, 7 Oct) ──
     // The search to add, its dialog open; and why one couldn't be (the same search there, five there, Home full, Home not
@@ -2276,6 +2298,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         return { gridColumn: packed.fullRow ? '1 / -1' : String(packed.col), gridRow: `${packed.rowStart} / span ${packed.rowSpan}`, alignSelf: 'start' };
     }
 
+    /** While a card is in the air, the cards stand in the order the drop would make (a grid's `order`: the DOM stays where it is). */
+    const liveIndex = new Map((liveFolded ?? []).map((c, i) => [c.id, i * 2]));
+    const liveOrder = (id: string): React.CSSProperties => (drag.lift ? { order: liveIndex.get(id) } : {});
+
     /** A card in Arrange: its band with ↑ ↓ or Stays here, and one line. Its body isn't drawn, so nothing else is read. */
     function renderFolded(card: HomeCardInstance): ReactNode {
         const c = a.cards;
@@ -2290,10 +2316,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 title={cm ? communityName(cm, profile) : card.type === 'search' ? cardRowName(card, profile) : nameOf(card)}
                 hue={card.type === 'needs' ? (c.needs?.items.some(i => i.accent) ? 'amber' : 'sage') : homeCardHue(card)}
                 accent={card.type === 'needs' && c.needs?.items.some(i => i.accent)}
-                style={placement(card.id, spansRow(card.type))} onHeight={reportHeight(card.id)}
+                style={{ ...placement(card.id, spansRow(card.type)), ...liveOrder(card.id) }} onHeight={reportHeight(card.id)}
                 arrange={at < 0
                     ? { label, stays: true }
-                    : { label, canUp: at > 0, canDown: at < movable.length - 1, across: cols > 1, onMove: (d) => moveInArrange(card, d) }}>
+                    : { label, canUp: at > 0, canDown: at < movable.length - 1, across: cols > 1, onMove: (d) => moveInArrange(card, d),
+                        drag: drag.bandProps(card.id), lifted: drag.lift?.id === card.id }}>
                 <p data-testid={`home-arrange-line-${card.id}`} className="m-0 pb-2 text-sm text-text-secondary break-words">{line}</p>
                 {!drawn && (
                     <div className="flex flex-wrap justify-end gap-x-2">
@@ -2994,11 +3021,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     rowGap: isPacked ? 0 : (cols > 1 ? 4 : 0),
                     gridAutoRows: isPacked ? `${HOME_PACK_ROW_HEIGHT}px` : undefined,
                     justifyContent: 'center', alignItems: 'start',
+                    // The cards are read by their offsets while one is dragged: from this box.
+                    position: 'relative',
                 }}>
                     {folded ? (
                         <>
                             {folded.filter(c => c.type !== FIXED_LAST).map(renderFolded)}
-                            <PackedBlock onHeight={reportHeight(ARRANGE_ADD)} data-testid="home-arrange-tile" style={placement(ARRANGE_ADD, false)} className="mb-3">
+                            <PackedBlock onHeight={reportHeight(ARRANGE_ADD)} data-testid="home-arrange-tile" style={{ ...placement(ARRANGE_ADD, false), ...(drag.lift ? { order: (liveIndex.get(FIXED_LAST) ?? (liveFolded?.length ?? 0) * 2) - 1 } : {}) }} className="mb-3">
                                 <button type="button" data-testid="home-arrange-add" aria-label={t('Add a card to Home')} onClick={() => setPickerOpen(true)}
                                     className="w-full min-h-[48px] px-4 rounded-2xl border border-dashed border-border-primary bg-transparent text-sm font-bold text-text-primary cursor-pointer break-words hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                     <span aria-hidden="true">＋ </span>{t('Add a card')}

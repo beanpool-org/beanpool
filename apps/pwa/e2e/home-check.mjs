@@ -35,6 +35,11 @@
  *      cards overlap and no gap opens, folded or after Done; Tab walks the member's order; Done stays on screen; a band
  *      held enters; a move survives a reload. `HOME_ONLY=arrangeAcross`, and the pictures for its PR.
  *
+ *   8. Drag in Arrange (slice L3): a band dragged with the mouse and with a finger, motion on and reduced, at 1280 and 360 px:
+ *      card 5 above card 2 saves the same list an arrow does (read back from the node), a reload holds it, the arrows still
+ *      work, focus and scroll read where the card landed; Escape, a blur and a cancelled finger save nothing; a tap is a
+ *      tap; the fixed cards can't be lifted or passed; the page scrolls near the edge. `HOME_ONLY=dragAcross`.
+ *
  * Fails on any sideways scroll, a control under 44 px, an axe violation, a document-policy violation, or a request to
  * any host but this machine.
  *
@@ -173,9 +178,9 @@ function recorder(cdp, origin) {
 }
 
 /** `installDismissed`: the install banner said no to for good (a device setting, kept across sign-out), so nothing covers a tap. */
-async function openContext(browser, origin, { identity = null, dark = false, geolocation = null, installDismissed = false } = {}) {
+async function openContext(browser, origin, { identity = null, dark = false, geolocation = null, installDismissed = false, calm = true, touch = false } = {}) {
     const context = await browser.newContext({
-        viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce',
+        viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: calm ? 'reduce' : 'no-preference', hasTouch: touch,
         ...(geolocation ? { geolocation, permissions: ['geolocation'] } : {}),
     });
     const seen = { violations: [], otherHosts: new Set() };
@@ -1415,6 +1420,339 @@ async function arrangeAcross(browser, root) {
     }
 }
 
+// ---------- Arrange: dragging a band (slice L3) ----------
+
+/** Pointer, mouse or finger (CDP touch events, which Chromium turns into pointer events with `touch-action` honoured). */
+function pointerDriver(page, cdp, mode) {
+    let cur = { x: 0, y: 0 };
+    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' || type === 'touchCancel' ? [] : [{ x, y, id: 1 }] });
+    return {
+        down: async (x, y) => { cur = { x, y }; if (mode === 'mouse') { await page.mouse.move(x, y); await page.mouse.down(); } else await touch('touchStart', x, y);  if (mode === 'touch') await page.waitForTimeout(230); },
+        move: async (x, y, steps = 1) => {
+            for (let i = 1; i <= steps; i++) {
+                const at = { x: cur.x + ((x - cur.x) * i) / steps, y: cur.y + ((y - cur.y) * i) / steps };
+                if (mode === 'mouse') await page.mouse.move(at.x, at.y); else await touch('touchMove', at.x, at.y);
+                if (steps > 1) await wait(16);
+            }
+            cur = { x, y };
+        },
+        up: async () => { if (mode === 'mouse') await page.mouse.up(); else await touch('touchEnd'); },
+        cancel: async () => { if (mode === 'touch') await touch('touchCancel'); },
+    };
+}
+
+const boxOf = (page, testId) => page.getByTestId(testId).boundingBox();
+const bandPoint = async (page, id) => { const b = await boxOf(page, `card-band-${id}`); return { x: b.x + 10, y: b.y + b.height / 2 }; };
+const movableOrder = (page) => page.evaluate(() => Array.from(document.querySelectorAll('[data-testid^="home-arrange-up-"]')).map((b) => b.dataset.testid.replace('home-arrange-up-', '')));
+const isLifted = (page, id) => page.evaluate((i) => document.querySelector(`[data-testid="home-card-${i}"]`)?.getAttribute('data-lifted') === 'true', id);
+/** The list the node holds for her, read from its own table: the cards that can move, in the saved order. */
+async function savedMovable(node, key, among) {
+    const rows = await node.ask({ op: 'sql', sql: "SELECT pref_value AS v FROM member_preferences WHERE public_key = ? AND pref_key = 'home.layout'", params: [key], all: true });
+    const layout = typeof rows[0].v === 'string' ? JSON.parse(rows[0].v) : rows[0].v;
+    return layout.cards.map((c) => c.id).filter((id) => among.includes(id));
+}
+/** The page, signed in as Ana with the usual cards, and Arrange open. */
+async function openArranged(browser, root, { mode = 'mouse', calm = true, width, height, large = false, dark = false }) {
+    const ana = memberIdentity('Ana');
+    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }]);
+    const { context, page } = await openContext(browser, node.origin, { identity: ana, dark, installDismissed: true, calm, touch: mode === 'touch' });
+    const saves = { n: 0 };
+    page.on('request', (r) => { if (r.url().endsWith('/api/members/preferences') && r.method() === 'POST') saves.n++; });
+    const open = async () => {
+        await page.goto(`${node.origin}/app`, { waitUntil: 'load' });
+        if (large) await scaleText(page);
+        await page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
+        await wait(1_200);
+    };
+    await page.setViewportSize({ width, height });
+    await open();
+    const skip = page.getByTestId('home-card-start').getByRole('button', { name: /skip/i });
+    if (await skip.count()) {
+        await skip.first().click();
+        await page.getByTestId('home-card-tips').waitFor({ timeout: 8_000 });
+        await wait(1_500);
+        await open();
+    }
+    const arrange = async () => {
+        await page.getByTestId('home-arrange-open').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+        await page.getByTestId('home-arrange-open').click();
+        await page.getByTestId('home-arrange-bar').waitFor();
+        await wait(400);
+    };
+    const bandTouch = await page.getByTestId('card-band-tips').evaluate((el) => getComputedStyle(el).touchAction);
+    await arrange();
+    const cdp = await context.newCDPSession(page);
+    return { ana, node, context, page, saves, open, arrange, bandTouch, d: pointerDriver(page, cdp, mode) };
+}
+/** The pointer carried to a card's top or bottom half. */
+async function carryTo(page, d, id, half, steps = 14) {
+    const b = await boxOf(page, `home-card-${id}`);
+    // The same way across the card as where the band was taken (its left end), so the card in the air lines up with the one it is over.
+    await d.move(b.x + 22, b.y + b.height * (half === 'top' ? 0.25 : 0.75), steps);
+}
+/** The page scrolled so a card stands just under the bar. */
+async function showUnderBar(page, id) {
+    await page.evaluate((i) => {
+        const bar = document.querySelector('[data-testid="home-arrange-bar"]').getBoundingClientRect();
+        const el = document.querySelector(`[data-testid="home-card-${i}"]`);
+        document.querySelector('main').scrollTop += el.getBoundingClientRect().top - bar.bottom - 8;
+    }, id);
+    await wait(200);
+}
+/** Whatever focus is on, and how far it stands clear of the bar above and the tab bar below. */
+const focusRoom = (page) => page.evaluate(() => {
+    const el = document.activeElement;
+    const box = el.getBoundingClientRect();
+    const nav = document.querySelector('[data-testid="mobile-bottom-nav"]')?.getBoundingClientRect();
+    return { id: el.dataset.testid, over: box.top - document.querySelector('[data-testid="home-arrange-bar"]').getBoundingClientRect().bottom, under: (nav?.height ? nav.top : window.innerHeight) - box.bottom };
+});
+const savedAfter = (page) => page.waitForRequest((r) => r.url().endsWith('/api/members/preferences') && r.method() === 'POST');
+
+async function dragAcross(browser, root) {
+    console.log('\nDrag in Arrange (slice L3):');
+    // 1. Card 5 above card 2, saved as an arrow's list, with the mouse and a finger, motion on and reduced, wide and narrow.
+    // DRAG_PARTS=1,2 runs only those parts (each is minutes long).
+    const part = (n) => !process.env.DRAG_PARTS || process.env.DRAG_PARTS.split(',').includes(n);
+    for (const [width, height] of part('1') ? [[1280, 900], [360, 640]] : []) {
+        for (const mode of ['mouse', 'touch']) {
+            for (const calm of [true, false]) {
+                const tag = `${mode}, ${calm ? 'reduced motion' : 'motion on'}, ${width} px`;
+                const h = await openArranged(browser, root, { mode, calm, width, height });
+                const { page, node, d, ana } = h;
+                try {
+                    check(h.bandTouch === 'auto', `${tag}: a band outside Arrange leaves touch-action alone (${h.bandTouch})`);
+                    check(await page.getByTestId('card-band-tips').evaluate((el) => getComputedStyle(el).touchAction) === 'none', `${tag}: a band in Arrange has touch-action: none`);
+                    const was = await movableOrder(page);
+                    check(was.length >= 5, `${tag}: Arrange holds ${was.length} cards that move (${was.join(' ')})`);
+                    const src = was[Math.min(4, was.length - 1)];
+                    const dst = was[1];
+                    const want = was.filter((x) => x !== src);
+                    want.splice(1, 0, src);
+                    await showUnderBar(page, dst);
+                    const beforeDst = await boxOf(page, `home-card-${dst}`);
+                    const p = await bandPoint(page, src);
+                    const saves0 = h.saves.n;
+                    // Every slide the page asks for is a call to animate(): counted, so "no slides" is a number.
+                    await page.evaluate(() => { window.__slides = 0; const o = Element.prototype.animate; Element.prototype.animate = function (...a) { window.__slides++; return o.apply(this, a); }; });
+                    await d.down(p.x, p.y);
+                    await d.move(p.x + 2, p.y + 2);
+                    check(!(await isLifted(page, src)), `${tag}: a press that has barely moved lifts nothing`);
+                    await d.move(p.x + 12, p.y + 12, 3);
+                    await wait(100);
+                    check(await isLifted(page, src), `${tag}: past a few pixels the card lifts, with its ring`);
+                    await carryTo(page, d, dst, 'top');
+                    await wait(calm ? 150 : 450);
+                    const afterDst = await boxOf(page, `home-card-${dst}`);
+                    check(Math.abs(afterDst.y - beforeDst.y) > 2 || Math.abs(afterDst.x - beforeDst.x) > 2, `${tag}: the card under the pointer slid aside while held`);
+                    check(h.saves.n === saves0, `${tag}: nothing is saved while the card is held`);
+                    const saved = savedAfter(page);
+                    await d.up();
+                    await saved;
+                    await wait(calm ? 250 : 650);
+                    const slides = await page.evaluate(() => window.__slides);
+                    check(calm ? slides === 0 : slides > 0, `${tag}: ${calm ? 'no card slid' : 'the cards slid'} (${slides} slide${slides === 1 ? '' : 's'} asked for)`);
+                    const got = await movableOrder(page);
+                    check(JSON.stringify(got) === JSON.stringify(want), `${tag}: released, card ${was.indexOf(src) + 1} stands above card 2 (${got.join(' ')})`);
+                    check(!(await isLifted(page, src)) && await page.evaluate((id) => !document.querySelector(`[data-testid="home-card-${id}"]`).style.transform, src), `${tag}: the ring and the lift are gone`);
+                    check(JSON.stringify(await savedMovable(node, ana.publicKey, was)) === JSON.stringify(want), `${tag}: the node's saved layout holds that order`);
+                    const room = await focusRoom(page);
+                    check(room.id?.startsWith('home-arrange-') && room.id.endsWith(src) && room.over >= 0 && room.under >= 0, `${tag}: focus reads where the card landed, clear of both bars (${room.id}, ${Math.round(room.over)} px under the bar, ${Math.round(room.under)} px over the tab bar)`);
+                    await packedRight(page, `${tag}: after a drop`);
+                    await h.open();
+                    await h.arrange();
+                    check(JSON.stringify(await movableOrder(page)) === JSON.stringify(want), `${tag}: a reload reads the dragged order back`);
+                    // The arrows still work after a drag, and save the same way.
+                    const down = page.getByTestId(`home-arrange-down-${src}`);
+                    await down.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+                    const arrowSaved = savedAfter(page);
+                    await down.click();
+                    await arrowSaved;
+                    await wait(300);
+                    const swapped = [...want];
+                    [swapped[1], swapped[2]] = [swapped[2], swapped[1]];
+                    check(JSON.stringify(await movableOrder(page)) === JSON.stringify(swapped), `${tag}: ↓ still moves it one place`);
+                    check(JSON.stringify(await savedMovable(node, ana.publicKey, was)) === JSON.stringify(swapped), `${tag}: and the node holds that`);
+                } finally {
+                    await h.context.close();
+                    await node.stop();
+                }
+            }
+        }
+    }
+    // 2. What cancels, what is a tap, and what can't be lifted or passed (the mouse, motion on).
+    if (part('2')) {
+        const h = await openArranged(browser, root, { mode: 'mouse', calm: false, width: 1280, height: 900 });
+        const { page, node, d, ana } = h;
+        try {
+            const was = await movableOrder(page);
+            const src = was[3];
+            const dst = was[0];
+            const barUp = () => page.getByTestId('home-arrange-bar').count();
+            const p = await bandPoint(page, src);
+            const n = h.saves.n;
+            await d.down(p.x, p.y);
+            await d.up();
+            await wait(300);
+            check(h.saves.n === n && (await barUp()) === 1 && JSON.stringify(await movableOrder(page)) === JSON.stringify(was), 'a tap on a band with no movement is a tap: nothing saved, Arrange still open');
+            const lift = async () => {
+                const q = await bandPoint(page, src);
+                await d.down(q.x, q.y);
+                await d.move(q.x + 12, q.y + 12, 3);
+                await carryTo(page, d, dst, 'top');
+                await wait(450);
+                check(await isLifted(page, src), 'a card is in the air');
+            };
+            await lift();
+            await page.keyboard.press('Escape');
+            await wait(450);
+            check(!(await isLifted(page, src)) && JSON.stringify(await movableOrder(page)) === JSON.stringify(was), 'Escape puts the card back');
+            check((await barUp()) === 1, 'and that Escape leaves Arrange open');
+            await d.up();
+            await wait(300);
+            check(h.saves.n === n, 'letting go after Escape saves nothing');
+            await packedRight(page, 'after Escape');
+            await lift();
+            await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+            await wait(450);
+            check(!(await isLifted(page, src)), 'a window blur puts the card down');
+            await d.up();
+            await wait(300);
+            check(h.saves.n === n && JSON.stringify(await movableOrder(page)) === JSON.stringify(was), 'and saves nothing');
+            await page.keyboard.press('Escape');
+            await page.getByTestId('home-arrange-bar').waitFor({ state: 'detached' });
+            check(true, 'Escape with nothing in the air still ends Arrange');
+            await h.arrange();
+            // The fixed cards: no handle on their bands, and a drop on them or past them moves nothing.
+            const needsTouch = await page.getByTestId('card-band-needs').evaluate((el) => getComputedStyle(el).touchAction).catch(() => null);
+            check(needsTouch !== 'none', `a band that stays here has no touch-action: none (${needsTouch})`);
+            const np = await bandPoint(page, 'needs').catch(() => null);
+            if (np) {
+                await d.down(np.x, np.y);
+                await d.move(np.x + 12, np.y + 40, 4);
+                check(await page.evaluate(() => !document.querySelector('[data-lifted="true"]')), 'a band that stays here does not lift');
+                await d.up();
+            }
+            const q = await bandPoint(page, src);
+            await d.down(q.x, q.y);
+            await d.move(q.x + 12, q.y + 12, 3);
+            await carryTo(page, d, 'community', 'top');
+            await wait(450);
+            await d.up();
+            await wait(400);
+            check(h.saves.n === n && JSON.stringify(await movableOrder(page)) === JSON.stringify(was), 'dropped on the community card (which stays last), nothing moves or is saved');
+            const q2 = await bandPoint(page, src);
+            await d.down(q2.x, q2.y);
+            await d.move(q2.x + 12, q2.y + 12, 3);
+            await carryTo(page, d, was.at(-1), 'bottom');
+            await wait(450);
+            const saved = savedAfter(page);
+            await d.up();
+            await saved;
+            await wait(450);
+            const wantLast = [...was.filter((x) => x !== src), src];
+            check(JSON.stringify(await movableOrder(page)) === JSON.stringify(wantLast), 'dropped on the bottom half of the last card, it goes last');
+            const dom = await page.evaluate(() => Array.from(document.querySelector('[data-testid="home-grid"]').children).map((e) => e.dataset.testid.replace('home-card-', '')));
+            check(dom.at(-1) === 'community' && dom[0] === 'needs', `the fixed cards stand first and last (${dom.join(' ')})`);
+            check(JSON.stringify(await savedMovable(node, ana.publicKey, was)) === JSON.stringify(wantLast), 'and the node holds that');
+            await packedRight(page, 'after a drop to the end');
+        } finally {
+            await h.context.close();
+            await node.stop();
+        }
+    }
+    // 2b. A finger the system takes back (a cancelled touch) puts the card down and saves nothing.
+    if (part('2')) {
+        const h = await openArranged(browser, root, { mode: 'touch', calm: false, width: 1280, height: 900 });
+        const { page, node, d } = h;
+        try {
+            const was = await movableOrder(page);
+            const p = await bandPoint(page, was[3]);
+            await d.down(p.x, p.y);
+            await d.move(p.x + 12, p.y + 12, 3);
+            await carryTo(page, d, was[0], 'top');
+            await wait(450);
+            check(await isLifted(page, was[3]), 'a finger lifts a card');
+            const n = h.saves.n;
+            await d.cancel();
+            await wait(450);
+            check(!(await isLifted(page, was[3])) && JSON.stringify(await movableOrder(page)) === JSON.stringify(was) && h.saves.n === n, 'a cancelled finger puts the card back and saves nothing');
+            await packedRight(page, 'after a cancelled finger');
+        } finally {
+            await h.context.close();
+            await node.stop();
+        }
+    }
+    // 3. The page scrolls near the edge while a card is held.
+    if (part('3')) {
+        const h = await openArranged(browser, root, { mode: 'mouse', calm: false, width: 1280, height: 420 });
+        const { page, node, d } = h;
+        try {
+            const was = await movableOrder(page);
+            await page.evaluate(() => document.querySelector('main').scrollTo(0, 0));
+            await wait(150);
+            const p = await bandPoint(page, was[1]);
+            await d.down(p.x, p.y);
+            await d.move(p.x + 12, p.y + 12, 3);
+            await d.move(p.x + 12, 405, 10);
+            const top0 = await page.evaluate(() => document.querySelector('main').scrollTop);
+            await wait(700);
+            const top1 = await page.evaluate(() => document.querySelector('main').scrollTop);
+            check(top1 > top0 + 40, `held near the bottom edge, the page scrolls (${top0} → ${top1} px)`);
+            const lifted = await boxOf(page, `home-card-${was[1]}`);
+            check(lifted.y <= 405 && lifted.y + lifted.height >= 395, 'and the card stays under the pointer while it does');
+            // A wheel under a still pointer: the card stays under it.
+            await d.move(p.x + 12, 210, 8);
+            await wait(300);
+            const wheelFrom = await page.evaluate(() => document.querySelector('main').scrollTop);
+            await page.mouse.wheel(0, -120);
+            await wait(250);
+            const wheelTo = await page.evaluate(() => document.querySelector('main').scrollTop);
+            const afterWheel = await boxOf(page, `home-card-${was[1]}`);
+            check(wheelTo !== wheelFrom && afterWheel.y <= 210 && afterWheel.y + afterWheel.height >= 210, `a wheel turned the page (${wheelFrom} → ${wheelTo} px) and the card stayed under the pointer`);
+            await page.keyboard.press('Escape');
+            await d.up();
+            await wait(300);
+            check(JSON.stringify(await movableOrder(page)) === JSON.stringify(was), 'Escape after a scroll puts it back');
+        } finally {
+            await h.context.close();
+            await node.stop();
+        }
+    }
+    // 4. Mid-drag at each width and in both themes: no overlap, no sideways scroll, axe clean; the pictures.
+    for (const dark of part('4') ? [false, true] : []) {
+        for (const [width, height, large] of [[320, 720, true], [768, 900, false], [1280, 900, false], [1600, 1000, false]]) {
+            const tag = `${width}-${dark ? 'dark' : 'light'}`;
+            const h = await openArranged(browser, root, { mode: 'mouse', calm: false, width, height, large, dark });
+            const { page, node, d } = h;
+            try {
+                const was = await movableOrder(page);
+                // At 320 px with 1.3x text the cards are tall: card 3 is the furthest one that stands clear of the tab bar.
+                const src = was[large ? 2 : Math.min(4, was.length - 1)];
+                await showUnderBar(page, was[1]);
+                const p = await bandPoint(page, src);
+                await d.down(p.x, p.y);
+                await d.move(p.x + 12, p.y + 12, 3);
+                await carryTo(page, d, was[1], 'top');
+                await wait(500);
+                check(await isLifted(page, src), `${tag}: a card is in the air`);
+                await noSideScroll(page, `${tag} mid-drag`);
+                await axeClean(page, '[data-testid="home-page"]', `${tag} mid-drag`);
+                fs.mkdirSync(SHOTS_DIR, { recursive: true });
+                await page.screenshot({ path: path.join(SHOTS_DIR, `drag-${tag}.png`) });
+                const saved = savedAfter(page);
+                await d.up();
+                await saved;
+                await wait(500);
+                await packedRight(page, `${tag}: after the drop`);
+                await page.screenshot({ path: path.join(SHOTS_DIR, `drag-${tag}-dropped.png`) });
+            } finally {
+                await h.context.close();
+                await node.stop();
+            }
+        }
+    }
+}
+
 async function main() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-home-check-'));
     let browser;
@@ -1423,7 +1761,7 @@ async function main() {
         browser = await chromium.launch();
         console.log('The web app as built; Chromium at 320 px, 1.3x text, reduced motion.');
         const only = process.env.HOME_ONLY?.split(',').map((n) => n.trim()).filter(Boolean);
-        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode, arrangeAcross].filter((r) => !only?.length || only.includes(r.name))) {
+        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode, arrangeAcross, dragAcross].filter((r) => !only?.length || only.includes(r.name))) {
             try {
                 await run(browser, root);
             } catch (e) {

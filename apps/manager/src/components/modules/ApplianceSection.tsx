@@ -20,6 +20,7 @@ import {
 } from '../../lib/node-client';
 import { restoreDoneWords } from '../../lib/restore-words';
 import { NodeIdentityPanel } from './NodeIdentityPanel';
+import { ListingPromisePanel } from './ListingPromisePanel';
 import { AddressesPanel } from './AddressesPanel';
 import { PeerConnectorsPanel } from './PeerConnectorsPanel';
 import { StandbyReplicationPanel } from './StandbyReplicationPanel';
@@ -1431,6 +1432,8 @@ export function ApplianceSection({
                         diag={diag}
                         onRefreshDiag={onRefreshDiag}
                     />
+                    {/* The listing promise (Mothership A3): its four lines and the closing day, under Directory Publishing. */}
+                    <ListingPromisePanel key={`promise-${activeNode.id}`} activeNode={activeNode} viewer={rolesViewer} />
                 </SectionErrorBoundary>
             )}
 

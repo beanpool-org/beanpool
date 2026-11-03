@@ -39,6 +39,7 @@ import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm, readNearestInCircle } from '../lib/listings-near';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
+import { clusterIcon, elderHaloHtml } from '../lib/map-pin-style';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -735,13 +736,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             // 2 Nov). The library's zoom has no cap and its spiral is what the list replaces.
             zoomToBoundsOnClick: false,
             spiderfyOnMaxZoom: false,
-            iconCreateFunction: (cluster) => {
-                return L.divIcon({
-                    html: `<div style="background-color: #1f2937; color: white; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 18px; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${cluster.getChildCount()}</div>`,
-                    className: 'custom-cluster-icon',
-                    iconSize: [36, 36],
-                });
-            }
+            // The phone's bubble (lib/map-pin-style.ts): blue, a white ring and a glow, sized by the pins inside, 99+ from 99.
+            iconCreateFunction: (cluster) => L.divIcon({ ...clusterIcon(cluster.getChildCount()), className: 'custom-cluster-icon' }),
         });
         clusterGroup.on('clusterclick clusterkeypress', (e: any) => {
             if (e.type === 'clusterkeypress' && e.originalEvent?.keyCode !== 13) return;
@@ -1720,12 +1716,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             if (useModernMarkers) {
                 html = `
                 <div style="position: relative; width: 40px; height: 48px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.15));">
+                    ${elderHaloHtml(hasElderGlow, 40)}
                     <div style="
                         width: 40px; height: 40px; border-radius: 50%;
                         background: rgba(255,255,255,0.95); border: 2.5px solid ${borderColor};
                         display: flex; align-items: center; justify-content: center;
                         box-sizing: border-box; z-index: 2; position: relative;
-                        ${hasElderGlow ? 'border-color: #fbbf24; box-shadow: 0 0 6px rgba(251,191,36,0.8);' : ''}
                     ">
                         <span style="font-size: 22px; line-height: 1; padding-bottom: 2px;">${emoji}</span>
                     </div>
@@ -1740,6 +1736,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             } else {
                 html = `
                 <div style="position: relative; width: 44px; height: 56px; display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.15));">
+                    ${elderHaloHtml(hasElderGlow, 44)}
                     <div style="
                         width: 44px; height: 44px; border-radius: 50%;
                         background: rgba(255,255,255,0.95); border: 2.5px solid ${borderColor};

@@ -14,6 +14,8 @@ On the global community each poll says **An informal poll; it decides nothing**.
 
 When an anonymous poll there has closed, it also says how many of its votes came from **new or 12-word accounts**, for example "5 of 12 votes came from new or 12-word accounts". Each vote counts as the account was when it voted: a new account is one that still had the new-account limits, and a 12-word account is one made with 12 words that had not added a sign-in. When at least 3 votes came from new or 12-word accounts, and the other votes are either none or at least 3, each answer also says how many of its own did. Every vote still counts, and nothing shows who voted.
 
+A poll there stays on the board, closed, for a week after it closes, so its result, and what it says about where its votes came from, can be read for that week. Then it comes off the board. The person who started it can still open it after that, with its result and its typed answers. See "The global community's limits".
+
 While a poll is open it says nothing about this. If it did, someone checking the poll after each vote could tell what kind of account each vote came from, and how it chose. An open vote never says it, open or closed: it shows who voted, so the count would say which kind of account each voter has. A group's poll doesn't say it either, and nor does a poll on a local community.
 
 ## Starting a poll
@@ -58,7 +60,7 @@ On an anonymous poll the words stay hidden until the poll closes, then show with
 
 On an open vote the words can be read at once. Changing your vote takes them away, and so does deleting your account.
 
-If you started the poll and a line is abusive, tap **Report** beside it. The report goes to the owners and names nobody. An owner can tap **Remove**: the words go for good, and the vote still counts. If the poll itself is removed, or the person who started it leaves while it's still open, its typed answers go with it, and even an owner can't read them after that. A poll that has closed keeps them if the person who started it leaves.
+If you started the poll and a line is abusive, tap **Report** beside it. The report goes to the owners and names nobody. An owner can tap **Remove**: the words go for good, and the vote still counts. If the poll itself is removed, or the person who started it leaves while it's still open, its typed answers go with it, and even an owner can't read them after that. A poll that has closed keeps them if the person who started it leaves, and so does one that comes off the board a week after it closes on the global community.
 
 ## Closing a poll early
 

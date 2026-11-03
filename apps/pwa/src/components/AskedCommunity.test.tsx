@@ -43,6 +43,23 @@ describe('the asked community on the Find card', () => {
         expect(screen.queryByText(/open Find a community in the BeanPool app/)).toBeNull();
     });
 
+    it('says what the community promised under its facts (Mothership A3): kept, taking requests, and a closing day', async () => {
+        const closingOn = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
+        stubList([{
+            key: 'k1', name: 'Castlemaine BeanPool', url: 'https://castlemaine.beanpool.org', memberCount: 9,
+            promise: { v: 1, owners: 2, backups: true, reports: true, notice: true }, acceptingKnocks: true, closingOn,
+        }]);
+        render(<AskedCommunity host="castlemaine.beanpool.org" identity={ME} asked={notAsked} onClose={() => {}} />);
+        expect((await screen.findByTestId('home-find-asked-promise')).textContent).toMatch(/^Keeps the listing promise · Accepting members · Closing on /);
+    });
+
+    it('a list that sends none of the three (an older global node) draws no promise line', async () => {
+        stubList([{ key: 'k1', name: 'Castlemaine BeanPool', url: 'https://castlemaine.beanpool.org', memberCount: 9 }]);
+        render(<AskedCommunity host="castlemaine.beanpool.org" identity={ME} asked={notAsked} onClose={() => {}} />);
+        await screen.findByRole('button', { name: 'Ask to join Castlemaine BeanPool' });
+        expect(screen.queryByTestId('home-find-asked-promise')).toBeNull();
+    });
+
     it('Ask to join → the form → "You asked to join", sent to that community and nowhere else', async () => {
         const asked = stubList([{ key: 'k1', name: 'Castlemaine BeanPool', url: 'https://castlemaine.beanpool.org', memberCount: 9 }]);
         const onAsked = vi.fn();

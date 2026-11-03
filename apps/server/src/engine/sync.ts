@@ -8,7 +8,7 @@ import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
 import { bodyOfSignedText, bytesOfSignedText, copiedFreeTags, copiedPostTags, replaceLoneSurrogates, storedFreeTags, storedPostTags } from '@beanpool/core';
-import { getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
+import { attachmentKey, getImageStore, headObject, readObject, postPhotoKey, MAX_OBJECT_BYTES, type ObjectInfo } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOfAsync, storePhotoColumnsAsync, type PhotoColumns } from '../storage/image-columns.js';
 import { readProfileRecord } from '../config/node-profile.js';
 import { readCommunitySettings } from '../config/community-settings.js';
@@ -121,8 +121,12 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     an open vote's link to its words on its vote (poll_votes.other_answer_id). An importer before this one drops both: after
  *     a take-over a sealed poll would count no answers and its words would be gone. OLDEST_STANDBY_FORMAT is 13 from here, as
  *     10 to 12 were.
+ * 14. Chat photos, DM and group alike (gap G4): `message_attachments` on the plain path, each object fetched by reference
+ *     (attachmentReferenceOf), and deleted with its tombstone. An importer before this one keeps none (it knows no such plain
+ *     table), and its cursor is past every photo already sent: the re-seed brings them all. OLDEST_STANDBY_FORMAT stays: an
+ *     older standby is no worse off than before, its photos unavailable after a take-over as they always were.
  */
-export const REPLICA_FORMAT = 13;
+export const REPLICA_FORMAT = 14;
 
 /**
  * The oldest importer a main server sends a copy to (routes/backup.ts sync-copy, a whole copy or a delta): 8 photos by
@@ -627,6 +631,38 @@ export interface PhotoReference {
     mime: string;
     bytes: number;
     key: string;
+    /**
+     * A chat photo's (attachmentReferenceOf, gap G4): its line's id; `post_id` is then '' and `order_num` 0. An object the
+     * main server no longer serves is no failed copy for one of these (services/backup-puller.ts fetchPhotoObjects).
+     */
+    message_id?: string;
+}
+
+/** How a reference is named in the logs and a failed pull's record: a listing photo's `post_id|order_num`, a chat photo's line. */
+export function referenceLabel(ref: PhotoReference): string {
+    return ref.message_id !== undefined ? `chat photo ${ref.message_id}` : `listing photo ${ref.post_id}|${ref.order_num}`;
+}
+
+/**
+ * A chat photo's object by reference (gap G4): a copy's `message_attachments` row (a plain table, verbatim) that names its
+ * object by `sha256` and `bytes`, with no ciphertext in the row, as the reference the puller fetches before the import
+ * (services/backup-puller.ts fetchPhotoObjects), under the key both servers keep it by, which the row names
+ * (storage/image-store.ts attachmentKey). Null for a row that holds its ciphertext, or names no object, or names one any other
+ * way (a row from before `sha256`, until the main server's evacuation job fills it in): it lands as it is, and its photo is
+ * unavailable on this server until a copy names its object.
+ */
+export function attachmentReferenceOf(row: unknown): PhotoReference | null {
+    const r = row as { message_id?: unknown; data?: unknown; storage_key?: unknown; sha256?: unknown; bytes?: unknown } | null;
+    if (!r || typeof r !== 'object') return null;
+    const { message_id, data, storage_key, sha256, bytes } = r;
+    if (typeof data === 'string' && data.length > 0) return null;
+    if (typeof message_id !== 'string' || !message_id || typeof storage_key !== 'string') return null;
+    if (typeof sha256 !== 'string' || !SHA256_HEX.test(sha256)) return null;
+    if (typeof bytes !== 'number' || !Number.isInteger(bytes) || bytes <= 0 || bytes > MAX_OBJECT_BYTES) return null;
+    let key: string;
+    try { key = attachmentKey(message_id); } catch { return null; }
+    if (storage_key !== key) return null;
+    return { post_id: '', order_num: 0, sha256, mime: 'application/octet-stream', bytes, key, message_id };
 }
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -910,6 +946,15 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
         // `conversationId|publicKey`, the same shape the conversation-consolidation migration writes.
         case 'messages': {
             const r = db.prepare(`DELETE FROM messages WHERE id=?`).run(rowKey);
+            return r.changes > 0;
+        }
+        // A chat photo the main server deleted (its line deleted or removed, its author's account, a withdrawn request): a
+        // plain table's row (gap G4), and its object here after the commit, as a listing photo's (storage design §7), so a
+        // deleted photo leaves this standby's store too, not only its rows.
+        case 'message_attachments': {
+            const key = (db.prepare(`SELECT storage_key FROM message_attachments WHERE message_id=?`).get(rowKey) as { storage_key: string | null } | undefined)?.storage_key;
+            const r = db.prepare(`DELETE FROM message_attachments WHERE message_id=?`).run(rowKey);
+            if (r.changes > 0 && key) afterTransactionCommit(() => deleteStoredObjects(db, [key]));
             return r.changes > 0;
         }
         case 'conversation_participants': {

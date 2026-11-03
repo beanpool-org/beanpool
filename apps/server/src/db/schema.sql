@@ -481,6 +481,10 @@ CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_
 CREATE INDEX IF NOT EXISTS idx_posts_event_start ON posts(event_start_at, id) WHERE type = 'event';
 -- The minute roll (engine/event-series-roll.ts rollDueSeries): the repeating events whose date has ended, and only them.
 CREATE INDEX IF NOT EXISTS idx_posts_event_series ON posts(event_end_at) WHERE type = 'event' AND event_repeat IS NOT NULL;
+-- Retention's minute run, where it is on (engine/posts.ts archiveEndedPosts): the events that have ended, in end order, and
+-- the closed polls still on the board, and only them, so neither scan reads every post the node holds.
+CREATE INDEX IF NOT EXISTS idx_posts_event_end ON posts(event_end_at) WHERE type = 'event' AND event_end_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_poll_closed_on_board ON posts(updated_at) WHERE type = 'poll' AND status = 'completed' AND active = 1;
 -- The 30-day prune of old dates' reminder marks (pruneStaleRsvps).
 CREATE INDEX IF NOT EXISTS idx_event_reminders_sent_occurrence ON event_reminders_sent(occurrence_at);
 
@@ -532,15 +536,23 @@ CREATE INDEX IF NOT EXISTS idx_post_photos_storage_key ON post_photos(storage_ke
 -- `data` is the ciphertext until the image store has it, then `storage_key` names the object and `data` is
 -- null. `nonce` and `mime` never leave the row: the recipient needs both to decrypt, they are a few dozen
 -- bytes, and the node has never held the key that would let it read either the object or the row.
+-- A standby copies the rows verbatim (a plain table, engine/replication-manifest.ts, gap G4) and fetches each object by
+-- `sha256` and `bytes` (the stored ciphertext's), as listing photos go by reference (routes/backup.ts sync-object). Both
+-- are NULL while the row holds `data`, and on a row from before them until the evacuation job fills them in.
 CREATE TABLE IF NOT EXISTS message_attachments (
     message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
     data TEXT,
     nonce TEXT NOT NULL,
     mime TEXT,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    storage_key TEXT
+    storage_key TEXT,
+    sha256 TEXT,
+    bytes INTEGER,
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_message_attachments_storage_key ON message_attachments(storage_key COLLATE NOCASE) WHERE storage_key IS NOT NULL;
+-- A chat photo's object by its content address, as a standby asks for one (routes/backup.ts sync-object).
+CREATE INDEX IF NOT EXISTS idx_message_attachments_sha256 ON message_attachments(sha256) WHERE sha256 IS NOT NULL;
 
 -- 5. Marketplace Transactions
 CREATE TABLE IF NOT EXISTS marketplace_transactions (
@@ -873,6 +885,19 @@ CREATE TABLE IF NOT EXISTS keeper_own_posts (
 );
 CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_keeper ON keeper_own_posts(keeper, made_at);
 CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_made_at ON keeper_own_posts(made_at);
+
+-- 11e′. What an owner's AI assistant made other than posts (agent/owner-seeds.ts): a group, an enterprise, a shop, a Pulse
+-- link, each by the grant that made it (`assistant:<grant id>`, as posts.created_via), so remove_all_i_made and the owner's
+-- "Remove its posts" find them. `ref` is the thing's own id here (a group's id, an enterprise's key, a shop's id, a Pulse
+-- item's id). This server's own, as its grants are (agent_suggestions, agentOAuthGrants): never copied to a standby.
+CREATE TABLE IF NOT EXISTS agent_made (
+    kind TEXT NOT NULL CHECK (kind IN ('group', 'enterprise', 'shop', 'pulse')),
+    ref TEXT NOT NULL,
+    created_via TEXT NOT NULL,
+    made_at TEXT NOT NULL,
+    PRIMARY KEY (kind, ref)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_made_via ON agent_made(created_via, made_at);
 
 -- 11f. Photo upload budget log (engine/photo-upload-budget.ts): records photo bytes stored
 -- per member in a sliding 24-hour window. This server's own, never copied to a standby,

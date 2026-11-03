@@ -538,9 +538,14 @@ export const TABLES: Record<string, TableEntry> = {
     dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by state_before reached_out_at reach_out_withdrawn_at updated_at', { rows: REAL_CONVERSATIONS }),
     // A limit on sending message requests (engine/request-limits.ts), so a standby that takes over refuses and clears the same.
     request_limits: plain('id sender_pubkey made_at until how lifted_at updated_at'),
-
-    // ── Not copied today, and the design says they should be ──
-    message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
+    // A chat photo, DM or group alike (engine/messaging.ts, engine/group-thread.ts): ciphertext the node can't open, its
+    // nonce and mime, verbatim, so a server that takes over serves the photos its lines name to who may read them
+    // (routes/marketplace.ts, by the copied conversations, participants and group rosters). Its object goes by reference,
+    // as a listing photo's does: the row names it by `sha256` and `bytes`, and the standby fetches only the objects its store
+    // lacks (services/backup-puller.ts fetchPhotoObjects, routes/backup.ts sync-object), under the same key
+    // (storage/image-store.ts attachmentKey). Every delete (the line deleted or removed, its author's account, a
+    // conversation, a withdrawn request) writes a tombstone, and the standby deletes the row and its object.
+    message_attachments: plain('message_id data nonce mime created_at storage_key sha256 bytes updated_at'),
 
     // ── Local by design ──
     sync_cursors: { kind: 'local', reason: "this server's own pull cursors" },
@@ -557,6 +562,7 @@ export const TABLES: Record<string, TableEntry> = {
     bring_back_log: { kind: 'local', reason: "this server's audit trail of the bring-backs it released" },
     writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
     money_acts: { kind: 'local', reason: "this server's own count of each account's money acts in the day (engine/money-limits.ts), a day's: a promoted server starts its day afresh" },
+    agent_made: { kind: 'local', reason: "the groups, enterprises, shops and Pulse links this server's AI assistants made, by grant (agent/owner-seeds.ts): the grants are this server's own, as agent_suggestions are" },
     keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },

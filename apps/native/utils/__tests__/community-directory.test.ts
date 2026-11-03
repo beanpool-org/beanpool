@@ -19,7 +19,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { getPublicKey } from '@noble/ed25519';
 import { bytesToHex } from '../crypto';
 import {
-    communityOrigin, readCommunity, readGlobalHome, fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace,
+    communityOrigin, promiseLine, readCommunity, readGlobalHome, fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace,
     findCommunityCardCopy, communityFacts, communityLabel, notAnsweringLine, DIRECTORY_MESSAGES, type GlobalHome, type Fetched,
 } from '../community-directory';
 import { GLOBAL_NODE_URL } from '../node-profile';
@@ -237,5 +237,31 @@ describe('the "Find your community" card, in each state', () => {
             .toMatchObject({ communityCount: 0, directoryFetchedAt: '2026-10-14T08:00:00.000Z' });
         expect(readGlobalHome({ point: 'request', communities: [] })!.communityCount).toBeNull();
         expect(readGlobalHome({})).toBeNull();
+    });
+});
+
+describe('the listing promise a directory row carries (Mothership A3)', () => {
+    const PROMISE = { v: 1, owners: 2, backups: true, reports: true, notice: true };
+    const base = { key: 'k1', name: 'Lismore', url: 'https://lismore.example.org' };
+    const NOW = Date.UTC(2026, 10, 3, 10, 0, 0);
+
+    it('keeps the exact promise, the knock switch and the closing day as given', () => {
+        expect(readCommunity({ ...base, promise: PROMISE, acceptingKnocks: true, closingOn: '2026-12-03' }))
+            .toMatchObject({ promise: PROMISE, acceptingKnocks: true, closingOn: '2026-12-03' });
+    });
+
+    it('null promise is "none" and stays null; a forged one is dropped like an absent one', () => {
+        expect(readCommunity({ ...base, promise: null })).toMatchObject({ promise: null });
+        expect(readCommunity({ ...base, promise: { ...PROMISE, names: ['Ana'] } })).not.toHaveProperty('promise');
+        expect(readCommunity({ ...base, promise: 'true' })).not.toHaveProperty('promise');
+        expect(readCommunity(base)).not.toHaveProperty('promise');
+        expect(readCommunity({ ...base, acceptingKnocks: 'yes', closingOn: 20261203 })).toMatchObject({ acceptingKnocks: null, closingOn: null });
+    });
+
+    it('promiseLine joins the lines the card says; null when the directory said none', () => {
+        expect(promiseLine(readCommunity({ ...base, promise: PROMISE, acceptingKnocks: true, closingOn: '2026-12-03' })!, NOW))
+            .toBe('Keeps the listing promise · Accepting members · Closing on 3 Dec 2026');
+        expect(promiseLine(readCommunity({ ...base, promise: null })!, NOW)).toBe('New listing');
+        expect(promiseLine(readCommunity(base)!, NOW)).toBeNull();
     });
 });

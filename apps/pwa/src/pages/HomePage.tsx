@@ -53,7 +53,7 @@ import { AskToJoin } from '../components/AskToJoin';
 import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
-    joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
+    joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, promiseLine, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
     pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
     type HomeFind,
@@ -2391,12 +2391,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             const text = `${cm.name ?? t('A community')}${facts ? ` · ${facts}` : ''}`;
                             // Gone quiet for more than 36 h: said under the row, which stays a link (front doors S13).
                             const quiet = notAnsweringLine(cm);
+                            // What its directory push promised (mothership A3): kept the listing promise, takes requests, closing day.
+                            const promised = promiseLine(cm);
                             return (
                                 <Fragment key={cm.key}>
                                     {cm.url
                                         ? <HomeLine href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
                                         : <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>}
                                     {quiet && <p className="m-0 pb-1 text-xs italic text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-not-answering-${cm.key}`}>{quiet}</p>}
+                                    {promised && <p dir="auto" className="m-0 pb-1 text-xs text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-promise-${cm.key}`}>{promised}</p>}
                                     {identity && cm.url && <AskToJoin community={cm} identity={identity} asked={askedOpen(cm.url)} onAsked={handleAsked} testId={`home-find-ask-${cm.key}`} />}
                                 </Fragment>
                             );

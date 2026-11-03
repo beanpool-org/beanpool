@@ -72,8 +72,8 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * G0 (the ledger), G1 (listings another community's), G2 (a member's and an enterprise's standing: the members row,
  * preferences, keepers and pledges), G5 (the community's own settings) and G9 (a new standby's first pull, which this
  * suite found) are closed, and so are G1b's listing, deal, photo and project columns, G3's tables (in-flight money and
- * governance, on the plain-table path) and G4's but chat photos (members' phones, mutes, read marks, reminders sent, the
- * activity list and the pricing guide, on the same path): a difference in any of them is new. G3 is not closed whole: its one setting, the
+ * governance, on the plain-table path) and G4's (members' phones, mutes, read marks, reminders sent, the activity list, the
+ * pricing guide and chat photos, on the same path, each chat photo's object by reference): a difference in any of them is new. G3 is not closed whole: its one setting, the
  * Commons project proposals still waiting for a decision (node_config `commons_projects`, a `community` gap in
  * engine/replication-manifest.ts NODE_CONFIG_KEYS), stays behind on a take-over, and the preview names it. This scenario
  * makes no such proposal, so nothing here differs by it; one that did would need its line here.
@@ -84,10 +84,6 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:conversations.name', gap: 'G1b', why: "a renamed group's chat keeps its old name until a whole copy (a rename moves no stamp; a delta picks conversations by created_at)" },
     { key: 'db:messages.metadata', gap: 'G1b', why: "a message sent with empty metadata is null on the standby where the main server holds '' (the import writes `|| null`)" },
     { key: 'db:ratings.comment', gap: 'G1b', why: "a rating with no comment is null on the standby where the main server holds '' (the import writes `|| null`); both apps read either as none" },
-
-    // G4: chat photos (PR 8). The phones, mutes, read marks, reminders sent, the activity list and the pricing guide are
-    // copied on the plain-table path.
-    { key: 'db:message_attachments (not copied)', gap: 'G4', why: 'every chat photo from before is gone' },
 ];
 // Not a gap but a difference the comparison leaves out: a face URL's key (SEC-PUB-02, #2049) is made from the server's own
 // avatarKeySecret, which a standby never copies, as listing photos' photoKeySecret, so a take-over changes every face URL

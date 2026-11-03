@@ -1466,6 +1466,12 @@ export function initSchema() {
     } catch (e) {
         console.error('[DB] ⚠️  Could not make message_attachments.data optional; attachments stay in the database:', e);
     }
+    // A chat photo's object by reference, for a standby (gap G4): its stored ciphertext's sha256 and size, and the plain
+    // table's watermark (stampPlainTables makes its triggers; a main server stamps the rows from before). After the rebuild
+    // above, which copies the older columns alone.
+    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN sha256 TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN bytes INTEGER`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN updated_at DATETIME`).run(); } catch { }
 
     try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // Phase 2 delta backup — the remaining mutable tables gain their watermark

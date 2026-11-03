@@ -102,7 +102,7 @@ async function sealedAccount(phonePubHex: string) {
 }
 
 const text = () => host.textContent ?? '';
-const button = (name: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === name) as HTMLButtonElement | undefined;
+const button = (name: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === name) as HTMLButtonElement | undefined;
 const of = (path: string) => calls.filter((c) => c.path === path);
 
 async function until(check: () => boolean, ms = 6_000): Promise<void> {
@@ -127,7 +127,7 @@ beforeEach(async () => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    await act(async () => { root.render(createElement(PairInScreen)); });
+    await act(async () => { root.render(createElement(PairInScreen) as unknown as Parameters<Root['render']>[0]); });
 });
 
 afterEach(async () => {

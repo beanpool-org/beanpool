@@ -1,6 +1,6 @@
 /**
  * Front doors S9 shots: Settings → Use the phone app with Put your account on your phone, in each state, against a
- * stubbed relay (no request leaves the page). `?state=` code | phone | digits | wrong | done | burned | nowords.
+ * stubbed relay (no request leaves the page). `?state=` code | phone | digits | wrong | received | done | notsaved | unheard | burned | nowords.
  */
 import { createRoot } from 'react-dom/client';
 import { createPairInKey } from '@beanpool/core';
@@ -22,7 +22,11 @@ window.fetch = (async (input: RequestInfo | URL) => {
         polls++;
         if (state === 'code' || state === 'phone' || state === 'nowords') return json({ status: 'waiting' });
         if (state === 'burned') return json({ status: 'burned' });
-        if (state === 'done') return json(polls === 1 ? { status: 'released', phonePubHex: phone.publicKeyHex } : { status: 'collected' });
+        // received: the phone has the seal, not yet saved. done: the phone said it saved it. notsaved / unheard: it said no, or nothing.
+        const after = state === 'done' ? { status: 'saved' } : state === 'notsaved' ? { status: 'not-saved' } : state === 'unheard' ? { status: 'expired' } : { status: 'collected' };
+        if (state === 'received' || state === 'done' || state === 'notsaved' || state === 'unheard') {
+            return json(polls === 1 ? { status: 'released', phonePubHex: phone.publicKeyHex } : polls === 2 ? { status: 'collected' } : after);
+        }
         return json({ status: 'confirming' });
     }
     if (path === '/api/pair/confirm') return json({ result: 'wrong', triesLeft: 2 }, 400);

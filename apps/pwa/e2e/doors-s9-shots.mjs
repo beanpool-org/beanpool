@@ -3,7 +3,8 @@
 /**
  * Front doors S9 at 320 px with text at 130%, light and dark: Settings → Use the phone app → Put your account on your
  * phone, in each state (the code; the code on a phone's browser, with Open the BeanPool app; the digits; wrong digits;
- * done, with Remove from this browser; burned; a browser without the 12 words). The relay is stubbed in the harness
+ * the phone has it but has not saved it; done, with Remove from this browser, once the phone saved it; the phone did
+ * not save it; no word from it; burned; a browser without the 12 words). The relay is stubbed in the harness
  * (doors-s9-shots-harness.tsx) and every request off the page is aborted.
  *
  * Fails on: the page scrolling sideways, text past the 320 edge, a button under 44 px, text under 4.5:1 contrast.
@@ -37,7 +38,10 @@ const STATES = [
         await page.getByRole('button', { name: 'Confirm' }).click();
         await page.getByText('Those are not the digits on the phone.', { exact: false }).waitFor();
     }],
-    ['done', 'done, Remove from this browser offered', async (page) => page.getByRole('button', { name: 'Remove from this browser' }).waitFor()],
+    ['received', 'the phone has it, not saved yet: no Remove', async (page) => page.getByText('Your phone has received your account.', { exact: false }).waitFor()],
+    ['done', 'the phone saved it: Remove from this browser offered', async (page) => page.getByRole('button', { name: 'Remove from this browser' }).waitFor()],
+    ['notsaved', 'the phone did not save it', async (page) => page.getByText("Your phone didn't save your account", { exact: false }).waitFor()],
+    ['unheard', 'no word from the phone', async (page) => page.getByText("Your phone hasn't said it saved your account", { exact: false }).waitFor()],
     ['burned', 'three wrong tries', async (page) => page.getByText('typed wrong three times', { exact: false }).waitFor()],
     ['nowords', 'a browser without the 12 words', async (page) => page.getByText("doesn't hold your 12 recovery words", { exact: false }).waitFor()],
 ];

@@ -90,6 +90,9 @@ const SAVE_WINDOW_MS = 5 * 60_000;
 // - No session outlives its 120 s, so polling a collected one every few seconds can't keep it: the grace is re-armed
 //   only inside that. The computer polls every 1.5 s and stops at 120 s (apps/pwa WelcomePage), so no honest collect
 //   needs longer.
+// - To a phone, a collect leaves a SaveOutcome: two 32-byte hashes and one word, no seal and no key, for SAVE_WINDOW_MS
+//   (5 minutes), at most MAX_HELD_PAYLOADS of them (~100 KB in all). Past that cap no record is made, and the browser
+//   then says the phone hasn't said it saved the account, and keeps it: never a false success.
 // A payload past MAX_HELD_PAYLOADS is refused with the busy answer, which the phone shows, and its session stays waiting
 // so the phone can try again; nobody else's held payload is ever dropped to make room.
 const MAX_SESSIONS = 10_000;

@@ -160,6 +160,10 @@ async function throughTheServer(): Promise<void> {
     assert(saved.status === 200 && saved.headers.get('cache-control') === 'no-store', "the phone says it saved the account: 200, no-store");
     assert(((await (await poll(browser.sessionId, cookie)).json()) as any).status === 'saved', 'the browser polls: saved');
     assert((await poll(browser.sessionId, '')).status === 403, 'a poll without the cookie still learns nothing');
+    const unsay = await post('/api/pair/saved', { sessionId: browser.sessionId, phoneSecret: offered.phoneSecret, saved: false });
+    assert(unsay.status === 409 && ((await (await poll(browser.sessionId, cookie)).json()) as any).status === 'saved', "a different word after it: 409, 'saved' stands");
+    const nowhere = await post('/api/pair/saved', { sessionId: 'ef'.repeat(16), phoneSecret: offered.phoneSecret, saved: true });
+    assert(nowhere.status === 410, "a 'saved' for no collected session: 410");
 
     // 10. The other direction stays as it was: an offer into a phone-to-browser session is refused.
     const fromPhone = createPairingSession();

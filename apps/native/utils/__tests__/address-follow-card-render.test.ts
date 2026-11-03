@@ -46,10 +46,13 @@ const follow = vi.hoisted(() => ({
     offer: null as null | { from: string; to: string; host: string },
     result: 'moved' as string,
 }));
+// Another check finding the move changed (utils/address-follow.ts onFollowOfferChanged): the fallback card's, say.
+const changed = vi.hoisted(() => ({ listeners: [] as Array<() => void> }));
 vi.mock('../address-follow', () => ({
     addressFollowOffer: vi.fn(async () => follow.offer),
     acceptAddressFollow: vi.fn(async () => follow.result),
     snoozeAddressFollow: vi.fn(async () => undefined),
+    onFollowOfferChanged: vi.fn((l: () => void) => { changed.listeners.push(l); return () => { changed.listeners = changed.listeners.filter(x => x !== l); }; }),
 }));
 const switches = vi.hoisted(() => ({ listeners: [] as Array<() => void> }));
 vi.mock('../community-switch', () => ({
@@ -77,6 +80,7 @@ beforeEach(() => {
     follow.offer = OFFER;
     follow.result = 'moved';
     switches.listeners = [];
+    changed.listeners = [];
     vi.mocked(Alert.alert).mockClear();
     vi.mocked(acceptAddressFollow).mockClear();
     vi.mocked(snoozeAddressFollow).mockClear();
@@ -164,6 +168,30 @@ describe('the follow card at 320 dp, text at 1.3x', () => {
         follow.offer = null;
         await act(async () => { for (const l of switches.listeners) l(); });
         expect(addressFollowOffer).toHaveBeenCalledTimes(2);
+    });
+
+    it('asked again when another check finds the move changed (the fallback card\'s, which stands aside for this one)', async () => {
+        follow.offer = null;
+        const host = await render();
+        expect(card(host)).toBeNull();
+        expect(changed.listeners).toHaveLength(1);
+        follow.offer = OFFER;
+        await act(async () => { for (const l of changed.listeners) l(); });
+        await act(async () => {});
+        expect(addressFollowOffer).toHaveBeenCalledTimes(2);
+        expect(card(host)).not.toBeNull();
+    });
+
+    it('only the latest ask\'s answer shows: an earlier one still on its way never puts back what a later one found', async () => {
+        let release: (o: typeof OFFER | null) => void = () => {};
+        vi.mocked(addressFollowOffer).mockImplementationOnce(() => new Promise(r => { release = r; }));
+        const host = await render();
+        await act(async () => { for (const l of changed.listeners) l(); });
+        await act(async () => {});
+        expect(card(host)).not.toBeNull();
+        await act(async () => { release(null); });
+        await act(async () => {});
+        expect(card(host)).not.toBeNull();
     });
 
     it('draws from the theme\'s own colours, light and dark', async () => {

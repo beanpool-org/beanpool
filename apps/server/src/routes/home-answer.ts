@@ -107,7 +107,7 @@ import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { memberShop, shopOf } from '../engine/shops.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
-import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor, titleForMembers } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor, titleForMembers, isBranchVote, removalSubjects } from '../decisions-engine.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
@@ -400,8 +400,8 @@ export interface HomeReader {
 }
 
 /** The landings an app may say it opens (`lands=`), beyond the ones every app has. */
-export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks']);
+export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -641,8 +641,9 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     // Votes the member hasn't cast on Decisions open now, as the signed decisions list gives them (routes/commons.ts):
     // formal Decisions only where they are on, never an emergency suspension made while they were off, and never a money
     // vote the member can't cast yet (no completed trade and no voice credits), which isn't asking anything of them, and never a
-    // vote on removing the member themselves (the voter rule refuses them; the line would stay all week, #2430). Only for a reader
-    // who reads as a member (`c.member`), and the line names the Decision.
+    // vote on removing the member themselves (the voter rule refuses them; the line would stay all week, #2430), a branch's
+    // included, nor a branch's vote to an app that doesn't draw it (lands=branch-vote; routes/commons.ts drawsBranchVotes).
+    // Only for a reader who reads as a member (`c.member`), and the line names the Decision.
     if (c.member && decisionsOn()) {
         const mine = getOwnDecisionVotes(me);
         const blocked = !hasCompletedTrade(me) && getVoiceCredits(me) <= 0;
@@ -650,7 +651,8 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             .filter(d => !madeWithoutVote(d) && !mine.has(d.id)
                 && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now
                 && !(d.franchise === 'quadratic_trade' && blocked)
-                && !(d.effect === 'remove_member' && d.subject === me))
+                && !(d.effect === 'remove_member' && removalSubjects(d).includes(me))
+                && (c.lands.has('branch-vote') || !isBranchVote(d)))
             .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt));
         if (votes.length) {
             const soonest = votes[0].closesAt;

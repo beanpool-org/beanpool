@@ -99,6 +99,11 @@ export const OWNER_ALERT_WORDS = {
         many: `{n} members' accounts were moved to a new phone in the last day, ${how}.`,
     }),
     branchesPruned: { one: 'A branch of invites was pruned in the last day, by an owner.', many: '{n} branches of invites were pruned in the last day, by an owner.' },
+    /** An owner paused a whole invite branch, which opened one vote on removing it (decisions-engine.ts pauseBranch; removal by vote S5). */
+    branchesPaused: (how: string) => ({
+        one: `A branch of invites was paused in the last day, ${how}, and the community votes on removing it.`,
+        many: `{n} branches of invites were paused in the last day, ${how}, and the community votes on removing them.`,
+    }),
     communityRenamed: "The community's name was changed, by an admin.",
     callsignChanged: "The community's callsign was changed, by an admin.",
     contactsChanged: "The community's contact details were changed, by an admin.",

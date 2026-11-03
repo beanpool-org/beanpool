@@ -1576,8 +1576,10 @@ function pollResults(grant: AgentGrant, args: Record<string, unknown>, boundary:
     const made = madePoll(grant, args.post_id);
     if (!made.ok) return made;
     const { row } = made;
-    if (!isLive(row)) return { ok: false, error: 'That poll is removed, so it has no results to read.' };
-    const post = getPosts({ id: row.id, includeAllScopes: true })[0];
+    // A closed poll a node with retention on took off the board a week after it closed (engine/posts.ts archiveEndedPosts) keeps
+    // its counts for its author: only one taken down is gone.
+    if (!isLive(row) && row.status !== 'completed') return { ok: false, error: 'That poll is removed, so it has no results to read.' };
+    const post = getPosts({ id: row.id, includeAllScopes: true, includeInactive: true })[0];
     if (!post) return { ok: false, error: 'That poll cannot be read now: try again later.' };
     return {
         ok: true, rows: 1,

@@ -162,6 +162,7 @@ export const SUITES = [
     'test-dos-hardening',
     'test-global-server-limits',
     'test-global-cost-limits',
+    'test-retention',
     'test-profile-fanout',
     'test-limiter-ipv6-and-password-brake',
     'test-password-brake-no-lockout',

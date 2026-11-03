@@ -1,8 +1,11 @@
 {
-  "_about": "English a member reads outside t() (JSX text, text props, alert arguments), per directory. scripts/words/words.mjs lint fails when a count rises; S3 sweeps take each to 0. `lint --update` lowers it; a rise needs `--update --raise \"<reason>\"`, which is recorded in `raises` (words.test.mjs compares with origin/main).",
+  "_about": "English a member reads outside t(), per directory. `counts`: JSX text, text props, alert arguments. `constants`: module-level English sentence constants that reach a screen (a JSX child, a text prop, an alert, a share sheet or a push; the rule is in scripts/words/README.md). scripts/words/words.mjs lint fails when a count rises; S3 sweeps take each to 0. `lint --update` lowers them; a rise needs `--update --raise \"<reason>\"`, which is recorded in `raises` (words.test.mjs compares with origin/main).",
   "counts": {
     "apps/native/app": 4,
     "apps/native/app/(tabs)": 4,
     "apps/native/components": 1
+  },
+  "constants": {
+    "packages/beanpool-core/src": 1
   }
 }

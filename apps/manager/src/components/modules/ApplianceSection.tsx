@@ -30,6 +30,7 @@ import { TakeoverPanel } from './TakeoverPanel';
 import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
+import { ReadyForTheHallCard } from './ReadyForTheHallCard';
 import { AutomationTokensPanel } from './AutomationTokensPanel';
 import { ConnectedAssistantsPanel } from './ConnectedAssistantsPanel';
 import { RetirePasswordPanel } from './RetirePasswordPanel';
@@ -1066,6 +1067,11 @@ export function ApplianceSection({
             {/* Subtab: Backups & Restore */}
             {subTab === 'backups' && (
                 <div className="space-y-6">
+                    {/* Lights-out H4: the checklist for keeping the community going from a laptop in the hall (owners and admins; a standby has its own panels). */}
+                    <SectionErrorBoundary sectionName="Ready for the hall" resetKey={activeNode.id}>
+                        <ReadyForTheHallCard activeNode={activeNode} diag={diag} viewer={rolesViewer} isStandby={isStandby} />
+                    </SectionErrorBoundary>
+
                     <SectionErrorBoundary sectionName="Who can unlock this community" resetKey={activeNode.id}>
                         <TakeoverLockPanel activeNode={activeNode} viewer={rolesViewer} communityName={diag?.communityName || undefined} />
                     </SectionErrorBoundary>

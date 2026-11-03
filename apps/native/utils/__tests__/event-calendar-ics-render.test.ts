@@ -290,19 +290,27 @@ describe('iOS path', () => {
     it('iOS offline error dismisses modal and displays alert', async () => {
         platform.OS = 'ios';
         const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        vi.mocked(AsyncStorage.getItem).mockResolvedValueOnce(null);
-        await renderComponent();
+        // The phone has no community address stored. Every read says so, not just the next one: the Invite and share button
+        // reads it too, when the screen is drawn (components/InviteAndShare.tsx), and used to take this test's one answer.
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const stored = getItem.getMockImplementation();
+        getItem.mockImplementation(async () => null);
+        try {
+            await renderComponent();
 
-        const addBtn = host.querySelector('[aria-label="Add this event to your calendar"]') as HTMLElement;
-        await act(async () => { addBtn.click(); });
+            const addBtn = host.querySelector('[aria-label="Add this event to your calendar"]') as HTMLElement;
+            await act(async () => { addBtn.click(); });
 
-        const fileOption = host.querySelector('[data-testid="event-add-calendar-file"]') as HTMLElement;
-        await act(async () => { fileOption.click(); });
+            const fileOption = host.querySelector('[data-testid="event-add-calendar-file"]') as HTMLElement;
+            await act(async () => { fileOption.click(); });
 
-        expect(alertCalls.calls.length).toBe(1);
-        expect(alertCalls.calls[0][0]).toBe('Not added');
-        expect(alertCalls.calls[0][1]).toBe('You are currently offline.');
-        expect(host.querySelector('[data-testid="modal-choice"]')).toBeNull();
+            expect(alertCalls.calls.length).toBe(1);
+            expect(alertCalls.calls[0][0]).toBe('Not added');
+            expect(alertCalls.calls[0][1]).toBe('You are currently offline.');
+            expect(host.querySelector('[data-testid="modal-choice"]')).toBeNull();
+        } finally {
+            getItem.mockImplementation(stored!);
+        }
     });
 });
 

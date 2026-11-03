@@ -3690,5 +3690,16 @@
   "Move {card} earlier": "{card} کو پہلے لے جائیں",
   "Move {card} later": "{card} کو بعد میں لے جائیں",
   "Messages in your other communities show on your phone, or when you open that community here.": "آپ کی دوسری کمیونٹیز کے پیغامات آپ کے فون پر ظاہر ہوتے ہیں، یا جب آپ اس کمیونٹی کو یہاں کھولتے ہیں۔",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "الرٹس آپ کے فون پر ہر اس کمیونٹی سے پہنچتے ہیں جسے آپ رکھتے ہیں۔ آپ BeanPool شیٹ پر کسی کمیونٹی کے لیے انہیں بند کر سکتے ہیں۔"
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "الرٹس آپ کے فون پر ہر اس کمیونٹی سے پہنچتے ہیں جسے آپ رکھتے ہیں۔ آپ BeanPool شیٹ پر کسی کمیونٹی کے لیے انہیں بند کر سکتے ہیں۔",
+  "For 1 day": "1 دن کے لیے",
+  "For 1 week": "1 ہفتے کے لیے",
+  "For 3 days": "3 دن کے لیے",
+  "Only an owner, an admin or the post's author can take a pin off.": "صرف مالک، ایڈمن یا پوسٹ کا مصنف پن ہٹا سکتے ہیں۔",
+  "Options": "اختیارات",
+  "Pin to the top…": "اوپر پن کریں…",
+  "Pinned": "پن شدہ",
+  "Pinned by your community · until {date}": "آپ کی کمیونٹی کی طرف سے پن کیا گیا · {date} تک",
+  "Take the pin off": "پن ہٹائیں",
+  "Three posts are pinned already. Take one off first.": "تین پوسٹس پہلے سے پن ہیں۔ پہلے ایک ہٹائیں۔",
+  "📌 PINNED": "📌 پن شدہ"
 }

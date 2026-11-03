@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { copyCardLine, copyFromLine, eventCopyOf, t, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
+import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
@@ -203,6 +203,14 @@ function EventWhen({ post, className, testId, hostLine = false }: { post: Market
                         </>
                     )}
                 </span>
+                {pinLive(post as any) && (
+                    <span
+                        data-testid="event-pinned-chip"
+                        className="flex-shrink-0 text-[11px] font-black tracking-wide px-2 py-0.5 rounded-md bg-bp-chip-accent-tint text-bp-chip-accent-ink border border-transparent shadow-xs"
+                    >
+                        {t('📌 PINNED')}
+                    </span>
+                )}
                 <StateBadge post={post} />
             </span>
             {parts?.note && (

@@ -3948,5 +3948,16 @@
   "Move {card} earlier": "Переместить {card} раньше",
   "Move {card} later": "Переместить {card} позже",
   "Messages in your other communities show on your phone, or when you open that community here.": "Сообщения в других ваших сообществах отображаются на вашем телефоне или когда вы открываете это сообщество здесь.",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Оповещения приходят на ваш телефон из каждого сохраненного сообщества. Вы можете отключить их для сообщества на панели BeanPool."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Оповещения приходят на ваш телефон из каждого сохраненного сообщества. Вы можете отключить их для сообщества на панели BeanPool.",
+  "For 1 day": "На 1 день",
+  "For 1 week": "На 1 неделю",
+  "For 3 days": "На 3 дня",
+  "Only an owner, an admin or the post's author can take a pin off.": "Снять закрепление могут только владелец, администратор или автор публикации.",
+  "Options": "Параметры",
+  "Pin to the top…": "Закрепить сверху…",
+  "Pinned": "Закреплено",
+  "Pinned by your community · until {date}": "Закреплено вашим сообществом · до {date}",
+  "Take the pin off": "Снять закрепление",
+  "Three posts are pinned already. Take one off first.": "Уже закреплены три публикации. Сначала снимите одну.",
+  "📌 PINNED": "📌 ЗАКРЕПЛЕНО"
 }

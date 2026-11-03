@@ -3690,5 +3690,16 @@
   "Move {card} earlier": "Hamisha {card} mapema",
   "Move {card} later": "Hamisha {card} baadaye",
   "Messages in your other communities show on your phone, or when you open that community here.": "Ujumbe katika jumuiya zako zingine huonekana kwenye simu yako, au unapofungua jumuiya hiyo hapa.",
-  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Arifa hufika kwenye simu yako kutoka kwa kila jumuiya unayoweka. Unaweza kuzizima kwa ajili ya jumuiya kwenye ukurasa wa BeanPool."
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Arifa hufika kwenye simu yako kutoka kwa kila jumuiya unayoweka. Unaweza kuzizima kwa ajili ya jumuiya kwenye ukurasa wa BeanPool.",
+  "For 1 day": "Kwa siku 1",
+  "For 1 week": "Kwa wiki 1",
+  "For 3 days": "Kwa siku 3",
+  "Only an owner, an admin or the post's author can take a pin off.": "Mmiliki, msimamizi au mwandishi wa chapisho pekee ndiye anayeweza kuondoa ubandikaji.",
+  "Options": "Chaguo",
+  "Pin to the top…": "Bandika juu…",
+  "Pinned": "Imebandikwa",
+  "Pinned by your community · until {date}": "Imebandikwa na jumuiya yako · hadi {date}",
+  "Take the pin off": "Ondoa ubandikaji",
+  "Three posts are pinned already. Take one off first.": "Machapisho matatu tayari yamebandikwa. Ondoa moja kwanza.",
+  "📌 PINNED": "📌 IMEBANDIKWA"
 }

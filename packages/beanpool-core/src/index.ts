@@ -42,6 +42,7 @@ export * from './address-reach.js';
 export * from './first-trade-words.js';
 export * from './invite-vouch.js';
 export * from './invite-ask.js';
+export * from './invite-and-share.js';
 export * from './event-copy.js';
 export * from './show-on-global.js';
 export * from './peek-ticket.js';

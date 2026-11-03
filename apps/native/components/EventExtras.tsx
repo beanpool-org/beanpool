@@ -44,6 +44,7 @@ import { t, tn } from '@beanpool/core';
 import { EVENT_ACCENT } from './EventCard';
 import { Sentence } from './Sentence';
 import { ShareOutsideButton } from './SharePost';
+import { InviteAndShareButton } from './InviteAndShare';
 import { reminderBeforeWords } from './settings/settings-lines';
 import { eventLineWords } from './event-lines';
 
@@ -170,6 +171,8 @@ export function EventShareAndCalendar({ post }: { post: any }) {
             </View>
             {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
             <ShareOutsideButton post={post} />
+            {/* One invite for a friend, who lands on this event once they have joined (invite-and-share). */}
+            <InviteAndShareButton post={post} />
 
             <Modal
                 visible={choiceOpen}

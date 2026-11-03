@@ -3,7 +3,7 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
-import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
+import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer } from '@beanpool/core';
@@ -1410,6 +1410,8 @@ export interface MarketplacePost {
     updatedAt?: string;
     active: boolean;
     status: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
+    pinnedUntil?: string | null;
+    pinnedAt?: string | null;
     repeatable: boolean;
     lendable?: boolean;
     /** #108: a real cash outlay is involved (fuel / consumables used up doing the job). No amount by
@@ -2116,6 +2118,20 @@ export async function resumeMarketplacePost(
     const answer = await request<{ success: boolean }>('POST', '/api/marketplace/posts/resume', { postId, authorPublicKey });
     onGlobalCopy((copy, identity) => copy.tendCopies(identity));
     return answer;
+}
+
+/** Pins a public post for 1, 3 or 7 days (DESIGN-pinning-fable §2): an owner or admin role is required. */
+export async function pinMarketplacePost(
+    postId: string, days: PinDays
+): Promise<{ success: boolean; postId: string; pinnedUntil: string | null; pinnedAt: string | null }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/pin`, { days });
+}
+
+/** Takes a pin off a post: an owner, admin, or the post's author. */
+export async function unpinMarketplacePost(
+    postId: string
+): Promise<{ success: boolean; postId: string; pinnedUntil: null; pinnedAt: null }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/unpin`, {});
 }
 
 /** Newest first; the node answers 50 when no `limit` is given, and at most 200 a page. */

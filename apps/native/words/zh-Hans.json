@@ -5963,5 +5963,20 @@
     "other": "{community} 中有 {n} 条新消息 · 切换"
   },
   "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "来自你保存的每个社区的提醒都会发送到你的手机。你可以在 BeanPool 面板中关闭某个社区的提醒。",
-  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "这部手机上的提醒已关闭。手机暂时还没能联系上这个社区来停止那边的提醒，会再试一次。"
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "这部手机上的提醒已关闭。手机暂时还没能联系上这个社区来停止那边的提醒，会再试一次。",
+  "Pinned": "已置顶",
+  "📌 PINNED": "📌 已置顶",
+  "Pin to the top…": "置顶…",
+  "Pin to the top": "置顶",
+  "Take the pin off": "取消置顶",
+  "For 1 day": "1 天",
+  "For 3 days": "3 天",
+  "For 1 week": "1 周",
+  "Pinned by your community · until {date}": "由你的社区置顶 · 截止至 {date}",
+  "Choose how long to pin this post to the top of the Market:": "选择将此帖子置顶到市集顶部的时间：",
+  "Post options": "帖子选项",
+  "Event options": "活动选项",
+  "Poll options": "投票选项",
+  "Failed to pin post": "置顶帖子失败",
+  "Failed to unpin post": "取消置顶失败"
 }

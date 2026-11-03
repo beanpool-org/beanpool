@@ -34,7 +34,8 @@ export type InviteForShare = { ok: true; code: string } | { ok: false; offline: 
 
 export interface MakeInviteDeps {
     fetchImpl?: typeof fetch;
-    sign?: typeof import('./crypto').buildSignedHeaders;
+    /** The request builder the phone's other invites use (utils/crypto buildSignedHeaders); a test hands in a stand-in. */
+    signedHeaders?: typeof import('./crypto').buildSignedHeaders;
 }
 
 /**
@@ -52,8 +53,8 @@ export async function makeInviteForShare(
     let res: Response;
     try {
         // Loaded when a tap needs it: the key's crypto is not read by a screen that only draws the button.
-        const sign = deps.sign ?? (await import('./crypto')).buildSignedHeaders;
-        const headers = await sign('POST', url, body, identity.privateKey, identity.publicKey);
+        const buildHeaders = deps.signedHeaders ?? (await import('./crypto')).buildSignedHeaders;
+        const headers = await buildHeaders('POST', url, body, identity.privateKey, identity.publicKey);
         res = await doFetch(url, { method: 'POST', headers, body });
     } catch {
         // No answer at all: no offline ticket, which can't take a friend to this listing.

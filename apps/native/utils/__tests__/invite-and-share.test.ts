@@ -232,10 +232,10 @@ describe('what it never makes', () => {
 
     it('makeInviteForShare, on its own: offline is told apart from a refusal', async () => {
         const id = { publicKey: 'pk', privateKey: 'sk', callsign: 'x' } as any;
-        const sign = (async () => ({})) as any;
-        const down = await makeInviteForShare(NODE, id, null, undefined, { sign, fetchImpl: (async () => { throw new Error('down'); }) as any });
+        const signedHeaders = (async () => ({})) as any;
+        const down = await makeInviteForShare(NODE, id, null, undefined, { signedHeaders, fetchImpl: (async () => { throw new Error('down'); }) as any });
         expect(down).toMatchObject({ ok: false, offline: true });
-        const refused = await makeInviteForShare(NODE, id, null, undefined, { sign, fetchImpl: (async () => ({ ok: false, status: 500, json: async () => ({}) })) as any });
+        const refused = await makeInviteForShare(NODE, id, null, undefined, { signedHeaders, fetchImpl: (async () => ({ ok: false, status: 500, json: async () => ({}) })) as any });
         expect(refused).toMatchObject({ ok: false, offline: false });
     });
 });

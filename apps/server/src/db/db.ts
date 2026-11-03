@@ -1248,6 +1248,19 @@ export function addHealthAccessLogToken(d: Database.Database): boolean {
 }
 
 /**
+ * Adds agent_takedowns' `by_author` (MCP-MODERATION S2: a call that named its posts by `author_of`, engine/agent-takedowns.ts) to a
+ * table from before it: ALTER TABLE ADD COLUMN, every row kept as it was and 0, which is what each was (by ids or by reports). No
+ * rebuild for a new value of `via`: its CHECK stays, and an older server reading a new row reads 'ids'. Nothing on a table that has
+ * it, or none (schema.sql makes it with the column); true when it added. Idempotent.
+ */
+export function addTakedownByAuthor(d: Database.Database): boolean {
+    const cols = (d.prepare('PRAGMA table_info(agent_takedowns)').all() as { name: string }[]).map(c => c.name);
+    if (!cols.length || cols.includes('by_author')) return false;
+    d.exec('ALTER TABLE agent_takedowns ADD COLUMN by_author INTEGER NOT NULL DEFAULT 0 CHECK (by_author IN (0, 1))');
+    return true;
+}
+
+/**
  * A member's one active poll was also a UNIQUE index on posts(author_pubkey) for active polls. Owners and admins may now
  * have as many as the owners' "Owner and admin limit" (Marty, 31 Oct; engine/owner-admin-limit.ts), so the number is
  * engine/posts.ts assertActivePollRoom alone (createPost's and resumePost's) and the index, under the SAME name, is
@@ -2078,6 +2091,11 @@ export function initSchema() {
         if (addHealthAccessLogToken(db)) console.log('[DB] ✅ Migrated health_access_log to name the automation token behind a look');
     } catch (err: any) {
         console.error('[DB] ❌ Failed to add the token to health_access_log:', err?.message || err);
+    }
+    try {
+        if (addTakedownByAuthor(db)) console.log('[DB] ✅ Migrated agent_takedowns to say which calls named a post\'s author');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to add by_author to agent_takedowns:', err?.message || err);
     }
 
     // In-flight money and governance replicate to a standby as plain tables (engine/replication-manifest.ts, design G3):

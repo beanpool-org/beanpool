@@ -20,6 +20,7 @@ import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
 import { ownRowOf } from '../utils/own-profile-anchor';
+import { loadLastPhotoOffer, type PhotoOffer } from '../utils/last-photo-offer';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import { AreaPicker } from '../components/AreaPicker';
@@ -75,11 +76,16 @@ export default function ProfileSetupScreen() {
     //  - `nodeAvatar`     what this community holds for us, read from the synced `members` row (since
     //                     #725 that is the node's own `/api/avatar/<pk>?size=thumb` URL, and
     //                     null when the node has no photo).
-    // The phone's copy of the last photo chosen in ANY community is neither shown nor sent here (Profile S2):
+    // The phone's copy of the last photo chosen in ANY community is neither shown nor sent here unasked (Profile S2):
     // it was previewed as if it were this community's and then published, so a picture chosen in one community
-    // became the picture in the next. A fresh community shows no photo until one is chosen, and the wizard asks.
+    // became the picture in the next. A fresh community shows no photo until one is chosen, and the wizard asks;
+    // the last photo is only OFFERED, as a tickbox that starts off (`photoOffer`, below, Profile S3).
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [nodeAvatar, setNodeAvatar] = useState<string | null>(null);
+    // The photo the member used last, in another community, offered while this one holds none for them (Profile S3,
+    // utils/last-photo-offer.ts). It is a tickbox that starts OFF: ticking makes it this session's pick, which is what
+    // gets shown and sent; left off, it shows only as the offer's small thumbnail and nothing of it is sent.
+    const [photoOffer, setPhotoOffer] = useState<PhotoOffer | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -104,6 +110,7 @@ export default function ProfileSetupScreen() {
             const row: string | null = member?.avatar_url ?? null;
             setNodeAvatar(row && row !== 'null' && row !== 'undefined' && row.trim() !== '' ? row : null);
             const haveAvatar = Boolean(row);
+            void loadLastPhotoOffer(row).then(offer => { if (!cancelled) setPhotoOffer(offer); });
             // The name this community holds for the member; only where it holds none yet (no row, or one without a name)
             // does the phone's pre-fill stand in, as it does on the join form.
             const communityName = ownRowOf(member)?.callsign?.trim() ?? '';
@@ -127,6 +134,17 @@ export default function ProfileSetupScreen() {
     // "do you have an avatar yet?" means for the Next button, so someone whose photo is already on the
     // node is not forced to re-pick one to get through a step they only opened to change their name.
     const displayAvatar = pendingAvatar ?? nodeAvatar;
+
+    // The box is ticked exactly while the photo it offers is this session's pick: picking another photo un-ticks it,
+    // un-ticking it takes the offered photo back out, and nothing is ticked by itself.
+    const offerTicked = photoOffer !== null && pendingAvatar === photoOffer.avatar;
+    const toggleOffer = () => {
+        if (!photoOffer) return;
+        setPendingAvatar(offerTicked ? null : photoOffer.avatar);
+    };
+    const offerLabel = photoOffer
+        ? (photoOffer.from ? t('Use the photo from {community}?', { community: photoOffer.from }) : t('Use the photo you chose last?'))
+        : '';
 
     // Live per-node availability check while editing the name (debounced). Runs only
     // on the name step. 'unknown' (node unreachable) never blocks — the server still
@@ -365,6 +383,24 @@ export default function ProfileSetupScreen() {
                                 />
                                 <Text style={styles.previewCallsign}>{callsign.trim()}</Text>
                             </View>
+                            {photoOffer && (
+                                <Pressable
+                                    style={styles.offerRow}
+                                    onPress={toggleOffer}
+                                    accessibilityRole="checkbox"
+                                    accessibilityState={{ checked: offerTicked }}
+                                    accessibilityLabel={offerLabel}
+                                    testID="last-photo-offer"
+                                >
+                                    <View style={[styles.offerBox, offerTicked && styles.offerBoxOn]}>
+                                        {offerTicked && <Text style={styles.offerTick}>✓</Text>}
+                                    </View>
+                                    <View style={styles.offerThumb}>
+                                        <MemberAvatar avatarUrl={photoOffer.avatar} pubkey={identity?.publicKey ?? ''} callsign={callsign.trim()} size={40} />
+                                    </View>
+                                    <Text style={styles.offerText}>{offerLabel}</Text>
+                                </Pressable>
+                            )}
                             <Pressable style={styles.secondaryBtn} onPress={() => setShowAvatarPicker(true)} accessibilityRole="button">
                                 <Text style={styles.secondaryBtnText}>
                                     {displayAvatar ? t('Change Photo or Avatar') : t('Choose Photo or Avatar')}
@@ -463,6 +499,21 @@ return StyleSheet.create({
         marginBottom: 12, borderWidth: 1, borderColor: colors.border.strong,
     },
     secondaryBtnText: { color: colors.text.body, fontSize: 15, fontWeight: '600' },
+    // The offer of the last photo (Profile S3). The words take the room left and wrap, so a long community name and a
+    // bigger system font stay inside a 320 dp card; the box and the picture keep their size.
+    offerRow: {
+        flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingVertical: 8, paddingHorizontal: 12,
+        marginBottom: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.subtle,
+    },
+    offerBox: {
+        width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.text.secondary, marginRight: 12,
+        alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    // Filled blue with a white tick. The outline is the lighter blue in dark: the fill alone reads 2.9:1 on the dark row, under the 3:1 a control needs.
+    offerBoxOn: { backgroundColor: palette.blue600, borderColor: dark ? palette.blue400 : palette.blue600 },
+    offerTick: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
+    offerThumb: { marginRight: 12, flexShrink: 0 },
+    offerText: { flex: 1, flexShrink: 1, color: colors.text.body, fontSize: 14, lineHeight: 20, fontWeight: '600' },
     backBtn: { padding: 12, alignItems: 'center', marginTop: 4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
     error: { color: colors.feedback.danger.fg, fontSize: 13, marginBottom: 12, textAlign: 'center' },

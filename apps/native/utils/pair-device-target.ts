@@ -34,7 +34,7 @@ export interface PairingQr {
 
 const PAIR_PREFIX = 'beanpool://pair?';
 /** A plain https origin in its canonical spelling, with at most one trailing slash. Lower case only. */
-const CANONICAL_HTTPS_ORIGIN = /^https:\/\/(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[(?=(?:[0-9a-f.]*:){2})[0-9a-f:.]+\])(?::[1-9]\d{0,4})?\/?$/;
+export const CANONICAL_HTTPS_ORIGIN = /^https:\/\/(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[(?=(?:[0-9a-f.]*:){2})[0-9a-f:.]+\])(?::[1-9]\d{0,4})?\/?$/;
 
 /** The pairing QR, read strictly (rule 1), or null: refused, nothing sent. */
 export function parsePairingQr(raw: unknown): PairingQr | null {

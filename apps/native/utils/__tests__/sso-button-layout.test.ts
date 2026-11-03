@@ -126,7 +126,7 @@ describe('the social sign-in screen: Apple, Google and Facebook buttons', () => 
 
 describe('Restore your account: the Recover with Social button', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
-    // The four rows are drawn by components/welcome/RestoreMenu.tsx (vault rethink VR4), in its styles with welcome.tsx's logos.
+    // The five rows are drawn by components/welcome/RestoreMenu.tsx (vault rethink VR4), in its styles with welcome.tsx's logos.
     const menu = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/RestoreMenu.tsx'), 'utf-8');
     /**
      * A one-line entry in RestoreMenu.tsx's StyleSheet (inside makeStyles(colors, dark)), in light and in dark: only the

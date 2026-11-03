@@ -100,3 +100,46 @@ export function decryptPairingPayload<T = any>(
     const jsonStr = new TextDecoder().decode(plaintextBytes);
     return JSON.parse(jsonStr) as T;
 }
+
+/**
+ * The other way, browser to phone (front doors S9). The browser seals its account with the session key whose public half
+ * its QR shows (`pub`), to the key the phone offered. The phone opens it with the QR's `pub`, never with a key the relay
+ * names, so only an account sealed by the browser it scanned opens: a relay that swapped in another account's seal fails
+ * the AEAD. Its own HKDF label, so a seal of one direction never opens as the other's.
+ */
+const TO_PHONE_INFO = utf8ToBytes('beanpool-pairing-to-phone-v1');
+
+function toPhoneKey(ownPrivHex: string, otherPubHex: string, sessionId: string): Uint8Array {
+    const shared = x25519.getSharedSecret(hexToBytes(ownPrivHex), hexToBytes(otherPubHex));
+    return hkdf(sha256, shared, utf8ToBytes(sessionId), TO_PHONE_INFO, 32);
+}
+
+/** A fresh X25519 key for the phone's offer (its private half never leaves the phone). */
+export function createPairInKey(): { privateKeyHex: string; publicKeyHex: string } {
+    const priv = x25519.utils.randomSecretKey();
+    return { privateKeyHex: bytesToHex(priv), publicKeyHex: bytesToHex(x25519.getPublicKey(priv)) };
+}
+
+/** The browser seals `payload` from its session key (`browserPrivHex`) to the phone's offered key. */
+export function sealPairingPayloadToPhone(
+    payload: unknown,
+    browserPrivHex: string,
+    phonePubHex: string,
+    sessionId: string,
+): { nonceHex: string; ciphertextHex: string } {
+    const nonce = randomBytes(NONCE_LEN);
+    const cipher = xchacha20poly1305(toPhoneKey(browserPrivHex, phonePubHex, sessionId), nonce, utf8ToBytes(sessionId));
+    return { nonceHex: bytesToHex(nonce), ciphertextHex: bytesToHex(cipher.encrypt(utf8ToBytes(JSON.stringify(payload)))) };
+}
+
+/** The phone opens the browser's seal with its own key and the QR's `pub` (`browserPubHex`). Throws on any other seal. */
+export function openPairingPayloadOnPhone<T = unknown>(
+    ciphertextHex: string,
+    nonceHex: string,
+    browserPubHex: string,
+    phonePrivHex: string,
+    sessionId: string,
+): T {
+    const cipher = xchacha20poly1305(toPhoneKey(phonePrivHex, browserPubHex, sessionId), hexToBytes(nonceHex), utf8ToBytes(sessionId));
+    return JSON.parse(new TextDecoder().decode(cipher.decrypt(hexToBytes(ciphertextHex)))) as T;
+}

@@ -117,6 +117,15 @@ If you joined in a browser, bring the same account to the phone app. Don't join 
 - Type your 12 words, then under **Which community?** tap **Global community**. In an app without that choice, type the global community's address, global.beanpool.org. For another community, type that community's address: the web app shows it in the same sentence.
 - If you joined with a sign-in, **Recover with Social** works too, with that same sign-in. See "Getting your account back".
 
+Or, with no typing, scan a code from the browser:
+
+- In the web app, open **Settings**, tap **Use the phone app**, then **Put your account on your phone**. It shows a QR code for two minutes.
+- In the phone app, tap **Already a Member? Restore Account**, then **Scan from a browser**, and point the phone's camera at the code.
+- The phone then shows **four digits**. Type them in the browser and press **Confirm**. Your account goes to the phone only after that. Three wrong tries and nothing is sent: make a new code. Never read the digits out or send them to anyone.
+- The phone shows whose account it is and which community it is from. Tap **Bring it to this phone**.
+- Once the phone has saved it, the browser says so: the account is then on both, and you can keep both or tap **Remove from this browser**. If the phone doesn't save it, or you leave before it does, the browser says so and keeps the account.
+- The browser needs your 12 words for this. If it doesn't have them, it says so: use one of the ways above.
+
 Screen 1 of joining in a browser says the same the other way round: if you are already on BeanPool, on any phone or computer, bring that account instead of starting a new one.
 
 ## Using your phone account on a computer

@@ -21,6 +21,7 @@ const ALLOWED: Array<[string, string, string]> = [
     ['components/FormerAddressBanner.tsx', 'bg-white text-amber-900', 'the same white button on the same amber banner'],
     ['components/ImageLightbox.tsx', 'rounded-full focus-visible', 'the photo dots on the lightbox, which is black in both themes'],
     ['pages/InvitePage.tsx', 'bg-white rounded-xl p-4 inline-block', 'the QR code needs its white quiet zone to scan'],
+    ['components/BringToPhone.tsx', 'max-w-[216px] box-border p-2 rounded-lg bg-white', 'the QR code needs its white quiet zone to scan'],
     ['pages/SettingsPage.tsx', 'block rounded-full bg-white shadow-md', 'the knob of a switch'],
     ['pages/ToolsPage.tsx', 'w-5 h-5 rounded-full bg-white', 'the knob of a switch, on a track coloured in both themes'],
 ];

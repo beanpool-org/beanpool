@@ -6,6 +6,7 @@ import { isAuthReturnLink } from '../utils/auth-return';
 import { linkCarriesInvite } from '../utils/welcome-invite';
 import { claimRouteFromSystemPath } from '../utils/claim-link';
 import { pairRouteFromSystemPath } from '../utils/pair-link';
+import { pairInRouteFromSystemPath } from '../utils/pair-in';
 import { holdStartUpLinkRoute } from '../utils/member-landing';
 import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '../utils/global-link';
 import { doorLinkFromSystemPath, doorLinkRoute, type DoorLink } from '../utils/open-door';
@@ -113,6 +114,13 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     if (pairRoute) {
         if (initial) holdStartUpLinkRoute();
         return pairRoute;
+    }
+    // The other way (front doors S9): a browser's "bring my account to the phone" code opened from the camera app. The
+    // screen reads the whole link with its own strict grammar and sends nothing before the member's tap (utils/pair-in.ts).
+    const pairInRoute = pairInRouteFromSystemPath(path);
+    if (pairInRoute) {
+        if (initial) holdStartUpLinkRoute();
+        return pairInRoute;
     }
 
     // The global community's smart link, `https://beanpool.org/global` or `beanpool://global` (utils/global-link.ts): the

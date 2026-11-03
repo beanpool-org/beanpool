@@ -1,7 +1,8 @@
 /**
- * Restore your account's four rows (app/welcome.tsx, slice S10; vault rethink VR4 adds the third): sign-in, the 12 words,
- * "My community can bring me back" (the same key, from an admin who sees the member in person: app/rekey-code.tsx), and an
- * admin's re-key code (a new key). Every label wraps, with no line limit, so all four hold at 320 dp with text at 1.3×.
+ * Restore your account's five rows (app/welcome.tsx, slice S10; vault rethink VR4 adds the third): sign-in, the 12 words,
+ * "My community can bring me back" (the same key, from an admin who sees the member in person: app/rekey-code.tsx), an
+ * admin's re-key code (a new key), and a browser's code (front doors S9: the account a member's web browser holds, by QR,
+ * app/pair-in.tsx). Every label wraps, with no line limit, so all five hold at 320 dp with text at 1.3×.
  * The table is the rows' own, not the screen's handed down, so the contrast check (utils/button-contrast.ts) reads them.
  */
 import { useMemo, type ReactNode } from 'react';
@@ -9,7 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { palette, type AppColors } from '../../constants/colors';
 import { useWords } from '../LanguageProvider';
 
-export function RestoreMenu({ colors, dark, logos, onSocial, onWords, onCommunity, onRekey }: {
+export function RestoreMenu({ colors, dark, logos, onSocial, onWords, onCommunity, onRekey, onBrowser }: {
     /** The screen's colours (utils/onboarding-colors.ts). */
     colors: AppColors;
     dark: boolean;
@@ -19,6 +20,8 @@ export function RestoreMenu({ colors, dark, logos, onSocial, onWords, onCommunit
     onWords: () => void;
     onCommunity: () => void;
     onRekey: () => void;
+    /** The account a browser holds, by its code (front doors S9, app/pair-in.tsx). */
+    onBrowser: () => void;
 }) {
     const { t } = useWords();
     const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
@@ -41,6 +44,11 @@ export function RestoreMenu({ colors, dark, logos, onSocial, onWords, onCommunit
             {/* Lost the phone and the words: an admin's re-key code (app/rekey-code.tsx, #1768). */}
             <Pressable style={styles.recoverBtn} onPress={onRekey} accessibilityRole="button">
                 <Text style={styles.recoverBtnText}>{t('🪪 An admin gave me a re-key code')}</Text>
+            </Pressable>
+            {/* Signed in on the web: that browser shows a code, this phone scans it (front doors S9). */}
+            <Pressable style={styles.recoverBtn} onPress={onBrowser} accessibilityRole="button" accessibilityHint={t('For an account you use in a web browser.')}>
+                <Text style={styles.recoverBtnText}>{t('💻 Scan from a browser')}</Text>
+                <Text style={styles.restoreRowHint}>{t('For an account you use in a web browser.')}</Text>
             </Pressable>
         </>
     );

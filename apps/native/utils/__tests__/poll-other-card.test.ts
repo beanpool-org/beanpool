@@ -4,6 +4,8 @@
  * rendered with react-dom and React Native stood in for. New app, old node: a node that doesn't say it can gets no tick.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: any) => children }));
+vi.mock('../../components/useKeepCaretVisible', () => ({ useKeepCaretVisible: () => ({ scrollRef: { current: null }, scrollProps: {} }) })); // the real one needs the keyboard library's native side
 import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { POLL_BALLOT_SEALED, POLL_OTHER_WORDS_MAX } from '@beanpool/core';

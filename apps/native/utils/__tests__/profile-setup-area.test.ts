@@ -10,6 +10,8 @@
  * nothing and writes nothing; a position is rounded to 0.1° before any request is built.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: any) => children }));
+vi.mock('../../components/useKeepCaretVisible', () => ({ useKeepCaretVisible: () => ({ scrollRef: { current: null }, scrollProps: {} }) })); // the real one needs the keyboard library's native side
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 

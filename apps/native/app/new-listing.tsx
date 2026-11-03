@@ -14,6 +14,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { StyleSheet, View, Text, Alert, ScrollView, TextInput, Pressable, Dimensions, Image as RNImage, Keyboard, Linking, Modal, FlatList, Platform } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useKeepCaretVisible } from '../components/useKeepCaretVisible';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { MapAreaRing } from '../components/MapAreaRing';
 import * as Location from 'expo-location';
@@ -291,7 +292,8 @@ export default function NewListingScreen() {
     const [showPricingModal, setShowPricingModal] = useState(false);
     const [showPricingGuideModal, setShowPricingGuideModal] = useState(false);
     const [pricingModalTab, setPricingModalTab] = useState<'guide' | 'tax'>('guide');
-    const scrollViewRef = useRef<ScrollView>(null);
+    // Keeps the field being typed in (and a growing Description's caret) above the keyboard with no scroll needed.
+    const { scrollRef: scrollViewRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
 
     // #143 step 4 — which communities a listing could be aimed at. Fetched once; failure is silent and
     // leaves the list empty, which hides the reach chooser. That is the right failure: a member should not be
@@ -774,7 +776,7 @@ export default function NewListingScreen() {
 
                         {/* flexShrink so the form scrolls inside the sheet's 95% cap rather than the sheet
                             growing past it — the sheet sizes to content now that it is not flex:1. */}
-                        <ScrollView ref={scrollViewRef} style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={{ paddingBottom: 40 }}>
+                        <ScrollView ref={scrollViewRef} {...keepCaretVisible} style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive" contentContainerStyle={{ paddingBottom: 40 }}>
                             {/* Type Toggle — colours match map pins */}
                             <View style={styles.typeRow}>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: postType === 'offer' }} style={[styles.typeBtn, postType === 'offer' && styles.typeBtnOffer]} onPress={() => setPostType('offer')}>

@@ -139,3 +139,4 @@ Each AGY Flash agent:
 1. The director re-runs `pnpm words:draft --report` to confirm missing and stale counts drop to `0`.
 2. The director inspects the Safety/Money keys identified by `--report`.
 3. The director merges the round branches into `main` and publishes guide versions if guide pages were updated (`pnpm guide:publish --merge`).
+4. **The sign-in return pages** (`apps/website/auth/*.html`, `apps/pwa/public/auth/facebook.html`) carry core's translations of their five sentences (`packages/beanpool-core/src/auth-bounce-words.ts`; keys in core's catalogs like any other). They are generated: after a round that fills any of those keys, run `node scripts/website-build.mjs` and commit the pages, or `node scripts/website-build.mjs --check` (and the `website_links` check) fails with "out of sync".

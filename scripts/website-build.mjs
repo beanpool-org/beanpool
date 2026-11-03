@@ -18,6 +18,9 @@
  * - Relative link rewrites: links to translated pages remain in <lang>/, links to untranslated pages (like legal) link to English.
  * - Asset path rewrites: relative paths (style.css, bean.png, fonts/, main.js) adjust for <lang>/ subdirectories.
  * - The Android download (beanpool.org/android): version, address, size and digest from apps/website-src/android-apk.json.
+ * - The sign-in return pages (apps/website/auth/*.html and apps/pwa/public/auth/facebook.html): generated from
+ *   apps/website-src/auth/bounce.html, packages/beanpool-core/src/auth-bounce-words.ts and core's catalogs; each page picks its
+ *   language when it opens (see "Sign-in return pages" below).
  *
  * Modes:
  *   node scripts/website-build.mjs            Builds all pages from apps/website-src/content/ into apps/website/<lang>/
@@ -587,6 +590,121 @@ export function draftLanguage(lang) {
     }
 }
 
+// ── Sign-in return pages ─────────────────────────────────────────────────────────────────────────────────────────
+//
+// A provider (Google, Facebook, Instagram, TikTok) sends the member back to one FIXED address (https://beanpool.org/auth/<provider>,
+// registered with the provider), so the page cannot be a per-language copy at a per-language address the way the 11 translated pages
+// are. Instead each page carries a table of the languages that have a translation of its few sentences and picks one when it opens:
+// the member's own choice (the web app's `beanpool-language`; beanpool.org's `beanpool_lang`), else the browser's, else English.
+// The pages are generated, so the five stay the same page: apps/website-src/auth/bounce.html (the template and the picker), the
+// English and its ids from packages/beanpool-core/src/auth-bounce-words.ts, the translations from core's catalogs
+// (packages/beanpool-core/words/<lang>.json, keyed by the English: the same words the translation pass already fills in). A language
+// with no translation of a sentence shows the English; a missing translation is never a failure.
+
+const AUTH_TEMPLATE = path.join(REPO_ROOT, 'apps', 'website-src', 'auth', 'bounce.html');
+const AUTH_WORDS_SOURCE = path.join(REPO_ROOT, 'packages', 'beanpool-core', 'src', 'auth-bounce-words.ts');
+const CORE_WORDS_DIR = path.join(REPO_ROOT, 'packages', 'beanpool-core', 'words');
+
+/** The five pages: beanpool.org's four, and the web app's own Facebook return (served by every node at /auth/facebook.html). */
+export const AUTH_PAGES = Object.freeze([
+    { provider: 'Google', id: 'google', message: 'signIn', out: 'apps/website/auth/google.html' },
+    { provider: 'Facebook', id: 'facebook', message: 'authentication', out: 'apps/website/auth/facebook.html' },
+    { provider: 'Instagram', id: 'instagram', message: 'authentication', out: 'apps/website/auth/instagram.html' },
+    { provider: 'TikTok', id: 'tiktok', message: 'authentication', out: 'apps/website/auth/tiktok.html' },
+    { provider: 'Facebook', id: 'facebook', message: 'authentication', out: 'apps/pwa/public/auth/facebook.html' },
+]);
+
+/** The ids and English of auth-bounce-words.ts (`id: word('…')` lines), read as text so this script needs no TypeScript. */
+export function readAuthWords(file = AUTH_WORDS_SOURCE) {
+    const words = {};
+    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+        const m = /^\s*(\w+):\s*word\((["'])(.+)\2\),?\s*$/.exec(line);
+        if (m) words[m[1]] = m[3];
+    }
+    if (Object.keys(words).length === 0) throw new Error(`no word('…') lines found in ${path.relative(REPO_ROOT, file)}`);
+    return words;
+}
+
+/** Core's catalogs for the 24 languages that have files (a language with no file yet is simply untranslated). */
+export function readCoreCatalogs(dir = CORE_WORDS_DIR) {
+    const catalogs = {};
+    for (const lang of GUIDE_LANGS) {
+        const file = path.join(dir, `${lang}.json`);
+        if (fs.existsSync(file)) catalogs[lang] = JSON.parse(fs.readFileSync(file, 'utf8'));
+    }
+    return catalogs;
+}
+
+/** { lang: { id: translated } } for the languages that have at least one of the sentences; a sentence with no translation is left out. */
+export function authTables(words, catalogs) {
+    const tables = {};
+    for (const lang of GUIDE_LANGS) {
+        const table = {};
+        for (const [id, english] of Object.entries(words)) {
+            const said = catalogs?.[lang]?.[english];
+            if (typeof said === 'string' && said.trim()) table[id] = said;
+        }
+        if (Object.keys(table).length > 0) tables[lang] = table;
+    }
+    return tables;
+}
+
+const escapeText = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** JSON for a <script>: never a closing tag or comment opener, never a line separator that old engines refuse. */
+const LINE_SEPARATORS = new RegExp(`[${String.fromCharCode(0x2028)}${String.fromCharCode(0x2029)}]`, 'g');
+const scriptJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c').replace(LINE_SEPARATORS, (c) => `\\u${c.charCodeAt(0).toString(16)}`);
+
+/** One return page, as the build writes it. `words` and `catalogs` are the English and the translations (tests pass their own). */
+export function renderAuthPage(page, { words = readAuthWords(), catalogs = readCoreCatalogs() } = {}) {
+    for (const id of ['title', 'heading', page.message, 'open']) {
+        if (typeof words[id] !== 'string') throw new Error(`auth-bounce-words.ts has no "${id}" sentence`);
+    }
+    const english = (id) => escapeText(words[id].split('{provider}').join(page.provider));
+    const fills = {
+        TITLE: english('title'),
+        HEADING: english('heading'),
+        MESSAGE_ID: page.message,
+        MESSAGE: english(page.message),
+        OPEN: english('open'),
+        WORDS: scriptJson(authTables(words, catalogs)),
+        LANGS: scriptJson(LANGS),
+        PROVIDER_JSON: scriptJson(page.provider),
+        PROVIDER_ID: page.id,
+    };
+    let out = fs.readFileSync(AUTH_TEMPLATE, 'utf8').replace(/\r\n/g, '\n');
+    for (const [name, value] of Object.entries(fills)) out = out.split(`{{${name}}}`).join(value);
+    return out;
+}
+
+/** Writes the five pages (only the ones that changed). Returns the paths it wrote. */
+export function buildAuthPages(options) {
+    const wrote = [];
+    for (const page of AUTH_PAGES) {
+        const file = path.join(REPO_ROOT, page.out);
+        const html = renderAuthPage(page, options);
+        if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== html) {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            fs.writeFileSync(file, html, 'utf8');
+            wrote.push(page.out);
+        }
+    }
+    return wrote;
+}
+
+/** What `--check` says about the five pages: each exists and is exactly what the build writes now. */
+export function checkAuthPages(options) {
+    const errors = [];
+    for (const page of AUTH_PAGES) {
+        const file = path.join(REPO_ROOT, page.out);
+        if (!fs.existsSync(file)) {
+            errors.push(`missing sign-in return page: ${page.out}; run 'node scripts/website-build.mjs'`);
+        } else if (fs.readFileSync(file, 'utf8') !== renderAuthPage(page, options)) {
+            errors.push(`${page.out} is out of sync with apps/website-src/auth/bounce.html, packages/beanpool-core/src/auth-bounce-words.ts and core's words; run 'node scripts/website-build.mjs'`);
+        }
+    }
+    return errors;
+}
+
 /** Builds all website pages from English sources and content/ per-language files. */
 export function buildAll() {
     // 1. Update English pages
@@ -621,6 +739,9 @@ export function buildAll() {
             fs.writeFileSync(targetPath, rendered, 'utf8');
         }
     }
+
+    // 3. The sign-in return pages (beanpool.org's four and the web app's own)
+    buildAuthPages();
 }
 
 /**
@@ -787,6 +908,8 @@ export function checkWebsite() {
             }
         }
     }
+
+    errors.push(...checkAuthPages());
 
     return errors;
 }

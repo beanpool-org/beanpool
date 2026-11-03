@@ -214,8 +214,8 @@ async function main(): Promise<void> {
     assert(getBalance(kim.pk).balance === -600 && getBalance(kim.pk).floor !== 0, `Kimberly is 600 in debit with a known floor (${JSON.stringify(getBalance(kim.pk)).slice(0, 120)})`);
     const rule = await call('GET', null, '/api/community/known-rule');
     assert(rule.status === 200 && rule.body?.known === true && rule.body?.knownFloor === 1000 && rule.body?.debtLinePct === 50 && rule.body?.quietDays === 60
-        && typeof rule.body?.ruleFrom === 'string' && rule.body?.debtLineFrom === null && rule.body?.quietDaysFrom === null
-        && Object.keys(rule.body).sort().join() === 'debtLineFrom,debtLinePct,known,knownFloor,quietDays,quietDaysFrom,ruleFrom',
+        && rule.body?.debtLineFrom === null && rule.body?.quietDaysFrom === null
+        && Object.keys(rule.body).sort().join() === 'debtLineFrom,debtLinePct,known,knownFloor,quietDays,quietDaysFrom',
         `the join screen reads the rule's numbers before joining, and no sentence: the words are the app's (${show(rule)})`);
     assert((await call('GET', kim, '/api/community/consent-terms')).status === 404 && (await call('GET', kim, '/api/names/consent')).status === 404
         && (await call('POST', kim, '/api/names/consent', { version: '6:50:60' })).status === 404 && (await call('DELETE', kim, '/api/names/consent')).status === 404,
@@ -224,27 +224,28 @@ async function main(): Promise<void> {
     assert(none.status === 403, `a member can't open the exceptions (${show(none)})`);
     assert(logRows() === 0, 'and a refused opening is no line');
 
-    // The 14 days: the dial went on just now and the stamp was written at this boot, so everyone above but Tiana was
-    // confirmed before them.
+    // No start notice: the dial went on just now and the stamp was written at this boot, and the rule is on from that moment.
     const stamp = () => (db.prepare("SELECT value FROM node_config WHERE key = 'balance_rule_from'").get() as { value: string } | undefined)?.value;
     const stamped = stamp();
-    assert(!!stamped && Date.parse(stamped) > Date.now() + 13 * DAY && Date.parse(stamped) <= Date.now() + 14 * DAY, `the boot wrote the start, 14 days on (${stamped})`);
+    assert(!!stamped && Date.parse(stamped) <= Date.now() && Date.parse(stamped) > Date.now() - 10 * 60_000, `the boot wrote the start: that moment, not 14 days on (${stamped})`);
     const early = await exceptions(ada);
-    assert(early.status === 200 && early.body?.rule?.started === false && early.body?.rule?.from === rule.body?.ruleFrom && Date.parse(early.body?.rule?.from) >= Date.parse(stamped!),
-        `the answer says when the rule starts, and that it hasn't (${show(early)})`);
-    assert((early.body?.exceptions ?? []).map((e: any) => e.memberPubkey).join() === tia.pk,
-        `before the start, only a member confirmed after the stamp is listed: Tiana, and none of the 600s from before it (${show(early)})`);
+    const earlyKeys = new Set<string>((early.body?.exceptions ?? []).map((e: any) => e.memberPubkey));
+    assert(early.status === 200 && early.body?.rule?.started === true && early.body?.rule?.from === undefined
+        && earlyKeys.has(kim.pk) && earlyKeys.has(una.pk) && earlyKeys.has(tia.pk),
+        `on a node that just booted the rule is on at once: members confirmed before the dial are listed with the one confirmed after (${show(early)})`);
     assert((early.body?.departed ?? []).some((d: any) => d.id === 'debt-gone'), 'and the debts of members who left, as before');
     const vicBack = await call('POST', vic, '/api/names/step-back', {});
-    assert(vicBack.status === 200 && vicBack.body?.owing === true, `Vicenza steps back in the 14 days, owing past her ordinary line (${show(vicBack)})`);
-    assert(!((await exceptions(ada)).body?.exceptions ?? []).some((e: any) => e.memberPubkey === vic.pk),
-        'and is not listed while the 14 days run: she was confirmed before the stamp');
-    // Day 15: the stamp and the dial's line where a clock would have them.
-    const startRule = () => {
-        db.prepare("UPDATE node_config SET value = ? WHERE key = 'balance_rule_from'").run(ago(DAY));
-        db.prepare("UPDATE known_floor_log SET at = ? WHERE action = 'confirmation'").run(ago(15 * DAY));
-    };
-    startRule();
+    assert(vicBack.status === 200 && vicBack.body?.owing === true, `Vicenza steps back, owing past her ordinary line (${show(vicBack)})`);
+    assert(((await exceptions(ada)).body?.exceptions ?? []).some((e: any) => e.memberPubkey === vic.pk && e.reasons.join() === 'stepped_back_owing'),
+        'and is listed at once, as the step-back told her');
+    // A stamp from the days of a 14-day start notice holds a time in the future: it is read as started now, and not rewritten.
+    const future = new Date(Date.now() + 14 * DAY).toISOString();
+    db.prepare("UPDATE node_config SET value = ? WHERE key = 'balance_rule_from'").run(future);
+    const oldStamp = await exceptions(ada);
+    assert(oldStamp.status === 200 && oldStamp.body?.rule?.started === true && (oldStamp.body?.exceptions ?? []).some((e: any) => e.memberPubkey === kim.pk) && stamp() === future,
+        `an old stamp 14 days ahead lists at once, and is left as it was (${show(oldStamp)})`);
+    // The knowledge of a start 14 days on isn't in the join screen's numbers either.
+    assert(!('ruleFrom' in ((await call('GET', null, '/api/community/known-rule')).body ?? {})), 'the join screen\'s rule carries no start date');
     // In the old record, Unaleigh said no. The record stays and nothing reads it (Q-C).
     db.prepare("INSERT INTO known_consent_log (id, member_pubkey, action, version) VALUES ('old-no', ?, 'withdrawn', '6:50:60')").run(una.pk);
     assert(!(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'known_consents'").get()), 'there is no consent table left to read');
@@ -268,21 +269,20 @@ async function main(): Promise<void> {
     const names = [kim, una, lea, neo, ugo, rex, sam, ada].map(m => m.name);
     assert(!names.some(n => ex.text.includes(n)), 'no callsign or name of anyone is on the wire');
     assert(!/callsign|name"/i.test(ex.text), 'nor a field that could carry one');
-    // Turning the dial on is the rule arriving, for whoever was confirmed while it was off and never told.
+    // Turning the dial on is the rule arriving too: at once, no notice.
     await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: false } } }, owner);
     const dialAgain = await call('POST', null, '/api/local/admin/community-shape', { changes: { knownFloor: { on: true } } }, owner);
     const afterDial = await exceptions(ada);
-    assert(dialAgain.status === 200 && afterDial.status === 200 && afterDial.body?.rule?.started === false && Date.parse(afterDial.body?.rule?.from) > Date.now() + 13 * DAY
-        && (afterDial.body?.exceptions ?? []).length === 0,
-        `the dial going back on starts the 14 days again: nobody confirmed before it is listed (${show(afterDial)})`);
+    assert(dialAgain.status === 200 && afterDial.status === 200 && afterDial.body?.rule?.started === true
+        && (afterDial.body?.exceptions ?? []).some((e: any) => e.memberPubkey === kim.pk),
+        `the dial going back on is the rule at once: Kimberly, confirmed before it, is listed (${show(afterDial)})`);
     const dot = makeMember('Dorothea');
     createPost('offer', 'produce', `${dot.name} mends things`, 'Repairs', 10, 'fixed', dot.pk);
     confirm(dot, ada, 0);
     const dotPost = createPost('offer', 'produce', `Samwise's 600-Bean basket for ${dot.name}`, 'Veg', 600, 'fixed', sam.pk)!;
     await call('POST', dot, '/api/marketplace/posts/accept', { postId: dotPost.id, buyerPublicKey: dot.pk });
-    assert(((await exceptions(ada)).body?.exceptions ?? []).map((e: any) => e.memberPubkey).join() === dot.pk,
-        'and a member confirmed after it is listed from the first day, as Tiana was');
-    startRule();
+    assert(((await exceptions(ada)).body?.exceptions ?? []).some((e: any) => e.memberPubkey === dot.pk),
+        'and a member confirmed after it is listed too, as Tiana was');
 
     // ── 4. the owner's two lines ──────────────────────────────────────────────────────────────────
     console.log('── 4. the two lines ──');
@@ -465,7 +465,7 @@ async function main(): Promise<void> {
     // ── 6c. the list fails closed ──────────────────────────────────────────────────────────────────
     console.log('── 6c. failing closed ──');
     const stampNow = stamp()!;
-    const nobody = (r: Res) => r.status === 200 && (r.body?.exceptions ?? []).length === 0 && r.body?.rule?.from === null && r.body?.rule?.started === false
+    const nobody = (r: Res) => r.status === 200 && (r.body?.exceptions ?? []).length === 0 && r.body?.rule?.started === false
         && (r.body?.departed ?? []).some((d: any) => d.id === 'debt-gone');
     db.prepare("DELETE FROM node_config WHERE key = 'balance_rule_from'").run();
     const noStamp = await exceptions(ada);
@@ -490,7 +490,7 @@ async function main(): Promise<void> {
     const adaSession = { 'X-Admin-Session': s.sessionId! };
     const mgr = await call('GET', null, '/api/local/admin/community-health', undefined, adaSession);
     assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 60 && mgr.body?.log?.length === logRows()
-        && mgr.body?.rule?.started === true && typeof mgr.body?.rule?.from === 'string' && mgr.body?.consent === undefined
+        && mgr.body?.rule?.started === true && mgr.body?.rule?.from === undefined && mgr.body?.consent === undefined
         && mgr.body?.exceptions === undefined, `an admin's Settings reads the totals, the lines and the access log, and no exceptions (${show(mgr)})`);
     const mgrO = await call('GET', null, '/api/local/admin/community-health', undefined, owner);
     assert(mgrO.status === 200 && mgrO.body?.known === true, `and the owner's (${show(mgrO)})`);

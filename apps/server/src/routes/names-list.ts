@@ -16,7 +16,7 @@
  *   POST   /api/names/confirmations/:id/revoke      → { id, status }
  *   GET    /api/names/log?limit&offset              → { log, total, limit, offset }
  *   POST   /api/names/settings                      { twoAdminsToConfirm?, namesShownToMembers? } (an owner)
- *   GET    /api/names/health                        → the Community health panel: the totals, the two lines, when the rule starts
+ *   GET    /api/names/health                        → the Community health panel: the totals, the two lines, whether the rule has started
  *   GET    /api/names/health/exceptions             → known mode only: confirmed members past a line, and members who stepped
  *                                                     back owing past their ordinary line, by key and entry id (never a name),
  *                                                     and the open debts of members who left (logged)

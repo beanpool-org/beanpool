@@ -60,11 +60,13 @@ const BUTTON =
 export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
     const info = useCommunityInfo();
     const [role, setRole] = useState<string | null | undefined>(undefined);
+    const needsRole = info?.features?.door === 'admins' || info?.features?.privatePreview === true;
     useEffect(() => {
+        if (!needsRole) return;
         let cancelled = false;
         void myNodeRoleOnce().then(r => { if (!cancelled) setRole(r ?? null); });
         return () => { cancelled = true; };
-    }, []);
+    }, [needsRole]);
     const says = shareSays(info?.features, role);
     const [note, setNote] = useState<string | null>(null);
     const [calendarMenuOpen, setCalendarMenuOpen] = useState(false);

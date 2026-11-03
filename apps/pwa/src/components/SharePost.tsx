@@ -76,10 +76,10 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
     // The link made but not handed over, for the post it was made for (the same button may be drawn for another post
     // next): `failed`, shown to copy by hand; or the share sheet was closed, kept unshown for the next tap.
     const [kept, setKept] = useState<{ postId: string; link: string; failed: boolean } | null>(null);
-    if (info?.features?.shareOutside !== true || !shareableOutside(post)) return null;
+    const says = shareSays(info?.features);
+    if (!says.showShareOutside || !shareableOutside(post)) return null;
     const keptLink = kept?.postId === post.id ? kept.link : null;
     const shownLink = kept?.postId === post.id && kept.failed ? kept.link : null;
-    const says = shareSays(info?.features);
 
     const handOverNow = async (link: string) => {
         const how = await handOver(post.title, link);
@@ -139,11 +139,13 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
 export function SharePostButtons({ post, onNavigate }: { post: MarketplacePost; onNavigate?: (tab: string) => void }) {
     const info = useCommunityInfo();
     const [role, setRole] = useState<string | null | undefined>(undefined);
+    const needsRole = info?.features?.door === 'admins' || info?.features?.privatePreview === true;
     useEffect(() => {
+        if (!needsRole) return;
         let cancelled = false;
         void myNodeRoleOnce().then(r => { if (!cancelled) setRole(r ?? null); });
         return () => { cancelled = true; };
-    }, []);
+    }, [needsRole]);
     const says = shareSays(info?.features, role);
     const [note, setNote] = useState<string | null>(null);
     const shareWithMembers = async () => {

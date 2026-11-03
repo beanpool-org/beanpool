@@ -131,6 +131,7 @@ async function main() {
     };
     /** A poll made as the engine makes one (a poll carries no photo), by its own author (one open poll each), then closed a
      *  day ago, past its closing time a second ago, or left open. */
+    const askers = new Map<string, Id>();
     const poll = (title: string, state: 'closed' | 'open' | 'past-close'): string => {
         const author = member(`Asker${crypto.randomBytes(3).toString('hex')}`);
         const p = se.createPost('poll', 'general', title, `${title}?`, 0, 'fixed', author.pubKeyHex, HERE.lat, HERE.lng,
@@ -139,6 +140,7 @@ async function main() {
         if (!p) throw new Error(`could not make ${title}`);
         if (state === 'closed') db.prepare("UPDATE posts SET status = 'completed', poll_closes_at = ?, updated_at = ? WHERE id = ?").run(ago(1), ago(1), p.id);
         if (state === 'past-close') db.prepare('UPDATE posts SET poll_closes_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), p.id);
+        askers.set(p.id, author);
         return p.id;
     };
     const listing = (author: Id, title: string, days: number): string => {
@@ -269,6 +271,12 @@ async function main() {
     const boardAfter = await boardHas(ben, closed);
     assert(boardAfter.status === 200 && !boardAfter.has, `after the run, the closed poll is on no board (${boardAfter.status})`);
     assert(!(await readsById(ben, closed)) && !(await readsById(ana, closed)), 'nor read by id, by Ben or by Ana');
+    // The author keeps their own copy: their phone opens it by id, closed, with its result.
+    const own = await byIdFor(askers.get(pastClose)!, pastClose);
+    const ownList: any[] = Array.isArray(own.body) ? own.body : (own.body?.posts ?? []);
+    const ownPoll = ownList.find((p: any) => p.id === pastClose);
+    assert(own.status === 200 && !!ownPoll && ownPoll.status === 'completed' && Array.isArray(ownPoll.pollOptions) && ownPoll.pollOptions.length >= 2,
+        `its author still opens it by id, closed, with its answers (${own.status}: ${JSON.stringify(ownPoll && { status: ownPoll.status, options: ownPoll.pollOptions?.length, total: ownPoll.totalVotes })})`);
 
     const delta = await call('GET', `/api/marketplace/posts?limit=200&sync=true&types=poll,event&updatedAfter=${encodeURIComponent(since)}`, null, ben);
     const deltaRows: any[] = Array.isArray(delta.body) ? delta.body : (delta.body?.posts ?? []);

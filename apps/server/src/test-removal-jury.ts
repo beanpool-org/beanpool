@@ -44,10 +44,12 @@
  * 10. J2c, branch juries (DESIGN-removal-jury-j2-calls-fable.md call 4): under Automatic at 150 an owner's branch pause
  *     (removal by vote S5) of three draws one jury of 12 for the root's key, from the day's pool without the accounts its
  *     card names (the listed and the established left off); the root's inviter, the subtree's other accounts (an admin, an
- *     account already paused: in the pool, passed over) and the owner pausing stand aside; only jurors vote (an account on
- *     the list in S5's words), are pushed and asked on Home, and read the balances; /jury serves no subject, the root and
- *     the list, and checks out with the root's key, open and closed; paused again the same day naming the established
- *     account, the same pool, hash and order; the tally leaves out every account on the list; 6 of 9 removes the branch.
+ *     account already paused: in the pool, passed over), a member who reported a fake on the list other than the root, and
+ *     the owner pausing stand aside, while one who reported only the established account left off is seated; only jurors
+ *     vote (an account on the list in S5's words), are pushed and asked on Home, and read the balances; /jury serves no
+ *     subject, the root and the list, and checks out with the root's key, open and closed; paused again the same day naming
+ *     the established account, the same pool, hash and order, and its reporter stands aside now; the tally leaves out
+ *     every account on the list; 6 of 9 removes the branch.
  *     Under Everyone, S5's vote as it was (every voter pushed, 15 votes count, no jury); under Automatic with 99 in the
  *     branch's pool, everyone too.
  * 11. J2a, who serves: a freeze moves no roster (freeze two members, pause, unfreeze one: the hash worked out before the
@@ -688,18 +690,20 @@ async function main() {
     /** The first `n` of a draw free to be set up: not yet used here, active, not in Sam's case, not Gwen or Ada. */
     const headPicks = (order: string[], n: number) => order.filter(k => unused().has(k) && !samsCase.has(k) && byKey.has(k)
         && statusOf(byKey.get(k)!) === 'active' && k !== gen.pk && k !== ada.pk).slice(0, n);
-    // The root: one for whom Gwen, the owner who pauses, and three members free to be set up all fall in the first 12 of the
-    // draw, so the walk reaches all four whatever else it passes over.
+    // The root: one for whom Gwen, the owner who pauses, and five members free to be set up all fall in the first 12 of the
+    // draw, so the walk reaches all six whatever else it passes over.
     const root = subjectWhere(c => {
         if (!freshOk(c)) return false;
         const o = juryOrder(branchPoolOf(c), c.pk, today).order;
-        const picks = headPicks(o, 3);
-        return o.indexOf(gen.pk) >= 0 && o.indexOf(gen.pk) < 12 && picks.length === 3 && picks.every(k => o.indexOf(k) < 12);
+        const picks = headPicks(o, 5);
+        return o.indexOf(gen.pk) >= 0 && o.indexOf(gen.pk) < 12 && picks.length === 5 && picks.every(k => o.indexOf(k) < 12);
     });
-    const [inviterKey, roleKey, pausedKey] = headPicks(juryOrder(branchPoolOf(root), root.pk, today).order, 3);
+    const [inviterKey, roleKey, pausedKey, twigReporterKey, settledReporterKey] = headPicks(juryOrder(branchPoolOf(root), root.pk, today).order, 5);
     const inviter = subjectWhere(c => c.pk === inviterKey);
     const roleHolder = subjectWhere(c => c.pk === roleKey);
     const pausedOne = subjectWhere(c => c.pk === pausedKey);
+    const twigReporter = subjectWhere(c => c.pk === twigReporterKey);
+    const settledReporter = subjectWhere(c => c.pk === settledReporterKey);
     // The branch: the root, whom `inviter` invited; the root invited the two twigs, the established account and an admin; the
     // admin invited `pausedOne`, paused on their own already. Left off the list: the admin (a role) and pausedOne (paused);
     // both still in the pool (nothing on the card names them), so only the walk passes them over.
@@ -708,12 +712,21 @@ async function main() {
     invitedBy.run(roleHolder.pk, pausedOne.pk);
     grantNodeRole(roleHolder.pk, 'admin', gen.pk);
     pauseOf(pausedOne);
+    // And two with a link to one account the card names, not the root: everyone linked to any account on the list stands
+    // aside (call 4: the union of juryConflictsOf over all of them), and nobody for a link to an account the vote isn't on.
+    // twigReporter reported twigA, a fake on the list; settledReporter reported the established account left off it.
+    const reportOf = db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)");
+    reportOf.run(crypto.randomUUID(), twigReporter.pk, twigA.pk, 'A fake account', ago(DAY));
+    reportOf.run(crypto.randomUUID(), settledReporter.pk, settled.pk, 'A report of a member of long standing', ago(DAY));
     const branchPool = branchPoolOf(root);
     const bOrder = juryOrder(branchPool, root.pk, today).order;
     const listedKeys = [root, twigA, twigB].map(m => m.pk);
     const linked = new Set(listedKeys.flatMap(k => [...juryConflictsOf(k)]));
     assert(linked.has(inviter.pk) && linked.has(roleHolder.pk) && !linked.has(pausedOne.pk) && !linked.has(gen.pk),
         "set up: the root's inviter and the admin the root invited have a link to an account on the list; pausedOne and Gwen have none");
+    assert(linked.has(twigReporter.pk) && !juryConflictsOf(root.pk).has(twigReporter.pk)
+        && !linked.has(settledReporter.pk) && juryConflictsOf(settled.pk).has(settledReporter.pk),
+        "set up: twigReporter's one link is to twigA, not the root; settledReporter's is to the established account left off, and to nobody on the list");
     pushes.length = 0;
     const b1 = de.pauseBranch(root.pk, gen.pk, `A crowd of fakes brought in by ${root.callsign}`, { freshProof: true, include: [twigA.pk, twigB.pk] });
     if (!b1.success) throw new Error(`setup: could not pause the branch of ${root.callsign}: ${b1.error}`);
@@ -739,11 +752,13 @@ async function main() {
     const bRoll = rollOf(branchVote);
     const bAside = bRoll.filter(r => r.status === 'stood_aside').map(r => r.k);
     const bSeated = bRoll.filter(r => r.status === 'on').map(r => r.k);
-    const expectAside = [inviter, roleHolder, pausedOne, gen].map(m => m.pk);
+    const expectAside = [inviter, roleHolder, pausedOne, twigReporter, gen].map(m => m.pk);
     assert(JSON.stringify([...bAside].sort()) === JSON.stringify([...expectAside].sort()),
-        `passed over at the walk: the root's inviter, the admin the root invited, pausedOne (in the subtree, linked to nobody on the list) and the owner pausing (${bAside.length})`);
+        `passed over at the walk: the root's inviter, the admin the root invited, pausedOne (in the subtree, linked to nobody on the list), the member who reported twigA and the owner pausing (${bAside.length})`);
     assert(bSeated.length === 12 && JSON.stringify([...bSeated].sort()) === JSON.stringify(bOrder.filter(k => !expectAside.includes(k)).slice(0, 12).sort()),
         `the next 12 of the draw for the root's key are seated (${bSeated.length})`);
+    assert(bAside.includes(twigReporter.pk) && bSeated.includes(settledReporter.pk),
+        "a member who reported a fake on the list other than the root stands aside; one who reported only the established account left off, which the vote isn't on, is seated");
     assert(checkJuryDraw({ pool: bStored, subject: root.pk, snapshotDate: today, rosterHash: bp.jury?.rosterHash, roll: bRoll.map(r => r.k) }).ok,
         "core's checkJuryDraw with the root's key: the node's pool and roll check out");
     const opened = new Set(pushes.filter(p => p.k === 'decision.removal').flatMap(p => p.to));
@@ -813,7 +828,7 @@ async function main() {
     const bNotServed: string[] = (bClosed.didNotServe ?? []).map((x: any) => x.publicKey);
     assert(JSON.stringify([...bVoted].sort()) === JSON.stringify(jurorsB.slice(0, 2).map(j => j.pk).sort())
         && expectAside.every(k => bNotServed.includes(k)) && bNotServed.length === bRoll.length - 2,
-        `closed: the two who voted; and among those who didn't serve, the root's inviter, the subtree's admin and paused account and the owner who paused (${bVoted.length}, ${bNotServed.length})`);
+        `closed: the two who voted; and among those who didn't serve, the root's inviter, the subtree's admin and paused account, twigA's reporter and the owner who paused (${bVoted.length}, ${bNotServed.length})`);
     const bDrawnAs = [...(bClosed.voted ?? []), ...(bClosed.didNotServe ?? [])].map((x: any) => x.drawnAs as string);
     assert(bClosed.subject === null && bClosed.root === root.pk && checkJuryDraw({
         pool: (bClosed.pool ?? []).map((p: any) => p.publicKey), subject: bClosed.root, snapshotDate: bClosed.snapshotDate, rosterHash: bClosed.rosterHash, roll: bDrawnAs,
@@ -837,9 +852,11 @@ async function main() {
     const roll2 = rollOf(branchVote2);
     const aside2 = roll2.filter(r => r.status === 'stood_aside').map(r => r.k);
     const seated2 = roll2.filter(r => r.status === 'on').map(r => r.k);
-    const expectAside2 = [inviter, roleHolder, pausedOne].map(m => m.pk);
+    const expectAside2 = [inviter, roleHolder, pausedOne, twigReporter, settledReporter].map(m => m.pk);
     assert(JSON.stringify([...aside2].sort()) === JSON.stringify([...expectAside2].sort()) && seated2.includes(gen.pk) && seated2.length === 12,
         `paused with the password, which has no key, nobody stands aside as the one pausing: Gwen is seated this time (${aside2.length} passed over)`);
+    assert(aside2.includes(settledReporter.pk),
+        "with the established account on the list now, the member who reported it stands aside: who stands aside follows the accounts the vote is on, while the roster and the order stay put");
     // The tally over the roll (§5) leaves out every account on the list, whatever a row says: here one seated by a row written
     // straight into the roll, with a No, and a member not drawn with a No too. 6 Yes to 3 No from the jury removes the branch.
     const jurors2 = seated2.map(k => byKey.get(k)!);
@@ -861,7 +878,7 @@ async function main() {
     const notServed2: string[] = (c2.didNotServe ?? []).map((x: any) => x.publicKey);
     assert(JSON.stringify([...voted2].sort()) === JSON.stringify(jurors2.slice(0, 9).map(j => j.pk).sort())
         && expectAside2.every(k => notServed2.includes(k)) && notServed2.length === roll2.length - 9 && !notServed2.includes(twigB.pk),
-        `closed: the 9 who voted; and among those who didn't serve the root's inviter and the subtree's other accounts, with the 3 jurors who didn't vote (${voted2.length}, ${notServed2.length})`);
+        `closed: the 9 who voted; and among those who didn't serve the root's inviter, the subtree's other accounts and the two reporters, with the 3 jurors who didn't vote (${voted2.length}, ${notServed2.length})`);
     const pool2 = (c2.pool ?? []).map((p: any) => p.publicKey);
     const roll2Served = [...(c2.voted ?? []), ...(c2.didNotServe ?? [])].map((x: any) => x.drawnAs as string);
     const check2 = (seedKey: string) => checkJuryDraw({ pool: pool2, subject: seedKey, snapshotDate: c2.snapshotDate, rosterHash: c2.rosterHash, roll: roll2Served });

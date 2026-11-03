@@ -1099,9 +1099,8 @@ export default function MarketScreen() {
         const stream = marketStream(pinsRead.rest, nowMs, {
             eventsOnly: filter === 'events', narrowedBySearch: searching, circle, ownKey: identity?.publicKey,
         });
-        const distances = circle ? distancesFrom(stream, circle.area) : null;
+        const distances = circle ? distancesFrom([...pinsRead.pinned, ...stream], circle.area) : null;
         return { pinned: pinsRead.pinned, stream, allMatching: pinsRead.allMatching, realMatchingCount: pinsRead.realMatchingCount, circle, distances };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [basePosts, posts, filter, categoryFilter, eventWindow, trustFilter, beansOnly, radiusKm, locationCenter, groupFilter, blockedUsers, favCategories,
         searchQuery, answerStands, selectedTag, selectedFree, isSearching, searchResults, nodeProfile, memberArea, identity?.publicKey, nowTick, nowMinute]);
     const pinnedPosts = market.pinned;
@@ -1644,7 +1643,7 @@ export default function MarketScreen() {
         const km = market.distances?.get(String(item.id));
         const words = km == null ? null : formatDistance(km);
         return words ? (
-            <Text testID="card-distance" numberOfLines={1} style={{ fontSize: 12, fontWeight: '600', color: colors.text.secondary, marginTop: 2 }}>{`📍 ${words}`}</Text>
+            <Text testID="card-distance" numberOfLines={1} style={{ fontSize: 12, fontWeight: '600', color: colors.text.secondary, marginTop: 2 }}>{t('📍 {distance}', { distance: words })}</Text>
         ) : null;
     };
 
@@ -1985,7 +1984,7 @@ export default function MarketScreen() {
     // The worldwide community's one line above the list, under the Pinned block: the list is the newest, inside the circle round the member's area.
     const newestLine = market.circle && filteredPosts.length > 0 ? (
         <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
-            <Text testID="market-newest-within" numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: colors.text.secondary }}>
+            <Text testID="market-newest-within" numberOfLines={2}style={{ fontSize: 13, fontWeight: '600', color: colors.text.secondary }}>
                 {newestWithinLine(market.circle)}
             </Text>
         </View>

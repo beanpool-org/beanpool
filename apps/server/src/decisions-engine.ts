@@ -715,11 +715,36 @@ export function branchEntryOf(decision: Pick<Decision, 'effect' | 'params'>, pub
 
 /**
  * SQL: the decision row `d` names the member key `pk` (an SQL expression): as its subject, or, on a branch vote, on its list.
+ * Not one taken off the list (`lifted`): the vote no longer holds nor removes them. Only the chain rules read that too
+ * (liftedFromBranchSql).
  */
 export function namesMemberSql(d: string, pk: string): string {
     return `(${d}.subject = ${pk} OR (${d}.subject IS NULL AND ${d}.effect = 'remove_member' AND EXISTS (
         SELECT 1 FROM json_each(CASE WHEN json_valid(${d}.params) THEN ${d}.params ELSE '{}' END, '$.branch') bm
         WHERE json_extract(bm.value, '$.pubkey') = ${pk})))`;
+}
+
+/**
+ * SQL: the branch vote row `d` took the member key `pk` (an SQL expression) off its list (dropFromBranch: an admin lifted
+ * their pause by hand, or the community's own vote brought them back), so its `lifted` names them. Read by the chain rules
+ * alone (votesEndedWithoutRemoving, thirdPauseRefused): that pause, and its end for them, stay on their record. Never where
+ * a vote holds someone (namesMemberSql): it holds them no more.
+ */
+function liftedFromBranchSql(d: string, pk: string): string {
+    return `(${d}.subject IS NULL AND ${d}.effect = 'remove_member' AND EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(${d}.params) THEN ${d}.params ELSE '{}' END, '$.lifted') bl
+        WHERE json_extract(bl.value, '$.pubkey') = ${pk}))`;
+}
+
+/**
+ * This account's newest entry in a branch vote's `lifted` (dropFromBranch), or null: it never left that list. One with no
+ * readable time is still theirs (its `at` reads NaN), so a reader drops that vote rather than read the vote's own end.
+ */
+function liftedEntryOf(decision: Pick<Decision, 'effect' | 'params'>, pubkey: string): BranchLifted | null {
+    if (!isBranchVote(decision) || !Array.isArray(decision.params.lifted)) return null;
+    const mine = (decision.params.lifted as BranchLifted[]).filter(l => l?.pubkey === pubkey);
+    const timed = mine.filter(l => Number.isFinite(parseDbTime(l.at)));
+    return timed.length ? timed.reduce((a, b) => (parseDbTime(b.at) > parseDbTime(a.at) ? b : a)) : mine[0] ?? null;
 }
 
 function assertEffectAllowedHere(effect: DecisionEffect): void {
@@ -2702,7 +2727,8 @@ export interface BranchLifted {
  * An account leaves a branch's list: an admin lifted its pause on the open vote (adminLiftSuspension), or the community's
  * own vote brought it back while it was open or in its grace window (executeDecision's unsuspend_member / reinstate_member,
  * `byVote`). Its vote
- * no longer names them nor removes them, and its record keeps their name and when (`lifted`). What the list owes is counted
+ * no longer names them nor removes them, and its record keeps their name and when (`lifted`), which the chain rules still
+ * count as that pause of them, ended then (liftedFromBranchSql). What the list owes is counted
  * again, and the title and description say the count left. The vote runs on for the others; returns false when nobody is
  * left on it, writing nothing, for the caller to close it. Rows only, inside the caller's transaction.
  */
@@ -3194,7 +3220,8 @@ const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
  * Why `actor` may not pause `subjectPubkey` now (Amendment A point 5), or null: a vote on removing them that `actor`
  * brought (paused them for it, or proposed it before proposing a removal closed) ended without removing them less than
  * REMOVAL_COOL_DOWN_DAYS ago. Ended so: the community said No or tied ('failed'), too few voted ('unresolved'), or it was
- * stopped before it closed, by a halt or by lifting the pause ('admin_halted' with no grace window begun). Not a removal the
+ * stopped before it closed, by a halt or by lifting the pause ('admin_halted' with no grace window begun), or, a branch's
+ * vote, it took them off its list (a hand lift, or the community's vote to bring them back). Not a removal the
  * community passed that an admin then halted in its grace window, nor one that passed and couldn't be carried out
  * ('execution_blocked'): the community agreed with that case. Another admin may still pause them, under the usual rules.
  * Only where the community votes: with votes off a pause opens no vote, and the moderators decide (design §10 Q11). The
@@ -3269,30 +3296,47 @@ function broughtBy(decision: Decision): unknown {
     return isPauseVote(decision) ? decision.params?.pausedBy : decision.authorPubkey;
 }
 
+/** A vote on removing a member that ended without removing them (votesEndedWithoutRemoving): when, and how it is told. */
+interface VoteEndedWithoutRemoving { decision: Decision; endedAt: number; after: SecondPauseAfter }
+
 /**
  * The community's votes on removing this member that ended without removing them, newest first, each with when it ended:
  * the community said No or tied ('failed', at its close), too few voted ('unresolved', at its close), or it was stopped
  * before it closed, by a halt or by lifting the pause ('admin_halted' with no grace window begun, when it was stopped). Not
  * a removal the community passed that an admin then halted in its grace window, nor one that passed and couldn't be carried
- * out ('execution_blocked'): the community agreed with that case. The cool-down (removalCoolDownRefusal) reads the ones a
- * given admin brought, and the re-pause rule (repauseWindow) the newest of all.
+ * out ('execution_blocked'): the community agreed with that case. A branch's vote that took them off its list
+ * (liftedFromBranchSql) ended for them then, whatever it went on to decide for the others: told as one member's vote is
+ * when it ends so, a bring-back vote's as cancelled ('failed'), a hand lift's as stopped. The cool-down
+ * (removalCoolDownRefusal) reads the ones a given admin brought, and the re-pause rule (repauseWindow) the newest of all.
  */
-function votesEndedWithoutRemoving(subjectPubkey: string): Array<{ decision: Decision; endedAt: number }> {
+function votesEndedWithoutRemoving(subjectPubkey: string): VoteEndedWithoutRemoving[] {
     return (db.prepare(`
         SELECT * FROM decisions d
-        WHERE ${namesMemberSql('d', '@pk')} AND d.effect = 'remove_member' AND d.scope_kind = 'community'
-          AND (d.status IN ('failed', 'unresolved') OR (d.status = 'admin_halted' AND d.grace_period_ends_at IS NULL))
+        WHERE d.effect = 'remove_member' AND d.scope_kind = 'community' AND (
+            (${namesMemberSql('d', '@pk')}
+              AND (d.status IN ('failed', 'unresolved') OR (d.status = 'admin_halted' AND d.grace_period_ends_at IS NULL)))
+            OR ${liftedFromBranchSql('d', '@pk')})
     `).all({ pk: subjectPubkey }) as any[]).map(rowToDecision)
-        .map(decision => ({ decision, endedAt: parseDbTime(decision.status === 'admin_halted' ? decision.adminHaltedAt : decision.closesAt) }))
+        .map(decision => endedWithoutRemoving(decision, subjectPubkey))
         .filter(v => Number.isFinite(v.endedAt))
         .sort((a, b) => b.endedAt - a.endedAt);
+}
+
+/** When and how a vote votesEndedWithoutRemoving found ended for this member: their leaving its list first, if they did. */
+function endedWithoutRemoving(decision: Decision, pubkey: string): VoteEndedWithoutRemoving {
+    const left = liftedEntryOf(decision, pubkey);
+    if (left) return { decision, endedAt: parseDbTime(left.at), after: left.byVote ? 'no' : 'stopped' };
+    const { status, executionReason } = decision;
+    if (status === 'admin_halted') return { decision, endedAt: parseDbTime(decision.adminHaltedAt), after: 'stopped' };
+    const after = status === 'unresolved' ? 'too_few' : executionReason?.startsWith(YES_FLOOR_RECORD) ? 'too_few_yes' : 'no';
+    return { decision, endedAt: parseDbTime(decision.closesAt), after };
 }
 
 /**
  * The vote whose end makes pausing this member again an owner's act with a new reason (design §3.4 rule 2), and the moment
  * that stops: the newest vote that ended without removing them, while it ended less than REPAUSE_NEEDS_OWNER_DAYS ago.
  */
-function repauseWindow(subjectPubkey: string, now: number): { decision: Decision; endedAt: number; until: number } | null {
+function repauseWindow(subjectPubkey: string, now: number): (VoteEndedWithoutRemoving & { until: number }) | null {
     const last = votesEndedWithoutRemoving(subjectPubkey)[0];
     if (!last) return null;
     const until = last.endedAt + REPAUSE_NEEDS_OWNER_DAYS * DAY_MS;
@@ -3323,12 +3367,13 @@ export function repauseNeedsOwner(subjectPubkey: string, now: number = Date.now(
 /**
  * Whether pausing this member again would be a third pause within THIRD_PAUSE_DAYS of the first (design §3.4 rule 3): two
  * pauses opened in that time, whatever their votes decided. Each pause opens its own vote (isPauseVote), so they are counted
- * by their votes' opening.
+ * by their votes' opening: a branch's vote too, and one that took them off its list since (liftedFromBranchSql) as well.
  */
 function thirdPauseRefused(subjectPubkey: string, now: number): boolean {
     const since = now - THIRD_PAUSE_DAYS * DAY_MS;
     return (db.prepare(`
-        SELECT * FROM decisions d WHERE ${namesMemberSql('d', '@pk')} AND d.effect = 'remove_member' AND d.author_pubkey = @system AND d.scope_kind = 'community'
+        SELECT * FROM decisions d WHERE (${namesMemberSql('d', '@pk')} OR ${liftedFromBranchSql('d', '@pk')})
+          AND d.effect = 'remove_member' AND d.author_pubkey = @system AND d.scope_kind = 'community'
     `).all({ pk: subjectPubkey, system: SYSTEM_AUTHOR }) as any[]).map(rowToDecision)
         .filter(d => isPauseVote(d) && parseDbTime(d.opensAt) > since).length >= 2;
 }
@@ -3383,9 +3428,9 @@ export function pauseChainRefusal(
             // Told as that vote ended, as the card of an owner's second pause tells it (secondPauseSentence).
             return {
                 status: 403, code: REPAUSE_NEEDS_OWNER_CODE,
-                error: window.decision.status === 'admin_halted'
+                error: window.after === 'stopped'
                     ? tr('A vote on {name} was stopped on {date} without removing them. Only an owner can pause them again before {until}.', values)
-                    : window.decision.status === 'unresolved'
+                    : window.after === 'too_few'
                         ? tr('Too few members voted on {name} by {date}. Only an owner can pause them again before {until}.', values)
                         : tr('The community decided on {name} on {date}. Only an owner can pause them again before {until}.', values),
             };
@@ -3420,9 +3465,7 @@ type SecondPauseAfter = 'no' | 'too_few_yes' | 'too_few' | 'stopped';
 export function secondPauseOf(subjectPubkey: string, now: number): { after: SecondPauseAfter; endedAt: string } | null {
     const window = repauseWindow(subjectPubkey, now);
     if (!window) return null;
-    const { status, executionReason } = window.decision;
-    const after = status === 'failed' ? (executionReason?.startsWith(YES_FLOOR_RECORD) ? 'too_few_yes' : 'no') : status === 'unresolved' ? 'too_few' : 'stopped';
-    return { after, endedAt: new Date(window.endedAt).toISOString() };
+    return { after: window.after, endedAt: new Date(window.endedAt).toISOString() };
 }
 
 /** The sentence a second pause's record opens with, in the node's English (the apps say it in the member's language). */

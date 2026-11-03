@@ -18,7 +18,10 @@
  *     and its end removes each; a halt in the window gives them all back; lifting one by hand takes them off the list and
  *     the vote runs on for the others, its title and description saying the count left.
  *  8. The chain rules hold: after a branch's vote said No, an admin can't pause one of its accounts again, and an owner
- *     can't pause the branch again with the same reason.
+ *     can't pause the branch again with the same reason. An account that LEFT the list keeps that pause on its record, as
+ *     one member's removal does: brought back by the community's vote in the window, the owner who paused waits out the
+ *     cool-down and a re-pause is an owner's with a new reason; lifted by hand, a third pause in 90 days is refused, on a
+ *     new key too. And that vote holds them no more: paused alone again, they are in no window of it and vote elsewhere.
  *  9. Votes off: no branch pause (404 feature_off), and the owner's prune branch works as before.
  * 10. A re-key of an account on the list (engine/key-move.ts) moves it on the vote, mid-vote and mid-grace: No lifts its new
  *     key's pause, Yes removes its new key, a halt gives it back, and Offboard settling the others leaves the window open.
@@ -132,6 +135,7 @@ async function main() {
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
+    const { completeRekey, issueRekeyCode, executeOffboard } = await import('./engine/member-wizards.js');
 
     await initTls();
     se.initStateEngine();
@@ -197,6 +201,14 @@ async function main() {
         if (r.status !== 200 || !r.body?.decision?.id) throw new Error(`setup: could not pause ${root.callsign}'s branch: ${r.status} ${r.text}`);
         return r.body.decision.id;
     };
+
+    /** The member's key replaced, as Settings → Re-Key does (completeRekey): the same person on a new key. */
+    const rekey = (from: Id): Id => {
+        const to = keypair(from.callsign);
+        completeRekey(from.pubKeyHex, to.pubKeyHex, issueRekeyCode(from.pubKeyHex, 'owner:password').code, 'owner:password');
+        return to;
+    };
+    const listedKeys = (decisionId: string) => (JSON.parse(row(decisionId).params).branch as any[]).map((e) => e.pubkey);
 
     // ── 1. Selection and refusals ───────────────────────────────────────────────────────────────────────────────────
     console.log('1. Selection and refusals');
@@ -366,7 +378,6 @@ async function main() {
     const liftInGrace = de.adminLiftSuspension(s3.b.pubKeyHex, ada.pubKeyHex);
     assert(!liftInGrace.success && liftInGrace.status === 409, `an admin can't lift one in the window: halt it instead (${liftInGrace.error})`);
     // The offboarding wizard settles one account early: that one is removed, and the window runs on for the others.
-    const { executeOffboard } = await import('./engine/member-wizards.js');
     const settledEarly = executeOffboard(s3.a.pubKeyHex, { resolution: 'prune_zero_balance' }, ada.pubKeyHex);
     assert(settledEarly.success && statusOf(s3.a) === 'pruned' && row(id3).status === 'execution_pending_grace'
         && [s3.root, s3.b, s3.c].every(i => statusOf(i) === 'disabled'),
@@ -418,6 +429,73 @@ async function main() {
     assert(sameReason.status === 400 && sameReason.body?.code === de.REPAUSE_SAME_REASON_CODE && s1.all.every(i => statusOf(i) === 'active'),
         `another owner can't pause the branch again with the same reason, nobody paused (${sameReason.status} ${sameReason.body?.code})`);
 
+    // An account that LEFT the list keeps that pause on its record: brought back by the community's vote, or lifted by hand.
+    // The accounts the sections above brought back count in every electorate now: they leave, so the 7 voters reach quorum.
+    for (const id of [...s1.all, ...s2.all, ...s4.all, s5.b, settled, modInBranch, loner, other]) {
+        db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(id.pubKeyHex);
+    }
+    const bringBackVote = (who: Id) => {
+        const d = de.createDecision({ authorPubkey: ada.pubKeyHex, title: `Bring ${who.callsign} back`, description: `${who.callsign} is a real neighbour; we know them`,
+            touches: 'member', effect: 'unsuspend_member', subject: who.pubKeyHex });
+        vote(d.id, voters.slice(0, 5), []);
+        closeNow(d.id);
+        return d.id;
+    };
+    const NEW_CASE = 'A new case about this one account, a week later';
+    // (a) Yes, then the community brings one account back in the window: as for one member's removal, the owner who paused
+    // waits out the cool-down, and pausing them again within 30 days is an owner's, with a new reason.
+    const g = branchOf('Again');
+    const idG = await pauseBranchNow(g.root);
+    vote(idG, voters.slice(0, 5), []);
+    closeNow(idG);
+    const ottoActor = JSON.parse(row(idG).params).pausedBy as string;
+    const backG = bringBackVote(g.b);
+    assert(row(backG).status === 'executed' && statusOf(g.b) === 'active' && row(idG).status === 'execution_pending_grace' && !listedKeys(idG).includes(g.b.pubKeyHex),
+        `setup: the community brings ${g.b.callsign} back in the window; they leave the list (${row(idG).status})`);
+    const againG = de.adminEmergencySuspend(g.b.pubKeyHex, ottoActor, REASON, { freshProof: true });
+    const needsOwnerG = de.repauseNeedsOwner(g.b.pubKeyHex);
+    const solo = seed('SoloX', gen, 1);
+    const soloPause = de.adminEmergencySuspend(solo.pubKeyHex, ottoActor, REASON, { freshProof: true });
+    if (!soloPause.success || !soloPause.decision) throw new Error(`setup: could not pause SoloX alone: ${soloPause.error}`);
+    vote(soloPause.decision.id, voters.slice(0, 5), []);
+    closeNow(soloPause.decision.id);
+    bringBackVote(solo);
+    const againSolo = de.adminEmergencySuspend(solo.pubKeyHex, ottoActor, REASON, { freshProof: true });
+    assert(row(soloPause.decision.id).status === 'failed' && !againSolo.success && againSolo.code === de.REMOVAL_COOL_DOWN_CODE && de.repauseNeedsOwner(solo.pubKeyHex),
+        `control, one member's removal: brought back in the window, the owner's same-reason re-pause is refused (${againSolo.code}) and a re-pause is an owner's`);
+    assert(!againG.success && againG.code === againSolo.code && statusOf(g.b) === 'active',
+        `the same for one account a branch's vote listed: the owner who paused the branch is refused (${againG.code ?? 'PAUSED'}), still active`);
+    assert(needsOwnerG, `and pausing them again within 30 days is an owner's (repauseNeedsOwner ${needsOwnerG})`);
+    const sameReasonG = de.pauseChainRefusal(g.b.pubKeyHex, 'owner:password', REASON);
+    assert(sameReasonG?.code === de.REPAUSE_SAME_REASON_CODE, `another owner can't pause them again with the branch's reason (${sameReasonG?.code ?? 'allowed'})`);
+    // (b) An admin lifts one account by hand while the vote is open: that pause stays on its record. Paused alone again (an
+    // owner, a new reason), a third pause in 90 days is refused.
+    const h = branchOf('Thrice');
+    const idH = await pauseBranchNow(h.root);
+    const liftH = de.adminLiftSuspension(h.b.pubKeyHex, ada.pubKeyHex);
+    assert(liftH.success && statusOf(h.b) === 'active' && row(idH).status === 'open' && !listedKeys(idH).includes(h.b.pubKeyHex),
+        `setup: lifted by hand, ${h.b.callsign} leaves the open vote's list`);
+    const byAdminH = de.adminEmergencySuspend(h.b.pubKeyHex, ada.pubKeyHex, NEW_CASE, { freshProof: true });
+    assert(!byAdminH.success && byAdminH.code === de.REPAUSE_NEEDS_OWNER_CODE,
+        `an admin can't pause them again within 30 days of that lift, as after one member's pause lifted by hand (${byAdminH.code ?? 'PAUSED'})`);
+    const secondH = de.adminEmergencySuspend(h.b.pubKeyHex, 'owner:password', NEW_CASE, { freshProof: true });
+    assert(secondH.success && statusOf(h.b) === 'disabled', `an owner pauses them alone again, with a new reason (${secondH.error ?? 'paused'})`);
+    de.adminLiftSuspension(h.b.pubKeyHex, ada.pubKeyHex);
+    const thirdH = de.adminEmergencySuspend(h.b.pubKeyHex, ada.pubKeyHex, 'A third case about the same account again', { freshProof: true });
+    assert(!thirdH.success && thirdH.code === de.THIRD_PAUSE_CODE && statusOf(h.b) === 'active',
+        `a third pause within 90 days is refused, the branch's pause counted (${thirdH.code ?? 'PAUSED'})`);
+    // A re-key moves the lifted entry with the account (engine/key-move.ts): on its new key, the third pause is still refused.
+    const hb2 = rekey(h.b);
+    const thirdOnNewKey = de.pauseChainRefusal(hb2.pubKeyHex, ada.pubKeyHex, 'A third case about the same account again');
+    assert(thirdOnNewKey?.code === de.THIRD_PAUSE_CODE && JSON.parse(row(idH).params).lifted?.some((l: any) => l.pubkey === hb2.pubKeyHex),
+        `re-keyed, the account's lifted entry moves to its new key, and a third pause is still refused (${thirdOnNewKey?.code ?? 'allowed'})`);
+    // The control: an account off a branch's list is not held by that vote. Paused alone again, it is paused by nothing
+    // but its own open vote, outside the branch's window, so it still votes on another Decision.
+    const soloG = de.adminEmergencySuspend(g.b.pubKeyHex, 'owner:password', NEW_CASE, { freshProof: true });
+    const castByG = de.castDecisionVote(idH, g.b.pubKeyHex, false);
+    assert(soloG.success && statusOf(g.b) === 'disabled' && se.removalInGraceOf(g.b.pubKeyHex) === null && castByG.success,
+        `control: off the list, paused alone again, they are in no window of the branch's and still vote elsewhere (${castByG.error ?? 'cast'})`);
+
     // ── 9. Votes off ────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n9. Votes off: no branch vote, and the prune branch as before');
     setSwitchOverride('decisions', false);
@@ -431,18 +509,10 @@ async function main() {
 
     // ── 10. A re-key moves an account on the list ───────────────────────────────────────────────────────────────────
     console.log('\n10. A re-key moves an account on the list: mid-vote and mid-grace, then No, Yes and a halt');
-    // The accounts the sections above brought back count in every electorate now: they leave, so the 7 voters reach quorum.
-    for (const id of [...s1.all, ...s2.all, ...s4.all, s5.b, settled, modInBranch, loner, other]) {
+    // The accounts §8 brought back, or left paused only by an open vote, count in every electorate: they leave too.
+    for (const id of [...g.all, ...h.all, hb2, solo]) {
         db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(id.pubKeyHex);
     }
-    const { completeRekey, issueRekeyCode } = await import('./engine/member-wizards.js');
-    /** The member's key replaced, as Settings → Re-Key does (completeRekey): the same person on a new key. */
-    const rekey = (from: Id): Id => {
-        const to = keypair(from.callsign);
-        completeRekey(from.pubKeyHex, to.pubKeyHex, issueRekeyCode(from.pubKeyHex, 'owner:password').code, 'owner:password');
-        return to;
-    };
-    const listedKeys = (decisionId: string) => (JSON.parse(row(decisionId).params).branch as any[]).map((e) => e.pubkey);
     const gone = (id: Id) => (db.prepare('SELECT COUNT(*) AS c FROM members WHERE public_key = ?').get(id.pubKeyHex) as { c: number }).c === 0;
 
     const k1 = branchOf('KeyNo');

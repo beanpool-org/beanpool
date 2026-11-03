@@ -31,7 +31,7 @@ export function takedownsSummary(grant: AgentGrant): { today: number; perDay: nu
     return { today: takedownsTodayBy(grant.id), perDay: agentPostsPerDay() };
 }
 
-/** Who may see this grant's takedowns at all: an owner's, ticked. A read, so a standby answers too (it has no record: none). */
+/** Who may take posts down or list them at all: an owner's grant, ticked. */
 function tickGate(grant: AgentGrant): string | null {
     if (grant.role !== 'owner') return "Only an owner's assistant takes posts down: an admin's cannot.";
     if (!grant.canModerate) return NOT_TICKED;
@@ -220,7 +220,8 @@ export const OWNER_TAKEDOWN_TOOLS: AgentTool[] = [
             required: ['days', 'returned', 'takedowns'],
         },
         run: (grant, args, boundary) => {
-            const refused = tickGate(grant);
+            // A standby keeps no record (engine/agent-takedowns.ts): "none" there would be untrue, so it says where the record is.
+            const refused = tickGate(grant) ?? (getNodeRole() === 'backup' ? 'This server is a standby, which keeps no record of takedowns: ask the main server.' : null);
             if (refused) return { ok: false, error: refused };
             const n = Math.floor(Number(args.days ?? TAKEDOWN.holdDays));
             const days = Number.isFinite(n) && n >= 1 ? Math.min(n, TAKEDOWN.holdDays) : TAKEDOWN.holdDays;

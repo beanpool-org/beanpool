@@ -23,8 +23,8 @@
  * - Disconnect: an owner any assistant, an admin their own. Its next call to /mcp is 401.
  * - Disconnect and put back (`putBack: true` on the same route; MCP-MODERATION S2, design §3.8): an owner's only, asked before
  *   anything is written (requireAdminRole reads the role, refuses every token, and asks the phone's step-up), so a refused one
- *   disconnects nothing. Then everything that assistant took down in the hold (7 days) and still waits is put back, as Moderation's
- *   "Put back everything since" does (engine/agent-takedowns.ts putBackTakedowns). No fresh proof: it is the undo of a stolen
+ *   disconnects nothing. Then everything that assistant took down that still waits is put back, as Moderation's "Put back
+ *   everything since" does (engine/agent-takedowns.ts putBackTakedowns); what is final stays final. No fresh proof: it is the undo of a stolen
  *   token's day, and has to be one tap. Each row says how many of its takedowns wait (`takedownsHeld`).
  * - Preview (`POST …/agent/preview`): what a tool answers, run by the same table /mcp runs (agent/tools.ts), with the
  *   same redaction and the same fences. Never a write: take_backup is not previewed. Not counted against any limit. With
@@ -39,7 +39,7 @@ import {
     type AutomationTokenView,
 } from '../automation-tokens.js';
 import { grantIdsWithMadePosts, madePostsCount, removeAllMadeBy } from './owner-posts.js';
-import { TAKEDOWN, takedownsHeldBy, takedownsTodayBy } from '../engine/agent-takedowns.js';
+import { takedownsHeldBy, takedownsTodayBy } from '../engine/agent-takedowns.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getMember, putBackTakedowns } from '../state-engine.js';
 import { logger } from '../logger.js';
@@ -336,9 +336,12 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         ctx.body = { postsPerDay: perDay };
     });
 
-    /** What "Disconnect and put back" puts back once the grant is gone: everything it took down in the hold that still waits. */
-    const putBackAfter = (ctx: any, id: string, now: number) => {
-        const out = putBackTakedowns({ grantId: id, since: new Date(now - TAKEDOWN.holdDays * DAY_MS).toISOString() });
+    /**
+     * What "Disconnect and put back" puts back once the grant is gone: everything it took down that still waits, the 7 days' hold and
+     * any left hidden past them (a deal, a Child safety report), so it matches the row's `takedownsHeld`. What is final stays final.
+     */
+    const putBackAfter = (ctx: any, id: string) => {
+        const out = putBackTakedowns({ grantId: id, since: new Date(0).toISOString() });
         logger.info('ADMIN', 'Posts an AI assistant took down put back', {
             grant: id, posts: out.back.slice(0, 200), stillHidden: out.stillHidden.length, gone: out.gone, role: ctx.state?.adminRole ?? null,
             by: String(actorOf(ctx) ?? 'owner:password').slice(0, 16), disconnected: true,
@@ -353,7 +356,6 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         // Asked before anything changes: a refused "and put back" disconnects nothing.
         const putBack = body(ctx).putBack === true;
         if (putBack && !requireAdminRole(ctx, ['owner'], 'Only an owner puts back everything an assistant took down: disconnect it, and an owner puts its takedowns back')) return;
-        const now = Date.now();
         const oauth = visibleOAuthGrants(ctx).find((g) => g.id === id);
         if (oauth && revokeOAuthGrant(id)) {
             forgetAgentGrant(id);
@@ -364,7 +366,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             const name = `${cleanMemberText(oauth.clientName, 60) || 'unnamed'}, sending to ${redirectHost(oauth.redirectUri)}`;
             logger.info('AUTH', 'AI assistant disconnected', { grant: id, via: 'oauth', role, by: by.slice(0, 16) });
             noteSecurityEvent({ key: 'sec.agent', actor: by, actorRole: role, detail: agentDisconnectedWords(name, role) });
-            ctx.body = { revoked: id, ...(putBack ? { putBack: putBackAfter(ctx, id, now) } : {}) };
+            ctx.body = { revoked: id, ...(putBack ? { putBack: putBackAfter(ctx, id) } : {}) };
             return;
         }
         const target = visibleGrants(ctx).find((t) => t.id === id);
@@ -380,7 +382,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         const role = roleOf(ctx);
         logger.info('AUTH', 'AI assistant disconnected', { tokenId: id, role, by: by.slice(0, 16) });
         noteSecurityEvent({ key: 'sec.agent', actor: by, actorRole: role, detail: agentDisconnectedWords(cleanMemberText(target.name, 60), role) });
-        ctx.body = { revoked: id, ...(putBack ? { putBack: putBackAfter(ctx, id, now) } : {}) };
+        ctx.body = { revoked: id, ...(putBack ? { putBack: putBackAfter(ctx, id) } : {}) };
     });
 
     router.post('/api/local/admin/agent/preview', async (ctx) => {

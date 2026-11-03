@@ -49,6 +49,7 @@ import { readNearbyAreaCopy } from '../../utils/nearby-area';
 import { communityListEmpty, communityListNote, joinedWords, type CommunityListNote } from '../../utils/community-list-note';
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { welcomeLineWords } from '../../components/welcome/welcome-lines';
+import { DoorRuleLine } from '../../components/DoorRuleLine';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -631,6 +632,15 @@ export default function PeopleScreen() {
     const shareCommunityLink = () => {
         if (anchorUrl) Share.share({ message: communityLinkMessage(anchorUrl) }).catch(() => {});
     };
+
+    // The community the typed invite joins (handleRedeem's target): none before a code is typed, and not this community
+    // for a member, whose invite there only says "Already a Member". A guest here completes registration here. An invite
+    // naming an address that isn't plain throws, and handleRedeem refuses it: no sentence for it either.
+    const redeemTarget = (() => {
+        if (!redeemCode.trim()) return null;
+        try { return redeemTargetUrl(redeemCode.trim(), redeemNodeUrl, anchorUrl); } catch { return null; }
+    })();
+    const redeemRuleUrl = redeemTarget && (isGuest || redeemTarget !== anchorUrl) ? redeemTarget : null;
 
     const handleRedeem = async () => {
         const rawInvite = redeemCode.trim();
@@ -1439,6 +1449,9 @@ export default function PeopleScreen() {
                                 keyboardType="url"
                             />
                         )}
+                        {/* The rule of the community this invite joins, where it confirms its members: the sentence its join
+                            screen says (Marty, 3 Nov). Read once the typing stops; never for this community, which a member is in. */}
+                        <DoorRuleLine url={redeemRuleUrl} delayMs={600} testID="people-join-rule" />
                         <Pressable
                             accessibilityRole="button"
                             style={{ backgroundColor: colors.brand.fill, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}

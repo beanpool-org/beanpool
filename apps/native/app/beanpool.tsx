@@ -16,7 +16,7 @@ import { useCommunities, type CommunityRow, type CommunityStatus } from '../util
 import { useNoticeCounts } from '../utils/use-notice-counts';
 import { dropCounts, noticeCountFor } from '../utils/notice-counts';
 import { readAlertsOff } from '../utils/push-alerts-off';
-import { sameCommunity } from '../utils/push-pins';
+import { communityAddress, sameCommunity } from '../utils/push-pins';
 import { useGlobalEntry } from '../utils/use-global-entry';
 import { useGlobalDoor } from '../utils/use-global-door-open';
 import { isGlobalCommunity } from '../utils/global-join-existing';
@@ -173,6 +173,7 @@ export default function BeanPoolSheet() {
     const { identity } = useIdentity();
     const [optionsCommunity, setOptionsCommunity] = useState<CommunityRow | null>(null);
     const [alertsOff, setAlertsOff] = useState<string[]>([]);
+    const [togglingAlerts, setTogglingAlerts] = useState(false);
 
     React.useEffect(() => {
         let alive = true;
@@ -181,23 +182,29 @@ export default function BeanPoolSheet() {
     }, []);
 
     const toggleAlerts = async () => {
-        if (!optionsCommunity) return;
+        if (!optionsCommunity || togglingAlerts) return;
+        setTogglingAlerts(true);
         const target = optionsCommunity.url;
         const isOff = alertsOff.some((c) => sameCommunity(c, target));
-        if (isOff) {
-            setAlertsOff((prev) => prev.filter((c) => !sameCommunity(c, target)));
-            const { turnAlertsOnAt } = await import('../services/push-notifications');
-            await turnAlertsOnAt(target).catch((e) => console.warn('[Push] Turn alerts on failed', e));
-        } else {
-            setAlertsOff((prev) => [...prev, target]);
-            if (identity) {
-                const { turnAlertsOffAt } = await import('../utils/account-leaves-phone');
-                await turnAlertsOffAt(identity, target).catch((e) => console.warn('[Push] Turn alerts off failed', e));
+        try {
+            if (isOff) {
+                setAlertsOff((prev) => prev.filter((c) => !sameCommunity(c, target)));
+                const { turnAlertsOnAt } = await import('../services/push-notifications');
+                await turnAlertsOnAt(target).catch((e) => console.warn('[Push] Turn alerts on failed', e));
             } else {
-                const { markAlertsOff } = await import('../utils/push-alerts-off');
-                await markAlertsOff(target).catch(() => {});
+                setAlertsOff((prev) => [...prev, target]);
+                if (identity) {
+                    const { turnAlertsOffAt } = await import('../utils/account-leaves-phone');
+                    await turnAlertsOffAt(identity, target).catch((e) => console.warn('[Push] Turn alerts off failed', e));
+                } else {
+                    const { markAlertsOff } = await import('../utils/push-alerts-off');
+                    const base = communityAddress(target);
+                    if (base) await markAlertsOff(base).catch(() => {});
+                }
+                await dropCounts(AsyncStorage, [target]).catch(() => {});
             }
-            await dropCounts(AsyncStorage, [target]).catch(() => {});
+        } finally {
+            setTogglingAlerts(false);
         }
     };
 
@@ -558,6 +565,7 @@ export default function BeanPoolSheet() {
                                 <Switch
                                     value={!alertsOff.some((c) => sameCommunity(c, optionsCommunity.url))}
                                     onValueChange={() => void toggleAlerts()}
+                                    disabled={togglingAlerts}
                                     trackColor={{ false: colors.surface.subtle, true: colors.brand.primary }}
                                     thumbColor={colors.surface.card}
                                     accessibilityRole="switch"

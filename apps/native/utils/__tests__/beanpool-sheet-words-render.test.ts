@@ -24,8 +24,10 @@ const shared = vi.hoisted(() => ({ messages: [] as string[] }));
 // use-global-guest-visit reads useNodeStatus().recheck (only during a visit, which these screens never start); the real
 // context pulls expo-crypto in at import.
 vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'unknown' }) }));
+vi.mock('../account-leaves-phone', () => ({ turnAlertsOffAt: vi.fn(async () => {}) }));
+vi.mock('../../services/push-notifications', () => ({ turnAlertsOnAt: vi.fn(async () => {}) }));
 vi.mock('react-native', () => {
-    const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
+    const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', switch: 'switch' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
         const { children, onPress, onLongPress, accessibilityLabel, accessibilityHint, accessibilityRole, testID, placeholder, numberOfLines, adjustsFontSizeToFit, minimumFontScale, value, onChangeText, disabled, onValueChange } = props;
@@ -34,7 +36,8 @@ vi.mock('react-native', () => {
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (onLongPress && !disabled) attrs.onContextMenu = (e: any) => { e?.preventDefault?.(); onLongPress(); };
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
-        if (onValueChange) { attrs.onChange = (e: any) => onValueChange(e?.target?.checked ?? !value); attrs.checked = !!value; }
+        if (onValueChange) { attrs.type = 'checkbox'; attrs.onChange = (e: any) => onValueChange(e?.target?.checked ?? !value); attrs.checked = !!value; }
+        if (disabled) attrs.disabled = true;
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -365,6 +368,37 @@ describe('the BeanPool sheet in the pseudo-locale: every word on it came through
 
         expect(host.textContent).toContain('Alerts from this community');
         expect(host.textContent).not.toContain('Remove from your saved list');
+    });
+
+    it('toggling alerts switch updates alertsOff and normalizes target address', async () => {
+        store.map.set('beanpool_anchor_url', RIVERSIDE);
+        store.map.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: RIVERSIDE }, { url: HILLS }]));
+        await renderIn('en');
+
+        const hillsBtn = host.querySelector('[aria-label="Hills, Can\'t reach it right now"]');
+        expect(hillsBtn).not.toBeNull();
+        await act(async () => {
+            (hillsBtn as any).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        });
+        await settle();
+
+        const switchEl = host.querySelector('input[role="switch"]') as HTMLInputElement;
+        expect(switchEl).not.toBeNull();
+        expect(switchEl.checked).toBe(true);
+
+        // Toggle off
+        await act(async () => {
+            switchEl.click();
+        });
+        await settle();
+        expect(switchEl.checked).toBe(false);
+
+        // Toggle back on
+        await act(async () => {
+            switchEl.click();
+        });
+        await settle();
+        expect(switchEl.checked).toBe(true);
     });
 });
 

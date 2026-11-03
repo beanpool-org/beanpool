@@ -1,4 +1,4 @@
-import { archetypeToCarry, publicArchetype, type QuizResult } from '@beanpool/core';
+import { archetypeIsNewer, archetypeToCarry, parseArchetype, publicArchetype, type QuizResult } from '@beanpool/core';
 import { accountEpochHolds } from './account-epoch';
 import { checkMembership, updateMemberProfile } from './api';
 
@@ -48,4 +48,26 @@ export async function publishQuizResult(publicKey: string, result: QuizResult): 
 /** What a Save carries of the working style, given the row the community holds: this browser's copy when it is newer. */
 export function workingStyleToCarry(publicKey: string, row: string | null | undefined): string | null {
     return archetypeToCarry(readWorkingStyle(publicKey), row);
+}
+
+/**
+ * Adopt `row` into this browser's copy when it is newer than the current browser copy.
+ * Older never overwrites newer, and a tie changes nothing. An old millisecond stamp read
+ * here is reduced to a date before it goes anywhere.
+ */
+export function adoptWorkingStyle(publicKey: string, row: string | null | undefined): boolean {
+    if (!publicKey || !row) return false;
+    const current = readWorkingStyle(publicKey);
+    if (!archetypeIsNewer(row, current)) return false;
+    if (!accountEpochHolds()) return false;
+    const parsed = parseArchetype(row);
+    if (!parsed) return false;
+    try {
+        const sanitized = { ...parsed };
+        delete (sanitized as any).updatedAt;
+        localStorage.setItem(storeKey(publicKey), JSON.stringify(sanitized));
+        return true;
+    } catch {
+        return false;
+    }
 }

@@ -1672,7 +1672,7 @@ router.delete('/api/local/admin/sync-copy/:copyId', async (ctx) => {
 // One listing photo's object by its content address, for a standby taking a copy whose photos go by reference (engine/sync.ts
 // photoRowsByReference; design scratch/global-node/DESIGN-paged-copies-fable.md §6, P4): the bytes a `post_photos` row of this
 // server names by that sha256, or a chat photo's (gap G4: a `message_attachments` row of this server names it by that
-// sha256; its object is ciphertext no server can open, sent only to a standby, which copies the rows that name it), and
+// sha256; its object is ciphertext no server can open, sent only to who may pull a copy, which holds the rows that name it), and
 // nothing else. An address no listing or chat photo here names is 404, whatever the store holds under it: anything a
 // shared bucket holds, and an avatar's (no object: it sits in its members row). The same auth as a copy's pages, under the
 // same administrative limiter (https-server.ts): a standby asks only for the objects its store lacks, at its pages' pace

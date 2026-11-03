@@ -8,7 +8,7 @@ related: communities, privacy, near-you, joining, browsing-the-market
 
 ## What your area is
 
-On the global community, your area is roughly where you are: about 10 km around a town or a spot, never your exact place. The global community uses it to show you what's on offer near you: the nearest 500 listings within 250 km of it. See "More than one community".
+On the global community, your area is roughly where you are: about 10 km around a town or a spot, never your exact place. The global community uses it to show you what's on offer near you: the nearest 500 listings within 250 km of it. The Market then lists them newest first, each with how far away it is. See "More than one community".
 
 You give it when you join, at **Roughly where are you?**, which you can skip with **Skip for now**. You can change it or clear it any time. It belongs to your account in the global community, so your phone and the web app use the same one.
 

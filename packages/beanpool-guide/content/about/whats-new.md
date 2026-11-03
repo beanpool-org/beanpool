@@ -5,6 +5,17 @@ summary: What changed in the app, in plain words.
 related: home, the-bean, how-it-works, rules, faq, communities
 ---
 
+## The Market in one order
+
+On the phone you get this with an up-to-date app; in a web browser, at once.
+
+- **Newest first, the same on the phone and the web.** The Market lists posts newest first under **Today**, **Yesterday**, **This Week** and **Older Listings**, by the day each was listed. The headings **Upcoming events**, **Polls** and **Nearest first** are gone.
+- **An event comes back once.** The day before it starts, an event is listed again under **Today**. A poll does the same the day before it closes. Then they sink like any other post.
+- **Two places a day.** A person's third post of a day, and any after it, come after everyone else's from that day.
+- **Editing a post does not move it up.** To be seen again, post again.
+- **On the global community**, the Market shows the newest within 250 km of your area, or within your **Distance**, each post with how far away it is. A line above the list says so. The phone no longer needs your location for it.
+- **Not changed:** posts an owner pinned stay at the top, **Events** still lists the soonest first, and a search finds what best matches your words. See "Browsing the market".
+
 ## Where your sign-in's copy is kept
 
 On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated.
@@ -24,7 +35,7 @@ You get these when the global community's server is updated. On the phone they n
 - **Your area.** In the web app, joining the global community has one more step after your photo: **Roughly where are you?** On the phone it is asked when you join with an account you already have; a new phone account sets it later in Settings, under **Your area**. In that step, tap **Use my location**, **Type a town or suburb**, or **Skip for now**. It is kept to about 10 km, never your exact spot. Change or clear it in Settings, under **Your area**. See "Your area".
 - **No area, no problem.** Without one you see the newest listings from everywhere, and a line above the Market says so. On the phone, tap it to set your area.
 - **New listings near you.** They come in as they are posted. Ones far away no longer reach your phone.
-- **In the web app**, the Market and the Map start from your area, or from a place you pick with **Distance**: nearest first, each listing with how far away it is. See "Finding things near you".
+- **In the web app**, the Market and the Map start from your area, or from a place you pick with **Distance**: each listing with how far away it is. The Map shows the nearest first. The Market lists the newest first, as "The Market in one order", above, says. See "Finding things near you".
 - **Polls** have no place of their own, so each is shown at the area of the member who made it.
 - **Type your town.** On the global community, **Find your community** on Home no longer needs your location: tap **or type your town** and pick your town. Only a rough point is kept. See "Finding a community near you".
 - **Posting without a price.** On the global community the post form asks for no price, because Beans live in local communities. In the web app, **Post Offer** and **Post Need** now work without one. A local community still asks for a price.

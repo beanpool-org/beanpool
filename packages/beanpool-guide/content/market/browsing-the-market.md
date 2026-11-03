@@ -8,13 +8,17 @@ related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-t
 
 ## The Market tab
 
-Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted.
+Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, under **Today**, **Yesterday**, **This Week** and **Older Listings**, by the day each was listed. The phone and the web app list it the same way.
 
-On the phone, events come first. If you have already let the app use your location, the list and compact views show listings nearest first instead, under **Nearest first**, with polls under **Polls**. **For You** keeps its own order. Pull the list down to refresh it.
+- **An event comes back once.** The day before it starts, an event is listed again under **Today**, among that day's new posts, and then sinks like any other. A weekly event comes back once a week.
+- **A poll comes back once too**, the day before it closes.
+- **Nobody takes more than two places a day.** A person's third post of a day, and any after it, come after everyone else's from that day.
+- **Editing a post does not move it up.** Nor does pausing it, or an answer to it. To be seen again, post again.
+- **A post an owner has pinned** sits at the very top, under **Pinned**, whatever its age.
 
-In the web app the Market opens as cards. In the list and compact views, events sit under the day they were posted. On a local community the web app does not put the nearest first.
+In the list and compact views you see the day headings. The grid shows the same order without them. On the phone the Market opens as a list; in the web app it opens as cards. **For You** keeps its own order. Under **Events** the soonest comes first, with **Today**, **This weekend** and **Next 7 days**. A search shows the posts that best match your words. Pull the list down on the phone to refresh it.
 
-On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere. With a **Distance**, open **Distance** and tap **Reset** to go back to your area, then tap **Show everywhere**. On the phone, the global community keeps the listings nearest your area, so those are what the Market shows first. When fewer than eight are near you, the newest from elsewhere come underneath under **Newest from elsewhere**, on the phone and the web app. They don't when you have picked a **Distance**, typed a search, or are looking at **Events**. See "Finding things near you".
+On the global community, the Market shows the newest within 250 km of your area (the rough place you give the community when you join, or in **Settings**), or within the **Distance** you pick, each post with how far away it is. A line above the list says which: **Newest within 250 km of your area.**, or, with a **Distance**, **Newest within 5 km of the place you picked.** It is the same on the phone and in the web app, and on the phone it does not need you to let the app use your location. In the web app, near your area the line has **Show everywhere** for the newest from everywhere. With a **Distance**, open **Distance** and tap **Reset** to go back to your area, then tap **Show everywhere**. When fewer than eight are near you, the newest from elsewhere come underneath under **Newest from elsewhere**, on the phone and the web app. They don't when you have picked a **Distance**, typed a search, or are looking at **Events**. See "Finding things near you".
 
 On the global community, while there are only a few listings, the Market also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened or answered. They go once there are enough real listings.
 

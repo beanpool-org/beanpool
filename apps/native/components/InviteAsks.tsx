@@ -184,6 +184,9 @@ export function AskAnAdmin({ anchorUrl, identity, onShare }: { anchorUrl: string
                                 onChangeText={setHowKnown}
                                 maxLength={INVITE_ASK_LIMITS.howKnown}
                                 accessibilityLabel={t(INVITE_ASK_WORDS.howKnown)}
+                                // One line to the node (it closes up line breaks), wrapped here so all of it shows at 320 dp.
+                                multiline
+                                textAlignVertical="top"
                                 placeholderTextColor={colors.text.muted}
                                 testID="invite-ask-how-known"
                             />

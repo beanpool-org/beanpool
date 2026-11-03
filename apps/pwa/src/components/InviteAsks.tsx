@@ -30,7 +30,7 @@ const REFUSAL = 'm-0 mb-3 text-sm leading-relaxed text-amber-700 dark:text-amber
 function Fenced({ name, line }: { name?: string; line: string }) {
     return (
         <div className="mt-2 pl-2.5 border-l-[3px] border-nature-300 dark:border-nature-600" data-testid="invite-ask-fence">
-            {name && <p dir="auto" className="m-0 text-[15px] font-bold text-nature-950 dark:text-white break-words">{name}</p>}
+            {name && <p dir="auto" className="m-0 text-base font-bold text-nature-950 dark:text-white break-words">{name}</p>}
             <p dir="auto" className="m-0 text-sm leading-relaxed text-nature-800 dark:text-nature-100 break-words whitespace-pre-wrap">{line}</p>
         </div>
     );

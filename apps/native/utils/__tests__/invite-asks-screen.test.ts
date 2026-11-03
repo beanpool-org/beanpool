@@ -70,7 +70,7 @@ const type = async (el: HTMLElement | null, text: string) => {
         el!.dispatchEvent(new Event('input', { bubbles: true }));
     });
 };
-const mount = async (el: ReturnType<typeof createElement>) => { await act(async () => { root.render(el); }); await flush(); };
+const mount = async (el: Parameters<Root['render']>[0]) => { await act(async () => { root.render(el); }); await flush(); };
 const member = (onShare = vi.fn()) => mount(createElement(AskAnAdmin, { anchorUrl: 'https://node.example', identity: IDENTITY, onShare }));
 const admin = (offersVouch = false) => mount(createElement(InviteAsksToAnswer, { anchorUrl: 'https://node.example', identity: IDENTITY, offersVouch }));
 const posted = () => node.calls.filter((c) => c.body !== undefined);
@@ -130,7 +130,7 @@ describe('asking on the phone', () => {
         const row = by('invite-ask-answer-n1')!;
         expect(row.textContent).toContain('It works once, for 30 days.');
         expect(row.textContent).toContain('INV-ABCD-EFGH');
-        const share = [...row.querySelectorAll('button')].find((b) => b.textContent?.includes('Share'))!;
+        const share = Array.from(row.querySelectorAll("button")).find((b) => b.textContent?.includes("Share"))!;
         await click(share);
         expect(onShare).toHaveBeenCalledWith('INV-ABCD-EFGH');
     });

@@ -7,10 +7,11 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { AVATAR_PICTURE, t } from '@beanpool/core';
-import { updateMemberProfile, getMemberProfile, registerMember } from '../lib/api';
+import { updateMemberProfile, getMemberProfile, registerMember, nodeAddress } from '../lib/api';
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { lastPhotoToOffer, lastPhotoFrom } from '../lib/last-photo';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
 import { OnboardingGuide } from './OnboardingGuide';
 import { usePictureCrop } from './PictureCropDialog';
@@ -30,6 +31,9 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
     const [step, setStep] = useState<Step>('name');
     const [callsign, setCallsign] = useState(identity.callsign ?? '');
     const [avatar, setAvatar] = useState<string | null>(null);
+    // The photo the member used last, in another community, offered while this one holds none for them (Profile S3,
+    // lib/last-photo.ts). A tickbox that starts OFF: ticking it makes it the pick, and only then is it shown or sent.
+    const [photoOffer, setPhotoOffer] = useState<{ avatar: string; from: string | null } | null>(null);
     // Preserved so saving the avatar doesn't blank an existing bio/contact.
     const [bio, setBio] = useState('');
     const [contact, setContact] = useState<Contact>(null);
@@ -43,6 +47,8 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
         (async () => {
             try {
                 const p = await getMemberProfile(identity.publicKey, identity.publicKey);
+                // Only once this community has said what it holds: an answer that never came offers nothing.
+                setPhotoOffer(lastPhotoToOffer(nodeAddress(), p?.avatar ?? null));
                 if (!p) return;
 
                 setAvatar(p.avatar);
@@ -61,6 +67,11 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
 
     const nameOk = callsign.trim().length >= 2;
     const avatarOk = !!resolveAvatarUrl(avatar);
+    // Ticked exactly while the offered photo is the pick: choosing another photo un-ticks it, and un-ticking takes it back
+    // out (this community held none when it was offered, so none comes back).
+    const offerTicked = photoOffer !== null && avatar === photoOffer.avatar;
+    const offerFrom = photoOffer ? lastPhotoFrom(photoOffer) : null;
+    const offerLabel = offerFrom ? t('Use the photo from {community}?', { community: offerFrom }) : t('Use the photo you chose last?');
     const idx = ORDER.indexOf(step);
 
     // A photo opens the crop dialog: the part the member chooses in the circle is their avatar, 512 px
@@ -170,6 +181,23 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                                 style={{ background: `url("${resolvedAvatar || resolveAvatarUrl(null, identity.publicKey) || '/avatars/avatar_bean_green.webp'}") center/cover` }}
                             >
                             </div>
+                            {photoOffer && (
+                                <label className="flex items-center gap-3 text-left mt-4 p-3 rounded-xl border border-nature-300 dark:border-nature-600 bg-nature-50 dark:bg-nature-800 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        data-testid="last-photo-offer"
+                                        checked={offerTicked}
+                                        onChange={() => { cropper.cancel(); setAvatar(offerTicked ? null : photoOffer.avatar); }}
+                                        className="w-5 h-5 shrink-0 cursor-pointer accent-nature-900 dark:accent-white"
+                                    />
+                                    <span
+                                        aria-hidden="true"
+                                        className="w-10 h-10 rounded-full shrink-0 overflow-hidden bg-oat-100 dark:bg-nature-700"
+                                        style={{ background: `url("${resolveAvatarUrl(photoOffer.avatar) || ''}") center/cover` }}
+                                    />
+                                    <span className="flex-1 min-w-0 break-words text-sm font-semibold text-nature-800 dark:text-nature-100">{offerLabel}</span>
+                                </label>
+                            )}
                             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
                             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleAvatarUpload} className="hidden" />
                             <div className="flex justify-center gap-3 mt-4">

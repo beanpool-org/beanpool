@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lastPhotoOffer, communityHostOf } from '../index.js';
+import { lastPhotoOffer, communityHostOf, photoCanTravel } from '../index.js';
 
 // Profile S3: the last photo is OFFERED on joining a community that holds none for the member, and nothing else
 // ever reads it. This is the one rule the phone and the web both ask.
@@ -41,6 +41,17 @@ describe('lastPhotoOffer', () => {
     it('never offers a value that cannot travel: a node URL, a device file, junk', () => {
         for (const bad of ['/api/avatar/abc?size=thumb', 'https://a.example/api/avatar/abc', 'file:///data/user/0/x.jpg', '', 'null', 'undefined']) {
             expect(lastPhotoOffer({ last: { avatar: bad, from: null }, hereAvatar: null, setHere: false }), bad).toBeNull();
+        }
+    });
+});
+
+describe('photoCanTravel', () => {
+    it('is true for a picture itself or a shipped one, and false for anything that names a place or nothing', () => {
+        expect(photoCanTravel(DATA)).toBe(true);
+        expect(photoCanTravel('DATA:image/png;base64,iVBOR')).toBe(true);
+        expect(photoCanTravel(PRESET)).toBe(true);
+        for (const no of ['/api/avatar/abc?size=thumb', 'https://a.example/x.jpg', 'file:///x.jpg', '', '  ', 'null', 'undefined', null, undefined, 7]) {
+            expect(photoCanTravel(no), String(no)).toBe(false);
         }
     });
 });

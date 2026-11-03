@@ -15,8 +15,11 @@ export interface LastPhoto {
     from: string | null;
 }
 
-/** A value that carries the picture itself or names a shipped one: the same allow-list as the phone's isPortableAvatarValue. */
-function carriesPicture(value: unknown): value is string {
+/**
+ * Can this photo be kept, and offered, for another community? A value that carries the picture itself or names a shipped
+ * one: the same allow-list as the phone's isPortableAvatarValue. A node's own picture URL names a place, so it is not.
+ */
+export function photoCanTravel(value: unknown): value is string {
     if (typeof value !== 'string') return false;
     const v = value.trim();
     if (!v || v === 'null' || v === 'undefined') return false;
@@ -49,7 +52,7 @@ export function lastPhotoOffer(input: {
     setHere: boolean;
 }): LastPhoto | null {
     const { last, hereAvatar, setHere } = input;
-    if (!last || !carriesPicture(last.avatar)) return null;
+    if (!last || !photoCanTravel(last.avatar)) return null;
     if (!holdsNoPhoto(hereAvatar)) return null;
     if (setHere) return null;
     return { avatar: last.avatar.trim(), from: last.from };

@@ -1,7 +1,7 @@
 ---
 slug: global-limits
 title: Limits on a global community
-summary: The limits that keep a global community's cost flat: listings archived after 90 days without a change, an event's photos deleted a week after it ends, polls off the board when they close, 5 photos a listing, the nearest 500 listings on a phone, 3 place watches. What each does, and how to change it.
+summary: The limits that keep a global community's cost flat: listings archived after 90 days without a change, an event's photos deleted a week after it ends, polls off the board a week after they close, 5 photos a listing, the nearest 500 listings on a phone, 3 place watches. What each does, and how to change it.
 related: showcase, rate-limits, backups-and-replicas, updates-and-health
 ---
 
@@ -13,7 +13,7 @@ The members' guide lists the same numbers, in "The global community's limits". I
 
 - **A listing is archived 90 days after it last changed**, with its photos. A local community: never. Setting: LISTING_ARCHIVE_DAYS, from 30 to 3650.
 - **An event's photos are deleted 7 days after it ends.** A local community: never. No setting.
-- **A poll comes off the board when it closes.** A local community: a closed poll stays on the board with its result. No setting.
+- **A poll comes off the board 7 days after it closes.** A local community: a closed poll stays on the board with its result. No setting.
 - **5 photos a listing or an event**, on every community. No setting.
 - **A member's phone keeps the nearest 500 listings within 250 km** of their area. A local community: every listing. Settings: NEARBY_LISTINGS_MAX and NEARBY_LISTINGS_RADIUS_KM, each from 1 to 2000.
 - **3 places a member may watch**, on every community that keeps the directory (a global community does; a local one doesn't). Setting: PLACE_WATCHES_MAX, from 1 to 20.
@@ -59,8 +59,8 @@ A standby archives nothing of its own: it copies the result from the main server
 
 The same switch, **retention**, covers them. Every minute the main server:
 
-- Deletes the photos of an event that ended 7 days ago. Nothing else about the event changes. It already left the Market, the Map, Home and search when it ended. Its host and the people who went can still open it, and its chat stays, until the clean-up 30 days after the end, which every community runs. Left alone: a repeating event that goes on, one changed in the last 7 days (an RSVP, or photos added after the day), one a report waits on or hidden for the moderators, and copies of another community's events.
-- Takes a poll off the board when it closes, whether its author closed it or its time ran out. Every member's app drops it. Its votes stay in the database. Its author can still open it by its address, with its result, and an owner's assistant still reads its counts with poll_results. Left alone: a poll a report waits on or hidden for the moderators, and copies of another community's polls.
+- Deletes the photos of an event that ended 7 days ago. Nothing else about the event changes. It already left the Market, the Map, Home and search when it ended. Its host and the people who went can still open it, and its chat stays, until the clean-up 30 days after the end, which every community runs. Left alone: a repeating event that goes on, one changed in the last 7 days (its host's edits, such as photos added after the day; an ended event takes no RSVPs), one a report waits on or hidden for the moderators, and copies of another community's events.
+- Takes a poll off the board 7 days after it closed, whether its author closed it or its time ran out. For those 7 days it stays on the board, closed, so members read its result and, on an anonymous poll, how many of its votes came from new or 12-word accounts, and its author reads its typed answers. Then every member's app drops it. Its votes and its typed answers stay in the database. Its author can still open it by its address, with its result and its typed answers, an owner can still read and remove a typed answer, and an owner's assistant still reads its counts with poll_results. Left alone: a poll a report waits on, of the poll or of one of its typed answers, one hidden for the moderators, one changed in the last 7 days (an owner removing a typed answer, say), and copies of another community's polls.
 
 At most 200 events and 200 polls go in one run, each in its own transaction; the rest go a minute later. The photos go as a listing's do (above). A standby does nothing of its own: it copies the result from the main server.
 

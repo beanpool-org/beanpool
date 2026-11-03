@@ -1,7 +1,7 @@
 ---
 slug: global-community-limits
 title: The global community's limits
-summary: The global community is free, with limits that keep its cost flat. A listing is archived 90 days after it last changed, an event's photos go a week after it ends, a poll leaves the board when it closes. Up to 5 photos a listing, the nearest 500 listings on your phone, 3 places to watch.
+summary: The global community is free, with limits that keep its cost flat. A listing is archived 90 days after it last changed, an event's photos go a week after it ends, a poll leaves the board a week after it closes. Up to 5 photos a listing, the nearest 500 listings on your phone, 3 places to watch.
 related: beans-and-the-global-community, posting, your-area, finding-a-community, reporting
 ---
 
@@ -17,7 +17,7 @@ These are the global community's limits. A local community runs on its own serve
 
 - **A listing is archived 90 days after it last changed.** It comes off the Market and the Map, and its photos are deleted. Editing it, pausing it or putting it back up all count as a change: opening it with **Edit Post** and tapping **Save** keeps it for another 90 days. A deal on it counts too. When one of yours is archived, you get a notification with your **Marketplace Activity** alerts. You can post it again any time.
 - **An event's photos are deleted a week after it ends.** An event leaves the Market and the Map when it ends. Its host and the people who went can still open it, without its photos, and its chat stays for 30 days after the end, as on every community.
-- **A poll comes off the board when it closes.**
+- **A poll comes off the board a week after it closes.** For that week everyone who could see it still reads its result, with how many of its votes came from new or 12-word accounts on an anonymous poll, and the person who started it reads its typed answers. After the week, the person who started it can still open it, with its result and its typed answers. See "Polls".
 - **Up to 5 photos a listing.**
 - **Your phone keeps the nearest 500 listings**, within 250 km of your area. It also keeps your own, and any you have a deal or a conversation about. The Market's search still finds listings from everywhere. See "Your area".
 - **You can watch up to 3 places** with **Tell me when one starts here**. To watch another, stop watching one. See "Finding a community near you".

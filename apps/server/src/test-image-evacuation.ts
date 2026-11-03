@@ -74,6 +74,20 @@ function dataUrl(buf: Buffer, mime = 'image/jpeg'): string {
 function dbSizeBytes(file: string): number {
     try { return fs.statSync(file).size; } catch { return 0; }
 }
+/**
+ * The bytes the two photo-carrying tables take, with their indexes and overflow pages, counted page by page (dbstat).
+ * The whole state.db is the wrong thing to hold against the old file: the schema's own pages (a page or more for every
+ * table and index; about 2.3 MB of the new file here, none of the old one) are in the new file and were never in the old
+ * one, so every table a change adds eats into a whole-file ratio (#2775: 2.43 MB after of 4.85 MB before, with main already
+ * at 2.41 and the line at 2.42). This is the part the evacuation is meant to empty.
+ */
+function photoTableBytes(conn: { prepare(sql: string): { get(): unknown } }): number {
+    const row = conn.prepare(
+        `SELECT COALESCE(SUM(pgsize), 0) AS n FROM dbstat
+          WHERE name IN (SELECT name FROM sqlite_master WHERE tbl_name IN ('post_photos', 'message_attachments'))`
+    ).get() as { n: number };
+    return row.n;
+}
 
 /** How many inline photos the fixture carries. Enough for the size measurement to mean something. */
 // Enough that the last section's "less than half" weighs photos: every table the schema gains adds to the database it measures and
@@ -86,7 +100,7 @@ const FIXTURE_ATTACHMENTS = 10;
  * schema.sql is a no-op on a table that already exists, so this is the only way to exercise the rebuild the
  * live nodes will go through.
  */
-function seedLegacyDatabase(): { photos: { postId: string; order: number; value: string }[]; attachments: { id: string; data: string; nonce: string }[] } {
+function seedLegacyDatabase(): { photos: { postId: string; order: number; value: string }[]; attachments: { id: string; data: string; nonce: string }[]; photoTableBytes: number; payloadBytes: number } {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     const legacy = new Database(path.join(DATA_DIR, 'state.db'));
     legacy.pragma('journal_mode = WAL');
@@ -148,8 +162,10 @@ function seedLegacyDatabase(): { photos: { postId: string; order: number; value:
     // Fold the WAL back into state.db so the "before" size is the whole database, not the part of it that
     // happens to have been checkpointed.
     legacy.pragma('wal_checkpoint(TRUNCATE)');
+    const tableBytes = photoTableBytes(legacy);
     legacy.close();
-    return { photos, attachments };
+    const payloadBytes = photos.reduce((n, p) => n + p.value.length, 0) + attachments.reduce((n, a) => n + a.data.length, 0);
+    return { photos, attachments, photoTableBytes: tableBytes, payloadBytes };
 }
 
 async function main(): Promise<void> {
@@ -671,7 +687,20 @@ async function main(): Promise<void> {
         `\n   state.db: ${(sizeBeforeUpgrade / 1024 / 1024).toFixed(2)} MB before → ` +
         `${(sizeAfter / 1024 / 1024).toFixed(2)} MB after, with ${(storeBytes / 1024 / 1024).toFixed(2)} MB now in the image store.\n`
     );
-    assert(sizeAfter < sizeBeforeUpgrade / 2, 'the database is less than half the size it was');
+    // The whole file is held against the legacy file only after the schema's own pages are taken off (see photoTableBytes):
+    // what is left is the photo tables and any slack the VACUUM did not return, so it still goes red when the photos
+    // stay in a row (or the space is not given back), and no longer when a change adds a table.
+    const photoTablesAfter = photoTableBytes(db);
+    const schemaAndOtherBytes = (db.prepare('SELECT COALESCE(SUM(pgsize), 0) AS n FROM dbstat').get() as { n: number }).n - photoTablesAfter;
+    console.log(
+        `   photo tables: ${(fixture.photoTableBytes / 1024 / 1024).toFixed(2)} MB before → ${(photoTablesAfter / 1024 / 1024).toFixed(2)} MB after; ` +
+        `the rest of the file (the schema's pages and every other table): ${(schemaAndOtherBytes / 1024 / 1024).toFixed(2)} MB.\n`
+    );
+    assert(fixture.photoTableBytes >= fixture.payloadBytes,
+        `the measure sees the photos: the legacy tables read ${fixture.photoTableBytes} B, the inline photos alone are ${fixture.payloadBytes} B`);
+    assert(photoTablesAfter < fixture.photoTableBytes / 2, 'the photo tables are less than half the size they were');
+    assert(sizeAfter - schemaAndOtherBytes < sizeBeforeUpgrade / 2,
+        'the database, less the pages that are not the photo tables, is less than half the size it was');
 
     // ── 12. the export names the rows it could not send ─────────────────────────────────────────
     //

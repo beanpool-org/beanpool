@@ -15,10 +15,13 @@
  *   them and writes nothing back; a clear that keeps the account (Force Clear, leaving a community) is read afresh. A
  *   tab that missed the news finds it at the start of its next read or write, and that call stops there: what the page
  *   held went with the news, so nothing of it is kept or sent (PR #1479's review, round 3).
- * - **The card frame** (CARD-FRAME §1–§2): "…" on a card (Settings… · Move up · Move down · Remove), Add a card
- *   (components/AddCardDialog.tsx) and Edit home (components/EditHomeDialog.tsx) on the community card; the version-2
+ * - **The card frame** (CARD-FRAME §1–§2): "…" on a card (Settings… · Arrange · Remove), Add a card
+ *   (components/AddCardDialog.tsx) and Arrange on the community card; the version-2
  *   list is saved on the account (`home.layout`) with this browser's copy. Which copy stands, what is asked and every edit
  *   are lib/home-layout.ts, the phone's rules (apps/native/utils/home-cards.ts).
+ * - **Arrange** (DESIGN-home-layout-fable.md §3.2): one way to move a card, on the card. Holding a band, "…" → Arrange or
+ *   Arrange › folds the cards to their bands and one line, where they stand, with ↑ ↓ on each; every move is saved as it
+ *   is made, through `moveCard`, so Done (or Escape) only unfolds them. The DOM is still the member's order.
  * - **A wide screen** (scratch/global-node/DESIGN-home-wide-and-content-fable.md D1, slice W2): the cards stand in as many
  *   320–576 px columns as the page's own width holds, up to three, row first in the saved order; Needs you and the
  *   community card span the row. A phone's width is one column, as before. Auto only: a saved choice of columns is W0's.
@@ -32,10 +35,10 @@ import {
     HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    homeCardHue, homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
+    ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
     type CardHue,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
+    capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word,
     communityShapeSummary, type CommunityShapeFeatures,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -50,17 +53,18 @@ import { AskToJoin } from '../components/AskToJoin';
 import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
-    joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
-    starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
+    joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, promiseLine, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
+    pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
     type HomeFind,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
-    canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
-    listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, NOT_ON_ACCOUNT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderAmong,
+    canRemoveCard, cardLabelName, cardLine, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
+    listOf, moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
+    resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
+import { useArrangeDrag } from '../lib/arrange-drag';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { markHomeInflight, recordHomeAnswer } from '../lib/home-store';
 import { settleInterests, shareInterests } from '../lib/home-interests';
@@ -88,8 +92,7 @@ import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/mar
 import { CategoryTile } from '../components/CategoryTile';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
-import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../components/HomeCard';
-import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
+import { CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, packedHeight, useCardContainer } from '../components/HomeCard';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { OneWayBackCard } from '../components/OneWayBack';
@@ -148,7 +151,7 @@ export const TIPS_DONE_WORDS = HOME_WORDS.tipsDone;
 const LIB_LINES = {
     skyNoPlace: SKY_NO_PLACE_LINE, fewerCards: FEWER_CARDS_LINE, hint: HOME_HINT_LINE, searchOffline: SEARCH_OFFLINE_LINE,
     typeYourTown: TYPE_YOUR_TOWN, notHereTypeYourTown: NOT_HERE_TYPE_YOUR_TOWN, startCard: START_CARD_WORDS,
-    tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW,
+    tipsDontShow: TIPS_DONT_SHOW, tipsDontShowLabel: TIPS_DONT_SHOW_LABEL, saveSearchNotNow: SAVE_SEARCH_NOT_NOW, notOnAccount: NOT_ON_ACCOUNT_LINE,
 } as const;
 /** Core's FIND_TOWN_SEARCH_WORDS as the town search draws them, in the member's language (made where drawn). */
 const findTownWords = (): AddressSearchWords => ({
@@ -199,6 +202,21 @@ function reducedMotion(): boolean {
 const FULL_ROW: React.CSSProperties = { gridColumn: '1 / -1' };
 /** Needs you and the community card are full rows of the grid; every other card is one cell (D1, D3). */
 const spansRow = (type: string) => type === FIXED_FIRST || type === FIXED_LAST;
+/** The two one-time notes, when they stand in the grid, packed as full rows of it. */
+const NOTE_FEWER = 'note-fewer';
+const NOTE_HINT = 'note-hint';
+/** Arrange's + Add a card tile, packed as one card is. */
+const ARRANGE_ADD = 'arrange-add';
+/** The room left under Arrange's bar when a card or a control is brought into view. */
+const ARRANGE_CLEAR_PX = 8;
+/** Which packed child a child of the grid is, by the testids the page gives them; an element that is none has no id. */
+function packIdOf(el: Element): string | null {
+    const testId = el.getAttribute('data-testid') ?? '';
+    if (testId === 'home-fewer') return NOTE_FEWER;
+    if (testId === 'home-hint') return NOTE_HINT;
+    if (testId === 'home-arrange-tile') return ARRANGE_ADD;
+    return testId.startsWith('home-card-') ? testId.slice('home-card-'.length) : null;
+}
 
 /**
  * How many columns Home's cards stand in (DESIGN-home-wide-and-content-fable.md D1, slice W2; Auto only): the page's own
@@ -377,7 +395,7 @@ function MarketListingItem({
                             {kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}
                         </span>
                         <span dir="auto" className="text-sm font-semibold break-words text-text-primary">
-                            {item.title}
+                            {item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}
                         </span>
                     </div>
                     {(price || km) && (
@@ -416,7 +434,7 @@ function MarketListingItem({
                     <span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>
                         {kind === 'NEED' ? t('NEED', undefined, 'listing type') : t('OFFER', undefined, 'listing type')}
                     </span>
-                    <span dir="auto">{item.title}</span>
+                    <span dir="auto">{item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}</span>
                 </span>
                 {(price || km) && <span className="block text-xs text-text-secondary">{[price, km].filter(Boolean).join(' · ')}</span>}
             </span>
@@ -440,7 +458,7 @@ function MarketBody({
     nextImageLoading: () => 'eager' | 'lazy';
 }) {
     const { wide } = useCardContainer();
-    const items = starredFirst(m.items, i => i.category, isVisitor ? [] : myInterests);
+    const items = pinnedFirst(starredFirst(m.items, i => i.category, isVisitor ? [] : myInterests));
     const examples = m.examples && m.items.length < 6;
 
     return (
@@ -776,7 +794,7 @@ function DecideBody({
                         testId="home-decide-poll"
                     >
                         <span className="min-w-0 flex-1">
-                            <span className="block break-words text-sm font-semibold">{pollHeading}</span>
+                            <span className="block break-words text-sm font-semibold">{d.poll!.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{pollHeading}</span>
                             {pollCloses && <span className="block text-xs text-text-secondary break-words">{pollCloses}</span>}
                         </span>
                     </HomeLine>
@@ -863,7 +881,7 @@ function CommunityBody({
     features,
     onOpenShape,
     onAddCard,
-    onEditHome,
+    onArrange,
 }: {
     cm: NonNullable<HomeCards['community']>;
     profile: string;
@@ -871,7 +889,7 @@ function CommunityBody({
     features?: CommunityShapeFeatures | null;
     onOpenShape?: () => void;
     onAddCard: () => void;
-    onEditHome: () => void;
+    onArrange: () => void;
 }) {
     const { wide } = useCardContainer();
     // The members' card (design §4.1): a visitor, who reads the lobby's Home, is told none of it.
@@ -969,7 +987,7 @@ function CommunityBody({
             {!isVisitor && (
                 <div className="flex flex-wrap justify-end gap-x-4">
                     <HomeMore onClick={onAddCard} testId="home-add-open" label={t('Add a card to Home')}>{t('Add a card ›')}</HomeMore>
-                    <HomeMore onClick={onEditHome} testId="home-edit-open" label={t('Edit home: the cards on Home and their order')}>{t('Edit home ›')}</HomeMore>
+                    <HomeMore onClick={onArrange} testId="home-arrange-open" label={t(ARRANGE_WORDS.link)}>{t(ARRANGE_WORDS.more)}</HomeMore>
                 </div>
             )}
         </div>
@@ -999,15 +1017,19 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [interestsOpen, setInterestsOpen] = useState(false);
     // "Your way back in" is drawn: only the card knows (its schedule is in this browser), and it says so before the paint.
     const [safetyDrawn, setSafetyDrawn] = useState(false);
+    // Arrange doesn't draw the card's body, and its going says "not drawn": that isn't news of the card. Done draws it again.
+    const inArrangeNow = useRef(false);
+    const noteSafetyDrawn = useCallback((drawn: boolean) => { if (drawn || !inArrangeNow.current) setSafetyDrawn(drawn); }, []);
     const [tipsGuide, setTipsGuide] = useState<Guide | null>(() => {
         try { return getBundledGuide(); } catch { return null; }
     });
-    const [editOpen, setEditOpen] = useState(false);
+    // Arrange (DESIGN-home-layout-fable.md §3.2): the cards are folded and carry their arrows.
+    const [arranging, setArranging] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [shapeModalOpen, setShapeModalOpen] = useState(false);
-    // A card's Settings… (from its "…" or Edit home).
+    // A card's Settings… (from its "…", or Arrange's word on a card with nothing to show).
     const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
-    // The node refused the version-2 layout (a node from before the frame): Edit home says the cards stay here (§2.3).
+    // The node refused the version-2 layout (a node from before the frame): Arrange says the cards stay here (§2.3).
     const [notOnAccount, setNotOnAccount] = useState(false);
     const [fewerOpen, setFewerOpen] = useState(false);
     const [point, setPoint] = useState<HomePoint | null>(() => marketPoint());
@@ -1142,7 +1164,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     /** A tour part way in this browser, for "Pick up the tour at step n ›". */
     const [tourProgress, setTourProgress] = useState<TourProgress | null>(null);
     const { run: tourRun, pendingEnd, pendingAgain } = useTour();
-    // The Tips card's record as changed on this landing (Next, Don't show, Edit home); another landing's is not this one's.
+    // The Tips card's record as changed on this landing (Next, Don't show, Remove); another landing's is not this one's.
     const [tipsChanged, setTipsChanged] = useState<{ landing: string; record: TipsRecord } | null>(null);
     const tipsRef = useRef<TipsRecord | null>(null);
     // The landing whose once-a-day advance has been written: once per landing, never while Home is in front.
@@ -1184,8 +1206,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     pointRef.current = point;
     const interestsCardRef = useRef<HTMLDivElement | null>(null);
     const pageRef = useRef<HTMLDivElement | null>(null);
+    const gridRef = useRef<HTMLDivElement | null>(null);
     const [measurePage, cols] = useHomeColumns();
     const setPage = useCallback((el: HTMLDivElement | null) => { pageRef.current = el; measurePage(el); }, [measurePage]);
+    // The updater is the only reader, so every report sees the one before it, however many land in one batch, and an
+    // unchanged height comes back as the same object and renders nothing. No ref of these: a ref holding this state was
+    // written to directly, which changed the state under React and swallowed every height after the first (PR #2748).
+    const [cardHeights, setCardHeights] = useState<Readonly<Record<string, PackHeight>>>({});
+    const onCardHeight = useCallback((id: string, h: number) => {
+        const now = Date.now();
+        setCardHeights(prev => settleHeights(prev, { [id]: h }, now));
+    }, []);
     // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
     const focusAfterHide = useRef<string[] | null>(null);
     // The next landing comes after a clear: the kept copy is gone (or going), so the node is asked afresh.
@@ -1233,7 +1264,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     /*
      * Save the layout on the account, as the phone does (apps/native/app/(tabs)/index.tsx pushLayout). A 400 from a node
      * whose Home answer is version 1 (or has none) is a node from before the card frame: the cards stay in this browser,
-     * Edit home says so, and they are sent again at the next landing, never in a loop (CARD-FRAME §2.3). Any other refusal:
+     * Arrange says so, and they are sent again at the next landing, never in a loop (CARD-FRAME §2.3). Any other refusal:
      * the account's copy stands and this one is never sent again by itself. A success clears both.
      */
     const saveLayout = useCallback((next: HomeLayoutV2): Promise<void> => {
@@ -1519,7 +1550,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         setAnswer(null);
         setLayout(null);
         setInterests(null);
-        setEditOpen(false);
+        setArranging(false);
         setPickerOpen(false);
         setSettingsFor(null);
         setNotOnAccount(false);
@@ -1634,6 +1665,193 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     /** The layout edits start from: the one drawn, or the starter set for a Home never saved once the tour has ended. */
     const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
     const startUp = shown.some(c => c.type === 'start');
+    const isVisitor = !answer || !!answer.welcome || !answer.me;
+    const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
+    // In Arrange the grid holds the folded cards, drawn or not; null: Home as usual.
+    const foldedPins = answer ? currentPins(answer, now) : [];
+    const folded = arranging && answer && !isVisitor
+        ? arrangeCards(cardOrder(shownLayout(answer, layout, { tourOver }), foldedPins), shown, type => cardOnNode(type, frameOf(answer)), foldedPins)
+            .filter(c => c.type !== FIXED_LAST || !!answer.cards.community)
+        : null;
+    const inArrange = !!folded;
+    inArrangeNow.current = inArrange;
+    // Dragging a band (L3): the lifted card's place is live, so the cards are laid out in the order the drop would make.
+    const drag = useArrangeDrag({
+        gridRef, enabled: inArrange, onDrop: dropInArrange,
+        ids: (folded ?? []).filter(c => canMoveCard(c.type, foldedPins)).map(c => c.id),
+    });
+    const liveFolded = folded && drag.lift ? reorderAmong(folded, drag.lift.id, drag.lift.to, foldedPins) : folded;
+    const shownKey = (liveFolded ?? shown).map(c => `${c.id}:${c.type}`).join(',');
+
+    // Each child reports its own height at mount and by its own ResizeObserver, but that comes a frame late, so when the
+    // columns or the list change every child is read here, before the paint. The grid's direct children are the packed ones.
+    useLayoutEffect(() => {
+        const grid = gridRef.current;
+        if (cols <= 1 || !grid || typeof ResizeObserver === 'undefined') return;
+        const seen: Record<string, number> = {};
+        for (const el of Array.from(grid.children) as HTMLElement[]) {
+            const id = packIdOf(el);
+            if (id) seen[id] = packedHeight(el);
+        }
+        const now = Date.now();
+        setCardHeights(prev => settleHeights(prev, seen, now));
+    }, [cols, shownKey, inArrange, notesUnderFirst, fewerOpen, hintOpen, safetyDrawn]);
+
+    const packedList = useMemo(() => {
+        if (cols <= 1 || typeof ResizeObserver === 'undefined') return [];
+        if (Object.keys(cardHeights).length === 0) return [];
+        const items: PackableCard[] = [];
+        const tile = { id: ARRANGE_ADD, height: cardHeights[ARRANGE_ADD]?.height ?? 0 };
+        const cards = liveFolded ?? shown;
+        for (let i = 0; i < cards.length; i++) {
+            const card = cards[i];
+            if (!inArrange && card.type === 'safety' && !safetyDrawn) continue;
+            // Arrange's tile stands last, before the community card.
+            if (inArrange && card.type === FIXED_LAST) items.push(tile);
+            items.push({
+                id: card.id,
+                height: cardHeights[card.id]?.height ?? 0,
+                fullRow: spansRow(card.type),
+            });
+            if (!inArrange && i === 0 && notesUnderFirst) {
+                if (fewerOpen && !isVisitor) {
+                    items.push({
+                        id: NOTE_FEWER,
+                        height: cardHeights[NOTE_FEWER]?.height ?? 0,
+                        fullRow: true,
+                    });
+                }
+                if (hintOpen && !isVisitor && !startUp) {
+                    items.push({
+                        id: NOTE_HINT,
+                        height: cardHeights[NOTE_HINT]?.height ?? 0,
+                        fullRow: true,
+                    });
+                }
+            }
+        }
+        if (inArrange && !cards.some(c => c.type === FIXED_LAST)) items.push(tile);
+        return packHome(items, cols);
+    }, [cols, shownKey, inArrange, cardHeights, notesUnderFirst, fewerOpen, hintOpen, isVisitor, startUp, safetyDrawn]);
+
+    const packedMap = useMemo(() => new Map(packedList.map(p => [p.id, p])), [packedList]);
+    const isPacked = typeof ResizeObserver !== 'undefined' && cols > 1 && packedList.length > 0;
+
+    // ── Arrange (DESIGN-home-layout-fable.md §3.2) ──
+    // The card it was entered from, whose "…" takes focus back at Done (Arrange › when there is none).
+    const arrangeFrom = useRef<string | null>(null);
+    // The next focus at Done: a pointer's Done leaves the page where it is; a key's goes where focus goes.
+    const arrangeBack = useRef<{ quiet: boolean } | null>(null);
+    // After a move: the arrow to keep focus on, or its twin once it is off at an end.
+    const focusArrow = useRef<{ id: string; dir: 'up' | 'down' } | null>(null);
+    /** A drag let go (L3): the same list an arrow would have made, saved at once; focus and scroll go where the card landed. */
+    function dropInArrange(id: string, to: number) {
+        const card = folded?.find(c => c.id === id);
+        if (!folded || !card) return;
+        focusArrow.current = { id, dir: 'up' };
+        if (!changeLayout((l) => moveCardTo(l, id, to, folded, Date.now(), foldedPins))) { focusArrow.current = null; return; }
+        setLive(arrangeMovedLine(cardLabelName(card, String(answer?.profile)), to + 1, folded.filter(c => canMoveCard(c.type, foldedPins)).length));
+    }
+    function startArrange(from?: string) {
+        arrangeFrom.current = from ?? null;
+        setArranging(true);
+        setLive(t(ARRANGE_WORDS.opened));
+    }
+    function endArrange(quiet = false) {
+        arrangeBack.current = { quiet };
+        setArranging(false);
+    }
+    const endArrangeRef = useRef(endArrange);
+    endArrangeRef.current = endArrange;
+    // The bar stands over the top of the page and a phone's tab bar over its bottom: what a move, Tab or Shift+Tab brings
+    // into view stops clear of both. The bar's height follows the language and the text size, so it is measured.
+    useEffect(() => {
+        const scroller = pageRef.current?.closest('main');
+        const bar = pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-bar"]');
+        if (!inArrange || !scroller || !bar) return;
+        const keepClear = () => {
+            scroller.style.scrollPaddingTop = `${bar.offsetHeight + ARRANGE_CLEAR_PX}px`;
+            scroller.style.scrollPaddingBottom = getComputedStyle(scroller).paddingBottom;
+        };
+        keepClear();
+        const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(keepClear);
+        watch?.observe(bar);
+        return () => {
+            watch?.disconnect();
+            scroller.style.scrollPaddingTop = '';
+            scroller.style.scrollPaddingBottom = '';
+        };
+    }, [inArrange]);
+    useEffect(() => {
+        const page = pageRef.current;
+        if (inArrange) {
+            const id = arrangeFrom.current;
+            const arrow = id && (page?.querySelector<HTMLElement>(`[data-testid="home-arrange-up-${id}"]:not([disabled])`) ?? page?.querySelector<HTMLElement>(`[data-testid="home-arrange-down-${id}"]:not([disabled])`));
+            (arrow || page?.querySelector<HTMLElement>('[data-testid="home-arrange-done"]'))?.focus();
+            if (arrow) arrow.closest('section')?.scrollIntoView?.({ block: 'center' });
+            else page?.scrollIntoView?.({ block: 'start' });
+            // Escape is Done, unless a dialog in front has the keys (components/dialog-focus.ts).
+            const onKey = (e: KeyboardEvent) => {
+                if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
+                e.preventDefault();
+                endArrangeRef.current();
+            };
+            document.addEventListener('keydown', onKey);
+            return () => document.removeEventListener('keydown', onKey);
+        }
+        const back = arrangeBack.current;
+        arrangeBack.current = null;
+        if (!back) return;
+        const id = arrangeFrom.current;
+        const target = (id && page?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`))
+            || page?.querySelector<HTMLElement>('[data-testid="home-arrange-open"]');
+        target?.focus({ preventScroll: back.quiet });
+    }, [inArrange]);
+    // Before the slide below, which puts a moved card back where it stood for 150 ms: focus and scroll have to see where it landed.
+    useLayoutEffect(() => {
+        const moved = focusArrow.current;
+        if (!moved) return;
+        focusArrow.current = null;
+        const page = pageRef.current;
+        const twin = moved.dir === 'up' ? 'down' : 'up';
+        const arrow = page?.querySelector<HTMLElement>(`[data-testid="home-arrange-${moved.dir}-${moved.id}"]:not([disabled])`)
+            ?? page?.querySelector<HTMLElement>(`[data-testid="home-arrange-${twin}-${moved.id}"]:not([disabled])`);
+        arrow?.focus();
+        arrow?.closest('section')?.scrollIntoView?.({ block: 'nearest' });
+    }, [layout]);
+    // The fold shows as a quick settle, and a moved card slides from where it stood (none with reduced motion).
+    const stood = useRef(new Map<string, { x: number; y: number }>());
+    const wasFolded = useRef(false);
+    const liftedId = drag.lift?.id;
+    useLayoutEffect(() => {
+        const grid = gridRef.current;
+        const calm = reducedMotion();
+        if (wasFolded.current !== inArrange) {
+            wasFolded.current = inArrange;
+            if (!calm) grid?.animate?.([{ opacity: 0.6 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' });
+        }
+        const dropped = drag.settle.current;
+        drag.settle.current = null;
+        if (!inArrange || !grid) { stood.current = new Map(); return; }
+        const box = grid.getBoundingClientRect();
+        const next = new Map<string, { x: number; y: number }>();
+        for (const el of Array.from(grid.children) as HTMLElement[]) {
+            const id = packIdOf(el);
+            // The card in the air follows the pointer; it is back in its slot, or let go from where it was, below.
+            if (!id || id === liftedId) continue;
+            const r = el.getBoundingClientRect();
+            const at = { x: r.left - box.left, y: r.top - box.top };
+            const was = dropped?.id === id ? dropped : stood.current.get(id);
+            const letGo = was === dropped;
+            next.set(id, at);
+            if (!calm && was && (was.x !== at.x || was.y !== at.y)) {
+                const from = `translate(${was.x - at.x}px, ${was.y - at.y}px)${letGo ? ' scale(1.02)' : ''}`;
+                el.animate?.([{ transform: from }, { transform: 'none' }], { duration: 150, easing: 'ease-out' });
+            }
+        }
+        stood.current = next;
+        drag.follow();
+    }, [inArrange, shownKey, packedList, drag.ended]);
 
     // ── "Save this search to Home" from the Market (Marty, 7 Oct) ──
     // The search to add, its dialog open; and why one couldn't be (the same search there, five there, Home full, Home not
@@ -1753,7 +1971,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }, [interestsShown]);
 
     /**
-     * A layout change made here (a card's "…", Edit home). Returns false when it was made on a Home this page no longer
+     * A layout change made here (a card's "…", Arrange). Returns false when it was made on a Home this page no longer
      * holds: a sign-out or a clear this call was the first to hear of (landedEpoch). The change goes with what the page
      * held, drawn, kept and sent nowhere, and the page lands again.
      */
@@ -1791,7 +2009,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         return true;
     }
 
-    // After a Remove, focus goes to the nearest card left (its "…", else its heading; Edit home on the community card),
+    // After a Remove, focus goes to the nearest card left (its "…" or arrow, else its heading; Arrange on the community card),
     // never to the page's <body>. After an add, to the new card's "…" once it is drawn; until then, and for good once the
     // add's read finds nothing to show, to the community card's Add a card (review of #1701, finding 3). Focus the member
     // moved on themselves meanwhile stays where they put it.
@@ -1799,8 +2017,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const added = focusAfterAdd.current;
         if (added) {
             const card = pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${added.id}"]`);
-            const target = card?.querySelector<HTMLElement>('[data-testid="home-card-menu"]') ?? card?.querySelector<HTMLElement>('h2');
-            const waiting = pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
+            const target = card?.querySelector<HTMLElement>('[data-testid="home-card-menu"], button[data-testid^="home-arrange-"]:not([disabled])') ?? card?.querySelector<HTMLElement>('h2');
+            const waiting = pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-add"], [data-testid="home-add-open"]');
             const active = document.activeElement;
             const free = !active || active === document.body || !active.isConnected || active === waiting;
             if (target || added.read) focusAfterAdd.current = null;
@@ -1812,8 +2030,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         for (const id of order) {
             const card = pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"]`);
             if (!card) continue;
-            const target = card.querySelector<HTMLElement>('[data-testid="home-card-menu"]')
-                ?? card.querySelector<HTMLElement>('[data-testid="home-edit-open"]')
+            const target = card.querySelector<HTMLElement>('[data-testid="home-card-menu"], [data-testid="home-arrange-open"], [data-testid^="home-arrange-up-"]:not([disabled]), [data-testid^="home-arrange-down-"]:not([disabled])')
                 ?? card.querySelector<HTMLElement>('h2');
             if (target) { target.focus(); return; }
         }
@@ -1933,53 +2150,55 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
     const a = answer;
     const profile = String(a.profile);
-    const isVisitor = !!a.welcome || !a.me;
     const beansOn = visitor ? visitor.beans : a.features.beans !== false;
     const pins = currentPins(a, now);
     let imgCount = 0;
     const nextImageLoading = () => (imgCount++ < 8 ? 'eager' : 'lazy');
-    // Only the cards on screen: a "Your way back in" with nothing to say is no place to move to, or a press on the card
-    // next to it would swap the two in the saved list and move nothing anyone can see (PR #2411 review).
-    const movable = shown.filter(c => canMoveCard(c.type, pins) && (c.type !== 'safety' || safetyDrawn));
+    // The cards Arrange moves among: every one it shows, so a press always moves something a member can see.
+    const movable = (folded ?? []).filter(c => canMoveCard(c.type, pins));
     const nameOf = (c: Pick<HomeCardInstance, 'type'>) => (isHomeCardId(c.type) ? cardTitle(c.type, a) : cardName(c.type, profile));
 
     function menuFor(card: HomeCardInstance) {
         if (isVisitor || !canRemoveCard(card.type, pins)) return undefined;
-        const i = movable.findIndex(c => c.id === card.id);
         return {
             // A saved search is named by its words; any other card by its heading, as before.
             ...(card.type === 'search' ? { label: cardLabelName(card, profile) } : {}),
-            canMoveUp: i > 0,
-            canMoveDown: i >= 0 && i < movable.length - 1,
-            across: cols > 1,
             onRemove: () => removeFromHome(card.id),
+            onArrange: () => startArrange(card.id),
             ...(homeCardType(card.type)?.readSettings && card.type !== 'tools' ? { onSettings: () => setSettingsFor(card) } : {}),
-            onMove: (d: 'up' | 'down') => { changeLayout((l) => moveCard(l, card.id, d, movable, Date.now(), pins)); },
         };
+    }
+
+    /** ↑ or ↓ in Arrange: saved at once through `moveCard`; focus stays on the arrow, and the place is said. */
+    function moveInArrange(card: HomeCardInstance, dir: 'up' | 'down') {
+        const at = movable.findIndex(c => c.id === card.id) + (dir === 'up' ? -1 : 1);
+        focusArrow.current = { id: card.id, dir };
+        if (!changeLayout((l) => moveCard(l, card.id, dir, movable, Date.now(), pins))) { focusArrow.current = null; return; }
+        setLive(arrangeMovedLine(cardLabelName(card, profile), at + 1, movable.length));
     }
 
     /**
      * Remove (§1.3): the instance leaves the list, said politely by the card's words, and focus goes to the nearest card
      * left. Remove on Tips does what "Don't show tips again" does: the record holds it too.
      */
-    function removeFromHome(id: string, inDialog = false) {
+    function removeFromHome(id: string) {
         const card = shown.find(c => c.id === id) ?? listOf(drawnBase()).find(c => c.id === id);
         if (!card) return;
-        if (card.type === 'tips') { tipsDontShow(inDialog); return; }
+        if (card.type === 'tips') { tipsDontShow(); return; }
         const name = cardLabelName(card, profile);
         const onList = listOf(drawnBase()).some(c => c.id === id);
         // The interests card opened from Tune without being on the list just closes.
         if (onList && !changeLayout((l) => removeCard(l, id, Date.now(), pins))) return;
-        // From Edit home, the dialog keeps focus on its nearest row: the page behind a modal never takes it.
-        if (!inDialog) focusAround(id);
+        focusAround(id);
         setLive(removedLine(name));
         if (card.type === 'interests') setInterestsOpen(false);
     }
 
     /** Focus to the nearest card left once `id` has gone (read after the next draw, the effect above). */
     function focusAround(id: string) {
-        const ids = shown.map(c => c.id);
-        const at = shown.findIndex(c => c.id === id || c.type === id);
+        const cards = folded ?? shown;
+        const ids = cards.map(c => c.id);
+        const at = cards.findIndex(c => c.id === id || c.type === id);
         focusAfterHide.current = [...ids.slice(at + 1), ...ids.slice(0, Math.max(at, 0)).reverse()];
     }
 
@@ -2015,9 +2234,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }
 
     // "Don't show tips again" (and the card's Hide): the record says so, and the layout hides it for the other devices.
-    function tipsDontShow(inDialog = false) {
+    function tipsDontShow() {
         if (!publicKey || landedEpoch() === null) return;
-        if (!inDialog) focusAround('tips');
+        focusAround('tips');
         keepTips(dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
         const tipsCard = listOf(drawnBase()).find(c => c.type === 'tips');
         if (tipsCard) changeLayout((l) => removeCard(l, tipsCard.id, Date.now(), pins));
@@ -2029,7 +2248,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         : undefined;
 
     function needsLine(item: NeedsItem, i: number) {
-        const words = item.kind === 'vote' && item.closesAt && item.count === 1
+        const words = item.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(item.count)) : item.kind === 'vote' && item.closesAt && item.count === 1
             ? item.label.replace(/closes (within the hour|in \d+ (hours?|days))/, closesWords(item.closesAt, now))
             : item.label;
         const go = () => {
@@ -2069,6 +2288,52 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         return <HomeLine key={i} onClick={go} label={item.accent ? t('{line}. Waiting on you.', { line: words }) : words} testId={`home-needs-${item.kind}`}>{body}</HomeLine>;
     }
 
+    /** One column packs nothing, so nothing is measured or kept there: a phone browser runs none of this (§3.1). */
+    const reportHeight = (id: string) => (cols > 1 ? (h: number) => onCardHeight(id, h) : undefined);
+
+    /** Where a packed child stands; unpacked, a full row or the grid's next cell. */
+    function placement(id: string, fullRow: boolean): React.CSSProperties {
+        const packed = packedMap.get(id);
+        if (!packed) return fullRow ? FULL_ROW : {};
+        return { gridColumn: packed.fullRow ? '1 / -1' : String(packed.col), gridRow: `${packed.rowStart} / span ${packed.rowSpan}`, alignSelf: 'start' };
+    }
+
+    /** While a card is in the air, the cards stand in the order the drop would make (a grid's `order`: the DOM stays where it is). */
+    const liveIndex = new Map((liveFolded ?? []).map((c, i) => [c.id, i * 2]));
+    const liveOrder = (id: string): React.CSSProperties => (drag.lift ? { order: liveIndex.get(id) } : {});
+
+    /** A card in Arrange: its band with ↑ ↓ or Stays here, and one line. Its body isn't drawn, so nothing else is read. */
+    function renderFolded(card: HomeCardInstance): ReactNode {
+        const c = a.cards;
+        const drawn = shown.some(s => s.id === card.id) && (card.type !== 'safety' || safetyDrawn);
+        const at = movable.findIndex(m => m.id === card.id);
+        const cm = card.type === FIXED_LAST ? c.community : undefined;
+        const line = drawn ? cardLine(card.type) : card.type === 'tips' && tipsAllSeen ? t('All tips seen') : card.type === 'sky' ? t(LIB_LINES.skyNoPlace) : t('Nothing to show now');
+        const label = cardLabelName(card, profile);
+        const quiet = 'min-h-[44px] px-2 bg-transparent border-0 text-sm font-bold text-text-secondary hover:text-text-primary cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
+        return (
+            <HomeCard key={card.id} id={card.id}
+                title={cm ? communityName(cm, profile) : card.type === 'search' ? cardRowName(card, profile) : nameOf(card)}
+                hue={card.type === 'needs' ? (c.needs?.items.some(i => i.accent) ? 'amber' : 'sage') : homeCardHue(card)}
+                accent={card.type === 'needs' && c.needs?.items.some(i => i.accent)}
+                style={{ ...placement(card.id, spansRow(card.type)), ...liveOrder(card.id) }} onHeight={reportHeight(card.id)}
+                arrange={at < 0
+                    ? { label, stays: true }
+                    : { label, canUp: at > 0, canDown: at < movable.length - 1, across: cols > 1, onMove: (d) => moveInArrange(card, d),
+                        drag: drag.bandProps(card.id), lifted: drag.lift?.id === card.id }}>
+                <p data-testid={`home-arrange-line-${card.id}`} className="m-0 pb-2 text-sm text-text-secondary break-words">{line}</p>
+                {!drawn && (
+                    <div className="flex flex-wrap justify-end gap-x-2">
+                        {homeCardType(card.type)?.readSettings && card.type !== 'tools' && (
+                            <button type="button" className={quiet} data-testid={`home-arrange-settings-${card.id}`} aria-label={t('Settings for {card}', { card: label })} onClick={() => setSettingsFor(card)}>{t('Settings…')}</button>
+                        )}
+                        <button type="button" className={quiet} data-testid={`home-arrange-remove-${card.id}`} aria-label={t('Remove {card} from Home', { card: label })} onClick={() => removeFromHome(card.id)}>{t('Remove')}</button>
+                    </div>
+                )}
+            </HomeCard>
+        );
+    }
+
     function renderCard(card: HomeCardInstance, index: number): ReactNode {
         const id = card.type as HomeCardId;
         const c = a.cards;
@@ -2076,7 +2341,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const hue: CardHue = card.type === 'needs'
             ? (c.needs?.items.some(i => i.accent) ? 'amber' : 'sage')
             : homeCardHue(card);
-        const common = { id: card.id, title, hue, menu: menuFor(card), style: spansRow(card.type) ? { ...cardStyle(index), ...FULL_ROW } : cardStyle(index) };
+        const placementStyle = placement(card.id, spansRow(card.type));
+
+        const common = {
+            id: card.id,
+            title,
+            hue,
+            menu: menuFor(card),
+            style: { ...cardStyle(index), ...placementStyle },
+            onHeight: reportHeight(card.id),
+            // Getting started has no "…" and no hold: Skip is its remove.
+            onHold: isVisitor || card.type === 'start' ? undefined : () => startArrange(card.id),
+        };
         switch (card.type) {
             case 'needs':
                 return c.needs && (
@@ -2086,17 +2362,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 );
             case 'safety':
                 // The two-doors card, with its own ✕ and schedule kept in this browser (components/OneWayBack.tsx).
-                // Its "…" (Move up · Move down · Remove) sits over the card's own ✕. The cell comes with the card: put away
+                // Its "…" (Arrange · Remove) sits over the card's own ✕. The cell comes with the card: put away
                 // or checked, it has nothing to say and takes no cell (PR #2411 review). `c.safety` is the node's word that the
                 // member has only their 12 words, so a card not yet put away is drawn with the answer, not a request later
                 // (arriving second in the order, it moved every card after it to another cell).
                 return identity && (
-                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn}
+                    <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={noteSafetyDrawn}
                         keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => (
-                        <div style={cardStyle(index)} data-testid={`home-card-${card.id}`}>
+                        <PackedBlock onHeight={common.onHeight} style={{ ...cardStyle(index), ...placementStyle }} data-testid={`home-card-${card.id}`} className="mb-3 [&>section]:mb-0">
                             {common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
                             {oneWayBack}
-                        </div>
+                        </PackedBlock>
                     )} />
                 );
             case 'find': {
@@ -2115,12 +2391,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             const text = `${cm.name ?? t('A community')}${facts ? ` · ${facts}` : ''}`;
                             // Gone quiet for more than 36 h: said under the row, which stays a link (front doors S13).
                             const quiet = notAnsweringLine(cm);
+                            // What its directory push promised (mothership A3): kept the listing promise, takes requests, closing day.
+                            const promised = promiseLine(cm);
                             return (
                                 <Fragment key={cm.key}>
                                     {cm.url
                                         ? <HomeLine href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
                                         : <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>}
                                     {quiet && <p className="m-0 pb-1 text-xs italic text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-not-answering-${cm.key}`}>{quiet}</p>}
+                                    {promised && <p dir="auto" className="m-0 pb-1 text-xs text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-promise-${cm.key}`}>{promised}</p>}
                                     {identity && cm.url && <AskToJoin community={cm} identity={identity} asked={askedOpen(cm.url)} onAsked={handleAsked} testId={`home-find-ask-${cm.key}`} />}
                                 </Fragment>
                             );
@@ -2454,14 +2733,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                             </span>
                                         )}
                                         {repeats && <span data-testid="home-event-repeats" className="block break-words text-xs font-bold text-violet-800 dark:text-violet-200"><span aria-hidden="true">↻ </span>{repeats}</span>}
-                                        <span dir="auto" className="block break-words font-semibold">{item.title}</span>
+                                        <span dir="auto" className="block break-words font-semibold">{item.pinned && <span aria-hidden="true" data-testid="home-pin">📌 </span>}{item.title}</span>
                                         {(where || km) && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{[where, km].filter(Boolean).join(' · ')}</span>}
                                     </span>
                                     {rsvp && <span className="shrink-0 text-xs font-bold text-emerald-800 dark:text-emerald-300">{rsvp}</span>}
                                 </HomeLine>
                             );
                         })}
-                        <HomeMore onClick={() => onNavigate('map')}>{t('All events ›')}</HomeMore>
+                        <div className="flex flex-wrap justify-end gap-x-4">
+                            <HomeMore onClick={() => onNavigate('map-calendar')} testId="home-events-calendar" label={t('Calendar')}>{t('Calendar')}<span aria-hidden="true"> ›</span></HomeMore>
+                            <HomeMore onClick={() => onNavigate('marketplace', 'events')} testId="home-events-all">{t('All events ›')}</HomeMore>
+                        </div>
                     </HomeCard>
                 );
             }
@@ -2546,8 +2828,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const n = c.notices!;
                 return (
                     <HomeCard key={id} {...common}>
-                        <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{n.first.title}</p>
-                        {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{n.first.line}</p>}
+                        <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{inviteAskNoticeHere(n.first.title)}</p>
+                        {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{inviteAskNoticeHere(n.first.line)}</p>}
                         {n.unseen > 1 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{tn(n.unseen - 1, 'and {n} more', 'and {n} more')}</p>}
                         <HomeMore onClick={() => {
                             // Never a notice of a Home this page no longer holds (another community's, in a tab that missed the news).
@@ -2578,7 +2860,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             features={a?.features}
                             onOpenShape={() => setShapeModalOpen(true)}
                             onAddCard={() => setPickerOpen(true)}
-                            onEditHome={() => setEditOpen(true)}
+                            onArrange={() => startArrange()}
                         />
                     </HomeCard>
                 );
@@ -2635,18 +2917,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }
 
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
-    // Edit home's rows (§1.3): the cards on Home in order, without the fixed two and a pinned card.
-    const editCards = editOpen && !isVisitor
-        ? cardOrder(shownLayout(a, layout, { tourOver }), pins).filter(c => c.type !== FIXED_FIRST && c.type !== FIXED_LAST && !pins.includes(c.type) && cardOnNode(c.type, frameOf(a)))
-        : [];
-    const editRows: EditHomeRow[] = editCards.map(c => ({
-                id: c.id,
-                // A saved search's row is named by its words (cardRowName), so two searches read as two rows.
-                name: c.type === 'search' ? cardRowName(c, profile) : nameOf(c),
-                label: cardLabelName(c, profile),
-                note: shown.some(s => s.id === c.id) ? null : c.type === 'tips' && tipsAllSeen ? t('All tips seen') : c.type === 'sky' ? t(LIB_LINES.skyNoPlace) : t('Nothing to show now'),
-                hasSettings: !!homeCardType(c.type)?.readSettings && c.type !== 'tools',
-            }));
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
     const hasPoint = !!point || !!a.me?.area;
     const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
@@ -2654,26 +2924,37 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // only when the first card is a full row itself: with nothing waiting there is no Needs you, and a full-row note after
     // a one-cell card would push the cards beside it to the next row, leaving the first row empty (PR #2411 review). There
     // the notes stand above the grid, as wide as it. One column keeps them under the first card, as before.
-    const notesUnderFirst = cols === 1 || (!!shown[0] && spansRow(shown[0].type));
+    const notePacking = (id: string): React.CSSProperties => {
+        const packed = packedMap.get(id);
+        if (!packed) return FULL_ROW;
+        return {
+            ...FULL_ROW,
+            gridColumn: '1 / -1',
+            gridRow: `${packed.rowStart} / span ${packed.rowSpan}`,
+            alignSelf: 'start',
+            // `-mt-1` is for the unpacked grid's rows: here it would only move 4 px from above the note to below it.
+            marginTop: 0,
+        };
+    };
     const firstNotes = (under: boolean) => (
         <>
             {fewerOpen && !isVisitor && (
-                <p data-testid="home-fewer" style={under ? FULL_ROW : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                <PackedBlock tag="p" onHeight={under ? reportHeight(NOTE_FEWER) : undefined} data-testid="home-fewer" style={under ? notePacking(NOTE_FEWER) : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
                     <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.fewerCards)}</span>
                     <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
                         className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                         ✕
                     </button>
-                </p>
+                </PackedBlock>
             )}
             {hintOpen && !isVisitor && !startUp && (
-                <p data-testid="home-hint" style={under ? FULL_ROW : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
+                <PackedBlock tag="p" onHeight={under ? reportHeight(NOTE_HINT) : undefined} data-testid="home-hint" style={under ? notePacking(NOTE_HINT) : undefined} className={`${under ? '-mt-1' : 'm-0'} mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100`}>
                     <span className="min-w-0 flex-1 break-words">{t(LIB_LINES.hint)}</span>
                     <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
                         className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                         ✕
                     </button>
-                </p>
+                </PackedBlock>
             )}
         </>
     );
@@ -2702,7 +2983,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         {t("Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.")}
                     </p>
                 )}
-                {!notesUnderFirst && firstNotes(false)}
+                {!notesUnderFirst && !inArrange && firstNotes(false)}
                 {/* The "Use the phone app" card (front doors S4): after the first post or a week */}
                 {(() => {
                     const p = a.me?.probation;
@@ -2726,42 +3007,65 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 {askedCommunity && identity && answer && !shown.some(c => c.type === 'find') && (
                     <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />
                 )}
-                {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
-                    own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.
-                    Between rows the cards' own 12 px and 4 more, as between columns; one column keeps its 12 px, as before. */}
-                <div data-testid="home-grid" style={{
+                {inArrange && (
+                    <div data-testid="home-arrange-bar" className="sticky top-0 z-20 mb-3 pl-3 pr-1 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary shadow-sm">
+                        <p className="m-0 min-w-0 flex-1 break-words text-sm text-text-primary">{t(ARRANGE_WORDS.bar)}</p>
+                        <button type="button" data-testid="home-arrange-done" aria-label={t(ARRANGE_WORDS.done)} onClick={(e) => endArrange(e.detail > 0)}
+                            className="shrink-0 min-w-[64px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                            {t('Done')}
+                        </button>
+                    </div>
+                )}
+                {inArrange && notOnAccount && (
+                    <p data-testid="home-arrange-not-on-account" className="m-0 mb-3 text-sm text-text-primary break-words">{t(LIB_LINES.notOnAccount)}</p>
+                )}
+                {/* The cards (D1): columns 320–576 px wide, packed shortest column first in the saved order (slice L1).
+                    When packed: 4 px row tracks, 0 row gap, with cards positioned by gridColumn/gridRow and self-aligned.
+                    One column keeps its natural layout without grid packing. */}
+                <div ref={gridRef} data-testid="home-grid" style={{
                     display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, ${HOME_COLUMN_MAX}px))`, columnGap: HOME_COLUMN_GAP,
-                    rowGap: cols > 1 ? 4 : 0, justifyContent: 'center', alignItems: 'start',
+                    rowGap: isPacked ? 0 : (cols > 1 ? 4 : 0),
+                    gridAutoRows: isPacked ? `${HOME_PACK_ROW_HEIGHT}px` : undefined,
+                    justifyContent: 'center', alignItems: 'start',
+                    // The cards are read by their offsets while one is dragged: from this box.
+                    position: 'relative',
                 }}>
-                    {shown.map((card, i) => (
+                    {folded ? (
+                        <>
+                            {folded.filter(c => c.type !== FIXED_LAST).map(renderFolded)}
+                            <PackedBlock onHeight={reportHeight(ARRANGE_ADD)} data-testid="home-arrange-tile" style={{ ...placement(ARRANGE_ADD, false), ...(drag.lift ? { order: (liveIndex.get(FIXED_LAST) ?? (liveFolded?.length ?? 0) * 2) - 1 } : {}) }} className="mb-3">
+                                <button type="button" data-testid="home-arrange-add" aria-label={t('Add a card to Home')} onClick={() => setPickerOpen(true)}
+                                    className="w-full min-h-[48px] px-4 rounded-2xl border border-dashed border-border-primary bg-transparent text-sm font-bold text-text-primary cursor-pointer break-words hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                    <span aria-hidden="true">＋ </span>{t('Add a card')}
+                                </button>
+                            </PackedBlock>
+                            {folded.filter(c => c.type === FIXED_LAST).map(renderFolded)}
+                        </>
+                    ) : shown.map((card, i) => (
                         <Fragment key={card.id}>
                             {renderCard(card, i)}
                             {i === 0 && notesUnderFirst && firstNotes(true)}
                         </Fragment>
                     ))}
                 </div>
-                {editOpen && !isVisitor && (
-                    <EditHomeDialog
-                        rows={editRows}
-                        notOnAccount={notOnAccount}
-                        onAdd={() => { setEditOpen(false); setPickerOpen(true); }}
-                        onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editCards, Date.now(), pins)); }}
-                        onSettings={(id) => { const card = listOf(drawnRef.current).find(c => c.id === id); if (card) setSettingsFor(card); }}
-                        onRemove={(id) => removeFromHome(id, true)}
-                        // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
-                        // part-way through keeps their place (confirmation 1, finding 2).
-                        onReset={() => {
-                            const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
-                            if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
-                        }}
-                        onClose={() => setEditOpen(false)}
-                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-edit-open"]')}
-                    />
+                {inArrange && (
+                    <div className="flex justify-center">
+                        <button type="button" data-testid="home-arrange-reset"
+                            // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
+                            // part-way through keeps their place (confirmation 1, finding 2).
+                            onClick={() => {
+                                const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
+                                if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
+                            }}
+                            className="min-h-[44px] px-3 bg-transparent border-0 text-sm font-bold text-text-secondary hover:text-text-primary cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                            {t('Reset to defaults')}
+                        </button>
+                    </div>
                 )}
                 {picker && (
                     <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
-                        // Opened from Edit home, which has closed: the community card's Add a card.
-                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
+                        // Arrange's tile while it is open, else the community card's Add a card.
+                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-add"], [data-testid="home-add-open"]')} />
                 )}
                 {addSearch && (
                     <CardSettingsDialog
@@ -2790,13 +3094,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: type !== 'sky' });
                         }}
                         onClose={() => setSettingsFor(null)}
-                        // Its opener was a menu's Settings…, gone with the menu: Edit home's row "…" while Edit home is open, else
-                        // the card's "…".
+                        // Its opener was a menu's Settings…, gone with the menu: the card's "…", or its word in Arrange.
                         returnFocus={() => {
                             const id = settingsFor.id;
-                            return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-edit-menu-${id}"]`)
+                            return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-arrange-settings-${id}"]`)
                                 ?? pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`)
-                                ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
+                                ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-add"], [data-testid="home-add-open"]');
                         }}
                     />
                 )}

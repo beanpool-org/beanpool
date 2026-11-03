@@ -43,6 +43,8 @@ export const POST_TYPE_COLORS = {
 } as const;
 
 export interface PollOption {
+    /** This answer is Other, which takes typed words. Only the node sets it. */
+    other?: boolean;
     id: string;
     text: string;
     votes?: number;
@@ -77,6 +79,8 @@ export interface MarketplacePost {
     createdAt: string;
     photos?: string[];
     status?: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
+    pinnedUntil?: string | null;
+    pinnedAt?: string | null;
     repeatable?: boolean;
     lendable?: boolean;
     /** #108: a real cash outlay is involved (fuel / consumables). No amount — terms live in chat. */
@@ -95,6 +99,7 @@ export interface MarketplacePost {
     /** How many of the votes came from new or 12-word accounts (the global node's public polls). */
     pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
+    pollAnswered?: boolean;
     pollVotes?: PollVoteRecord[];
     audienceScope?: 'public' | 'group' | 'direct';
     targetGroupId?: string;

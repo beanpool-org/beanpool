@@ -11,6 +11,7 @@
  * xx too). What members wrote is shown as written: an event's title and text, its place, names, a group's name.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../../components/useKeepCaretVisible', () => ({ useKeepCaretVisible: () => ({ scrollRef: { current: null }, scrollProps: {} }) })); // the real one needs the keyboard library's native side
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { act, createElement } from 'react';

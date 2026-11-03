@@ -76,7 +76,8 @@ const communityRow = vi.hoisted(() => ({ value: null as null | Record<string, un
 const calls = vi.hoisted(() => ({ updateMemberProfile: [] as Array<{ pubkey: string; data: Record<string, unknown> }> }));
 
 vi.mock('../db', () => ({
-    getMemberProfile: vi.fn(async () => communityRow.value),
+    // A row read fresh each time, as the copy gives it: what one reader changes on its row is no other reader's.
+    getMemberProfile: vi.fn(async () => (communityRow.value ? { ...communityRow.value } : null)),
     getMemberRatings: vi.fn(async () => ({ average: 5, count: 1, asProvider: { average: 5 }, asReceiver: { average: 5 }, ratings: [] })),
     getMemberPosts: vi.fn(async () => []),
     getBalance: vi.fn(async () => ({ balance: 100 })),
@@ -106,7 +107,11 @@ vi.mock('../use-node-profile', () => ({
 vi.mock('../use-reader-features', () => ({ useShowcaseMode: () => 'off' }));
 vi.mock('../reads-own', () => ({ readsOwn: vi.fn(async () => true) }));
 vi.mock('../members-lookup', () => ({ cardNeedsFetch: () => false, fetchCardByKey: vi.fn(async () => null) }));
-vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null) }));
+const device = vi.hoisted(() => ({ value: null as null | { archetype?: string }, saved: [] as Array<{ archetype?: string | null }> }));
+vi.mock('../canonical-profile', () => ({
+    getCanonicalProfile: vi.fn(async () => device.value),
+    saveCanonicalProfile: vi.fn(async (partial: { archetype?: string | null }) => { device.saved.push(partial); }),
+}));
 
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 vi.mock('../../components/ReviewModal', () => ({ ReviewModal: () => null }));
@@ -127,6 +132,7 @@ vi.mock('../../components/ArchetypeQuizModal', () => ({
     },
 }));
 
+import { ARCHETYPES } from '@beanpool/core';
 import PublicProfileScreen from '../../app/public-profile';
 
 const NODE = 'https://second.example.test';
@@ -142,6 +148,8 @@ beforeEach(() => {
     nav.router.replace.mockClear();
     calls.updateMemberProfile = [];
     communityRow.value = null;
+    device.value = null;
+    device.saved = [];
     requests = [];
     (globalThis as any).fetch = vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
         requests.push({ url, method: init?.method ?? 'GET', body: init?.body });
@@ -240,5 +248,119 @@ describe('public-profile quiz publishes this community name (Profile S2-W)', () 
         } finally {
             IDENTITY.callsign = origCallsign;
         }
+    });
+});
+
+describe('the quiz is one result, for every community on the phone (working style S1)', () => {
+    const OTHER = 'https://first.example.test';
+    const STRANGER = 'https://looked-at.example.test';
+    const takeQuiz = async () => {
+        const quizBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Take 60s Quiz'));
+        expect(quizBtn).toBeDefined();
+        await act(async () => { quizBtn!.click(); });
+        await settle();
+        await act(async () => { (document.querySelector('[data-testid="complete-quiz"]') as HTMLElement).click(); });
+        await settle();
+    };
+    const waitingAt = (url: string) => {
+        const raw = mem.store.get(`beanpool_pending_profile:archetype:${new URL(url).origin}`);
+        return raw ? JSON.parse(raw).archetype : null;
+    };
+    const SENT = JSON.stringify({ primary: 'catalyst', secondary: 'weaver', mode: 'quick', takenOn: '2026-10-31' });
+
+    it('publishes the type, the wing, the mode and the day, and no clock', async () => {
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
+        await render();
+        await takeQuiz();
+        expect(published()[0].archetype).toBe(SENT);
+    });
+
+    it('the result becomes the device\'s, and waits for every other community saved on the phone', async () => {
+        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: OTHER }]));
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
+        await render();
+        await takeQuiz();
+        expect(JSON.parse(device.saved[0].archetype!).primary).toBe('catalyst');
+        expect(waitingAt(OTHER)).toBe(SENT);
+        expect(waitingAt(NODE)).toBeNull();
+        expect(requests.filter(r => r.url.startsWith(OTHER))).toEqual([]);
+    });
+
+    it('a guest visit elsewhere on the phone is not marked', async () => {
+        mem.store.set('beanpool_saved_nodes', JSON.stringify([{ url: NODE }, { url: STRANGER }]));
+        const { markGuestNode } = await import('../nodes');
+        await markGuestNode(STRANGER);
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
+        await render();
+        await takeQuiz();
+        expect(waitingAt(STRANGER)).toBeNull();
+    });
+
+    it('open on a guest visit, the phone keeps the result and that community is sent nothing', async () => {
+        const { markGuestNode } = await import('../nodes');
+        await markGuestNode(NODE);
+        await render();
+        await takeQuiz();
+        expect(JSON.parse(device.saved[0].archetype!).primary).toBe('catalyst');
+        expect(published()).toEqual([]);
+    });
+
+    it('a publish the community refused, or that never reached it, waits for its next sync', async () => {
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
+        (globalThis as any).fetch = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }));
+        await render();
+        await takeQuiz();
+        expect(waitingAt(NODE)).toBe(SENT);
+
+        mem.store.delete(`beanpool_pending_profile:archetype:${new URL(NODE).origin}`);
+        (globalThis as any).fetch = vi.fn(async () => { throw new TypeError('Network request failed'); });
+        if (root) act(() => root!.unmount());
+        host?.remove();
+        await render();
+        await takeQuiz();
+        expect(waitingAt(NODE)).toBe(SENT);
+    });
+
+    it('a phone that can\'t write what waits still publishes', async () => {
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
+        await render();
+        const { default: storage } = await import('@react-native-async-storage/async-storage');
+        const setItem = vi.mocked(storage.setItem);
+        const writes = setItem.getMockImplementation()!;
+        setItem.mockImplementation(async (key, value) => {
+            if (key.startsWith('beanpool_pending_profile:archetype:')) throw new Error('disk full');
+            return writes(key, value);
+        });
+        try {
+            await takeQuiz();
+        } finally {
+            setItem.mockImplementation(writes);
+        }
+        expect(published()).toHaveLength(1);
+        expect(published()[0].archetype).toBe(SENT);
+    });
+
+    it('a publish that landed leaves nothing waiting here', async () => {
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null };
+        await render();
+        await takeQuiz();
+        expect(waitingAt(NODE)).toBeNull();
+    });
+
+    it('My Profile shows the device\'s newer result over this community\'s older row, and the row\'s when it is the newer', async () => {
+        const row = JSON.stringify({ primary: 'guardian', secondary: 'weaver', mode: 'quick', takenOn: '2026-10-01' });
+        const newer = JSON.stringify({ primary: 'spark', secondary: 'weaver', mode: 'quick', takenOn: '2026-11-02' });
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null, archetype: row };
+        device.value = { archetype: newer };
+        await render();
+        expect(document.body.textContent).toContain(ARCHETYPES.spark.name);
+        expect(document.body.textContent).not.toContain(ARCHETYPES.guardian.name);
+
+        if (root) act(() => root!.unmount());
+        host?.remove();
+        communityRow.value = { public_key: KEY, callsign: 'Rosa', avatar_url: null, bio: null, archetype: newer };
+        device.value = { archetype: row };
+        await render();
+        expect(document.body.textContent).toContain(ARCHETYPES.spark.name);
     });
 });

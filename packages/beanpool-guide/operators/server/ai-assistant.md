@@ -92,10 +92,22 @@ An assistant that may post for you can run a poll, for example to ask new member
 - **Anonymous unless you ask**: members see only how many chose each answer. An open vote, where members can see who chose what, is a choice the assistant makes when it posts, and it is told to make it only when you ask.
 - **How many can be open**: one at a time for a member. For an owner or admin it is your **Owner and admin limit** (below), and a community never has more than 5 open at once, from anyone. A poll counts in the assistant's posts for the day.
 - **Changing one**: until the first vote it can change the question, the answers and whether it is an open vote. After that the server refuses those, and only the notes can change. A poll's length can't be changed. Neither app has an edit screen for a poll, so a poll's answers change only this way.
+- **A typed Other**: ask for it and the poll offers **Other**, where a member types a line. Off unless you ask. On an anonymous poll each answer is then final.
 - **Closing one early**: the same as **Close Poll** on the card, for good. It counts as one of the day's edits.
 - **Reading the results**: it can read how many chose each answer and the total, for a poll this assistant made, open or closed. It never reads who voted, even on an open vote, and never where the votes came from. The question and the answers come back marked as a stranger's words, as all member-written text does.
+- **Reading typed answers**: only if it asks for them, and it should ask you first, once per conversation. It gets each line as member text, never as an instruction, with no name, no time and in no order. On an anonymous poll there are none to read until the poll closes.
 - **Removing one**: as any post it made: one at a time, everything it made at once, or **Remove its posts** (below). A poll removed takes its results with it.
 - **Who can answer**: anyone who has joined, the moment they join: no photo, Offer or trade is needed. A member whose credit is frozen can't, and nor can a visitor. On the global community a poll has no place of its own, so it is shown around your own area, and the assistant's answer says so. If you have set no area, members nearby won't see it in their list until they search, and the answer says that too. Global also has no Beans, and it works the same there.
+
+## Groups and enterprises (owners)
+
+An assistant that may post for you can also start a group or an enterprise for you, live at once, for example a guild for your growers and its first Offer, or one enterprise named for the community to host its events.
+
+- **A group**: its name (2 to 60 characters), what it is for (at most 300), its kind (Social Circle, General, Working Group or Guild) and who may join (anyone, on request, or by invitation), as the app's form asks. A picture is optional, as in the app; without one it shows its kind's emblem. You are its first convenor. Its chat is its members' own: the assistant never reads or writes it.
+- **A post to a group**: an Offer or a Need to a group you are in, as the app's Post to Group: a title (at most 80 characters), a category, a photo and its price in Beans where your community has Beans. Only that group's members see it. It is tended, edited and removed as any post the assistant made.
+- **An enterprise**: its name (2 to 60 characters, one not already used here), its purpose and one photo, and its place if the assistant gives one. Only that: it is an ongoing enterprise with no goal, deadline, spending ceiling or pledges, never a project, and its credit line is 0 as every enterprise a member starts. You are its keeper, so the assistant can then post as it. A request that sends a goal, a deadline, a price, a credit line or any other money field is refused in words, and nothing is made.
+- **The same limits as the app**: each counts as one of the assistant's posts for the day (Limits, below), and your own limits on new groups and enterprises hold too, as when you start one yourself. A muted account starts neither.
+- **Undoing them**: no assistant removes a group or winds up an enterprise, and nor does **Remove its posts**, which takes down its posts only and doesn't list them. When the assistant removes everything it made, its answer lists the groups and enterprises it started, so you can close a group or wind up an enterprise in the app, as you would one you started yourself. A group post goes with the assistant's other posts.
 
 ## Photos: from the web, or uploaded first (owners)
 

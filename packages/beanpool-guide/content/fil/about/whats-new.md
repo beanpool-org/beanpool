@@ -79,12 +79,12 @@ Nasa server ng iyong komunidad ang ilan sa mga pagbabagong ito. Makukuha mo ang 
 
 ### Mga Grupo
 
-- **Bawat grupo ay may chat.** May tatlong button na ngayon ang Talk: **Mga Mensahe**, **Mga Grupo** at **Mga Tao**. Inililista ng **Mga Grupo** ang iyong mga grupo, ang mga negosyong pinapangalagaan mo at ang mga event na pupuntahan mo, bawat isa ay may pinakabagong mensahe at bilang ng hindi pa nababasa.
-- **Isang paraan upang magsimula ng grupo.** Binubuksan ng **Bagong grupo** sa Talk at **+** sa Commons ang parehong form, na pinili ang **Social Circle** para sa iyo. Pagkatapos mong gawin ito, mapupunta ka sa chat nito, na magtatanong kung sino ang gusto mong imbitahan.
+- **Bawat grupo ay may chat.** May tatlong button na ngayon ang Usapan: **Mga Mensahe**, **Mga Grupo** at **Mga Tao**. Inililista ng **Mga Grupo** ang iyong mga grupo, ang mga negosyong pinapangalagaan mo at ang mga event na pupuntahan mo, bawat isa ay may pinakabagong mensahe at bilang ng hindi pa nababasa.
+- **Isang paraan upang magsimula ng grupo.** Binubuksan ng **Bagong grupo** sa Usapan at **+** sa Commons ang parehong form, na pinili ang **Social Circle** para sa iyo. Pagkatapos mong gawin ito, mapupunta ka sa chat nito, na magtatanong kung sino ang gusto mong imbitahan.
 - **Mga Imbitasyon.** Maaaring mag-imbita ang mga convenor mula sa menu ng chat. Ipinapakita ng imbitasyon kung sino ang nagpadala nito, at dadalhin ka ng **Sumali sa grupo** nang direkta sa chat.
 - **I-mute ang isang chat**: Sa loob ng 8 oras, Sa loob ng isang linggo o Palagi. Sa isang grupo, nakakalusot pa rin ang mga @pagbanggit.
 - **Isang header para sa bawat chat**: ang pangalan ng grupo, negosyo o event sa itaas. I-tap ito upang makita ang grupo, negosyo o event.
-- Inalis na ang mga lumang group chat sa Talk, kasama ang kanilang mga mensahe.
+- Inalis na ang mga lumang group chat sa Usapan, kasama ang kanilang mga mensahe.
 - Bawat grupo ay mayroon na ngayong **nangungunang convenor** — ang sinumang gumawa nito, sa simula. Ang sinumang convenor ay nag-aalaga pa rin sa mga miyembro at mga post, ngunit ang pinuno lamang ang maaaring mag-alis o magbaba ng antas ng isang convenor, at walang sinuman ang maaaring mag-alis sa pinuno. Maaaring ipasa ng pinuno ang pamumuno sa iba. Kung hindi magparamdam ang pinuno sa loob ng 30 araw, maaaring pumili ang grupo ng bago, sa screen ng grupo sa itaas ng listahan. Tingnan ang "Mga tuntunin at mga desisyon".
 - **Mga boto sa isang grupo.** Maaaring bumoto ang mga miyembro ng grupo sa sariling mga bagay ng grupo, tulad ng bagong convenor o bagong pinuno: buksan ang grupo at tumingin sa ilalim ng **Mga Desisyon**.
 - **Pagpili ng bagong pinuno para sa tahimik na grupo.** Ang mga tao lamang na nasa grupo bago naging tahimik ang pinuno nito ang maaaring bumoto. Ang mga taong sumali, o ginawang mga convenor, pagkatapos noon ay walang masasabi, kaya hindi maaaring kunin ng mga bagong account ang isang grupong naging tahimik ang pinuno.

@@ -23,7 +23,10 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { copyFromLine, eventCopyOf, t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@beanpool/core';
-import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
+import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent, unpinPostOnNode } from '../utils/db';
+import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../utils/pins';
+import { usePinRole } from '../utils/use-pin-role';
+import { PinSheet } from './PinSheet';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
 import { PostTagChips } from './PostTagChips';
@@ -50,6 +53,8 @@ interface EventDetailProps {
     openMembership?: boolean;
     /** A local community, whose host may show the event on the global community (components/ShowOnGlobalRow.tsx). */
     onLocalCommunity?: boolean;
+    /** The node's profile says pins are on (`features.pins`): the screen that opens this has it, so this asks nothing of the profile. */
+    pinsOn?: boolean;
 }
 
 function countsOf(p: any): RsvpCounts {
@@ -60,7 +65,7 @@ function countsOf(p: any): RsvpCounts {
     };
 }
 
-export function EventDetail({ post, openMembership = false, onLocalCommunity = false }: EventDetailProps) {
+export function EventDetail({ post, openMembership = false, onLocalCommunity = false, pinsOn = false }: EventDetailProps) {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
@@ -79,6 +84,43 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     const [copyDraft, setCopyDraft] = useState<EventCopy | null>(null);
     // Non-null while the edit form is open; one object per opening, which NewEventModal applies once.
     const [editOf, setEditOf] = useState<{ id: string; values: EventEditValues; audienceLabel: string } | null>(null);
+    const [showPinSheet, setShowPinSheet] = useState(false);
+    const [unpinning, setUnpinning] = useState(false);
+    // The "···" is for an owner or admin (Pin, Take the pin off) and for a pinned event's host (Take the pin off).
+    const pinRole = usePinRole(pinsOn, identity?.publicKey);
+
+    const handleEventOptions = () => {
+        const pinned = isPostPinned(p);
+        if (pinned) {
+            Alert.alert(t('Event options'), undefined, [
+                {
+                    text: t('Take the pin off'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (unpinning) return;
+                        setUnpinning(true);
+                        try {
+                            await unpinPostOnNode(p.id);
+                            await load();
+                        } catch (e: any) {
+                            Alert.alert(t('Error'), pinFailureText(e, t('Failed to unpin post')));
+                        } finally {
+                            setUnpinning(false);
+                        }
+                    },
+                },
+                { text: t('Cancel'), style: 'cancel' },
+            ]);
+        } else {
+            Alert.alert(t('Event options'), undefined, [
+                {
+                    text: t('Pin to the top…'),
+                    onPress: () => setShowPinSheet(true),
+                },
+                { text: t('Cancel'), style: 'cancel' },
+            ]);
+        }
+    };
 
     const load = useCallback(async () => {
         try {
@@ -281,7 +323,20 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 </Pressable>
                 {/* In capitals in the words, never a textTransform: that follows the phone's rules, not the language's. */}
                 <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('EVENT', undefined, 'screen title')}</Text>
-                <View style={{ width: 72 }} />
+                <View style={{ width: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {showPinMenu({ pinsOn, role: pinRole, pinned: isPostPinned(p), isAuthor: isOwnEvent(p, identity?.publicKey) }) && (
+                        <Pressable
+                            testID="event-menu-btn"
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Event options')}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
+                            onPress={handleEventOptions}
+                        >
+                            <Text style={{ fontSize: 22, color: colors.text.body, fontWeight: '900' }}>···</Text>
+                        </Pressable>
+                    )}
+                </View>
             </View>
 
             {/*
@@ -306,6 +361,36 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
                 {!!hostLine && <Text style={styles.timeNote}>{hostLine}</Text>}
                 {!!eventRepeatCaption(p) && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {eventRepeatCaption(p)}</Text>}
+                {isPostPinned(p) && (
+                    <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} testID="pinned-detail-line">
+                        <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600', flex: 1 }} numberOfLines={2}>
+                            {pinnedDetailLine(p)}
+                        </Text>
+                        {isOwnEvent(p, identity?.publicKey) && (
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Take the pin off')}
+                                testID="event-author-unpin-btn"
+                                onPress={async () => {
+                                    if (unpinning) return;
+                                    setUnpinning(true);
+                                    try {
+                                        await unpinPostOnNode(p.id);
+                                        await load();
+                                    } catch (e: any) {
+                                        Alert.alert(t('Error'), pinFailureText(e, t('Failed to unpin post')));
+                                    } finally {
+                                        setUnpinning(false);
+                                    }
+                                }}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                            >
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg }}>{t('Take the pin off')}</Text>
+                            </Pressable>
+                        )}
+                    </View>
+                )}
                 <Text style={styles.title}>{p.title}</Text>
                 {!!view && (
                     <EventNextDates
@@ -525,6 +610,17 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 onClose={() => setEditOf(null)}
                 onSaved={() => { load(); DeviceEventEmitter.emit('sync_data_updated'); }}
             />
+            {/* Drawn only while open: the sheet is a Modal, and most screens never open it. */}
+            {showPinSheet && (
+                <PinSheet
+                    visible
+                    postId={p.id}
+                    onClose={() => setShowPinSheet(false)}
+                    onPinned={async () => {
+                        await load();
+                    }}
+                />
+            )}
         </View>
     );
 }

@@ -194,9 +194,10 @@ export async function resolveProfilePublishAvatar(input: {
  * nothing about the photo must leave it alone, or it disarms the retry for a pick that has
  * reached nothing: exactly the defect this round fixes. Callers must not call it until the node
  * has answered 2xx AND (where they check) the echo confirmed the avatar stored. Only
- * `community`'s change goes (pending-profile-sync.ts): one waiting for another community waits.
+ * `community`'s change goes (pending-profile-sync.ts): one waiting for another community waits, and so does a working
+ * style waiting beside it, which this publish said nothing about.
  */
 export async function retireParkedPickAfterPublish(decision: ProfilePublishAvatar, community: string | null): Promise<void> {
     if (!decision.clearsParkedPick) return;
-    await clearPendingProfileChange(community);
+    await clearPendingProfileChange(community, undefined, undefined, true);
 }

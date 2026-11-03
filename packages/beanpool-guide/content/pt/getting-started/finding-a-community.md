@@ -59,7 +59,7 @@ Você continua sendo membro da comunidade global e pode alternar entre elas: con
 
 ## Se você for membro de uma comunidade local
 
-As pessoas podem pedir para entrar na sua comunidade a partir da comunidade global. Toque em **Conversas**, depois em **Pessoas**, e então em **Convites**: os pedidos são listados sob **Quer entrar**, com o nome, a mensagem e o local de origem de quem pede. Os pedidos são respondidos no aplicativo para celular: o aplicativo web não os lista.
+As pessoas podem pedir para entrar na sua comunidade a partir da comunidade global. Toque em **Bate-papo**, depois em **Pessoas**, e então em **Convites**: os pedidos são listados sob **Quer entrar**, com o nome, a mensagem e o local de origem de quem pede. Os pedidos são respondidos no aplicativo para celular: o aplicativo web não os lista.
 
 - **Convidar:** gera um convite que apenas a conta solicitante pode usar. O aplicativo da pessoa o encontra sozinho, e ela entra com um único toque.
 - **Agora não:** a pessoa não é avisada. Ela continuará vendo "sem resposta por enquanto" e não poderá pedir novamente por 30 dias.

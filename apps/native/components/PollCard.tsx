@@ -27,13 +27,18 @@ import {
     Pressable,
     ActivityIndicator,
     Alert,
+    TextInput,
 } from 'react-native';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
-import { votePoll, closePoll } from '../utils/db';
+import { votePoll, closePoll, isOwnerHere, unpinPostOnNode, getPost } from '../utils/db';
+import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../utils/pins';
+import { usePinRole } from '../utils/use-pin-role';
+import { PinSheet } from './PinSheet';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
-import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSealed, pollOtherLines, pollOtherOption, POLL_OTHER_WORDS_MAX, LOCAL_COMMUNITY_LINES, t, tn } from '@beanpool/core';
+import { PollOtherAnswers } from './PollOtherAnswers';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { signedRequestWords } from './signed-request-lines';
 
@@ -44,6 +49,8 @@ export interface PollOption {
     percentage?: number;
     /** Of this option's votes, how many came from new or 12-word accounts, where the node gives the split. */
     newOrWordsVotes?: number;
+    /** This answer is Other, which takes typed words (@beanpool/core poll-other). Only the node sets it. */
+    other?: boolean;
 }
 
 export interface PollVoteRecord {
@@ -64,9 +71,11 @@ interface PollCardProps {
     informal?: boolean;
     /** Where the node previews Decisions (the showcase): the marker's line under the note, "a Decision binds" (design §1 row 7). */
     decisionsPreview?: boolean;
+    /** The node's profile says pins are on (`features.pins`): the Market, which has the profile, says so; the card asks nothing of it. */
+    pinsOn?: boolean;
 }
 
-export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false }: PollCardProps) {
+export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false }: PollCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
 
@@ -74,6 +83,13 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
     const [showVoters, setShowVoters] = useState(false);
+    const [typingOther, setTypingOther] = useState(false);
+    const [otherWords, setOtherWords] = useState('');
+    const [ownerHere, setOwnerHere] = useState(false);
+    const [showPinSheet, setShowPinSheet] = useState(false);
+    const [unpinning, setUnpinning] = useState(false);
+    // The "···" is for an owner or admin (Pin, Take the pin off) and for a pinned poll's author (Take the pin off).
+    const pinRole = usePinRole(pinsOn, currentPubkey);
 
     // Keep livePost in sync if prop changes
     React.useEffect(() => {
@@ -116,7 +132,20 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
     const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
 
-    const handleVote = async (optionId: string) => {
+    const offersOther = pollOtherOption(options) !== null;
+    const sealed = pollIsSealed(options, openFlag);
+    // The node's word on a card it sent, or this phone's own record of its answer (utils/db.ts votePoll).
+    const answered = sealed && (livePost.pollAnswered === true || !!userVotedOptionId);
+    // Only a card with words to offer asks; a member's card asks nothing. The node decides who reads.
+    const asksRole = offersOther && !isAuthor && Boolean(currentPubkey);
+    React.useEffect(() => {
+        if (!asksRole) return;
+        let cancelled = false;
+        void isOwnerHere().then(owner => { if (!cancelled && owner) setOwnerHere(true); });
+        return () => { cancelled = true; };
+    }, [asksRole]);
+
+    const handleVote = async (optionId: string, typed?: string) => {
         if (isClosed) {
             Alert.alert(t('Poll Closed'), t('This poll has ended and can no longer receive votes.'));
             return;
@@ -128,10 +157,12 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
 
         setVotingOptionId(optionId);
         try {
-            const res = await votePoll(livePost.id, optionId);
+            const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
             if (res?.post) {
                 setLivePost(res.post);
             }
+            setTypingOther(false);
+            setOtherWords('');
             onVoteSuccess?.();
         } catch (err: any) {
             Alert.alert(t('Voting Error'), err.message ? signedRequestWords(err.message) : t('Could not record your vote.'));
@@ -182,39 +213,108 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
         return t('Closes in {n}d', { n: diffDays });
     };
 
+    const handlePollOptions = () => {
+        const pinned = isPostPinned(livePost);
+        if (pinned) {
+            Alert.alert(t('Poll options'), undefined, [
+                {
+                    text: t('Take the pin off'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (unpinning) return;
+                        setUnpinning(true);
+                        try {
+                            await unpinPostOnNode(livePost.id);
+                            const updated = await getPost(livePost.id);
+                            if (updated) {
+                                setLivePost((prev: any) => ({
+                                    ...prev,
+                                    pinned_until: updated.pinned_until,
+                                    pinned_at: updated.pinned_at,
+                                    pinnedUntil: updated.pinnedUntil,
+                                    pinnedAt: updated.pinnedAt,
+                                }));
+                            }
+                        } catch (e: any) {
+                            Alert.alert(t('Error'), pinFailureText(e, t('Failed to unpin post')));
+                        } finally {
+                            setUnpinning(false);
+                        }
+                    },
+                },
+                { text: t('Cancel'), style: 'cancel' },
+            ]);
+        } else {
+            Alert.alert(t('Poll options'), undefined, [
+                {
+                    text: t('Pin to the top…'),
+                    onPress: () => setShowPinSheet(true),
+                },
+                { text: t('Cancel'), style: 'cancel' },
+            ]);
+        }
+    };
+
     return (
-        <View style={styles.card}>
+        <View style={styles.card} testID="poll-card">
             {/* Header: Badge, Status, Remaining Time */}
-            <View style={styles.headerRow}>
+            <View style={styles.headerRow} testID="poll-header">
                 <View style={styles.badgeGroup}>
-                    <View style={styles.pollBadge}>
+                    {isPostPinned(livePost) && (
+                        <View testID="pinned-chip" style={[styles.pollBadge, { backgroundColor: colors.surface.subtle, borderColor: colors.border.default, borderWidth: 1 }]}>
+                            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.heading }}>{t('📌 PINNED')}</Text>
+                        </View>
+                    )}
+                    <View style={styles.pollBadge} testID="poll-badge">
                         <Text style={styles.pollBadgeText}>{t('🗳️ POLL')}</Text>
                     </View>
-                    <View style={[styles.statusBadge, isClosed ? styles.statusClosed : styles.statusActive]}>
+                    <View style={[styles.statusBadge, isClosed ? styles.statusClosed : styles.statusActive]} testID="poll-status">
                         <Text style={isClosed ? styles.statusClosedText : styles.statusActiveText}>
                             {formatTimeRemaining()}
                         </Text>
                     </View>
                 </View>
 
-                {isAuthor && !isClosed && (
-                    <Pressable
-                        onPress={handleClosePoll}
-                        disabled={isClosing}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        style={styles.closeBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel={isClosing ? t('Closing poll...') : t('Close poll')}
-                        accessibilityState={{ busy: isClosing }}
-                    >
-                        {isClosing ? (
-                            <ActivityIndicator size="small" color="#ef4444" />
-                        ) : (
-                            <Text style={styles.closeBtnText}>{t('Close Poll')}</Text>
-                        )}
-                    </Pressable>
-                )}
+                <View style={styles.headerActions}>
+                    {showPinMenu({ pinsOn, role: pinRole, pinned: isPostPinned(livePost), isAuthor }) && (
+                        <Pressable
+                            testID="poll-menu-btn"
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Poll options')}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
+                            onPress={handlePollOptions}
+                        >
+                            <Text style={{ fontSize: 20, color: colors.text.body, fontWeight: '900' }}>···</Text>
+                        </Pressable>
+                    )}
+                    {isAuthor && !isClosed && (
+                        <Pressable
+                            onPress={handleClosePoll}
+                            disabled={isClosing}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            style={styles.closeBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel={isClosing ? t('Closing poll...') : t('Close poll')}
+                            accessibilityState={{ busy: isClosing }}
+                        >
+                            {isClosing ? (
+                                <ActivityIndicator size="small" color="#ef4444" />
+                            ) : (
+                                <Text style={styles.closeBtnText}>{t('Close Poll')}</Text>
+                            )}
+                        </Pressable>
+                    )}
+                </View>
             </View>
+
+            {isPostPinned(livePost) && (
+                <View style={{ marginTop: 6, marginBottom: 4 }} testID="pinned-detail-line">
+                    <Text style={{ fontSize: 12, color: colors.text.secondary, fontWeight: '600' }} numberOfLines={2}>
+                        {pinnedDetailLine(livePost)}
+                    </Text>
+                </View>
+            )}
 
             {/* Author info */}
             <View style={styles.authorRow}>
@@ -240,24 +340,25 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
                     const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
+                    const optionText = opt.other ? pollOtherLines.other() : opt.text;
                     // One sentence for a screen reader, in the member's language: the option, its share, its votes, then
                     // where they came from and whether it is the member's own, each said after the last.
-                    let optionLabel = tn(count, '{option}, {pct} percent, {n} vote', '{option}, {pct} percent, {n} votes', { option: opt.text, pct });
+                    let optionLabel = tn(count, '{option}, {pct} percent, {n} vote', '{option}, {pct} percent, {n} votes', { option: optionText, pct });
                     if (optionOrigins) optionLabel = t('{label}, {origins}', { label: optionLabel, origins: optionOrigins });
                     if (isVoted) optionLabel = t('{label}, your vote', { label: optionLabel });
 
                     return (
                         <Pressable
                             key={opt.id || String(idx)}
-                            disabled={isClosed || Boolean(votingOptionId)}
-                            onPress={() => handleVote(opt.id)}
+                            disabled={isClosed || Boolean(votingOptionId) || answered}
+                            onPress={() => (opt.other ? setTypingOther(v => !v) : handleVote(opt.id))}
                             style={[
                                 styles.optionRow,
                                 isVoted && styles.optionRowVoted,
                                 isClosed && styles.optionRowClosed,
                             ]}
                             accessibilityRole="button"
-                            accessibilityState={{ selected: isVoted, disabled: isClosed || Boolean(votingOptionId) }}
+                            accessibilityState={{ selected: isVoted, disabled: isClosed || Boolean(votingOptionId) || answered }}
                             accessibilityLabel={optionLabel}
                         >
                             {/* Background percentage fill bar */}
@@ -279,7 +380,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                                         </View>
                                     ) : null}
                                     <Text style={[styles.optionText, isVoted && styles.optionTextVoted]} numberOfLines={2}>
-                                        {opt.text}
+                                        {optionText}
                                     </Text>
                                 </View>
                                 <View style={styles.optionRight}>
@@ -300,6 +401,41 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     );
                 })}
             </View>
+
+            {/* Other: a line to type, and what becomes of it. */}
+            {typingOther && !isClosed && !answered && (
+                <View style={styles.otherBox} testID="poll-other-box">
+                    <TextInput
+                        value={otherWords}
+                        onChangeText={setOtherWords}
+                        maxLength={POLL_OTHER_WORDS_MAX}
+                        placeholder={pollOtherLines.placeholder()}
+                        placeholderTextColor={colors.text.muted}
+                        accessibilityLabel={pollOtherLines.placeholder()}
+                        style={styles.otherInput}
+                        testID="poll-other-words"
+                    />
+                    <Text style={styles.otherNoName} testID="poll-other-no-name">{pollOtherLines.noName()}</Text>
+                    {sealed && <Text style={styles.openBallotNote}>{pollOtherLines.sealedNote()}</Text>}
+                    <View style={styles.otherActions}>
+                        <Pressable
+                            onPress={() => handleVote(pollOtherOption(options)!.id, otherWords.trim())}
+                            disabled={!otherWords.trim() || Boolean(votingOptionId)}
+                            style={[styles.otherSend, (!otherWords.trim() || Boolean(votingOptionId)) && styles.otherSendOff]}
+                            accessibilityRole="button"
+                            accessibilityLabel={pollOtherLines.send()}
+                            testID="poll-other-send"
+                        >
+                            <Text style={styles.otherSendText}>{pollOtherLines.send()}</Text>
+                        </Pressable>
+                        <Pressable onPress={() => setTypingOther(false)} style={styles.otherCancel} accessibilityRole="button" accessibilityLabel={pollOtherLines.cancel()}>
+                            <Text style={styles.otherCancelText}>{pollOtherLines.cancel()}</Text>
+                        </Pressable>
+                        <Text style={styles.otherCount}>{otherWords.length}/{POLL_OTHER_WORDS_MAX}</Text>
+                    </View>
+                </View>
+            )}
+            {answered && <Text style={styles.answeredNote} testID="poll-answered">{t('✓ {line}', { line: pollOtherLines.answered() })}</Text>}
 
             {/* On the worldwide community: a show of opinion, never a decision. */}
             {informal && (
@@ -326,6 +462,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     {t('🔒 Anonymous: everyone sees only the totals')}
                 </Text>
             )}
+            {sealed && !answered && !isClosed && !typingOther && <Text style={styles.openBallotNote}>{pollOtherLines.sealedNote()}</Text>}
 
             {/* Turnout Tally */}
             <View style={styles.turnoutRow}>
@@ -355,7 +492,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     </Text>
                     {votesList.map((v, i) => {
                         const matchedOpt = optionsById.get(v.optionId);
-                        const optText = matchedOpt ? matchedOpt.text : v.optionId;
+                        const optText = matchedOpt ? (matchedOpt.other ? pollOtherLines.other() : matchedOpt.text) : v.optionId;
                         const voterName = v.voterCallsign || (v.voterPubkey ? v.voterPubkey.slice(0, 8) : t('Member'));
 
                         return (
@@ -368,12 +505,62 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                     })}
                 </View>
             )}
+
+            {/* The words, for the poll's maker and the owners. */}
+            {offersOther && (isAuthor || ownerHere) && <PollOtherAnswers postId={livePost.id} />}
+            {/* Drawn only while open: the sheet is a Modal, and most cards never open it. */}
+            {showPinSheet && (
+                <PinSheet
+                    visible
+                    postId={livePost.id}
+                    onClose={() => setShowPinSheet(false)}
+                    onPinned={async () => {
+                        const updated = await getPost(livePost.id);
+                        if (updated) {
+                            setLivePost((prev: any) => ({
+                                ...prev,
+                                pinned_until: updated.pinned_until,
+                                pinned_at: updated.pinned_at,
+                                pinnedUntil: updated.pinnedUntil,
+                                pinnedAt: updated.pinnedAt,
+                            }));
+                        }
+                    }}
+                />
+            )}
         </View>
     );
 }
 
 const makeStyles = ({ colors, theme }: ThemeContextType) =>
     StyleSheet.create({
+        otherBox: {
+            marginBottom: 10,
+            padding: 10,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: theme === 'dark' ? palette.violet500 : palette.violet200,
+            backgroundColor: colors.surface.card,
+        },
+        otherInput: {
+            minHeight: 44,
+            borderWidth: 1,
+            borderRadius: 8,
+            borderColor: theme === 'dark' ? palette.gray700 : palette.gray300,
+            backgroundColor: colors.surface.app,
+            color: colors.text.body,
+            paddingHorizontal: 10,
+            fontSize: 15,
+        },
+        otherNoName: { marginTop: 6, fontSize: 12, fontWeight: '700', color: colors.text.body },
+        otherActions: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+        otherSend: { minHeight: 44, paddingHorizontal: 14, borderRadius: 8, justifyContent: 'center', backgroundColor: palette.violet600 },
+        otherSendOff: { opacity: 0.5 },
+        otherSendText: { fontSize: 13, fontWeight: '800', color: palette.white },
+        otherCancel: { minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
+        otherCancelText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
+        otherCount: { marginLeft: 'auto', fontSize: 11, color: colors.text.muted },
+        answeredNote: { marginBottom: 6, fontSize: 12, fontWeight: '700', color: theme === 'dark' ? palette.violet300 : palette.violet700 },
         card: {
             backgroundColor: colors.surface.card,
             borderRadius: 16,
@@ -387,16 +574,29 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             shadowRadius: 6,
             elevation: 2,
         },
+        // Wraps: at 320 dp and 130% text a pinned poll's owner has PINNED, POLL, the status, "···" and Close Poll to
+        // draw in 288 dp. The badges wrap among themselves; the buttons drop to their own line, to the right.
         headerRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             justifyContent: 'space-between',
             alignItems: 'center',
+            rowGap: 8,
+            columnGap: 8,
             marginBottom: 10,
         },
         badgeGroup: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
+            flexShrink: 1,
             alignItems: 'center',
             gap: 8,
+        },
+        headerActions: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            marginLeft: 'auto',
         },
         pollBadge: {
             backgroundColor: theme === 'dark' ? '#4c1d95' : '#ede9fe',

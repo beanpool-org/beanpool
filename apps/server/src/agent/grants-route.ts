@@ -232,7 +232,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         if (!(await requireFreshProof(ctx, body(ctx).code, 'remove the posts an assistant made'))) return;
         const by = actorOf(ctx) ?? 'owner:password';
         const out = removeAllMadeBy(id, 'settings', by);
-        ctx.body = { grant: id, removed: out.removed, kept: out.kept };
+        ctx.body = { grant: id, removed: out.removed, kept: out.kept, leftStanding: out.leftStanding };
     });
 
     router.post('/api/local/admin/agent/grants', async (ctx) => {

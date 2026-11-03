@@ -9,11 +9,12 @@ import { HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
 /** The starter set as a saved Home (DESIGN-getting-started-fable.md §1): the list a newcomer's Home was before Getting started, and what Skip or Done leaves. */
 const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
-    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
+    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_FLIP_MS, HOME_PACK_MAX_FLIPS, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
     columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
-    moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, searchEmptyLine, searchFirstLine, type HomeLayoutV2,
+    moveCard, moveCardTo, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
+    resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
+import { arrangeCards, cardLine, reorderAmong } from './home-layout';
 
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
 const H = 3_600_000;
@@ -104,6 +105,33 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
         expect(ids(moveCard(l, 'events', 'down', shown, NOW))).toEqual(['steps', 'tips', 'market', 'notices', 'events']);
         expect(moveCard(l, 'steps', 'up', shown, NOW)).toBeNull();
         expect(moveCard(l, 'notices', 'down', shown, NOW)).toBeNull();
+    });
+
+    it('a drop (L3): the card goes to its place among the movable ones, the others keep their slots, and the shape is an arrow\'s', () => {
+        const l: HomeLayoutV2 = { ...starterLayout(), cards: ['steps', 'tips', 'market', 'events', 'notices'].map(id => ({ id, type: id })) };
+        // On screen: tips isn't drawn, so it keeps its slot whatever moves around it.
+        const shown = cardOrder(l).filter(c => c.id !== 'tips');
+        expect(ids(moveCardTo(l, 'notices', 0, shown, NOW)!)).toEqual(['notices', 'tips', 'steps', 'market', 'events']);
+        expect(ids(moveCardTo(l, 'steps', 3, shown, NOW)!)).toEqual(['market', 'tips', 'events', 'notices', 'steps']);
+        // One place is what an arrow does, with the same keys saved.
+        const arrow = moveCard(l, 'events', 'up', shown, NOW)!;
+        const drop = moveCardTo(l, 'events', 1, shown, NOW)!;
+        expect(drop).toEqual(arrow);
+        expect(Object.keys(drop)).toEqual(Object.keys(l));
+        // Where it already stands, or a card that is not there: nothing to save.
+        expect(moveCardTo(l, 'market', 1, shown, NOW)).toBeNull();
+        expect(moveCardTo(l, 'nothing', 0, shown, NOW)).toBeNull();
+    });
+
+    it('a drag\'s preview never moves a card that stays here, and never lets one be passed', () => {
+        const cards = [{ id: 'needs', type: 'needs' }, { id: 'find', type: 'find' }, { id: 'a', type: 'market' }, { id: 'b', type: 'events' }, { id: 'c', type: 'notices' }, { id: 'community', type: 'community' }];
+        const live = (id: string, to: number) => reorderAmong(cards, id, to, ['find']).map(c => c.id);
+        expect(live('c', 0)).toEqual(['needs', 'find', 'c', 'a', 'b', 'community']);
+        expect(live('a', 99)).toEqual(['needs', 'find', 'b', 'c', 'a', 'community']);
+        // The fixed two and a pin are no card to lift: asking changes nothing.
+        expect(live('needs', 2)).toEqual(cards.map(c => c.id));
+        expect(live('find', 0)).toEqual(cards.map(c => c.id));
+        expect(live('community', 0)).toEqual(cards.map(c => c.id));
     });
 
     it('reset: the newcomer\'s list; a schedule\'s dismissal and a newer app\'s card are kept', () => {
@@ -350,7 +378,7 @@ describe('this browser\'s own marked save, read back (review of #1701 confirmati
     });
 });
 
-describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, §5.2 item 20; slice F4)", () => {
+describe("a saved search's words on its card and in Arrange (CARD-FRAME §4, §5.2 item 20; slice F4)", () => {
     it('the first line is the words and the distance, the words alone with no point', () => {
         expect(searchFirstLine('eggs', 5)).toBe('eggs · within 5 km');
         expect(searchFirstLine('  duck   eggs ', 25)).toBe('duck eggs · within 25 km');
@@ -363,7 +391,7 @@ describe("a saved search's words on its card and in Edit home (CARD-FRAME §4, �
         expect(SEARCH_OFFLINE_LINE).toBe('Shows when your community answers');
     });
 
-    it("Edit home names a search's row by its words (bounded), any other card by its name", () => {
+    it("Arrange names a search's band by its words (bounded), any other card by its name", () => {
         expect(cardRowName({ type: 'search', settings: { q: 'eggs' } })).toBe('eggs');
         expect(cardRowName({ type: 'search', settings: { q: 'x'.repeat(40) } })).toBe(`${'x'.repeat(24)}…`);
         expect(cardRowName({ type: 'search', settings: {} })).toBe('A saved search');
@@ -414,5 +442,226 @@ describe('the columns on a wide screen (DESIGN-home-wide-and-content-fable.md D1
 
     it('the grid is never wider than its columns at 576 px and the gaps between them', () => {
         expect([1, 2, 3].map(gridWidth)).toEqual([576, 1168, 1760]);
+    });
+});
+
+describe('packing by height on a wide screen (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
+    it('packHome puts card 4 under the shortest of 1–3', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 }, // span = ceil(116/4) = 29 -> bottoms[0] = 30
+            { id: 'c2', height: 40 },  // span = ceil(56/4) = 14  -> bottoms[1] = 15
+            { id: 'c3', height: 120 }, // span = ceil(136/4) = 34 -> bottoms[2] = 35
+            { id: 'c4', height: 60 },  // shortest is col 2 (15)  -> span = ceil(76/4) = 19 -> bottoms[1] = 34
+        ];
+        const packed = packHome(cards, 3);
+        expect(packed).toEqual([
+            { id: 'c1', col: 1, rowStart: 1, rowSpan: 29 },
+            { id: 'c2', col: 2, rowStart: 1, rowSpan: 14 },
+            { id: 'c3', col: 3, rowStart: 1, rowSpan: 34 },
+            { id: 'c4', col: 2, rowStart: 15, rowSpan: 19 },
+        ]);
+    });
+
+    it('ties to the first column on equal heights', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 },
+            { id: 'c2', height: 100 },
+            { id: 'c3', height: 100 },
+            { id: 'c4', height: 50 },
+        ];
+        const packed = packHome(cards, 3);
+        expect(packed[3]).toEqual({
+            id: 'c4',
+            col: 1,
+            rowStart: 30,
+            rowSpan: Math.ceil((50 + HOME_PACK_ROW_GAP) / HOME_PACK_ROW_HEIGHT),
+        });
+    });
+
+    it('full rows wait for every column', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 }, // span 29 -> bottom 30
+            { id: 'c2', height: 40 },  // span 14 -> bottom 15
+            { id: 'c3', height: 120 }, // span 34 -> bottom 35
+            { id: 'c4', height: 50, fullRow: true }, // waits for max(30, 15, 35) = 35; span 17 -> bottoms = [52, 52, 52]
+            { id: 'c5', height: 60 },  // starts at 52, ties to col 1
+        ];
+        const packed = packHome(cards, 3);
+        expect(packed[3]).toEqual({
+            id: 'c4',
+            col: 1,
+            rowStart: 35,
+            rowSpan: 17,
+            fullRow: true,
+        });
+        expect(packed[4]).toEqual({
+            id: 'c5',
+            col: 1,
+            rowStart: 52,
+            rowSpan: 19,
+        });
+    });
+
+    it('one column gives no placement', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 },
+            { id: 'c2', height: 40 },
+            { id: 'c3', height: 50, fullRow: true },
+        ];
+        expect(packHome(cards, 1)).toEqual([]);
+        expect(packHome(cards, 0)).toEqual([]);
+        expect(packHome(cards, -1)).toEqual([]);
+        expect(packHome([], 3)).toEqual([]);
+    });
+
+    it('notes under a full-row first card wait and span all columns, followed by standard cards', () => {
+        const cards: PackableCard[] = [
+            { id: 'needs', height: 80, fullRow: true },    // span 24 -> bottoms = [25, 25, 25]
+            { id: 'note-fewer', height: 40, fullRow: true }, // span 14 -> bottoms = [39, 39, 39]
+            { id: 'note-hint', height: 40, fullRow: true },  // span 14 -> bottoms = [53, 53, 53]
+            { id: 'tips', height: 100 },                     // span 29 -> col 1, row 53 -> bottom[0] = 82
+            { id: 'events', height: 60 },                    // span 19 -> col 2, row 53 -> bottom[1] = 72
+            { id: 'market', height: 120 },                   // span 34 -> col 3, row 53 -> bottom[2] = 87
+            { id: 'pulse', height: 80 },                     // span 24 -> col 2 (shortest 72) -> bottom[1] = 96
+            { id: 'community', height: 100, fullRow: true }, // span 29 -> max(82, 96, 87) = 96 -> bottoms = [125, 125, 125]
+        ];
+        const packed = packHome(cards, 3);
+        expect(packed).toEqual([
+            { id: 'needs', col: 1, rowStart: 1, rowSpan: 24, fullRow: true },
+            { id: 'note-fewer', col: 1, rowStart: 25, rowSpan: 14, fullRow: true },
+            { id: 'note-hint', col: 1, rowStart: 39, rowSpan: 14, fullRow: true },
+            { id: 'tips', col: 1, rowStart: 53, rowSpan: 29 },
+            { id: 'events', col: 2, rowStart: 53, rowSpan: 19 },
+            { id: 'market', col: 3, rowStart: 53, rowSpan: 34 },
+            { id: 'pulse', col: 2, rowStart: 72, rowSpan: 24 },
+            { id: 'community', col: 1, rowStart: 96, rowSpan: 29, fullRow: true },
+        ]);
+    });
+
+    it('gaps gone at 2 columns: cards pack under shortest column', () => {
+        const cards: PackableCard[] = [
+            { id: 'c1', height: 100 }, // span 29 -> col 1, row 1 -> bottom 30
+            { id: 'c2', height: 40 },  // span 14 -> col 2, row 1 -> bottom 15
+            { id: 'c3', height: 50 },  // span 17 -> col 2 (shortest 15), row 15 -> bottom 32
+            { id: 'c4', height: 80 },  // span 24 -> col 1 (shortest 30), row 30 -> bottom 54
+        ];
+        const packed = packHome(cards, 2);
+        expect(packed).toEqual([
+            { id: 'c1', col: 1, rowStart: 1, rowSpan: 29 },
+            { id: 'c2', col: 2, rowStart: 1, rowSpan: 14 },
+            { id: 'c3', col: 2, rowStart: 15, rowSpan: 17 },
+            { id: 'c4', col: 1, rowStart: 30, rowSpan: 24 },
+        ]);
+    });
+});
+
+describe('settleHeights: a height that keeps turning back stops moving the cards (PR #2748)', () => {
+    const report = (was: Readonly<Record<string, PackHeight>>, height: number, now: number) => settleHeights(was, { tips: height }, now);
+
+    it('a new height lands, in a new object; the old one is left as it was', () => {
+        const was = settleHeights({}, { tips: 100 }, 0);
+        const frozen = JSON.stringify(was);
+        const now = report(was, 140, 1000);
+        expect(now.tips.height).toBe(140);
+        expect(now).not.toBe(was);
+        expect(JSON.stringify(was)).toBe(frozen);
+    });
+
+    it('the same height, or none, gives back the same object: React renders nothing', () => {
+        const was = settleHeights({}, { tips: 100 }, 0);
+        expect(report(was, 100, 1)).toBe(was);
+        expect(report(was, 0, 1)).toBe(was);
+        expect(settleHeights(was, {}, 1)).toBe(was);
+        expect(settleHeights({}, { tips: Number.NaN }, 1)).toEqual({});
+    });
+
+    it('turning back quickly and for ever: bounded, and it stands at the taller height', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        let moves = 0;
+        for (let i = 1; i <= 100; i += 1) {
+            const next = report(was, i % 2 ? 140 : 100, i * 16);
+            if (next.tips.height !== was.tips.height) moves += 1;
+            was = next;
+        }
+        expect(moves).toBeLessThanOrEqual(HOME_PACK_MAX_FLIPS + 2);
+        expect(was.tips.height).toBe(140);
+        expect(report(was, 100, 101 * 16).tips.height).toBe(140);
+    });
+
+    it('three heights going round are bounded the same way', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        let moves = 0;
+        const round = [140, 180, 100];
+        for (let i = 0; i < 99; i += 1) {
+            const next = report(was, round[i % 3], (i + 1) * 16);
+            if (next.tips.height !== was.tips.height) moves += 1;
+            was = next;
+        }
+        expect(moves).toBeLessThanOrEqual(HOME_PACK_MAX_FLIPS * 2 + 2);
+        expect(was.tips.height).toBe(180);
+    });
+
+    it('growing always lands, even past the limit: a stale short height is an overlap', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        for (let i = 1; i <= 20; i += 1) was = report(was, i % 2 ? 140 : 100, i * 16);
+        expect(report(was, 300, 400).tips.height).toBe(300);
+    });
+
+    it('growing lands even on the turn past the limit: after a slow shrink, that turn is a rise', () => {
+        let was = settleHeights({}, { tips: 140 }, 0);
+        was = report(was, 100, 1000);
+        [140, 100, 140, 100, 140].forEach((h, i) => { was = report(was, h, 1016 + i * 16); });
+        expect(was.tips.flips).toBeGreaterThan(HOME_PACK_MAX_FLIPS);
+        expect(was.tips.height).toBe(140);
+    });
+
+    it('a held card lets go once it has been still: the shrink that comes after lands', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        for (let i = 1; i <= 20; i += 1) was = report(was, i % 2 ? 140 : 100, i * 16);
+        const held = was.tips;
+        expect(held.height).toBe(140);
+        expect(report(was, 100, held.at + HOME_PACK_FLIP_MS - 1).tips.height).toBe(140);
+        expect(report(was, 100, held.at + HOME_PACK_FLIP_MS).tips.height).toBe(100);
+    });
+
+    it('a person opening and closing a card, however often, is never held', () => {
+        let was = settleHeights({}, { tips: 100 }, 0);
+        for (let i = 1; i <= 21; i += 1) was = report(was, i % 2 ? 300 : 100, i * HOME_PACK_FLIP_MS);
+        expect(was.tips.height).toBe(300);
+        expect(report(was, 100, 22 * HOME_PACK_FLIP_MS).tips.height).toBe(100);
+    });
+
+    it('a window dragged one way is never held: heights going one way are not turns', () => {
+        let was = settleHeights({}, { tips: 400 }, 0);
+        for (let i = 1; i <= 100; i += 1) was = report(was, 400 - i, i);
+        expect(was.tips.height).toBe(300);
+    });
+
+    it('one card going round holds only that card', () => {
+        let was = settleHeights({}, { tips: 100, market: 200 }, 0);
+        for (let i = 1; i <= 20; i += 1) was = settleHeights(was, { tips: i % 2 ? 140 : 100 }, i * 16);
+        const now = settleHeights(was, { tips: 100, market: 150 }, 21 * 16);
+        expect(now.tips.height).toBe(140);
+        expect(now.market.height).toBe(150);
+    });
+});
+
+describe('the cards Arrange folds (DESIGN-home-layout-fable.md §3.2)', () => {
+    const order = [{ id: 'needs', type: 'needs' }, { id: 'market', type: 'market' }, { id: 'sky', type: 'sky' }, { id: 'chat', type: 'chat' }, { id: 'community', type: 'community' }];
+    const onNode = (type: string) => type !== 'chat';
+
+    it('what is drawn, and every other card on the list this node can show, in the list\'s order', () => {
+        expect(arrangeCards(order, [{ id: 'market' }, { id: 'community' }], onNode).map(c => c.id)).toEqual(['market', 'sky', 'community']);
+    });
+
+    it('a fixed card or a pin only while it is drawn: nothing to show there means no band to say it stays', () => {
+        expect(arrangeCards(order, [{ id: 'needs' }, { id: 'community' }], onNode).map(c => c.id)).toEqual(['needs', 'market', 'sky', 'community']);
+        const find = { id: 'find', type: 'find' };
+        expect(arrangeCards([find, ...order], [], () => true, ['find']).map(c => c.id)).toEqual(['market', 'sky', 'chat']);
+    });
+
+    it("a folded card's line is the catalogue's; a type nobody knows has none", () => {
+        expect(cardLine('events')).toBe('Events coming up soon.');
+        expect(cardLine('future-card')).toBe('');
     });
 });

@@ -12,7 +12,7 @@ import {
     getCommunityInfo, getPublicCommunityInfo,
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
-    vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
+    vouchMember, unvouchMember, canVouch, readInviteVouch, hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
     updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
     getPublicCommunityHealth,
     seedGenesisMember,
@@ -835,6 +835,8 @@ router.get('/api/community/info', async (ctx) => {
         // Request binding (@beanpool/core request-signing.ts): this server verifies format 2, so an app signs its
         // requests here for the host it connects to. A server that doesn't say gets the old format. `addresses`: this
         // community's own names (engine/own-addresses.ts), public by nature; empty on a node that knows none.
+        // A poll here can offer a typed Other (engine/poll-other.ts): an app asks the maker only where the node says.
+        pollOther: true,
         requestSigning: REQUEST_SIGNING_VERSION,
         addresses: publishedAddresses(),
         // Lost-name L4: where the community lives now (one of `addresses`, or null), and the BeanPool names it had
@@ -1174,10 +1176,18 @@ router.post('/api/community/register', async (ctx) => {
 // ===================== INVITE API (PUBLIC) =====================
 
 router.post('/api/invite/generate', async (ctx) => {
-    const { publicKey, intendedFor } = (ctx as any).requestBody || {};
+    const { publicKey, intendedFor, vouchLevel } = (ctx as any).requestBody || {};
     if (!publicKey) {
         ctx.status = 400;
         ctx.body = { error: 'publicKey is required' };
+        return;
+    }
+    // A vouch this invite carries (the node decides, never the app): a level from anyone who can't vouch is refused, and
+    // no code is made. `publicKey` is the signer (the middleware's spoof check). An invite with none is as it always was.
+    const vouch = readInviteVouch(publicKey, vouchLevel);
+    if (vouch.refusal) {
+        ctx.status = vouch.refusal.status;
+        ctx.body = { error: vouch.refusal.error, code: vouch.refusal.code };
         return;
     }
     // 20 made a day and 50 unused at once, per member, an owner's or admin's the owners' setting (W-main,
@@ -1185,7 +1195,7 @@ router.post('/api/invite/generate', async (ctx) => {
     // comes first), before anything is written. Where only admins
     // invite (config/door.ts), a member who is no owner or admin is answered 403 `admins_only` before the limit.
     let invite: ReturnType<typeof generateInvite>;
-    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
+    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey), undefined, vouch.level); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!invite) {
         ctx.status = 403;
         // A member whose account is paused brings nobody in while it lasts (removal by vote S1), and is told so.

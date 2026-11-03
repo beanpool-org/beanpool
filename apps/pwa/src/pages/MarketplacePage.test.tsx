@@ -1,6 +1,8 @@
 import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
@@ -238,6 +240,26 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         await act(async () => { screen.getByRole('button', { name: 'Next 7 days' }).click(); });
         expect(screen.getByText('Working bee')).toBeInTheDocument();
         expect(screen.queryByText('Spring fair')).not.toBeInTheDocument();
+    });
+
+    it('calendar-s4: openFilter="event" selects Events pill and calendar button calls onNavigate("map-calendar")', async () => {
+        const onNavigate = vi.fn();
+        const onFilterOpened = vi.fn();
+        render(
+            <MarketplacePage
+                identity={identity}
+                openFilter="event"
+                onFilterOpened={onFilterOpened}
+                onNavigate={onNavigate}
+            />
+        );
+        await screen.findByText('Working bee');
+        expect(onFilterOpened).toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Events' }).getAttribute('aria-pressed')).toBe('true');
+        const calButton = screen.getByTestId('market-calendar-button');
+        expect(calButton).toBeInTheDocument();
+        fireEvent.click(calButton);
+        expect(onNavigate).toHaveBeenCalledWith('map-calendar');
     });
 
     it('opens an event that has left the feed when a link names it (the chat\'s View event), asking the node by id (A4)', async () => {
@@ -482,9 +504,10 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         }
     });
 
-    it('gives the poll two of the columns from md up, and lays its answers out in two', async () => {
+    it('gives the poll two of the columns at every width, and lays its answers out in two from md up', async () => {
         await openGrid();
-        expect(pollCard().parentElement!.className).toContain('md:col-span-2');
+        // At 320 px with 1.3x text one column of two clipped "Other": the whole row on a phone, two columns from md up.
+        expect(pollCard().parentElement!.className.split(/\s+/)).toContain('col-span-2');
         expect(pollOptions().className).toContain('md:grid-cols-2');
     });
 
@@ -1260,6 +1283,43 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         fireEvent.click(within(screen.getByTestId('deal-row-tx-a')).getByRole('button', { name: 'Message Marty' }));
         await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-1'));
         expect(chat).toHaveBeenCalledWith('dm', [ME, 'marty-pk'], ME, undefined, 'p');
+    });
+
+    // R1 (engine/request-limits.ts): reports cleared the member's message requests; every screen that starts a chat words the refusal.
+    describe("403 dm_requests_limited on a Message button: the rule in the member's language, dated, not the node's English", () => {
+        const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+        const SPANISH = 'Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el 2026-11-08. Todavía puedes responder a quienes te escribieron y publicar.';
+        const refused = () => Object.assign(new Error(LIMITED), { status: 403, code: 'dm_requests_limited' });
+        const inSpanish = () => {
+            const es = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+            setLanguage('es', [es]);
+            return () => setLanguage('en');
+        };
+
+        it('Message on a listing', async () => {
+            const undo = inSpanish();
+            try {
+                vi.spyOn(api, 'createConversationApi').mockRejectedValue(refused());
+                await open(listing({ title: 'Pottery course' }), []);
+                fireEvent.click(await screen.findByRole('button', { name: /💬/ }));
+                expect(await screen.findByText(SPANISH)).toBeInTheDocument();
+                expect(screen.queryByText(LIMITED)).not.toBeInTheDocument();
+            } finally { undo(); }
+        });
+
+        it("Message on a deal's row (the author's)", async () => {
+            const undo = inSpanish();
+            try {
+                vi.spyOn(api, 'createConversationApi').mockRejectedValue(refused());
+                await open(listing({ title: 'Pottery course', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }), [
+                    deal({ id: 'tx-a', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME }),
+                ]);
+                const row = await screen.findByTestId('deal-row-tx-a');
+                fireEvent.click(within(row).getByRole('button', { name: /Marty/ }));
+                expect(await screen.findByText(SPANISH)).toBeInTheDocument();
+                expect(screen.queryByText(LIMITED)).not.toBeInTheDocument();
+            } finally { undo(); }
+        });
     });
 
     it('the author opened at one deal (Home, the header): that row comes first', async () => {

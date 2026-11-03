@@ -98,7 +98,8 @@ test('the repository passes words:check and is at or under the words:lint baseli
     const { problems, catalogCount } = await checkRepo({ extracted });
     assert.deepEqual(problems, []);
     // Every catalog file on disk is read: the phone, the web app, core and the server carry all 24 languages but English
-    // (S1 + S2 + MCP-MODERATION S1: 24 + 24 + 24 + 24).
+    // (S1 + S2: 24 + 24 + 24; the server's since its refusals for a pin, which go out in the member's language, and
+    // MCP-MODERATION S1's takedown notices: 24).
     const onDisk = ['apps/native/words', 'apps/pwa/words', 'packages/beanpool-core/words', 'apps/server/words']
         .flatMap((d) => fs.readdirSync(path.join(ROOT, d)).filter((f) => /^[A-Za-z-]+\.json$/.test(f))).length;
     assert.equal(catalogCount, onDisk);

@@ -16,7 +16,7 @@
  *   POST   /api/names/confirmations/:id/revoke      → { id, status }
  *   GET    /api/names/log?limit&offset              → { log, total, limit, offset }
  *   POST   /api/names/settings                      { twoAdminsToConfirm?, namesShownToMembers? } (an owner)
- *   GET    /api/names/health                        → the Community health panel: the totals, the two lines, when the rule starts
+ *   GET    /api/names/health                        → the Community health panel: the totals, the two lines, whether the rule has started
  *   GET    /api/names/health/exceptions             → known mode only: confirmed members past a line, and members who stepped
  *                                                     back owing past their ordinary line, by key and entry id (never a name),
  *                                                     and the open debts of members who left (logged)
@@ -41,7 +41,7 @@ import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js'
 import { HealthError, healthSummary, knownRule, openExceptions, readHealthAccessLog, setHealthSettings, stepBackFromConfirmed } from '../engine/community-health.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
-import { getMember, isVisitorKey, generateInvite } from '../state-engine.js';
+import { getMember, isVisitorKey, generateInvite, readInviteVouch } from '../state-engine.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { getNodeProfile } from '../config/node-profile.js';
@@ -167,11 +167,14 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
 
     // An invite bound to an entry (community modes slice 3): redeeming it confirms the joiner against the entry, by the
     // admin who made it. The same limits as any invite (W-main) and the door's rule; the entry's rule is confirmMember's.
+    // It can carry a vouch too, on the same terms as POST /api/invite/generate: the two add up (core creditAllowance).
     router.post('/api/names/entries/:id/invite', async (ctx) => {
         const actor = admin(ctx);
         if (!actor) return;
+        const vouch = readInviteVouch(actor, (ctx as any).requestBody?.vouchLevel);
+        if (vouch.refusal) return answer(ctx, vouch.refusal.status, vouch.refusal.error, vouch.refusal.code);
         try {
-            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id));
+            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id), vouch.level);
             if (!invite) return answer(ctx, 403, word('Only registered members can generate invites'), 'not_member');
             ctx.status = 201;
             ctx.body = { success: true, invite };

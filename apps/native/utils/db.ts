@@ -28,14 +28,15 @@ import { isPlainNodeAddress, plainOriginOf, shouldBlockCleartextNodeUrl } from '
 import { TOOL_DOCS_TABLE } from '../tools/schema';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar } from './avatar-value';
-import { clearPendingProfileChange, nameRefusedForGood, pendingNameRefused, pendingProfileChange } from './pending-profile-sync';
+import { clearPendingProfileChange, clearWaitingArchetype, clearWaitingRemoval, nameRefusedForGood, pendingNameRefused, pendingProfileChange, waitingArchetype, waitingRemoval } from './pending-profile-sync';
+import { adoptNewerRowIntoDevice, archetypeToSend, carryRowToNode, finishRemoval, healGuestMark, removalToSend } from './working-style';
 import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
-import { postsViewRefusal, viewOf } from './posts-view';
+import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { eventCopyColumn, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
+import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -427,12 +428,15 @@ async function _doInitDB() {
             event_online INTEGER,
             event_repeat TEXT,
             event_repeat_until TEXT,
+            event_repeat_skips TEXT,
             carried_callsign TEXT,
             carried_avatar TEXT,
             carried_banner TEXT,
             tags TEXT NOT NULL DEFAULT '',
             free_tags TEXT NOT NULL DEFAULT '',
-            shown_from TEXT
+            shown_from TEXT,
+            pinned_until TEXT,
+            pinned_at TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -799,8 +803,12 @@ ${TOOL_DOCS_TABLE}
         // A repeating event's pattern and last date (DESIGN-event-times §8), for the cached card's ↻ caption.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_until TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_repeat_skips TEXT;`); } catch (e) {}
         // Lendable offers (S3): whether an Offer is lendable (tool store / lending)
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN lendable INTEGER DEFAULT 0;`); } catch (e) {}
+        // A pin (DESIGN-pinning-fable.md §2; apps/server engine/pins.ts): until when, and when made.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pinned_until TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pinned_at TEXT;`); } catch (e) {}
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS event_rsvps (
@@ -1069,6 +1077,8 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
         r.audienceScope = r.audience_scope || 'public';
+        r.pinnedUntil = r.pinned_until || r.pinnedUntil || undefined;
+        r.pinnedAt = r.pinned_at || r.pinnedAt || undefined;
         if (r.type === 'event') {
             r.goingCount = r.event_going_count ?? 0;
             r.interestedCount = r.event_interested_count ?? 0;
@@ -1127,6 +1137,8 @@ export async function getMyPosts(pubkey: string) {
     return rows.map((r: any) => {
         r.authorFoundingNeeded = r.author_founding_needed === 1;
         r.author_energy_cycled = r.author_energy_cycled ?? 0;
+        r.pinnedUntil = r.pinned_until || r.pinnedUntil || undefined;
+        r.pinnedAt = r.pinned_at || r.pinnedAt || undefined;
         if (typeof r.photos === 'string') {
             try {
                 r.photos = JSON.parse(r.photos);
@@ -1167,7 +1179,7 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
     }
     const p = posts[0];
     const before = await database.getFirstAsync<any>(
-        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable, tags, free_tags FROM posts WHERE id = ?', [id]
+        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable, tags, free_tags, pinned_until, pinned_at FROM posts WHERE id = ?', [id]
     );
     await acquireSyncLock();
     try {
@@ -1190,7 +1202,9 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
         (before.lendable ? 1 : 0) !== (p.lendable ? 1 : 0) ||
         (before.photos ?? null) !== syncedPhotosColumn(p) ||
         (before.tags ?? '') !== syncedTagsColumn(p) ||
-        (before.free_tags ?? '') !== syncedFreeTagsColumn(p);
+        (before.free_tags ?? '') !== syncedFreeTagsColumn(p) ||
+        (before.pinned_until || null) !== (p.pinned_until || p.pinnedUntil || null) ||
+        (before.pinned_at || null) !== (p.pinned_at || p.pinnedAt || null);
     if (changed) {
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -1232,6 +1246,8 @@ export async function getPost(id: string) {
     if (row) {
         row.authorFoundingNeeded = row.author_founding_needed === 1;
         row.author_energy_cycled = row.author_energy_cycled ?? 0;
+        row.pinnedUntil = row.pinned_until || row.pinnedUntil || undefined;
+        row.pinnedAt = row.pinned_at || row.pinnedAt || undefined;
 
         if (typeof row.photos === 'string') {
             try { 
@@ -1817,6 +1833,17 @@ export async function getBalance(pubkey: string) {
     };
 }
 
+/**
+ * Whether the node says this member can vouch now (the invite screen's control, people.tsx). getBalance answers from this
+ * phone's copy and refreshes it behind that answer, so on its own it would show someone appointed since the last read
+ * nothing, and someone stood down a choice the node then refuses. With no answer from the node the copy stands: that screen
+ * offers no vouch offline, and the node decides again when the invite is made.
+ */
+export async function askCanVouch(pubkey: string): Promise<boolean> {
+    await refreshBalanceFromServer(pubkey);
+    return (await getBalance(pubkey)).canVouch;
+}
+
 export async function getTransactions(pubkey: string) {
     const database = await getDb();
     
@@ -2077,7 +2104,8 @@ export async function updateMemberProfile(pubkey: string, data: { callsign: stri
                 bio: data.bio,
                 contactValue: data.contact_value,
                 contactVisibility: data.contact_visibility,
-                archetype: data.archetype,
+                // Not the working style: a row can be older than the device's result, and writing it here put a community's
+                // old result over a retake (utils/working-style.ts). Only the quiz writes the device's copy.
             });
         }
     } catch { /* canonical mirror is best-effort */ }
@@ -2185,6 +2213,8 @@ export async function createPost(post: any) {
             durationDays: post.durationDays || 7,
             // Anonymous unless its creator chose an open vote (2026-09-28); only `true` opens one.
             pollOpenVote: post.pollOpenVote === true,
+            // A typed Other, only when the maker asked and the node said it can (NewPollModal).
+            ...(post.pollOther === true ? { pollOther: true } : {}),
         } : {}),
         // Events (docs/events-on-the-map.md §2.2): the server forces reach local and the other trade fields.
         ...(post.type === 'event' ? {
@@ -2293,8 +2323,8 @@ export async function createPost(post: any) {
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     const tagsStr = post.tags ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : '';
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0,
@@ -2314,7 +2344,7 @@ export async function createPost(post: any) {
     return { eventTimeAdjusted: answer?.eventTimeAdjusted ?? null, post: answer?.post ?? null };
 }
 
-export async function votePoll(postId: string, optionId: string) {
+export async function votePoll(postId: string, optionId: string, otherWords?: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
         throw new Error('You are currently offline.');
@@ -2326,7 +2356,8 @@ export async function votePoll(postId: string, optionId: string) {
     const body = {
         postId,
         optionId,
-        voterPublicKey: identity.publicKey
+        voterPublicKey: identity.publicKey,
+        ...(otherWords === undefined ? {} : { otherWords }),
     };
     const bodyString = JSON.stringify(body);
     const voteUrl = `${anchorUrl}/api/marketplace/posts/${encodeURIComponent(postId)}/vote`;
@@ -2380,11 +2411,11 @@ export async function persistEventView(post: any, memberPubkey: string) {
     if (!post || post.type !== 'event' || !post.id) return;
     try {
         const database = await waitForInit();
-        const [, , , state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil] = eventCacheColumns(post);
+        const [, , , state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil, repeatSkips] = eventCacheColumns(post);
         await database.runAsync(
-            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, event_start_local = ?, event_end_local = ?, event_tz = ?, event_online = ?, event_repeat = ?, event_repeat_until = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
+            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, event_start_local = ?, event_end_local = ?, event_tz = ?, event_online = ?, event_repeat = ?, event_repeat_until = ?, event_repeat_skips = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
             [post.eventStartAt ?? post.event_start_at ?? null, post.eventEndAt ?? post.event_end_at ?? null,
-             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil,
+             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested, startLocal, endLocal, tz, online, repeat, repeatUntil, repeatSkips,
              post.status ?? null, post.updatedAt ?? post.updated_at ?? null, post.id]
         );
         if (post.myRsvp === 'going' || post.myRsvp === 'interested') {
@@ -2651,6 +2682,44 @@ function repeatOnGlobalCopy(run: (copy: typeof import('./show-on-global')) => Pr
     import('./show-on-global').then(run).catch(() => {});
 }
 
+/** A poll's typed answers as its maker or an owner reads them (apps/server engine/poll-other.ts). */
+export interface PollOtherRead {
+    state: 'held' | 'open';
+    count: number;
+    answers: Array<{ id: string; words: string; reported: boolean }>;
+    removed: number;
+    canRemove: boolean;
+}
+
+let ownerHereRead: { anchor: string | null; owner: Promise<boolean> } | null = null;
+
+/** Whether the signer is an owner on this community (GET /api/node-admin/me), asked once per community a run, and only by a poll card with words to offer. It decides nothing: the node checks every read. */
+export async function isOwnerHere(): Promise<boolean> {
+    const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (ownerHereRead?.anchor === anchor) return ownerHereRead.owner;
+    const owner = signedGet('/api/node-admin/me')
+        .then(res => (res.ok ? res.json() : null))
+        .then((body: { role?: unknown } | null) => body?.role === 'owner')
+        .catch(() => { ownerHereRead = null; return false; });
+    ownerHereRead = { anchor, owner };
+    return owner;
+}
+
+export async function getPollOtherAnswers(postId: string): Promise<PollOtherRead> {
+    const res = await signedGet(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers`);
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(body?.error || 'The typed answers could not be read.');
+    return body as PollOtherRead;
+}
+
+export async function reportPollOtherAnswer(postId: string, answerId: string) {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/report`, {});
+}
+
+export async function removePollOtherAnswer(postId: string, answerId: string) {
+    return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/remove`, {});
+}
+
 export async function closePoll(postId: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
@@ -2694,6 +2763,47 @@ export async function closePoll(postId: string) {
         } catch (dbErr) {
             console.warn('[SQLite] Failed to persist poll close locally:', dbErr);
         }
+    }
+    return json;
+}
+
+/**
+ * Pins a post for 1, 3 or 7 days (DESIGN-pinning-fable.md §2).
+ * Signed member route: role check happens on the node, refusal returns node's words.
+ */
+export async function pinPostOnNode(postId: string, days: PinDays): Promise<{ success: boolean; postId: string; pinnedUntil: string; pinnedAt: string }> {
+    // The shared signed request: it signs, sends X-Language so a refusal comes back in the member's language, and throws
+    // the node's own sentence (with `nodeAnswered` set) for the screen to show (utils/pins.ts pinFailureText).
+    const json = await _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/pin`, { days });
+    try {
+        const database = await waitForInit();
+        await database.runAsync(
+            `UPDATE posts SET pinned_until = ?, pinned_at = ?, updated_at = ? WHERE id = ?`,
+            [json.pinnedUntil || null, json.pinnedAt || null, json.pinnedAt || new Date().toISOString(), postId]
+        );
+        emitAppEvent('sync_data_updated');
+    } catch (e) {
+        console.warn('[DB] Failed to update local post pin status:', e);
+    }
+    return json;
+}
+
+/**
+ * Takes the pin off a post early (DESIGN-pinning-fable.md §0.2, §2.5).
+ * Signed member route: owners, admins, or the post's author may unpin.
+ */
+export async function unpinPostOnNode(postId: string): Promise<{ success: boolean; postId: string }> {
+    // `{}` as every other phone POST sends; the signed actor is the only input the node reads.
+    const json = await _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/unpin`, {});
+    try {
+        const database = await waitForInit();
+        await database.runAsync(
+            `UPDATE posts SET pinned_until = NULL, pinned_at = NULL WHERE id = ?`,
+            [postId]
+        );
+        emitAppEvent('sync_data_updated');
+    } catch (e) {
+        console.warn('[DB] Failed to clear local post pin status:', e);
     }
     return json;
 }
@@ -3787,6 +3897,18 @@ function syncedPhotosColumn(p: any): string | null {
 }
 
 /**
+ * The node says this member has answered a sealed poll, perhaps on the web or before a reinstall, and that is all it can say
+ * (@beanpool/core poll-other). Kept as this phone keeps its own votes, so the card says so with no answer ticked: no answer
+ * has this id. An answer this phone gave stays as it is.
+ */
+async function noteSealedAnswer(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    if (p?.pollAnswered !== true) return;
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return;
+    await txn.runAsync('INSERT OR IGNORE INTO poll_votes (post_id, voter_pubkey, option_id, signature) VALUES (?, ?, ?, ?)', [p.id, me, POLL_BALLOT_SEALED, '']);
+}
+
+/**
  * One listing as the node sends it, written to the cache. The only row writer the delta sync, a pushed change and
  * the by-id refresh in getPost use. It names every column the node sends: INSERT OR REPLACE does not keep a column
  * it leaves out, it puts it back to the table default, which is how every sync once cleared the 💸 marker and
@@ -3794,9 +3916,10 @@ function syncedPhotosColumn(p: any): string | null {
  * sends it and nothing reads it.
  */
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
+    await noteSealedAnswer(txn, p);
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, shown_from, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, free_tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, event_repeat_skips, shown_from, carried_callsign, carried_avatar, carried_banner, pinned_until, pinned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3849,6 +3972,8 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             syncedAuthorAvatar(p),
             p.id ?? null,
             syncedAuthorBanner(p),
+            p.pinnedUntil || p.pinned_until || null,
+            p.pinnedAt || p.pinned_at || null,
         ]
     );
 }
@@ -3890,6 +4015,9 @@ function carriesAuthorAvatar(p: any): boolean {
 
 /** The author's name a listing carries (the node's `authorCallsign`), or null for a copy without one. */
 function syncedAuthorCallsign(p: any): string | null {
+    // A read that names nobody says so: '' and not null, which keeps what the row holds. A copy whose member stopped taking
+    // questions must not go on naming them here (@beanpool/core eventCopyOf).
+    if ((p.authorPublicKey ?? p.author_pubkey) === HIDDEN_AUTHOR) return '';
     const name = p.authorCallsign ?? p.author_callsign;
     return typeof name === 'string' && name.trim() !== '' ? name : null;
 }
@@ -4113,6 +4241,13 @@ export async function localPostTies(postId: string): Promise<{ authorPubkey: str
  * writes nothing and answers false, as for a switch.
  */
 export async function applyDelta(delta: any, expectedDbName?: string, generation?: number): Promise<boolean> {
+    let anchorUrl: string | null = null;
+    let selfPubkey: string | null = null;
+    let ownRowChanged = false;
+    let ownSyncedArchetype: string | null = null;
+    let ownRowAheadOfNode: string | null = null;
+    let selfMemberFound = false;
+
     await acquireSyncLock();
     try {
         const database = await getDb();
@@ -4136,8 +4271,8 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         // and awaiting it between SQLite statements would hold the write transaction open on
         // unrelated I/O. `ownRowChanged` is declared out here so it survives to after the
         // commit, which is the only point at which it is safe to tell the UI to re-read.
-        const selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
-        let ownRowChanged = false;
+        anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+        selfPubkey = (await loadIdentity().catch(() => null))?.publicKey ?? null;
         await database.withTransactionAsync(async () => {
             const txn = database;
 // Full-replace sync: server response is the source of truth
@@ -4187,22 +4322,58 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const profileUpdatedAt = m.profileUpdatedAt || m.profile_updated_at || null;
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
-            const arch = m.archetype || null;
+            let arch = m.archetype || null;
+            let finalArch = arch;
+            // The node SAYING a member has no working style: the field is there, and null. A removal reaches other members'
+            // phones this way (the node bumps profile_updated_at, so the next delta names the member with null), and the
+            // COALESCE below would keep the cached result and go on typing them (Chemistry tips) while the web shows none.
+            // A delta that leaves the field out (an older node, a trimmed row) says nothing, and keeps it, as a partial
+            // list keeps an avatar. Not this member's own row: that has its own rule (a retake not yet sent stands, below).
+            const archetypeNullClears = m.archetype === null && pk !== selfPubkey;
+            if (pk === selfPubkey) {
+                selfMemberFound = true;
+                const localRow = await txn.getFirstAsync<{ archetype?: string | null }>(
+                    'SELECT archetype FROM members WHERE public_key = ?',
+                    [pk]
+                );
+                // Remove my working style: while this community is still to be told, the result it holds, and any the phone's
+                // row still holds, are ones the member took off. Neither comes back through this sync (not into the row, the
+                // device copy, the other communities, nor the node). One taken after the removal is a retake: it stands.
+                const removal = anchorUrl ? await waitingRemoval(anchorUrl, pk) : null;
+                if (removal) {
+                    if (arch && !archetypeIsAfter(arch, removal.removedOn)) { arch = null; finalArch = null; }
+                    if (localRow?.archetype && !archetypeIsAfter(localRow.archetype, removal.removedOn)) {
+                        localRow.archetype = null;
+                        await txn.runAsync('UPDATE members SET archetype = NULL WHERE public_key = ?', [pk]);
+                    }
+                }
+                if (localRow?.archetype && !archetypeIsNewer(arch, localRow.archetype)) {
+                    finalArch = localRow.archetype;
+                    // Null is a removal's to send (S3): only a row the node really holds older.
+                    if (arch && archetypeIsNewer(localRow.archetype, arch)) ownRowAheadOfNode = localRow.archetype;
+                } else if (arch) {
+                    ownSyncedArchetype = arch;
+                    if (!localRow?.archetype || archetypeIsNewer(arch, localRow.archetype)) {
+                        ownRowChanged = true;
+                    }
+                }
+            }
             if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
             await txn.runAsync(
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
+                   archetype = CASE WHEN ? THEN excluded.archetype
+                                    ELSE COALESCE(excluded.archetype, members.archetype) END,
                    avatar_url = CASE WHEN ? THEN excluded.avatar_url
                                      ELSE COALESCE(excluded.avatar_url, members.avatar_url) END,
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
                    earned_credit = excluded.earned_credit,
-                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by),
-                   archetype = COALESCE(excluded.archetype, members.archetype)`,
-                // The CASE placeholder is the 9th `?` in the statement text, so it binds AFTER
-                // the eight VALUES parameters.
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, arch, avatarNullClears ? 1 : 0]
+                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by)`,
+                // The CASE placeholders are the 9th (archetype) and 10th (avatar, last) `?` in the statement text, so
+                // they bind AFTER the eight VALUES parameters.
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, archetypeNullClears ? 1 : 0, avatarNullClears ? 1 : 0]
             );
         }
 
@@ -4440,10 +4611,27 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
         });
         // AFTER the commit, and only on a real change — see ownProfileRowWouldChange.
         if (ownRowChanged && selfPubkey) emitOwnProfileUpdated(selfPubkey);
-        return true;
     } finally {
         releaseSyncLock();
     }
+    if (selfMemberFound && anchorUrl && selfPubkey) {
+        await healGuestMark(anchorUrl, selfPubkey).catch(e => console.warn('[DB] Failed to heal a guest mark:', e));
+    }
+    if (ownRowAheadOfNode && anchorUrl && selfPubkey) {
+        await carryRowToNode(selfPubkey, ownRowAheadOfNode, anchorUrl).catch(e => console.warn('[DB] Failed to keep a row the node is behind:', e));
+    }
+    if (ownSyncedArchetype && selfPubkey) {
+        try {
+            const canonical = await getCanonicalProfile().catch(() => null);
+            const deviceCopy = canonical?.archetype ?? null;
+            if (archetypeIsNewer(ownSyncedArchetype, deviceCopy)) {
+                await adoptNewerRowIntoDevice(selfPubkey, ownSyncedArchetype, anchorUrl);
+            }
+        } catch (e) {
+            console.warn('[DB] Failed to adopt newer archetype row:', e);
+        }
+    }
+    return true;
 }
 
 // Returns only the fetched messages that would actually change a local row: new ids
@@ -7370,8 +7558,6 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     // another community's, and none of it goes to this one (#2461 review).
     if (!(await stillOnCommunity(anchorUrl))) return false;
 
-    // Still read for the bio, contact and archetype below; the picture is never taken from it (Profile S2).
-    const canonical = await getCanonicalProfile();
     // Since #725 the members sync writes the node's own `/api/avatar/<pk>?size=thumb` string
     // into the local row, and `profile?.avatar_url` happily offered that — so this function
     // published the node's URL back to the node as the member's avatar, and from then on
@@ -7396,30 +7582,22 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     const bio = profile?.bio ?? '';
     const contactValue = profile?.contact_value ?? null;
     const contactVisibility = profile?.contact_visibility ?? undefined;
-    const archetypeRaw = profile?.archetype ?? canonical?.archetype ?? null;
+    // What waits for this community, or a device copy newer than its row: never its own row sent back, and never to a
+    // community that doesn't say this key is a member (utils/working-style.ts).
+    const publicArchetype = await archetypeToSend(anchorUrl, identity, profile?.archetype);
 
     // The bail-out used to be `if (!avatar)`, from when a picture was the only thing this
     // published. It now carries bio, contact and archetype too, so keying it on the avatar
     // dropped a quiz result on the floor for anyone who hadn't uploaded a photo — and cleared
     // the pending flag on the way out, so it never retried. Only give up when there is
     // genuinely nothing anywhere to publish. A new name waiting here is something to publish.
-    if (!avatar && !bio && !contactValue && !archetypeRaw && !pending?.callsign) {
+    if (!avatar && !bio && !contactValue && !publicArchetype && !pending?.callsign) {
         // Safe to drop this community's change here, parked value and all, and the only place it
         // is dropped unsent: `avatar` being null means the rule found nothing publishable, so
         // anything still parked is a value that is not portable and can never be published — a
         // portable pick would have been chosen above and kept this code out of this branch.
         await clearPendingProfileChange(anchorUrl, pending);
         return false;
-    }
-    let publicArchetype: string | null = null;
-    if (archetypeRaw) {
-        const parsed = parseArchetype(archetypeRaw);
-        publicArchetype = parsed ? JSON.stringify({
-            primary: parsed.primary,
-            secondary: parsed.secondary,
-            mode: parsed.mode,
-            updatedAt: parsed.updatedAt,
-        }) : archetypeRaw;
     }
 
     // ADDITIVE ONLY. The server reads `update.avatar !== undefined ? update.avatar : existing`
@@ -7479,12 +7657,13 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
         // `return false` above leaves it for the next retry, and a change kept while this was out
         // waits for the next.
         await clearPendingProfileChange(anchorUrl, pending);
+        if (publicArchetype) await clearWaitingArchetype(anchorUrl, publicArchetype);
         // The local mirror writes the copy open now (getDb): after a switch while the update was out, that is another
         // community's, and this one's profile stays out of it. This community's next members sync brings it home.
         if (!(await stillOnCommunity(anchorUrl))) return true;
         // Mirror what was just published into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
-        if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {
+        if (!profile?.avatar_url || publicArchetype) {
             try {
                 await updateMemberProfile(identity.publicKey, {
                     callsign: rowCallsign ?? profile?.callsign ?? identity.callsign,
@@ -7492,7 +7671,7 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
                     bio: bio || undefined,
                     contact_value: contactValue || undefined,
                     contact_visibility: contactVisibility,
-                    archetype: archetypeRaw || undefined,
+                    archetype: publicArchetype || undefined,
                 });
             } catch { /* local mirror is best-effort */ }
         } else if (rowCallsign !== undefined && rowCallsign !== profile?.callsign) {
@@ -7506,6 +7685,55 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
         return true;
     } catch {}
     return false;
+}
+
+/**
+ * The working style waiting for `community`, sent at its own sync and nothing else with it: no name, bio, contact or
+ * photo. The phone's copy of those can be older than the node's (a bio changed on the web), and a quiz taken in another
+ * community is no reason to send them back. Only while the phone is on `community`, and only as archetypeToSend allows.
+ * What waits stays for the next sync unless the community took it. Answers whether it did.
+ */
+export async function pushWaitingArchetype(opts: { community: string }): Promise<boolean> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const identity = await loadIdentity();
+    if (!anchorUrl || !identity || plainOriginOf(opts.community) !== plainOriginOf(anchorUrl)) return false;
+    const removal = await waitingRemoval(anchorUrl, identity.publicKey);
+    if (!removal && !(await waitingArchetype(anchorUrl, identity.publicKey))) return false;
+    const row = await getMemberProfile(identity.publicKey);
+    if (!(await stillOnCommunity(anchorUrl))) return false;
+    if (removal) {
+        // Remove my working style: this community's turn to hear it, as a null, where it holds a result (working-style.ts).
+        if (!(await removalToSend(anchorUrl, identity)) || !(await stillOnCommunity(anchorUrl))) return false;
+        const removeBody = JSON.stringify({ publicKey: identity.publicKey, archetype: null });
+        const removeHeaders = await buildSignedHeaders('POST', `${anchorUrl}/api/profile/update`, removeBody, identity.privateKey, identity.publicKey);
+        try {
+            const res = await fetch(`${anchorUrl}/api/profile/update`, { method: 'POST', headers: removeHeaders, body: removeBody });
+            if (!res.ok) return false;
+        } catch {
+            return false;
+        }
+        // The null is in. The row here goes before the removal stops waiting: a row left holding the result, with no removal
+        // to judge it against, is what the next start adopts and carries to every other community. A copy that won't
+        // clear keeps the removal waiting (the next turn finds the node holding none and tries again).
+        await finishRemoval(anchorUrl, identity.publicKey, removal.removedOn);
+        return true;
+    }
+    const archetype = await archetypeToSend(anchorUrl, identity, row?.archetype);
+    if (!archetype) return false;
+    const bodyString = JSON.stringify({ publicKey: identity.publicKey, archetype });
+    const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
+    try {
+        const res = await fetch(`${anchorUrl}/api/profile/update`, { method: 'POST', headers, body: bodyString });
+        if (!res.ok) return false;
+    } catch {
+        return false;
+    }
+    await clearWaitingArchetype(anchorUrl, archetype);
+    // Into this community's row at once, as pushProfileToServer does; after a switch, its next members sync brings it home.
+    if (row?.callsign && (await stillOnCommunity(anchorUrl))) {
+        await updateMemberProfile(identity.publicKey, { callsign: row.callsign, archetype }).catch(() => {});
+    }
+    return true;
 }
 
 /** Whether the phone is still on `community`: the copy getDb opens is that community's (pillar-sync's mid-sync check). */

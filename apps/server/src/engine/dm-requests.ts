@@ -984,7 +984,7 @@ function withdrawOpenerLines(row: RequestRow): void {
         const keys = (db.prepare('SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT value FROM json_each(?))')
             .all(ids) as { storage_key: string }[]).map(r => r.storage_key);
         for (const k of kept) if (k.storage_key) keys.push(k.storage_key);
-        db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT value FROM json_each(?))').run(ids);
+        deletePlainRows('message_attachments', 'message_id IN (SELECT value FROM json_each(?))', ids);
         db.prepare('DELETE FROM messages WHERE id IN (SELECT value FROM json_each(?))').run(ids);
         for (const id of stored) writeTombstone('messages', id);
         db.prepare('DELETE FROM withheld_lines WHERE id IN (SELECT value FROM json_each(?))').run(JSON.stringify(kept.map(k => k.id)));

@@ -33,10 +33,14 @@ export interface NodeFeatures {
     openJoin?: boolean;
     knocks?: boolean;
     distanceSearch?: boolean;
+    /** Owners and admins can pin a post for 1, 3 or 7 days (DESIGN-pinning-fable.md §2). Hidden when not said. */
+    pins?: boolean;
     probation?: boolean;
     autoHideReports?: boolean;
     autoMute?: boolean;
     guestListingsOnly?: boolean;
+    /** A poll here can offer a typed Other (apps/server engine/poll-other.ts). An older node says nothing, and the maker isn't asked. */
+    pollOther?: boolean;
     /** A nearly empty Market shows a few example cards (utils/example-listings.ts). */
     exampleListings?: boolean;
     /** Members propose and vote on formal Decisions here. Off on the worldwide community (Marty, 2026-09-27). */
@@ -84,6 +88,10 @@ export interface NodeFeatures {
      * alone (the #1946 review, finding 1, measured).
      */
     onlineEvents?: boolean;
+    /** An invite can carry a vouch here (core offersInviteVouch). */
+    inviteVouch?: boolean;
+    /** A member can ask an admin to invite someone here (core offersInviteAsk). */
+    inviteAsks?: boolean;
     /**
      * Anyone can join in a minute (the global node; DESIGN-global-member-privacy-fable.md §1): a new event's "Only people I
      * let in" starts ticked, and the form says who reads the note. A node that doesn't say is a local community.
@@ -110,9 +118,11 @@ export type NodeDoor = 'open' | 'members' | 'admins';
 const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | 'knownFloor'>> = [
+    'pins',
+    'pollOther',
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'dmRequests', 'shareOutside',
+    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteVouch', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
 ];
 
 export interface NodeProfile {
@@ -193,9 +203,11 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
     const b = body as {
         profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown; addresses?: unknown; primaryAddress?: unknown;
-        recoveryCopies?: unknown;
+        recoveryCopies?: unknown; pollOther?: unknown;
     };
     const features: NodeFeatures = {};
+    // Said beside `features` by the node (routes/community.ts), kept among them here.
+    if (b.pollOther === true) features.pollOther = true;
     if (b.features && typeof b.features === 'object') {
         const f = b.features as Record<string, unknown>;
         for (const key of FEATURE_KEYS) {

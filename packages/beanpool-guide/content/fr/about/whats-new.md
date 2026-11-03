@@ -79,12 +79,12 @@ Certains de ces changements résident sur le serveur de votre communauté. Vous 
 
 ### Groupes
 
-- **Chaque groupe a une discussion.** Échanges comporte désormais trois boutons : **Messages**, **Groupes** et **Membres**. **Groupes** liste vos groupes, les entreprises que vous gérez et les événements auxquels vous participez, chacun avec son dernier message et le nombre de non-lus.
-- **Une seule façon de créer un groupe.** **Nouveau groupe** dans Échanges et **+** dans les Communs ouvrent le même formulaire, avec **Cercle social** sélectionné pour vous. Après l'avoir créé, vous arrivez dans sa discussion, qui vous demande qui vous souhaitez inviter.
+- **Chaque groupe a une discussion.** Chat comporte désormais trois boutons : **Messages**, **Groupes** et **Membres**. **Groupes** liste vos groupes, les entreprises que vous gérez et les événements auxquels vous participez, chacun avec son dernier message et le nombre de non-lus.
+- **Une seule façon de créer un groupe.** **Nouveau groupe** dans Chat et **+** dans les Communs ouvrent le même formulaire, avec **Cercle social** sélectionné pour vous. Après l'avoir créé, vous arrivez dans sa discussion, qui vous demande qui vous souhaitez inviter.
 - **Invitations.** Les coordinateurs peuvent inviter des personnes depuis le menu de la discussion. Une invitation indique qui l'a envoyée, et **Rejoindre le groupe** vous emmène directement dans la discussion.
 - **Mettre en sourdine une discussion** : Pour 8 heures, Pour une semaine ou Toujours. Dans un groupe, les @mentions passent toujours.
 - **Un en-tête unique pour chaque discussion** : le nom du groupe, de l'entreprise ou de l'événement en haut. Touchez-le pour voir le groupe, l'entreprise ou l'événement.
-- Les anciennes discussions de groupe dans Échanges ont été retirées, avec leurs messages.
+- Les anciennes discussions de groupe dans Chat ont été retirées, avec leurs messages.
 - Chaque groupe dispose désormais d'un **coordinateur principal** — la personne qui l'a créé, au départ. Tout coordinateur s'occupe toujours des membres et des publications, mais seul le coordinateur principal peut retirer ou rétrograder un coordinateur, et personne ne peut retirer le coordinateur principal. Le coordinateur principal peut transmettre son rôle à quelqu'un d'autre. Si le coordinateur principal reste inactif pendant 30 jours, le groupe peut en choisir un nouveau, sur l'écran du groupe au-dessus de la liste des membres. Voir « Règles et décisions ».
 - **Votes dans un groupe.** Les membres d'un groupe peuvent voter sur les affaires propres au groupe, comme un nouveau coordinateur ou un nouveau coordinateur principal : ouvrez le groupe et regardez sous **Décisions**.
 - **Choisir un nouveau coordinateur principal pour un groupe inactif.** Seules les personnes qui étaient dans le groupe avant que son coordinateur principal ne devienne inactif peuvent voter. Les personnes qui l'ont rejoint, ou qui ont été nommées coordinatrices après cela, n'ont pas voix au chapitre, de sorte que de nouveaux comptes ne peuvent pas prendre le contrôle d'un groupe dont le responsable est devenu silencieux.

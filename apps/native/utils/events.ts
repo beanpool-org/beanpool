@@ -11,7 +11,7 @@ import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, zonePlaceFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
     LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type WordKey,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
-    listingFreeTags, postTagsOf, storedFreeTags, copyFromLine, eventCopyOf, eventRepeatOf, isOnlineEvent,
+    listingFreeTags, postTagsOf, storedFreeTags, copyFromLine, eventCopyOf, eventRepeatOf, isOnlineEvent, isLocalDate,
 } from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
@@ -513,6 +513,33 @@ export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: numbe
 }
 
 /**
+ * A repeating event's cancelled skips dates as JSON text, or null.
+ */
+function eventRepeatSkipsColumn(p: any): string | null {
+    const raw = p?.eventRepeatSkips ?? p?.event_repeat_skips;
+    if (!raw) return null;
+    const filterDates = (arr: unknown[]) => arr.filter(isLocalDate);
+
+    if (Array.isArray(raw)) {
+        const valid = filterDates(raw);
+        return valid.length > 0 ? JSON.stringify(valid) : null;
+    }
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                const valid = filterDates(parsed);
+                return valid.length > 0 ? JSON.stringify(valid) : null;
+            }
+            return null;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
+
+/**
  * The local cache columns for an event, from a server row (camelCase) or a local row (snake_case). Counts
  * are the public ones; the viewer's own RSVP and the private note are not cached here — the sync pull is
  * unsigned and never carries them.
@@ -520,8 +547,8 @@ export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: numbe
  * The host's clock, its zone and online ride along (DESIGN-event-times amendment 1, item 3), so the card reads right from the
  * cache. The join link does not: it is served like the private note, to the host and Going only.
  */
-export function eventCacheColumns(p: any): [string | null, string | null, string | null, string | null, number, number, string | null, string | null, string | null, number | null, string | null, string | null] {
-    if (p?.type !== 'event') return [null, null, null, null, 0, 0, null, null, null, null, null, null];
+export function eventCacheColumns(p: any): [string | null, string | null, string | null, string | null, number, number, string | null, string | null, string | null, number | null, string | null, string | null, string | null] {
+    if (p?.type !== 'event') return [null, null, null, null, 0, 0, null, null, null, null, null, null, null];
     const series = eventRepeatOf(p);
     const online = p.event_online ?? p.eventOnline;
     return [
@@ -538,6 +565,7 @@ export function eventCacheColumns(p: any): [string | null, string | null, string
         // A repeating event's pattern and last date (DESIGN-event-times §8), so the cached card shows its ↻ caption.
         series.rule ? JSON.stringify(series.rule) : null,
         series.until,
+        series.rule ? eventRepeatSkipsColumn(p) : null,
     ];
 }
 

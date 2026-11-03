@@ -126,6 +126,15 @@ vi.mock('../../app/ThemeContext', async () => {
     };
 });
 
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recognition: 'member' }) }));
+const shareState = vi.hoisted(() => ({ profile: null as any, answered: true, role: null as any }));
+vi.mock('../use-node-profile', () => ({ useNodeProfile: () => shareState.profile }));
+vi.mock('../identity', () => ({ loadIdentity: async () => ({ publicKey: 'me-pk' }) }));
+vi.mock('../node-admin', () => ({
+    cachedNodeRoleHeard: async () => (shareState.answered ? { role: shareState.role, communityName: 'Test' } : null),
+    persistNodeRole: async () => {},
+    readPersistedNodeRole: async () => undefined,
+}));
 vi.mock('../db', () => ({
     fetchMyEvents: async () => [],
     fetchMemberPreferences: async () => ({}),
@@ -148,6 +157,8 @@ const POST = {
 
 let root: Root;
 let host: HTMLElement;
+// Fields a test adds to the event (a live, public event is one Share outside is offered for).
+const postExtra = { value: {} as Record<string, unknown> };
 
 async function renderComponent(colors: any = lightColors, isDark = false) {
     currentTheme.theme = isDark ? 'dark' : 'light';
@@ -156,7 +167,7 @@ async function renderComponent(colors: any = lightColors, isDark = false) {
     document.body.appendChild(host);
     root = createRoot(host);
     await act(async () => {
-        root.render(createElement(EventShareAndCalendar, { post: POST }) as any);
+        root.render(createElement(EventShareAndCalendar, { post: { ...POST, ...postExtra.value } }) as any);
     });
 }
 
@@ -290,19 +301,27 @@ describe('iOS path', () => {
     it('iOS offline error dismisses modal and displays alert', async () => {
         platform.OS = 'ios';
         const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        vi.mocked(AsyncStorage.getItem).mockResolvedValueOnce(null);
-        await renderComponent();
+        // The phone has no community address stored. Every read says so, not just the next one: the Invite and share button
+        // reads it too, when the screen is drawn (components/InviteAndShare.tsx), and used to take this test's one answer.
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const stored = getItem.getMockImplementation();
+        getItem.mockImplementation(async () => null);
+        try {
+            await renderComponent();
 
-        const addBtn = host.querySelector('[aria-label="Add this event to your calendar"]') as HTMLElement;
-        await act(async () => { addBtn.click(); });
+            const addBtn = host.querySelector('[aria-label="Add this event to your calendar"]') as HTMLElement;
+            await act(async () => { addBtn.click(); });
 
-        const fileOption = host.querySelector('[data-testid="event-add-calendar-file"]') as HTMLElement;
-        await act(async () => { fileOption.click(); });
+            const fileOption = host.querySelector('[data-testid="event-add-calendar-file"]') as HTMLElement;
+            await act(async () => { fileOption.click(); });
 
-        expect(alertCalls.calls.length).toBe(1);
-        expect(alertCalls.calls[0][0]).toBe('Not added');
-        expect(alertCalls.calls[0][1]).toBe('You are currently offline.');
-        expect(host.querySelector('[data-testid="modal-choice"]')).toBeNull();
+            expect(alertCalls.calls.length).toBe(1);
+            expect(alertCalls.calls[0][0]).toBe('Not added');
+            expect(alertCalls.calls[0][1]).toBe('You are currently offline.');
+            expect(host.querySelector('[data-testid="modal-choice"]')).toBeNull();
+        } finally {
+            getItem.mockImplementation(stored!);
+        }
     });
 });
 
@@ -375,5 +394,66 @@ describe('Choice renders at 320 dp × 1.3, both themes, 44 dp targets', () => {
         // paddingBottom must be 16 + 48 = 64dp
         expect(cardStyle2.paddingBottom).toBe(64);
         await act(async () => { cancelBtn2.click(); });
+    });
+});
+
+describe('the event Share row says what the link does (share-says)', () => {
+    beforeEach(() => {
+        shareState.profile = null; shareState.answered = true; shareState.role = null;
+        postExtra.value = { type: 'event', status: 'active', active: true, audienceScope: 'public', eventEndAt: '2999-11-05T12:00:00.000Z' };
+    });
+    afterEach(() => { postExtra.value = {}; });
+    const text = (id: string) => host.querySelector(`[data-testid="${id}"]`)?.textContent ?? null;
+
+    it('sharing outside on: the members line, the privacy note and "event" (not "listing") under Share outside', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
+        await renderComponent();
+        expect(text('event-share-members-note')).toBe('This link opens for members only.');
+        // ONE note, not two: the privacy facts and the 7 days read together.
+        expect(text('share-outside-line')).toBe('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
+    });
+
+    it('sharing outside on but joining paused: the line never promises to ask to join', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: false } };
+        await renderComponent();
+        expect(text('share-outside-line')).toBe('Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.');
+    });
+
+    it('only admins invite and the role could not be read: no line (never "only admins invite")', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins' } };
+        shareState.answered = false;
+        await renderComponent();
+        expect(text('event-share-members-note')).toBeNull();
+    });
+
+    it('only admins invite and the member is not an admin: says so', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins' } };
+        await renderComponent();
+        expect(text('event-share-members-note')).toBe('This link opens for members only, and only admins invite here.');
+        // The node does not say it takes asks: the line, and no button.
+        expect(text('share-ask-admin-button')).toBeNull();
+    });
+
+    it('only admins invite, the node takes asks, the member is no admin: the line and "Ask an admin to invite someone", no Invite and share', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
+        await renderComponent();
+        expect(text('event-share-members-note')).toBe('This link opens for members only, and only admins invite here.');
+        expect(text('share-ask-admin-button')).toBe('Ask an admin to invite someone');
+        expect(text('invite-and-share-button')).toBeNull();
+    });
+
+    it('only admins invite, the node takes asks, an owner or admin: the plain members line and no Ask (Invite and share is share-ask-admin.test.ts)', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
+        shareState.role = 'admin';
+        await renderComponent();
+        expect(text('event-share-members-note')).toBe('This link opens for members only.');
+        expect(text('share-ask-admin-button')).toBeNull();
+    });
+
+    it('only admins invite, the node takes asks, the role could not be read: no line and no Ask', async () => {
+        shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
+        shareState.answered = false;
+        await renderComponent();
+        expect(text('share-ask-admin-button')).toBeNull();
     });
 });

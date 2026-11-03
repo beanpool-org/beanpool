@@ -25,6 +25,8 @@ interface Props {
     allTools?: readonly ToolManifest[];
     apps?: Readonly<Record<string, unknown>>;
     hue?: CardHue;
+    onHeight?: (height: number) => void;
+    onHold?: () => void;
 }
 
 export function YourToolsCard({
@@ -40,6 +42,8 @@ export function YourToolsCard({
     allTools = TOOLS,
     apps = TOOL_APPS,
     hue,
+    onHeight,
+    onHold,
 }: Props) {
     // Only tools with a Home card and a web half in this build are offered.
     const available = useMemo(
@@ -97,7 +101,7 @@ export function YourToolsCard({
     }, [publicKey, reload, chosen]);
 
     return (
-        <HomeCard id={id} title={title} menu={menu} style={style} hue={hue}>
+        <HomeCard id={id} title={title} menu={menu} style={style} hue={hue} onHeight={onHeight} onHold={onHold}>
             {chosen.length === 0 ? (
                 <p data-testid="home-tools-empty" className="m-0 mb-3 text-sm text-text-secondary">
                     {t('Add a tool to keep it here.')}

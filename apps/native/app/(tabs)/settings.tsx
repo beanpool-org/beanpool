@@ -20,10 +20,10 @@ import { updateMemberProfile, getMemberProfile, fetchNodeCallsign, signedRequest
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../../utils/event-extras';
-import { getCanonicalProfile } from '../../utils/canonical-profile';
+import { archetypeToSend } from '../../utils/working-style';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../../utils/avatar-value';
 import {
-    keepPendingProfileChange, nameRefusedForGood, pendingNameAccepted, pendingNameRefused, pendingProfileChange, takeNameRefusal,
+    clearWaitingArchetype, keepPendingProfileChange, nameRefusedForGood, pendingNameAccepted, pendingNameRefused, pendingProfileChange, takeNameRefusal,
 } from '../../utils/pending-profile-sync';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
@@ -66,7 +66,7 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult } from '@beanpool/core';
+import { FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -697,7 +697,6 @@ export default function SettingsScreen() {
     const [bio, setBio] = useState('');
     const [contact, setContact] = useState('');
     const [contactVisibility, setContactVisibility] = useState<'hidden' | 'trade_partners' | 'friends' | 'community'>('community');
-    const [archetypeRaw, setArchetypeRaw] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [anchorUrl, setAnchorUrl] = useState<string>('Detecting...');
@@ -730,7 +729,6 @@ export default function SettingsScreen() {
         };
         try {
             const profile = await getMemberProfile(identity.publicKey);
-            const canonical = await getCanonicalProfile().catch(() => null);
             // Assign unconditionally. Setting this only when the node knows us would
             // leave the previous node's name on the card (and in the purge gate) after
             // switching to a node that has no profile for this key.
@@ -752,15 +750,12 @@ export default function SettingsScreen() {
                         setContact(profile.contact_value ?? '');
                         setContactVisibility((profile.contact_visibility as any) || 'community');
                     }
-                    if (profile.archetype) setArchetypeRaw(profile.archetype);
-                    else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 } else {
                     if (!edited.bio) setBio('');
                     if (!edited.contact) {
                         setContact('');
                         setContactVisibility('community');
                     }
-                    if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 }
             }
 
@@ -803,7 +798,6 @@ export default function SettingsScreen() {
                             bio: profile?.bio ?? undefined,
                             contact_value: profile?.contact_value ?? undefined,
                             contact_visibility: profile?.contact_visibility ?? undefined,
-                            archetype: profile?.archetype ?? canonical?.archetype ?? undefined,
                         });
                     }
                     if (!identity.callsign?.trim()) {
@@ -1250,6 +1244,8 @@ export default function SettingsScreen() {
             // What this Save decided about the photo, kept in scope because the pending keys may
             // only be retired on the strength of what the payload actually carried.
             let avatarDecision: ProfilePublishAvatar | null = null;
+            // The working style this Save carries, in its public form, if any.
+            let archetypeSent: string | null = null;
             const url = await AsyncStorage.getItem('beanpool_anchor_url');
             // What waits for this community from an earlier offline Save (utils/pending-profile-sync.ts): only its own.
             const pending = await pendingProfileChange(url, identity.publicKey);
@@ -1283,15 +1279,11 @@ export default function SettingsScreen() {
                 avatarDecision = await resolveProfilePublishAvatar({ sessionPick: avatarPickedThisSession, parked: pending?.avatar });
                 const publishAvatar = avatarDecision.avatar;
                 if (publishAvatar) payloadObj.avatar = publishAvatar;
-                if (archetypeRaw) {
-                    const parsed = parseArchetype(archetypeRaw);
-                    payloadObj.archetype = parsed ? JSON.stringify({
-                        primary: parsed.primary,
-                        secondary: parsed.secondary,
-                        mode: parsed.mode,
-                        updatedAt: parsed.updatedAt,
-                    }) : archetypeRaw;
-                }
+                // What waits for this community, or a device copy newer than its row: its own row is never sent back,
+                // and an older result never goes over a newer one (utils/working-style.ts).
+                const row = await getMemberProfile(identity.publicKey).catch(() => null);
+                archetypeSent = await archetypeToSend(url, identity, row?.archetype);
+                if (archetypeSent) payloadObj.archetype = archetypeSent;
                 const bodyString = JSON.stringify(payloadObj);
                 const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
 
@@ -1345,6 +1337,7 @@ export default function SettingsScreen() {
             } else if (avatarDecision) {
                 // The node has accepted. A name this payload carried is no longer waiting there.
                 if (payloadCarriesName) await pendingNameAccepted(url);
+                if (archetypeSent) await clearWaitingArchetype(url, archetypeSent);
                 // Retire the parked pick ONLY if this payload carried it
                 // (or a newer pick that supersedes it): a bio-only Save publishes no photo, and
                 // clearing the keys here used to disarm the retry for a pick that had reached
@@ -1363,7 +1356,7 @@ export default function SettingsScreen() {
             // row. Writing `avatar` would put the node's own URL (or a stale canonical copy)
             // into the row as if the member had chosen it.
             if (avatarPickedThisSession) localUpdate.avatar_url = avatarPickedThisSession;
-            if (archetypeRaw) localUpdate.archetype = archetypeRaw;
+            if (archetypeSent && !offline) localUpdate.archetype = archetypeSent;
             await updateMemberProfile(identity.publicKey, localUpdate);
             // The card renders nodeCallsign, so it would keep showing the pre-edit name
             // until the screen remounted if we didn't move it here too.
@@ -2647,6 +2640,9 @@ export default function SettingsScreen() {
                     <Text style={styles.sectionTitle}>{t("🔔 Notification Preferences")}</Text>
                     <Text style={styles.infoText}>
                         {t("Control which push notifications wake up your device. Changes are saved automatically.")}
+                    </Text>
+                    <Text style={[styles.infoText, { marginTop: 4 }]}>
+                        {t('Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.')}
                     </Text>
 
                     {notifLoading ? (

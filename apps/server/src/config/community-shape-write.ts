@@ -63,6 +63,7 @@ import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type
 import { readShape, configuredJoinOf, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
 import { directoryUnlistedByEnv, initDirectoryPublisher, listedSwitchedOff } from '../services/directory-publisher.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
+import { closeCopyDoors } from '../engine/event-copy.js';
 import { stopAllPeekTickets } from '../engine/peek-tickets.js';
 
 const { t: tr } = wordsFor('en');
@@ -129,7 +130,7 @@ const SETTING_NAMES: Record<ShapeSettingName, string> = {
     listed: 'Listed in the BeanPool directory',
     shareLocation: 'Share location & radius', shareMemberCount: 'Share member count', shareEmail: 'Share email',
     sharePhone: 'Share phone', shareHealth: 'Share health', probation: 'Limits on new accounts',
-    autoHide: 'Reported posts hidden automatically', autoMute: 'Repeat offenders muted automatically',
+    autoHide: 'Reported posts hidden and message requests cleared automatically', autoMute: 'Repeat offenders muted automatically',
     recoveryCopies: "Where members' copies go",
 };
 
@@ -437,6 +438,8 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         for (const [name, on] of switches) setSwitchOverride(name, on);
         // Outside sharing turned off stops every link shared until now: turned on again later, none of them reopens.
         if (switches.some(([name, on]) => name === 'shareOutside' && on === false)) stopAllPeekTickets(at);
+        // Requests off leaves nothing to hold a stranger's first line through a copy's door, so the doors close with them.
+        if (switches.some(([name, on]) => name === 'dmRequests' && on === false)) closeCopyDoors(at);
         if (door) setDoor(door);
         if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
         if (Object.keys(share).length > 0) updateNodeConfig(share);

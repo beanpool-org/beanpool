@@ -7,13 +7,16 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const nav = vi.hoisted(() => ({ params: { view: 'community' } as Record<string, string>, pushed: [] as unknown[] }));
-vi.mock('expo-router', () => ({
-    router: { push: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.pushed.push(to), navigate: () => {}, back: () => {}, canGoBack: () => true },
-    useLocalSearchParams: () => nav.params,
-    useFocusEffect: (cb: () => void | (() => void)) => { cb(); },
-    useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
-    ErrorBoundary: () => null,
-}));
+vi.mock('expo-router', async () => {
+    const { useEffect } = await import('react');
+    return {
+        router: { push: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.pushed.push(to), navigate: () => {}, back: () => {}, canGoBack: () => true },
+        useLocalSearchParams: () => nav.params,
+        useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]),
+        useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
+        ErrorBoundary: () => null,
+    };
+});
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
 vi.mock('react-native', async () => (await import('./profile-events-words-harness')).nativeMock(alerts));
@@ -32,7 +35,11 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name
 vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
     KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
+    // The ask sheet's lift (components/InviteAsks.tsx, useModalKeyboardLift): no keyboard here.
+    useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }),
 }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('expo-clipboard', () => ({ setStringAsync: async () => {} }));
 
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');

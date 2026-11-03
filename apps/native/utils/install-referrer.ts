@@ -2,8 +2,8 @@
  * Google Play's install referrer, read once ever on the first screen (app/welcome.tsx). A link tapped WITHOUT the app
  * installed detours via Google Play, and the website packs what the link was for into the store link's `referrer`, which
  * Google hands the app on its first start:
- * - an invite (the invite trampoline, routes/invite-trampoline.ts): `invite=…&server=…`, so the invite survives the install
- *   with no clipboard or retyping;
+ * - an invite (the invite trampoline, routes/invite-trampoline.ts): `invite=…&server=…`, and `&post=<id>` when it was sent from a
+ *   listing (invite-and-share), so the invite survives the install with no clipboard or retyping, and the listing opens after the join;
  * - the global community (beanpool.org/global, apps/website/global.html): `global=1`, which names no one and opens the first
  *   screen's door (DESIGN-global-entry-fable.md §A row 5);
  * - a post a member shared outside their community (front doors S6, the node's share page's Get the app, apps/server
@@ -14,7 +14,7 @@
  * An invite in the same referrer wins over a peek, and a peek over `global=1`. Android only; on iOS the App Store hands nothing over, and the first
  * screen shows both doors. No lock-in: with no referrer, or a store that isn't Google Play, the first screen is as it was.
  */
-import { isPeekPostId, isPeekTicket } from '@beanpool/core';
+import { isPeekPostId, isPeekTicket, landingPostId } from '@beanpool/core';
 import { shouldBlockCleartextNodeUrl } from './node-url';
 import { communityOrigin } from './community-origin';
 
@@ -23,7 +23,7 @@ export const INSTALL_REFERRER_CHECKED_KEY = 'beanpool_install_referrer_checked';
 
 /** What the referrer asked for: an invite (with its community's address when it named a safe one), the global door, or nothing. */
 export type InstallReferrer =
-    | { kind: 'invite'; invite: string; server: string | null }
+    | { kind: 'invite'; invite: string; server: string | null; post?: string }
     | { kind: 'global' }
     | { kind: 'peek'; origin: string; postId: string; ticket: string }
     | null;
@@ -49,7 +49,10 @@ export function readInstallReferrer(referrer: unknown): InstallReferrer {
     const invite = referrerValue(referrer, 'invite');
     if (invite && invite.trim()) {
         const server = referrerValue(referrer, 'server');
-        return { kind: 'invite', invite, server: server && !shouldBlockCleartextNodeUrl(server) ? server : null };
+        // The listing an invite-and-share link was sent from (invite-and-share: `post=<id>`), as an id and only beside an invite:
+        // opened once the invite has been used. One that isn't an id is no listing, and the invite goes on without it.
+        const post = landingPostId(referrerValue(referrer, 'post'));
+        return { kind: 'invite', invite, server: server && !shouldBlockCleartextNodeUrl(server) ? server : null, ...(post ? { post } : {}) };
     }
     const ticket = referrerValue(referrer, 'peek');
     if (ticket !== null) {

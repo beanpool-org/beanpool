@@ -332,7 +332,13 @@ describe('the model is the app', () => {
         const guard = layout.slice(layout.indexOf('        if (isLoading) return;\n        const root = (segments as string[])[0];'));
         // Since S3 the guard also looks again when the phone's community comes or goes (`noCommunity`, a waiting phone).
         const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding, noCommunity]);'));
-        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*const notice = landing === DEFAULT_MEMBER_LANDING \? takeOpenAfterLanding\(identity\.publicKey, nodeUrl\) : null;\n\s*if \(notice\) router\.push\(notice\);\n\s*$/);
+        // After the landing: the notice, or else (invite-and-share) the listing held since the join. Both only over the tabs' index
+        // (`landing === DEFAULT_MEMBER_LANDING`), nothing else (utils/post-after-join.ts).
+        expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*const notice = landing === DEFAULT_MEMBER_LANDING \? takeOpenAfterLanding\(identity\.publicKey, nodeUrl\) : null;\n\s*if \(notice\) router\.push\(notice\);(?:\n\s*\/\/.*)*\n\s*else if \(landing === DEFAULT_MEMBER_LANDING\) \{(?:\n\s*\/\/.*)*\n\s*void \(async \(\) => \{[\s\S]*?takePostAfterJoin\(community\);\n\s*if \(route && isComponentMounted\.current\) router\.push\(route as any\);\n\s*\}\)\(\);\n\s*\}\n\s*$/);
+        // Still one replace after the landing line (the landing's own); the only pushes are the notice's and the held listing's.
+        const tail = body.slice(body.indexOf('const landing = memberRedirect('));
+        expect(tail.match(/router\.replace\(/g)).toHaveLength(1);
+        expect(tail.match(/router\.push\(/g)).toHaveLength(2);
         expect(body).not.toMatch(/root === 'welcome'\) \{\s*router\.replace/);
     });
 

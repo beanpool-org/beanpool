@@ -67,7 +67,7 @@ A photo stays sealed. No other message in the chat comes with a report, and nobo
 
 Report on a message request does the same, and blocks the sender for the member who reported them. If the sender deleted the message before the member tapped Report, or your server refused the message's report, you get a report of the person instead: the member's reason, and no message. **Child safety** still alerts you. If the member is over the hourly limit for reports, the sender is blocked and no report reaches you.
 
-Enough of these reports clear a sender's requests with no moderator needed, where **Reported posts hidden automatically** is on. The sender's waiting requests leave every list, and they can't send new ones for 7 days, then 14, 28 and 56 on a repeat, and at most 90. It takes two people reporting the same words, on a line of 40 or more letters or digits, or three people reporting anything, or one person when the sender is a 12-words newcomer on probation. Only someone a request reached counts, and one person's accounts count once. Words are compared only as reporters handed them over: your server can't read a sealed line. It is not a pause: the sender can still answer people who wrote to them, and post, and they are told in words. **Message requests cleared by reports**, at the top of Reports, names them, and **Undo** brings their requests back and lets them send new ones. Their reports stay in your queue. A pause or a mute clears a member's waiting requests too, until you lift it.
+Enough of these reports clear a sender's requests with no moderator needed, where **Reported posts hidden and message requests cleared automatically** is on. The sender's waiting requests leave every list, and they can't send new ones for 7 days, then 14, 28 and 56 on a repeat, and at most 90. It takes two people reporting the same words, on a line of 40 or more letters or digits, or three people reporting anything, or one person when the sender is a 12-words newcomer on probation. Only someone a request reached counts, and one person's accounts count once. Words are compared only as reporters handed them over: your server can't read a sealed line. It is not a pause: the sender can still answer people who wrote to them, and post, and they are told in words. **Message requests cleared by reports**, at the top of Reports, names them, and **Undo** brings their requests back and lets them send new ones. Their reports stay in your queue. A pause or a mute clears a member's waiting requests too, until you lift it.
 
 ## A message from a group's chat
 
@@ -76,7 +76,7 @@ A group's chat is end-to-end encrypted: your server stores it but cannot read it
 - **Verified**, the message's words, its photo if it has one, and whose key signed it: the message is exactly what its author sent.
 - **Could not be verified**, with no words: the key does not open the message, or the message is not signed by the member it names. A reporter can't make up a message, or change one, and have it read as someone else's. Judge the report on the reporter's words alone.
 - **Photo could not be verified**: the words check out, but the photo stored with them is not the one their author sent.
-- **Image unavailable**: the words check out, but this server holds no copy of the photo. Photos in chats are not copied to a standby, so a server that took over from another has none of them.
+- **Image unavailable**: the words check out, but this server holds no copy of the photo. A standby copies photos in chats, so this happens only when it took over before it had copied that photo, or the photo was lost from the server's storage.
 - That its author deleted it, or a convenor removed it, after it was reported: then there is nothing left to open.
 
 The key opens that message and nothing else: no other message in the chat, and no other photo. Nobody in the group is told who reported it. Settings has no button to take a group chat message down: a convenor removes it in the chat, and the owners and admins can suspend its author.
@@ -104,7 +104,7 @@ A report on a line in a circle's chat reaches you like a report on any group's c
 On the global community, automated safety rules are on by default. On a local community, an owner can choose to turn them on under **How this community works** (under Safety):
 
 - **Limits on new accounts (probation)**: New accounts have small daily posting and messaging limits during their first days, protecting the community from rapid spam.
-- **Reported posts hidden automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Reports clear a sender's message requests by the same switch. Off by default on local communities (where reports wait for a moderator to review).
+- **Reported posts hidden and message requests cleared automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Reports clear a sender's message requests by the same switch. Off by default on local communities (where reports wait for a moderator to review).
 - **Repeat offenders muted automatically (auto-mute)**: A member whose posts moderators have removed 3 times in 30 days is automatically muted from posting and messaging until a moderator lifts it.
 
 ### How posts are hidden by reports
@@ -150,6 +150,10 @@ Anyone can join the global community, with 12 secret words or a sign-in, so one 
 What removal can't do: someone determined can come back in about a minute with new 12 words, or with another sign-in account. That account starts again from nothing: a new name, the new-account limits, and posts that reports hide (one report, while a 12-words account is new). Removing it again is one more action.
 
 Nor does removing an account take back its votes in polls: they still count, as every vote does. Instead, when an anonymous poll for everyone on the global community closes, it says how many of its votes came from new or 12-word accounts (see Polls in the members' guide), so a burst of votes from new accounts shows on the result, to everyone. It says nothing while the poll is open, since checking after each vote would show each vote's kind of account and its choice. An open vote, a group's poll and a poll for one person never say it.
+
+A report of a typed answer on a poll names the poll and nobody else: nothing knows who wrote it on an anonymous poll. It holds no words, because admins read this queue and only owners and the poll's maker read those. To see it, an owner opens the poll's card and taps **Read the typed answers**, where the reported line is marked, and **Remove** takes the words down for good. The vote still counts, and the report closes. Actioning the report itself pauses nobody.
+
+The words go by themselves, and the report closes with them, when the line stops existing: its voter on an open vote changes their vote or deletes their account, the poll is removed by anyone who can, its group closes, or its maker leaves while it is open. A removed poll's words can't be read again by anyone. Only a backup taken before they went still holds them.
 
 If a standby takes over from this server, the hidden posts stay hidden, but the list of actions and their **Undo** stay behind on the old server: restore those posts one at a time.
 

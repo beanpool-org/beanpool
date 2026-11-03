@@ -4,6 +4,7 @@
 // A leaf module (the database and the listing pushes' area map, nothing else), so the standby's import (engine/sync.ts)
 // and the re-key share one list.
 
+import { UNNAMED_COPY_SQL } from '@beanpool/engine';
 import { db, deletePlainRows } from '../db/db.js';
 import { refreshMemberAreas } from './member-area.js';
 
@@ -100,8 +101,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
 
     // (f) posts. A copy of an event shows no author, and this move stamps a member's rows at one instant: a copy stamped with
     // them would read beside a listing that names them, with the same time to the millisecond (engine/event-copy.ts). So it
-    // keeps its stamp, and no delta sends it again: a standby makes this same move itself (followReplicatedRekeys).
-    const movePost = (column: string): void => rewrite('posts', `${column} = ?`, `${column} = ?`, 'shown_from_host IS NOT NULL');
+    // keeps its stamp, and no delta sends it again: a standby makes this same move itself (followReplicatedRekeys). One that
+    // takes questions names them anyway, and its readers need the new key to write to.
+    const movePost = (column: string): void => rewrite('posts', `${column} = ?`, `${column} = ?`, UNNAMED_COPY_SQL.replace(/\bp\./g, ''));
     movePost('author_pubkey');
     movePost('accepted_by');
     movePost('created_by');
@@ -162,6 +164,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // (o) member_preferences
     move('member_preferences', 'public_key');
     move('chat_mutes', 'member_pubkey');
+    // Their asks that an admin invite someone (engine/invite-asks.ts), still theirs to read and take back.
+    move('invite_asks', 'asker_pubkey');
     // Their tools' private copies (engine/tool-state.ts): the new phone gets them back from here.
     move('member_tool_state', 'public_key');
     // Their shop (engine/shops.ts): the same front window, under the new key. Keyed by its own id, so its listings and its
@@ -269,6 +273,19 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // admin could pause the member again at once from the new one, and the member's report of the case would name nobody.
     rewrite('decisions', "params = json_set(params, '$.pausedBy', ?)",
         "effect = 'remove_member' AND (CASE WHEN json_valid(params) THEN json_extract(params, '$.pausedBy') END) = ?");
+    // A branch's vote (decisions-engine pauseBranch) names its accounts in its params, its subject null: each on its list
+    // (`branch[].pubkey`, and the admin who took a reply down, `replyHiddenBy`), its root, the established accounts left off
+    // and those lifted out of it. Left on the old key, a re-keyed account drops off the list mid-vote or mid-grace: its new
+    // key stays paused with no vote to end it, and on Yes it is never removed while the record says every account was.
+    for (const r of db.prepare(`
+        SELECT id, params, updated_at AS u FROM decisions
+        WHERE subject IS NULL AND effect = 'remove_member' AND json_valid(params) AND instr(params, ?) > 0
+    `).all(oldKey) as { id: string; params: string; u: string | null }[]) {
+        const params = JSON.parse(r.params);
+        if (!moveBranchKeys(params, oldKey, newKey)) continue;
+        db.prepare('UPDATE decisions SET params = ? WHERE id = ?').run(JSON.stringify(params), r.id);
+        if (keepStamps && hasStamp('decisions')) db.prepare('UPDATE decisions SET updated_at = ? WHERE id = ? AND updated_at IS NOT ?').run(r.u, r.id, r.u);
+    }
     move('decisions', 'subject', "touches = 'member' OR touches = 'pool' OR touches = 'scope'");
     move('decision_votes', 'voter_pubkey');
     move('decision_electors', 'member_pubkey');
@@ -324,6 +341,28 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // can't open it; it goes, never moves. On the main server with a tombstone; a standby drops it here as well.
     if (keepStamps) db.prepare('DELETE FROM names_copies WHERE owner_pubkey = ?').run(oldKey);
     else deletePlainRows('names_copies', 'owner_pubkey = ?', oldKey);
+}
+
+/**
+ * A branch vote's params (decisions-engine pauseBranch) with the old key moved to the new wherever they name it: an entry on
+ * its list (`branch`, its `pubkey` and `replyHiddenBy`), its `root`, an established account left off (`established`), one
+ * lifted out of it (`lifted`). Changes `params` in place; returns whether anything moved.
+ */
+function moveBranchKeys(params: unknown, oldKey: string, newKey: string): boolean {
+    if (!params || typeof params !== 'object') return false;
+    const p = params as Record<string, unknown>;
+    let moved = false;
+    const swap = (e: unknown, field: string): void => {
+        if (!e || typeof e !== 'object' || (e as Record<string, unknown>)[field] !== oldKey) return;
+        (e as Record<string, unknown>)[field] = newKey;
+        moved = true;
+    };
+    for (const list of ['branch', 'established', 'lifted']) {
+        if (Array.isArray(p[list])) for (const e of p[list] as unknown[]) swap(e, 'pubkey');
+    }
+    if (Array.isArray(p.branch)) for (const e of p.branch as unknown[]) swap(e, 'replyHiddenBy');
+    swap(p.root, 'pubkey');
+    return moved;
 }
 
 // ── on a standby ─────────────────────────────────────────────────────────────────────────────────────────────────

@@ -546,8 +546,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 // and we confirm the node actually stored the avatar before clearing the flag.
                 // Only the change waiting for THIS cycle's community (utils/pending-profile-sync.ts): one made in
                 // another waits for that one, and is never sent here.
-                const { pendingProfileChange } = await import('../utils/pending-profile-sync');
-                if (await pendingProfileChange(anchorUrl, pubKey)) {
+                const waiting = await import('../utils/pending-profile-sync');
+                if (await waiting.pendingProfileChange(anchorUrl, pubKey)) {
                     try {
                         // Delegate to the single publisher: it verifies the node actually
                         // stored the avatar before clearing the flag, and sends only what
@@ -562,6 +562,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                     } catch (healErr) {
                         console.warn('[Pillar Sync] Profile heal attempt failed (will retry next sync):', healErr);
                     }
+                } else if ((await waiting.waitingArchetype(anchorUrl, pubKey)) || (await waiting.waitingRemoval(anchorUrl, pubKey))) {
+                    // A quiz taken in another community, or a removal: this one's turn, and only the result (or the null) goes (utils/working-style.ts).
+                    const { pushWaitingArchetype } = await import('../utils/db');
+                    await pushWaitingArchetype({ community: anchorUrl }).catch((healErr: unknown) => {
+                        console.warn('[Pillar Sync] Working style heal failed (will retry next sync):', healErr);
+                    });
                 }
             } catch (e) {}
         }
@@ -1733,6 +1739,9 @@ let needsAnotherSync = false;
 // in the workspace has pulled @types/node into scope. Adding a test runner to this app did
 // exactly that. This spelling is correct under either.
 let debounceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+// Every caller waiting on the pending debounce: a call inside the window replaces the timer, not the promise the one before
+// it handed out, which settles with the replacing call's (the first run of the working style hangs off the boot call's).
+let debounceWaiters: (() => void)[] = [];
 // The trailing sync's cooldown (requestSync), pending. A sync asked for as a cycle ends (the Market's second try, heard on
 // PILLAR_SYNC_ENDED) waits it out before its debounce: counted as queued, or the Market read ~2 s of nothing running and
 // said "Having trouble connecting" with that sync still to come (review of PR #2127).
@@ -1742,7 +1751,8 @@ let trailingTimeoutId: ReturnType<typeof setTimeout> | null = null;
  * Coordinated request wrapper. Ensures that only one performSync executes at a time,
  * and debounces rapid consecutive calls (e.g. WebSocket updates) with a 150ms window.
  * If another sync is requested while one is already running, it queues a single trailing
- * sync to execute after the current sync finishes, ensuring no events are missed.
+ * sync to execute after the current sync finishes, ensuring no events are missed. A call replaced in the 150ms window
+ * settles with the call that replaced it.
  */
 export async function requestSync(): Promise<void> {
     if (syncPromise) {
@@ -1756,12 +1766,16 @@ export async function requestSync(): Promise<void> {
     }
 
     return new Promise<void>((resolve) => {
+        debounceWaiters.push(resolve);
         debounceTimeoutId = setTimeout(() => {
             debounceTimeoutId = null;
+            const waiters = debounceWaiters;
+            debounceWaiters = [];
+            const settle = () => waiters.forEach(done => done());
 
             if (syncPromise) {
                 needsAnotherSync = true;
-                resolve();
+                settle();
                 return;
             }
 
@@ -1781,7 +1795,7 @@ export async function requestSync(): Promise<void> {
                 }
             });
 
-            syncPromise.then(() => resolve());
+            syncPromise.then(settle);
         }, 150);
     });
 }

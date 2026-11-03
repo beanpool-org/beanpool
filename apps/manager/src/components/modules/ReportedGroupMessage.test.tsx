@@ -79,10 +79,10 @@ describe('ReportedGroupMessage', () => {
         expect(screen.queryByRole('img')).toBeNull();
     });
 
-    it('after a standby took over: the words open and the photo reads Image unavailable, saying why', async () => {
+    it('a photo this server holds no copy of: the words open and the photo reads Image unavailable, saying why', async () => {
         serve({ ...base, words: { state: 'verified', text: 'Look' }, photo: { state: 'unavailable' } });
         render(<ReportedGroupMessage nodeUrl="https://node.example" reportId="r1" />);
-        expect(await screen.findByText(/^Image unavailable\. Photos in chats are not copied to a standby server/)).toBeInTheDocument();
+        expect(await screen.findByText(/^Image unavailable\. This server holds no copy of the photo: it took over from another server/)).toBeInTheDocument();
         expect(screen.getByText('Look')).toBeInTheDocument();
         expect(screen.queryByRole('img')).toBeNull();
     });

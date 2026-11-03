@@ -67,3 +67,68 @@ describe('a sync asked for as a cycle ends', () => {
         expect(isPillarSyncActive()).toBe(false);
     });
 });
+
+// At boot three calls land within the debounce: the start's, the socket's on open (ws-client.ts) and the identity effect's.
+// A later one replaces the earlier one's timer, and the first run of the working style hangs off the start's promise
+// (app/_layout.tsx), as a pull-to-refresh's spinner hangs off its own. So a replaced call settles with the one that replaced it.
+describe('a call replaced inside the debounce', () => {
+    const cyclesAsRun = () => {
+        const ended: number[] = [];
+        (Module as any)._load = function (request: string, ...rest: unknown[]) {
+            if (request !== 'react-native') return nodeLoad.call(this, request, ...rest);
+            return { DeviceEventEmitter: { emit: (name: string) => { if (name === PILLAR_SYNC_ENDED) ended.push(Date.now()); } } };
+        };
+        return ended;
+    };
+    const pass = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+
+    it('one call, alone, settles as its cycle ends', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const ended = cyclesAsRun();
+        let settled = false;
+        requestSync().then(() => { settled = true; });
+        await pass(149);
+        expect(settled).toBe(false);
+        await pass(1);
+        expect(ended).toHaveLength(1);
+        expect(settled).toBe(true);
+    });
+
+    for (const calls of [2, 3]) {
+        it(`${calls} calls 60 ms apart: one cycle, and every caller hears it end, none before`, async () => {
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+            const ended = cyclesAsRun();
+            const settled: number[] = [];
+            for (let call = 0; call < calls; call++) {
+                if (call > 0) await pass(60);
+                requestSync().then(() => { settled.push(call); });
+            }
+            await pass(149);
+            expect(ended).toHaveLength(0);
+            expect(settled).toEqual([]);
+
+            await pass(1);
+            expect(ended).toHaveLength(1);
+            expect([...settled].sort()).toEqual(Array.from({ length: calls }, (_, call) => call));
+
+            // No caller is owed a cycle of its own: nothing runs after it.
+            await pass(3_000);
+            expect(ended).toHaveLength(1);
+            expect(isPillarSyncActive()).toBe(false);
+        });
+    }
+
+    it('what hangs off a replaced call runs after the cycle, as the first run does at boot', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        const ended = cyclesAsRun();
+        const order: string[] = [];
+        const boot = Promise.resolve()
+            .then(() => requestSync())
+            .then(() => { order.push(`first run, after ${ended.length} cycle`); });
+        await pass(60);
+        requestSync().catch(() => {});
+        await pass(150);
+        await boot;
+        expect(order).toEqual(['first run, after 1 cycle']);
+    });
+});

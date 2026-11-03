@@ -1,0 +1,245 @@
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+    buildCalendarMonth,
+    calendarDayHeading,
+    calendarTitle,
+    copyFromLine,
+    eventCopyOf,
+    listPhotoUrl,
+    STACK_LIST_SHARE,
+    t,
+    type CalendarOccurrence,
+} from '@beanpool/core';
+import type { MarketplacePost } from '../lib/api';
+import { formatEventWhen } from '../lib/events';
+import { MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
+import type { StackPin } from '../lib/map-stack';
+import { MapStackList } from './MapStackList';
+import { MonthGrid, type CalendarEventPost } from './MonthGrid';
+
+export interface MapCalendarProps {
+    posts: readonly MarketplacePost[];
+    covered?: boolean;
+    onClose: () => void;
+    onOpenPost?: (post: MarketplacePost) => void;
+    onStartEvent?: () => void;
+}
+
+/**
+ * The panel's width from md up is a third of the map, never under 320 px nor over 480 px (the panel's classes below). The
+ * pin cards and the filter bar stop short of it with the same rule as a clamp (the two class names here), and
+ * `calendarPanelWidth` is it as a number, for the code that asks whether a card fits beside the panel; MapCalendar.test.tsx
+ * pins that the three agree. Tailwind reads class names as whole literals, so they are spelled out.
+ */
+export const CARD_STOPS_AT_CALENDAR_CLASS = 'md:right-[clamp(320px,33.3333%,480px)]';
+/** The filter bar's width cap while the panel is open (from md up the panel lies over the map's right side): its rows scroll, with the › hint, rather than run under it. */
+export const CHIPS_STOP_AT_CALENDAR_CLASS = 'md:max-w-[calc(100%-clamp(320px,33.3333%,480px))]';
+export function calendarPanelWidth(mapWidth: number, wide: boolean): number {
+    if (!wide) return mapWidth; // below md the panel covers the whole map
+    return Math.max(320, Math.min(mapWidth / 3, 480));
+}
+
+/** Convert a calendar occurrence to a StackPin row for MapStackList. */
+function occurrenceToStackPin(
+    occ: CalendarOccurrence<CalendarEventPost>,
+    onOpen?: (post: MarketplacePost) => void,
+): StackPin {
+    const base = occ.baseEvent;
+    const copy = eventCopyOf(base);
+    const copyFrom = copy?.from ? copyFromLine(copy.from) : null;
+    const typeLabel = copyFrom ? t('Event · {from}', { from: copyFrom }) : t('Event');
+    return {
+        key: `event:${base.id}:${occ.date}`,
+        title: base.title,
+        type: typeLabel,
+        when: formatEventWhen(occ) || null,
+        photo: base.photos?.[0] ? listPhotoUrl(base.photos[0]) : null,
+        emoji: MARKETPLACE_CATEGORIES_BY_ID.get(base.category)?.emoji || '📌',
+        eventStartMs: occ.eventStartAt ? Date.parse(occ.eventStartAt) : null,
+        createdMs: Date.parse(base.createdAt ?? ''),
+        open: () => onOpen?.(base),
+    };
+}
+
+/**
+ * MapCalendar — Event calendar on the web map (DESIGN-map-calendar-fable.md §1, §4, §8 S3).
+ * Sits over the map's right third on wide screens (>= 768px), or as an overlay on narrow ones.
+ * Hidden when `covered` (e.g. while another screen or modal is over it).
+ * Reuses MapStackList for a selected day's events.
+ */
+export function MapCalendar({
+    posts,
+    covered = false,
+    onClose,
+    onOpenPost,
+    onStartEvent,
+}: MapCalendarProps) {
+    const now = useMemo(() => new Date(), []);
+    const [viewYear, setViewYear] = useState(() => now.getFullYear());
+    const [viewMonth, setViewMonth] = useState(() => now.getMonth() + 1);
+
+    // Active event posts only (ended and cancelled events never show)
+    const eventPosts = useMemo(() => {
+        return posts.filter((p) =>
+            p.type === 'event' &&
+            p.status !== 'cancelled' &&
+            p.eventState !== 'cancelled' &&
+            (!p.status || p.status === 'active'),
+        );
+    }, [posts]);
+
+    // Calendar model for current month
+    const month = useMemo(() => {
+        return buildCalendarMonth<CalendarEventPost>({
+            year: viewYear,
+            month: viewMonth,
+            now,
+            events: eventPosts as CalendarEventPost[],
+        });
+    }, [viewYear, viewMonth, now, eventPosts]);
+
+    // Selected date: opens with the first active date with events in this month, or null
+    const [selectedDate, setSelectedDate] = useState<string | null>(() => month.firstActiveDate);
+    const [selectedByTap, setSelectedByTap] = useState(false);
+
+    useEffect(() => {
+        if (!selectedByTap) {
+            setSelectedDate(month.firstActiveDate);
+        }
+    }, [month.firstActiveDate, selectedByTap]);
+
+    // A dialog to a screen reader: focus moves in on opening (a door gives the member no other cue) and goes back to
+    // where it was on closing, when that place is still on the page.
+    const headingRef = useRef<HTMLHeadingElement>(null);
+    useEffect(() => {
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        headingRef.current?.focus({ preventScroll: true });
+        return () => {
+            if (opener && opener !== document.body && opener.isConnected) opener.focus({ preventScroll: true });
+        };
+    }, []);
+
+    // The selected day scrolls clear of the day's list lying over the bottom of the month, however it was selected:
+    // a tap, a jump, the next event's day on opening, or ‹ ›. Reduced motion jumps instead of gliding.
+    const scrollRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const scroller = scrollRef.current;
+        if (!scroller || !selectedDate || covered) return;
+        const cell = scroller.querySelector<HTMLElement>(`[data-date="${selectedDate}"]`);
+        const list = scroller.parentElement?.querySelector<HTMLElement>('[data-testid="map-stack-list"]');
+        if (!cell || !list) return;
+        const over = cell.getBoundingClientRect().bottom + 8 - list.getBoundingClientRect().top;
+        if (over <= 0) return;
+        const calm = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        scroller.scrollTo?.({ top: scroller.scrollTop + over, behavior: calm ? 'auto' : 'smooth' });
+    }, [selectedDate, month.monthKey, covered]);
+
+    // Keyboard accessibility: Escape closes the calendar overlay
+    useEffect(() => {
+        if (covered) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose, covered]);
+
+    // Selected day's pins for MapStackList
+    const selectedPins = useMemo<StackPin[]>(() => {
+        if (!selectedDate) return [];
+        const occurrences = month.eventsByDay[selectedDate] ?? [];
+        return occurrences.map((occ) => occurrenceToStackPin(occ, onOpenPost));
+    }, [selectedDate, month.eventsByDay, onOpenPost]);
+
+    return (
+        <aside
+            data-testid="map-calendar"
+            role="dialog"
+            aria-label={calendarTitle()}
+            className="absolute top-0 bottom-0 left-0 right-0 md:left-auto md:right-0 md:w-1/3 md:min-w-[320px] md:max-w-[480px] z-[120] flex flex-col bg-white dark:bg-nature-900 md:border-l md:border-nature-200 md:dark:border-nature-800 shadow-2xl overflow-hidden"
+            // The overlay covers the tab bar, so nothing under it needs room kept for the bar (the list and the grid read this).
+            style={{ '--bottom-nav-offset': '0px', ...(covered ? { display: 'none' } : {}) } as CSSProperties}
+        >
+            {/* Header: Calendar title and close button */}
+            <header className="flex items-center justify-between pl-4 pr-1 min-h-[52px] flex-shrink-0 border-b border-nature-200 dark:border-nature-800">
+                <h1
+                    ref={headingRef}
+                    tabIndex={-1}
+                    // Takes focus so the title is read out; not a control, so no ring round it.
+                    style={{ outline: 'none' }}
+                    className="text-base font-extrabold text-gray-900 dark:text-white m-0"
+                >
+                    {calendarTitle()}
+                </h1>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label={t('Close')}
+                    className="flex-shrink-0 min-h-[44px] min-w-[44px] bg-transparent border-none text-sm font-extrabold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center justify-center cursor-pointer"
+                >
+                    ✕
+                </button>
+            </header>
+
+            {/* Scrollable grid area */}
+            <div
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto overscroll-contain"
+                style={{
+                    paddingBottom: selectedDate
+                        ? `calc((100% - var(--bottom-nav-offset, 0px)) * ${STACK_LIST_SHARE} + var(--bottom-nav-offset, 0px))`
+                        : undefined,
+                }}
+            >
+                <MonthGrid
+                    month={month}
+                    selectedDate={selectedDate}
+                    onSelectDate={(date) => {
+                        setSelectedDate(date);
+                        setSelectedByTap(true);
+                    }}
+                    onPrevMonth={() => {
+                        const p = month.prevMonth;
+                        setViewYear(p.year);
+                        setViewMonth(p.month);
+                        setSelectedByTap(false);
+                    }}
+                    onNextMonth={() => {
+                        const n = month.nextMonth;
+                        setViewYear(n.year);
+                        setViewMonth(n.month);
+                        setSelectedByTap(false);
+                    }}
+                    onJumpToDate={(targetDate) => {
+                        const y = +targetDate.slice(0, 4);
+                        const m = +targetDate.slice(5, 7);
+                        setViewYear(y);
+                        setViewMonth(m);
+                        setSelectedDate(targetDate);
+                        setSelectedByTap(true);
+                    }}
+                    onStartEvent={onStartEvent}
+                />
+            </div>
+
+            {/* The same list a stacked bubble opens, with day heading */}
+            {selectedDate && (
+                <MapStackList
+                    key={selectedDate}
+                    pins={selectedPins}
+                    covered={covered}
+                    takeFocus={selectedByTap}
+                    heading={calendarDayHeading(selectedDate, selectedPins.length)}
+                    onClose={() => {
+                        setSelectedDate(null);
+                        setSelectedByTap(true);
+                    }}
+                />
+            )}
+        </aside>
+    );
+}

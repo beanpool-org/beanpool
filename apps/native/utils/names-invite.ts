@@ -7,6 +7,8 @@
  * see why.
  */
 
+import { inviteAndShareLink } from '@beanpool/core';
+
 /** What the node did with a binding when the invite was used (server engine/names-list.ts InviteBindOutcome). */
 export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin' | 'open_debt';
 
@@ -57,7 +59,10 @@ export async function inviteThisPerson(
     }
 }
 
-/** The link an invite's QR code holds, and the message its Share sends (as the People tab's invite). */
-export function inviteLink(anchorUrl: string, code: string): string {
-    return `${anchorUrl}/?invite=${code}`;
+/**
+ * The link an invite's QR code holds, and the message its Share sends (as the People tab's invite). With `postId`, the listing
+ * the friend lands on once they have joined (invite-and-share, core inviteAndShareLink); without one, as it has always been.
+ */
+export function inviteLink(anchorUrl: string, code: string, postId?: string | null): string {
+    return inviteAndShareLink(anchorUrl, code, postId);
 }

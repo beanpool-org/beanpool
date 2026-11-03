@@ -72,10 +72,10 @@
 import {
     PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe,
-    openDeals as coreOpenDeals, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
+    openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
     type ShopCounts, type TourRecord,
 } from '@beanpool/core';
-import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, ON_HOLIDAY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
+import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, livePinIds, ON_HOLIDAY_SQL, UNNAMED_COPY_SQL, guestPost, haversineKm, type MarketplacePost, type ShownFrom } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import {
     getMember, getPosts, getBalance, getMarketplaceTransactions, getConversationsByMember, getListedUnreadCounts,
@@ -95,6 +95,7 @@ import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
 import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/knocks.js';
+import { inviteAskCount } from '../engine/invite-asks.js';
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -106,7 +107,7 @@ import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { memberShop, shopOf } from '../engine/shops.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
-import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor, titleForMembers } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor, titleForMembers, isBranchVote, removalSubjects } from '../decisions-engine.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
@@ -127,7 +128,7 @@ export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'st
  */
 const BUILT_WHEN_ASKED: ReadonlySet<string> = new Set([...HOME_CARD_IDS, 'shop']);
 
-/** Cards a member can't hide (§4.1): `needs` costs them something if missed, `community` holds "Edit home". `find` too, for its first 30 days on the global node. */
+/** Cards a member can't hide (§4.1): `needs` costs them something if missed, `community` holds "Arrange". `find` too, for its first 30 days on the global node. */
 const UNHIDEABLE: ReadonlySet<string> = new Set(['needs', 'community']);
 const FIND_PINNED_DAYS = 30;
 
@@ -194,7 +195,7 @@ export const HOME_INTERESTS_PREF_KEY = 'interests';
 
 // ── what the answer holds ────────────────────────────────────────────────────────────────────────────────────────────
 
-export type NeedsKind = 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
+export type NeedsKind = 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite' | 'message' | 'group';
 /** Where a tap lands: the same targets the header's "needs you" icons use (apps/native utils/needs-you.ts). */
 export type NeedsTarget =
     | { to: 'admin'; section: AdminSettingsSection }
@@ -259,6 +260,8 @@ export interface MarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy of a listing (engine/event-copy.ts): where it is from, and its price there, in words. */
     shownCopy?: true; shownFrom?: ShownFrom; shownPrice?: string;
+    /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): only on a pinned row, so an unpinned row and an older node's read as they did. */
+    pinned?: true;
 }
 /**
  * One line of "Coming up". `startLocal` and `tz` are the host's clock and its zone (DESIGN-event-times §4: the line reads the
@@ -272,6 +275,8 @@ export interface EventItem {
     shownCopy?: true; shownFrom?: ShownFrom;
     /** A repeating event's pattern (no clock, no length) and its last date, for the ↻ caption (DESIGN-event-times §4, §8). */
     repeat?: { freq: string; interval: number; byDay?: string; byMonthDay?: number; pos?: number }; repeatUntil?: string;
+    /** A live pin (MarketItem.pinned): the event comes first, whatever its date. */
+    pinned?: true;
 }
 
 
@@ -327,7 +332,7 @@ export interface HomeCards {
     /** The open Decisions, soonest closing first, and the first open poll (the soonest closing), its question as asked. */
     decide?: {
         open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean;
-        items: DecideItem[]; poll: { id: string; title: string; closesAt: string } | null;
+        items: DecideItem[]; poll: { id: string; title: string; closesAt: string; pinned?: true } | null;
     };
     groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean; last: GroupLastLine | null }[]; total: number };
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
@@ -395,8 +400,8 @@ export interface HomeReader {
 }
 
 /** The landings an app may say it opens (`lands=`), beyond the ones every app has. */
-export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people']);
+export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -427,6 +432,8 @@ interface Ctx {
     pinnedChats?: string[];
     /** Read once per answer, for `steps` and `me`. */
     firstOffer?: boolean;
+    /** Read once per answer, for the Market, Coming up and Decide cards: the live pins, newest pin first (pinnedPosts). */
+    pinned?: MarketplacePost[];
 }
 
 /**
@@ -582,6 +589,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     if (role && active) {
         const queue = getAdminQueue({ forModerator: role === 'moderator', forOwner: role === 'owner', forMember: me });
         const work = queue.items.filter(i => i.count > 0 && !(knocksApart && i.kind === 'knocks'));
+        // Asks that an admin invite someone are never in the admin line: its tap opens Settings, which can't answer them.
         const total = work.reduce((n, i) => n + i.count, 0);
         if (total > 0) {
             const parts = work.map(i => adminItemInWords(i, c.switches.decisions));
@@ -598,6 +606,17 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             items.push({
                 kind: 'knock', count: waiting, accent: true,
                 label: waiting === 1 ? '1 person asked to join' : `${waiting} people asked to join`,
+                target: { to: 'people' },
+            });
+        }
+        // A member asked an owner or admin to invite someone (engine/invite-asks.ts): theirs on the admins door only (the
+        // count is 0 on any other door, or with invites off), a count and no name, for an app that answers them
+        // (lands=asks), in People → Invites.
+        const asks = c.lands.has('asks') && (role === 'owner' || role === 'admin') ? inviteAskCount() : 0;
+        if (asks > 0) {
+            items.push({
+                kind: 'ask', count: asks, accent: true,
+                label: asks === 1 ? '1 member asked you to invite someone' : `${asks} members asked you to invite someone`,
                 target: { to: 'people' },
             });
         }
@@ -622,8 +641,9 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
     // Votes the member hasn't cast on Decisions open now, as the signed decisions list gives them (routes/commons.ts):
     // formal Decisions only where they are on, never an emergency suspension made while they were off, and never a money
     // vote the member can't cast yet (no completed trade and no voice credits), which isn't asking anything of them, and never a
-    // vote on removing the member themselves (the voter rule refuses them; the line would stay all week, #2430). Only for a reader
-    // who reads as a member (`c.member`), and the line names the Decision.
+    // vote on removing the member themselves (the voter rule refuses them; the line would stay all week, #2430), a branch's
+    // included, nor a branch's vote to an app that doesn't draw it (lands=branch-vote; routes/commons.ts drawsBranchVotes).
+    // Only for a reader who reads as a member (`c.member`), and the line names the Decision.
     if (c.member && decisionsOn()) {
         const mine = getOwnDecisionVotes(me);
         const blocked = !hasCompletedTrade(me) && getVoiceCredits(me) <= 0;
@@ -631,7 +651,8 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             .filter(d => !madeWithoutVote(d) && !mine.has(d.id)
                 && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now
                 && !(d.franchise === 'quadratic_trade' && blocked)
-                && !(d.effect === 'remove_member' && d.subject === me))
+                && !(d.effect === 'remove_member' && removalSubjects(d).includes(me))
+                && (c.lands.has('branch-vote') || !isBranchVote(d)))
             .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt));
         if (votes.length) {
             const soonest = votes[0].closesAt;
@@ -880,6 +901,24 @@ function shopCard(c: Ctx): NonNullable<HomeCards['shop']> {
     };
 }
 
+/**
+ * The live pins of this node (DESIGN-pinning-fable.md §2.2, slice 4), newest pin first, read once per answer: the posts the
+ * Market puts first, read here as the same reader reads any post by id (postsFor), so a post removed, hidden by reports or
+ * a group's or direct one is never among them, and a visitor's read is a visitor's. The rule is core's `pinLive` at the
+ * answer's own clock, so a pin that ran out is not pinned even before the node tidies its row. A pin comes from anywhere,
+ * as it does in the Market (PostFilter.pinsFirst): a radius bounds the rest of a card, not its pins. Where there is a point
+ * each carries its distance, as the rest of a card's rows do.
+ */
+function pinnedPosts(c: Ctx): MarketplacePost[] {
+    if (c.pinned) return c.pinned;
+    const ids = livePinIds(db, iso(c.now));
+    if (!ids.length) return c.pinned = [];
+    const byId = new Map(postsFor(c, {
+        ids, near: c.point ? { ...c.point } : undefined, measureAtMost: c.point ? ONE_PASS_MAX_MEASURED : undefined,
+    }).map(p => [p.id, p]));
+    return c.pinned = ids.flatMap(id => byId.get(id) ?? []).filter(p => pinLive(p, c.now) && !!bounded(p.id, ID_CHARS));
+}
+
 function eventsCard(c: Ctx): HomeCards['events'] | undefined {
     built('events');
     // "Within 50 km" where the listings come nearest first (the global profile) and there is a point; elsewhere every event.
@@ -895,10 +934,14 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
     // (DESIGN-event-times §4, director amendment 2), read on their own, the soonest few.
     const seen = new Set(nearby.map(p => p.id));
     const online = near ? postsFor(c, { ...read, eventOnline: true }).filter(p => !seen.has(p.id)) : [];
-    const items = [...nearby, ...online]
-        .filter(p => p.status === 'active' && p.eventState !== 'cancelled' && !!bounded(p.eventStartAt, ID_CHARS) && !!bounded(p.id, ID_CHARS)
+    const pins = pinnedPosts(c).filter(p => p.type === 'event' && !!bounded(p.eventStartAt, ID_CHARS));
+    const pinnedIds = new Set(pins.map(p => p.id));
+    const soonest = [...nearby, ...online]
+        .filter(p => !pinnedIds.has(p.id) && p.status === 'active' && p.eventState !== 'cancelled' && !!bounded(p.eventStartAt, ID_CHARS) && !!bounded(p.id, ID_CHARS)
             && Date.parse(p.eventStartAt!) <= until && Date.parse(p.eventEndAt || p.eventStartAt!) > c.now)
-        .sort((a, b) => Date.parse(a.eventStartAt!) - Date.parse(b.eventStartAt!))
+        .sort((a, b) => Date.parse(a.eventStartAt!) - Date.parse(b.eventStartAt!));
+    // The live pins first, whatever their date, then the soonest: the card keeps its few (EVENT_ITEMS).
+    const items = [...pins, ...soonest]
         .slice(0, EVENT_ITEMS)
         .map((p): EventItem => ({
             id: p.id, title: clip(p.title, TITLE_CHARS), startsAt: p.eventStartAt!, endsAt: bounded(p.eventEndAt, ID_CHARS),
@@ -910,6 +953,7 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
             ...(p.eventOnline ? { online: true as const } : {}),
             ...copyFieldsOf(p),
             ...(p.eventRepeat ? { repeat: publicRepeatPattern(p.eventRepeat), ...(p.eventRepeatUntil ? { repeatUntil: p.eventRepeatUntil } : {}) } : {}),
+            ...(pinnedIds.has(p.id) ? { pinned: true as const } : {}),
         }));
     return items.length ? { items, radiusKm: near ? EVENTS_RADIUS_KM : null } : undefined;
 }
@@ -930,8 +974,13 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
     }).filter(p => p.status === 'active' && p.active !== false);
     const since = c.now - MARKET_DAYS * DAY_MS;
     const recent = pool.filter(p => Date.parse(p.createdAt) >= since);
-    const shown = starredFirst(recent.filter(p => !!bounded(p.id, ID_CHARS)), p => p.category, c.member ? c.interests : [])
-        .slice(0, c.member ? MARKET_ITEMS : VISITOR_MARKET_ITEMS)
+    // The live pinned Offers and Needs first (at most PINS_MAX), whatever their age; the card keeps its few, the pool fills below.
+    const limit = c.member ? MARKET_ITEMS : VISITOR_MARKET_ITEMS;
+    const pins = pinnedPosts(c).filter(p => p.type === 'offer' || p.type === 'need').slice(0, Math.min(PINS_MAX, limit));
+    const pinnedIds = new Set(pins.map(p => p.id));
+    const rest = starredFirst(recent.filter(p => !pinnedIds.has(p.id) && !!bounded(p.id, ID_CHARS)), p => p.category, c.member ? c.interests : []);
+    const shown = [...pins, ...rest]
+        .slice(0, limit)
         .map((p): MarketItem => ({
             // The category is only checked to be text when it is written (engine/post-fields.ts): cut like the title.
             id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
@@ -941,6 +990,7 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
             ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
             ...(c.point ? { distanceKm: p.distanceKm ?? null } : {}),
             ...copyFieldsOf(p),
+            ...(pinnedIds.has(p.id) ? { pinned: true as const } : {}),
         }));
     // The empty state (§6.1): on a node that asks for example cards, fewer than a handful of real listings in view.
     const examples = c.features.exampleListings && pool.length < EXAMPLES_BELOW;
@@ -998,10 +1048,13 @@ function decideCard(c: Ctx, settings?: Record<string, unknown>): HomeCards['deci
     built('decide');
     const { show } = readDecideSettings(settings);
     // The community's Decisions only: this card opens Commons → Decide, which never lists a keepers' vote. The Needs-you
-    // line carries those and lands on the enterprise (lands=enterprise).
+    // line carries those and lands on the enterprise (lands=enterprise). A branch's vote only to an app that draws it
+    // (lands=branch-vote), as the decisions list it opens serves it (routes/commons.ts drawsBranchVotes): an older app is
+    // never shown a row it can't open, nor counts it.
     const open = decisionsOn()
         ? getOpenDecisions()
-            .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now)
+            .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now
+                && (c.lands.has('branch-vote') || !isBranchVote(d)))
         : [];
     // W3 (§2): the rows, soonest closing first, each saying whether the signer has voted (their own ballots only: a
     // Decision is a secret ballot).
@@ -1023,12 +1076,14 @@ function decideCard(c: Ctx, settings?: Record<string, unknown>): HomeCards['deci
     const polls = getPosts({ type: 'poll', viewerPubkey: c.me!, limit: POLL_POOL + 1, neighbourhood: getProfileSwitches().openMembership || undefined })
         .filter(p => p.status === 'active' && !!p.pollClosesAt && Date.parse(p.pollClosesAt) > c.now);
     if (!open.length && !polls.length) return undefined;
-    // The first open poll, the soonest closing, its question as asked.
-    const firstPoll = polls.filter(p => !!bounded(p.id, ID_CHARS) && !!bounded(p.pollClosesAt, ID_CHARS))
+    // The first open poll, its question as asked: the newest live pinned one when there is one (read by id, so it is the first
+    // whatever its age), else the soonest closing.
+    const pinnedPoll = pinnedPosts(c).find(p => p.type === 'poll' && !!bounded(p.pollClosesAt, ID_CHARS));
+    const firstPoll = pinnedPoll ?? polls.filter(p => !!bounded(p.id, ID_CHARS) && !!bounded(p.pollClosesAt, ID_CHARS))
         .sort((a, b) => Date.parse(a.pollClosesAt!) - Date.parse(b.pollClosesAt!))[0];
     return {
         open: open.length, soonestClosesAt: soonestOf(open), polls: Math.min(polls.length, POLL_POOL), pollsMore: polls.length > POLL_POOL,
-        items: rowsOf(open), poll: firstPoll ? { id: firstPoll.id, title: clip(firstPoll.title, TITLE_CHARS), closesAt: firstPoll.pollClosesAt! } : null,
+        items: rowsOf(open), poll: firstPoll ? { id: firstPoll.id, title: clip(firstPoll.title, TITLE_CHARS), closesAt: firstPoll.pollClosesAt!, ...(firstPoll === pinnedPoll ? { pinned: true as const } : {}) } : null,
     };
 }
 
@@ -1267,12 +1322,12 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
     const joined7d = (db.prepare(`SELECT COUNT(*) AS c FROM members
                                    WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
                                      AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*'`).get(iso(c.now - JOINED_DAYS * DAY_MS)) as { c: number }).c;
-    const eventsSoon = (db.prepare(`SELECT COUNT(*) AS c FROM posts
+    const eventsSoon = (db.prepare(`SELECT COUNT(*) AS c FROM posts p
                                      WHERE type = 'event' AND event_start_at IS NOT NULL AND event_start_at <= ? AND COALESCE(event_end_at, event_start_at) > ?
                                        AND active = 1 AND status = 'active'
                                        AND (audience_scope IS NULL OR audience_scope = 'public') AND hidden_by_reports_at IS NULL
                                        AND COALESCE(event_state, '') != 'cancelled'
-                                       AND (shown_from_host IS NOT NULL OR (author_pubkey NOT IN (${ON_HOLIDAY_SQL})
+                                       AND (${UNNAMED_COPY_SQL} OR (author_pubkey NOT IN (${ON_HOLIDAY_SQL})
                                             AND author_pubkey NOT IN (SELECT m.public_key FROM members m WHERE NOT (${ENTERPRISE_ON_BOARD_SQL}))))`).get(iso(c.now + EVENT_DAYS * DAY_MS), iso(c.now)) as { c: number }).c;
     return { joined7d, eventsSoon, ...(c.switches.beans ? { commonsPot: Math.round(commonsBalance) } : {}) };
 }

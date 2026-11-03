@@ -22,13 +22,15 @@ import { isAuthReturnLink } from './auth-return';
 export interface InviteParams {
     invite?: string;
     server?: string;
+    /** The listing an invite-and-share link was sent from (core postIdFromInviteLink): opened once the invite has been used. */
+    post?: string;
     /** Set afresh each time the root layout routes an invite link here, so a second tap on the same invite counts. */
     t?: string;
 }
 
 export type InviteArrival =
     | { from: 'link'; url: string }
-    | { from: 'params'; invite: string; server?: string };
+    | { from: 'params'; invite: string; server?: string; post?: string };
 
 /** A link with an invite in its query, which is what welcome reads from one. A sign-in return never counts. */
 export function linkCarriesInvite(url: string): boolean {
@@ -59,7 +61,7 @@ export function inviteToApply(
     if (params.invite) {
         present.push({
             key: `params:${params.invite}|${params.server ?? ''}|${params.t ?? ''}`,
-            arrival: { from: 'params', invite: params.invite, server: params.server },
+            arrival: { from: 'params', invite: params.invite, server: params.server, ...(params.post ? { post: params.post } : {}) },
         });
     }
     const fresh = present.find((p) => !applied.has(p.key));

@@ -104,6 +104,8 @@ export const PUSH_NOTICE_KINDS = {
     // notifyKnockReceived). People, whose Invites list holds the request. The asker's "answered" notice is no push: their
     // phone posts it from its own background check (apps/native utils/sync-notices.ts), since no community has their token.
     'community.knock': { body: word('Someone asked to join your community.'), tab: 'people' },
+    // To a member whose ask to invite someone was answered (server engine/invite-asks.ts). Never the code, the reason or a name.
+    'community.invite-ask': { body: word('An admin answered your ask to invite someone.'), tab: 'people' },
     'account.recovery-started': { body: word("Someone is trying to recover your account. If this isn't you, open BeanPool and stop it."), tab: 'settings' },
     'account.restored': { body: word("Your account was just restored on another device. If that wasn't you, open BeanPool now."), tab: 'settings' },
     // To the old phone when an admin makes a re-key code (server engine/member-wizards.ts issueRekeyCode): the one sign a

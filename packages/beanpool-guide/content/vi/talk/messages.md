@@ -9,23 +9,23 @@ source-hash: dd41c095375671ac
 
 ## Cuộc trò chuyện của bạn
 
-**Trò chuyện** có ba nút ở trên cùng: **Tin nhắn**, **Nhóm** và **Mọi người**.
+**Chat** có ba nút ở trên cùng: **Tin nhắn**, **Nhóm** và **Mọi người**.
 
-Nhấn vào **Trò chuyện** trong hàng thẻ, sau đó chọn **Tin nhắn**. Các cuộc trò chuyện của bạn với mọi người được liệt kê ở đó. Các giao dịch cần bạn xử lý nằm ở trên cùng, trong phần **Cần hành động**.
+Nhấn vào **Chat** trong hàng thẻ, sau đó chọn **Tin nhắn**. Các cuộc trò chuyện của bạn với mọi người được liệt kê ở đó. Các giao dịch cần bạn xử lý nằm ở trên cùng, trong phần **Cần hành động**.
 
 Các cuộc trò chuyện thuộc về một nhóm, một doanh nghiệp hoặc một sự kiện nằm trong phần **Nhóm**, chứ không phải ở đây. Xem "Nhóm".
 
 - Tìm kiếm bằng **Tìm cuộc trò chuyện, bài đăng, đối tác...**.
 - Nút bộ lọc sắp xếp theo **Gần đây** hoặc **Chưa đọc** (và ở nơi cộng đồng của bạn sử dụng Đậu, theo số Đậu trong mỗi giao dịch, cao nhất hoặc thấp nhất trước), đồng thời có thể hiển thị **Chỉ tin chưa đọc** hoặc **Chỉ bạn bè**.
-- Trên điện thoại, nút tìm kiếm và bộ lọc sẽ trượt biến mất khi bạn cuộn xuống. Cuộn lên một chút và chúng sẽ quay trở lại. Nhấn vào **Trò chuyện** lần nữa để nhảy lên đầu trang.
+- Trên điện thoại, nút tìm kiếm và bộ lọc sẽ trượt biến mất khi bạn cuộn xuống. Cuộn lên một chút và chúng sẽ quay trở lại. Nhấn vào **Chat** lần nữa để nhảy lên đầu trang.
 
 Trong ứng dụng web, đây là thẻ **Chat**. Thẻ này liệt kê tất cả các cuộc trò chuyện của bạn, bao gồm cả của các nhóm và sự kiện, với **Tất cả**, **Giao dịch**, **Trực tiếp** và **Nhóm** ở trên cùng, đồng thời không có tính năng tìm kiếm hoặc bộ lọc.
 
 ## Bắt đầu cuộc trò chuyện
 
 - Từ một hồ sơ: mở hồ sơ của họ và nhấn **Nhắn tin**. Bạn cũng có thể kết bạn với họ tại đó.
-- Từ **Trò chuyện**: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ.
-- Từ danh sách thành viên: **Trò chuyện**, sau đó chọn **Mọi người**, và nhấn 💬 bên cạnh tên một thành viên trong **Cộng đồng** hoặc **Bạn bè**.
+- Từ **Chat**: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ.
+- Từ danh sách thành viên: **Chat**, sau đó chọn **Mọi người**, và nhấn 💬 bên cạnh tên một thành viên trong **Cộng đồng** hoặc **Bạn bè**.
 - Từ một bài đăng: nhấn vào **Nhắn tin** và tên của người đó.
 
 Trong ứng dụng web, hãy dùng **Nhắn tin** trên hồ sơ của họ, 💬 trên hàng của họ trong **Mọi người**, **✉️ Tin nhắn trực tiếp mới**, hoặc nút **💬 Nhắn tin** trên một bài đăng.

@@ -6,7 +6,7 @@ import { isSyntheticAccount, type PushNoticeKind, word } from '@beanpool/core';
 import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
-import { deleteStoredObjects, storeAttachmentColumns } from '../storage/image-columns.js';
+import { deleteStoredObjects, inlineAttachmentColumns, storeAttachmentColumns, type AttachmentColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import {
     getMember,
@@ -196,7 +196,7 @@ function refuseVisitorOutsideItsDirectConversations(messageId: string, publicKey
  * any other type with this, as a 410.
  */
 export const CHAT_GROUP_REMOVED_ERROR =
-    word('Group chats made from Talk were removed. Create a group in Commons instead — every group has its own chat.');
+    word('Group chats made in Chat were removed. Create a group in Commons instead — every group has its own chat.');
 
 /**
  * A member's words in a direct conversation are stored only end-to-end encrypted: the privacy policy tells members
@@ -639,7 +639,7 @@ export function sendMessage(
         timestamp: new Date().toISOString()
     };
     const photo = attachment?.data && attachment?.nonce ? attachment : undefined;
-    let photoCols: { data: string | null; storage_key: string | null } | null = null;
+    let photoCols: AttachmentColumns | null = null;
     if (photo) {
         // The ciphertext goes to the image store and the row keeps the nonce, the mime and a key
         // (storage design §7). The node has never held the key that would decrypt either half, so nothing
@@ -650,14 +650,14 @@ export function sendMessage(
         // storage-health sweep takes past its grace, never a line whose photo row is missing.
         let key: string | null = null;
         try { key = attachmentKey(msg.id); } catch { /* kept in the row */ }
-        photoCols = key ? storeAttachmentColumns(getImageStore(), key, photo.data) : { data: photo.data, storage_key: null };
+        photoCols = key ? storeAttachmentColumns(getImageStore(), key, photo.data) : inlineAttachmentColumns(photo.data);
     }
     // The line and its photo's row in one transaction: both or neither.
     db.transaction(() => {
         db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.metadata, msg.timestamp);
         if (photo && photoCols) {
-            db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)`)
-                .run(msg.id, photoCols.data, photo.nonce, photo.mime || 'image/jpeg', photoCols.storage_key);
+            db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key, sha256, bytes) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+                .run(msg.id, photoCols.data, photo.nonce, photo.mime || 'image/jpeg', photoCols.storage_key, photoCols.sha256, photoCols.bytes);
         }
     })();
     if (photo && attBytes > 0) recordStoredPhotoBytes(authorPubkey, attBytes);
@@ -1265,7 +1265,8 @@ export function removeOldChatGroups(): number {
             const doomedObjects = (db.prepare(
                 'SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT id FROM messages WHERE conversation_id = ?)'
             ).all(id) as any[]).map(r => r.storage_key as string);
-            db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)').run(id);
+            // Each with its tombstone: a standby copies the photos (a plain table, gap G4) and deletes them, objects too.
+            deletePlainRows('message_attachments', 'message_id IN (SELECT id FROM messages WHERE conversation_id = ?)', id);
             if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomedObjects));
             db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
             db.prepare('DELETE FROM conversation_participants WHERE conversation_id = ?').run(id);

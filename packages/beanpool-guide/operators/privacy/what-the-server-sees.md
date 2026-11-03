@@ -27,6 +27,7 @@ Anyone with the server's files can read these, and so can anyone who can open a 
 - the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;
 - who messaged whom, and when, which message each one answers, and their emoji reactions, even for direct messages;
 - the messages you send members from the admin page;
+- while it waits, a member's ask that an admin invite someone: who asked, the person's first name and one line on how they know them. Owners, admins and that member read it; the AI assistant can't. It is deleted when it is answered, taken back or 30 days old, and a standby deletes its copy too. A backup taken while it waited holds it until that backup goes;
 - **how each member voted**.
 
 ## Secret ballots

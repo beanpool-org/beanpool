@@ -178,9 +178,10 @@ export interface ProfileSwitches {
     openMembership: boolean;
     /** A listing (an Offer or a Need) is archived `profileLimits().listingArchiveDays` after it last changed: taken off
      *  the Market as its author's own removal takes it, and its photos deleted (engine/posts.ts archiveStaleListings;
-     *  DESIGN-global-mothership-fable §4.2, decision 7, Marty 2026-10-18). On (the global node): photos are the cost that
-     *  grows, and a lobby of the world's listings would otherwise keep every one for good. Off (a local community): a
-     *  listing stays until its author takes it down, as before. */
+     *  DESIGN-global-mothership-fable §4.2, decision 7, Marty 2026-10-18); an event's photos are deleted a week after it ends,
+     *  and a poll leaves the board a week after it closes (engine/posts.ts archiveEndedPosts). On (the global node): photos
+     *  are the cost that grows, and a lobby of the world's listings would otherwise keep every one for good. Off (a local
+     *  community): a listing stays until its author takes it down, and a closed poll stays on the board, as before. */
     retention: boolean;
     /** A member's first message to someone who hasn't added them, written to them or traded with them waits as a request
      *  until that person accepts it (engine/dm-requests.ts; DESIGN-message-a-friend-fable.md §4, Marty 2026-10-23). On (the
@@ -312,6 +313,10 @@ export interface NodeFeatures {
      *  every member's set and Home hold them wherever the member is (director amendment 2). The apps offer "Online" only
      *  where it is true: a server from before it would refuse the event, or keep it from everyone but its host. */
     onlineEvents: boolean;
+    pins: boolean;
+    inviteVouch: boolean;
+    /** A member can ask an admin to invite someone here: with `door` 'admins', what core offersInviteAsk reads. */
+    inviteAsks: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
     /** A post reported by members in 3 independent circles, each with at least half its author's standing, is hidden
@@ -512,6 +517,14 @@ export function nearbyListingsLimits(): { radiusKm: number; max: number } {
 
 /** A listing is archived this many days after it last changed, where `retention` is on (Marty, 2026-10-18). */
 export const LISTING_ARCHIVE_DAYS_DEFAULT = 90;
+/** An event's photos are deleted this many days after it ended, where `retention` is on (design §4.2: "events a week
+ *  after they end"). Not an env: the 30-day scrub takes the rest of an ended event on every node, so a longer number
+ *  would mean nothing and a shorter one would take photos the people who went still look at. */
+export const EVENT_ARCHIVE_DAYS = 7;
+/** A closed poll leaves the board this many days after it closed, where `retention` is on: as an ended event's week (the
+ *  director, 3 Nov, for Marty; reversible). Its result, an anonymous poll's typed Other answers (for its maker) and, on the
+ *  global node, where an anonymous poll's votes came from show only once it has closed, so the week is when they are read. Not an env, as EVENT_ARCHIVE_DAYS. */
+export const POLL_ARCHIVE_DAYS = 7;
 /** LISTING_ARCHIVE_DAYS's range: under a month would take listings their authors still mean; ten years is "keep them". */
 const LISTING_ARCHIVE_DAYS_MIN = 30;
 const LISTING_ARCHIVE_DAYS_MAX = 3_650;
@@ -525,9 +538,14 @@ const PLACE_WATCHES_CEILING = 20;
  * profile's default unless the operator set its env; a value out of range is the default, and the log says so once.
  */
 export interface ProfileLimits {
-    /** Days after it last changed (an edit, a pause, being put back up) a listing is archived: LISTING_ARCHIVE_DAYS, 90.
+    /** Days after it last changed (an edit, a pause, being put back up, a deal on it) a listing is archived: LISTING_ARCHIVE_DAYS, 90.
      *  Null where `retention` is off: a listing stays until its author takes it down. */
     listingArchiveDays: number | null;
+    /** Days after it ended an event loses its photos: EVENT_ARCHIVE_DAYS, 7. Null where `retention` is off. */
+    eventArchiveDays: number | null;
+    /** Days after it closed a poll is taken off the board: POLL_ARCHIVE_DAYS, 7. Its author still reads it by id, with its
+     *  result and its typed answers. Null where `retention` is off: a closed poll stays on the board with its result. */
+    pollArchiveDays: number | null;
     /** Photos a listing or an event may carry: 5 on every node, as the apps' five photo slots are (@beanpool/engine
      *  MAX_POST_PHOTOS). Not an env: a lower number would meet five slots in the apps. */
     photosPerListing: number;
@@ -557,6 +575,8 @@ export function profileLimits(): ProfileLimits {
     const s = getProfileSwitches();
     return {
         listingArchiveDays: s.retention ? archiveDaysSetting() : null,
+        eventArchiveDays: s.retention ? EVENT_ARCHIVE_DAYS : null,
+        pollArchiveDays: s.retention ? POLL_ARCHIVE_DAYS : null,
         photosPerListing: MAX_POST_PHOTOS,
         nearbyListingsMax: s.nearbyListings ? nearbyListingsLimits().max : null,
         placeWatches: envLimit('PLACE_WATCHES_MAX', PLACE_WATCHES_DEFAULT, 1, PLACE_WATCHES_CEILING),
@@ -576,6 +596,14 @@ export function getNodeFeatures(): NodeFeatures {
         distanceSearch: true,
         // Also the build's: every profile carries online events.
         onlineEvents: true,
+        // And pins (engine/pins.ts): an app offers one only where the node says so (DESIGN-pinning-fable.md §2.11).
+        pins: true,
+        // And a vouch on an invite (engine/invites.ts), which means nothing where there are no Beans: an app offers one
+        // only where the node says so, so a phone newer than its node never shows a choice the node would drop.
+        inviteVouch: s.beans,
+        // And an ask that an admin invite someone (engine/invite-asks.ts): answered with an invite, so never where invites
+        // are off. An app offers one only where the node says so, and where only admins invite (`door`).
+        inviteAsks: s.invites,
         probation: s.probation,
         autoHideReports: s.autoHideReports,
         autoMute: s.autoMute,
@@ -941,7 +969,8 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     }
     if (configured.retention) {
         console.log(`🗄️  Retention is on: a listing is archived ${archiveDaysSetting()} days after it last changed, and its photos are `
-            + 'deleted (LISTING_ARCHIVE_DAYS).');
+            + `deleted (LISTING_ARCHIVE_DAYS); an event loses its photos ${EVENT_ARCHIVE_DAYS} days after it ends; a poll leaves the `
+            + `board ${POLL_ARCHIVE_DAYS} days after it closes.`);
     }
     return { profile, previous };
 }

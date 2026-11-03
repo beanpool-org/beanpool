@@ -3,11 +3,11 @@
  *
  * Base URL is same-origin (the PWA is served by the node).
  */
-import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
+import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer } from '@beanpool/core';
-import { readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
+import { readCommunityCard, t, type DmLineDisclosure, type DmLineSig, type VouchLevel } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -320,9 +320,12 @@ export interface CommunityInfo {
      * (absent when off).
      */
     features?: {
+        door?: string | null; invites?: boolean | null; knocks?: boolean | null;
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** This node carries online events (DESIGN-event-times §9). Absent (a node from before): the form offers no "Online". */
         onlineEvents?: boolean;
+        inviteVouch?: boolean;
+        inviteAsks?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
         /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */
@@ -444,6 +447,10 @@ export async function getListedCommunityByHost(host: string): Promise<HomeCommun
         url: typeof row.url === 'string' ? row.url : null,
         memberCount: typeof row.memberCount === 'number' ? row.memberCount : null,
         distanceKm: null,
+        // What its directory push promised (mothership A3); core communityPromiseLines checks the shapes when they are shown.
+        ...(row.promise !== undefined ? { promise: row.promise } : {}),
+        acceptingKnocks: typeof row.acceptingKnocks === 'boolean' ? row.acceptingKnocks : null,
+        closingOn: typeof row.closingOn === 'string' ? row.closingOn : null,
     };
 }
 
@@ -537,8 +544,8 @@ export interface InviteCode {
     intendedFor?: string;
 }
 
-export async function generateInvite(publicKey: string, intendedFor?: string): Promise<{ success: boolean; invite: InviteCode }> {
-    return request('POST', '/api/invite/generate', { publicKey, intendedFor });
+export async function generateInvite(publicKey: string, intendedFor?: string, vouchLevel?: VouchLevel): Promise<{ success: boolean; invite: InviteCode }> {
+    return request('POST', '/api/invite/generate', { publicKey, intendedFor, vouchLevel });
 }
 
 export interface InviteCheck { valid: boolean; reason?: string; inviterCallsign?: string | null; communityName?: string | null }
@@ -1152,6 +1159,11 @@ export interface MessageAttachment {
     mime?: string;
 }
 
+/** Its author, on the copy's own page at the global community: the door shuts. An Off is never refused. */
+export async function stopTakingQuestions(id: string): Promise<{ success: boolean }> {
+    return request('POST', '/api/marketplace/posts/takes-questions', { id, on: false });
+}
+
 export async function createConversationApi(
     type: 'dm',
     participants: string[],
@@ -1387,6 +1399,8 @@ export interface MarketplacePost {
     shownFrom?: ShownFromLine;
     /** Its price at home, for its words alone (core copyPriceLine). */
     shownPrice?: string;
+    /** Its member takes questions about it: a member's read has their name and key (@beanpool/core copyAsk). */
+    takesQuestions?: boolean;
     id: string;
     type: 'offer' | 'need' | 'poll' | 'event';
     category: string;
@@ -1401,6 +1415,8 @@ export interface MarketplacePost {
     updatedAt?: string;
     active: boolean;
     status: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
+    pinnedUntil?: string | null;
+    pinnedAt?: string | null;
     repeatable: boolean;
     lendable?: boolean;
     /** #108: a real cash outlay is involved (fuel / consumables used up doing the job). No amount by
@@ -1427,7 +1443,7 @@ export interface MarketplacePost {
     authorAvatarUrl?: string | null;
     /** The shop banner URL of the author enterprise (Pictures S6). */
     authorBannerUrl?: string | null;
-    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
+    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number; other?: boolean }>;
     pollClosesAt?: string;
     /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
     pollOpenVote?: boolean;
@@ -1435,6 +1451,8 @@ export interface MarketplacePost {
     /** How many of the votes came from new or 12-word accounts (the global node's public polls; @beanpool/core poll-vote-origins). */
     pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
+    /** The reader has answered this sealed poll, which is all the node knows of it (@beanpool/core pollIsSealed). */
+    pollAnswered?: boolean;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
     // Audience scoping (docs/the-commons.md §9, Item 10)
     audienceScope?: 'public' | 'group' | 'direct';
@@ -1587,6 +1605,8 @@ export async function createMarketplacePost(post: {
     durationDays?: number;
     /** A poll only: true makes it an open vote (members see who chose what). Left out, it is anonymous. */
     pollOpenVote?: boolean;
+    /** Offer a typed Other (@beanpool/core poll-other). */
+    pollOther?: boolean;
     audienceScope?: 'public' | 'group' | 'direct';
     targetGroupId?: string;
     targetPubkey?: string;
@@ -1815,8 +1835,43 @@ export async function deleteGroupPost(groupId: string, postId: string): Promise<
     return request('DELETE', `/api/groups/${encodeURIComponent(groupId)}/posts/${encodeURIComponent(postId)}`);
 }
 
-export async function votePoll(postId: string, optionId: string): Promise<{ success: boolean; post: MarketplacePost }> {
-    return request('POST', `/api/marketplace/posts/${postId}/vote`, { optionId });
+export async function votePoll(postId: string, optionId: string, otherWords?: string): Promise<{ success: boolean; post: MarketplacePost }> {
+    return request('POST', `/api/marketplace/posts/${postId}/vote`, otherWords === undefined ? { optionId } : { optionId, otherWords });
+}
+
+/** A poll's typed answers as its maker or an owner reads them (apps/server engine/poll-other.ts). */
+export interface PollOtherRead {
+    state: 'held' | 'open';
+    count: number;
+    answers: Array<{ id: string; words: string; reported: boolean }>;
+    removed: number;
+    canRemove: boolean;
+}
+
+export async function getPollOtherAnswers(postId: string): Promise<PollOtherRead> {
+    return request('GET', `/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers`);
+}
+
+export async function reportPollOtherAnswer(postId: string, answerId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/report`, {});
+}
+
+export async function removePollOtherAnswer(postId: string, answerId: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/other-answers/${encodeURIComponent(answerId)}/remove`, {});
+}
+
+let myNodeRoleRead: Promise<string | null | undefined> | null = null;
+
+/**
+ * The signer's role here (GET /api/node-admin/me), asked once a page load, and only by a card that has something to offer an owner.
+ * It decides nothing: the node checks every read. A role, null (the node answered: no role), or undefined (it did not answer:
+ * not known, and asked again next time), so a card never mistakes "not heard" for "not an admin".
+ */
+export function myNodeRoleOnce(): Promise<string | null | undefined> {
+    myNodeRoleRead ??= (request('GET', '/api/node-admin/me') as Promise<{ role?: string | null }>)
+        .then(r => r?.role ?? null)
+        .catch(() => { myNodeRoleRead = null; return undefined; });
+    return myNodeRoleRead;
 }
 
 /** RSVP to an event as the signed member: Going, Interested, or null for not going. */
@@ -2072,6 +2127,20 @@ export async function resumeMarketplacePost(
     const answer = await request<{ success: boolean }>('POST', '/api/marketplace/posts/resume', { postId, authorPublicKey });
     onGlobalCopy((copy, identity) => copy.tendCopies(identity));
     return answer;
+}
+
+/** Pins a public post for 1, 3 or 7 days (DESIGN-pinning-fable §2): an owner or admin role is required. */
+export async function pinMarketplacePost(
+    postId: string, days: PinDays
+): Promise<{ success: boolean; postId: string; pinnedUntil: string | null; pinnedAt: string | null }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/pin`, { days });
+}
+
+/** Takes a pin off a post: an owner, admin, or the post's author. */
+export async function unpinMarketplacePost(
+    postId: string
+): Promise<{ success: boolean; postId: string; pinnedUntil: null; pinnedAt: null }> {
+    return request('POST', `/api/marketplace/posts/${encodeURIComponent(postId)}/unpin`, {});
 }
 
 /** Newest first; the node answers 50 when no `limit` is given, and at most 200 a page. */
@@ -3244,7 +3313,8 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     // S2, components/WantsToJoin): `people` gets "N people asked to join" as its own line landing there ({ to: 'people' }),
     // for owners and admins out of the admin line (whose settings page has no list of them), and for any member where any
     // member may answer, once a request has waited 3 days.
-    q.set('lands', 'enterprise,group,invite,people');
+    // `asks`: and a member's ask that an admin invite someone (components/InviteAsks).
+    q.set('lands', 'enterprise,group,invite,people,asks');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

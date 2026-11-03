@@ -117,6 +117,15 @@ function keptCommunities(anchor: string | null, saved: Record<string, unknown>[]
     return [...new Set(kept)];
 }
 
+/**
+ * The community the phone is set to, and every community it keeps, that one among them. No pins: for a reader that only
+ * needs the list (other-communities-unread.ts, and a tap on its notice). Throws when the phone's storage can't be read.
+ */
+export async function readKeptCommunities(storage: Pick<Storage, 'getItem'>): Promise<{ anchor: string | null; kept: string[] }> {
+    const anchor = communityAddress(await storage.getItem(ANCHOR_STORE_KEY));
+    return { anchor, kept: keptCommunities(anchor, savedRecords(await storage.getItem(SAVED_NODES_STORE_KEY))) };
+}
+
 let pinWrites: Promise<unknown> = Promise.resolve();
 
 /**

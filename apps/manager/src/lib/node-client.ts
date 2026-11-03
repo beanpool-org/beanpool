@@ -1353,8 +1353,8 @@ export async function fetchReports(
 /**
  * The one group chat message a report names, as the key its reporter handed over opens it (server:
  * engine/group-chat-report.ts). Each part is 'verified' against the key that signed it, or 'unverified' ("could not be
- * verified"); the words are 'gone' once deleted or removed, and a photo 'unavailable' where the server holds none (after a
- * standby took over: chat photos are not copied to a standby).
+ * verified"); the words are 'gone' once deleted or removed, and a photo 'unavailable' where the server holds none (a standby
+ * that took over before it had copied it, or a photo lost from the server's storage).
  */
 export interface ReportedMessage {
     id: string;

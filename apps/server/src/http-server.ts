@@ -1,6 +1,8 @@
 /**
  * HTTP Server — Redirect to HTTPS (Port 8080)
  *
+ * A node with a certificate of its own: to anything but a tunnel, only the ACME route and a 301 to https
+ *   (plain-http-gate.ts, design D9). Through a tunnel, and on every node without one, as below.
  * Public nodes (Let's Encrypt): 301 redirect all traffic to HTTPS /welcome
  * LAN nodes (self-signed): Shows QR trust bootstrap + CA cert download
  *
@@ -19,7 +21,13 @@ import { getCaCertPem, servesCaCertificateFor } from './services/tls.js';
 import { getKoaApp, getUpgradeHandler } from './https-server.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { acmeChallengeMiddleware } from './services/acme/challenge.js';
+import { plainHttpGate, plainUpgradeAllowed } from './plain-http-gate.js';
 import QRCode from 'qrcode';
+
+/** Tests only: called with each socket the plain listener accepts, before anything reads it (a test gives it another
+ *  remote address there: test-plain-http-gate.ts). Null puts it back. */
+let connectionHookForTests: ((socket: import('node:net').Socket) => void) | null = null;
+export function _setPlainConnectionHookForTests(fn: ((socket: import('node:net').Socket) => void) | null): void { connectionHookForTests = fn; }
 
 /**
  * Starts the plain-HTTP listener and resolves with the port it actually bound.
@@ -36,6 +44,10 @@ export async function startHttpServer(port: number): Promise<number> {
     // The ACME http-01 answer, first: never delegated to the HTTPS app (a tunnel request carries cf-connecting-ip), never
     // redirected to CF_RECORD_NAME. Everything else goes on below unchanged.
     app.use(acmeChallengeMiddleware());
+
+    // Port 80 to the Internet (plain-http-gate.ts, design D9): once this server holds a certificate of its own, a request
+    // that did not come through a tunnel gets a 301 to https and nothing else. A node with none answers as it always has.
+    app.use(plainHttpGate());
 
     // Cloudflare Tunnel delegation & direct IP access for Settings/API/PWA
     app.use(async (ctx, next) => {
@@ -210,6 +222,7 @@ export async function startHttpServer(port: number): Promise<number> {
         // F3): in tunnel mode every request and live socket arrives here.
         const server = http.createServer(serverTimeoutOptions(), app.callback());
         applyServerLimits(server);
+        server.prependListener('connection', (socket) => connectionHookForTests?.(socket));
         server.listen(port, () => {
             const bound = (server.address() as AddressInfo).port;
             console.log(`🔓 HTTP → HTTPS redirect listening on http://0.0.0.0:${bound}`);
@@ -220,6 +233,9 @@ export async function startHttpServer(port: number): Promise<number> {
         // listener Node hands the upgrade to Koa as a plain request, which 404s. Looked up per request
         // because index.ts starts this server before the HTTPS one exists.
         server.on('upgrade', (req, socket, head) => {
+            // The same line as every request: no live-updates socket in cleartext from outside a tunnel on a node with a
+            // certificate of its own (plain-http-gate.ts).
+            if (!plainUpgradeAllowed(req, socket)) return;
             const handleUpgrade = getUpgradeHandler();
             if (!handleUpgrade) {
                 socket.destroy();

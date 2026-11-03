@@ -201,6 +201,11 @@ export function getGenesisEarnedCredit(type: GenesisInviteType): number {
 
 // Vouch level → the credit-floor beans an appointed voucher hands out (see vouchMember).
 export type VouchLevel = 1 | 2 | 3;
+/** The three levels, in order: all a vouch can be, and nothing else counts as one (a string, 0, 4, 1.5). */
+export const VOUCH_LEVELS: readonly VouchLevel[] = [1, 2, 3];
+export function isVouchLevel(value: unknown): value is VouchLevel {
+    return value === 1 || value === 2 || value === 3;
+}
 export function vouchCreditForLevel(level: VouchLevel): number {
     const c = PROTOCOL_CONSTANTS;
     switch (level) {

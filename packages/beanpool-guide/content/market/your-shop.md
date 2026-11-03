@@ -14,7 +14,7 @@ You have one shop in each community you are in.
 
 ## Opening it
 
-Open **Your shop** from the Home card **Your shop and tools**, or from **Tools**. To put the card on Home, use **Edit home** and add **Your shop and tools**.
+Open **Your shop** from the Home card **Your shop and tools**, or from **Tools**. To put the card on Home, tap **Add a card** and add **Your shop and tools**.
 
 Tap **Open my shop**. Until you give it a name, it is called after you: "Ana's shop".
 

@@ -21,7 +21,7 @@
  * modal: Tab stays inside it, and when the last one is put away focus goes back to where the member was.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { t } from '@beanpool/core';
+import { inviteAskNoticeHere, requestsClearedNotice, t } from '@beanpool/core';
 import { onSystemAnnouncement, onSocketOpen } from '../lib/sync';
 import { getUnseenNotices, markNoticesSeen, type KeptNotice } from '../lib/api';
 
@@ -50,10 +50,12 @@ const text = (v: unknown): string => (typeof v === 'string' ? v : '');
 function fromLive(a: any): ShownAlert | null {
     if (!a || (!text(a.title) && !text(a.body))) return null;
     const noticeId = text(a.noticeId) || undefined;
+    // "Message requests cleared" is worded here, in the member's language, from its kind and date (core requests-cleared-words).
+    const own = requestsClearedNotice(a);
     return {
         key: noticeId ?? `live-${++liveSeq}`,
-        title: text(a.title),
-        body: text(a.body),
+        title: own?.title ?? text(a.title),
+        body: own?.body ?? text(a.body),
         severity: text(a.severity) || 'info',
         noticeId,
         kind: text(a.kind) || undefined,
@@ -62,10 +64,11 @@ function fromLive(a: any): ShownAlert | null {
 
 function fromKept(n: KeptNotice): ShownAlert | null {
     if (!n || !text(n.id) || (!text(n.title) && !text(n.body))) return null;
+    const own = requestsClearedNotice(n.data);
     return {
         key: n.id,
-        title: text(n.title),
-        body: text(n.body),
+        title: own?.title ?? inviteAskNoticeHere(text(n.title)),
+        body: own?.body ?? inviteAskNoticeHere(text(n.body)),
         severity: text(n.severity) || 'info',
         noticeId: n.id,
         kind: text(n.data?.kind) || undefined,

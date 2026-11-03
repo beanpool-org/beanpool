@@ -83,7 +83,15 @@ You cannot save a post yet.
 
 ## Sharing a post
 
-Open a post and tap **Share with members**. Your phone's share sheet opens with the post's title and a link; on a computer the link is copied for you to paste. Anyone in your community who taps it opens the post. Someone who isn't a member lands on your community's own page, with how to ask to join.
+Before you tap, a plain line under the buttons tells you what the link will do, based on your community's rules and your standing:
+
+- **Sharing outside allowed:** You see **Share with members** and **Share outside the community**. Under **Share with members**, the line reminds you that this link opens for members only. Under **Share outside the community**, it tells you that anyone can read this listing (or event) for 7 days, and, where your community has joining open to requests, that they can then ask to join. Where joining is paused, it leaves that out. The same short note says the link shows no names or faces, and that you can stop it any time.
+- **Sharing outside off:** You see **Share with members** and the line that it opens for members only.
+- **Only admins invite:** Members see **Share with members** and the line that it opens for members only and only admins invite here. Where your community takes it, one more button sits under that line: **Ask an admin to invite someone**. It opens the same short form as **People**, then **Invites**: a first name and how you know them. An admin reads it and decides, and the answer reaches you under **Invites**. Owners and admins see the usual line and **Invite and share**.
+- **On an open community:** The link already opens for anyone, so no extra line is shown.
+- **In a private preview:** Only owners and admins invite, so members see that only admins invite here.
+
+When you tap **Share with members**, your phone's share sheet opens with the post's title and a link; on a computer the link is copied for you to paste. Anyone in your community who taps it opens the post. Someone who isn't a member lands on your community's front door.
 
 Where your community allows it, you can also tap **Share outside the community**. It is for showing one listing to a friend or a neighbour who isn't in BeanPool yet, in a chat or a message:
 
@@ -94,3 +102,15 @@ Where your community allows it, you can also tap **Share outside the community**
 - A post only your group or one person can see can't be shared outside.
 
 Each link you share outside is listed under **Settings**, **Shared outside**, until it runs out. Tap **Stop sharing** and that link stops working at once. A link also stops if the post is taken down, if you leave the community, or if your community's owners turn sharing outside off.
+
+### Inviting a friend from the post
+
+Where you can invite people to your community, a post also has one invite button, **Invite and share**, whichever of the lines above you see. It is for a friend who isn't in BeanPool yet and who you'd like to see this very post once they are in. There is no other invite button on a post.
+
+- Tap it and you see a line saying what it makes: one invite, for one person. An invite works once. If you can vouch for people, **Vouch for them** is there too, on **None** until you choose.
+- Tap **Make the invite and share**. Your phone's share sheet opens with the post's title and a link; on a computer the link is copied for you to paste. The invite is also listed under **Invites** like any other.
+- Your friend joins as anyone does with an invite, in the app or in the browser, and when they have joined they land on that post. Before that they see only what an invite shows: the link doesn't let them look at the post.
+- If they can't see that post, because it was taken down or only a group can see it, they land on Home as any new member does. Nothing says why, and nothing is wrong.
+- It needs a connection. A ticket made without one can't take anyone to a post, so you're told so and no invite is made.
+- Where only your community's admins invite, owners and admins see the button and other members don't: they see the line that only admins invite here. Until BeanPool has heard your role, there is no line and no button.
+- Where your community takes no invites, or you are only looking around as a guest, there is no button.

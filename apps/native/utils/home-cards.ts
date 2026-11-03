@@ -10,7 +10,7 @@
  * - **The layout** (CARD-FRAME §2) is a list of card instances the member owns, kept on the account (`home.layout`
  *   version 2) with a copy on the phone; the newer wins by `updatedAt`. A member adds (the picker), removes, moves and
  *   resets cards; nothing is dragged. `needs` stays at the top and `community` at the bottom (it carries Add a card and
- *   Edit home): neither is in the list. A card of a type this build doesn't know is kept through every save, never drawn.
+ *   Arrange): neither is in the list. A card of a type this build doesn't know is kept through every save, never drawn.
  * - **Interests reorder, they never filter** (§4.3): starred categories first, the rest after, each part in its order.
  * - **Needs you** is the header's own list (utils/needs-you.ts): the phone's own deals and unread messages from its
  *   database (fresher, no request), the node's admin work, votes and group lines from the answer.
@@ -27,7 +27,7 @@ import {
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
-    knockStillAnswerable,
+    knockStillAnswerable, capitalFirst, inviteAskNeedsLine,
     copyFromLine, eventCopyOf, type ShownFromLine,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
@@ -49,7 +49,7 @@ import {
 export type HomeCardId = string;
 export type { HomeCardInstance };
 
-/** First and last, always: the one card that costs a member something if missed, and the one that holds Edit home. */
+/** First and last, always: the one card that costs a member something if missed, and the one that holds Arrange. */
 export const FIXED_FIRST: HomeCardId = 'needs';
 export const FIXED_LAST: HomeCardId = 'community';
 const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
@@ -76,7 +76,7 @@ export const FIND_PINNED_DAYS = 30;
 export const STEPS_NEW_DAYS = 14;
 const DAY_MS = 86_400_000;
 
-/** A type's name: its caption, its row in the picker and Edit home, and the screen reader's words for its menu. */
+/** A type's name: its caption, its row in the picker and its band in Arrange, and the screen reader's words for its menu. */
 export function cardName(type: HomeCardId, profile?: string): string {
     const entry = homeCardType(type);
     if (!entry) return type;
@@ -87,7 +87,7 @@ export function cardName(type: HomeCardId, profile?: string): string {
 export const CARD_WORDS_MAX = 24;
 
 /**
- * One card's name for the screen reader: its "…" and Edit home's labels, and the "added" and "removed" lines. A saved
+ * One card's name for the screen reader: its "…", Arrange's arrows, and the "added" and "removed" lines. A saved
  * search is named by its words, in quotes and bounded, and its kind when it isn't Both (`"eggs"`, `"eggs" (Needs)`), so
  * two of them never sound alike (CARD-FRAME §1.3; review of #1699, finding 4; review of #1716); every other card by its
  * type's name. Never the caption: a caption is fixed words, never a member's.
@@ -113,7 +113,7 @@ function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string 
 }
 
 /**
- * One card's row name in Edit home: a saved search by its words, and its kind when it isn't Both (`eggs`, `Needs · eggs`),
+ * One card's name on its band in Arrange: a saved search by its words, and its kind when it isn't Both (`eggs`, `Needs · eggs`),
  * so two searches are two rows even with the same words; else its name.
  */
 export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
@@ -132,6 +132,8 @@ export interface HomeMarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean | null; shownFrom?: ShownFromLine | null; shownPrice?: string | null;
+    /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
+    pinned?: boolean | null;
 }
 export interface HomeEventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
@@ -141,6 +143,8 @@ export interface HomeEventItem {
     repeat?: RepeatPattern | null; repeatUntil?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from stands for its place. */
     shownCopy?: boolean | null; shownFrom?: ShownFromLine | null;
+    /** A live pin (HomeMarketItem.pinned): the event leads Coming up, whatever its date. */
+    pinned?: boolean | null;
 }
 export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null; publishedAt?: string | null }
 
@@ -152,7 +156,7 @@ export interface HomeEnterpriseLine { amount: number; at: string; kind: 'member'
 
 export interface HomeDecideItem { id: string; title: string; closesAt: string; voted: boolean }
 
-export interface HomeDecidePoll { id: string; title: string; closesAt: string }
+export interface HomeDecidePoll { id: string; title: string; closesAt: string; pinned?: boolean | null }
 
 export interface HomeGroupLastLine { who: string | null; at: string; text: string; locked?: { ciphertext: string; nonce: string; metadata: string | null } }
 
@@ -467,6 +471,22 @@ export const canRemoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = 
 /** Whether a card can be moved: the same cards; `needs` stays first, a pinned card under it, and `community` last. */
 export const canMoveCard = (type: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(type) && !pinned.includes(type);
 
+/**
+ * The cards Arrange folds, in `order` (DESIGN-home-layout-fable.md §3.2): whatever is drawn now, and every other card on
+ * the list that this node can show, so a card with nothing to say can still be moved, set up or removed.
+ */
+export function arrangeCards(
+    order: readonly HomeCardInstance[], drawn: readonly Pick<HomeCardInstance, 'id'>[], onNode: (type: HomeCardId) => boolean, pinned: readonly HomeCardId[] = [],
+): HomeCardInstance[] {
+    return order.filter(c => drawn.some(d => d.id === c.id) || (canMoveCard(c.type, pinned) && onNode(c.type)));
+}
+
+/** A card's one line when it is folded: the catalogue's. */
+export const cardLine = (type: HomeCardId): string => {
+    const entry = homeCardType(type);
+    return entry ? t(entry.line) : '';
+};
+
 const at = (now: number) => new Date(now).toISOString();
 
 /**
@@ -499,8 +519,7 @@ export function changeCardSettings(layout: HomeLayout | null, id: string, settin
 }
 
 /**
- * Up or down past the card next to it in `among` (the cards on screen, for the "…" menu; every card Edit home lists,
- * there), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
+ * Up or down past the card next to it in `among` (every card Arrange folds), so a move always shows. Every other card keeps its place in the list. Null when it can't move that way.
  */
 export function moveCard(
     layout: HomeLayout | null, id: string, dir: 'up' | 'down', among: readonly HomeCardInstance[], now: number, pinned: readonly HomeCardId[] = [],
@@ -550,7 +569,7 @@ export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | n
 // Lines kept here and shown through t() where they are drawn (app/(tabs)/index.tsx, components/home).
 export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
 /** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or tap … on a card to move or remove it.');
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or hold a card to arrange.');
 /** A saved search's kinds, as its settings sheet offers them (CARD-FRAME §4). */
 export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: WordKey }> = [
     { kind: 'any', label: word('Both') }, { kind: 'offer', label: word('Offers') }, { kind: 'need', label: word('Needs') },
@@ -590,14 +609,14 @@ export function searchEmptyLine(q: string, km: number | null): string {
     if (words) return km ? t('No {words} within {km} km right now', { words, km }) : t('No {words} right now', { words });
     return km ? t('No listings within {km} km right now', { km }) : t('No listings right now');
 }
-/** Edit home's line while a node before the frame can't keep the member's cards (§2.3). */
+/** Arrange's line while a node before the frame can't keep the member's cards (§2.3). */
 export const NOT_ON_ACCOUNT_LINE = word("Your community's server needs an update before your cards follow you to other devices.");
 
 /** Whose place the sun and moon card shows, as its settings sheet offers it (CARD-FRAME §4). */
 export const SKY_PLACE_CHIPS: ReadonlyArray<{ place: SkySettings['place']; label: WordKey }> = [
     { place: 'community', label: word('Your community') }, { place: 'me', label: word('Your area') },
 ];
-/** Edit home's line for a sun and moon card with no place to work from. */
+/** Arrange's line for a sun and moon card with no place to work from. */
 export const SKY_NO_PLACE_LINE = word('Nothing to show now: no place is known.');
 
 /**
@@ -673,7 +692,7 @@ export const removedLine = (name: string) => t('{card} removed. Add a card bring
  * Beans, deals, enterprise, Decide or invites on the worldwide community; Grow your community only where the reader can
  * invite; Find your community only on the global node; "Your way back in" only where the 12-words door is open or the node
  * sent one), and only for a type this build draws. Home draws only these whatever an answer holds, the picker lists only
- * these, and Edit home's "Nothing to show now" is said of a card that could show, never of one that can't.
+ * these, and Arrange's "Nothing to show now" is said of a card that could show, never of one that can't.
  */
 export function cardOnNode(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, role?: HomeRole): boolean {
     const t = homeCardType(type);
@@ -698,7 +717,7 @@ export function invitesForReader(features: HomeAnswer['features'], role: HomeRol
 
 /**
  * Whether the reader tailors this Home: a member (the answer has a `me`). A visitor's answer (a key with no account on
- * the global node gets the public cards, routes/home.ts) has no "…", no Add a card, no Edit home and no hint, and the
+ * the global node gets the public cards, routes/home.ts) has no "…", no Add a card, no Arrange and no hint, and the
  * phone never sends a layout for it: the node keeps a Home only for its members (design §2 (c)).
  */
 export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): boolean => !!answer?.me;
@@ -926,11 +945,22 @@ export function firstSteps(
  * starred categories first, each part keeping that order (interests reorder, never filter). Elsewhere what's new, starred
  * first, as H2 drew it. The node orders it so too, but the phone's stars can be newer than its answer.
  */
-export function marketInOrder<T extends { category: string; distanceKm?: number | null }>(
+export function marketInOrder<T extends { category: string; distanceKm?: number | null; pinned?: boolean | null }>(
     items: readonly T[], interests: readonly string[], profile: string, normalise: (c: string) => string = c => c,
 ): T[] {
     const near = profile === 'global' ? nearestFirst(items) : [...items];
-    return starredFirst(near, i => i.category, interests, normalise);
+    const ordered = starredFirst(near, i => i.category, interests, normalise);
+    // A live pin leads whatever the stars and the distance say (the node put it first; the phone's reordering keeps it there).
+    return [...ordered.filter(i => i.pinned), ...ordered.filter(i => !i.pinned)];
+}
+
+/** The 📌 a pinned Home row draws before its title (DESIGN-pinning-fable.md §2.2): nothing on any other row. */
+export function pinMark(row: { pinned?: boolean | null }): string {
+    return row.pinned ? '📌 ' : '';
+}
+/** A pinned Home row's text with its 📌 before it (see pinMark). */
+export function withPin(text: string, row: { pinned?: boolean | null }): string {
+    return `${pinMark(row)}${text}`;
 }
 
 function nearestFirst<T extends { distanceKm?: number | null }>(items: readonly T[]): T[] {
@@ -1039,7 +1069,7 @@ export function mergeNeeds(
     // A vote lands on Commons → Decide: never on a node without it (the node sends none there; this keeps it so).
     const lands = (i: HomeNeedsItem) => i.target.to !== 'decide' || !features || decideOnNode(features);
     const fromNode = (node ?? []).filter(i => !phoneHas(i.kind) && lands(i))
-        .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: voteLabelHere(i, now), target: i.target }));
+        .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: i.kind === 'ask' ? capitalFirst(inviteAskNeedsLine(i.count)) : voteLabelHere(i, now), target: i.target }));
     const fromPhone = (local?.entries ?? []).map(e => {
         // One deal the node names too: its words carry the listing's title.
         const named = e.kind === 'deal' ? (node ?? []).find(i => i.kind === 'deal' && sameDeal(i.target, e.target)) : undefined;
@@ -1243,7 +1273,7 @@ export function eventLine(e: HomeEventItem): string {
     const place = e.online ? t('Online') : copy ? (copy.from ? copyFromLine(copy.from) : null) : e.place;
     // A repeating event's rule rides after its next date: "Fri 16 Oct · ↻ Every Friday · Working bee, The hall".
     const repeats = repeatCaption(e.repeat ?? null, e.repeatUntil ?? null);
-    return `${eventHomeWhen(e)}${repeats ? ` · ↻ ${repeats}` : ''} · ${e.title}${place ? `, ${place}` : ''}`;
+    return `${eventHomeWhen(e)}${repeats ? ` · ↻ ${repeats}` : ''} · ${pinMark(e)}${e.title}${place ? `, ${place}` : ''}`;
 }
 
 /** An event's answer, beside it on Home; and as the screen reader says it. Shown through t(). */

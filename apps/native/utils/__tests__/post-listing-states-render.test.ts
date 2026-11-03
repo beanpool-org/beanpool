@@ -10,6 +10,7 @@
  * The listing page's harness is post-deal-open-render.test.ts's.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../../components/useKeepCaretVisible', () => ({ useKeepCaretVisible: () => ({ scrollRef: { current: null }, scrollProps: {} }) })); // the real one needs the keyboard library's native side
 import Module from 'node:module';
 import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

@@ -10,6 +10,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { useCoversScreen } from '../lib/screen-cover';
+import { nodeRefusal } from '../lib/node-refusal';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
@@ -29,12 +30,12 @@ import {
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
-    tagIndex, freshBanner, recordFreshBannerDismissal,
+    tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
-import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
+import { marked, readsOwn, treasuriesFallback, useCommunityInfo, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
@@ -46,6 +47,7 @@ import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { nearRead, nearParams, listingDistanceKm, readNearestInCircle, NODE_PAGE_DEFAULT } from '../lib/listings-near';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { PostPinDetail } from '../components/PostPinDetail';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
 import { haversineDistance, loadRadiusSettings, saveRadiusSettings, clearRadiusSettings, type RadiusSettings } from '../lib/geo';
@@ -59,6 +61,7 @@ import {
 import { TRANSACTION_FEE_RATE, eventCopyOf } from '@beanpool/core';
 import {
     getMarketplacePosts, removeMarketplacePost, updateMarketplacePost, pauseMarketplacePost, resumeMarketplacePost,
+    myNodeRoleOnce,
     getMemberProfile, createConversationApi, sendTransfer,
     submitRating, getMemberRatings, reportAbuse, getRatingsGiven,
     getNodeInfo, getRemotePosts, sendRemoteTransfer,
@@ -131,6 +134,9 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
     onRefreshTransactions?: () => void;
+    /** A door to a type filter (e.g. 'event' from Home's "All events ›"): taken once, then onFilterOpened. */
+    openFilter?: PostType | 'all' | 'for-you' | null;
+    onFilterOpened?: () => void;
     /**
      * Whether the viewer is a member of this node. False for a guest (a local key the node has no member
      * for), so the viewer's balance is never requested. Null while App is still checking, so the request
@@ -312,7 +318,7 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor, openFilter, onFilterOpened }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -428,6 +434,36 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     useEffect(() => {
         getNodeConfig().then(setNodeConfig).catch(console.error);
     }, []);
+
+    const communityInfo = useCommunityInfo();
+    const featuresPins = (communityInfo?.features as { pins?: boolean } | undefined)?.pins === true;
+    const [myNodeRole, setMyNodeRole] = useState<string | null>(null);
+    useEffect(() => {
+        let alive = true;
+        if (!identity?.publicKey) {
+            setMyNodeRole(null);
+            return;
+        }
+        // No answer from the node (undefined) is no role here, as it always was for this page.
+        myNodeRoleOnce().then(r => { if (alive) setMyNodeRole(r ?? null); }).catch(() => {});
+        return () => { alive = false; };
+    }, [identity?.publicKey]);
+    const isOwnerOrAdmin = Boolean(identity?.publicKey) && (myNodeRole === 'owner' || myNodeRole === 'admin');
+
+    // Clock state for real-time pin expiration without reload (scratch/fable-design/DESIGN-pinning-fable.md §2.5)
+    const [clockNow, setClockNow] = useState(() => Date.now());
+    useEffect(() => {
+        const futureExpirations = posts
+            .map(p => (p.pinnedUntil ? Date.parse(p.pinnedUntil) : 0))
+            .filter(t => t > Date.now());
+        if (futureExpirations.length === 0) return;
+        const earliest = Math.min(...futureExpirations);
+        const delay = Math.max(100, Math.min(earliest - Date.now() + 50, 60_000));
+        const timer = setTimeout(() => {
+            setClockNow(Date.now());
+        }, delay);
+        return () => clearTimeout(timer);
+    }, [posts, clockNow]);
 
     // Whether this node asks for example cards on a nearly empty Market, and whether its polls are labelled informal (the
     // global community), from the page's one shared read of /api/community/info (the lobby has already made it).
@@ -665,6 +701,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         };
     }, [searchQuery, selectedTag, selectedFree, typeFilter, categoryFilter, beansOnly, groupFilter, near, fitsNear]);
     useEffect(() => { searchAgainRef.current?.(); }, [listReads]);
+
+    // Handle filter opening from doors (e.g. Home's "All events ›")
+    useEffect(() => {
+        if (!openFilter) return;
+        setTypeFilter(openFilter);
+        onFilterOpened?.();
+    }, [openFilter, onFilterOpened]);
 
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);
@@ -1286,7 +1329,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             }
         } catch (e: any) {
-            setError(e.message || t('Failed to start conversation'));
+            setError(nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')));
         } finally {
             setMessaging(false);
         }
@@ -1504,7 +1547,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 distanceKm={distanceOf(selectedPost)}
                 onBack={() => setSelectedPost(null)}
                 onJoin={() => undefined}
-                footer={<ListingCopyFooter post={selectedPost} copy={listingCopy} reader={identity?.publicKey} />}
+                footer={<ListingCopyFooter post={selectedPost} copy={listingCopy} reader={identity?.publicKey} onOpenChat={(id) => onNavigate?.('messages', id)} />}
             />
         );
     }
@@ -1551,6 +1594,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         <span className="text-xl leading-none">←</span> {t('Back to Market')}
                     </button>
+                    <PostPinDetail
+                        post={selectedPost}
+                        identity={identity}
+                        isOwnerOrAdmin={isOwnerOrAdmin}
+                        featuresPins={featuresPins}
+                        onPostUpdated={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
+                    />
                     <EventDetail
                         post={selectedPost}
                         identity={identity}
@@ -1583,6 +1633,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         <span className="text-xl leading-none">←</span> {t('Back to Market')}
                     </button>
+                    <PostPinDetail
+                        post={selectedPost}
+                        identity={identity}
+                        isOwnerOrAdmin={isOwnerOrAdmin}
+                        featuresPins={featuresPins}
+                        onPostUpdated={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
+                    />
                     <PollCard
                         post={selectedPost}
                         identity={identity}
@@ -1725,7 +1782,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const result = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey, undefined, selectedPost.id);
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             } catch (e: any) {
-                setError(e.message || t('Failed to start conversation'));
+                setError(nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')));
             } finally {
                 setMessaging(false);
             }
@@ -1863,6 +1920,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                     {/* Content */}
                     <div className="p-5 md:p-6">
+                        <PostPinDetail
+                            post={selectedPost}
+                            identity={identity}
+                            isOwnerOrAdmin={isOwnerOrAdmin}
+                            featuresPins={featuresPins}
+                            onPostUpdated={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
+                        />
                         {/* Enterprise Season State Banners */}
                         {authorEnterpriseInactive?.paused && authorEnterpriseInactive?.status !== 'winding_up' && authorEnterpriseInactive?.status !== 'completed' && (
                             <div
@@ -2089,7 +2153,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 </div>
 
                  {/* Share with members, and outside the community where it allows it (front doors S6). */}
-                 <SharePostButtons post={selectedPost} />
+                 <SharePostButtons post={selectedPost} isMember={isMember} />
 
                  {!!identity && selectedPost.authorPublicKey === identity.publicKey && (
                      <ShowOnGlobalHostRow
@@ -2910,8 +2974,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 {[1, 2, 3, 4, 5].map(star => (
                                                     <button
                                                         key={star}
+                                                        type="button"
                                                         onClick={() => setMyRating(star)}
-                                                        className={`text-4xl leading-none transition-transform focus:outline-none ${
+                                                        aria-label={tn(star, 'Rate {n} star', 'Rate {n} stars')}
+                                                        className={`text-4xl leading-none transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg ${
                                                             star <= myRating ? 'text-amber-400 scale-110 drop-shadow-sm' : 'text-nature-300 scale-100'
                                                         }`}
                                                     >
@@ -3632,27 +3698,46 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Under Events: the map's date chips in place of Category and Distance (same as the phone, #895). */}
                 {typeFilter === 'event' && (
                     <div
-                        data-testid="feed-event-window-chips"
                         role="group"
                         aria-label={t('Filter events by date')}
-                        className="flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain mt-0.5 mb-2.5 pb-0.5"
+                        className="flex flex-nowrap items-center gap-2 overflow-x-auto overscroll-x-contain mt-0.5 mb-2.5 pb-0.5"
                         style={{ scrollbarWidth: 'none' }}
                     >
-                        {EVENT_WINDOWS.map(w => (
-                            <button
-                                key={w.id}
-                                type="button"
-                                aria-pressed={feedEventWindow === w.id}
-                                onClick={() => setFeedEventWindow(w.id)}
-                                className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold transition-colors cursor-pointer ${
-                                    feedEventWindow === w.id
-                                        ? 'bg-violet-700 border-violet-700 text-white'
-                                        : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
-                                }`}
-                            >
-                                {t(EVENT_WINDOW_WORDS[w.id])}
-                            </button>
-                        ))}
+                        <div
+                            data-testid="feed-event-window-chips"
+                            className="flex flex-nowrap items-center gap-2"
+                        >
+                            {EVENT_WINDOWS.map(w => (
+                                <button
+                                    key={w.id}
+                                    type="button"
+                                    aria-pressed={feedEventWindow === w.id}
+                                    onClick={() => setFeedEventWindow(w.id)}
+                                    className={`flex-shrink-0 whitespace-nowrap min-h-[48px] px-3.5 rounded-full border text-sm font-bold transition-colors cursor-pointer ${
+                                        feedEventWindow === w.id
+                                            ? 'bg-violet-700 border-violet-700 text-white'
+                                            : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
+                                    }`}
+                                >
+                                    {t(EVENT_WINDOW_WORDS[w.id])}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            data-testid="market-calendar-button"
+                            aria-label={t('Calendar')}
+                            onClick={() => onNavigate?.('map-calendar')}
+                            className="flex-shrink-0 min-h-[48px] min-w-[48px] px-3.5 rounded-full border text-sm font-bold shadow-sm transition-colors flex items-center justify-center cursor-pointer bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50 hover:bg-oat-50 dark:hover:bg-nature-800"
+                        >
+                            <svg data-calendar-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                                <path d="M3.5 10h17M8 3v4M16 3v4" />
+                                <circle cx="8.5" cy="14.5" r="0.6" fill="currentColor" />
+                                <circle cx="12" cy="14.5" r="0.6" fill="currentColor" />
+                                <circle cx="15.5" cy="14.5" r="0.6" fill="currentColor" />
+                            </svg>
+                        </button>
                     </div>
                 )}
 
@@ -3789,6 +3874,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     }
                     return 0;
                 });
+
+                // Pinned block (scratch/fable-design/DESIGN-pinning-fable.md §0.2, §2.4, §2.9):
+                // A pin rises within what the member asked to see (clientFilter already applied).
+                // Under search, tags, or member-picked distance (near.from === 'setting' or radiusSettings),
+                // the pinned block is suppressed (departure 3 from PR #2754).
+                const isUnderNarrowing = Boolean(searchQuery.trim()) || searchResults !== null || Boolean(selectedTag) || Boolean(selectedFree) || Boolean(radiusSettings) || near?.from === 'setting';
+                // The time now, not the timer's clock: that stands still in a tab with no pin ahead of it.
+                const drawnAt = Date.now();
+                const livePins = !isUnderNarrowing ? filtered.filter(p => pinLive(p as any, drawnAt)) : [];
+                livePins.sort((a, b) => {
+                    const timeA = Date.parse((a as any).pinnedAt || (a as any).pinned_at || a.createdAt || '') || 0;
+                    const timeB = Date.parse((b as any).pinnedAt || (b as any).pinned_at || b.createdAt || '') || 0;
+                    return timeB - timeA;
+                });
+                const pinnedPosts = livePins.slice(0, PINS_MAX);
+                const pinnedIds = new Set(pinnedPosts.map(p => p.id));
+                const unpinnedFiltered = pinnedPosts.length > 0 ? filtered.filter(p => !pinnedIds.has(p.id)) : filtered;
 
                 // The fill beneath a short nearby list (see clientFilter): none of them already shown, and not the node's own
                 // Daily Pulse, which is not from elsewhere. Pending while the read is out; nothing if it failed or came back empty.
@@ -3928,7 +4030,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <>
                             {fillHeading && (
                                 <div className="flex items-center gap-3 mt-2 mb-2">
-                                    <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">{fillHeading}</span>
+                                    <span
+                                        data-testid={fillHeading === t('Pinned') ? 'market-pinned-heading' : undefined}
+                                        className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap"
+                                    >
+                                        {fillHeading}
+                                    </span>
                                     <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
                                 </div>
                             )}
@@ -3941,7 +4048,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     post={post}
                                                     identity={identity}
                                                     viewMode={viewMode}
-                                                    distanceKm={fillHeading ? null : eventDistance(post)}
+                                                    distanceKm={fillHeading && fillHeading !== t('Pinned') ? null : eventDistance(post)}
                                                     onOpen={() => setSelectedPost(post)}
                                                     onRsvpChange={() => { refresh().catch(() => {}); }}
                                                 />
@@ -3951,9 +4058,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     if (post.type === 'poll') {
                                         return (
                                             // A poll is the tallest thing in the grid: four answers, the open-ballot
-                                            // note and the turnout row. One column of a 3+ column grid is too narrow
-                                            // for its answers ("It's Am…"), so from `md` up it takes two.
-                                            <div key={post.id} className="h-full md:col-span-2">
+                                            // note and the turnout row. One column of the grid is too narrow for its
+                                            // answers ("It's Am…", and at 320 px with 1.3x text "Other"), so it takes two
+                                            // at every width: the whole row on a phone.
+                                            <div key={post.id} className="h-full col-span-2">
                                                 <PollCard
                                                     post={post}
                                                     identity={identity}
@@ -3997,7 +4105,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             viewMode={viewMode}
                                             isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                             dealChip={dealChips.get(post.id) ?? null}
-                                            distanceKm={near && !fillHeading ? distanceOf(post) : null}
+                                            distanceKm={near && (fillHeading ? fillHeading === t('Pinned') : true) ? distanceOf(post) : null}
                                             beansMarked={priceMarked}
                                             onPhotoClick={(photos, idx, e) => {
                                                 setLightboxState({
@@ -4043,7 +4151,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         return (
                             <div key={title} className="flex flex-col gap-1.5 mb-2">
                                 <div className="flex items-center gap-3 mt-2 mb-1">
-                                    <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">
+                                    <span
+                                        data-testid={title === t('Pinned') ? 'market-pinned-heading' : undefined}
+                                        className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap"
+                                    >
                                         {title}
                                     </span>
                                     <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
@@ -4057,7 +4168,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         post={post}
                                                         identity={identity}
                                                         viewMode={viewMode}
-                                                        distanceKm={fillHeading ? null : eventDistance(post)}
+                                                        distanceKm={fillHeading && fillHeading !== t('Pinned') ? null : eventDistance(post)}
                                                         onOpen={() => setSelectedPost(post)}
                                                         onRsvpChange={() => { refresh().catch(() => {}); }}
                                                     />
@@ -4101,7 +4212,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             viewMode={viewMode}
                                             isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                             dealChip={dealChips.get(post.id) ?? null}
-                                            distanceKm={near && !fillHeading ? distanceOf(post) : null}
+                                            distanceKm={near && (fillHeading ? fillHeading === t('Pinned') : true) ? distanceOf(post) : null}
                                             beansMarked={priceMarked}
                                             onPhotoClick={(photos, idx, e) => {
                                                 setLightboxState({
@@ -4136,6 +4247,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </>
                     );
                 };
+
+                const pinnedSection = pinnedPosts.length > 0 ? (
+                    <div data-testid="market-pinned-block" className="mb-4">
+                        {renderCards(pinnedPosts, t('Pinned'))}
+                    </div>
+                ) : null;
 
                 const fillSection = fillRows.length > 0 ? (
                     <div data-testid="market-fill" className="mt-4">
@@ -4324,7 +4441,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     />
                                 </div>
                             )
-                        ) : renderCards(filtered)}
+                        ) : (
+                            <>
+                                {pinnedSection}
+                                {unpinnedFiltered.length > 0 && renderCards(unpinnedFiltered)}
+                            </>
+                        )}
                         {filtered.length > 0 && fillSection}
                         {filtered.length > 0 && examples}
                     </div>

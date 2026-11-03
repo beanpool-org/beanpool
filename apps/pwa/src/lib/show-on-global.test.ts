@@ -8,7 +8,7 @@ import { ed25519Signer, makeCopyKeeper, toEd25519Pkcs8, type CopyPair } from '@b
 import { copyIdFor, setNodeApiUrl, signedCopyFetch } from './api';
 import { clearCopyPairs, copyPairs } from './copy-pairs';
 import { memoryIndexedDB } from './memory-indexeddb';
-import { askGlobalStanding, forgetGlobalStanding, readGlobalStanding, tendCopiesSoon } from './show-on-global';
+import { askGlobalStanding, forgetGlobalStanding, readGlobalStanding, requestsWaitingOnGlobal, showPostOnGlobal, takeQuestions, tendCopiesSoon } from './show-on-global';
 import { communityInfoOnce } from './visitor-lobby-gate';
 import type { BeanPoolIdentity } from './identity';
 
@@ -190,3 +190,67 @@ describe('asking global', () => {
         expect(await askGlobalStanding(me, NOW)).toBe('unknown');
     });
 });
+
+describe('what waits on global, for the one Message requests row (slice GD)', () => {
+    const ask = (requests: unknown) => fetchMock.mockResolvedValue(new Response(JSON.stringify({ unread: 0, requests }), { status: 200 }));
+
+    it('a browser that has never ticked a door asks global nothing', async () => {
+        ask(2);
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('once ticked, the counts alone, of global, and where they are', async () => {
+        ask(2);
+        await takeQuestions('home-1', true, me).catch(() => {});
+        fetchMock.mockClear();
+        expect(await requestsWaitingOnGlobal(me)).toEqual({ count: 2, href: 'https://global.test/' });
+        expect(String(fetchMock.mock.calls[0][0])).toBe('https://global.test/api/me/unread');
+    });
+
+    it('a mark that stays after an Off: a request already sent is still theirs to answer', async () => {
+        ask(1);
+        await takeQuestions('home-1', true, me).catch(() => {});
+        await takeQuestions('home-1', false, me).catch(() => {});
+        fetchMock.mockClear();
+        expect((await requestsWaitingOnGlobal(me))?.count).toBe(1);
+    });
+
+    it('another account\'s mark asks nothing, and nothing waiting is no row', async () => {
+        ask(0);
+        await takeQuestions('home-1', true, me).catch(() => {});
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
+        fetchMock.mockClear();
+        expect(await requestsWaitingOnGlobal({ ...me, publicKey: 'other' })).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('a community that names no global, or no answer: nothing, and it throws nothing', async () => {
+        await takeQuestions('home-1', true, me).catch(() => {});
+        fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
+        vi.mocked(communityInfoOnce).mockResolvedValue({ profile: 'local', addresses: [] } as never);
+        fetchMock.mockClear();
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('with no answer, what the page shows stands; a real nothing takes it away', async () => {
+        const shown = { count: 3, href: 'https://global.test/' };
+        await takeQuestions('home-1', true, me).catch(() => {});
+        fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+        expect(await requestsWaitingOnGlobal(me, shown)).toBe(shown);
+        fetchMock.mockResolvedValue(new Response('{}', { status: 503 }));
+        expect(await requestsWaitingOnGlobal(me, shown)).toBe(shown);
+        ask(0);
+        expect(await requestsWaitingOnGlobal(me, shown)).toBeNull();
+    });
+
+    it('a plain show leaves no mark', async () => {
+        ask(2);
+        await showPostOnGlobal({ id: 'home-1' } as never, me).catch(() => {});
+        fetchMock.mockClear();
+        expect(await requestsWaitingOnGlobal(me)).toBeNull();
+    });
+});
+

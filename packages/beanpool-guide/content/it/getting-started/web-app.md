@@ -92,7 +92,7 @@ Se sei entrato nella comunità globale con 12 parole, esse rappresentano il tuo 
 ## Nomi e posizioni differenti
 
 - **Iscriversi con un invito:** il pulsante del primo passaggio dice **Crea l'identità e unisciti →**. Se qualcuno qui ha già il nome scelto, lo ricevi con un numero aggiunto. **← Indietro** su **La tua foto** mostra solo il tuo nome, con **Avanti →**: modificalo (fino a 20 caratteri) o mantienilo, sullo stesso account. Se qualcuno possiede già il nuovo nome, la pagina lo segnala e ne suggerisce altri.
-- **Schede:** l'app web ha **Inizio**, **Mercato**, **Mappa**, **Beni comuni**, **Chat**, **Persone** e **Mastro**. Ciò che l'app per telefono chiama **Chat** è **Chat** sul web, e **Persone** ha una propria scheda.
+- **Schede:** l'app web ha **Inizio**, **Mercato**, **Mappa**, **Beni comuni**, **Chat**, **Persone** e **Mastro**. Entrambe le app chiamano questa scheda **Chat**, e sul web **Persone** ha una propria scheda.
 - **Impostazioni e il tuo profilo:** i piccoli pulsanti in alto a destra: il tuo profilo, il **?**, poi Impostazioni. Su uno schermo ampio si trovano in fondo al menu sulla sinistra.
 - **Pubblicare un'Offerta o una Richiesta:** usa **Nuovo annuncio** sulla pagina della **Mappa**.
 - **Aspetto:** l'opzione si chiama **Come il dispositivo** anziché "Come il telefono".

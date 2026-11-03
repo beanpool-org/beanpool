@@ -845,7 +845,7 @@ function ChatScreen({ id }: { id: string }) {
     const handleFailedMessagePress = async (item: any) => {
         await KeyboardController.dismiss(); // Alert = separate window; see phantom-keyboard note above
         const errorText = (typeof item.metadata?.__sendError === 'string' && item.metadata.__sendError.trim())
-            ? item.metadata.__sendError
+            ? chatLineWords(item.metadata.__sendError)
             : t('This message could not be sent.');
         Alert.alert(t('Message not delivered'), errorText, [
             { text: t('Discard'), style: 'destructive', onPress: async () => {

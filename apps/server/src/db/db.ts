@@ -10,7 +10,6 @@ import { SHOP_CATEGORIES, SHOP_CATEGORY_KINDS, avatarUrlOf, isPastDeadline, isSe
 import { registerGeoFunctions, installNameFold, foldName, projectRowName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
-import { RULE_NOTICE_MS } from '../config/balance-rule.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
@@ -1467,6 +1466,12 @@ export function initSchema() {
     } catch (e) {
         console.error('[DB] ⚠️  Could not make message_attachments.data optional; attachments stay in the database:', e);
     }
+    // A chat photo's object by reference, for a standby (gap G4): its stored ciphertext's sha256 and size, and the plain
+    // table's watermark (stampPlainTables makes its triggers; a main server stamps the rows from before). After the rebuild
+    // above, which copies the older columns alone.
+    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN sha256 TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN bytes INTEGER`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN updated_at DATETIME`).run(); } catch { }
 
     try { db.prepare(`ALTER TABLE projects ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // Phase 2 delta backup — the remaining mutable tables gain their watermark
@@ -1652,6 +1657,7 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN vouch_level INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
@@ -1689,6 +1695,8 @@ export function initSchema() {
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
     try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
+    // An open vote's typed Other (schema.sql, which also makes its table of answers).
+    try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN other_answer_id TEXT`).run(); } catch { }
     try { if (makeActivePollIndexPlain()) console.log('[DB] The one-active-poll index is a plain one now (owners and admins may have more)'); } catch (e) { console.warn('[DB] Could not make the active-poll index plain:', (e as Error)?.message || e); }
 
     // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.
@@ -1730,6 +1738,10 @@ export function initSchema() {
     // When it was featured in its shop (schema.sql; DESIGN-shops-round3-enterprise-shopfront-fable.md §4). NULL on every
     // existing row: nothing is featured until its author or a keeper says so.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN featured_at TEXT`).run(); } catch { }
+    // A pin (schema.sql; DESIGN-pinning-fable.md §4). Before the schema.sql exec, whose index and trigger read them. NULL on
+    // every existing row: nothing is pinned until an owner or admin says so.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN pinned_until TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN pinned_at TEXT`).run(); } catch { }
     // What made a post when that was not its author's own app (schema.sql posts.created_via): 'assistant:<grant id>' for an
     // owner's AI assistant. NULL on every existing row: none was made that way.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN created_via TEXT`).run(); } catch { }
@@ -1743,6 +1755,7 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_from_host TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_from_post_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_price TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN shown_takes_questions INTEGER`).run(); } catch { }
     // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.
@@ -2542,9 +2555,9 @@ export function initSchema() {
 }
 
 /**
- * The day the rule on what the admins can see starts here (config/balance-rule.ts), written once on a main server and
- * never moved: INSERT OR IGNORE, so a restart or a later boot changes nothing. Writes node_config only and reads no
- * balance (a read at boot, before the exemptions, destroys Beans: #2313). A standby writes none: its take-over brings its
+ * The moment the rule on what the admins can see started here (config/balance-rule.ts): this first boot, no notice. Written
+ * once on a main server and never moved: INSERT OR IGNORE, so a restart or a later boot changes nothing. Writes node_config
+ * only and reads no balance (a read at boot, before the exemptions, destroys Beans: #2313). A standby writes none: its take-over brings its
  * main server's (config/community-settings.ts), or, from a main server older than the rule, this runs as it takes over.
  * A failure leaves no row, which lists nobody on the rule (engine/community-health.ts), and the next boot tries again.
  */
@@ -2552,7 +2565,7 @@ function stampBalanceRuleFrom(): void {
     if (getNodeRole() === 'backup') return;
     try {
         db.prepare(`INSERT OR IGNORE INTO node_config (key, value) VALUES ('balance_rule_from', ?)`)
-            .run(new Date(Date.now() + RULE_NOTICE_MS).toISOString());
+            .run(new Date().toISOString());
     } catch (e) {
         console.error('[DB] ❌ Could not stamp when the rule on what the admins can see starts (nobody is listed on it until it does):', e);
     }

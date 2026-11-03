@@ -32,6 +32,7 @@ import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../
 const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIcons>['name']> = {
     admin: 'shield-account-outline',
     knock: 'door-open',
+    ask: 'account-plus-outline',
     deal: 'handshake-outline',
     vote: 'vote-outline',
     invite: 'email-outline',

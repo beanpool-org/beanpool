@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, isVouchLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
@@ -12,7 +12,7 @@ import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing, 
 import { expoPushHeaders } from './config/expo-access-token.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import {
-    getNodeProfile, getNodeFeatures, getProfileSwitches, nearbyListingsLimits, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
+    getNodeProfile, getNodeFeatures, getProfileSwitches, nearbyListingsLimits, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS,
     profileLimits, BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
@@ -20,8 +20,9 @@ import { upgradeLegacyShapeAtBoot } from './config/community-shape-upgrade.js';
 import { placeAs, placeShownTo } from './config/community-place.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
-import { readOfCopy, type CopyColumns } from './engine/event-copy.js';
+import { closeCopyDoors, readOfCopy, setCopyQuestions as setCopyQuestionsEngine, type CopyColumns } from './engine/event-copy.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
+import { dropOpenVoteWordsOf, pollWordsGoWithThePoll, POLL_ANSWER_REPORT_SUBJECT } from './engine/poll-other.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
 import { WsClients } from './ws-area-index.js';
@@ -60,8 +61,10 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { tidyEndedPins } from './engine/pins.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
+import { linesPushedAbout } from './engine/chat-mutes.js';
 import { dropToolStateOf } from './engine/tool-state.js';
 import { dropShopOf, openShop } from './engine/shops.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
@@ -392,6 +395,7 @@ import {
     adminDeletePost as adminDeletePostEngine,
     assertPostWagesWritable,
     archiveStaleListings as archiveStaleListingsEngine,
+    archiveEndedPosts as archiveEndedPostsEngine,
     type EscrowRefundShortfall,
     type EventTimeOut
 } from './engine/posts.js';
@@ -723,6 +727,7 @@ export function initStateEngine(): void {
     // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
     // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
     setTakedownRemoval(makeTakedownFinal);
+    pollWordsGoWithThePoll();
     // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
     // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
     try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
@@ -1128,6 +1133,9 @@ function armMainServerTimers(): void {
         // Polls past their closing time, closed for good: a phone's next delta then brings the closed result, and with it
         // where an anonymous poll's votes came from, which it says only once closed (engine/posts.ts closeExpiredPolls).
         try { closeExpiredPolls(); } catch (e) { console.warn('[Polls] Closing sweep failed:', e); }
+        // Retention, where the node profile's `retention` switch is on (the global node): a poll a week past its close leaves
+        // the board, and an event a week past its end loses its photos (engine/posts.ts archiveEndedPosts). Safe every minute.
+        try { archiveEndedPosts(); } catch (e) { console.warn('[Retention] Event and poll archive failed:', e); }
         // Repeating events whose date has ended move to their next date (DESIGN-event-times §8), and RSVPs for dates a
         // month gone are pruned, hourly, inside this tick (engine/event-series-roll.ts). Main server only, like the rest.
         try { rollDueSeries(broadcast); } catch (e) { console.warn('[Events] Series roll failed:', e); }
@@ -1375,6 +1383,8 @@ export function loanNudgeBody(lenderCallsign: string | null | undefined, title: 
 export function runMarketplaceHygiene(): void {
     // A main server's alone (its timer starts only there, initStateEngine): it writes deals and the activity list, and pushes.
     if (getNodeRole() === 'backup') return;
+    // An operator's environment can turn requests off with no Settings write to close the doors (engine/event-copy.ts).
+    if (!getProfileSwitches().dmRequests) closeCopyDoors();
     // 1. Expire 'requested' transactions that nobody answered. No funds are locked
     // at the 'requested' stage, so expiry is purely a bookkeeping cleanup.
     const stale = db.prepare(`SELECT * FROM marketplace_transactions WHERE status='requested' AND created_at < datetime('now', ?)`)
@@ -1457,6 +1467,14 @@ export function runMarketplaceHygiene(): void {
     } catch (e) {
         console.warn('[Retention] Listing archive failed:', e);
     }
+
+    // 7. The pins that ended (engine/pins.ts): every read has already stopped treating them as pins, by the clock.
+    try {
+        const cleared = tidyEndedPins();
+        if (cleared > 0) console.log(`📌 Cleared ${cleared} pin(s) that ended`);
+    } catch (e) {
+        console.warn('[Pins] Hygiene tidy failed:', e);
+    }
 }
 
 /** One run of the listing archive (runMarketplaceHygiene step 6), with this node's broadcast and push. */
@@ -1465,6 +1483,17 @@ export function archiveStaleListings(nowMs = Date.now()): ReturnType<typeof arch
     if (run.archived > 0 || run.photosDropped > 0) {
         console.log(`🗄️  Archived ${run.archived} listing(s) past ${profileLimits().listingArchiveDays} days without a change, `
             + `and deleted ${run.photosDropped} photo(s)${run.more ? '; more wait for the next hour' : ''}`);
+    }
+    return run;
+}
+
+/** One run of the events' and polls' archive (the minute's tick, after closeExpiredPolls), with this node's broadcast. */
+export function archiveEndedPosts(nowMs = Date.now()): ReturnType<typeof archiveEndedPostsEngine> {
+    const run = archiveEndedPostsEngine(broadcast, nowMs);
+    if (run.events > 0 || run.polls > 0) {
+        console.log(`🗄️  Took ${run.polls} poll(s) ${profileLimits().pollArchiveDays} days past their close off the board and the photos `
+            + `off ${run.events} event(s) ${profileLimits().eventArchiveDays} days past their end: ${run.photosDropped} photo(s) deleted`
+            + `${run.more ? '; more wait for the next minute' : ''}`);
     }
     return run;
 }
@@ -1815,8 +1844,8 @@ interface ListingReach {
 function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
-    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in, shown_from_host FROM posts WHERE id = ?').get(id) as
-        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null; shown_from_host: string | null } | undefined;
+    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in, shown_from_host, shown_takes_questions FROM posts WHERE id = ?').get(id) as
+        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null; shown_from_host: string | null; shown_takes_questions: number | null } | undefined;
     if (!row) return null;
     const { radiusKm } = nearbyListingsLimits();
     const placed = row.lat != null && row.lng != null;
@@ -1825,7 +1854,7 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
-    const blockers = placed && row.shown_from_host == null ? blockersOfKept(row.author_pubkey) : null;
+    const blockers = placed && (row.shown_from_host == null || row.shown_takes_questions === 1) ? blockersOfKept(row.author_pubkey) : null;
     // Where anyone can join in a minute, each member's set measures another's listing from its neighbourhood
     // (engine getNearbySet, exactPlacesFor), so its copy reaches them as their set holds it: from the neighbourhood, or
     // from the place for those who have it exactly (exactPlaceReaders). Measured from the place for everyone, which
@@ -2137,7 +2166,7 @@ export { generateInvite, adminGenerateInvite };
 
 /** `joinerSigned`: the request carries a fresh signature by `publicKey` itself, the only way a visitor's row joins. */
 export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
-    return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned);
+    return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned, vouchOnJoin);
 }
 
 export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
@@ -5615,6 +5644,13 @@ export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; fai
  * (a re-vouch can raise or lower the level).
  */
 export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
+    writeVouch(voucherPubkey, targetPubkey, level);
+    broadcast({ type: 'profile_updated', publicKey: targetPubkey });
+    return { ok: true };
+}
+
+/** A vouch's checks and its row: vouchMember's, and an invite's at the redeem, which announces it once that has committed. */
+function writeVouch(voucherPubkey: string, targetPubkey: string, level: VouchLevel): void {
     if (voucherPubkey === targetPubkey) throw new Error(word('You cannot vouch for yourself'));
     // A visitor's row is no voucher, as a key with no row is none (getActingMember).
     if (!getActingMember(voucherPubkey)) throw new Error(word('Voucher not found'));
@@ -5633,8 +5669,33 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
     // profile_updated_at moved (engine getMemberDirectoryRows). Without it the vouch reached phones at their hourly full read.
     db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ?, profile_updated_at = ? WHERE public_key = ?`)
         .run(voucherPubkey, vouchCredit, new Date().toISOString(), targetPubkey);
-    broadcast({ type: 'profile_updated', publicKey: targetPubkey });
-    return { ok: true };
+}
+
+/**
+ * The vouch an invite carries, at its redeem (engine/invites.ts), inside the redeem's transaction. It is a hand vouch by
+ * the invite's maker in every way but the moment: the same checks and the same row, so "Vouched by" shows and it can be
+ * withdrawn the same way. The right is asked again here: a maker who has lost it vouches for nobody, and the person
+ * still joins, because a vouch never stops a join. So whatever refuses is caught, and nothing rolls back. A maker who is
+ * paused or has left never gets here: their invite admits nobody, with a vouch or without (redeemInvite's canInvite).
+ */
+function vouchOnJoin(voucherPubkey: string, joinerPubkey: string, level: VouchLevel): boolean {
+    if (!getProfileSwitches().beans) return false;
+    try {
+        writeVouch(voucherPubkey, joinerPubkey, level);
+        return true;
+    } catch (e) {
+        console.warn(`🤝 An invite's vouch was not applied: ${(e as Error)?.message}`);
+        return false;
+    }
+}
+
+/** What a level asked for on a new invite comes to: the level (none: undefined), or the refusal. No code is made on one. */
+export function readInviteVouch(inviterPubkey: string, raw: unknown): { level?: VouchLevel; refusal?: { status: number; error: string; code: string } } {
+    if (raw === undefined || raw === null) return {};
+    if (!isVouchLevel(raw)) return { refusal: { status: 400, error: word('A vouch on an invite is 25, 50 or 100 Beans, or none.'), code: 'bad_vouch_level' } };
+    if (!getProfileSwitches().beans) return { refusal: { status: 403, error: BEANS_OFF_MESSAGE, code: PROFILE_NO_BEANS } };
+    if (!canVouch(inviterPubkey)) return { refusal: { status: 403, error: word('Only owners, admins and appointed vouchers can vouch for someone on an invite.'), code: 'not_a_voucher' } };
+    return { level: raw };
 }
 
 /**
@@ -5677,6 +5738,7 @@ export function createPost(
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
         pollOpenVote?: unknown;
+        pollOther?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -5766,6 +5828,11 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     // The push dispatcher is handed in rather than imported by the engine module (it imports this one), so
     // cancelling an event can notify everyone going (docs/events-on-the-map.md §2.2, slice 5).
     return removePostEngine(broadcast, id, authorPublicKey, dispatchPushNotification);
+}
+
+/** A member's copy takes questions, or stops (engine/event-copy.ts). Null for anything but the signer's own copy. */
+export function setCopyQuestions(id: string, signer: string, on: boolean): boolean | null {
+    return setCopyQuestionsEngine(broadcast, id, signer, on);
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
@@ -6696,9 +6763,10 @@ export function votePoll(
     postId: string,
     voterPublicKey: string,
     optionId: string,
-    signature?: string
+    signature?: string,
+    otherWords?: unknown
 ): { success: boolean; post: MarketplacePost } {
-    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature);
+    return votePollEngine(broadcast, postId, voterPublicKey, optionId, signature, otherWords);
 }
 
 export function rsvpEvent(
@@ -7190,31 +7258,44 @@ export function getUnreadCounts(pubkey: string): Record<string, number> {
  * carries both read this, so the number on the app icon is always one the member can open and clear.
  */
 export function getListedUnreadCounts(pubkey: string): Record<string, number> {
-    const counts = getUnreadCounts(pubkey);
+    return Object.fromEntries(listedUnreadChats(pubkey).map(c => [c.id, c.unread]));
+}
+
+/** {@link getListedUnreadCounts}, each chat with its type. */
+function listedUnreadChats(pubkey: string): { id: string; type: string; unread: number }[] {
     const typeOf = db.prepare('SELECT type FROM conversations WHERE id = ?');
     // A message request for them they haven't accepted is listed apart, with its own count (engine/dm-requests.ts).
     const held = heldFromUnread(pubkey);
-    for (const id of Object.keys(counts)) {
-        if (held.has(id)) { delete counts[id]; continue; }
-        const conv = typeOf.get(id) as { type: string } | undefined;
-        if (conv && chatHiddenFrom({ id, type: conv.type }, pubkey)) delete counts[id];
+    const chats: { id: string; type: string; unread: number }[] = [];
+    for (const [id, unread] of Object.entries(getUnreadCounts(pubkey))) {
+        if (held.has(id)) continue;
+        const type = (typeOf.get(id) as { type: string } | undefined)?.type ?? '';
+        if (!chatHiddenFrom({ id, type }, pubkey)) chats.push({ id, type, unread });
     }
-    return counts;
+    return chats;
 }
 
 /** The unread lines in the chats a member's list shows: the push's badge, and `unread` in GET /api/me/unread. */
 export function getListedUnreadTotal(pubkey: string): number {
-    return Object.values(getListedUnreadCounts(pubkey)).reduce((sum, count) => sum + count, 0);
+    return listedUnreadChats(pubkey).reduce((sum, chat) => sum + chat.unread, 0);
 }
 
 /**
  * What waits for a member here, in counts alone (GET /api/me/unread, @beanpool/core UnreadAnswer): the two numbers their
- * conversation list gives as `totalUnread` and `requests.count`, without building that list. `asOf` is taken first, so
- * no line it claims to cover came after the count.
+ * conversation list gives as `totalUnread` and `requests.count`, without building that list, and how many of those lines
+ * a push told them of: none with Direct Messages off, whichever kind of chat (dispatchPushNotification reads `notify_chat`
+ * for them all), and otherwise as engine/chat-mutes.ts `linesPushedAbout` says. A mention is a chat push too, so it stops
+ * there as well. `asOf` is taken first, so no line it claims to cover came after the count.
  */
 export function getUnreadAnswer(pubkey: string): UnreadAnswer {
     const now = Date.now();
-    return { unread: getListedUnreadTotal(pubkey), requests: countRequestsWaitingFor(pubkey, now), asOf: new Date(now).toISOString() };
+    const chats = listedUnreadChats(pubkey);
+    return {
+        unread: chats.reduce((sum, chat) => sum + chat.unread, 0),
+        alerts: getMemberPreference(pubkey, 'notify_chat') === 'false' ? 0 : linesPushedAbout(pubkey, chats, now),
+        requests: countRequestsWaitingFor(pubkey, now),
+        asOf: new Date(now).toISOString(),
+    };
 }
 
 export function ensureTransactionConversation(postId: string, buyerPubkey: string, sellerPubkey: string): string {
@@ -7736,6 +7817,8 @@ export function putBackTakedowns(scope: PutBackScope): PutBackResult {
  * the report names. Null when it names nobody.
  */
 function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null; target_pulse_item_id?: string | null }): string | null {
+    // A report of a poll's typed answer is about nobody (engine/poll-other.ts): no action on it reaches a member.
+    if (report.target_pubkey === POLL_ANSWER_REPORT_SUBJECT) return null;
     if (report.target_pulse_item_id) {
         const item = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ?').get(report.target_pulse_item_id) as { owner_pubkey: string | null } | undefined;
         return item?.owner_pubkey || report.target_pubkey || null;
@@ -8821,11 +8904,15 @@ export type PruneDoor = 'direct' | 'owner-branch' | 'settles-removal';
  * vote passed, so nothing may say the community voted for it.
  */
 export function removalInGraceOf(publicKey: string): { id: string; gracePeriodEndsAt: string | null; decidedByOwner: boolean } | null {
+    // A branch's vote names its accounts in its params, not its subject (decisions-engine pauseBranch, namesMemberSql).
     const row = db.prepare(`
-        SELECT id, grace_period_ends_at, owner_decision_carried_at FROM decisions
-        WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
-        ORDER BY created_at DESC LIMIT 1
-    `).get(publicKey) as { id: string; grace_period_ends_at: string | null; owner_decision_carried_at: string | null } | undefined;
+        SELECT id, grace_period_ends_at, owner_decision_carried_at FROM decisions d
+        WHERE (d.subject = @pk OR (d.subject IS NULL AND EXISTS (
+                SELECT 1 FROM json_each(CASE WHEN json_valid(d.params) THEN d.params ELSE '{}' END, '$.branch') bm
+                WHERE json_extract(bm.value, '$.pubkey') = @pk)))
+          AND d.effect = 'remove_member' AND d.status = 'execution_pending_grace'
+        ORDER BY d.created_at DESC LIMIT 1
+    `).get({ pk: publicKey }) as { id: string; grace_period_ends_at: string | null; owner_decision_carried_at: string | null } | undefined;
     return row ? { id: row.id, gracePeriodEndsAt: row.grace_period_ends_at, decidedByOwner: !!row.owner_decision_carried_at } : null;
 }
 
@@ -8872,8 +8959,9 @@ export function assertMayPrune(publicKey: string, actor: string, door: PruneDoor
  * The posts a closed account (adminPruneUser, purgeMemberSelf) leaves behind, as SQL lists. A post's status is one of
  * active, pending (a deal in escrow), paused, completed and cancelled. The last two are where a post ends; each of the
  * first three can come back up (pending when its deal is cancelled, paused when its author resumes it), so the account's
- * posts in those are cancelled, and its open or paused polls closed with their votes kept. Paused was missed until
- * 4109713263: its author, removed or self-deleted, put it back up and moved it.
+ * posts in those are cancelled, and its open or paused polls closed with their votes kept and their typed answers gone
+ * (engine/poll-other.ts pollWordsGoWithThePoll). Paused was missed until 4109713263: its author, removed or self-deleted, put
+ * it back up and moved it.
  */
 const PRUNE_CLOSES_POSTS_IN = "('active', 'pending', 'paused')";
 const POLLS_A_PRUNE_CLOSES = "('active', 'paused')";
@@ -8957,6 +9045,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         dropPlaceWatches(publicKey);
         // What they wrote when they asked to join (G6) goes with them; the record of the knock stays.
         scrubKnocksOf(publicKey);
+        // Their asks that an admin invite someone go whole, with a tombstone each (engine/invite-asks.ts).
+        deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);
         // The moderation notices kept for them, and their pushes' details: nobody can read them now (engine/kept-notices.ts,
         // engine/push-notices.ts).
         dropKeptNoticesOf(publicKey);
@@ -9139,6 +9229,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Then every post they wrote but a poll, whatever its status, loses its words, photos and place (report C14,
         // engine/post-scrub.ts). Not in a try, as deleteAllShares below: a post left behind would keep what they wrote.
         scrubPostsOf(publicKey, now);
+        // And what they typed on an open vote, where the vote says which line it was. An anonymous poll's can't be found.
+        dropOpenVoteWordsOf(publicKey, now);
         // And every line they wrote, in a group's, an enterprise's or an event's chat and their half of each DM, reads
         // "This message was deleted", with the photos they sent gone (data-at-rest report F1, engine/message-tombstone.ts).
         // Not in a try either, for the same reason.
@@ -9152,6 +9244,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
+        deletePlainRows('invite_asks', 'asker_pubkey = ?', publicKey);
         dropKeptNoticesOf(publicKey);
         dropPushNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).

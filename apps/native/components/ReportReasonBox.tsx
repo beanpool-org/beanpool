@@ -9,6 +9,7 @@ import { useTheme } from '../app/ThemeContext';
 import { hapticTick } from '../utils/haptics';
 import { t } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { useScrollFieldContext } from './ScrollFieldContext';
 import { CHILD_SAFETY_HINT, CHILD_SAFETY_REASON, REPORT_REASONS, reportReasonWithWords } from '../utils/reportReasons';
 
 /** Marked in utils/reportReasons.ts, translated here where they are shown (each reason still SENT as written). */
@@ -23,6 +24,8 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
     onCancel?: () => void;
 }) {
     const { colors } = useTheme();
+    // In a sheet that scrolls (ReportMessageSheet) the note is kept in view as it grows; elsewhere there is no helper.
+    const fieldScroll = useScrollFieldContext();
     const [reason, setReason] = useState('');
     const [words, setWords] = useState('');
     const [sending, setSending] = useState(false);
@@ -76,6 +79,7 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
                 <Sentence text={t('{reason}: {hint}', { hint: t(LINES.childSafetyHint) })} parts={{ reason: <Text style={{ fontWeight: '700' }}>{t(LINES.childSafety)}</Text> }} />
             </Text>
             <TextInput
+                {...fieldScroll?.inputProps}
                 accessibilityLabel={t('Add a few words (optional)')}
                 style={{ backgroundColor: colors.surface.card, minHeight: 48, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, color: colors.text.body }}
                 placeholder={t('Add a few words (optional)')}

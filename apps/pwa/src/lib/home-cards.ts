@@ -7,7 +7,7 @@
  * nothing to say is not in the answer at all. What is left to the app is what only the member's own layout decides:
  *
  *   - **the order and which cards** are the member's version-2 list (lib/home-layout.ts, the card frame): `shownFrame`
- *     draws it, `needs` first and `community` last (it carries Add a card and Edit home);
+ *     draws it, `needs` first and `community` last (it carries Add a card and Arrange);
  *   - **the two cards with no data of their own** (§3.1): `interests` while no interest is set (or opened from the
  *     Market card's Tune), and `invite` where invites are on, after the member's first Offer;
  *   - **interests reorder, they never filter** (§4.3): starred categories first, the rest after;
@@ -21,7 +21,7 @@ import type { CircleCard, CircleDemand, ShownFromLine } from '@beanpool/core';
 import { copyFromLine, eventCopyOf } from '@beanpool/core';
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
-import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, communitiesNear, communityPromiseLines, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
@@ -76,7 +76,7 @@ export type NeedsTarget =
     | { to: 'shop'; id: string }
     | { to: 'shop-mine' };
 /** `knock`: requests to join (front doors S1), only to an app that asks with lands=people (lib/api.ts getHome); People → Invites lists them (S2). */
-export interface NeedsItem { kind: 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
+export interface NeedsItem { kind: 'admin' | 'knock' | 'ask' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**
  * A version-1 layout, as the web app before the card frame kept it (on the account and in this browser): read only
@@ -121,6 +121,12 @@ export interface HomeCommunity {
     lastSeenAt?: string | null;
     /** How quickly it answers requests to join (Lounge L1, entry S1: 'week' | 'slow' | 'none' | null). */
     answers?: 'week' | 'slow' | 'none' | null;
+    /** The listing promise its push carried: an object, null for none, left out by an older global node (core communityPromiseLines reads it). */
+    promise?: unknown;
+    /** Whether it takes requests to join. */
+    acceptingKnocks?: boolean | null;
+    /** The day it says it closes (YYYY-MM-DD). */
+    closingOn?: string | null;
 }
 export interface HomeFind {
     point: 'request' | 'area' | null;
@@ -142,6 +148,8 @@ export interface HomeMarketItem {
     id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from, and its price there in words. */
     shownCopy?: boolean; shownFrom?: ShownFromLine; shownPrice?: string;
+    /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
+    pinned?: boolean;
 }
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
@@ -153,6 +161,8 @@ export interface HomeEventItem {
     repeat?: RepeatPattern; repeatUntil?: string;
     /** A member's copy on the global community (@beanpool/core eventCopyOf): where it is from stands for its place. */
     shownCopy?: boolean; shownFrom?: ShownFromLine;
+    /** A live pin (HomeMarketItem.pinned): the event leads Coming up, whatever its date. */
+    pinned?: boolean;
 }
 
 export interface DealItem {
@@ -228,7 +238,7 @@ export interface HomeCards {
         polls: number;
         pollsMore: boolean;
         items?: DecideItem[];
-        poll?: { id: string; title: string; closesAt: string } | null;
+        poll?: { id: string; title: string; closesAt: string; pinned?: boolean } | null;
     };
     groups?: { items: { id: string; kind: 'group' | 'enterprise' | 'event'; name: string; unread: number; muted: boolean; last?: GroupLastLine | null }[]; total: number };
     joined?: { count7d: number; radiusKm: number | null; names?: { callsign: string; avatarUrl: string | null }[] };
@@ -429,6 +439,11 @@ export function starredFirst<T>(items: readonly T[], categoryOf: (t: T) => strin
     const starred = new Set(interests);
     const isStarred = (t: T) => starred.has(String(categoryOf(t) ?? '').trim().toLowerCase());
     return [...items.filter(isStarred), ...items.filter(t => !isStarred(t))];
+}
+
+/** Live pins first, the rest after, each part in the order it came: the node put the pins first, the stars must not move them. */
+export function pinnedFirst<T extends { pinned?: boolean }>(items: readonly T[]): T[] {
+    return [...items.filter(i => i.pinned), ...items.filter(i => !i.pinned)];
 }
 
 /** A chip tapped: on if it was off, off if it was on; the order they were chosen in kept. */
@@ -652,6 +667,16 @@ export function notAnsweringLine(c: Pick<HomeCommunity, 'lastSeenAt'>, now: numb
 }
 
 /**
+ * "Keeps the listing promise · Accepting members · Closing on 3 Dec", in the member's language, whatever of that the
+ * directory said under a listed community (core communityPromiseLines), or null. The phone's find screen says the same
+ * (apps/native/utils/community-directory.ts promiseLine).
+ */
+export function promiseLine(c: Pick<HomeCommunity, 'promise' | 'acceptingKnocks' | 'closingOn'>, now: number = Date.now()): string | null {
+    const lines = communityPromiseLines(c, now);
+    return lines.length ? lines.join(' · ') : null;
+}
+
+/**
  * The find card's headline, from what the node said (the phone's findCommunityCardCopy, but for the web's card, which
  * lists the communities themselves right under it, each a link to its own page, so the sentence doesn't name one).
  * Which one is @beanpool/core's findCommunityState: "none" only once the directory has loaded, and "near" only within
@@ -827,7 +852,7 @@ export function pulseByLine(p: { callsign: string; publishedAt?: string | null }
 
 // ── Sun and moon ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Edit home's line for a sun and moon card with no place to work from. A word() key: shown through t(). */
+/** Arrange's line for a sun and moon card with no place to work from. A word() key: shown through t(). */
 export const SKY_NO_PLACE_LINE = word('Nothing to show now: no place is known.');
 
 /**

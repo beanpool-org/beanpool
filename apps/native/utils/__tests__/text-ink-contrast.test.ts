@@ -46,6 +46,16 @@ describe('the phone\'s text inks reach 4.5:1 on every ground, in both themes', (
         expect(Number(ratio.toFixed(2)), `${c.ink} on ${c.ground} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
     });
 
+    // Home look S4 (Marty's yes, 2 Nov): in dark the card was #1a1a1a on the doodle ground #141a1a, 1.01:1, so the cards
+    // did not lift off the page at all. A card must stand apart from the ground it sits on, and its border from the card.
+    it('dark: the card lifts off the doodle ground and the app background, and its border shows on it', () => {
+        const ground = PATTERN?.[2] ?? '';
+        const lift = (a: string, b: string) => Number(contrastRatio(a, b).toFixed(2));
+        expect(lift(darkColors.surface.card, ground), `card ${darkColors.surface.card} on the doodle ground ${ground}`).toBeGreaterThanOrEqual(1.15);
+        expect(lift(darkColors.surface.card, darkColors.surface.app), `card on surface.app ${darkColors.surface.app}`).toBeGreaterThanOrEqual(1.25);
+        expect(lift(darkColors.border.default, darkColors.surface.card), `border.default ${darkColors.border.default} on the card`).toBeGreaterThanOrEqual(1.15);
+    });
+
     it.each(THEMES.map(([theme, tree]) => [theme, tree] as const))('%s: muted is quieter than secondary, secondary than body', (_theme, tree) => {
         for (const ground of [tree.surface.card, tree.surface.subtle]) {
             const [body, secondary, muted] = ['text.body', 'text.secondary', 'text.muted'].map((t) => contrastRatio(get(tree, t), ground));

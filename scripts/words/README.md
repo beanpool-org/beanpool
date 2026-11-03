@@ -6,7 +6,7 @@ This directory contains the tools for managing translations and the words layer 
 
 ## 1. Overview of Commands
 
-- `pnpm words:check`: Validates that every `t()` and `tn()` call is structurally valid against English sources and catalogs. Checks placeholder parity, plural forms, and ensures no stray catalog files.
+- `pnpm words:check`: Validates that every `t()` and `tn()` call is structurally valid against English sources and catalogs. Checks placeholder parity, plural forms, and ensures no stray catalog files. It also holds each translation to `GLOSSARY.csv`, to the numbers in the English, and to the words that never change (see section 3), against a recorded baseline of known problems. `words:check --known` lists them; `words:check --update` records a fall.
 - `pnpm words:lint`: Checks the ratchet on English literals outside `t()` per directory against `lint-baseline.json`. `words:lint --update` records falls; rises require `--raise "<reason>"`.
 - `pnpm words:extract`: Extracts English calls and writes `<catalog>/en.sources.json` mapping keys to `file:line` locations.
 - `pnpm words:count`: Reports counts of user-facing strings and word totals per package.
@@ -62,7 +62,23 @@ The director meaning-checks translations touching sensitive security or financia
 
 ---
 
-## 3. How the Director Runs a Round from These Briefs
+## 3. The glossary, numbers and untranslatable checks (slice T0)
+
+`GLOSSARY.csv` is the one list of the words that must be rendered the same way every time (columns: `term, meaning, flags`, then one column per language that has renderings: `es, pt, fr, ru` today; more columns are added as languages are settled). Edit it in a sheet or by hand; `words:check` reads it, `words:draft --briefs` puts it in every drafting brief, and Weblate can import it later (slice T3). The checks are core's (`packages/beanpool-core/src/words-check.ts`, `checkCatalogRules`) and read pairs of (English, translation), so moving the catalogs to PO changes only the reader.
+
+| Check | A translation fails when |
+| --- | --- |
+| glossary | its English has a glossary term (whole word, with a plural; any case unless the row is flagged `name`) and the translation has neither the language's rendering nor one of the row's allowed variants; or it has a `forbidden` word, in any language |
+| numbers | a number in the English is not in the translation. Digits of any script count and decimal or thousands separators of any country ("1.5%" = "1,5 %", "1,000" = "1 000"); a number written out in words ("treinta días") does not; digits against a letter before them ("E2E", "v2") are names, not numbers |
+| untranslatable | its English has "BeanPool" (or a typed word like `Type CONFIRM`) and the translation does not carry it as written |
+
+**A cell** is the rendering, then ` | ` and its allowed variants (`Bienes comunes | Comunes`). A trailing `~` is a stem for languages whose endings change (`боб~` matches бобы, бобов, бобами). Matching ignores case, and accents once a rendering has four letters or more. An empty cell means no rendering is settled: nothing is checked and nothing is invented. A rendering is in the CSV only if it is in a catalog of that language (a test refuses a made-up one). A variant is another form of the same word (plural, singular, adjective) or a label the catalogs already use (a tab word); a different word for the same thing is drift, and stays a known problem until the sentence is fixed.
+
+**The baseline** (`glossary-baseline.json`) records the problems that are in the catalogs today (they are machine drafts), as a short hash of rule + key + cause per catalog, so fixing one sentence cannot hide a new mistake in another. `words:check` fails on a problem that is not recorded; it never counts a fall against you. To record a fall: `words:check --update`. A rise is refused; the one exception is a new glossary row, which turns up new problems: `words:check --update --raise "<reason>"` (kept in the file; `words.test.mjs` compares with origin/main, as it does for the lint baseline). To fix a failure, change the translation (the message names the term and the language's rendering), not the baseline.
+
+Known false positives stay in the baseline until a person moves the sentence: a name inside another name ("Google Maps" is not the Map), a verb the language uses for the noun ("you are a member" as "you belong"), and "Commons Pool", which the catalogs' own label renders with "Bienes comunes" but some sentences with "Fondo común".
+
+## 4. How the Director Runs a Round from These Briefs
 
 The hourly heartbeat checks `pnpm words:draft --report`. When anything is missing or stale, the director initiates a drafting round following the `scratch/words-topup/run-*.sh` pattern.
 

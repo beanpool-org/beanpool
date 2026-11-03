@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT, catalogLangs, extractRepo, loadCoreChecks } from './words.mjs';
+import { glossaryForBrief, readGlossary } from './glossary.mjs';
 import { GUIDE_LANGS, guideBodyHash, loadGuide, parseGuideMarkdown } from '../../packages/beanpool-guide/src/guide.mjs';
 import { checkGuideTitles, draftGuideTitles, guideSourceHash, readGuideTitles } from '../../packages/beanpool-guide/src/titles.mjs';
 
@@ -415,6 +416,8 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
     const status = await draftStatus({ root, langs, catalogDefs, extracted });
     const rulesFile = path.join(root, 'scripts/words/STYLE.md');
     const styleRules = fs.existsSync(rulesFile) ? fs.readFileSync(rulesFile, 'utf8') : '';
+    // scripts/words/GLOSSARY.csv: every term with this language's rendering. A tree with no glossary (a test fixture) gets no section.
+    const glossaryTerms = readGlossary(await catalogLangs(root), root).terms;
 
     const written = [];
     for (const lang of status.langs) {
@@ -444,6 +447,16 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         briefLines.push('');
         briefLines.push(styleRules.trim());
         briefLines.push('');
+        if (glossaryTerms.length > 0) {
+            briefLines.push('## Glossary (scripts/words/GLOSSARY.csv)');
+            briefLines.push('');
+            briefLines.push('A sentence that has one of these English terms must carry the rendering in the last column (or one of its "also fine" forms);');
+            briefLines.push('every number in the English must be in your translation as a digit; BeanPool and a typed word like CONFIRM stay exactly as written;');
+            briefLines.push('a word marked "never use" must not appear. `node scripts/words/words.mjs check` fails on a new miss.');
+            briefLines.push('');
+            briefLines.push(glossaryForBrief(glossaryTerms, lang));
+            briefLines.push('');
+        }
         briefLines.push('---');
         briefLines.push('');
         briefLines.push('## Exact Items to Draft');

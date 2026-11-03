@@ -165,3 +165,242 @@ function describe(dropped: string[], invented: string[]): string {
     if (invented.length) parts.push(`unknown ${invented.map((p) => `{${p}}`).join(', ')}`);
     return parts.join('; ');
 }
+
+// ── Glossary, numbers, untranslatable ──────────────────────────────────────────────────────────────────────────
+//
+// The three checks that hold a translation to what the English means (scratch/fable-design/DESIGN-translation-tooling-fable.md
+// §3.6, slice T0). They read pairs of (English, translation), so they do not care whether the catalogs are JSON today or PO later:
+// only the reader changes. scripts/words/GLOSSARY.csv holds the terms; scripts/words/glossary.mjs reads it into `GlossaryTerm`s.
+//
+//   glossary        an English sentence that contains a glossary term must, in a language the term has a rendering for, carry that
+//                   rendering or one of its allowed variants; a translation never carries a `forbidden` word.
+//   numbers         every number in the English is in the translation.
+//   untranslatable  "BeanPool", and a word the member must type, stay as they are in every language.
+//
+// None of the three is a structural break (a sentence still renders), so words.mjs holds them to a recorded baseline that may only
+// fall, where `checkCatalog` above refuses outright.
+
+export type WordRule = 'glossary' | 'numbers' | 'untranslatable';
+
+export interface RuleProblem {
+    key: string;
+    rule: WordRule;
+    /**
+     * What the problem is about, apart from the words used to say it: the glossary term, or the number the translation lacks. Stable
+     * when the glossary row gains a variant, so the baseline can name a problem by it (words.mjs violationId).
+     */
+    what: string;
+    problem: string;
+}
+
+/** One problem on one (English, translation) pair, before it has a key. */
+export interface RuleFinding {
+    rule: WordRule;
+    what: string;
+    problem: string;
+}
+
+/** One row of GLOSSARY.csv. */
+export interface GlossaryTerm {
+    /** The English term, as a sentence has it. */
+    term: string;
+    /** One line: what the word means in BeanPool. */
+    meaning: string;
+    /**
+     * `untranslatable` (stays as written), `forbidden` (never in a translation), `name` (matches only the capitalised or upper-case
+     * word: "Offer" is the post, "offer" is the verb); others (`terminology`, `money`, `safety`, `operator`) are notes for translators.
+     */
+    flags: readonly string[];
+    /**
+     * Per language: the rendering (first) and its allowed variants. A `forbidden` row lists the renderings that are ruled out.
+     * A trailing `~` makes an entry a stem: it matches any word that starts with it (Russian endings).
+     */
+    renderings: Readonly<Partial<Record<string, readonly string[]>>>;
+}
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const LEFT = '(?<![\\p{L}\\p{N}_])';
+const RIGHT = '(?![\\p{L}\\p{N}_])';
+
+/** A word the member must type: an upper-case `untranslatable` term (CONFIRM, WIPE, DELETE). */
+export function isTypedWord(term: GlossaryTerm): boolean {
+    return term.flags.includes('untranslatable') && /^[A-Z]{3,}$/.test(term.term);
+}
+
+const patterns = new Map<string, RegExp>();
+
+/**
+ * Where a term is in an English sentence. A term flagged `name` ("Offer") matches its capitalised or upper-case word, with a plural
+ * (Offers); any other term ("group", "Beans", "sign-in") matches in any case. A typed word matches only where the sentence tells the member to type it
+ * (`Type CONFIRM`, `'WIPE'`), because "TO CONFIRM" in a label is the verb and is translated. Whole words only; `{placeholders}` are
+ * not words (callers blank them first).
+ */
+export function termPattern(term: GlossaryTerm): RegExp {
+    const cached = patterns.get(term.term);
+    if (cached) return cached;
+    const base = term.term.trim();
+    let re: RegExp;
+    if (isTypedWord(term)) {
+        const lead = '(?:(?:[Tt]ype|TYPE|[Ee]nter|ENTER|[Ww]rite|WRITE)\\s+[\'"‘“«]?|[\'"‘“«])';
+        re = new RegExp(`${lead}${escapeRe(base)}${RIGHT}`, 'u');
+    } else {
+        const isName = term.flags.includes('name');
+        const forms = (b: string): string[] => {
+            const upper = b === b.toUpperCase() && b !== b.toLowerCase();
+            const s = upper ? 'S' : 's';
+            const body = escapeRe(b).replace(/\s+/g, '\\s+');
+            const alts = [body, `${body}${s}`];
+            if (/y$/i.test(b)) alts.push(`${escapeRe(b.slice(0, -1)).replace(/\s+/g, '\\s+')}${upper ? 'IES' : 'ies'}`);
+            return alts;
+        };
+        const alts = isName ? [...forms(base), ...forms(base.toUpperCase())] : forms(base);
+        re = new RegExp(`${LEFT}(?:${alts.join('|')})${RIGHT}`, isName ? 'u' : 'iu');
+    }
+    patterns.set(term.term, re);
+    return re;
+}
+
+/** The English with its `{placeholders}` blanked, so a `{owner}` is not the word owner. */
+function plainEnglish(english: string): string {
+    return english.replace(/\{[A-Za-z0-9_]+\}/g, ' ');
+}
+
+const lower = (s: string): string => s.normalize('NFC').toLowerCase();
+const fold = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/**
+ * Does `text` carry this rendering? Case does not matter, and neither do accents once the rendering has four letters or more
+ * (Spanish loses one in the plural: publicación, publicaciones; a two-letter word like "nó" must match as written, or it would
+ * find "no" everywhere). A trailing `~` is a stem: any word starting with it.
+ */
+export function hasRendering(text: string, rendering: string): boolean {
+    const stem = rendering.endsWith('~');
+    const word = stem ? rendering.slice(0, -1) : rendering;
+    if (word.length === 0) return false;
+    const search = (haystack: string, needle: string): boolean => (stem
+        ? new RegExp(`${LEFT}${escapeRe(needle)}`, 'u').test(haystack)
+        : haystack.includes(needle));
+    if (search(lower(text), lower(word))) return true;
+    return fold(word).length >= 4 && search(fold(text), fold(word));
+}
+
+/** The glossary problems of one translated sentence (no `forbidden` here: see forbiddenProblems). */
+function glossaryProblems(lang: string, english: string, text: string, glossary: readonly GlossaryTerm[]): RuleFinding[] {
+    const plain = plainEnglish(english);
+    const out: RuleFinding[] = [];
+    for (const term of glossary) {
+        if (term.flags.includes('forbidden') || term.flags.includes('untranslatable')) continue;
+        const renderings = term.renderings[lang];
+        if (!renderings || renderings.length === 0) continue;
+        if (!termPattern(term).test(plain)) continue;
+        if (renderings.some((r) => hasRendering(text, r))) continue;
+        const shown = renderings.map((r) => (r.endsWith('~') ? `"${r.slice(0, -1)}…"` : `"${r}"`)).join(' or ');
+        out.push({ rule: 'glossary', what: term.term, problem: `"${term.term}" is ${shown} in ${lang}, and the translation has neither` });
+    }
+    return out;
+}
+
+/** A forbidden word in a translation, in any language: the term itself, or a rendering this language's column rules out. */
+function forbiddenProblems(lang: string, text: string, glossary: readonly GlossaryTerm[]): RuleFinding[] {
+    const haystack = fold(text);
+    const out: RuleFinding[] = [];
+    for (const term of glossary) {
+        if (!term.flags.includes('forbidden')) continue;
+        const banned = [term.term, ...(term.renderings[lang] ?? [])];
+        const hit = banned.find((b) => b.length > 0 && haystack.includes(fold(b.replace(/~$/, ''))));
+        if (hit) out.push({ rule: 'glossary', what: `never ${term.term}`, problem: `"${hit.replace(/~$/, '…')}" is a word we do not use (${term.meaning})` });
+    }
+    return out;
+}
+
+/**
+ * The numbers in a sentence as plain digits ("1,5 %" and "1.5%" are both "1.5"; "1 000" and "1,000" are "1000"), in order. Digits
+ * written against a letter before them are part of a name, not a quantity ("E2E", "v2", "H264"), and are not numbers.
+ */
+export function numbersOf(sentence: string): string[] {
+    // Any script's digits to 0-9: a Nd run always starts at a zero, so the offset into its run is the value.
+    const ascii = plainEnglish(sentence).replace(/\p{Nd}/gu, (c) => {
+        let start = c.codePointAt(0)!;
+        const cp = start;
+        while (start > 0 && /^\p{Nd}$/u.test(String.fromCodePoint(start - 1))) start--;
+        return String((cp - start) % 10);
+    });
+    const out: string[] = [];
+    // Between two groups of digits: a point, comma or apostrophe; a no-break or thin space (\p{Zs} but the plain one); or a plain
+    // space only when exactly three digits follow ("1 000").
+    for (const m of ascii.matchAll(/(?<![A-Za-z\d])\d+(?:(?:[.,'’]|(?!\x20)\p{Zs}|\x20(?=\d{3}(?!\d)))\d+)*/gu)) {
+        const groups = m[0].split(/[.,'’\p{Zs}]/u);
+        const last = groups[groups.length - 1];
+        const thousands = groups.length > 1 && last.length === 3 && groups[0] !== '0';
+        out.push(thousands ? groups.join('') : groups.length > 1 ? `${groups.slice(0, -1).join('')}.${last}` : groups[0]);
+    }
+    return out;
+}
+
+function numberProblems(english: string, text: string): RuleFinding[] {
+    const have = new Set(numbersOf(text));
+    const missing = [...new Set(numbersOf(english))].filter((n) => !have.has(n));
+    return missing.map((n) => ({ rule: 'numbers' as const, what: n, problem: `the English has ${n} and the translation does not` }));
+}
+
+function untranslatableProblems(english: string, text: string, glossary: readonly GlossaryTerm[]): RuleFinding[] {
+    const plain = plainEnglish(english);
+    const out: RuleFinding[] = [];
+    for (const term of glossary) {
+        if (!term.flags.includes('untranslatable')) continue;
+        const found = termPattern(term).exec(plain);
+        if (!found) continue;
+        const word = term.term;
+        // A label in capitals ("BEANPOOL") is the same word in capitals, so its translation may be too.
+        const inCapitals = found[0] === found[0].toUpperCase() && found[0] !== found[0].toLowerCase() && word !== word.toUpperCase();
+        // A typed word is the whole word ("CONFIRMAR" is not "CONFIRM"); the mark may take an ending of the language ("BeanPool's", "BeanPoolは").
+        const present = isTypedWord(term)
+            ? new RegExp(`(?<![A-Za-z0-9_])${escapeRe(word)}(?![A-Za-z0-9_])`).test(text)
+            : inCapitals ? text.toUpperCase().includes(word.toUpperCase()) : text.includes(word);
+        if (!present) out.push({ rule: 'untranslatable', what: word, problem: `"${word}" stays "${word}" in every language, and the translation does not carry it` });
+    }
+    return out;
+}
+
+/** The three rules on one (English, translation) pair. */
+export function ruleProblemsOf(lang: string, english: string, text: string, glossary: readonly GlossaryTerm[]): RuleFinding[] {
+    if (text.length === 0) return [];
+    return [
+        ...glossaryProblems(lang, english, text, glossary),
+        ...forbiddenProblems(lang, text, glossary),
+        ...numberProblems(english, text),
+        ...untranslatableProblems(english, text, glossary),
+    ];
+}
+
+/**
+ * The glossary, numbers and untranslatable problems of one language's catalog. A plural entry is read form by form against the
+ * English form it stands for (`one` against the singular, every other form against the plural). An empty or missing translation is
+ * untranslated, not a problem. Structural problems are checkCatalog's.
+ */
+export function checkCatalogRules(lang: Lang, catalog: Readonly<Record<string, unknown>>, glossary: readonly GlossaryTerm[]): RuleProblem[] {
+    const out: RuleProblem[] = [];
+    if (!isLang(lang) || lang === 'en') return out;
+    const seen = new Set<string>();
+    const push = (key: string, english: string, text: unknown) => {
+        if (typeof text !== 'string') return;
+        for (const p of ruleProblemsOf(lang, english, text, glossary)) {
+            // Two forms of one plural entry can fail alike ("People" in `one` and `other`): one problem for the key.
+            const id = `${key}\n${p.rule}\n${p.what}`;
+            if (!seen.has(id)) { seen.add(id); out.push({ key, rule: p.rule, what: p.what, problem: p.problem }); }
+        }
+    };
+    for (const [key, value] of Object.entries(catalog)) {
+        if (key === '_meta') continue;
+        if (value !== null && typeof value === 'object') {
+            const cut = key.indexOf(PLURAL_SEPARATOR);
+            if (cut < 0) continue;
+            const one = key.slice(0, cut);
+            const other = key.slice(cut + 1);
+            for (const [form, text] of Object.entries(value as Record<string, unknown>)) push(key, form === 'one' ? one : other, text);
+        } else {
+            push(key, key.split(CONTEXT_SEPARATOR)[0], value);
+        }
+    }
+    return out;
+}

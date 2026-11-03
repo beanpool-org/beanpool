@@ -533,6 +533,10 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 <li>
                                     Approve on your phone when it asks: check it names the assistant&rsquo;s address, then type the two digits.
                                     {isOwner ? ' Tick “May post for me” on that page only if it should post for you.' : ''}
+                                    {/* MCP-MODERATION S3: the page's second tick, for an owner's assistant or an admin's (one post a call). */}
+                                    {isOwner
+                                        ? ' Tick “May take down posts for me” only if it should take posts down for you.'
+                                        : ' Tick “May take down posts for me” on that page only if it should take posts down for you, one post a call.'}
                                 </li>
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
@@ -786,9 +790,9 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                                         : 'Reads only: not ticked to post'}
                                                 </p>
                                             )}
-                                            {g.role === 'owner' && g.canModerate === true && (
+                                            {(g.role === 'owner' || g.role === 'admin') && g.canModerate === true && (
                                                 <p className="text-[11px] text-nature-400 m-0 break-words" data-testid="agent-grant-moderates">
-                                                    May take down · {g.takedownsToday ?? 0} today{(g.takedownsHeld ?? 0) > 0 ? ` · ${g.takedownsHeld} waiting` : ''}
+                                                    May take down{g.role === 'admin' ? ', one post a call' : ''} · {g.takedownsToday ?? 0} today{(g.takedownsHeld ?? 0) > 0 ? ` · ${g.takedownsHeld} waiting` : ''}
                                                 </p>
                                             )}
                                             {typeof g.madePosts === 'number' && g.madePosts > 0 && (

@@ -295,9 +295,11 @@ run_parts() {
 # remove the tree the train was in, and the guard in cleanup did not stop a second one on 3 Nov, run for #2783). The watcher
 # is a plain sh, not a bash subshell, so it has no trap to run at all.
 with_limit() {
-  local limit=$1 pid watcher rc saved; shift
-  saved=$(trap -p EXIT INT TERM)
-  trap - EXIT INT TERM
+  local limit=$1 pid watcher rc saved scope="EXIT INT TERM"; shift
+  # From inside cleanup (shadow_record) the EXIT trap is already running: it is not lifted or put back there.
+  [ -z "${IN_CLEANUP:-}" ] || scope="INT TERM"
+  saved=$(trap -p $scope)
+  trap - $scope
   "$@" & pid=$!
   sh -c 'sleep "$1"; kill "$2"' sh "$limit" "$pid" > /dev/null 2>&1 & watcher=$!
   eval "$saved"
@@ -400,6 +402,7 @@ cleanup() {
   # A child inherits this trap until bash resets it. with_limit's watcher, killed just after its fork, can run it: measured on
   # bash 5.2 on 2 Nov 2026, and in CI it removed the tree the train was still in. Only the train's own shell cleans up.
   [ "${BASHPID:-$(exec sh -c 'echo $PPID')}" = "$$" ] || return 0
+  IN_CLEANUP=1
   shadow_record
   cd "$ORIG_DIR" || return
   if [ $KEEP -eq 1 ]; then echo "Scratch worktree kept: $WT"

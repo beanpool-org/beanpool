@@ -183,16 +183,19 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
     };
 
     const reviewRow = (id: WalkStep, icon: string, name: string, value: string, held: boolean) => (
-        <div key={id} data-testid={`walk-review-${id}`} className="flex items-start justify-between gap-2 py-2 border-b border-nature-800/60 min-w-0">
-            <div className="min-w-0">
-                <span className="text-xs font-bold text-white break-words"><span aria-hidden="true">{icon} </span>{name}</span>
-                <p className="text-[11px] text-nature-300 m-0 mt-0.5 break-words">{held ? t('Set by this server') : value}</p>
-            </div>
-            {!held && steps.includes(id) && (
-                <button type="button" onClick={() => go(id)} className="shrink-0 min-h-[40px] px-2 text-[11px] text-nature-300 underline bg-transparent border-0 cursor-pointer">
-                    {t('Change')}
-                </button>
-            )}
+        <div key={id} data-testid={`walk-review-${id}`} className="py-2 border-b border-nature-800/60 min-w-0">
+            <span className="text-xs font-bold text-white break-words"><span aria-hidden="true">{icon} </span>{name}</span>
+            <p className="text-[11px] text-nature-300 m-0 mt-0.5 break-words">
+                {held ? t('Set by this server') : value}
+                {!held && steps.includes(id) && (
+                    <>
+                        {' · '}
+                        <button type="button" onClick={() => go(id)} className="min-h-[40px] px-1 text-[11px] text-nature-300 underline bg-transparent border-0 cursor-pointer">
+                            {t('Change')}
+                        </button>
+                    </>
+                )}
+            </p>
         </div>
     );
 
@@ -200,7 +203,7 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
     useEffect(() => { bodyRef.current?.scrollIntoView?.({ block: 'nearest' }); }, [step]);
 
     return (
-        <div data-testid="core-walkthrough" data-step={step} ref={bodyRef} className="p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-4">
+        <div data-testid="core-walkthrough" data-step={step} ref={bodyRef} className="p-3 sm:p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-4">
             <p data-testid="walk-progress" className="text-[11px] font-bold text-nature-400 tracking-wider m-0 uppercase">
                 {t('Step {n} of {total}').replace('{n}', String(at + 1)).replace('{total}', String(steps.length))}
             </p>

@@ -237,16 +237,17 @@ export function CommunityShapeSection({
 
     const unlockButton = (key: keyof ShapeSettings, current: unknown) => {
         if (!locked || !canEdit || settings[key]?.lock) return undefined;
-        const open = openSetting === key;
+        // Open, the row has its own Save and Cancel: a second Cancel here would say the same thing twice.
+        if (openSetting === key) return undefined;
         return (
             <button
                 type="button"
                 data-testid={`shape-unlock-${key}`}
-                aria-expanded={open}
+                aria-expanded={false}
                 onClick={() => handleOpenRow(key, current)}
                 className="min-h-[44px] w-full sm:w-auto px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
             >
-                {open ? t('Cancel') : t('Unlock to change')}
+                {t('Unlock to change')}
             </button>
         );
     };

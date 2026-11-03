@@ -12,7 +12,8 @@
  * Leaving it (✕, the chooser closed, a poll or event done, "Not now", Back) takes the member back to where they were.
  */
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, Alert, ScrollView, TextInput, Pressable, Dimensions, Image as RNImage, Keyboard, Linking, Modal, FlatList, Platform } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TextInput, Pressable, Dimensions, Image as RNImage, Keyboard, Linking, Modal, FlatList, Platform } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from '../components/useKeepCaretVisible';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';

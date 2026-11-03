@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Keyboard, ActivityIndicator, DeviceEventEmitter } from 'react-native';
+import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from '../../components/useKeepCaretVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

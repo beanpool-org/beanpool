@@ -38,7 +38,8 @@ import {
 } from '../utils/group-history-unlock';
 import { LockedHistoryRow, LockedHistorySheet, SealedNoticeLine } from './LockedHistory';
 import { anchorUrl } from '../utils/node-post';
-import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, Linking, TextInput, ScrollView } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

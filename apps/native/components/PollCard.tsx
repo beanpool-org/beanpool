@@ -26,9 +26,9 @@ import {
     StyleSheet,
     Pressable,
     ActivityIndicator,
-    Alert,
     TextInput,
 } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';

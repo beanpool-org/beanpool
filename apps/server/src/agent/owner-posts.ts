@@ -323,7 +323,7 @@ function lettersApart(a: string, b: string): number {
 
 /** The longest an id or a free tag is read and said back in a refusal. */
 const REFUSED_ID_CHARS = 80;
-const REFUSED_TAG_CHARS = 40;
+export const REFUSED_TAG_CHARS = 40;
 
 /**
  * The three tags nearest an id the library does not have: those its last part names (the most specific: `food.fruit.lemons`,
@@ -363,7 +363,7 @@ function refusedBy(check: () => unknown): string | null {
  * posts or edits), or why not in the tool's words: createPost and updatePost hold them again, as any post's. `stored` is the
  * listing an edit changes, whose own tags pass as the engine passes them; on an edit null is refused, as it is for a title.
  */
-function heldTags(args: Record<string, unknown>, stored?: { tags?: string; free_tags?: string }): HeldTags {
+export function heldTags(args: Record<string, unknown>, stored?: { tags?: string; free_tags?: string }): HeldTags {
     const fields: TagFields = {};
     const refuse = (error: string): HeldTags => ({ ok: false, error });
     for (const [field, max, what] of [['tags', POST_TAGS_MAX, 'library ids from tags_search'], ['free_tags', FREE_TAGS_MAX, 'tags, each one text']] as const) {
@@ -392,8 +392,8 @@ function heldTags(args: Record<string, unknown>, stored?: { tags?: string; free_
     return { ok: true, fields };
 }
 
-const BLOCKED = new Set(['disabled', 'suspended', 'pruned']);
-const statusOf = (pk: string): string | undefined =>
+export const BLOCKED = new Set(['disabled', 'suspended', 'pruned']);
+export const statusOf = (pk: string): string | undefined =>
     (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status?: string } | undefined)?.status;
 
 /**
@@ -401,7 +401,7 @@ const statusOf = (pk: string): string | undefined =>
  * feature_off while the enterprises or treasuries switch is off (routes/profile-feature-gate.ts, before any handler, and
  * Beans off turns both off): a gate /mcp never meets, so the tools ask it themselves.
  */
-function enterprisesOff(): string | null {
+export function enterprisesOff(): string | null {
     const off = featureOffFor('/api/treasury', undefined, 'POST');
     return off ? featureOffMessage(off) : null;
 }
@@ -420,7 +420,7 @@ function keptEnterprises(member: string): Array<{ key: string; name: string }> {
 type Author = { ok: true; author: string; enterprise: boolean } | { ok: false; error: string };
 
 /** Who the post is by: the owner, or the enterprise `ref` names among the ones they keep now. */
-function authorFor(grant: AgentGrant, ref: unknown, required: boolean): Author {
+export function authorFor(grant: AgentGrant, ref: unknown, required: boolean): Author {
     if (ref === undefined || ref === null || ref === '') {
         return required
             ? { ok: false, error: 'Name the enterprise with as_enterprise: my_enterprises lists the ones you may post as.' }
@@ -527,17 +527,23 @@ export function sourceImageWords(which: string, from: 'address' | 'upload'): Ima
  * held for this post until `settle`; the addresses are fetched last, each counted against the grant's photos for the day,
  * all refused before any is fetched when the day has no room for them.
  */
-async function photosFrom(grant: AgentGrant, args: Record<string, unknown>): Promise<Photos> {
+/** How many photos a kind takes, and the words for too few or too many (a group's picture: 0 or 1; an enterprise's: 1). */
+export interface PhotoRule { min: number; max: number; none: string; tooMany: string }
+const POST_PHOTO_RULE: PhotoRule = {
+    min: AGENT_POST_PHOTOS_MIN, max: AGENT_POST_PHOTOS_MAX,
+    none: `Add a photo first: every Offer, Need and event needs 1 to ${AGENT_POST_PHOTOS_MAX} photos, from photo_urls, photo_ids or photos.`,
+    tooMany: `At most ${AGENT_POST_PHOTOS_MAX} photos a post, photos, photo_urls and photo_ids together.`,
+};
+
+export async function photosFrom(grant: AgentGrant, args: Record<string, unknown>, rule: PhotoRule = POST_PHOTO_RULE): Promise<Photos> {
     for (const k of PHOTO_FIELDS) {
         if (args[k] !== undefined && args[k] !== null && !Array.isArray(args[k])) return { ok: false, error: `${k} is a list.` };
     }
     const list = (k: (typeof PHOTO_FIELDS)[number]): unknown[] => (Array.isArray(args[k]) ? args[k] as unknown[] : []);
     const inline = list('photos'), urls = list('photo_urls'), ids = list('photo_ids');
     const total = inline.length + urls.length + ids.length;
-    if (total < AGENT_POST_PHOTOS_MIN) {
-        return { ok: false, error: `Add a photo first: every Offer, Need and event needs 1 to ${AGENT_POST_PHOTOS_MAX} photos, from photo_urls, photo_ids or photos.` };
-    }
-    if (total > AGENT_POST_PHOTOS_MAX) return { ok: false, error: `At most ${AGENT_POST_PHOTOS_MAX} photos a post, photos, photo_urls and photo_ids together.` };
+    if (total < rule.min) return { ok: false, error: rule.none };
+    if (total > rule.max) return { ok: false, error: rule.tooMany };
     if (urls.length && agentPhotosToday(grant.id) + urls.length > agentPhotosPerDay()) return { ok: false, error: photoDayFull(grant.id) };
     const uploads = claimUploadedPhotos(grant.id, ids);
     if (!uploads.ok) return uploads;
@@ -569,18 +575,18 @@ async function photosFrom(grant: AgentGrant, args: Record<string, unknown>): Pro
     }
 }
 
-function str(v: unknown, max: number): string | undefined {
+export function str(v: unknown, max: number): string | undefined {
     return typeof v === 'string' ? v.slice(0, max) : undefined;
 }
 
-function num(v: unknown): number | undefined {
+export function num(v: unknown): number | undefined {
     if (typeof v === 'number' && Number.isFinite(v)) return v;
     if (typeof v === 'string' && v.trim() && Number.isFinite(Number(v))) return Number(v);
     return undefined;
 }
 
 /** The refusals before anything else: an owner's grant, a server still this community's, and the day's count left. */
-function gate(grant: AgentGrant): string | null {
+export function gate(grant: AgentGrant): string | null {
     if (grant.role !== 'owner') return "Only an owner's assistant can post: an admin's cannot.";
     if (!grant.canPost) return NOT_TICKED;
     const replaced = getReplacedInfo();
@@ -603,8 +609,11 @@ const utcMidnight = (now: number): string => `${new Date(now).toISOString().slic
 
 /** The posts this grant made today (UTC), read from their rows (created_via), which a restart keeps. */
 function madeToday(grant: AgentGrant, now = Date.now()): number {
-    return (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE (author_pubkey = ? OR created_by = ?) AND created_via = ?
+    const posts = (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE (author_pubkey = ? OR created_by = ?) AND created_via = ?
         AND origin_node IS NULL AND created_at >= ?`).get(grant.member, grant.member, createdViaOf(grant), utcMidnight(now)) as { c: number }).c;
+    // And the groups and enterprises it made today (agent/owner-seeds.ts agent_made): one day's count across every kind.
+    const others = (db.prepare('SELECT COUNT(*) AS c FROM agent_made WHERE created_via = ? AND made_at >= ?').get(createdViaOf(grant), utcMidnight(now)) as { c: number }).c;
+    return posts + others;
 }
 
 /** The posts this grant made today: the count kept as each is admitted, or its rows when a restart emptied that count. */
@@ -616,12 +625,12 @@ export function assistantPostsToday(grant: AgentGrant): number {
  * The owners' "Assistant posts a day", just before the row is written (createPost's beforeWrite, once every other refusal
  * has passed), from the rows: what holds an assistant's posts as the owner, in place of the member's own 100.
  */
-function assertAssistantDay(grant: AgentGrant): void {
+export function assertAssistantDay(grant: AgentGrant): void {
     if (madeToday(grant) >= agentPostsPerDay()) throw new Error(dayFull(grant));
 }
 
 /** Today's count, which may be past the number after an owner lowers it, and the number: then the photo room left. */
-function dayFull(grant: AgentGrant): string {
+export function dayFull(grant: AgentGrant): string {
     return `This assistant has made ${assistantPostsToday(grant).toLocaleString('en')} posts today, and this community's owners allow `
         + `${agentPostsPerDay().toLocaleString('en')} a day: try again tomorrow (UTC). ${photoRoomWords(grant.member)}`;
 }
@@ -644,7 +653,7 @@ export function photoRoomWords(member: string): string {
 }
 
 /** A refusal's words for the assistant: the photo budget's also says how much room is left. */
-function refusalText(e: unknown, grant: AgentGrant, fallback: string): string {
+export function refusalText(e: unknown, grant: AgentGrant, fallback: string): string {
     const text = memberErrorText(e, fallback);
     return e instanceof PhotoBudgetExceededError ? `${text} ${photoRoomWords(grant.member)}` : text;
 }
@@ -773,7 +782,7 @@ export function grantMayStillPost(grant: AgentGrant, now = Date.now()): boolean 
  * Make a post (or an edit) with its photos, then settle them: an uploaded photo is used up only by a post that was made, and
  * can be sent again after a refusal.
  */
-function withPhotos(grant: AgentGrant, photos: Extract<Photos, { ok: true }>, make: () => ToolResult): ToolResult {
+export function withPhotos(grant: AgentGrant, photos: Extract<Photos, { ok: true }>, make: () => ToolResult): ToolResult {
     let out: ToolResult | undefined;
     try {
         // Fetching photo_urls takes seconds; the grant was checked before it. Disconnecting the assistant, untick "May post for me",
@@ -945,7 +954,7 @@ const PHOTO_IDS_SCHEMA = {
         + `photoId it answers goes here. Each is used once, by this assistant, within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours. ${PHOTOS_RULE}.`,
 };
 /** The three photo fields, on every tool that takes photos. */
-const PHOTO_PROPS = { photo_urls: PHOTO_URLS_SCHEMA, photo_ids: PHOTO_IDS_SCHEMA, photos: PHOTOS_SCHEMA };
+export const PHOTO_PROPS = { photo_urls: PHOTO_URLS_SCHEMA, photo_ids: PHOTO_IDS_SCHEMA, photos: PHOTOS_SCHEMA };
 const TAGS_SCHEMA = {
     type: 'array', maxItems: POST_TAGS_MAX,
     items: { type: 'string', description: 'a tag id from tags_search, e.g. food.fruit.lemon' },
@@ -960,9 +969,9 @@ const FREE_TAGS_SCHEMA = {
         + 'never translated, found only by its own letters. One tag per item: a comma parts two',
 };
 /** Both tag fields, on every create. */
-const TAG_PROPS = { tags: TAGS_SCHEMA, free_tags: FREE_TAGS_SCHEMA };
+export const TAG_PROPS = { tags: TAGS_SCHEMA, free_tags: FREE_TAGS_SCHEMA };
 /** What a description field says: assistants used to write "Tags: music, live, gig" into it. */
-const NO_TAGS_HERE = 'never a list of tags: those go in tags and free_tags';
+export const NO_TAGS_HERE = 'never a list of tags: those go in tags and free_tags';
 const LISTING_PROPS = {
     title: { type: 'string', maxLength: AGENT_TITLE_MAX.listing, description: `what it is, in a few words: at most ${AGENT_TITLE_MAX.listing} characters` },
     description: { type: 'string', description: `the details a member reads; ${NO_TAGS_HERE}` },
@@ -1009,7 +1018,7 @@ function enterpriseListingSchema(): Record<string, unknown> {
         additionalProperties: false,
     };
 }
-const POST_OUT = {
+export const POST_OUT = {
     type: 'object',
     properties: {
         postId: { type: 'string' }, kind: { type: 'string' }, asEnterprise: { type: 'boolean' }, link: { type: 'string' },
@@ -1024,11 +1033,11 @@ const POST_OUT = {
     required: ['postId', 'kind', 'asEnterprise', 'link', 'postsToday', 'postsPerDay'],
 };
 /** Every create's and update_post's description says it, for an assistant that reads no field's. */
-const TAGS_WORDS = 'tag it from the library first (tags, ids from tags_search), use free_tags only for what the library lacks, and never list tags in its description';
-const DAY_WORDS = "at most the posts a day this community's owners set (connection_info's posts.perDay), which never use up the member's own "
+export const TAGS_WORDS = 'tag it from the library first (tags, ids from tags_search), use free_tags only for what the library lacks, and never list tags in its description';
+export const DAY_WORDS = "at most the posts a day this community's owners set (connection_info's posts.perDay), which never use up the member's own "
     + 'posts a day from the apps';
-const OWNERS_POST_WORDS = "the post is the owner's, deleted as any post is, and moderators see it was made by an assistant";
-const LIMITS_WORDS = `${DAY_WORDS}; its photos count against the member's photo room (connection_info's posts.photoRoom); ${OWNERS_POST_WORDS}`;
+export const OWNERS_POST_WORDS = "the post is the owner's, deleted as any post is, and moderators see it was made by an assistant";
+export const LIMITS_WORDS = `${DAY_WORDS}; its photos count against the member's photo room (connection_info's posts.photoRoom); ${OWNERS_POST_WORDS}`;
 
 /** The rows agent/tools.ts adds to its table: owner-only, all of them. */
 export const OWNER_POST_TOOLS: AgentTool[] = [
@@ -1314,7 +1323,7 @@ function put(updates: Updates, fields: Updates): void {
 const isBlank = (v: unknown): boolean => typeof v === 'string' && !v.trim();
 
 /** The first of `fields` sent that is not true or false, in words: the engine reads any text as true. */
-function notAFlag(args: Record<string, unknown>, fields: readonly string[]): string | null {
+export function notAFlag(args: Record<string, unknown>, fields: readonly string[]): string | null {
     const field = fields.find((k) => args[k] !== undefined && typeof args[k] !== 'boolean');
     return field ? `${field} is true or false.` : null;
 }
@@ -1638,6 +1647,33 @@ function removeMade(grant: AgentGrant, args: Record<string, unknown>): ToolResul
     return { ok: true, rows: 1, result: { removed: [made.row.id], kept: [] } };
 }
 
+/** What else an assistant may make, as schema.sql agent_made names it. */
+export type MadeKind = 'group' | 'enterprise';
+
+/** Records what `grant` made, as posts.created_via records a post. */
+export function recordMade(grant: AgentGrant, kind: MadeKind, ref: string): void {
+    db.prepare('INSERT OR IGNORE INTO agent_made (kind, ref, created_via, made_at) VALUES (?, ?, ?, ?)').run(kind, ref, createdViaOf(grant), new Date().toISOString());
+}
+
+/** The groups and enterprises the assistant `grantId` made, still standing, oldest first. */
+export function madeBesidesPosts(grantId: string): Array<{ kind: MadeKind; ref: string }> {
+    return db.prepare(`SELECT a.kind, a.ref FROM agent_made a WHERE a.created_via = ? AND (
+            (a.kind = 'group' AND EXISTS (SELECT 1 FROM groups g WHERE g.id = a.ref) AND NOT EXISTS (SELECT 1 FROM group_closures c WHERE c.group_id = a.ref))
+         OR (a.kind = 'enterprise' AND EXISTS (SELECT 1 FROM members m WHERE m.public_key = a.ref AND m.is_treasury = 1 AND m.wind_up_finalised_at IS NULL)))
+        ORDER BY a.made_at`).all(`assistant:${grantId}`) as Array<{ kind: MadeKind; ref: string }>;
+}
+
+/** What remove_all_i_made and Settings say of each: never removed there, wound up by a person in the app. */
+export const LEFT_STANDING_WHY: Record<MadeKind, string> = {
+    group: 'A group is not removed by an assistant: its convenors close it in the app (Group, then Close the group), by its members\' vote.',
+    enterprise: 'An enterprise is not removed by an assistant: its keepers wind it up in the app (the enterprise\'s page, then Wind up).',
+};
+
+/** The groups and enterprises listed back, each with why it stays. Enterprises by their ref, never their key. */
+export function leftStandingBy(grantId: string): Array<{ kind: MadeKind; id: string; why: string }> {
+    return madeBesidesPosts(grantId).map((m) => ({ kind: m.kind, id: m.kind === 'enterprise' ? enterpriseRef(m.ref) : m.ref, why: LEFT_STANDING_WHY[m.kind] }));
+}
+
 /** The confirmation remove_all_i_made asks, said out loud (design §2.3). */
 export const REMOVE_ALL_CONFIRM = 'remove everything this assistant made';
 
@@ -1645,6 +1681,8 @@ export interface RemovedMade {
     removed: string[];
     /** Posts still up (a deal in escrow, an enterprise its maker no longer keeps), each with why, in words. */
     kept: Array<{ postId: string; why: string }>;
+    /** The groups and enterprises it made, still standing: no assistant removes one (leftStandingBy). */
+    leftStanding: Array<{ kind: MadeKind; id: string; why: string }>;
 }
 
 /**
@@ -1655,7 +1693,7 @@ export interface RemovedMade {
 export function removeAllMadeBy(grantId: string, via: 'assistant' | 'settings', by: string): RemovedMade {
     const rows = db.prepare(`SELECT id, author_pubkey, created_by FROM posts WHERE created_via = ? AND origin_node IS NULL
         AND active = 1 AND status != 'cancelled' ORDER BY created_at`).all(`assistant:${grantId}`) as Array<{ id: string; author_pubkey: string; created_by: string | null }>;
-    const result: RemovedMade = { removed: [], kept: [] };
+    const result: RemovedMade = { removed: [], kept: [], leftStanding: leftStandingBy(grantId) };
     for (const row of rows) {
         const out = removeOne(row.id, row.created_by ?? row.author_pubkey);
         if (out.ok) result.removed.push(row.id);
@@ -1760,6 +1798,11 @@ const REMOVED_OUT = {
     type: 'object',
     properties: { removed: { type: 'array', items: { type: 'string' } }, kept: { type: 'array' } },
     required: ['removed', 'kept'],
+};
+const REMOVED_ALL_OUT = {
+    ...REMOVED_OUT,
+    properties: { ...REMOVED_OUT.properties, leftStanding: { type: 'array', description: 'the groups and enterprises it made, still standing, each with how a person winds it up' } },
+    required: [...REMOVED_OUT.required, 'leftStanding'],
 };
 
 /** Slice S2's rows (design §2.3, §2.7): the undo list, and tending what this assistant made, nothing else. */
@@ -1941,9 +1984,10 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
     {
         name: 'remove_all_i_made',
         title: 'Remove everything this assistant made',
-        reads: `nothing: it takes down every live post THIS assistant made, once a day, when confirm is "${REMOVE_ALL_CONFIRM}"; `
-            + 'one with a deal in escrow stays up and is listed back with why',
-        never: "a post made in the app or by another assistant, or another member's data; it never moves Beans",
+        reads: `nothing: it takes down every live post THIS assistant made, group posts included, once a day, when confirm is "${REMOVE_ALL_CONFIRM}"; `
+            + 'one with a deal in escrow stays up and is listed back with why. The groups and enterprises it made are not removed: they are listed back '
+            + '(leftStanding), each with how its convenors or keepers wind it up in the app',
+        never: "a post made in the app or by another assistant, an enterprise's key, or another member's data; it never moves Beans",
         ownerOnly: true,
         posts: true,
         write: true,
@@ -1954,7 +1998,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
             required: ['confirm'],
             additionalProperties: false,
         },
-        outputSchema: REMOVED_OUT,
+        outputSchema: REMOVED_ALL_OUT,
         run: (grant, args) => {
             const refused = tendGate(grant);
             if (refused) return { ok: false, error: refused };
@@ -1963,7 +2007,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
                 return { ok: false, error: 'This assistant has removed everything it made once today, the most a day allows: try again tomorrow (UTC), or the owner presses "Remove its posts" in Settings.' };
             }
             const out = removeAllMadeBy(grant.id, 'assistant', grant.member);
-            return { ok: true, rows: out.removed.length, result: { removed: out.removed, kept: out.kept } };
+            return { ok: true, rows: out.removed.length, result: { removed: out.removed, kept: out.kept, leftStanding: out.leftStanding } };
         },
     },
 ];

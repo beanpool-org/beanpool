@@ -874,6 +874,19 @@ CREATE TABLE IF NOT EXISTS keeper_own_posts (
 CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_keeper ON keeper_own_posts(keeper, made_at);
 CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_made_at ON keeper_own_posts(made_at);
 
+-- 11e′. What an owner's AI assistant made other than posts (agent/owner-seeds.ts): a group, an enterprise, a shop, a Pulse
+-- link, each by the grant that made it (`assistant:<grant id>`, as posts.created_via), so remove_all_i_made and the owner's
+-- "Remove its posts" find them. `ref` is the thing's own id here (a group's id, an enterprise's key, a shop's id, a Pulse
+-- item's id). This server's own, as its grants are (agent_suggestions, agentOAuthGrants): never copied to a standby.
+CREATE TABLE IF NOT EXISTS agent_made (
+    kind TEXT NOT NULL CHECK (kind IN ('group', 'enterprise', 'shop', 'pulse')),
+    ref TEXT NOT NULL,
+    created_via TEXT NOT NULL,
+    made_at TEXT NOT NULL,
+    PRIMARY KEY (kind, ref)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_made_via ON agent_made(created_via, made_at);
+
 -- 11f. Photo upload budget log (engine/photo-upload-budget.ts): records photo bytes stored
 -- per member in a sliding 24-hour window. This server's own, never copied to a standby,
 -- and pruned once older than 48 hours.

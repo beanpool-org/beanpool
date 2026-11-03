@@ -554,6 +554,7 @@ export const TABLES: Record<string, TableEntry> = {
     bring_back_log: { kind: 'local', reason: "this server's audit trail of the bring-backs it released" },
     writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
     money_acts: { kind: 'local', reason: "this server's own count of each account's money acts in the day (engine/money-limits.ts), a day's: a promoted server starts its day afresh" },
+    agent_made: { kind: 'local', reason: "the groups, enterprises, shops and Pulse links this server's AI assistants made, by grant (agent/owner-seeds.ts): the grants are this server's own, as agent_suggestions are" },
     keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
     push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },

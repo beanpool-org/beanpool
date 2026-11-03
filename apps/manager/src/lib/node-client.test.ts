@@ -78,6 +78,7 @@ import {
     fetchStrandedEscrows,
     writeOffStrandedEscrow,
     StrandedEscrowWriteOffError,
+    checkRecoveryCodeApi,
 } from './node-client';
 import { FreshProofRequiredError } from './fresh-proof';
 
@@ -213,6 +214,78 @@ describe('resolveNodeApiUrl', () => {
         const url = resolveNodeApiUrl('https://node.beanpool.org', '/api/local/admin/onboarding-funnel', { days: '30' });
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
 
+        vi.unstubAllGlobals();
+    });
+});
+
+describe('checkRecoveryCodeApi', () => {
+    it('returns matches true and codeId when code is correct', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => ({ matches: true, codeId: 42 }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await checkRecoveryCodeApi('https://node.example', 'ABCD-EFGH', 'admin-pass', 'tfa-123');
+
+        expect(res).toEqual({ matches: true, codeId: 42 });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toBe(resolveNodeApiUrl('https://node.example', '/api/local/admin/takeover/recovery-code/check'));
+        expect(init.method).toBe('POST');
+        expect(init.headers).toEqual({
+            'Content-Type': 'application/json',
+            'X-Admin-Password': 'admin-pass',
+            'X-Admin-2FA-Session': 'tfa-123',
+        });
+        expect(JSON.parse(init.body)).toEqual({
+            code: 'ABCD-EFGH',
+            password: 'admin-pass',
+        });
+        vi.unstubAllGlobals();
+    });
+
+    it('returns matches false and codeId null when code does not match', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
+            status: 200,
+            json: async () => ({ matches: false }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await checkRecoveryCodeApi('https://node.example', 'WRONG-CODE');
+        expect(res).toEqual({ matches: false, codeId: null });
+        vi.unstubAllGlobals();
+    });
+
+    it('handles mistyped code (400 with typo: true) without throwing', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: false,
+            status: 400,
+            json: async () => ({ typo: true, error: 'Check characters do not match' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await checkRecoveryCodeApi('https://node.example', 'TYPO-CODE');
+        expect(res).toEqual({
+            matches: false,
+            codeId: null,
+            typo: true,
+            message: 'Check characters do not match',
+        });
+        vi.unstubAllGlobals();
+    });
+
+    it('rethrows unexpected server errors (500)', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            ok: false,
+            status: 500,
+            json: async () => ({ error: 'Internal database error' }),
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(checkRecoveryCodeApi('https://node.example', 'SOME-CODE')).rejects.toThrow('Internal database error');
         vi.unstubAllGlobals();
     });
 });

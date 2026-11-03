@@ -4,7 +4,7 @@
  * H. Pool-money votes: quadratic, a fresh allowance on each Decision; a member with no completed trade is told
  *    plainly; the list serves the number the server checks (qualifiedTradeValue).
  * I. Secret ballots: no response or broadcast says who voted how; the caller still sees their own vote.
- * J. Who may vote: active, unfrozen members who joined BEFORE the Decision opened. joined_at survives a
+ * J. Who may vote: active members (frozen ones too: a freeze moves no vote) who joined BEFORE the Decision opened. joined_at survives a
  *    backup restore.
  * K. Turnout: 30% (25% for removal) of the Decision's electorate ACTIVE in the last 30 days — any signed
  *    activity, not only trades — never fewer than 3. Last activity is backed by records that survive a restore.
@@ -253,6 +253,15 @@ async function run() {
     assert(!tooMany.success && tooMany.error === '5 votes cost 25 voice credits, and you have 16.',
         `over-spending one Decision is refused in plain words (got "${tooMany.error}")`);
 
+    // A freeze is about Beans, not citizenship (RV-S7): a trader whose credit is frozen still spends voice credits on a grant,
+    // and the vote is in its tally (Grant B: no other section reads it).
+    const frozenTrader = makeMember('FrozenTrader', { frozen: true });
+    completedTrade(frozenTrader, partner2, 5);
+    const bVotersBefore = tallyDecision(poolB.id).totalVoters;
+    const frozenOnB = castDecisionVote(poolB.id, frozenTrader, true, 2);
+    assert(frozenOnB.success && frozenOnB.creditsUsed === 4 && tallyDecision(poolB.id).totalVoters === bVotersBefore + 1,
+        `a frozen member's vote counts on a grant: 2 votes, 4 credits, in the tally (${JSON.stringify(frozenOnB)})`);
+
     const listForTrader = await callRouter(commons, 'GET', '/api/commons/decisions', { actor: trader });
     assert(listForTrader.body.myPoolVoting?.voiceCredits === 16,
         `the list serves the signer's voice credits = qualifiedTradeValue (got ${JSON.stringify(listForTrader.body.myPoolVoting)})`);
@@ -335,8 +344,14 @@ async function run() {
     const sameInstant = makeMember('SameInstant', { joinedAt: jDecision.opensAt });
     assert(!castDecisionVote(jDecision.id, sameInstant, true).success, 'joining at the very instant it opened is not "before"');
     assert(castDecisionVote(jDecision.id, oldHand, true).success, 'a member who joined earlier votes');
+    // A freeze is about Beans, not citizenship (RV-S7): a member whose credit is frozen votes, and the vote counts.
     const frozen = makeMember('Frozen', { frozen: true });
-    assert(!castDecisionVote(jDecision.id, frozen, true).success, 'a frozen member cannot vote');
+    const votersBefore = tallyDecision(jDecision.id).totalVoters;
+    const frozenVote = castDecisionVote(jDecision.id, frozen, true);
+    assert(frozenVote.success && tallyDecision(jDecision.id).totalVoters === votersBefore + 1 && decisionsEngine.checkVoterEligibility(frozen, jDecision).ok,
+        `a frozen member votes, and the vote is in the tally (${JSON.stringify(frozenVote)})`);
+    const frozenPropose = decisionsEngine.checkCanProposeDecision(frozen);
+    assert(!frozenPropose.ok && /frozen/i.test(frozenPropose.error ?? ''), `the same frozen member still cannot propose a Decision (${JSON.stringify(frozenPropose)})`);
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() - HOUR).toISOString(), newcomer);
     const laterDecision = createDecision({ authorPubkey: oldHand, title: 'Unfreeze JSubject', description: 'Opened after the newcomer joined', touches: 'member', effect: 'unfreeze_credit', subject: jSubject });
     assert(castDecisionVote(laterDecision.id, newcomer, true).success, 'the same member votes on a Decision opened after they joined');
@@ -352,8 +367,11 @@ async function run() {
     assert(getActiveMembersCount30d() === 10, 'a member last active 45 days ago does not count');
     const quietFrozen = makeMember('ActiveButFrozen', { lastActiveAt: new Date().toISOString(), frozen: true });
     const quietSuspended = makeMember('ActiveButSuspended', { lastActiveAt: new Date().toISOString(), status: 'disabled' });
-    assert(getActiveMembersCount30d() === 10, 'frozen and suspended members, who cannot vote, are not in the turnout base');
-    void quietFrozen; void quietSuspended;
+    assert(getActiveMembersCount30d() === 11, `a frozen member, who votes, is in the turnout base; a suspended one, who cannot, is not (got ${getActiveMembersCount30d()})`);
+    // Quiet again, so the counts below stay as they were (the frozen member's inclusion is proved above).
+    db.prepare('UPDATE members SET last_active_at = ? WHERE public_key = ?').run(new Date(kNow - 45 * DAY).toISOString(), quietFrozen);
+    assert(getActiveMembersCount30d() === 10, 'back to 10 once the frozen member goes quiet');
+    void quietSuspended;
     // Restored from a delta backup: last_active_at lagged, but the trade and the post travelled with the backup.
     const restoredTrader = makeMember('RestoredTrader', { lastActiveAt: new Date(kNow - 90 * DAY).toISOString() });
     completedTrade(restoredTrader, signedOnly[0], 5, new Date(kNow - 3 * DAY));

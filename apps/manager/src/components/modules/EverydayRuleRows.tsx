@@ -65,7 +65,10 @@ export function EverydayRuleRows({ activeNode, viewer, group, title, intro }: Ev
     const load = async () => {
         setLoadError(null);
         try {
-            setShape(await fetchCommunityShape(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
+            const data = await fetchCommunityShape(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            // An answer that is not a shape (an older node, an error body) is a failed load, never a crash.
+            if (!data?.settings || !Array.isArray(data.log)) throw new Error(t('Could not load these rules.'));
+            setShape(data);
         } catch (err: any) {
             setLoadError(err?.message || t('Could not load these rules.'));
         }

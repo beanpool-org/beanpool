@@ -225,11 +225,15 @@ export function CommunityShapeSection({
     // ── The lock line and the button under a locked Core row ──
     const lockedBy = shape.core?.lock?.byCallsign ? `@${shape.core.lock.byCallsign}` : t('an owner');
     const since = lockDate(shape.core?.lock?.at);
-    const lockLine = locked
-        ? (since
-            ? t('Locked since {date} by {callsign}.').replace('{date}', since).replace('{callsign}', lockedBy)
-            : t('Locked.')) + ' ' + (canEdit ? t('Unlock to change: it asks for your proof, and every owner is told.') : t('Only an owner unlocks it.'))
-        : undefined;
+    const lockLine = !locked
+        ? undefined
+        : since
+            ? (canEdit
+                ? t('Locked since {date} by {callsign}. Unlock to change: it asks for your proof, and every owner is told.')
+                : t('Locked since {date} by {callsign}. Only an owner unlocks it.')).replace('{date}', since).replace('{callsign}', lockedBy)
+            : canEdit
+                ? t('Locked. Unlock to change: it asks for your proof, and every owner is told.')
+                : t('Locked. Only an owner unlocks it.');
 
     const unlockButton = (key: keyof ShapeSettings, current: unknown) => {
         if (!locked || !canEdit || settings[key]?.lock) return undefined;
@@ -290,9 +294,10 @@ export function CommunityShapeSection({
     });
 
     const door = currentDoor(shape);
-    const joinValueText = settings.join.value === 'paused' ? `${joinDisplay(door)} · ${t('paused now')}` : joinDisplay(settings.join.value);
+    const joinValueText = settings.join.value === 'paused' ? t('{door} · paused now').replace('{door}', joinDisplay(door)) : joinDisplay(settings.join.value);
 
-    const unconfirmedOwner = !locked && canEdit;
+    // A server from before core settings says nothing of them: no banner, no walkthrough, no lock to speak of.
+    const hasCore = Boolean(shape.core);
 
     return (
         <div data-testid="community-shape-section" className="p-4 sm:p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl max-w-2xl w-full mx-auto font-sans space-y-6">
@@ -340,7 +345,7 @@ export function CommunityShapeSection({
             )}
 
             {/* Not confirmed yet: offered, never forced. The community runs on its choices meanwhile. */}
-            {!locked && !standby && !(walkStart && canEdit) && (
+            {hasCore && !locked && !standby && !(walkStart && canEdit) && (
                 canEdit ? (
                     <div data-testid="core-unconfirmed-banner" className="p-3.5 rounded-xl bg-bp-chip-warn-tint border border-amber-800/50 space-y-2">
                         <p className="text-xs font-bold text-bp-chip-warn-ink m-0">{t('Not confirmed yet.')}</p>
@@ -360,7 +365,7 @@ export function CommunityShapeSection({
                 )
             )}
 
-            {walkStart && canEdit && !locked ? (
+            {hasCore && walkStart && canEdit && !locked ? (
                 <CoreWalkthrough
                     activeNode={activeNode}
                     shape={shape}

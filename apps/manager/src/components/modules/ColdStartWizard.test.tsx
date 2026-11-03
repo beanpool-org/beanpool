@@ -259,7 +259,7 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         const line = screen.getByTestId('recovery-copies-line');
         expect(line).toHaveTextContent("Where members' copies go: This server");
         expect(line).toHaveTextContent("Your server keeps members' copies. The people who run it can open them.");
-        expect(line).toHaveTextContent('How this community works → Ways back');
+        expect(line).toHaveTextContent('You can change it later under Core settings; once you confirm them, each change asks you to unlock it first.');
         // Asked once, as the wizard opened: never by a step.
         expect(vi.mocked(global.fetch).mock.calls.filter((c: any[]) => String(c[0]).includes('/api/community/info'))).toHaveLength(1);
     });

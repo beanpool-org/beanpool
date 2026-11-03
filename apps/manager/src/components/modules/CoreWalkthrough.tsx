@@ -149,7 +149,7 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
         const lock = serverHeld(key);
         return lock ? (
             <p data-testid={`walk-held-${key}`} className="text-[11px] leading-relaxed m-0 p-2 rounded-lg bg-nature-900/60 text-nature-300 break-words">
-                <span aria-hidden="true">🔒 </span>{t('Set by this server.')} {lock.why}
+                <span aria-hidden="true">🔒 </span>{lock.why}
             </p>
         ) : null;
     };
@@ -170,7 +170,7 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
                                 <input type="radio" name={`walk-${key}`} checked={value === on}
                                     onChange={() => setDraft({ ...draft, [key]: on })} className="mt-0.5 accent-terra-500" />
                                 <div>
-                                    <span className="font-bold">{on ? t('On') : t('Off')}{current === on ? ` · ${t('now')}` : ''}</span>
+                                    <span className="font-bold">{current === on ? (on ? t('On · now') : t('Off · now')) : (on ? t('On') : t('Off'))}</span>
                                     <p className="text-[11px] text-nature-400 m-0 mt-0.5">{getConsequenceSentence(key, on, shape)}</p>
                                     {!on && extraOff && <p className="text-[11px] text-bp-ink-warning m-0 mt-0.5">{extraOff}</p>}
                                 </div>
@@ -212,7 +212,7 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
                         {t('Set once, when you start your community. Changing one later affects every member, and asks you to unlock it first. Six settings, about five minutes. Your community already runs with the choices shown; this is where you make them yours.')}
                     </p>
                     <p className="text-xs text-nature-400 m-0">
-                        {shape.kind === 'global' ? t('Kind of server: global community') : t('Kind of server: local community')} · {t('set on the server')}
+                        {shape.kind === 'global' ? t('Kind of server: global community · set on the server') : t('Kind of server: local community · set on the server')}
                     </p>
                 </div>
             )}

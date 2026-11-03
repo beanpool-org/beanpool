@@ -75,7 +75,7 @@ describe('RecoveryCopiesLine', () => {
 
         expect(screen.getByTestId('recovery-copies-line')).toBeInTheDocument();
         expect(screen.getByText(/Where members' copies go: BeanPool's key vault/)).toBeInTheDocument();
-        expect(screen.getByText(/How this community works → Ways back/)).toBeInTheDocument();
+        expect(screen.getByText(/You can change it later under/)).toHaveTextContent('Core settings');
     });
 
     it('renders correctly for server choice', () => {

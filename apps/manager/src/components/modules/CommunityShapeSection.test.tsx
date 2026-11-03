@@ -202,8 +202,8 @@ describe('CommunityShapeSection — 320 px layout & role access', () => {
 
         // Header and role hint
         expect(screen.getByText('🧭')).toBeInTheDocument();
-        expect(screen.getByText('How this community works')).toBeInTheDocument();
-        expect(screen.getByTestId('shape-role-hint')).toHaveTextContent("You're an admin: this page is read-only.");
+        expect(screen.getByText('Core settings')).toBeInTheDocument();
+        expect(screen.getByTestId('shape-role-hint')).toHaveTextContent("You're an admin: you can read these.");
 
         // Admins see no expand arrows or buttons to change
         expect(container.querySelectorAll('button[type="submit"]')).toHaveLength(0);
@@ -213,8 +213,9 @@ describe('CommunityShapeSection — 320 px layout & role access', () => {
         expect(screen.getByTestId('shape-val-join')).toHaveTextContent('Any member invites');
         expect(screen.getByTestId('shape-val-beans')).toHaveTextContent('On');
         expect(screen.getByTestId('shape-val-decisions')).toHaveTextContent('On');
-        expect(screen.getByTestId('shape-val-knocks')).toHaveTextContent('On');
-        expect(screen.getByTestId('shape-val-listed')).toHaveTextContent('Yes');
+        // The everyday rules moved to where they are used (EverydayRuleRows.test.tsx).
+        expect(screen.queryByTestId('shape-val-knocks')).toBeNull();
+        expect(screen.queryByTestId('shape-val-listed')).toBeNull();
     });
 
     it('standby server shows standby banner and refuses all editing', async () => {
@@ -271,29 +272,6 @@ describe('CommunityShapeSection — Owner editing and saving single changes', ()
         expect(payload.changes).toEqual({ join: 'admins' });
         expect(payload.note).toBe('Winter lockdown');
         expect(payload.password).toBe('pw');
-    });
-
-    it('owner can switch requests to join (knocks) off alone', async () => {
-        const shape = makeDefaultShape();
-        const fetchMock = mockShapeApi(shape);
-
-        render(<CommunityShapeSection activeNode={NODE} viewer={PASSWORD} />);
-        await waitFor(() => expect(screen.getByTestId('shape-val-knocks')).toHaveTextContent('On'));
-
-        fireEvent.click(screen.getByTestId('shape-expand-knocks'));
-        const checkbox = screen.getByRole('checkbox', { name: /Take requests to join/i });
-        expect(checkbox).toBeChecked();
-
-        fireEvent.click(checkbox);
-        expect(checkbox).not.toBeChecked();
-        expect(screen.getByTestId('shape-consequence')).toHaveTextContent(/Nobody can ask to join, and members stop seeing requests/);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
-
-        const postCall = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
-        expect(postCall).toBeDefined();
-        expect(JSON.parse(postCall![1].body).changes).toEqual({ knocks: false });
     });
 
     it('owner can configure known floor numbers and saves { knownFloor: { on, floor, cap } }', async () => {
@@ -411,94 +389,6 @@ describe('CommunityShapeSection — Locks and Refusals (409)', () => {
             expect(screen.getByRole('alert')).toHaveTextContent('Switching Beans off would freeze what members hold.');
         });
     });
-
-    it('Finding 1: Listed row opens under held_back, schedule_never, and server_env (configured: true) so owner can switch OFF', async () => {
-        for (const code of ['held_back', 'schedule_never', 'server_env'] as const) {
-            const shape = makeDefaultShape({
-                listed: {
-                    value: false,
-                    configured: true,
-                    source: 'owner',
-                    lock: { code, why: `Locked by ${code}` },
-                },
-            });
-            const fetchMock = mockShapeApi(shape);
-
-            const { unmount } = render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
-            await waitFor(() => expect(screen.getByTestId('shape-lock-listed')).toBeInTheDocument());
-
-            // Lock line is visible
-            expect(screen.getByTestId('shape-lock-listed')).toHaveTextContent(`Locked by ${code}`);
-
-            // Row CAN expand
-            fireEvent.click(screen.getByTestId('shape-expand-listed'));
-            const checkbox = screen.getByRole('checkbox', { name: /Publish to directory/i }) as HTMLInputElement;
-            expect(checkbox).toBeInTheDocument();
-            // Starts checked from configured (true), not value (false)
-            expect(checkbox.checked).toBe(true);
-
-            // Save is disabled initially because draftValue === configured
-            const saveBtn = screen.getByRole('button', { name: 'Save' });
-            expect(saveBtn).toBeDisabled();
-
-            // Clicking unchecks it
-            fireEvent.click(checkbox);
-            expect(checkbox.checked).toBe(false);
-            expect(saveBtn).not.toBeDisabled();
-
-            // If server_env, cannot re-check it to true
-            if (code === 'server_env') {
-                expect(checkbox).toBeDisabled();
-            }
-
-            // Save sends listed: false
-            fireEvent.click(saveBtn);
-            await waitFor(() => {
-                const call = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
-                expect(call).toBeDefined();
-                expect(JSON.parse(call![1].body)).toMatchObject({
-                    changes: { listed: false },
-                });
-            });
-
-            unmount();
-        }
-    });
-
-    it('Finding 1: Listed row does not expand under profile (global) or server_env when configured is false', async () => {
-        // Global kind with profile lock
-        const globalShape = makeDefaultShape({
-            listed: {
-                value: false,
-                configured: true,
-                source: 'server',
-                lock: { code: 'profile', why: "Set by this server's kind (global)" },
-            },
-        }, { kind: 'global' });
-        mockShapeApi(globalShape);
-        const { unmount } = render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
-        await waitFor(() => expect(screen.getByTestId('shape-lock-listed')).toBeInTheDocument());
-
-        fireEvent.click(screen.getByTestId('shape-expand-listed'));
-        expect(screen.queryByRole('checkbox', { name: /Publish to directory/i })).toBeNull();
-        unmount();
-
-        // server_env when configured is already false: cannot turn on
-        const envOffShape = makeDefaultShape({
-            listed: {
-                value: false,
-                configured: false,
-                source: 'owner',
-                lock: { code: 'server_env', why: 'Held back by env' },
-            },
-        });
-        mockShapeApi(envOffShape);
-        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
-        await waitFor(() => expect(screen.getByTestId('shape-lock-listed')).toBeInTheDocument());
-
-        fireEvent.click(screen.getByTestId('shape-expand-listed'));
-        expect(screen.queryByRole('checkbox', { name: /Publish to directory/i })).toBeNull();
-    });
 });
 
 describe('CommunityShapeSection — Folded fixes from PR #2415 review', () => {
@@ -570,9 +460,8 @@ describe('CommunityShapeSection — Audit log', () => {
         expect(logBlock).toHaveTextContent('Who can join: Any member invites → Only admins invite');
         expect(logBlock).toHaveTextContent('“Summer visitors”');
 
-        // Password session displays "the owner (password)" and On/Off
-        expect(logBlock).toHaveTextContent('the owner (password)');
-        expect(logBlock).toHaveTextContent('Share email: Off → On');
+        // An everyday line (Share email) sits with its own card now, not here.
+        expect(logBlock).not.toHaveTextContent('Share email');
 
         // Raw key without callsign is shortened
         expect(logBlock).toHaveTextContent('abcdef01… (owner)');
@@ -600,7 +489,8 @@ describe('CommunityShapeSection — Accessibility (Finding 5)', () => {
         const radiogroup = screen.getByRole('radiogroup', { name: /Who can join/i });
         expect(radiogroup).toBeInTheDocument();
         const radios = within(radiogroup).getAllByRole('radio');
-        expect(radios).toHaveLength(3);
+        // Two doors: pausing new members is an everyday rule, under Invites & QR.
+        expect(radios).toHaveLength(2);
     });
 
     it('row headers are not buttons for read-only admin viewers', async () => {

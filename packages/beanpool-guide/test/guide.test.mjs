@@ -788,7 +788,7 @@ test("the members' guide: a copy of an event is the phone's and the browser's to
 });
 
 test("the operators' manual: a member shows a copy from their phone or browser (#2731)", () => {
-    const page = fs.readFileSync(path.join(OPERATORS_DIR, 'setup', 'how-this-community-works.md'), 'utf8');
+    const page = fs.readFileSync(path.join(OPERATORS_DIR, 'server', 'address-and-peers.md'), 'utf8');
     assert.ok(page.includes('on the global community from their phone or browser, by their own key'), 'the web app has the tick too');
 });
 

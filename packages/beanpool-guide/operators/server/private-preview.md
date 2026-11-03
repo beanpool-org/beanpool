@@ -13,7 +13,7 @@ Set PRIVATE_PREVIEW=1 in the server's .env and run docker compose up -d. To open
 
 Members' faces keep their addresses either way: on every server, a face opens only from the address the server gave its members.
 
-The Manager shows whether it is on, under Node Identity ("Private preview: on" or "off"). It can't be changed there: only the server's setting changes it.
+The Manager shows whether it is on, under Node Identity, in Being found ("Private preview: on" or "off"). It can't be changed there: only the server's setting changes it.
 
 ## What changes while it is on
 

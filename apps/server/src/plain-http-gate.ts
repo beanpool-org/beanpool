@@ -3,10 +3,11 @@
  * scratch/global-node/DESIGN-https-anywhere-fable.md D9, §6 and §7 S6).
  *
  * A node with no certificate of its own (a LAN or development node, a node reached only through a tunnel) answers on
- * port 80 exactly as it always has. Once this server holds a CA certificate for one of its addresses
- * (tls.ts holdsOwnCertificate), a request that did not come through a tunnel gets only the ACME challenge route (mounted
- * before this gate) and a 301 to https: never a page of the app, an API answer, a cookie or a live-updates socket in
- * cleartext. The redirect goes to the same host when it is one of this community's addresses, else to its main one.
+ * port 80 exactly as it always has. Once this server holds a CA certificate for one of its addresses (tls.ts
+ * holdsOwnCertificate; one that lapsed counts, from the first request after a restart too), a request that did not come
+ * through a tunnel gets only the ACME challenge route (mounted before this gate) and a 301 to https: never a page of the
+ * app, an API answer, a cookie or a live-updates socket in cleartext. The redirect goes to the same host when it is one
+ * of this community's addresses, else to its main one.
  *
  * Which requests came through a tunnel is read from the socket first. A header counts only from a private-range source,
  * never from a public one (cf-connecting-ip from anyone was only ever cosmetic):
@@ -34,6 +35,11 @@ import type Koa from 'koa';
 import net from 'node:net';
 import { configuredAddresses, isBeanPoolName, isLocalNetworkHost, isLoopbackHost, normalizeAddress, primaryAddress } from './engine/own-addresses.js';
 import { holdsOwnCertificate, servedHosts, servesCaCertificateFor } from './services/tls.js';
+import { acmeTargets } from './services/acme/schedule.js';
+
+/** The addresses this server certifies now, as its renewal tick orders them (schedule.ts acmeTargets; status.ts reads the
+ *  same): what tls.ts holdsOwnCertificate reads state.json for, from the first request after a start. */
+const certifiedHosts = () => acmeTargets().map((t) => t.host);
 
 /** A socket's remote address as Node gives it, IPv4-mapped IPv6 unwrapped; '' for none. */
 function plainAddress(remoteAddress: string | undefined): string {
@@ -84,7 +90,7 @@ export function saysHttpsBefore(req: Pick<PlainRequest, 'forwardedProto' | 'forw
  */
 export function plainHttpAnswersAsBefore(req: PlainRequest): boolean {
     if (isLoopbackSource(req.remoteAddress)) return true;
-    if (!holdsOwnCertificate()) return true;
+    if (!holdsOwnCertificate(certifiedHosts)) return true;
     if (!isPrivateSource(req.remoteAddress)) return false;
     const host = req.host ? normalizeAddress(req.host) : null;
     return (!!host && isBeanPoolName(host)) || saysHttpsBefore(req);

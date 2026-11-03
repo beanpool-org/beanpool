@@ -117,14 +117,23 @@ export function selfSignedHosts(now = clock()): Array<{ host: string; expired: b
 
 /**
  * Whether this server has a certificate of its own, for the plain listener's line (plain-http-gate.ts, design D9): it
- * serves a valid CA certificate for one of its addresses, or one of its certified addresses had one that expired before it
- * was renewed (selfSignedHosts `expired`), so a lapse never reopens port 80 to the app in cleartext. On disk only
- * (data/tls/acme/<identifier>/state.json), read at most once every 10 seconds; false on a node that never had one.
+ * serves a valid CA certificate for one of its addresses, or the state.json of one of `certified` (the addresses it
+ * certifies now: schedule.ts acmeTargets) records one, so a lapse never reopens port 80 to the app in cleartext.
+ *
+ * `certified` is read from configuration, not from the renewal tick (checkedHosts, as selfSignedHosts reads it): after a
+ * restart with a lapsed certificate on disk initTls() serves nothing and no tick has looked at anything, and the tick's
+ * order for that address can take ORDER_TIMEOUT_MS; the gate is closed from the first request all the same. Not every
+ * folder on disk (storedHosts) either: a folder stays when its address is dropped, and a node that no longer certifies
+ * that address answers port 80 as one with none. State on disk read at most once every 10 seconds (initTls starts again);
+ * false on a node that never had one.
  */
-export function holdsOwnCertificate(now = clock()): boolean {
+export function holdsOwnCertificate(certified: () => string[], now = clock()): boolean {
     for (const s of served.values()) if (s.notAfter > now) return true;
     if (heldMemo && now >= heldMemo.at && now - heldMemo.at < HELD_MEMO_MS) return heldMemo.held;
-    const held = selfSignedHosts(now).some((h) => h.expired);
+    const held = certified().some((host) => {
+        const state = readState(DATA_DIR, host);
+        return state.validUntil > 0 || state.lastSuccessAt > 0;
+    });
     heldMemo = { at: now, held };
     return held;
 }
@@ -265,6 +274,7 @@ export async function initTls(): Promise<void> {
 
     served.clear();
     checked.clear();
+    heldMemo = null;
     adoptLegacyFleetCertificate();
     const now = clock();
     for (const host of storedHosts(DATA_DIR)) {

@@ -20,6 +20,9 @@
  *   6. the ACME challenge route answers from the Internet on a node with a certificate, unknown tokens 404, never a
  *      redirect;
  *   7. a certificate that expires before it is renewed keeps the redirect: a lapse never reopens port 80 in cleartext;
+ *   7b. nor after a restart: an expired pair and a state.json that records it on disk, initTls(), and the Internet gets a
+ *      301 from the first request, before any renewal tick has looked at the address;
+ *   7c. a lapsed certificate for an address this server no longer certifies (its folder stays) does not shut port 80;
  *   8. a real connection from a non-loopback address of this machine is not loopback (the remoteAddress assumption);
  *   9. what the loopback rule rests on: the tunnel's origin is 127.0.0.1, and docker-compose.yml pins beanpool-node to
  *      127.0.0.1 and runs no host network, so nothing outside the container reaches it from loopback.
@@ -55,6 +58,9 @@ const challenge = await import('./services/acme/challenge.js');
 const store = await import('./services/acme/store.js');
 const gate = await import('./plain-http-gate.js');
 const { LOOPBACK_ORIGIN } = await import('./services/tunnel-connector.js');
+const { acmeTargets } = await import('./services/acme/schedule.js');
+/** The addresses this server certifies now, as the gate reads them. */
+const certified = () => acmeTargets().map((t) => t.host);
 
 initAdminPassword();
 await tlsMod.initTls();
@@ -107,7 +113,7 @@ const OWN = 'beans.example.org';
 
 // ── 1. No certificate of its own: as always ─────────────────────────────────────────────────────────────────────
 console.log('\n1. A node with no certificate of its own answers port 80 as it always has');
-check('no certificate of its own at the start', !tlsMod.holdsOwnCertificate());
+check('no certificate of its own at the start', !tlsMod.holdsOwnCertificate(certified));
 {
     const api = await get(PUBLIC, '/api/version', OWN);
     check('/api from the Internet is served (as today)', api.status === 200 && api.body.includes('version'), `${api.status} ${api.body.slice(0, 80)}`);
@@ -126,7 +132,7 @@ const made = selfsigned.generate([{ name: 'commonName', value: OWN }], {
 });
 const problem = tlsMod.serveCertificate(OWN, { cert: made.cert, key: made.private });
 check('the test certificate is served', problem === null, problem ?? '');
-check('the node now holds a certificate of its own', tlsMod.holdsOwnCertificate());
+check('the node now holds a certificate of its own', tlsMod.holdsOwnCertificate(certified));
 check('its main address is the configured name', primaryAddress() === OWN, String(primaryAddress()));
 
 function redirected(a: Answer, to: string): boolean {
@@ -242,10 +248,58 @@ console.log('\n7. A certificate that lapses keeps the redirect');
     tlsMod.noteChecked(OWN);
     tlsMod._setTlsClockForTests(() => times.notAfter + 60_000);
     check('the certificate is no longer served', !tlsMod.servesCaCertificateFor(OWN));
-    check('the node still counts as holding one', tlsMod.holdsOwnCertificate());
+    check('the node still counts as holding one', tlsMod.holdsOwnCertificate(certified));
     const a = await get(PUBLIC, '/api/version', OWN);
     check('/api from the Internet is still a 301', a.status === 301, `${a.status}`);
     tlsMod._setTlsClockForTests(null);
+}
+
+console.log('\n7b. After a restart with that lapsed certificate on disk, the redirect holds before any renewal tick');
+{
+    // A fresh start as index.ts makes one: the expired pair and a state.json that records it in data/tls/acme/, nothing
+    // served, no tick yet (its order for the address can take ORDER_TIMEOUT_MS), then initTls() on the boot path. The
+    // clock is minutes past check 7's, so nothing it read is reused.
+    const times = store.certTimes(made.cert)!;
+    store.writePair(dataDir, OWN, { cert: made.cert, key: made.private });
+    store.writeState(dataDir, { ...store.emptyState(OWN), validUntil: times.notAfter, lastSuccessAt: times.notBefore });
+    tlsMod.serveCertificate(OWN, null);
+    tlsMod.setPreferredOrder([]);
+    tlsMod._setTlsClockForTests(() => times.notAfter + 5 * 60_000);
+    await tlsMod.initTls();
+    check('the expired pair on disk is not served after initTls()', tlsMod.servedHosts().length === 0, tlsMod.servedHosts().join(','));
+    check('no renewal tick has looked at any address yet', tlsMod.checkedHosts().length === 0, tlsMod.checkedHosts().join(','));
+    for (const p of ['/api/version', '/settings']) {
+        const a = await get(PUBLIC, p, OWN);
+        check(`${p} from the Internet → 301 before any tick`, redirected(a, `https://${OWN}${p}`), `${a.status} ${a.body.slice(0, 60)}`);
+    }
+    const ws = await upgrade(PUBLIC, OWN);
+    check('a live-updates socket from the Internet is refused before any tick', ws.status === 301, `${ws.status}`);
+    const tunnel = await get(null, '/api/version', 'mullum.beanpool.org');
+    check('the tunnel in this container is still served', tunnel.status === 200, `${tunnel.status}`);
+}
+
+console.log('\n7c. A lapsed certificate for an address this server no longer certifies does not shut port 80');
+{
+    // Its folder stays on disk (schedule.ts: used again if the address comes back), but the node no longer serves that
+    // address: a LAN node now, port 80 answers as it always has.
+    const DROPPED = 'dropped.example.net';
+    const times = store.certTimes(made.cert)!;
+    fs.rmSync(path.join(store.acmeRoot(dataDir), OWN), { recursive: true, force: true });
+    store.writePair(dataDir, DROPPED, { cert: made.cert, key: made.private });
+    store.writeState(dataDir, { ...store.emptyState(DROPPED), validUntil: times.notAfter, lastSuccessAt: times.notBefore });
+    await tlsMod.initTls();
+    check('the dropped address has a folder that records a certificate', tlsMod.servedHosts().length === 0
+        && store.readState(dataDir, DROPPED).validUntil === times.notAfter);
+    check('the node does not count as holding one', !tlsMod.holdsOwnCertificate(certified));
+    const a = await get(PUBLIC, '/api/version', OWN);
+    check('/api from the Internet is served (as on a node with none)', a.status === 200 && a.body.includes('version'), `${a.status}`);
+
+    // Back to a node with a valid certificate of its own, for the checks below.
+    fs.rmSync(path.join(store.acmeRoot(dataDir), DROPPED), { recursive: true, force: true });
+    store.writePair(dataDir, OWN, { cert: made.cert, key: made.private });
+    tlsMod._setTlsClockForTests(null);
+    await tlsMod.initTls();
+    check('the valid pair on disk is served again', tlsMod.servesCaCertificateFor(OWN) && tlsMod.holdsOwnCertificate(certified));
 }
 
 console.log('\n8. A real connection from a non-loopback address of this machine');

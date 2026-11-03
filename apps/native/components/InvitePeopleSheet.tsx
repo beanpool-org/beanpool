@@ -10,7 +10,8 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { Modal, View, Text, TextInput, Pressable, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardController } from 'react-native-keyboard-controller';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

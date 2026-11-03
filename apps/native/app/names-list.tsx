@@ -19,7 +19,8 @@
  * is at least 48dp tall and every row wraps at 320dp and 1.3× text.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch, Modal, Share, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Switch, Modal, Share, ScrollView } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams, ErrorBoundary } from 'expo-router';

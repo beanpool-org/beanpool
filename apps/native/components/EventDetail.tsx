@@ -16,7 +16,8 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator, Linking, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Linking, Platform, DeviceEventEmitter } from 'react-native';
+import { Alert } from '../utils/keyboard-alert';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';

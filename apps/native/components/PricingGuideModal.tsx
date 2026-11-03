@@ -10,15 +10,17 @@ import {
     TextInput,
     Pressable,
     FlatList,
+    ScrollView,
     Modal,
     ActivityIndicator,
     Platform,
     Image,
-    KeyboardAvoidingView,
 } from 'react-native';
 // react-native's own SafeAreaView is a no-op on Android, so the header sat under the status
 // bar and the close button collided with the battery. This one applies real insets.
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalKeyboardLift } from './useModalKeyboardLift';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import {
@@ -50,6 +52,11 @@ interface Props {
 
 export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props) {
     const { theme, colors } = useTheme();
+    // The report box is lifted by the keyboard's height (useModalKeyboardLift), never React Native's KeyboardAvoidingView
+    // (iOS-only: on Android the box stayed under the keyboard) and never a nested KeyboardProvider.
+    const insets = useSafeAreaInsets();
+    const reportLift = useModalKeyboardLift(insets.top + 8);
+    const reportScroll = useScrollFieldIntoView();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<PricingCategory | 'all'>('all');
@@ -658,8 +665,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
 
                 {/* Report Bad Price Modal */}
                 <Modal visible={!!reportingItem} transparent animationType="fade" onRequestClose={() => setReportingItem(null)}>
-                    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetOverlay}>
-                        <View style={styles.sheetCard}>
+                    <View style={styles.sheetOverlay}>
+                        <View style={[styles.sheetCard, { maxHeight: reportLift.maxHeight, marginBottom: reportLift.lift }]}>
+                            <ScrollView {...reportScroll.scrollProps} style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                             {reportSuccess ? (
                                 <View style={{ alignItems: 'center', paddingVertical: 20 }}>
                                     <Text style={{ fontSize: 40, marginBottom: 10 }}>✨</Text>
@@ -704,6 +712,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                     </View>
 
                                     <TextInput
+                                        {...reportScroll.inputProps}
                                         style={styles.reportInput}
                                         placeholder={t('Optional: Why is this estimate wrong? (e.g. what should it cost?)')}
                                         placeholderTextColor={colors.text.muted}
@@ -739,8 +748,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
                                     </Pressable>
                                 </>
                             )}
+                            </ScrollView>
                         </View>
-                    </KeyboardAvoidingView>
+                    </View>
                 </Modal>
             </SafeAreaView>
         </Modal>

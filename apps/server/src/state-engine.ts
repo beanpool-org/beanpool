@@ -8865,11 +8865,15 @@ export type PruneDoor = 'direct' | 'owner-branch' | 'settles-removal';
  * vote passed, so nothing may say the community voted for it.
  */
 export function removalInGraceOf(publicKey: string): { id: string; gracePeriodEndsAt: string | null; decidedByOwner: boolean } | null {
+    // A branch's vote names its accounts in its params, not its subject (decisions-engine pauseBranch, namesMemberSql).
     const row = db.prepare(`
-        SELECT id, grace_period_ends_at, owner_decision_carried_at FROM decisions
-        WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
-        ORDER BY created_at DESC LIMIT 1
-    `).get(publicKey) as { id: string; grace_period_ends_at: string | null; owner_decision_carried_at: string | null } | undefined;
+        SELECT id, grace_period_ends_at, owner_decision_carried_at FROM decisions d
+        WHERE (d.subject = @pk OR (d.subject IS NULL AND EXISTS (
+                SELECT 1 FROM json_each(CASE WHEN json_valid(d.params) THEN d.params ELSE '{}' END, '$.branch') bm
+                WHERE json_extract(bm.value, '$.pubkey') = @pk)))
+          AND d.effect = 'remove_member' AND d.status = 'execution_pending_grace'
+        ORDER BY d.created_at DESC LIMIT 1
+    `).get({ pk: publicKey }) as { id: string; grace_period_ends_at: string | null; owner_decision_carried_at: string | null } | undefined;
     return row ? { id: row.id, gracePeriodEndsAt: row.grace_period_ends_at, decidedByOwner: !!row.owner_decision_carried_at } : null;
 }
 

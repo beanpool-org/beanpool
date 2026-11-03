@@ -22,9 +22,9 @@ import {
     ScrollView,
     Alert,
     ActivityIndicator,
-    KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Crypto from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
@@ -36,6 +36,7 @@ import { placelessListingNote, pollOtherLines, t, tn } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { nearbyListingsOn, useMyArea } from '../utils/member-area';
 import { signedRequestWords } from './signed-request-lines';
+import { useKeepCaretVisible } from './useKeepCaretVisible';
 
 const HEADER_PAD_TOP = 14;
 
@@ -51,6 +52,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
     const { identity } = useIdentity();
     // Android draws this pageSheet full-screen under the status bar; see utils/modal-safe-area.
     const topInset = pageSheetTopInset(Platform.OS, useSafeAreaInsets().top);
+    const { scrollRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
 
     const [question, setQuestion] = useState('');
     const [description, setDescription] = useState('');
@@ -166,7 +168,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
         >
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior="padding"
             >
                 <View style={styles.container}>
                     {/* Header */}
@@ -200,6 +202,8 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                     </View>
 
                     <ScrollView
+                        ref={scrollRef}
+                        {...keepCaretVisible}
                         style={styles.body}
                         contentContainerStyle={{ paddingBottom: 40 }}
                         keyboardShouldPersistTaps="handled"

@@ -465,6 +465,7 @@
  "test-removal-fairness": 15.5,
  "test-removal-jury": 3.7,
  "test-removal-small": 5.5,
+ "test-removal-branch": 5.5,
  "test-removed-connector-listings": 6.3,
  "test-removed-member-delete": 6.6,
  "test-replica-hashes": 0.6,

@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardController } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalKeyboardLift } from '../components/useModalKeyboardLift';
 import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -84,6 +85,10 @@ export default function TreasuryManageScreen() {
     const [sweeping, setSweeping] = useState(false);
     const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
     const [hourlyDealPrompt, setHourlyDealPrompt] = useState<any | null>(null);
+    // The hours card is centred in a Modal and its box takes focus at once: the card is lifted by the keyboard's height
+    // (never a KeyboardAvoidingView or a nested KeyboardProvider in a Modal: see components/useModalKeyboardLift).
+    const hoursInsets = useSafeAreaInsets();
+    const hoursLift = useModalKeyboardLift(hoursInsets.top + 8);
     const [hourlyDealHours, setHourlyDealHours] = useState('');
     const [cancelling, setCancelling] = useState(false);
     const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
@@ -1252,8 +1257,8 @@ export default function TreasuryManageScreen() {
 
             {hourlyDealPrompt && (
                 <Modal visible transparent animationType="fade" onRequestClose={() => setHourlyDealPrompt(null)}>
-                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-                        <View style={{ backgroundColor: colors.surface.card, borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, borderWidth: 1, borderColor: colors.border.default }}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20, paddingBottom: 20 + hoursLift.lift }}>
+                        <View style={{ backgroundColor: colors.surface.card, borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, maxHeight: hoursLift.maxHeight, borderWidth: 1, borderColor: colors.border.default }}>
                             <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading, marginBottom: 6 }}>
                                 {t('Confirm Hours Worked')}
                             </Text>

@@ -24,6 +24,7 @@ import {
 } from '../utils/db';
 import { useTheme } from '../app/ThemeContext';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { signedRequestWords } from './signed-request-lines';
 
 /** Sentences marked in core (scoped-decision.ts), translated here where they are shown. */
@@ -207,6 +208,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
     // Lifted by the keyboard's height, never a KeyboardAvoidingView inside this Modal: see components/useModalKeyboardLift.
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8, 0.92);
+    const fieldScroll = useScrollFieldIntoView();
     const effects = scopedEffectsFor(lifecycle);
     const [effect, setEffect] = useState<ScopedEffect>('pay_out');
     const [who, setWho] = useState<string | null>(null);
@@ -244,7 +246,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
         <Modal visible transparent animationType="slide" onRequestClose={onClose}>
             <View style={[s.backdrop, { paddingTop: insets.top + 8 }]}>
                 <View style={[s.sheet, { maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="propose-scoped-sheet">
-                    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
+                    <ScrollView {...fieldScroll.scrollProps} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
                         <Text style={s.sheetTitle} accessibilityRole="header">{t('Propose a vote')}</Text>
                         <Text style={s.note}>{t("Everyone on the roll votes. It runs 7 days, or ends sooner once the answer can't change.")}</Text>
                         <Text style={s.fieldLabel}>{t('What should happen?')}</Text>
@@ -273,6 +275,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                             <>
                                 <Text style={s.fieldLabel}>{t('How many Beans?')}</Text>
                                 <TextInput
+                                    {...fieldScroll.inputProps}
                                     value={amountText} onChangeText={setAmountText} keyboardType="decimal-pad" placeholder="40"
                                     placeholderTextColor={colors.text.muted} style={s.input} accessibilityLabel={t('Amount in Beans')}
                                 />
@@ -283,10 +286,10 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                             </>
                         )}
                         <Text style={s.fieldLabel}>{t('Title')}</Text>
-                        <TextInput value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder={t('Pay Ali for the stall repairs')}
+                        <TextInput {...fieldScroll.inputProps} value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder={t('Pay Ali for the stall repairs')}
                             placeholderTextColor={colors.text.muted} accessibilityLabel={t('Title')} />
                         <Text style={s.fieldLabel}>{t('Why?')}</Text>
-                        <TextInput value={why} onChangeText={setWhy} style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]} multiline
+                        <TextInput {...fieldScroll.inputProps} value={why} onChangeText={setWhy} style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]} multiline
                             placeholder={t('Say why, in a sentence or two.')} placeholderTextColor={colors.text.muted} accessibilityLabel={t('Why')} />
                         {error && <Text style={s.error}>{error}</Text>}
                         <OpenTheVoteButtons ready={ready} busy={busy} onSend={send} onClose={onClose} />
@@ -334,6 +337,7 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
     // Lifted by the keyboard's height, never a KeyboardAvoidingView inside this Modal: see components/useModalKeyboardLift.
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8, 0.92);
+    const fieldScroll = useScrollFieldIntoView();
     const choicesOffered = groupChoicesFor(people, me);
     const [choice, setChoice] = useState<GroupChoice>(choicesOffered[0] ?? 'close');
     const [who, setWho] = useState<string | null>(null);
@@ -366,7 +370,7 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
         <Modal visible transparent animationType="slide" onRequestClose={onClose}>
             <View style={[s.backdrop, { paddingTop: insets.top + 8 }]}>
                 <View style={[s.sheet, { maxHeight: lift.maxHeight, marginBottom: lift.lift }]} testID="propose-group-sheet">
-                    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
+                    <ScrollView {...fieldScroll.scrollProps} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
                         <Text style={s.sheetTitle} accessibilityRole="header">{t('Propose a vote')}</Text>
                         <Text style={s.note}>{t("The group's members and convenors vote. It runs 7 days, or ends sooner once the answer can't change.")}</Text>
                         <Text style={s.fieldLabel}>{t('What should happen?')}</Text>
@@ -408,10 +412,10 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
                             <Text style={s.fee}>{t('If it passes, the group takes no new messages, posts or members, and its other open votes end. Its chat stays to read.')}</Text>
                         )}
                         <Text style={s.fieldLabel}>{t('Title')}</Text>
-                        <TextInput value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder={t('Ada leads the guild')}
+                        <TextInput {...fieldScroll.inputProps} value={title} onChangeText={setTitle} style={s.input} maxLength={120} placeholder={t('Ada leads the guild')}
                             placeholderTextColor={colors.text.muted} accessibilityLabel={t('Title')} />
                         <Text style={s.fieldLabel}>{t('Why?')}</Text>
-                        <TextInput value={why} onChangeText={setWhy} style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]} multiline
+                        <TextInput {...fieldScroll.inputProps} value={why} onChangeText={setWhy} style={[s.input, { minHeight: 72, textAlignVertical: 'top' }]} multiline
                             placeholder={t('Say why, in a sentence or two.')} placeholderTextColor={colors.text.muted} accessibilityLabel={t('Why')} />
                         {error && <Text style={s.error}>{error}</Text>}
                         <OpenTheVoteButtons ready={ready} busy={busy} onSend={send} onClose={onClose} />

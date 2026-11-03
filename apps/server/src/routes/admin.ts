@@ -46,7 +46,8 @@ import {
 import {
     decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, adminHideReply,
     emergencySuspendRefusal, pauseChainRefusal, OPEN_PAUSES_PROOF_CODE, PAUSE_REFUSAL_CODES, ownerDecideTooFew, ownerDecisionRefusal,
-    tallyForReader, type OwnerOnlyAdminAction, type PauseRefusal,
+    tallyForReader, pauseBranch, pauseBranchRefusal, branchPauseSelection,
+    type OwnerOnlyAdminAction, type PauseRefusal,
 } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
@@ -2051,6 +2052,52 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     }
 });
 
+/** The established accounts an owner names for a branch pause (`include`): member keys only, as many as a branch holds. */
+function includeKeys(raw: unknown): string[] {
+    return Array.isArray(raw) ? raw.filter((k): k is string => typeof k === 'string' && k.length > 0).slice(0, 1000) : [];
+}
+
+// What pausing this member's invite branch would do (removal by vote S5, design §3.5): who would be paused, and who would be
+// left off and why (an established account the owner may name, a node role, one already paused). Reads only; owners only.
+router.get('/api/local/admin/branches/:pubkey/pause', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can pause a whole invite branch')) return;
+    const include = includeKeys(String(ctx.query.include || '').split(',').filter(Boolean));
+    const { accounts, refusal } = branchPauseSelection(ctx.params.pubkey, include);
+    ctx.body = { votes: decisionsOn(), accounts, ...(refusal ? { refusal: refusal.error } : {}) };
+});
+
+// An owner pauses a member and their whole invite branch, and one vote opens on removing every account paused (removal by
+// vote S5, design §3.5): the branch's removal where the community votes. Owners only, with the fresh proof each time (as
+// removing or suspending an owner asks), a reason members read, and `include` naming established accounts to pause too.
+// Refused, before the proof is spent, as the engine would refuse it (pauseBranchRefusal).
+router.post('/api/local/admin/branches/:pubkey/pause', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can pause a whole invite branch')) return;
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
+    const { reason, include: rawInclude, code } = (ctx as any).requestBody || {};
+    const include = includeKeys(rawInclude);
+    const before = pauseBranchRefusal(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '', { include, freshProof: true });
+    if (before.refusal) {
+        ctx.status = before.refusal.status;
+        ctx.body = { error: before.refusal.error, ...(before.refusal.code ? { code: before.refusal.code } : {}) };
+        return;
+    }
+    if (!(await requireFreshProof(ctx, code ?? ctx.get('x-fresh-proof'), 'pause a whole invite branch'))) return;
+    const result = pauseBranch(ctx.params.pubkey, actor, reason, { include, freshProof: true });
+    if (!result.success) {
+        ctx.status = result.status;
+        ctx.body = { error: result.error, ...(result.code ? { code: result.code } : {}) };
+        return;
+    }
+    ctx.body = {
+        success: true,
+        decision: decisionForAdmin(result.decision, (ctx.state as any)?.isKeySession ? actor : null),
+        leftOff: result.leftOff.map(a => ({ pubkey: a.pubkey, name: a.name, leftOff: a.leftOff })),
+    };
+});
+
 router.post('/api/local/admin/announcements', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { title, body, severity } = (ctx as any).requestBody || {};
@@ -2407,8 +2454,9 @@ router.post('/api/local/admin/decisions/:id/hide-reply', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const signedActor = resolveAdminActor(ctx);
     if (!signedActor) return;
-    const { reason } = (ctx as any).requestBody || {};
-    const result = adminHideReply(ctx.params.id, signedActor, reason);
+    // `member`: on a branch's vote, whose reply (each account on its list replies for itself).
+    const { reason, member } = (ctx as any).requestBody || {};
+    const result = adminHideReply(ctx.params.id, signedActor, reason, undefined, member);
     if (!result.success) {
         ctx.status = result.status;
         ctx.body = { error: result.error };

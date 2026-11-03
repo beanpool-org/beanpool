@@ -11,6 +11,7 @@ import { POST_CATEGORIES, categoryLabel } from '../../constants/categories';
 import { HOME_TARGET_DP, homeStyles } from './HomeParts';
 import { sheetStyles } from './sheet-parts';
 import { useModalKeyboardLift } from '../useModalKeyboardLift';
+import { useScrollFieldIntoView } from '../useScrollFieldIntoView';
 
 /**
  * A card's settings sheet (CARD-FRAME §1.2, §1.3): the picker opens it on Add for a type with settings (its last button
@@ -40,6 +41,7 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
 }) {
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8);
+    const fieldScroll = useScrollFieldIntoView();
     const [q, setQ] = useState('');
     const [kind, setKind] = useState<HomeSearchKind>('any');
     const [category, setCategory] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
                             <Text style={[sheetStyles.doneText, { color: colors.text.link }]}>{t('Cancel')}</Text>
                         </Pressable>
                     </View>
-                    <ScrollView style={sheetStyles.list} keyboardShouldPersistTaps="handled" testID="card-settings-scroll">
+                    <ScrollView style={sheetStyles.list} {...fieldScroll.scrollProps} keyboardShouldPersistTaps="handled" testID="card-settings-scroll">
                         {sky ? (
                             <SettingChips label={t('Whose place')} id="place" colors={colors} value={place} onPick={setPlace}
                                 options={SKY_PLACE_CHIPS.map(p => ({ value: p.place, label: t(p.label) }))} />
@@ -87,6 +89,7 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
                         </>) : (<>
                             <Text style={[settingsStyles.label, { color: colors.text.body }]} nativeID="card-settings-words-label">{t('Words to look for')}</Text>
                             <TextInput
+                                {...fieldScroll.inputProps}
                                 value={q}
                                 onChangeText={setQ}
                                 maxLength={HOME_SEARCH_MAX_CHARS}

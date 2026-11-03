@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Alert, Keyboard, ActivityIndicator, DeviceEventEmitter } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useKeepCaretVisible } from '../../components/useKeepCaretVisible';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
 
@@ -534,7 +535,8 @@ export default function PostDetailModal() {
     // Transactions / Reporting state
     const [accepting, setAccepting] = useState(false);
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
-    const scrollViewRef = useRef<ScrollView>(null);
+    // Keeps the field being typed in (the edit form, the rating comment, the reply box) above the keyboard.
+    const { scrollRef: scrollViewRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
     // Contribution-first gate: accepting an Offer requires having listed one.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
@@ -1398,7 +1400,7 @@ export default function PostDetailModal() {
             {/* No keyboardVerticalOffset: this screen draws its own header (no navigation header), and keyboard-controller
                 already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-            <ScrollView ref={scrollViewRef} contentContainerStyle={[styles.scroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 60 }]} keyboardShouldPersistTaps="handled">
+            <ScrollView ref={scrollViewRef} {...keepCaretVisible} contentContainerStyle={[styles.scroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 60 }]} keyboardShouldPersistTaps="handled">
                 {/* Type + Category Badge */}
                 <View style={styles.typeBadgeRow}>
                     <View style={styles.catBadge}>

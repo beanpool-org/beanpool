@@ -20,7 +20,7 @@ import {
 import { projectEndDate } from '../engine/unfunded-pledges.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
-import { decisionsOn, madeWithoutVote, replyToRemovalCase, removalCaseReport, tallyForReader, juryForReader } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, replyToRemovalCase, removalCaseReport, tallyForReader, juryForReader, isBranchVote } from '../decisions-engine.js';
 import { noteNewReport } from '../services/alerts.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -189,6 +189,17 @@ function myPoolVoting(actor: string | undefined): { voiceCredits: number; hasCom
     return { voiceCredits: getVoiceCredits(actor), hasCompletedTrade: hasCompletedTrade(actor) };
 }
 
+/**
+ * Whether the app asking draws a branch's vote (removal by vote S5: decisions-engine pauseBranch), as it says with
+ * `draws=branch` (a comma list; unknown names are ignored). An app from before it would draw that card as one member's
+ * removal, without the list it decides on, so it is never given one: not in the list, nor by its id.
+ */
+function drawsBranchVotes(query: unknown): boolean {
+    const raw = query && typeof query === 'object' ? (query as Record<string, unknown>).draws : undefined;
+    const parts = (Array.isArray(raw) ? raw : [raw]).flatMap(v => typeof v === 'string' ? v.split(',') : []);
+    return parts.map(v => v.trim()).includes('branch');
+}
+
 router.get('/api/commons/decisions', async (ctx) => {
     const status = ctx.query.status as any;
     // With formal Decisions switched off (the global node) nothing is open to a vote, so no open Decision is listed and
@@ -196,7 +207,8 @@ router.get('/api/commons/decisions', async (ctx) => {
     // while they were off, once they are back on: nobody votes on it (madeWithoutVote). The history, and a Decision by
     // its id, still answer.
     const votes = decisionsOn();
-    const decisions = getAllDecisions(status).filter(d => d.status !== 'open' || (votes && !madeWithoutVote(d)));
+    const drawsBranch = drawsBranchVotes(ctx.query);
+    const decisions = getAllDecisions(status).filter(d => (d.status !== 'open' || (votes && !madeWithoutVote(d))) && (drawsBranch || !isBranchVote(d)));
     // Each card carries the signer's own vote (null if they haven't voted) — taken from authentication
     // only, never from a parameter, so the list never reveals how anyone else voted.
     const actor = (ctx.state as any)?.actor as string | undefined;
@@ -217,8 +229,9 @@ router.get('/api/commons/decisions', async (ctx) => {
 
 router.get('/api/commons/decisions/:id', async (ctx) => {
     const decision = getDecision(ctx.params.id);
-    // An enterprise's keepers' vote is read in that enterprise (routes/enterprise-decisions.ts), by its keepers only.
-    if (!decision || decision.scopeKind !== 'community') {
+    // An enterprise's keepers' vote is read in that enterprise (routes/enterprise-decisions.ts), by its keepers only. A
+    // branch's vote only by an app that draws it (drawsBranchVotes).
+    if (!decision || decision.scopeKind !== 'community' || (isBranchVote(decision) && !drawsBranchVotes(ctx.query))) {
         ctx.status = 404;
         ctx.body = { error: word('Decision not found') };
         return;

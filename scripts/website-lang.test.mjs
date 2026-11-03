@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import net from 'node:net';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -56,6 +57,58 @@ const CONTENT_DIR = path.join(REPO_ROOT, 'apps', 'website-src', 'content');
 const require = createRequire(path.join(REPO_ROOT, 'apps/pwa/package.json'));
 const { chromium } = require('playwright');
 const { JSDOM } = require('jsdom');
+
+// Why a goto timed out (3 reds in a week: #2727, #2779, #2774): the pages carry parser-blocking <script src> tags in <head>
+// for unpkg.com (Leaflet) and cdn.jsdelivr.net (supabase-js). `domcontentloaded` and `load` both wait for them, so a CI
+// runner whose fetch of either host stalls holds page.goto for the full 30 s. None of these tests need those scripts, so
+// every browser here refuses any request that is not to the local static server (127.0.0.1) at once. The pages are
+// unchanged; a refused script is skipped and the parser carries on, as it does for a member who is offline.
+// WEBSITE_LANG_STALL_OUTSIDE=1 forces the old condition: the browser resolves every outside host to a local port that
+// accepts connections and never answers, so a request that is not refused hangs the way a stalled CI fetch does.
+const LOCAL_HOST = '127.0.0.1';
+let stallServerPromise = null;
+
+function stallServer() {
+    if (!stallServerPromise) {
+        stallServerPromise = new Promise(resolve => {
+            const sockets = new Set();
+            const srv = net.createServer(s => { sockets.add(s); s.on('error', () => {}); s.on('close', () => sockets.delete(s)); });
+            srv.listen(0, LOCAL_HOST, () => resolve({ srv, port: srv.address().port, sockets }));
+        });
+    }
+    return stallServerPromise;
+}
+
+/** Launches headless Chromium whose every context refuses requests to hosts other than 127.0.0.1. `blockOutside: false` is for the self-test of the guard only. */
+async function launchBrowser({ blockOutside = true } = {}) {
+    const args = [];
+    if (process.env.WEBSITE_LANG_STALL_OUTSIDE === '1') {
+        const { port } = await stallServer();
+        args.push(`--host-resolver-rules=MAP * ${LOCAL_HOST}:${port}, EXCLUDE ${LOCAL_HOST}`);
+    }
+    const browser = await chromium.launch({ headless: true, args });
+    if (!blockOutside) return browser;
+    const newContext = browser.newContext.bind(browser);
+    browser.newContext = async (options) => {
+        const context = await newContext(options);
+        await context.route(url => url.hostname !== LOCAL_HOST, route => route.abort('blockedbyclient'));
+        return context;
+    };
+    browser.newPage = async (options) => {
+        const context = await browser.newContext(options);
+        const page = await context.newPage();
+        page.on('close', () => { context.close().catch(() => {}); });
+        return page;
+    };
+    return browser;
+}
+
+after(async () => {
+    if (!stallServerPromise) return;
+    const { srv, sockets } = await stallServerPromise;
+    for (const s of sockets) s.destroy();
+    srv.close();
+});
 
 test('website translation check passes across all pages and languages', () => {
     const errors = checkWebsite();
@@ -513,6 +566,55 @@ test('main.js on English page presents "Read this in <language>" banner when nav
     }
 });
 
+test('browser guard: a parser-blocking head script on a host that never answers does not hold page.goto, and the real pages\' outside scripts are refused', async () => {
+    // A host that accepts and never answers, reached as "localhost" so it is not the allowed 127.0.0.1.
+    const hang = net.createServer(s => { s.on('error', () => {}); });
+    await new Promise(r => hang.listen(0, '127.0.0.1', r));
+    const hangPort = hang.address().port;
+    const server = http.createServer((req, res) => {
+        if (req.url === '/page.html') {
+            res.writeHead(200, { 'content-type': 'text/html' });
+            res.end(`<!doctype html><html><head><script src="http://localhost:${hangPort}/blocking.js"></script></head><body>ok</body></html>`);
+            return;
+        }
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript' }[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const guarded = await launchBrowser();
+    const unguarded = await launchBrowser({ blockOutside: false });
+    try {
+        // Without the guard the blocking script holds domcontentloaded: this is the CI timeout, at 3 s instead of 30 s.
+        const stuck = await unguarded.newPage();
+        await assert.rejects(
+            stuck.goto(`http://127.0.0.1:${port}/page.html`, { waitUntil: 'domcontentloaded', timeout: 3000 }),
+            /Timeout 3000ms exceeded/,
+            'a head script on a stalled host holds page.goto (the failure the guard prevents)'
+        );
+        // With the guard it is refused at once.
+        const page = await guarded.newPage();
+        const t0 = Date.now();
+        await page.goto(`http://127.0.0.1:${port}/page.html`, { waitUntil: 'domcontentloaded', timeout: 3000 });
+        assert.ok(Date.now() - t0 < 3000, 'guarded goto does not wait for the outside host');
+
+        // The real pages do pull scripts from outside hosts; the guard must refuse every one of them.
+        const refused = [];
+        page.on('requestfailed', req => refused.push(new URL(req.url()).hostname));
+        await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'load', timeout: 10000 });
+        assert.ok(refused.length > 0, 'index.html asks for outside scripts, and they are refused');
+        assert.ok(refused.every(h => h !== LOCAL_HOST), 'only outside hosts are refused');
+    } finally {
+        await guarded.close();
+        await unguarded.close();
+        server.close();
+        hang.close();
+    }
+});
+
 test('320px viewport layout in Arabic (ar) has no horizontal overflow in headless Chromium', async () => {
     const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
 
@@ -526,7 +628,7 @@ test('320px viewport layout in Arabic (ar) has no horizontal overflow in headles
 
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     const port = server.address().port;
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser();
 
     try {
         const page = await browser.newPage({ viewport: { width: 320, height: 600 } });
@@ -558,7 +660,7 @@ test('RTL navbar is mirrored at 1280px in headless Chromium with logo on the rig
 
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     const port = server.address().port;
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser();
 
     try {
         const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -589,7 +691,7 @@ test('language banner on mobile (320px) does not overlap fixed navbar in headles
 
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     const port = server.address().port;
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser();
 
     try {
         const context = await browser.newContext({
@@ -676,7 +778,7 @@ test('stale banner renders inside legal-content and is not obscured by fixed nav
 
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     const port = server.address().port;
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchBrowser();
 
     try {
         const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -940,7 +1042,7 @@ test('mobile width (320px and 360px with 1.3x text) with language menu open has 
     let browser;
 
     try {
-        browser = await chromium.launch({ headless: true });
+        browser = await launchBrowser();
         for (const width of [320, 360]) {
             for (const testPage of ['index.html', 'ar/index.html']) {
                 const page = await browser.newPage({ viewport: { width, height: 640 } });
@@ -1002,7 +1104,7 @@ test('RTL desktop top language menu mirrors without horizontal overflow at 1280p
     let browser;
 
     try {
-        browser = await chromium.launch({ headless: true });
+        browser = await launchBrowser();
         const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
         await page.goto(`http://127.0.0.1:${port}/ar/index.html`, { waitUntil: 'load' });
 
@@ -1047,7 +1149,7 @@ test('mobile width (320px) desktop-lang-menu on pages without phone menu stays w
     let browser;
 
     try {
-        browser = await chromium.launch({ headless: true });
+        browser = await launchBrowser();
         for (const testPage of ['privacy.html', 'ar/status.html']) {
             const page = await browser.newPage({ viewport: { width: 320, height: 640 } });
             await page.goto(`http://127.0.0.1:${port}/${testPage}`, { waitUntil: 'load' });
@@ -1110,7 +1212,7 @@ function navSweepEnv() {
             await new Promise(r => server.listen(0, '127.0.0.1', r));
             const port = server.address().port;
             try {
-                const browser = await chromium.launch({ headless: true });
+                const browser = await launchBrowser();
                 return { server, port, browser };
             } catch (err) {
                 server.close();

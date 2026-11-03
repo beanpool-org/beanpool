@@ -39,7 +39,7 @@ vi.mock('react-native', () => {
     };
 });
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), KeyboardStickyView: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
+vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children?: unknown }) => createElement('div', null, children as any), useSafeAreaInsets: () => ({ top: 0, bottom: 34, left: 0, right: 0 }) }));
 vi.mock('expo-router', async () => {
     const { useEffect } = await import('react');
     return {

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Alert, ActivityIndicator, Platform } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
@@ -45,6 +45,7 @@ export default function GroupPostScreen() {
     const { identity } = useIdentity();
     const { theme, colors } = useTheme();
 
+    const insets = useSafeAreaInsets();
     const [footerHeight, setFooterHeight] = useState(0);
     const [type, setType] = useState<'offer' | 'need'>('offer');
     const [title, setTitle] = useState('');
@@ -468,8 +469,11 @@ export default function GroupPostScreen() {
                     </Pressable>
                 </KeyboardAwareScrollView>
 
-                {/* Rides above the keyboard instead of being hidden behind it while typing. */}
-                <KeyboardStickyView onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
+                {/* Rides above the keyboard instead of being hidden behind it while typing. This screen keeps the 'bottom' safe-area
+                    edge, so at rest the footer sits above the home indicator; iOS reports the keyboard's height WITH that strip, so
+                    without `opened: insets.bottom` the footer would stop that far above the keyboard and cover the bottom of the
+                    field being typed in. Android is left as it was: its library already subtracts the navigation bar. */}
+                <KeyboardStickyView offset={{ opened: Platform.OS === 'ios' ? insets.bottom : 0 }} onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}>
                     <View style={styles.footer}>
                         <Pressable
                             style={styles.submitBtn}

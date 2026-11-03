@@ -63,10 +63,23 @@ describe('groups A and B: each full-screen form scrolls the field being typed in
 
     it('group-post: the Post button rides above the keyboard in a KeyboardStickyView, and the scroll view clears its measured height', () => {
         const c = code('app/group-post.tsx');
-        expect(c).toMatch(/<KeyboardStickyView onLayout=\{\(e\) => setFooterHeight\(e\.nativeEvent\.layout\.height\)\}>/);
+        expect(c).toMatch(/<KeyboardStickyView offset=\{\{ opened: Platform\.OS === 'ios' \? insets\.bottom : 0 \}\} onLayout=\{\(e\) => setFooterHeight\(e\.nativeEvent\.layout\.height\)\}>/);
         expect(c).toMatch(/bottomOffset=\{footerHeight \+ 16\}/);
         expect(c.indexOf('<KeyboardStickyView')).toBeGreaterThan(c.indexOf('</KeyboardAwareScrollView>'));
         expect(c.indexOf('style={styles.footer}')).toBeGreaterThan(c.indexOf('<KeyboardStickyView'));
+    });
+
+    it('group-post on iPhone: the footer stops AT the keyboard, not the home-indicator strip above it (Opus review of #2801)', () => {
+        // iOS reports the keyboard's full height, home-indicator strip included. The screen keeps its 'bottom' edge (the footer
+        // clears the indicator at rest), so the sticky view must rise by keyboard MINUS that inset, or the button floats ~34 pt
+        // above the keyboard and covers the bottom of the field. treasury-post drops the edge instead and needs no offset.
+        const c = code('app/group-post.tsx');
+        expect(c).toMatch(/const insets = useSafeAreaInsets\(\)/);
+        expect(c).toMatch(/<SafeAreaView[^>]*edges=\{\['top', 'bottom'\]\}/);
+        expect(c).toMatch(/<KeyboardStickyView offset=\{\{ opened: Platform\.OS === 'ios' \? insets\.bottom : 0 \}\}/);
+        const tp = code('app/treasury-post.tsx');
+        expect(tp).toMatch(/edges=\{\['top', 'left', 'right'\]\}/);
+        expect(tp).not.toMatch(/offset=\{\{ opened/);
     });
 
     it('propose-project: the Start button stays hidden while the keyboard is up, so the form gets the whole space', () => {

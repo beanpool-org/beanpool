@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import type { AppColors } from '../../constants/colors';
 import type { BeanPoolIdentity } from '../../utils/identity';
 import {
-    communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
+    communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, promiseLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
 import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, forgetKnock, knockCardState, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
@@ -152,6 +152,11 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
         const quiet = notAnsweringLine(c);
         return quiet ? <Text style={[s.rowSub, { fontStyle: 'italic' }]} testID={`home-find-not-answering-${c.key}`}>{quiet}</Text> : null;
     };
+    // What the community's directory push promised (mothership A3): "Keeps the listing promise · Accepting members · Closing on …".
+    const promiseRow = (c: DirectoryCommunity) => {
+        const line = promiseLine(c);
+        return line ? <Text style={s.rowSub} testID={`home-find-promise-${c.key}`}>{line}</Text> : null;
+    };
     const watching = watched || (home.watches?.length ?? 0) > 0;
     // Nothing listed near (and the list loaded): Start a community leads, as the web's card does (rehearsal B2).
     const state = findCommunityState(home);
@@ -197,12 +202,14 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
         <>
             <Text style={[s.rowLine, { marginBottom: 4 }]}>{copy.body}</Text>
             {!!named && quietLine(named)}
+            {!!named && promiseRow(named)}
             {others.map(c => (
                 <React.Fragment key={c.key}>
                     <Text style={s.rowSub} numberOfLines={2}>
                         {communityLabel(c)}{communityFacts(c) ? ` · ${communityFacts(c)}` : ''}
                     </Text>
                     {quietLine(c)}
+                    {promiseRow(c)}
                 </React.Fragment>
             ))}
             {!!nearby && <Text style={[s.rowSub, { marginTop: 4 }]} testID="home-find-nearby">{nearby}</Text>}

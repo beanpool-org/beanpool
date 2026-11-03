@@ -22,7 +22,7 @@ import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
 import {
-    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, notAnsweringLately, placeWatchLimitLine, roundPointToArea, t, tn, shownCount, type CircleCard, type CircleDemand,
+    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, communityPromiseLines, listingPromiseKept, findCommunityState, formatCount, formatNumber, knownCommunityCount, notAnsweringLately, placeWatchLimitLine, roundPointToArea, t, tn, shownCount, type CircleCard, type CircleDemand,
 } from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
@@ -55,6 +55,16 @@ export interface DirectoryCommunity {
     lastSeenAt?: string | null;
     /** How quickly it answers requests to join (Lounge L1, entry S1: 'week' | 'slow' | 'none' | null). */
     answers?: 'week' | 'slow' | 'none' | null;
+    /**
+     * The listing promise its push carried (mothership A3; core listingPromiseKept): the promise's object when it holds, null
+     * when the node says it has none ("New listing"), left out when the node said nothing (an older global node) or sent
+     * something that is not the promise.
+     */
+    promise?: Record<string, unknown> | null;
+    /** Whether it takes requests to join (a knock switch on, the door not "only admins", an address): true says "Accepting members". */
+    acceptingKnocks?: boolean | null;
+    /** The day it says it closes (YYYY-MM-DD), checked when shown (core closingDayAhead). */
+    closingOn?: string | null;
 }
 
 export interface PlaceWatch { id: string; lat: number; lng: number; radiusKm: number; createdAt: string; wouldHelp?: boolean }
@@ -124,6 +134,9 @@ export function readCommunity(raw: unknown): DirectoryCommunity | null {
         distanceKm: finite(r.distanceKm) && (r.distanceKm as number) >= 0 ? (r.distanceKm as number) : null,
         lastSeenAt: typeof r.lastSeenAt === 'string' && r.lastSeenAt.length <= 64 && Number.isFinite(Date.parse(r.lastSeenAt)) ? r.lastSeenAt : null,
         answers: r.answers === 'week' || r.answers === 'slow' || r.answers === 'none' ? r.answers : null,
+        ...(listingPromiseKept(r.promise) === null ? {} : { promise: r.promise as Record<string, unknown> | null }),
+        acceptingKnocks: typeof r.acceptingKnocks === 'boolean' ? r.acceptingKnocks : null,
+        closingOn: typeof r.closingOn === 'string' && r.closingOn.length <= 10 ? r.closingOn : null,
     };
 }
 
@@ -320,6 +333,15 @@ export function communityLabel(c: Pick<DirectoryCommunity, 'name'>): string {
  */
 export function notAnsweringLine(c: Pick<DirectoryCommunity, 'lastSeenAt'>, now: number = Date.now()): string | null {
     return notAnsweringLately(c.lastSeenAt, now) ? t(FIND_COMMUNITY_WORDS.notAnswering) : null;
+}
+
+/**
+ * "Keeps the listing promise · Accepting members · Closing on 3 Dec", whatever of that the directory said (core
+ * communityPromiseLines), or null. The web's Home card says the same lines (apps/pwa/src/lib/home-cards.ts).
+ */
+export function promiseLine(c: Pick<DirectoryCommunity, 'promise' | 'acceptingKnocks' | 'closingOn'>, now: number = Date.now()): string | null {
+    const lines = communityPromiseLines(c, now);
+    return lines.length ? lines.join(' · ') : null;
 }
 
 /** A distance of 1 km or more as the lines write it: "3.4", "12", "12,000" (one decimal under 10 km). */

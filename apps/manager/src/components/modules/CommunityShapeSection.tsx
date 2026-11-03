@@ -958,8 +958,8 @@ export function CommunityShapeSection({
                     <ShapeRow
                         id="autoHide"
                         icon="🛡️"
-                        name={t('Reported posts hidden automatically')}
-                        summary={t('Reports from three independent groups hide a post until a moderator looks.')}
+                        name={t('Reported posts hidden and message requests cleared automatically')}
+                        summary={t('Reports from three independent groups hide a post until a moderator looks. Reports from the people a sender wrote to can clear their message requests too.')}
                         displayValue={settings.autoHide.value ? t('On') : t('Off')}
                         lock={settings.autoHide.lock}
                         isOwner={isOwner && !standby}
@@ -974,7 +974,7 @@ export function CommunityShapeSection({
                                     onChange={(e) => setDraftValue(e.target.checked)}
                                     className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
                                 />
-                                <span>{t('Hide posts after three reports')}</span>
+                                <span>{t('Hide reported posts and clear reported message requests')}</span>
                             </label>
                             <RowControls
                                 onSave={() => handleSave('autoHide')}
@@ -1215,8 +1215,8 @@ export function logSettingName(setting: string): string {
         sharePhone: t('Share phone'),
         shareHealth: t('Share health'),
         probation: t('Limits on new accounts'),
-        autoHide: t('Reported posts hidden automatically'),
-        autoHideReports: t('Reported posts hidden automatically'),
+        autoHide: t('Reported posts hidden and message requests cleared automatically'),
+        autoHideReports: t('Reported posts hidden and message requests cleared automatically'),
         autoMute: t('Repeat offenders muted automatically'),
         recoveryCopies: t("Where members' copies go"),
     };

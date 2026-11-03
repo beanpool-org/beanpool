@@ -78,7 +78,7 @@ export function RequestLimitsCard({ nodeUrl, adminPassword, tfaToken, reloadKey 
                 <ul className="list-none p-0 m-0 space-y-2">
                     {limits.map(limit => (
                         <li key={limit.id} data-testid="request-limit" className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-nature-950 border border-nature-800">
-                            <p className="text-sm text-nature-100 m-0 flex-1 min-w-0">
+                            <p className="text-sm text-nature-100 m-0 flex-1 min-w-0 basis-[12rem]">
                                 <span className="font-bold">{limit.callsign || limit.publicKey.slice(0, 12)}</span>
                                 {' '}{WHY[limit.how]} Until {day(limit.until)}.
                             </p>

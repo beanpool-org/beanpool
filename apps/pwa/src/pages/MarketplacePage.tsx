@@ -10,6 +10,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { useCoversScreen } from '../lib/screen-cover';
+import { nodeRefusal } from '../lib/node-refusal';
 import { MarketplaceCard } from '../components/MarketplaceCard';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
@@ -1328,7 +1329,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             }
         } catch (e: any) {
-            setError(e.message || t('Failed to start conversation'));
+            setError(nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')));
         } finally {
             setMessaging(false);
         }
@@ -1781,7 +1782,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const result = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey, undefined, selectedPost.id);
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             } catch (e: any) {
-                setError(e.message || t('Failed to start conversation'));
+                setError(nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')));
             } finally {
                 setMessaging(false);
             }

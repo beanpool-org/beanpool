@@ -16,6 +16,8 @@ vi.hoisted(() => {
     Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
 });
 import Module from 'node:module';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { act, createElement, Fragment, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
@@ -606,6 +608,42 @@ describe("the opener's first line, on the phone", () => {
         expect(box()).not.toBeNull();
         expect(host.textContent).toContain('Your first message goes to Kofi as a request.');
         expect(host.textContent).toContain('! not delivered');
+    });
+
+    // R1 (engine/request-limits.ts): reports cleared this member's requests; the node's 403 `dm_requests_limited` ends as a
+    // failed line whose tap says why. The phone words that sentence itself (core requests-cleared-words.ts), date kept.
+    describe('reports cleared their requests: the failed line says so in the member\'s language', () => {
+        const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+        const failedWith = (error: string) => [{ ...lineAs('failed')[0], metadata: { __sendError: error } }];
+        const WORDS_DIR = path.resolve(__dirname, '../../../../packages/beanpool-core/words');
+
+        async function failedLine(): Promise<void> {
+            standIn({ getConversation: MINE, getMessages: () => Promise.resolve(failedWith(LIMITED)), syncSingleConversation: true });
+            await open();
+        }
+
+        it('English: the node\'s sentence, word for word, with the date', async () => {
+            await failedLine();
+            await tapLine('hello Kofi');
+            expect(alerts.said).toContain(LIMITED);
+        });
+
+        it('Spanish: the same rule in Spanish, still a "no puedes" and still dated', async () => {
+            await failedLine();
+            setLanguage('es', [JSON.parse(fs.readFileSync(path.join(WORDS_DIR, 'es.json'), 'utf8'))]);
+            await tapLine('hello Kofi');
+            const said = alerts.said.find((s) => s.includes('2026-11-08'));
+            expect(said).toBe('Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el 2026-11-08. Todavía puedes responder a quienes te escribieron y publicar.');
+            expect(alerts.said).not.toContain(LIMITED);
+        });
+
+        it('another failure\'s words are shown exactly as the node gave them', async () => {
+            standIn({ getConversation: MINE, getMessages: () => Promise.resolve(failedWith('This community is read-only for now.')), syncSingleConversation: true });
+            await open();
+            setLanguage('es', [JSON.parse(fs.readFileSync(path.join(WORDS_DIR, 'es.json'), 'utf8'))]);
+            await tapLine('hello Kofi');
+            expect(alerts.said).toContain('This community is read-only for now.');
+        });
     });
 });
 

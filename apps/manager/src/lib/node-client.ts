@@ -142,6 +142,12 @@ export interface DiagnosticsResponse {
      * read its alert book. Settings' Home lists these as they are, never working them out again.
      */
     serverAlerts?: { count: number; items: ServerAlert[] } | null;
+    /**
+     * The Android app this node carries for its local network (the apk-on-node lane, lights-out H3): its version at least.
+     * Absent until that lane lands; "Ready for the hall" then says the APK is not on this node yet (lib/hall-ready.ts
+     * readApkState reads it leniently and shows nothing ticked for anything it cannot read).
+     */
+    apk?: { version: string; versionCode?: number; size?: number } | null;
 }
 
 /** One of the server's own alerts, as the node says it. `priority`: 5 urgent, 4 high, 3 warning, 2 low, 1 info. */
@@ -156,7 +162,11 @@ export interface ServerAlert {
 /** When the standby needs its owners: an incident, in the node's words, and each standby it watches. */
 export interface StandbyHealthBanner {
     incident: { id: string; startedAt: number; pushed: boolean; lines: string[]; whatToDo: string[] } | null;
-    standbys: { id: string; label: string; lastPullAt: number; lastCopyAt: number | null; lastExactAt: number | null; healthy: boolean }[];
+    standbys: {
+        id: string; label: string; lastPullAt: number; lastCopyAt: number | null; lastExactAt: number | null; healthy: boolean;
+        /** Whether the standby says it is paired with this server (services/standby-health.ts `Paired`); absent from a node before it. */
+        paired?: 'this' | 'other' | 'none' | 'unknown';
+    }[];
 }
 
 /** An owner's "this standby is gone for good": the node stops watching it until it reports again. */

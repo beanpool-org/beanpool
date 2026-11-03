@@ -13,6 +13,8 @@
  *   another member's paused one is not there, as on their phone.
  * - tags_search (Tags T4) reads the library in core, the one the apps' pickers read, by the same index (owner-posts.ts
  *   libraryTagsFor): ids go on a listing, words do not. It holds no member's words: tags members typed are never in it.
+ * - categories and listings_search are offered to an owner's grant ticked "May take down posts for me" too (MCP-MODERATION S2,
+ *   `alsoModerates`): finding spam is reading the board. The read is the same Market read, no wider.
  * - community_area is the community's area as a member's app reads it (config/community-place.ts, to two decimals), the
  *   rounding a listing's pin gets (3 decimals), and the place names of this community's own events of the last 90 days,
  *   each at its pin rounded the same, fenced: never a member's area or pin, never an address a member typed beyond an
@@ -29,11 +31,17 @@ import { categoryRead, enterpriseRef, libraryTagsFor, OWNER_TEND_TOOLS, POLL_DAY
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 const NOT_TICKED = 'This assistant was connected without "May post for me": it reads what the other tools read, and nothing for seeding.';
+const NOT_TICKED_EITHER = 'This assistant was connected without "May post for me" or "May take down posts for me": it reads what the other tools read, and not the board.';
 
-function readGate(grant: AgentGrant): string | null {
+/**
+ * An owner's grant ticked "May post for me"; for the two reads an assistant needs to find spam (listings_search, categories:
+ * `alsoModerates`, MCP-MODERATION S2), one ticked "May take down posts for me" as well. Read on every call, as toolsFor lists them.
+ */
+function readGate(grant: AgentGrant, alsoModerates = false): string | null {
     if (grant.role !== 'owner') return "Only an owner's assistant reads for seeding: an admin's cannot.";
-    if (!grant.canPost) return NOT_TICKED;
-    return null;
+    if (grant.canPost) return null;
+    if (alsoModerates) return grant.canModerate === true ? null : NOT_TICKED_EITHER;
+    return NOT_TICKED;
 }
 
 function clampLimit(v: unknown, def = 20): number {
@@ -167,10 +175,11 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
         never: 'any member data',
         ownerOnly: true,
         posts: true,
+        alsoModerates: true,
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
         outputSchema: { type: 'object', properties: { categories: { type: 'array' }, kinds: { type: 'array' }, priceTypes: { type: 'array' }, pollDays: { type: 'array' }, beans: { type: 'boolean' } }, required: ['categories', 'kinds', 'priceTypes', 'pollDays', 'beans'] },
         run: (grant) => {
-            const refused = readGate(grant);
+            const refused = readGate(grant, true);
             if (refused) return { ok: false, error: refused };
             return {
                 ok: true, rows: PRICING_CATEGORIES.length,
@@ -220,6 +229,7 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
         memberText: true,
         ownerOnly: true,
         posts: true,
+        alsoModerates: true,
         inputSchema: {
             type: 'object',
             properties: {
@@ -233,7 +243,7 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
         },
         outputSchema: { type: 'object', properties: { q: { type: 'string' }, returned: { type: 'number' }, listings: { type: 'array' } }, required: ['q', 'returned', 'listings'] },
         run: (grant, args, boundary) => {
-            const refused = readGate(grant);
+            const refused = readGate(grant, true);
             return refused ? { ok: false, error: refused } : listingsSearch(grant, args, boundary);
         },
     },

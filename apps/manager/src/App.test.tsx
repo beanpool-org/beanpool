@@ -277,6 +277,50 @@ describe('App Component', () => {
             expect(screen.getByRole('button', { name: /download backup/i })).toBeInTheDocument();
         });
 
+        it.each([
+            ['a locked file', 'yes', 'bpsealed', 'downloadedAt'],
+            ['an unlocked file (no recovery code yet: no keys)', 'no', 'tar.gz', 'downloadedPlainAt'],
+        ])('a download of %s is noted for "Ready for the hall", in this browser, under its own kind', async (_what, locked, ext, key) => {
+            const blob = new Blob(['backup']);
+            stubPasswordSession((url) => (url.endsWith('/api/local/admin/backup')
+                ? Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    blob: () => Promise.resolve(blob),
+                    headers: new Headers({ 'Content-Disposition': `attachment; filename="beanpool.${ext}"`, 'X-Backup-Locked': locked }),
+                })
+                : undefined));
+            vi.stubGlobal('alert', vi.fn());
+            URL.createObjectURL = vi.fn(() => 'blob:backup');
+            URL.revokeObjectURL = vi.fn();
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /download backup/i }));
+            });
+            const notes = Object.entries(localStorage)
+                .filter(([k]) => k.startsWith('bp_hall_ready:'))
+                .map(([, v]) => JSON.parse(v));
+            expect(notes).toHaveLength(1);
+            expect(Object.keys(notes[0])).toEqual([key]);
+            expect(Math.abs(notes[0][key] - Date.now())).toBeLessThan(60_000);
+        });
+
+        it('a download that fails is not noted', async () => {
+            stubPasswordSession((url) => (url.endsWith('/api/local/admin/backup')
+                ? Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'boom' }), headers: new Headers() })
+                : undefined));
+            vi.stubGlobal('alert', vi.fn());
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /download backup/i }));
+            });
+            expect(Object.keys(localStorage).filter((k) => k.startsWith('bp_hall_ready:'))).toEqual([]);
+        });
+
         it('navigates across the 4 plain-English sections', async () => {
             stubPasswordSession();
             await act(async () => {

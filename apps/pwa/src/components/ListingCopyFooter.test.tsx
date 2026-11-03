@@ -3,6 +3,9 @@
  * show-on-global-render.test.ts): no name and nothing to write to until its member takes questions, then their name and one way
  * to write, which opens a chat for no post. Its author can stop from here, and has nothing to ask.
  */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { setLanguage } from '@beanpool/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ListingCopyFooter } from './ListingCopyFooter';
@@ -63,6 +66,22 @@ describe('a reader', () => {
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toBe('Not now');
         expect(alert.className).toContain('text-bp-ink-danger');
+    });
+});
+
+describe("a chat the node refuses to open because reports cleared the member's message requests (R1)", () => {
+    const LIMITED = "People you wrote to reported your message requests, so they were cleared and you can't send new ones until 2026-11-08. You can still answer people who wrote to you, and post.";
+
+    it("says it in the member's language, dated, not in the node's English", async () => {
+        const es = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/es.json'), 'utf8'));
+        setLanguage('es', [es]);
+        try {
+            vi.mocked(api.createConversationApi).mockRejectedValue(Object.assign(new Error(LIMITED), { status: 403, code: 'dm_requests_limited' }));
+            render(<ListingCopyFooter post={post} copy={open} reader={ME} />);
+            fireEvent.click(screen.getByTestId('listing-copy-ask-button'));
+            const alert = await screen.findByRole('alert');
+            expect(alert.textContent).toBe('Personas a las que escribiste denunciaron tus solicitudes de mensaje, así que se borraron y no puedes enviar nuevas hasta el 2026-11-08. Todavía puedes responder a quienes te escribieron y publicar.');
+        } finally { setLanguage('en'); }
     });
 });
 

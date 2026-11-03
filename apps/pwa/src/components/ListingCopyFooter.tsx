@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { askButton, askLine, copyAsk, copyPriceLine, t, type EventCopy } from '@beanpool/core';
 import { createConversationApi, stopTakingQuestions } from '../lib/api';
+import { nodeRefusal } from '../lib/node-refusal';
 import { EventCopyDoor } from './EventCopyDoor';
 import { ReportModal } from './ReportModal';
 
@@ -32,7 +33,7 @@ export function ListingCopyFooter({ post, copy, reader, onOpenChat }: Props) {
         try {
             await step();
         } catch (e: any) {
-            setFailed(e?.message || t('Failed to start conversation'));
+            setFailed(nodeRefusal(e)?.message ?? (e?.message || t('Failed to start conversation')));
         } finally {
             setBusy(false);
         }

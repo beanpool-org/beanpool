@@ -7,6 +7,16 @@
  *                            Without it (the phone's probe): 403 wrong-browser, with how many digits this relay asks for
  *   POST /api/pair/confirm   browser, with the binding cookie: { sessionId, code }; three wrong burn the session
  *   POST /api/pair/cancel
+ *
+ * The other way, browser to phone (front doors S9; pairing-relay.ts explains the order and why the phone shows the digits):
+ *   POST /api/pair/init      browser, with `to: 'phone'`: opens a to-phone session, the same binding cookie
+ *   POST /api/pair/offer     phone: { sessionId, phonePubHex }; one phone per session; answers the four digits to show
+ *                            and the phone's own binding secret
+ *   GET  /api/pair/poll      browser: 'confirming' once a phone scanned; after its digits, 'released' with the phone's
+ *                            key; then 'sent', 'collected'. Never a payload
+ *   POST /api/pair/confirm   browser types the digits the phone shows, as above
+ *   POST /api/pair/send      browser, with the binding cookie, only once released: the account sealed to the phone's key
+ *   POST /api/pair/collect   phone, with its secret: { sessionId, phoneSecret }; the sealed account once sent
  */
 
 import Router from '@koa/router';
@@ -17,8 +27,13 @@ import {
     pollPairingSession,
     cancelPairingSession,
     confirmPairingTransfer,
+    offerToPhoneSession,
+    sendToPhonePayload,
+    collectToPhonePayload,
     PAIRING_RELAY_LIMITS,
 } from '../pairing-relay.js';
+
+const SESSION_ID = /^[0-9a-fA-F]{16,64}$/;
 
 const COOKIE_PATH = '/api/pair';
 /** One cookie per session, so two tabs don't clash. */
@@ -34,15 +49,21 @@ export function createPairingRoutes(deps: RouteDeps): Router {
     router.post('/api/pair/init', async (ctx) => {
         if (!deps.rateLimit(ctx, 'pairing')) return;
 
-        const { sessionId, desktopPubHex } = (ctx.request as any).body || {};
+        const { sessionId, desktopPubHex, to } = (ctx.request as any).body || {};
 
         if (!sessionId || !desktopPubHex) {
             ctx.status = 400;
             ctx.body = { error: 'Missing sessionId or desktopPubHex' };
             return;
         }
+        // Only the exact word opens the other way; anything else here is a mistake, never a quiet phone-to-browser session.
+        if (to !== undefined && to !== 'phone') {
+            ctx.status = 400;
+            ctx.body = { error: 'Unknown pairing direction' };
+            return;
+        }
 
-        const res = initPairingSession(sessionId, desktopPubHex);
+        const res = initPairingSession(sessionId, desktopPubHex, to === 'phone' ? 'to-phone' : 'from-phone');
         if (!res.ok) {
             ctx.status = 400;
             ctx.body = { error: res.error };
@@ -140,6 +161,71 @@ export function createPairingRoutes(deps: RouteDeps): Router {
             : res.result === 'wrong' ? 400
             : res.result === 'wrong-browser' ? 403
             : 410;
+        ctx.body = res;
+    });
+
+    /**
+     * POST /api/pair/offer (S9)
+     * The phone that scanned a browser's to-phone code: its own X25519 key. Unsigned (the phone has no account yet).
+     */
+    router.post('/api/pair/offer', async (ctx) => {
+        if (!deps.rateLimit(ctx, 'pairing')) return;
+        const { sessionId, phonePubHex } = (ctx.request as any).body || {};
+        if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) {
+            ctx.status = 400;
+            ctx.body = { error: 'bad-session' };
+            return;
+        }
+        const res = offerToPhoneSession(sessionId, phonePubHex);
+        ctx.set('Cache-Control', 'no-store');
+        if (!res.ok) {
+            ctx.status = res.error === 'expired' ? 410 : res.error === 'taken' ? 409 : 400;
+            ctx.body = { error: res.error };
+            return;
+        }
+        ctx.body = { success: true, confirmCode: res.confirmCode, phoneSecret: res.phoneSecret, expiresAt: res.expiresAt };
+    });
+
+    /**
+     * POST /api/pair/send (S9)
+     * The browser that opened the to-phone session, with its binding cookie, once its digits matched: the sealed account.
+     */
+    router.post('/api/pair/send', async (ctx) => {
+        if (!deps.rateLimit(ctx, 'pairing')) return;
+        const { sessionId, nonceHex, ciphertextHex } = (ctx.request as any).body || {};
+        if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) {
+            ctx.status = 400;
+            ctx.body = { error: 'bad-session' };
+            return;
+        }
+        const res = sendToPhonePayload(sessionId, ctx.cookies.get(pairBindingCookieName(sessionId)) || undefined, nonceHex, ciphertextHex);
+        ctx.set('Cache-Control', 'no-store');
+        if (!res.ok) {
+            ctx.status = res.error === 'expired' ? 410
+                : res.error === 'wrong-browser' ? 403
+                : res.error === 'not-released' ? 409
+                : res.error === 'busy' ? 503
+                : 400;
+            ctx.body = { error: res.error };
+            return;
+        }
+        ctx.body = { success: true };
+    });
+
+    /**
+     * POST /api/pair/collect (S9)
+     * Polled by the phone that offered, with the secret its offer got. A POST, so the secret is never in an address or a log.
+     */
+    router.post('/api/pair/collect', async (ctx) => {
+        const { sessionId, phoneSecret } = (ctx.request as any).body || {};
+        if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) {
+            ctx.status = 400;
+            ctx.body = { error: 'bad-session' };
+            return;
+        }
+        const res = collectToPhonePayload(sessionId, phoneSecret);
+        ctx.set('Cache-Control', 'no-store');
+        ctx.status = res.status === 'wrong-phone' ? 403 : res.status === 'expired' ? 410 : 200;
         ctx.body = res;
     });
 

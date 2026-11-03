@@ -31,7 +31,7 @@ import {
     onNoticeCounts, readNoticeCounts, watchNoticeCounts,
 } from '../notice-counts';
 import { communitySwitched } from '../community-switch';
-import { PUSH_PINS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
+import { PUSH_ALERTS_OFF_STORE_KEY, PUSH_PINS_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 const MULLUM = 'https://mullum.beanpool.org';
 const BYRON = 'https://byron.example.net';
@@ -171,6 +171,36 @@ describe('each community\'s number rises with the notices it sends, counted on t
         await clearActiveCount(storage);
         stop();
         expect(told).toBe(1);
+    });
+});
+
+describe('alerts off silences a community at once (PR #2772 review, finding 2)', () => {
+    it('a notice from a community with alerts off is noted as seen and counts nothing: one already in the tray, or in flight, included', async () => {
+        mem.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([BYRON]));
+        await receive(push(byron.notice(kim.publicKey)));
+        await receive(push(oldtown.notice(kim.publicKey)));
+        expect(await counts()).toEqual({ [OLDTOWN]: 1 });
+        // Noted as seen all the same: turned on again, the same notice still in the tray doesn't count late.
+        const tallies = JSON.parse(mem.get(NOTICE_COUNTS_STORE_KEY)!);
+        expect(Object.keys(tallies[BYRON].seen)).toHaveLength(1);
+        mem.delete(PUSH_ALERTS_OFF_STORE_KEY);
+        expect(await counts()).toEqual({ [OLDTOWN]: 1 });
+    });
+
+    it('a number already written for a community that is now off is not shown, and its sum leaves it out', async () => {
+        await receive(push(byron.notice(kim.publicKey)));
+        await noteServerUnread(storage, OLDTOWN, 4);
+        expect(await counts()).toEqual({ [BYRON]: 1, [OLDTOWN]: 4 });
+        mem.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([OLDTOWN]));
+        expect(await counts()).toEqual({ [BYRON]: 1 });
+        expect(await noticeCountsSum(storage)).toBe(1);
+    });
+
+    it('a community\'s answer that comes after its alerts went off is written down as nothing, and tells nobody', async () => {
+        mem.set(PUSH_ALERTS_OFF_STORE_KEY, JSON.stringify([BYRON]));
+        expect(await noteServerUnread(storage, BYRON, 3)).toBe(false);
+        expect(await counts()).toEqual({});
+        expect(mem.get(NOTICE_COUNTS_STORE_KEY)).toBeUndefined();
     });
 });
 

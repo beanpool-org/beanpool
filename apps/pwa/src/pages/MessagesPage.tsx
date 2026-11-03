@@ -3900,6 +3900,11 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 </div>
             )}
 
+            {/* The web app's Talk notice (S1.5): messages in other communities show on phone or when opened here */}
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center', margin: '1.5rem 0 0' }}>
+                {t('Messages in your other communities show on your phone, or when you open that community here.')}
+            </p>
+
             {/* A request card's 🚩 Report (the chat has its own, in its header). */}
             {requestReportCard()}
             {reportTarget && (

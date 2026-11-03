@@ -313,6 +313,7 @@ export interface NodeFeatures {
      *  where it is true: a server from before it would refuse the event, or keep it from everyone but its host. */
     onlineEvents: boolean;
     pins: boolean;
+    inviteVouch: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
     /** A post reported by members in 3 independent circles, each with at least half its author's standing, is hidden
@@ -579,6 +580,9 @@ export function getNodeFeatures(): NodeFeatures {
         onlineEvents: true,
         // And pins (engine/pins.ts): an app offers one only where the node says so (DESIGN-pinning-fable.md §2.11).
         pins: true,
+        // And a vouch on an invite (engine/invites.ts), which means nothing where there are no Beans: an app offers one
+        // only where the node says so, so a phone newer than its node never shows a choice the node would drop.
+        inviteVouch: s.beans,
         probation: s.probation,
         autoHideReports: s.autoHideReports,
         autoMute: s.autoMute,

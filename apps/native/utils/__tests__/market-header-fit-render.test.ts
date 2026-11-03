@@ -98,10 +98,11 @@ vi.mock('react-native', () => {
 });
 
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
+const mockRouter = vi.hoisted(() => ({ push: vi.fn(), navigate: vi.fn(), setParams: vi.fn() }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect } = await import('react');
     return {
-        router: { push() {}, navigate() {}, setParams() {} },
+        router: mockRouter,
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
         useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
         useLocalSearchParams: () => params.now,
@@ -383,5 +384,23 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
         // In dark mode: colors.feedback.warning.bg and border
         expect(darkStyle.backgroundColor).toBe('#451a03'); // palette.amber950 / feedback.warning.bg
         expect(darkStyle.borderColor).toBe('#78350f'); // palette.amber900 / feedback.warning.border
+    });
+
+    it('5. Events pill shows calendar button and opens /calendar with ≥ 44 dp tap target', async () => {
+        params.now = { filter: 'events' };
+        mockRouter.push.mockClear();
+        await act(async () => { root.render(createElement(MarketScreen) as any); });
+        await act(async () => { await Promise.resolve(); });
+
+        const calBtn = host.querySelector('[data-testid="market-calendar-button"]') as HTMLElement;
+        expect(calBtn).not.toBeNull();
+        expect(calBtn.getAttribute('aria-label')).toBe('Calendar');
+
+        const style = JSON.parse(calBtn.getAttribute('data-style') || '{}');
+        expect(style.minHeight).toBeGreaterThanOrEqual(44);
+        expect(style.minWidth).toBeGreaterThanOrEqual(44);
+
+        act(() => { calBtn.click(); });
+        expect(mockRouter.push).toHaveBeenCalledWith('/calendar');
     });
 });

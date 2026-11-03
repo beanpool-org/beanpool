@@ -64,7 +64,7 @@
   "Your account there was closed.": "حساب شما در آنجا بسته شد.",
   "Your own community isn't affected.": "جامعهٔ خود شما تحت تأثیر قرار نگرفته است.",
   "Global community, {state}": "جامعهٔ جهانی، {state}",
-  "Switches to this community. Long press to remove it.": "به این جامعه می‌روید. برای حذف، طولانی فشار دهید.",
+  "Switches to this community. Long press for its options.": "به این جامعه می‌روید. برای دیدن گزینه‌های آن، طولانی فشار دهید.",
   "Guest": "مهمان",
   "Explore BeanPool worldwide": "دیدن BeanPool در سراسر جهان",
   "🌍 Explore BeanPool worldwide": "🌍 دیدن BeanPool در سراسر جهان",
@@ -6194,5 +6194,14 @@
   "Stop taking questions": "توقف پذیرش پرسش‌ها",
   "on the global community": "در جامعه جهانی",
   "Open their requests there": "درخواست‌هایشان را آنجا باز کنید",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "این خانه شماست. در پایین کارتی اضافه کنید، یا برای چیدمان، کارتی را نگه دارید."
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "این خانه شماست. در پایین کارتی اضافه کنید، یا برای چیدمان، کارتی را نگه دارید.",
+  "Alerts from this community": "هشدارهای این انجمن",
+  "Stops notifications and unread message checks from this community": "اعلان‌ها و بررسی پیام‌های خوانده‌نشده این انجمن را متوقف می‌کند",
+  "Remove from your saved list": "حذف از لیست ذخیره‌شده",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} پیام جدید در {community} · تغییر",
+    "other": "{n} پیام جدید در {community} · تغییر"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "هشدارها از هر انجمنی که نگه می‌دارید به تلفن شما می‌رسند. می‌توانید آنها را برای یک انجمن در برگه BeanPool خاموش کنید.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "هشدارها در این گوشی خاموش است. هنوز نتوانسته به این جامعه برسد تا آن‌ها را آنجا متوقف کند و دوباره تلاش می‌کند."
 }

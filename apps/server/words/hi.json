@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "केवल सार्वजनिक पोस्ट को पिन किया जा सकता है।",
   "Only this community's own posts can be pinned.": "केवल इस समुदाय की अपनी पोस्ट को पिन किया जा सकता है।",
   "This post has ended, so it can't be pinned.": "यह पोस्ट समाप्त हो चुकी है, इसलिए इसे पिन नहीं किया जा सकता।",
-  "Three posts are pinned already. Take one off first.": "तीन पोस्ट पहले से पिन हैं। पहले एक हटाएँ।"
+  "Three posts are pinned already. Take one off first.": "तीन पोस्ट पहले से पिन हैं। पहले एक हटाएँ।",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "निमंत्रण पर समर्थन 25, 50 या 100 फलियों का होता है, या कोई नहीं।",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "केवल मालिक, एडमिन और नियुक्त समर्थक ही निमंत्रण पर किसी का समर्थन कर सकते हैं।"
 }

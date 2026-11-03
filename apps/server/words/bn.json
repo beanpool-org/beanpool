@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite)",
     "reviewed": false,
     "updated": "2026-11-03",
     "note": "Keys are the English sentences; a key that is missing shows the English."
@@ -14,5 +14,7 @@
   "Only a public post can be pinned.": "শুধু সর্বজনীন পোস্ট পিন করা যায়।",
   "Only this community's own posts can be pinned.": "শুধু এই সম্প্রদায়ের নিজের পোস্ট পিন করা যায়।",
   "This post has ended, so it can't be pinned.": "এই পোস্টটি শেষ হয়ে গেছে, তাই এটি পিন করা যাবে না।",
-  "Three posts are pinned already. Take one off first.": "তিনটি পোস্ট ইতিমধ্যে পিন করা আছে। আগে একটি সরান।"
+  "Three posts are pinned already. Take one off first.": "তিনটি পোস্ট ইতিমধ্যে পিন করা আছে। আগে একটি সরান।",
+  "A vouch on an invite is 25, 50 or 100 Beans, or none.": "আমন্ত্রণে প্রত্যয়ন হয় 25, 50 বা 100 শিম, অথবা কিছুই নয়।",
+  "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "শুধু মালিক, অ্যাডমিন এবং নিযুক্ত প্রত্যয়নকারীরাই আমন্ত্রণে কারও জন্য প্রত্যয়ন করতে পারেন।"
 }

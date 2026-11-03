@@ -1701,7 +1701,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             <div className="font-bold flex items-center gap-1.5 mb-1 text-amber-800 dark:text-amber-300">
                                 <span>📱</span> {t('Phone App Only')}
                             </div>
-                            <>{t('These preferences govern push notifications delivered to the mobile app for this account. Web browsers do not receive push notifications.')}</>
+                            <p>{t('These preferences govern push notifications delivered to the mobile app for this account. Web browsers do not receive push notifications.')}</p>
+                            <p className="mt-1.5">{t('Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.')}</p>
                         </div>
 
                         {notifLoading ? (

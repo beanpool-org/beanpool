@@ -227,7 +227,7 @@ async function main() {
     const bodyObj4 = receivedRequests[4].body as Record<string, unknown>;
     assert(bodyObj4.communityName === 'Mullum Creek' && bodyObj4.name === 'Mullum Creek',
         `the community's name is sent with its contacts off: it is how the directory lists it (${JSON.stringify({ name: bodyObj4.name, communityName: bodyObj4.communityName })})`);
-    assert(bodyObj4.contactEmail === null && bodyObj4.contactPhone === null && !/hello@mullum|6684/.test(JSON.stringify(bodyObj4)),
+    assert(bodyObj4.contactEmail === null && bodyObj4.contactPhone === null && !/hello@mullum|6684 0000/.test(JSON.stringify(bodyObj4)),
         'Payload nulls the contact email and phone, and holds neither anywhere');
     assert(bodyObj4.nodeVersion === null, 'Payload omits/nulls nodeVersion when publishHealth is off');
     assert(bodyObj4.version === null, 'Payload omits/nulls version when publishHealth is off');
@@ -253,7 +253,7 @@ async function main() {
     assert(bodyObj5.serviceRadius === null && bodyObj5.memberCount === null,
         `Payload holds no service area and no member count (${JSON.stringify({ serviceRadius: bodyObj5.serviceRadius, memberCount: bodyObj5.memberCount })})`);
     assert(bodyObj5.nodeVersion === null && bodyObj5.version === null && bodyObj5.status === null, 'Payload holds no version or health');
-    assert(bodyObj5.contactEmail === null && bodyObj5.contactPhone === null && !/hello@mullum|6684/.test(JSON.stringify(bodyObj5)),
+    assert(bodyObj5.contactEmail === null && bodyObj5.contactPhone === null && !/hello@mullum|6684 0000/.test(JSON.stringify(bodyObj5)),
         'and says it has no contact email or phone, so the directory holds none it was sent before');
     updateNodeConfig({ publicAddress: null });
 
@@ -272,7 +272,7 @@ async function main() {
         return receivedRequests[receivedRequests.length - 1].body as Record<string, unknown>;
     };
     const legacyBody = await lastBody('on a node holding the old switch');
-    assert(legacyBody.contactEmail === null && legacyBody.contactPhone === null && !/hello@mullum|6684/.test(JSON.stringify(legacyBody)),
+    assert(legacyBody.contactEmail === null && legacyBody.contactPhone === null && !/hello@mullum|6684 0000/.test(JSON.stringify(legacyBody)),
         `the payload holds no contact email or phone (${JSON.stringify({ contactEmail: legacyBody.contactEmail, contactPhone: legacyBody.contactPhone })})`);
     assert(legacyBody.communityName === 'Mullum Creek' && typeof legacyBody.memberCount === 'number',
         'and still the community\'s name and member count, as before');

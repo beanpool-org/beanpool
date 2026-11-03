@@ -63,7 +63,7 @@
   "Your account there was closed.": "Votre compte y a été fermé.",
   "Your own community isn't affected.": "Votre propre communauté n'est pas touchée.",
   "Global community, {state}": "Communauté mondiale, {state}",
-  "Switches to this community. Long press to remove it.": "Passe à cette communauté. Appui long pour la retirer.",
+  "Switches to this community. Long press for its options.": "Passe à cette communauté. Appui long pour ses options.",
   "Guest": "Invité",
   "Explore BeanPool worldwide": "Découvrir BeanPool dans le monde",
   "🌍 Explore BeanPool worldwide": "🌍 Découvrir BeanPool dans le monde",
@@ -6195,5 +6195,14 @@
   "Stop taking questions": "Ne plus recevoir de questions",
   "on the global community": "sur la communauté globale",
   "Open their requests there": "Ouvrir leurs demandes là-bas",
-  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Voici votre accueil. Ajoutez une carte en bas, ou maintenez une carte appuyée pour organiser."
+  "This is your Home. Add a card at the bottom, or hold a card to arrange.": "Voici votre accueil. Ajoutez une carte en bas, ou maintenez une carte appuyée pour organiser.",
+  "Alerts from this community": "Alertes de cette communauté",
+  "Stops notifications and unread message checks from this community": "Arrête les notifications et la recherche de messages non lus de cette communauté",
+  "Remove from your saved list": "Retirer de votre liste enregistrée",
+  "{n} new message in {community} · Switch|{n} new messages in {community} · Switch": {
+    "one": "{n} nouveau message dans {community} · Changer",
+    "other": "{n} nouveaux messages dans {community} · Changer"
+  },
+  "Alerts reach your phone from every community you keep. You can turn them off for a community on the BeanPool sheet.": "Les alertes arrivent sur votre téléphone depuis chaque communauté que vous gardez. Vous pouvez les désactiver pour une communauté sur la feuille BeanPool.",
+  "Alerts are off on this phone. It couldn't reach this community to stop them there yet, and will try again.": "Les alertes sont désactivées sur ce téléphone. Il n'a pas encore pu joindre cette communauté pour les y arrêter, et réessaiera."
 }

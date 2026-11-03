@@ -1931,6 +1931,10 @@ export function initSchema() {
     } catch (err: any) {
         console.error("[DB] ❌ Failed to migrate decision_electors for a removal jury's statuses:", err?.message || err);
     }
+    // decision_electors.answered_at and reminded_at: a removal juror's Serve and the last reminder sent (slice J2b). Plain
+    // ADD COLUMNs, after the rebuild above (which makes the table as J1 had it) and before the schema.sql exec.
+    try { db.prepare('ALTER TABLE decision_electors ADD COLUMN answered_at DATETIME').run(); } catch { }
+    try { db.prepare('ALTER TABLE decision_electors ADD COLUMN reminded_at DATETIME').run(); } catch { }
 
     // groups.lead_pubkey: the group's LEAD convenor (2026-09-23). A plain ADD COLUMN, on purpose — a fourth value
     // in group_members.role would mean rebuilding that table for its CHECK constraint. Before the schema.sql exec

@@ -413,7 +413,7 @@ export const TABLES: Record<string, TableEntry> = {
     decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason owner_decided_at owner_decided_by owner_decided_reason owner_decision_carried_at'),
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
-    decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
+    decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at answered_at reminded_at'),
     // The pool a removal jury was drawn from (engine/removal-jury.ts, DESIGN-removal-jury-fable.md §3): with the roll above
     // and the decision's params, a restored node serves the same draw and never redraws.
     decision_jury_pools: plain('decision_id pool created_at updated_at'),

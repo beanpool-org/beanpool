@@ -7,8 +7,11 @@
  *    re-key and tied to no member row, so what the node serves for Check the draw is what it drew from, whoever has left
  *    since. Written once, when the pause opens the vote.
  *  - The roll (decision_electors, as an enterprise's or a group's vote keeps one): every member the walk reached, in draw
- *    order, seated (`on`) or passed over (`stood_aside`). `silent` (no vote 72 hours after seating) and `left` are slice
- *    J2's, with the alternates it seats. A juror's vote counts while they are `on` (decisions-engine.ts tallyDecision).
+ *    order, seated (`on`) or passed over (`stood_aside`). Slice J2b (decisions-engine.ts answerJurySeat, settleOpenJuries):
+ *    a juror who steps aside is `stood_aside` too; one with no answer 72 hours after being seated is `silent`; one who
+ *    leaves, is paused or is removed is `left`; and for each the walk goes on and seats the next member of the draw. A
+ *    seat dates from its row's created_at, a Serve is its answered_at, and the last reminder sent its reminded_at. A
+ *    juror's vote counts while they are `on` (decisions-engine.ts tallyDecision).
  *
  * Both replicate with the decision (engine/replication-manifest.ts), so a restored node never redraws.
  */
@@ -106,6 +109,79 @@ export function juryRollOf(decisionId: string): Array<{ key: string; status: Jur
 export function seatedJuror(decisionId: string, key: string): boolean {
     return !!db.prepare("SELECT 1 FROM decision_electors WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'")
         .get(decisionId, key);
+}
+
+/** A seated juror's seat (slice J2b): since when, whether they have answered (Serve, or a vote), and the last reminder. */
+export interface JurorSeat {
+    key: string;
+    seatedAt: string;
+    /** When they answered Serve; null when they haven't (they may still have voted: `voted`). */
+    answeredAt: string | null;
+    remindedAt: string | null;
+    /** A vote of theirs is on this decision. */
+    voted: boolean;
+}
+
+/** Everyone seated (`on`) on this jury now, with their seats. */
+export function jurySeatsOf(decisionId: string): JurorSeat[] {
+    return (db.prepare(`
+        SELECT e.member_pubkey AS key, e.created_at AS seatedAt, e.answered_at AS answeredAt, e.reminded_at AS remindedAt,
+               EXISTS (SELECT 1 FROM decision_votes v WHERE v.decision_id = e.decision_id AND v.voter_pubkey = e.member_pubkey) AS voted
+          FROM decision_electors e
+         WHERE e.decision_id = ? AND e.role_at_open = 'juror' AND e.status = 'on'
+    `).all(decisionId) as Array<Omit<JurorSeat, 'voted'> & { voted: number }>).map(r => ({ ...r, voted: r.voted === 1 }));
+}
+
+/**
+ * A seated juror's seat ends: `stood_aside` (they stepped aside), `silent` (no answer in time) or `left` (gone, paused or
+ * removed). Only a seat still `on` changes, so a seat ends once, whoever asks twice. Returns whether it changed. Inside the
+ * caller's transaction.
+ */
+export function unseatJuror(decisionId: string, key: string, status: Exclude<JurorStatus, 'on'>, at: string): boolean {
+    return db.prepare(`
+        UPDATE decision_electors SET status = ?, updated_at = ?
+         WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'
+    `).run(status, at, decisionId, key).changes > 0;
+}
+
+/** The walk goes on (decisions-engine.ts topUpJury): one more member it reached, seated now or passed over. */
+export function addToJuryRoll(decisionId: string, key: string, status: 'on' | 'stood_aside', at: string): void {
+    db.prepare(`
+        INSERT INTO decision_electors (decision_id, member_pubkey, role_at_open, status, created_at, updated_at)
+        VALUES (?, ?, 'juror', ?, ?, ?)
+    `).run(decisionId, key, status, at, at);
+}
+
+/** A seated juror answered Serve. The first answer stands; returns whether they are seated. */
+export function noteJurorServes(decisionId: string, key: string, at: string): boolean {
+    return db.prepare(`
+        UPDATE decision_electors SET answered_at = COALESCE(answered_at, ?), updated_at = ?
+         WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'
+    `).run(at, at, decisionId, key).changes > 0;
+}
+
+/** A seated juror was reminded at `at` (settleOpenJuries). */
+export function noteJurorReminded(decisionId: string, key: string, at: string): void {
+    db.prepare(`
+        UPDATE decision_electors SET reminded_at = ?, updated_at = ?
+         WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'
+    `).run(at, at, decisionId, key);
+}
+
+/**
+ * The key a pool member holds now (slice J2b): their key in the pool, followed forward through the re-keys that replaced
+ * it (`invalidated_keys.rekeyed_to`, as juryDrawnAs follows them back), so a member of the draw who moved to a new phone
+ * since is seated under the key they sign with. A key no re-key replaced is its own answer.
+ */
+export function juryCurrentKey(poolKey: string): string {
+    const next = db.prepare('SELECT rekeyed_to FROM invalidated_keys WHERE public_key = ? AND rekeyed_to IS NOT NULL');
+    let at = poolKey;
+    for (let hop = 0; hop < DRAWN_AS_HOPS; hop++) {
+        const to = (next.get(at) as { rekeyed_to: string } | undefined)?.rekeyed_to;
+        if (!to || to === at) break;
+        at = to;
+    }
+    return at;
 }
 
 /** How many re-keys back a roll key is followed to find the key it was drawn as: far more than any member makes. */

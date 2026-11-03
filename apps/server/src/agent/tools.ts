@@ -16,6 +16,8 @@
  * library tags and free tags, and tags_search finds the library's (agent/owner-reads.ts). MCP-MODERATION S1: an owner's grant ticked
  * "May take down posts for me" takes posts down directly (agent/owner-takedowns.ts): the one way an assistant changes moderation,
  * and it moves no Bean. It still can't dismiss a report, put a post back, lift a mute, or remove or suspend a member.
+ * MCP-MODERATION S3: an admin's grant ticked the same way (on the OAuth consent page) has `take_down`, one post a call, and never
+ * `take_down_many` or `takedowns_list`, the line Settings draws (only an owner deletes many). The role is the member's at each call.
  */
 import os from 'node:os';
 import { db } from '../db/db.js';
@@ -69,7 +71,10 @@ export interface AgentGrant {
     expiresAt: number | null;
     /** "May post for me", ticked when it was connected (token form or consent page): only then are the posting tools listed. */
     canPost: boolean;
-    /** "May take down posts for me", ticked when it was connected: only then are the takedown tools listed. Left out, it may not. */
+    /**
+     * "May take down posts for me", ticked when it was connected: only then are the takedown tools listed. Left out, it may not. An
+     * owner's grant has all three; an admin's `take_down` alone, one post a call (MCP-MODERATION S3), by `role` above, read per call.
+     */
     canModerate?: boolean;
 }
 
@@ -97,6 +102,11 @@ export interface AgentTool {
     write?: boolean;
     /** Takes something down (remove_post, remove_all_i_made, take_down, take_down_many): the MCP annotation says so. */
     destructive?: boolean;
+    /**
+     * A grant that does not have this tool but calls it by name (a tools list read before its member's role changed): why, in words.
+     * Null, or left out: "There is no tool …".
+     */
+    refusedTo?: (grant: AgentGrant) => string | null;
     inputSchema: JsonSchema;
     outputSchema: JsonSchema;
     /**
@@ -253,10 +263,13 @@ export const AGENT_CANNOT = [
     'reach another server',
 ];
 
-/** What this grant can't do: `connection_info`, said by what it was ticked for. */
-export function agentCannot(canModerate: boolean): string[] {
-    return !canModerate ? AGENT_CANNOT : AGENT_CANNOT.map((line) => (line === AGENT_CANNOT[3]
+/** What this grant can't do: `connection_info`, said by what it was ticked for, and by its member's role now. */
+export function agentCannot(canModerate: boolean, role: 'owner' | 'admin' = 'owner'): string[] {
+    if (!canModerate) return AGENT_CANNOT;
+    const lines = AGENT_CANNOT.map((line) => (line === AGENT_CANNOT[3]
         ? 'approve a suggestion, dismiss a report, put a post back or lift a mute (the admin does, on their phone or in Settings)' : line));
+    // An admin's assistant takes one post a call (MCP-MODERATION S3), as an admin deletes one at a time in Settings.
+    return role === 'owner' ? lines : [...lines, "take more than one post down in a call (an owner's assistant can)"];
 }
 
 export const AGENT_TOOLS: AgentTool[] = [
@@ -548,7 +561,7 @@ export const AGENT_TOOLS: AgentTool[] = [
             name: STR, member: STR, role: STR, via: STR, createdAt: STR_OR_NULL, expiresAt: STR_OR_NULL,
             calls: OBJ({ today: NUM, perMinute: NUM, perDay: NUM }), backups: OBJ({ today: NUM, perDay: NUM }), tools: ARR, cannot: ARR,
             posts: OBJ({ today: NUM, perDay: NUM, photoRoom: STR }), canPost: { type: 'boolean' }, canModerate: { type: 'boolean' },
-            takedowns: OBJ({ today: NUM, perDay: NUM }),
+            takedowns: OBJ({ today: NUM, perDay: NUM, perCall: NUM }),
             photos: OBJ({ today: NUM, perDay: NUM, uploadPath: STR, ways: STR }),
         }, ['name', 'member', 'role', 'via', 'createdAt', 'expiresAt', 'calls', 'backups', 'tools', 'cannot', 'canPost']),
         run: (grant) => ({
@@ -573,7 +586,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                 canModerate: grantModerates(grant),
                 ...(grantModerates(grant) ? { takedowns: takedownsSummary(grant) } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
-                cannot: agentCannot(grantModerates(grant)),
+                cannot: agentCannot(grantModerates(grant), grant.role),
             },
         }),
     },
@@ -693,9 +706,18 @@ export function grantPosts(grant: AgentGrant): boolean {
     return grant.role === 'owner' && grant.canPost && AGENT_TOOLS.some((t) => t.posts);
 }
 
-/** Whether this grant takes posts down: an owner's, ticked "May take down posts for me" (agent/owner-takedowns.ts). */
+/**
+ * Whether this grant takes posts down: ticked "May take down posts for me" (agent/owner-takedowns.ts), its member an owner or, one post
+ * a call, an admin (MCP-MODERATION S3). `role` is read on every call (agent/mcp-route.ts agentGrantFrom), never kept on the grant.
+ */
 export function grantModerates(grant: AgentGrant): boolean {
-    return grant.role === 'owner' && grant.canModerate === true;
+    return (grant.role === 'owner' || grant.role === 'admin') && grant.canModerate === true;
+}
+
+/** Words for a tool called by name that this grant does not have (agent/mcp-route.ts): the tool's own, else "There is no tool …". */
+export function unlistedToolWords(name: string, grant: AgentGrant): string {
+    const words = AGENT_TOOLS.find((t) => t.name === name)?.refusedTo?.(grant);
+    return words || `There is no tool "${name.slice(0, 60)}" for this assistant.`;
 }
 
 /** Whether the table offers suggestions (slice S4); the welcome and prompts say so only then. */

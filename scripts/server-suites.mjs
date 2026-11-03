@@ -234,6 +234,7 @@ export const SUITES = [
     'test-mcp-owner-undo',
     'test-mcp-takedown',
     'test-mcp-takedown-author',
+    'test-mcp-takedown-admin',
     'test-mcp-owner-edit',
     'test-mcp-owner-polls',
     'test-mcp-owner-tags',

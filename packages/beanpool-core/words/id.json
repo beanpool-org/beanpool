@@ -901,5 +901,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Hanya pemilik, admin, dan penjamin yang ditunjuk yang dapat menjamin seseorang pada undangan.",
   "This link opens for members only.": "Tautan ini hanya terbuka untuk anggota.",
   "This link opens for members only, and only admins invite here.": "Tautan ini hanya terbuka untuk anggota, dan di sini hanya admin yang mengundang.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Siapa pun dapat membaca postingan ini selama 7 hari, lalu meminta bergabung."
+  "Anyone can read this listing for 7 days, then ask to join.": "Siapa pun dapat membaca postingan ini selama 7 hari, lalu meminta bergabung.",
+  "Anyone can read this listing for 7 days.": "Siapa pun dapat membaca postingan ini selama 7 hari.",
+  "Anyone can read this event for 7 days, then ask to join.": "Siapa pun dapat membaca acara ini selama 7 hari, lalu meminta bergabung.",
+  "Anyone can read this event for 7 days.": "Siapa pun dapat membaca acara ini selama 7 hari."
 }

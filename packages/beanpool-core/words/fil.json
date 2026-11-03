@@ -941,5 +941,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Ang mga may-ari, admin at itinalagang tagapagpatunay lang ang makakapagpatunay para sa isang tao sa imbitasyon.",
   "This link opens for members only.": "Magbubukas lang ang link na ito para sa mga miyembro.",
   "This link opens for members only, and only admins invite here.": "Magbubukas lang ang link na ito para sa mga miyembro, at mga admin lang ang nag-iimbita rito.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Mababasa ng sinuman ang listahang ito sa loob ng 7 araw, pagkatapos ay humiling na sumali."
+  "Anyone can read this listing for 7 days, then ask to join.": "Mababasa ng sinuman ang listahang ito sa loob ng 7 araw, pagkatapos ay humiling na sumali.",
+  "Anyone can read this listing for 7 days.": "Mababasa ng sinuman ang listahang ito sa loob ng 7 araw.",
+  "Anyone can read this event for 7 days, then ask to join.": "Mababasa ng sinuman ang event na ito sa loob ng 7 araw, pagkatapos ay humiling na sumali.",
+  "Anyone can read this event for 7 days.": "Mababasa ng sinuman ang event na ito sa loob ng 7 araw."
 }

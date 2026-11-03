@@ -119,6 +119,11 @@ export const PEEK_WORDS = {
     adminsOnlyLine: word('This link opens for members only, and only admins invite here.'),
     /** Under Share outside, before tap. */
     shareOutsideLine: word('Anyone can read this listing for 7 days, then ask to join.'),
+    /** The same, where this community has joining paused (no knocks): nothing about asking to join. */
+    shareOutsideNoKnockLine: word('Anyone can read this listing for 7 days.'),
+    /** The same two for an event (Share outside on an event's row). */
+    shareOutsideEventLine: word('Anyone can read this event for 7 days, then ask to join.'),
+    shareOutsideEventNoKnockLine: word('Anyone can read this event for 7 days.'),
     /** Under Share outside, before the link is made. */
     shareOutsideNote: word('Anyone with the link sees this post for 7 days, without names or faces. You can stop it any time.'),
     sharedOutside: word('Shared outside'),

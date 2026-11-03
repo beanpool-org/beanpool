@@ -901,5 +901,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "소유자, 관리자, 지정된 보증인만 초대로 누군가를 보증할 수 있어요.",
   "This link opens for members only.": "이 링크는 멤버에게만 열려요.",
   "This link opens for members only, and only admins invite here.": "이 링크는 멤버에게만 열리며, 여기서는 관리자만 초대할 수 있어요.",
-  "Anyone can read this listing for 7 days, then ask to join.": "누구나 7일 동안 이 게시물을 볼 수 있고, 그 후 가입을 신청할 수 있어요."
+  "Anyone can read this listing for 7 days, then ask to join.": "누구나 7일 동안 이 게시물을 볼 수 있고, 그 후 가입을 신청할 수 있어요.",
+  "Anyone can read this listing for 7 days.": "누구나 7일 동안 이 게시물을 볼 수 있어요.",
+  "Anyone can read this event for 7 days, then ask to join.": "누구나 7일 동안 이 일정을 볼 수 있고, 그 후 가입을 신청할 수 있어요.",
+  "Anyone can read this event for 7 days.": "누구나 7일 동안 이 일정을 볼 수 있어요."
 }

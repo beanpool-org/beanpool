@@ -25,6 +25,11 @@ const nav = vi.hoisted(() => ({
 const mockState = vi.hoisted(() => ({
     profile: null as any,
     role: null as any,
+    /** What the node said: false = no answer at all. */
+    answered: true,
+    /** The last role this phone kept for this node: undefined = nothing kept. */
+    kept: undefined as any,
+    recognition: 'member' as string,
 }));
 
 vi.mock('react-native', () => {
@@ -75,7 +80,13 @@ vi.mock('../use-node-profile', () => ({
 }));
 
 vi.mock('../node-admin', () => ({
-    cachedNodeRole: vi.fn(async () => ({ role: mockState.role, communityName: 'Test Node' })),
+    cachedNodeRoleHeard: vi.fn(async () => (mockState.answered ? { role: mockState.role, communityName: 'Test Node' } : null)),
+    persistNodeRole: vi.fn(async () => {}),
+    readPersistedNodeRole: vi.fn(async () => mockState.kept),
+}));
+
+vi.mock('../../app/NodeStatusContext', () => ({
+    useNodeStatus: () => ({ recognition: mockState.recognition }),
 }));
 
 vi.mock('../identity', () => ({
@@ -117,6 +128,9 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         root = createRoot(container);
         mockState.role = null;
         mockState.profile = null;
+        mockState.answered = true;
+        mockState.kept = undefined;
+        mockState.recognition = 'member';
     });
 
     afterEach(() => {
@@ -129,7 +143,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
     it('Row 1: Sharing outside on — keeps both buttons, says members only and 7 days line', async () => {
         mockState.profile = {
             profile: 'local',
-            features: { shareOutside: true, door: 'members' },
+            features: { shareOutside: true, door: 'members', knocks: true },
         };
 
         await act(async () => {
@@ -257,5 +271,73 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-note')).toBeNull();
         expect(get('share-outside-line')).toBeNull();
         expect(get('invite-someone-button')).toBeNull();
+    });
+
+    const render = async (post: any = samplePost) => {
+        await act(async () => { root.render(createElement(SharePostButtons, { post }) as any); });
+    };
+
+    it('Row 1 with joining paused: the outside line never promises to ask to join', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: false } };
+        await render();
+        expect(get('share-outside-line')?.textContent).toBe('Anyone can read this listing for 7 days.');
+    });
+
+    it('Share outside keeps the standing note before the tap: no names or faces, and you can stop it', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
+        await render();
+        expect(get('share-outside-privacy')?.textContent).toContain('without names or faces. You can stop it any time.');
+    });
+
+    it('an event row says "event", never "listing"', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
+        await render({ ...samplePost, type: 'event', eventEndAt: new Date(Date.now() + 86400000).toISOString() });
+        expect(get('share-outside-line')?.textContent).toBe('Anyone can read this event for 7 days, then ask to join.');
+    });
+
+    it('only admins invite, no answer from the node and nothing kept: no line and no button (not "only admins invite")', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins' } };
+        mockState.answered = false;
+        await render();
+        expect(get('share-members-button')).not.toBeNull();
+        expect(get('share-members-note')).toBeNull();
+        expect(get('invite-someone-button')).toBeNull();
+    });
+
+    it('only admins invite, no answer from the node: the role kept on the phone is used, so an owner offline keeps the button', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins' } };
+        mockState.answered = false;
+        mockState.kept = 'owner';
+        await render();
+        expect(get('invite-someone-button')).not.toBeNull();
+        expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
+    });
+
+    it('only admins invite, no answer and the kept role is "none": says only admins invite', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins' } };
+        mockState.answered = false;
+        mockState.kept = null;
+        await render();
+        expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
+        expect(get('invite-someone-button')).toBeNull();
+    });
+
+    it('a guest here (or one the node has not recognised yet) is not offered Invite someone', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'members' } };
+        mockState.recognition = 'stranger';
+        await render();
+        expect(get('share-members-button')).not.toBeNull();
+        expect(get('invite-someone-button')).toBeNull();
+        mockState.recognition = 'unknown';
+        await render();
+        expect(get('invite-someone-button')).toBeNull();
+    });
+
+    it('invites off with a members door: no Invite someone and no members line', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'members', invites: false } };
+        await render();
+        expect(get('share-members-button')).not.toBeNull();
+        expect(get('invite-someone-button')).toBeNull();
+        expect(get('share-members-note')).toBeNull();
     });
 });

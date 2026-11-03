@@ -8,12 +8,14 @@
  * Each hands the link to the phone's share sheet. A refusal says the node's own words, and nothing is shared: never a
  * false success.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share, Alert, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PEEK_WORDS as W, shareSays, t, type WordKey } from '@beanpool/core';
+import { PEEK_WORDS as W, shareSays, t } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { useShareRole } from '../utils/use-share-role';
+import { useNodeStatus } from '../app/NodeStatusContext';
 import { eventLink } from '../utils/event-extras';
 import { makePeekLink, peekStopsHere } from '../utils/peek';
 
@@ -77,7 +79,7 @@ export function ShareOutsideButton({ post }: { post: any }) {
     const profile = useNodeProfile();
     const [busy, setBusy] = useState(false);
     const unsent = useRef<UnsentPeekLink | null>(null);
-    const says = shareSays(profile?.features);
+    const says = shareSays(profile?.features, undefined, post?.type === 'event' ? 'event' : 'listing');
     if (!says.showShareOutside || !shareableOutside(post)) return null;
     return (
         <View style={styles.outsideBlock}>
@@ -85,6 +87,8 @@ export function ShareOutsideButton({ post }: { post: any }) {
                 style={[styles.btn, busy && { opacity: 0.6 }]} accessibilityRole="button" testID="share-outside-button">
                 <Text style={styles.btnText}>{t(W.shareOutside)}</Text>
             </Pressable>
+            {/* The standing assurance, before the tap: no names or faces, and it can be stopped. */}
+            <Text style={styles.note} testID="share-outside-privacy">{t(W.shareOutsideNote)}</Text>
             {says.outsideLine && (
                 <Text style={styles.note} testID="share-outside-line">
                     {t(says.outsideLine)}
@@ -98,36 +102,11 @@ export function ShareOutsideButton({ post }: { post: any }) {
 export function SharePostButtons({ post }: { post: any }) {
     const styles = useStyles(makeStyles);
     const profile = useNodeProfile();
-    const [role, setRole] = useState<string | null | undefined>(undefined);
-    const needsRole = profile?.features?.door === 'admins' || profile?.features?.privatePreview === true;
-
-    useEffect(() => {
-        if (!needsRole) return;
-        let cancelled = false;
-        (async () => {
-            const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-            if (!anchor) {
-                if (!cancelled) setRole(null);
-                return;
-            }
-            try {
-                const { loadIdentity } = await import('../utils/identity');
-                const identity = await loadIdentity().catch(() => null);
-                if (!identity) {
-                    if (!cancelled) setRole(null);
-                    return;
-                }
-                const { cachedNodeRole } = await import('../utils/node-admin');
-                const res = await cachedNodeRole(anchor, identity);
-                if (!cancelled) setRole(res.role);
-            } catch {
-                if (!cancelled) setRole(null);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [needsRole]);
-
-    const says = shareSays(profile?.features, role);
+    const role = useShareRole(profile?.features);
+    // Invite someone is a member's: a guest here, or one the node has not yet recognised, is not offered it.
+    const { recognition } = useNodeStatus();
+    const says = shareSays(profile?.features, role, post?.type === 'event' ? 'event' : 'listing');
+    const showInvite = says.showInviteButton && recognition === 'member';
 
     const shareWithMembers = async () => {
         try {
@@ -157,7 +136,7 @@ export function SharePostButtons({ post }: { post: any }) {
                     {t(says.membersLine)}
                 </Text>
             )}
-            {says.showInviteButton && (
+            {showInvite && (
                 <Pressable onPress={onInviteSomeone} style={styles.btn} accessibilityRole="button" testID="invite-someone-button">
                     <Text style={styles.btnText}>{t('Invite someone')}</Text>
                 </Pressable>

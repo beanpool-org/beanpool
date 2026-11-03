@@ -6,7 +6,8 @@
  *   - Sharing outside on:
  *       Keep both buttons.
  *       Under Share with members: "This link opens for members only."
- *       Under Share outside: "Anyone can read this listing for 7 days, then ask to join."
+ *       Under Share outside: "Anyone can read this listing for 7 days, then ask to join." Where joining is paused
+ *       (features.knocks off, or not said) it stops at "...for 7 days."; for an event it says "event".
  *   - Sharing outside off, any member may invite:
  *       Share with members, "This link opens for members only.", and an "Invite someone" button.
  *   - Sharing outside off, only admins invite, member not an admin:
@@ -17,7 +18,8 @@
  *       No line: the link already opens for anyone.
  *   - Private preview:
  *       Only the owner's or an admin's invite: same as third row for a member, second row for admin.
- *   - Fallback (settings cannot be read):
+ *   - Invites off (features.invites false) with a members' door: no Invite someone, and no line about who may invite.
+ *   - Fallback (settings cannot be read, or the member's role is still loading or failed where it matters):
  *       Show today's buttons and no line. Never guess.
  */
 
@@ -30,9 +32,15 @@ export interface ShareSaysFeatures {
     invites?: boolean | null;
     shareOutside?: boolean | null;
     privatePreview?: boolean | null;
+    /** Asking to join (a knock) is on. Joining paused: false. */
+    knocks?: boolean | null;
 }
 
+/** The member's role here: a role, null (the node said none), or undefined (not known yet, or the node did not answer). */
 export type ShareSaysRole = string | null | undefined;
+
+/** What is being shared: the words differ for an event. */
+export type ShareSaysKind = 'listing' | 'event';
 
 export interface ShareSaysResult {
     /** Plain line under Share with members, or null if no line. */
@@ -45,7 +53,9 @@ export interface ShareSaysResult {
     showShareOutside: boolean;
 }
 
-export function shareSays(features: ShareSaysFeatures | null | undefined, role?: ShareSaysRole): ShareSaysResult {
+const NOTHING: ShareSaysResult = { membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false };
+
+export function shareSays(features: ShareSaysFeatures | null | undefined, role?: ShareSaysRole, kind: ShareSaysKind = 'listing'): ShareSaysResult {
     // If a community's settings can't be read, show today's buttons and no line. Never guess.
     if (!features || (features.door == null && features.shareOutside == null && features.openJoin == null && features.privatePreview == null)) {
         return {
@@ -72,16 +82,25 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
     const onlyAdmins = features.door === 'admins' || isPrivate;
 
     if (isSharingOutsideOn) {
+        // Only what the community allows: "ask to join" only where joining is on.
+        const asks = features.knocks === true;
+        const outsideLine = kind === 'event'
+            ? (asks ? W.shareOutsideEventLine : W.shareOutsideEventNoKnockLine)
+            : (asks ? W.shareOutsideLine : W.shareOutsideNoKnockLine);
         return {
             membersLine: W.membersOnlyLine,
-            outsideLine: W.shareOutsideLine,
+            outsideLine,
             showInviteButton: false,
             showShareOutside: true,
         };
     }
 
-    // Sharing outside is off
+    // Sharing outside is off. Where invites are off nobody invites: no button, and no line about who may.
+    if (features.invites === false) return NOTHING;
+
     if (onlyAdmins) {
+        // Whether this member is an admin is not known yet (or the node did not answer): today's buttons, no line.
+        if (role === undefined) return NOTHING;
         if (isAdmin) {
             return {
                 membersLine: W.membersOnlyLine,

@@ -941,5 +941,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Μόνο οι ιδιοκτήτες, οι διαχειριστές και οι διορισμένοι εγγυητές μπορούν να εγγυηθούν για κάποιον σε μια πρόσκληση.",
   "This link opens for members only.": "Αυτός ο σύνδεσμος ανοίγει μόνο για μέλη.",
   "This link opens for members only, and only admins invite here.": "Αυτός ο σύνδεσμος ανοίγει μόνο για μέλη και εδώ προσκαλούν μόνο οι διαχειριστές.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Οποιοσδήποτε μπορεί να διαβάσει αυτήν την καταχώριση για 7 ημέρες και στη συνέχεια να ζητήσει να συμμετάσχει."
+  "Anyone can read this listing for 7 days, then ask to join.": "Οποιοσδήποτε μπορεί να διαβάσει αυτήν την καταχώριση για 7 ημέρες και στη συνέχεια να ζητήσει να συμμετάσχει.",
+  "Anyone can read this listing for 7 days.": "Οποιοσδήποτε μπορεί να διαβάσει αυτήν την καταχώριση για 7 ημέρες.",
+  "Anyone can read this event for 7 days, then ask to join.": "Οποιοσδήποτε μπορεί να διαβάσει αυτήν την εκδήλωση για 7 ημέρες και στη συνέχεια να ζητήσει να συμμετάσχει.",
+  "Anyone can read this event for 7 days.": "Οποιοσδήποτε μπορεί να διαβάσει αυτήν την εκδήλωση για 7 ημέρες."
 }

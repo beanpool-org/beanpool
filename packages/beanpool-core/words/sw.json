@@ -941,5 +941,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Wamiliki, wasimamizi na wadhamini walioteuliwa pekee ndio wanaweza kumdhamini mtu kwenye mwaliko.",
   "This link opens for members only.": "Kiungo hiki hufunguka kwa wanachama pekee.",
   "This link opens for members only, and only admins invite here.": "Kiungo hiki hufunguka kwa wanachama pekee, na hapa wasimamizi pekee ndio wanaoalika.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Mtu yeyote anaweza kusoma tangazo hili kwa siku 7, kisha aombe kujiunga."
+  "Anyone can read this listing for 7 days, then ask to join.": "Mtu yeyote anaweza kusoma tangazo hili kwa siku 7, kisha aombe kujiunga.",
+  "Anyone can read this listing for 7 days.": "Mtu yeyote anaweza kusoma tangazo hili kwa siku 7.",
+  "Anyone can read this event for 7 days, then ask to join.": "Mtu yeyote anaweza kusoma tukio hili kwa siku 7, kisha aombe kujiunga.",
+  "Anyone can read this event for 7 days.": "Mtu yeyote anaweza kusoma tukio hili kwa siku 7."
 }

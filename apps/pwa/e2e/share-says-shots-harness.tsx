@@ -20,7 +20,7 @@ let mockRole: string | null = 'member';
 
 if (row === '1') {
     // Row 1: Sharing outside on
-    mockFeatures = { door: 'members', shareOutside: true };
+    mockFeatures = { door: 'members', shareOutside: true, knocks: true };
     mockRole = 'member';
 } else if (row === '2') {
     // Row 2: Sharing outside off, any member may invite

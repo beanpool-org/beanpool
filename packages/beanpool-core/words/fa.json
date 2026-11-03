@@ -941,5 +941,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "فقط مالکان، مدیران و تأییدکنندگان منصوب می‌توانند در دعوت‌نامه اعتبار کسی را تأیید کنند.",
   "This link opens for members only.": "این پیوند فقط برای اعضا باز می‌شود.",
   "This link opens for members only, and only admins invite here.": "این پیوند فقط برای اعضا باز می‌شود و اینجا فقط مدیران دعوت می‌کنند.",
-  "Anyone can read this listing for 7 days, then ask to join.": "هر کسی می‌تواند این آگهی را به مدت ۷ روز بخواند، سپس درخواست پیوستن بدهد."
+  "Anyone can read this listing for 7 days, then ask to join.": "هر کسی می‌تواند این آگهی را به مدت ۷ روز بخواند، سپس درخواست پیوستن بدهد.",
+  "Anyone can read this listing for 7 days.": "هر کسی می‌تواند این آگهی را به مدت ۷ روز بخواند.",
+  "Anyone can read this event for 7 days, then ask to join.": "هر کسی می‌تواند این رویداد را به مدت ۷ روز بخواند، سپس درخواست پیوستن بدهد.",
+  "Anyone can read this event for 7 days.": "هر کسی می‌تواند این رویداد را به مدت ۷ روز بخواند."
 }

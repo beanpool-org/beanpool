@@ -1021,5 +1021,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Поручитися за когось у запрошенні можуть лише власники, адміністратори та призначені поручителі.",
   "This link opens for members only.": "Це посилання відкривається лише для учасників.",
   "This link opens for members only, and only admins invite here.": "Це посилання відкривається лише для учасників, і запрошувати тут можуть лише адміністратори.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Будь-хто може переглядати це оголошення протягом 7 днів, а потім подати запит на вступ."
+  "Anyone can read this listing for 7 days, then ask to join.": "Будь-хто може переглядати це оголошення протягом 7 днів, а потім подати запит на вступ.",
+  "Anyone can read this listing for 7 days.": "Будь-хто може переглядати це оголошення протягом 7 днів.",
+  "Anyone can read this event for 7 days, then ask to join.": "Будь-хто може переглядати цю подію протягом 7 днів, а потім подати запит на вступ.",
+  "Anyone can read this event for 7 days.": "Будь-хто може переглядати цю подію протягом 7 днів."
 }

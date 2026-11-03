@@ -941,5 +941,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "உரிமையாளர்கள், நிர்வாகிகள், நியமிக்கப்பட்ட சான்றளிப்பவர்கள் மட்டுமே அழைப்பில் ஒருவருக்குச் சான்றளிக்க முடியும்.",
   "This link opens for members only.": "இந்த இணைப்பு உறுப்பினர்களுக்கு மட்டுமே திறக்கும்.",
   "This link opens for members only, and only admins invite here.": "இந்த இணைப்பு உறுப்பினர்களுக்கு மட்டுமே திறக்கும், இங்கு நிர்வாகிகள் மட்டுமே அழைக்கலாம்.",
-  "Anyone can read this listing for 7 days, then ask to join.": "யாரும் இந்த இடுகையை 7 நாட்களுக்குப் படிக்கலாம், பின்னர் இணையக் கோரலாம்."
+  "Anyone can read this listing for 7 days, then ask to join.": "யாரும் இந்த இடுகையை 7 நாட்களுக்குப் படிக்கலாம், பின்னர் இணையக் கோரலாம்.",
+  "Anyone can read this listing for 7 days.": "யாரும் இந்த இடுகையை 7 நாட்களுக்குப் படிக்கலாம்.",
+  "Anyone can read this event for 7 days, then ask to join.": "யாரும் இந்த நிகழ்வை 7 நாட்களுக்குப் படிக்கலாம், பின்னர் இணையக் கோரலாம்.",
+  "Anyone can read this event for 7 days.": "யாரும் இந்த நிகழ்வை 7 நாட்களுக்குப் படிக்கலாம்."
 }

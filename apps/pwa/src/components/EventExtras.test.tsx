@@ -24,6 +24,7 @@ vi.mock('../lib/api', async () => {
         setEventReminder: vi.fn(async () => ({ success: true })),
         getNotificationPreferences: vi.fn(async () => ({})),
         getNodeApiUrl: () => 'https://mullum.beanpool.org',
+        myNodeRoleOnce: vi.fn(async () => null),
     };
 });
 
@@ -364,5 +365,23 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         const note = screen.getByTestId('event-share-members-note');
         expect(note).toBeInTheDocument();
         expect(note).toHaveTextContent('This link opens for members only.');
+    });
+
+    it('the event Share row says "event" (not "listing") under Share outside', () => {
+        vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'members', shareOutside: true, knocks: true } } as any);
+        render(<EventDetail post={event} identity={identity} />);
+        const line = screen.getByTestId('share-outside-line');
+        expect(line).toHaveTextContent('Anyone can read this event for 7 days, then ask to join.');
+        expect(line.textContent).not.toMatch(/listing/);
+        expect(screen.getByTestId('share-outside-privacy')).toHaveTextContent('without names or faces');
+    });
+
+    it('where only admins invite, an event row says nothing until the role is known, and nothing if it could not be read', async () => {
+        vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'admins', shareOutside: false } } as any);
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(undefined);
+        render(<EventDetail post={event} identity={identity} />);
+        await waitFor(() => expect(api.myNodeRoleOnce).toHaveBeenCalled());
+        expect(screen.queryByTestId('event-share-members-note')).toBeNull();
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
     });
 });

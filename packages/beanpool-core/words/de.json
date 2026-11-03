@@ -956,5 +956,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Nur Eigentümer, Admins und ernannte Bürgen können bei einer Einladung für jemanden bürgen.",
   "This link opens for members only.": "Dieser Link öffnet sich nur für Mitglieder.",
   "This link opens for members only, and only admins invite here.": "Dieser Link öffnet sich nur für Mitglieder, und hier laden nur Admins ein.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Jeder kann dieses Angebot 7 Tage lang lesen und dann einen Beitritt anfragen."
+  "Anyone can read this listing for 7 days, then ask to join.": "Jeder kann dieses Angebot 7 Tage lang lesen und dann einen Beitritt anfragen.",
+  "Anyone can read this listing for 7 days.": "Jeder kann dieses Angebot 7 Tage lang lesen.",
+  "Anyone can read this event for 7 days, then ask to join.": "Jeder kann diese Veranstaltung 7 Tage lang lesen und dann einen Beitritt anfragen.",
+  "Anyone can read this event for 7 days.": "Jeder kann diese Veranstaltung 7 Tage lang lesen."
 }

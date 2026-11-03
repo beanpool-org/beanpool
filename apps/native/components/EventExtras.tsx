@@ -42,6 +42,7 @@ import {
 } from '../utils/event-extras';
 import { shareSays, t, tn } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { useShareRole } from '../utils/use-share-role';
 import { EVENT_ACCENT } from './EventCard';
 import { Sentence } from './Sentence';
 import { ShareOutsideButton } from './SharePost';
@@ -101,36 +102,8 @@ export function EventShareAndCalendar({ post }: { post: any }) {
     const insets = useSafeAreaInsets();
     const styles = useStyles(makeStyles);
     const profile = useNodeProfile();
-    const [role, setRole] = useState<string | null | undefined>(undefined);
-    const needsRole = profile?.features?.door === 'admins' || profile?.features?.privatePreview === true;
-
-    useEffect(() => {
-        if (!needsRole) return;
-        let cancelled = false;
-        (async () => {
-            const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-            if (!anchor) {
-                if (!cancelled) setRole(null);
-                return;
-            }
-            try {
-                const { loadIdentity } = await import('../utils/identity');
-                const identity = await loadIdentity().catch(() => null);
-                if (!identity) {
-                    if (!cancelled) setRole(null);
-                    return;
-                }
-                const { cachedNodeRole } = await import('../utils/node-admin');
-                const res = await cachedNodeRole(anchor, identity);
-                if (!cancelled) setRole(res.role);
-            } catch {
-                if (!cancelled) setRole(null);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [needsRole]);
-
-    const says = shareSays(profile?.features, role);
+    const role = useShareRole(profile?.features);
+    const says = shareSays(profile?.features, role, 'event');
     const event = shareableEvent(post);
     // Labelled with the place's zone ("Sat 17 Oct, 20:50 Lagos time"), so it is right wherever it is pasted (§4).
     const when = eventShareWhen(post);

@@ -4,7 +4,7 @@ import { PEEK_WORDS as W } from '../peek-ticket';
 
 describe('shareSays table rules', () => {
     it('Row 1: Sharing outside on — keeps both buttons, members only and 7 days line', () => {
-        const res = shareSays({ shareOutside: true, door: 'members' });
+        const res = shareSays({ shareOutside: true, door: 'members', knocks: true });
         expect(res.membersLine).toBe(W.membersOnlyLine);
         expect(res.outsideLine).toBe(W.shareOutsideLine);
         expect(res.showInviteButton).toBe(false);
@@ -97,5 +97,39 @@ describe('shareSays table rules', () => {
             showInviteButton: false,
             showShareOutside: false,
         });
+    });
+
+    it('Row 1 with joining paused (knocks off, or not said): the outside line stops at 7 days and never says ask to join', () => {
+        for (const knocks of [false, null, undefined]) {
+            const res = shareSays({ shareOutside: true, door: 'members', knocks });
+            expect(res.membersLine).toBe(W.membersOnlyLine);
+            expect(res.outsideLine).toBe(W.shareOutsideNoKnockLine);
+            expect(res.showShareOutside).toBe(true);
+        }
+    });
+
+    it('an event says "event", with and without asking to join', () => {
+        expect(shareSays({ shareOutside: true, door: 'members', knocks: true }, null, 'event').outsideLine).toBe(W.shareOutsideEventLine);
+        expect(shareSays({ shareOutside: true, door: 'members', knocks: false }, null, 'event').outsideLine).toBe(W.shareOutsideEventNoKnockLine);
+        expect(shareSays({ shareOutside: true, door: 'members', knocks: true }).outsideLine).toBe(W.shareOutsideLine);
+    });
+
+    it('where only admins invite, a role not known yet (loading, or no answer) says nothing and offers no button; a known "none" still says only admins invite', () => {
+        const unknown = shareSays({ shareOutside: false, door: 'admins' }, undefined);
+        expect(unknown).toEqual({ membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false });
+        const preview = shareSays({ privatePreview: true, door: 'admins', shareOutside: false }, undefined);
+        expect(preview).toEqual({ membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false });
+        expect(shareSays({ shareOutside: false, door: 'admins' }, null).membersLine).toBe(W.adminsOnlyLine);
+        // Where any member may invite, the role does not matter.
+        expect(shareSays({ shareOutside: false, door: 'members' }, undefined).showInviteButton).toBe(true);
+    });
+
+    it('invites off with a members door (an override): no Invite someone and no line about who may invite, for a member and an admin', () => {
+        const nothing = { membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false };
+        expect(shareSays({ shareOutside: false, door: 'members', invites: false }, null)).toEqual(nothing);
+        expect(shareSays({ shareOutside: false, door: 'members', invites: false }, 'owner')).toEqual(nothing);
+        expect(shareSays({ shareOutside: false, door: 'admins', invites: false }, 'owner')).toEqual(nothing);
+        // Sharing outside on is untouched: the link is still members-only and still shareable outside.
+        expect(shareSays({ shareOutside: true, door: 'members', invites: false, knocks: true }).showShareOutside).toBe(true);
     });
 });

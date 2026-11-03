@@ -955,6 +955,9 @@
   "A vouch on an invite is 25, 50 or 100 Beans, or none.": "Une garantie sur une invitation est de 25, 50 ou 100 haricots, ou aucune.",
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Seuls les propriétaires, les admins et les garants désignés peuvent se porter garants de quelqu’un sur une invitation.",
   "This link opens for members only.": "Ce lien ne s'ouvre que pour les membres.",
-  "This link opens for members only, and only admins invite here.": "Ce lien ne s'ouvre que pour les membres, et seuls les administrateurs invitent ici.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Tout le monde peut lire cette annonce pendant 7 jours, puis demander à rejoindre."
+  "This link opens for members only, and only admins invite here.": "Ce lien ne s'ouvre que pour les membres, et seuls les admins invitent ici.",
+  "Anyone can read this listing for 7 days, then ask to join.": "Tout le monde peut lire cette annonce pendant 7 jours, puis demander à rejoindre.",
+  "Anyone can read this listing for 7 days.": "Tout le monde peut lire cette annonce pendant 7 jours.",
+  "Anyone can read this event for 7 days, then ask to join.": "Tout le monde peut lire cet événement pendant 7 jours, puis demander à rejoindre.",
+  "Anyone can read this event for 7 days.": "Tout le monde peut lire cet événement pendant 7 jours."
 }

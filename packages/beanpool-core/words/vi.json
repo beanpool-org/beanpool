@@ -901,5 +901,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "Chỉ chủ sở hữu, quản trị viên và người bảo lãnh được chỉ định mới có thể bảo lãnh cho ai đó trên lời mời.",
   "This link opens for members only.": "Liên kết này chỉ mở cho thành viên.",
   "This link opens for members only, and only admins invite here.": "Liên kết này chỉ mở cho thành viên, và ở đây chỉ quản trị viên mới được mời.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Bất kỳ ai cũng có thể đọc tin đăng này trong 7 ngày, sau đó xin tham gia."
+  "Anyone can read this listing for 7 days, then ask to join.": "Bất kỳ ai cũng có thể đọc tin đăng này trong 7 ngày, sau đó xin tham gia.",
+  "Anyone can read this listing for 7 days.": "Bất kỳ ai cũng có thể đọc tin đăng này trong 7 ngày.",
+  "Anyone can read this event for 7 days, then ask to join.": "Bất kỳ ai cũng có thể đọc sự kiện này trong 7 ngày, sau đó xin tham gia.",
+  "Anyone can read this event for 7 days.": "Bất kỳ ai cũng có thể đọc sự kiện này trong 7 ngày."
 }

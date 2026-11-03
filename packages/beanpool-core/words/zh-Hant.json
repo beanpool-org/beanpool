@@ -901,5 +901,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "只有擁有者、管理員和指定擔保人才能在邀請中為他人擔保。",
   "This link opens for members only.": "此連結僅供成員開啟。",
   "This link opens for members only, and only admins invite here.": "此連結僅供成員開啟，且此處僅管理員可邀請。",
-  "Anyone can read this listing for 7 days, then ask to join.": "任何人均可在 7 天內查看此刊登內容，然後申請加入。"
+  "Anyone can read this listing for 7 days, then ask to join.": "任何人均可在 7 天內查看此刊登內容，然後申請加入。",
+  "Anyone can read this listing for 7 days.": "任何人均可在 7 天內查看此刊登內容。",
+  "Anyone can read this event for 7 days, then ask to join.": "任何人均可在 7 天內查看此活動，然後申請加入。",
+  "Anyone can read this event for 7 days.": "任何人均可在 7 天內查看此活動。"
 }

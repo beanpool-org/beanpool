@@ -11,9 +11,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { shareSays, t } from '@beanpool/core';
 import {
-    getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, myNodeRoleOnce, setEventReminder, type MarketplacePost,
+    getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, setEventReminder, type MarketplacePost,
 } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
+import { useShareRole } from '../lib/use-share-role';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, buildIcs, buildShareText, eventLink,
@@ -59,15 +60,8 @@ const BUTTON =
  */
 export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
     const info = useCommunityInfo();
-    const [role, setRole] = useState<string | null | undefined>(undefined);
-    const needsRole = info?.features?.door === 'admins' || info?.features?.privatePreview === true;
-    useEffect(() => {
-        if (!needsRole) return;
-        let cancelled = false;
-        void myNodeRoleOnce().then(r => { if (!cancelled) setRole(r ?? null); });
-        return () => { cancelled = true; };
-    }, [needsRole]);
-    const says = shareSays(info?.features, role);
+    const role = useShareRole(info?.features);
+    const says = shareSays(info?.features, role, 'event');
     const [note, setNote] = useState<string | null>(null);
     const [calendarMenuOpen, setCalendarMenuOpen] = useState(false);
     const calendarMenuRef = useRef<HTMLDivElement | null>(null);

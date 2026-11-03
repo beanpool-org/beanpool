@@ -2099,7 +2099,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 </div>
 
                  {/* Share with members, and outside the community where it allows it (front doors S6). */}
-                 <SharePostButtons post={selectedPost} onNavigate={onNavigate} />
+                 <SharePostButtons post={selectedPost} onNavigate={onNavigate} isMember={isMember} />
 
                  {!!identity && selectedPost.authorPublicKey === identity.publicKey && (
                      <ShowOnGlobalHostRow

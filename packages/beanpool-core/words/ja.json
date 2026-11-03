@@ -901,5 +901,8 @@
   "Only owners, admins and appointed vouchers can vouch for someone on an invite.": "招待で推薦（保証）できるのは、オーナー、管理者、任命された推薦人だけです。",
   "This link opens for members only.": "このリンクはメンバーのみ開くことができます。",
   "This link opens for members only, and only admins invite here.": "このリンクはメンバーのみ開くことができ、ここでは管理者のみが招待できます。",
-  "Anyone can read this listing for 7 days, then ask to join.": "誰でもこの投稿を7日間閲覧でき、その後参加を申請できます。"
+  "Anyone can read this listing for 7 days, then ask to join.": "誰でもこの投稿を7日間閲覧でき、その後参加を申請できます。",
+  "Anyone can read this listing for 7 days.": "誰でもこの投稿を7日間閲覧できます。",
+  "Anyone can read this event for 7 days, then ask to join.": "誰でもこのイベントを7日間閲覧でき、その後参加を申請できます。",
+  "Anyone can read this event for 7 days.": "誰でもこのイベントを7日間閲覧できます。"
 }

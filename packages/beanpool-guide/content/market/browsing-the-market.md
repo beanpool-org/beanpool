@@ -85,9 +85,9 @@ You cannot save a post yet.
 
 Before you tap, a plain line under the buttons tells you what the link will do, based on your community's rules and your standing:
 
-- **Sharing outside allowed:** You see **Share with members** and **Share outside the community**. Under **Share with members**, the line reminds you that this link opens for members only. Under **Share outside the community**, it tells you that anyone can read this listing for 7 days, then ask to join.
-- **Sharing outside off, any member may invite:** You see **Share with members**, the line that it opens for members only, and an **Invite someone** button to send an invite directly.
-- **Sharing outside off, only admins invite:** Members see **Share with members** and the line that it opens for members only and only admins invite here. Owners and admins also see the **Invite someone** button.
+- **Sharing outside allowed:** You see **Share with members** and **Share outside the community**. Under **Share with members**, the line reminds you that this link opens for members only. Under **Share outside the community**, it tells you that anyone can read this listing (or event) for 7 days, and, where your community has joining open to requests, that they can then ask to join. Where joining is paused, it stops at the 7 days. A short note there also reminds you that the link shows no names or faces, and that you can stop it any time.
+- **Sharing outside off, any member may invite:** (Only if your community's invites are on.) You see **Share with members**, the line that it opens for members only, and an **Invite someone** button to send an invite directly.
+- **Sharing outside off, only admins invite:** Members see **Share with members** and the line that it opens for members only and only admins invite here. Owners and admins also see the **Invite someone** button. Until BeanPool has heard your role, it shows no line and no **Invite someone** button.
 - **On an open community:** The link already opens for anyone, so no extra line is shown.
 - **In a private preview:** Only owners and admins invite, so members see that only admins invite here.
 

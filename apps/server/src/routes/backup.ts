@@ -2,6 +2,7 @@
  * Backup, Replication, Sync, Snapshots, and Restore routes.
  */
 
+import { noteRestoredCopy } from '../services/lights-out.js';
 import Router from '@koa/router';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -540,6 +541,9 @@ export async function restoreFromTar(
     cleanupRestoreTemp();
     // Everyone is told at the next boot, on the database now in place (services/restore-points.ts), and the log keeps it.
     leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader?.createdAt ?? null, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner' });
+    // And what lights-out reads later (services/lights-out.ts): this server's record came from a backup, made then, whose
+    // keys carried that take-over count. Never in a copy of this server (LEFT_OUT_OF_BACKUPS). Never fails a restore.
+    try { noteRestoredCopy(sealedHeader?.createdAt ?? null, bundle?.identityEpoch); } catch (e: any) { console.warn(`[Restore] ${e?.message || e}`); }
     console.log(`[Restore] A backup made ${sealedHeader?.createdAt ?? '(unlocked, date unknown)'} was restored by an owner; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
 
     // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished. The shell's

@@ -32,8 +32,9 @@
  */
 
 import type Koa from 'koa';
-import net from 'node:net';
-import { configuredAddresses, isBeanPoolName, isLocalNetworkHost, isLoopbackHost, normalizeAddress, primaryAddress } from './engine/own-addresses.js';
+import { configuredAddresses, isBeanPoolName, isLoopbackHost, normalizeAddress, primaryAddress } from './engine/own-addresses.js';
+import { isDirectLanRequest, isLoopbackSource, isPrivateSource } from './direct-lan-source.js';
+import { lightsOutOn } from './services/lights-out.js';
 import { holdsOwnCertificate, servedHosts, servesCaCertificateFor } from './services/tls.js';
 import { acmeTargets } from './services/acme/schedule.js';
 
@@ -41,27 +42,8 @@ import { acmeTargets } from './services/acme/schedule.js';
  *  same): what tls.ts holdsOwnCertificate reads state.json for, from the first request after a start. */
 const certifiedHosts = () => acmeTargets().map((t) => t.host);
 
-/** A socket's remote address as Node gives it, IPv4-mapped IPv6 unwrapped; '' for none. */
-function plainAddress(remoteAddress: string | undefined): string {
-    const a = (remoteAddress ?? '').trim().toLowerCase();
-    const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(a);
-    return mapped ? mapped[1] : a;
-}
-
-/** A connection from this machine's own loopback: inside the container, cloudflared run by this server among them. */
-export function isLoopbackSource(remoteAddress: string | undefined): boolean {
-    const a = plainAddress(remoteAddress);
-    if (net.isIPv4(a)) return a.startsWith('127.');
-    return a === '::1';
-}
-
-/** A connection from a private range (RFC 1918, link-local, IPv6 unique-local and link-local) or loopback. */
-export function isPrivateSource(remoteAddress: string | undefined): boolean {
-    const a = plainAddress(remoteAddress);
-    if (net.isIPv4(a)) return isLocalNetworkHost(a);
-    if (net.isIPv6(a)) return a === '::1' || isLocalNetworkHost(`[${a}]`);
-    return false;
-}
+// The source tests live in direct-lan-source.ts (one place for every LAN-only rule); here as they always were.
+export { isLoopbackSource, isPrivateSource } from './direct-lan-source.js';
 
 export interface PlainRequest {
     /** The socket's remote address, as req.socket.remoteAddress gives it. */
@@ -72,6 +54,43 @@ export interface PlainRequest {
     forwardedProto?: string | undefined;
     /** The Forwarded header (RFC 7239), or undefined. */
     forwarded?: string | undefined;
+    /** Every header, as Node gives them, and the path: what the hall's exemption reads (direct-lan-source.ts). */
+    headers?: Record<string, string | string[] | undefined>;
+    path?: string;
+}
+
+/**
+ * What a phone or browser straight from the hall Wi-Fi may reach while lights-out is OFF, on a server that holds a
+ * certificate of its own (design §4.1, §4.3): Settings and its files, the sign-in routes, the switch itself (Settings' and
+ * the phone's), the hall page (it says the hall is closed), and the four public reads the phone's hall door checks the laptop
+ * with before it signs anything (H2: the health, the community's info, the identity statement, the nonce attestation).
+ * Everything else, /api/ledger/transfer among it, keeps the redirect until the switch is on.
+ */
+const HALL_PATHS_WHILE_OFF_EXACT = new Set([
+    '/settings', '/hall', '/api/local/admin/lights-out', '/api/node/owner/lights-out',
+    '/api/community/health', '/api/community/info', '/api/local/community-info', '/api/node/identity-epoch', '/api/attest',
+]);
+const HALL_PATH_PREFIXES_WHILE_OFF = ['/settings/', '/api/local/admin/auth/'];
+
+/** Whether this path is one the hall reaches while the switch is off (above). Dot segments and doubled slashes never count. */
+export function hallPathWhileOff(rawPath: string | undefined): boolean {
+    if (!rawPath) return false;
+    const p = rawPath.split('?')[0];
+    if (/\/\.{1,2}(\/|$)|\/\/|%2e|%2f|\\/i.test(p)) return false;
+    const path = p.length > 1 ? p.replace(/\/$/, '') : p;
+    return HALL_PATHS_WHILE_OFF_EXACT.has(path) || HALL_PATH_PREFIXES_WHILE_OFF.some((x) => path.startsWith(x));
+}
+
+/**
+ * Lights-out's exemption (services/lights-out.ts, design §2.1 item 1, §4.1): a request straight from the hall Wi-Fi (a
+ * private or loopback source with no tunnel or proxy header, naming a local-network host: direct-lan-source.ts) is answered
+ * while the switch is on, and reaches the sign-in and switch paths while it is off. Never a public source, never anything
+ * that came through a tunnel or proxy.
+ */
+export function hallMayReach(req: PlainRequest): boolean {
+    if (!req.headers) return false;
+    if (!isDirectLanRequest({ remoteAddress: req.remoteAddress, headers: req.headers })) return false;
+    return lightsOutOn() || hallPathWhileOff(req.path);
 }
 
 /** Whether a proxy's headers say the request before it came over https: the first hop's X-Forwarded-Proto or proto=. */
@@ -85,15 +104,15 @@ export function saysHttpsBefore(req: Pick<PlainRequest, 'forwardedProto' | 'forw
 /**
  * Whether the plain listener answers this request as it always has (the tunnel's delegation, the trust page, the
  * CF_RECORD_NAME redirect): on a node with no certificate of its own; from loopback; from a private-range source naming a
- * beanpool.org host (a host-level tunnel) or saying the request came over https before it (a proxy of the operator's own).
- * Everything else gets the redirect.
+ * beanpool.org host (a host-level tunnel) or saying the request came over https before it (a proxy of the operator's own);
+ * from the hall Wi-Fi as lights-out allows (hallMayReach). Everything else gets the redirect.
  */
 export function plainHttpAnswersAsBefore(req: PlainRequest): boolean {
     if (isLoopbackSource(req.remoteAddress)) return true;
     if (!holdsOwnCertificate(certifiedHosts)) return true;
     if (!isPrivateSource(req.remoteAddress)) return false;
     const host = req.host ? normalizeAddress(req.host) : null;
-    return (!!host && isBeanPoolName(host)) || saysHttpsBefore(req);
+    return (!!host && isBeanPoolName(host)) || saysHttpsBefore(req) || hallMayReach(req);
 }
 
 /**
@@ -118,6 +137,7 @@ export function plainHttpGate(): Koa.Middleware {
         if (plainHttpAnswersAsBefore({
             remoteAddress: ctx.req.socket.remoteAddress, host: ctx.get('host') || undefined,
             forwardedProto: ctx.get('x-forwarded-proto') || undefined, forwarded: ctx.get('forwarded') || undefined,
+            headers: ctx.req.headers, path: ctx.path,
         })) {
             return next();
         }
@@ -145,6 +165,7 @@ export function plainUpgradeAllowed(req: { socket: { remoteAddress?: string }; h
     if (plainHttpAnswersAsBefore({
         remoteAddress: req.socket.remoteAddress, host,
         forwardedProto: one(req.headers['x-forwarded-proto']), forwarded: one(req.headers.forwarded),
+        headers: req.headers, path: (req.url ?? '/').split('?')[0],
     })) return true;
     const location = httpsRedirectTarget(host, req.url ?? '/');
     const head = location

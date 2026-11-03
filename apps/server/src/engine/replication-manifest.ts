@@ -731,6 +731,8 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     recoveryCodeUsed: { kind: 'per-server', reason: 'the notice that a take-over spent the code, on the server it ran on' },
     identityEpochSince: { kind: 'per-server', reason: 'when this server took the identity' },
     identityReplaced: { kind: 'per-server', reason: 'this server noticed another took its identity' },
+    lightsOut: { kind: 'per-server', reason: "the owner's lights-out switch for the hall (services/lights-out.ts): never in a backup file, the stager's copy or the bundle, so a hall laptop's \"on\" never wakes on the rented server" },
+    restoredCopy: { kind: 'per-server', reason: 'the last backup restored onto this server, which lights-out reads (recordAsOf, the epoch raise); never copied' },
 };
 
 /**

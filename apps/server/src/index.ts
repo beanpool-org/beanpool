@@ -85,6 +85,7 @@ import { initBackupPuller, registerSwapRestart } from './services/backup-puller.
 import { startStandbyHealthWatch } from './services/standby-health.js';
 import { recordBoot, startServerAlerts } from './services/alerts.js';
 import { migrateStandbyMainAtBoot, startPairRequestWatch } from './services/standby-main.js';
+import { startLightsOutRequestWatch } from './services/lights-out.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
@@ -162,6 +163,8 @@ async function main() {
     // before a take-over step reads it. Unpaired otherwise, and loud (standby.unpaired). And `beanpool pair`'s pickup.
     await migrateStandbyMainAtBoot();
     startPairRequestWatch();
+    // `beanpool lights-out on|off|status` on the laptop's shell (services/lights-out.ts): the same 2 s look, every role.
+    startLightsOutRequestWatch();
 
     // Step 2.51: `beanpool recover`, run in this container, leaves a notice in the data dir for each owner it adds: the
     // community is told and the log keeps it, at boot and within 5 s while running (recover-command.ts). Never blocks the boot.

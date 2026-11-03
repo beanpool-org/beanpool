@@ -936,8 +936,8 @@
   "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Những người bạn đã nhắn tới đã báo cáo các yêu cầu nhắn tin của bạn, nên chúng đã bị xóa và bạn không thể gửi yêu cầu mới cho đến {date}. Bạn vẫn có thể trả lời những người đã nhắn cho bạn, và đăng bài.",
   "This link opens for members only.": "Liên kết này chỉ mở cho thành viên.",
   "This link opens for members only, and only admins invite here.": "Liên kết này chỉ mở cho thành viên, và ở đây chỉ quản trị viên mới được mời.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Bất kỳ ai cũng có thể đọc tin đăng này trong 7 ngày, sau đó xin tham gia.",
-  "Anyone can read this listing for 7 days.": "Bất kỳ ai cũng có thể đọc tin đăng này trong 7 ngày.",
-  "Anyone can read this event for 7 days, then ask to join.": "Bất kỳ ai cũng có thể đọc sự kiện này trong 7 ngày, sau đó xin tham gia.",
-  "Anyone can read this event for 7 days.": "Bất kỳ ai cũng có thể đọc sự kiện này trong 7 ngày."
+  "Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.": "Bất kỳ ai có liên kết đều có thể đọc tin đăng này trong 7 ngày, không có tên hay khuôn mặt, sau đó xin tham gia. Bạn có thể dừng việc này bất cứ lúc nào.",
+  "Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.": "Bất kỳ ai có liên kết đều có thể đọc tin đăng này trong 7 ngày, không có tên hay khuôn mặt. Bạn có thể dừng việc này bất cứ lúc nào.",
+  "Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.": "Bất kỳ ai có liên kết đều có thể đọc sự kiện này trong 7 ngày, không có tên hay khuôn mặt, sau đó xin tham gia. Bạn có thể dừng việc này bất cứ lúc nào.",
+  "Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.": "Bất kỳ ai có liên kết đều có thể đọc sự kiện này trong 7 ngày, không có tên hay khuôn mặt. Bạn có thể dừng việc này bất cứ lúc nào."
 }

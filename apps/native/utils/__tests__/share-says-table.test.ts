@@ -162,7 +162,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-outside-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
-        expect(get('share-outside-line')?.textContent).toBe('Anyone can read this listing for 7 days, then ask to join.');
+        expect(get('share-outside-line')?.textContent).toBe('Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.');
         // One flow: Invite and share is the only invite action, here too (the member may invite).
         expect(get('invite-and-share-button')).not.toBeNull();
         expect(container.querySelectorAll('[data-testid="invite-and-share-button"]')).toHaveLength(1);
@@ -296,19 +296,22 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
     it('Row 1 with joining paused: the outside line never promises to ask to join', async () => {
         mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: false } };
         await render();
-        expect(get('share-outside-line')?.textContent).toBe('Anyone can read this listing for 7 days.');
+        expect(get('share-outside-line')?.textContent).toBe('Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.');
     });
 
-    it('Share outside keeps the standing note before the tap: no names or faces, and you can stop it', async () => {
+    it('Share outside carries ONE note before the tap: the 7 days, no names or faces, you can stop it (not two notes)', async () => {
         mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
         await render();
-        expect(get('share-outside-privacy')?.textContent).toContain('without names or faces. You can stop it any time.');
+        expect(get('share-outside-line')?.textContent).toContain('without names or faces');
+        expect(get('share-outside-line')?.textContent).toContain('You can stop it any time.');
+        expect(get('share-outside-line')?.textContent).toContain('7 days');
+        expect(get('share-outside-privacy')).toBeNull();
     });
 
     it('an event row says "event", never "listing"', async () => {
         mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
         await render({ ...samplePost, type: 'event', eventEndAt: new Date(Date.now() + 86400000).toISOString() });
-        expect(get('share-outside-line')?.textContent).toBe('Anyone can read this event for 7 days, then ask to join.');
+        expect(get('share-outside-line')?.textContent).toBe('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
     });
 
     it('only admins invite, no answer from the node and nothing kept: no line and no button (not "only admins invite")', async () => {

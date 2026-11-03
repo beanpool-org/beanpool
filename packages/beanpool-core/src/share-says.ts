@@ -8,14 +8,14 @@
  *   - Sharing outside on:
  *       Keep both buttons.
  *       Under Share with members: "This link opens for members only."
- *       Under Share outside: "Anyone can read this listing for 7 days, then ask to join." Where joining is paused
- *       (features.knocks off, or not said) it stops at "...for 7 days."; for an event it says "event".
+ *       Under Share outside ONE short note (the privacy note and the 7 days, 3 Nov): "Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time."
+ *       Where joining is paused (features.knocks off, or not said) it drops "then ask to join"; for an event it says "event".
  *       Invite and share shows where this member may invite (below).
  *   - Sharing outside off, any member may invite:
  *       Share with members, "This link opens for members only.", and Invite and share.
  *   - Sharing outside off, only admins invite, member not an admin:
- *       Share with members, "This link opens for members only, and only admins invite here." No invite action
- *       (the seam for "Ask an admin", #2775).
+ *       Share with members, "This link opens for members only, and only admins invite here." No invite action; one more
+ *       button, "Ask an admin to invite someone" (showAskAdmin, #2775's form), where the node takes asks and the role is known.
  *   - Sharing outside off, only admins invite, member is owner/admin:
  *       As the second row (Share with members, "This link opens for members only.", Invite and share).
  *   - Open door (global):
@@ -28,6 +28,7 @@
  */
 
 import { PEEK_WORDS as W } from './peek-ticket.js';
+import { offersInviteAsk } from './invite-ask.js';
 import type { WordKey } from './words.js';
 
 export interface ShareSaysFeatures {
@@ -38,6 +39,8 @@ export interface ShareSaysFeatures {
     privatePreview?: boolean | null;
     /** Asking to join (a knock) is on. Joining paused: false. */
     knocks?: boolean | null;
+    /** The node takes "Ask an admin to invite someone" (core invite-ask.ts offersInviteAsk). An older node says nothing. */
+    inviteAsks?: boolean | null;
 }
 
 /** The member's role here: a role, null (the node said none), or undefined (not known yet, or the node did not answer). */
@@ -53,11 +56,16 @@ export interface ShareSaysResult {
     outsideLine: WordKey | null;
     /** Whether Invite and share (the one invite action) may be shown: this member may invite here, and their role is known where it matters. */
     showInviteButton: boolean;
+    /**
+     * Whether "Ask an admin to invite someone" may be shown under the line: only admins invite here, this member is no
+     * owner or admin, their role is known, and the node takes asks (offersInviteAsk). The app adds "a member here".
+     */
+    showAskAdmin: boolean;
     /** Whether the "Share outside" button should be offered (subject to post shareability). */
     showShareOutside: boolean;
 }
 
-const NOTHING: ShareSaysResult = { membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false };
+const NOTHING: ShareSaysResult = { membersLine: null, outsideLine: null, showInviteButton: false, showAskAdmin: false, showShareOutside: false };
 
 export function shareSays(features: ShareSaysFeatures | null | undefined, role?: ShareSaysRole, kind: ShareSaysKind = 'listing'): ShareSaysResult {
     // If a community's settings can't be read, show today's buttons and no line. Never guess.
@@ -66,6 +74,7 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
             membersLine: null,
             outsideLine: null,
             showInviteButton: false,
+            showAskAdmin: false,
             showShareOutside: false,
         };
     }
@@ -76,6 +85,7 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
             membersLine: null,
             outsideLine: null,
             showInviteButton: false,
+            showAskAdmin: false,
             showShareOutside: false,
         };
     }
@@ -84,6 +94,9 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
     const isSharingOutsideOn = features.shareOutside === true && !isPrivate;
     const isAdmin = role === 'owner' || role === 'admin';
     const onlyAdmins = features.door === 'admins' || isPrivate;
+    // The one case that offers the ask: only admins invite (offersInviteAsk reads the door and the node's say), the role is
+    // known (not undefined: unknown is not "no admin") and is none of owner/admin.
+    const asksAnAdmin = features.invites !== false && onlyAdmins && role !== undefined && !isAdmin && offersInviteAsk({ inviteAsks: features.inviteAsks === true, door: features.door }, false);
 
     if (isSharingOutsideOn) {
         // Only what the community allows: "ask to join" only where joining is on.
@@ -96,6 +109,7 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
             outsideLine,
             // Where only admins invite the role must be known: not heard yet is no invite action, as in the rows below.
             showInviteButton: features.invites !== false && (!onlyAdmins || isAdmin),
+            showAskAdmin: asksAnAdmin,
             showShareOutside: true,
         };
     }
@@ -111,6 +125,7 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
                 membersLine: W.membersOnlyLine,
                 outsideLine: null,
                 showInviteButton: true,
+                showAskAdmin: false,
                 showShareOutside: false,
             };
         }
@@ -118,6 +133,7 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
             membersLine: W.adminsOnlyLine,
             outsideLine: null,
             showInviteButton: false,
+            showAskAdmin: asksAnAdmin,
             showShareOutside: false,
         };
     }
@@ -127,6 +143,7 @@ export function shareSays(features: ShareSaysFeatures | null | undefined, role?:
         membersLine: W.membersOnlyLine,
         outsideLine: null,
         showInviteButton: true,
+        showAskAdmin: false,
         showShareOutside: false,
     };
 }

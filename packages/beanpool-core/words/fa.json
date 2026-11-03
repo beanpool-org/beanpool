@@ -977,8 +977,8 @@
   "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "افرادی که به آن‌ها نوشتید درخواست‌های پیام شما را گزارش کردند، بنابراین پاک شدند و تا {date} نمی‌توانید درخواست جدیدی بفرستید. همچنان می‌توانید به کسانی که برای شما نوشته‌اند پاسخ دهید و پست بگذارید.",
   "This link opens for members only.": "این پیوند فقط برای اعضا باز می‌شود.",
   "This link opens for members only, and only admins invite here.": "این پیوند فقط برای اعضا باز می‌شود و اینجا فقط مدیران دعوت می‌کنند.",
-  "Anyone can read this listing for 7 days, then ask to join.": "هر کسی می‌تواند این آگهی را به مدت ۷ روز بخواند، سپس درخواست پیوستن بدهد.",
-  "Anyone can read this listing for 7 days.": "هر کسی می‌تواند این آگهی را به مدت ۷ روز بخواند.",
-  "Anyone can read this event for 7 days, then ask to join.": "هر کسی می‌تواند این رویداد را به مدت ۷ روز بخواند، سپس درخواست پیوستن بدهد.",
-  "Anyone can read this event for 7 days.": "هر کسی می‌تواند این رویداد را به مدت ۷ روز بخواند."
+  "Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.": "هر کسی که پیوند را داشته باشد می‌تواند این آگهی را به مدت ۷ روز بدون نام و چهره بخواند، سپس درخواست پیوستن بدهد. هر زمان بخواهید می‌توانید آن را متوقف کنید.",
+  "Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.": "هر کسی که پیوند را داشته باشد می‌تواند این آگهی را به مدت ۷ روز بدون نام و چهره بخواند. هر زمان بخواهید می‌توانید آن را متوقف کنید.",
+  "Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.": "هر کسی که پیوند را داشته باشد می‌تواند این رویداد را به مدت ۷ روز بدون نام و چهره بخواند، سپس درخواست پیوستن بدهد. هر زمان بخواهید می‌توانید آن را متوقف کنید.",
+  "Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.": "هر کسی که پیوند را داشته باشد می‌تواند این رویداد را به مدت ۷ روز بدون نام و چهره بخواند. هر زمان بخواهید می‌توانید آن را متوقف کنید."
 }

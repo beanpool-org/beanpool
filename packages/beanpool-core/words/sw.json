@@ -977,8 +977,8 @@
   "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Watu uliowaandikia waliripoti maombi yako ya ujumbe, kwa hiyo yamefutwa na huwezi kutuma mapya hadi {date}. Bado unaweza kuwajibu watu walioandika kwako, na kuchapisha.",
   "This link opens for members only.": "Kiungo hiki hufunguka kwa wanachama pekee.",
   "This link opens for members only, and only admins invite here.": "Kiungo hiki hufunguka kwa wanachama pekee, na hapa wasimamizi pekee ndio wanaoalika.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Mtu yeyote anaweza kusoma tangazo hili kwa siku 7, kisha aombe kujiunga.",
-  "Anyone can read this listing for 7 days.": "Mtu yeyote anaweza kusoma tangazo hili kwa siku 7.",
-  "Anyone can read this event for 7 days, then ask to join.": "Mtu yeyote anaweza kusoma tukio hili kwa siku 7, kisha aombe kujiunga.",
-  "Anyone can read this event for 7 days.": "Mtu yeyote anaweza kusoma tukio hili kwa siku 7."
+  "Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.": "Mtu yeyote mwenye kiungo anaweza kusoma tangazo hili kwa siku 7, bila majina wala nyuso, kisha aombe kujiunga. Unaweza kulisimamisha wakati wowote.",
+  "Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.": "Mtu yeyote mwenye kiungo anaweza kusoma tangazo hili kwa siku 7, bila majina wala nyuso. Unaweza kulisimamisha wakati wowote.",
+  "Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.": "Mtu yeyote mwenye kiungo anaweza kusoma tukio hili kwa siku 7, bila majina wala nyuso, kisha aombe kujiunga. Unaweza kulisimamisha wakati wowote.",
+  "Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.": "Mtu yeyote mwenye kiungo anaweza kusoma tukio hili kwa siku 7, bila majina wala nyuso. Unaweza kulisimamisha wakati wowote."
 }

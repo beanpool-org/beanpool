@@ -992,8 +992,8 @@
   "People you wrote to reported your message requests, so they were cleared and you can't send new ones until {date}. You can still answer people who wrote to you, and post.": "Menschen, denen du geschrieben hast, haben deine Nachrichtenanfragen gemeldet. Sie wurden deshalb gelöscht, und du kannst bis zum {date} keine neuen senden. Du kannst weiterhin Menschen antworten, die dir geschrieben haben, und Beiträge posten.",
   "This link opens for members only.": "Dieser Link öffnet sich nur für Mitglieder.",
   "This link opens for members only, and only admins invite here.": "Dieser Link öffnet sich nur für Mitglieder, und hier laden nur Admins ein.",
-  "Anyone can read this listing for 7 days, then ask to join.": "Jeder kann dieses Angebot 7 Tage lang lesen und dann einen Beitritt anfragen.",
-  "Anyone can read this listing for 7 days.": "Jeder kann dieses Angebot 7 Tage lang lesen.",
-  "Anyone can read this event for 7 days, then ask to join.": "Jeder kann diese Veranstaltung 7 Tage lang lesen und dann einen Beitritt anfragen.",
-  "Anyone can read this event for 7 days.": "Jeder kann diese Veranstaltung 7 Tage lang lesen."
+  "Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.": "Jeder mit dem Link kann dieses Angebot 7 Tage lang lesen, ohne Namen und Gesichter, und dann einen Beitritt anfragen. Du kannst das jederzeit beenden.",
+  "Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.": "Jeder mit dem Link kann dieses Angebot 7 Tage lang lesen, ohne Namen und Gesichter. Du kannst das jederzeit beenden.",
+  "Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.": "Jeder mit dem Link kann diese Veranstaltung 7 Tage lang lesen, ohne Namen und Gesichter, und dann einen Beitritt anfragen. Du kannst das jederzeit beenden.",
+  "Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.": "Jeder mit dem Link kann diese Veranstaltung 7 Tage lang lesen, ohne Namen und Gesichter. Du kannst das jederzeit beenden."
 }

@@ -117,15 +117,17 @@ export const PEEK_WORDS = {
     membersOnlyLine: word('This link opens for members only.'),
     /** Under Share with members when only admins invite and member is not admin. */
     adminsOnlyLine: word('This link opens for members only, and only admins invite here.'),
-    /** Under Share outside, before tap. */
-    shareOutsideLine: word('Anyone can read this listing for 7 days, then ask to join.'),
+    /**
+     * Under Share outside, before tap: ONE short note, the privacy note and the 7 days together (3 Nov). What anyone with the
+     * link sees and for how long, that it shows no names or faces, that it can be stopped, and (where joining is on) that
+     * they can then ask to join.
+     */
+    shareOutsideLine: word('Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.'),
     /** The same, where this community has joining paused (no knocks): nothing about asking to join. */
-    shareOutsideNoKnockLine: word('Anyone can read this listing for 7 days.'),
+    shareOutsideNoKnockLine: word('Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.'),
     /** The same two for an event (Share outside on an event's row). */
-    shareOutsideEventLine: word('Anyone can read this event for 7 days, then ask to join.'),
-    shareOutsideEventNoKnockLine: word('Anyone can read this event for 7 days.'),
-    /** Under Share outside, before the link is made. */
-    shareOutsideNote: word('Anyone with the link sees this post for 7 days, without names or faces. You can stop it any time.'),
+    shareOutsideEventLine: word('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.'),
+    shareOutsideEventNoKnockLine: word('Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.'),
     sharedOutside: word('Shared outside'),
     sharedOutsideNone: word('Nothing shared outside right now.'),
     stopSharing: word('Stop sharing'),

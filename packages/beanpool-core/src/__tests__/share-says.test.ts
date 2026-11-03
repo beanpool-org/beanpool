@@ -86,6 +86,7 @@ describe('shareSays table rules', () => {
             membersLine: null,
             outsideLine: null,
             showInviteButton: false,
+            showAskAdmin: false,
             showShareOutside: false,
         });
 
@@ -93,6 +94,7 @@ describe('shareSays table rules', () => {
             membersLine: null,
             outsideLine: null,
             showInviteButton: false,
+            showAskAdmin: false,
             showShareOutside: false,
         });
 
@@ -100,6 +102,7 @@ describe('shareSays table rules', () => {
             membersLine: null,
             outsideLine: null,
             showInviteButton: false,
+            showAskAdmin: false,
             showShareOutside: false,
         });
 
@@ -107,11 +110,12 @@ describe('shareSays table rules', () => {
             membersLine: null,
             outsideLine: null,
             showInviteButton: false,
+            showAskAdmin: false,
             showShareOutside: false,
         });
     });
 
-    it('Row 1 with joining paused (knocks off, or not said): the outside line stops at 7 days and never says ask to join', () => {
+    it('Row 1 with joining paused (knocks off, or not said): the outside note never says ask to join', () => {
         for (const knocks of [false, null, undefined]) {
             const res = shareSays({ shareOutside: true, door: 'members', knocks });
             expect(res.membersLine).toBe(W.membersOnlyLine);
@@ -128,20 +132,75 @@ describe('shareSays table rules', () => {
 
     it('where only admins invite, a role not known yet (loading, or no answer) says nothing and offers no button; a known "none" still says only admins invite', () => {
         const unknown = shareSays({ shareOutside: false, door: 'admins' }, undefined);
-        expect(unknown).toEqual({ membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false });
+        expect(unknown).toEqual({ membersLine: null, outsideLine: null, showInviteButton: false, showAskAdmin: false, showShareOutside: false });
         const preview = shareSays({ privatePreview: true, door: 'admins', shareOutside: false }, undefined);
-        expect(preview).toEqual({ membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false });
+        expect(preview).toEqual({ membersLine: null, outsideLine: null, showInviteButton: false, showAskAdmin: false, showShareOutside: false });
         expect(shareSays({ shareOutside: false, door: 'admins' }, null).membersLine).toBe(W.adminsOnlyLine);
         // Where any member may invite, the role does not matter.
         expect(shareSays({ shareOutside: false, door: 'members' }, undefined).showInviteButton).toBe(true);
     });
 
     it('invites off with a members door (an override): no invite action and no line about who may invite, for a member and an admin', () => {
-        const nothing = { membersLine: null, outsideLine: null, showInviteButton: false, showShareOutside: false };
+        const nothing = { membersLine: null, outsideLine: null, showInviteButton: false, showAskAdmin: false, showShareOutside: false };
         expect(shareSays({ shareOutside: false, door: 'members', invites: false }, null)).toEqual(nothing);
         expect(shareSays({ shareOutside: false, door: 'members', invites: false }, 'owner')).toEqual(nothing);
         expect(shareSays({ shareOutside: false, door: 'admins', invites: false }, 'owner')).toEqual(nothing);
         // Sharing outside on is untouched: the link is still members-only and still shareable outside.
         expect(shareSays({ shareOutside: true, door: 'members', invites: false, knocks: true }).showShareOutside).toBe(true);
+    });
+
+    describe('Ask an admin to invite someone (showAskAdmin)', () => {
+        const closed = { door: 'admins', inviteAsks: true, shareOutside: false };
+
+        it('only admins invite, a member who is no admin, role known, the node takes asks: the line stays and the Ask shows', () => {
+            for (const role of [null, 'moderator', 'member']) {
+                const res = shareSays(closed, role);
+                expect(res.membersLine).toBe(W.adminsOnlyLine);
+                expect(res.showAskAdmin).toBe(true);
+                expect(res.showInviteButton).toBe(false);
+            }
+        });
+
+        it('also with sharing outside on (the link is still members-only, and only admins invite)', () => {
+            const res = shareSays({ ...closed, shareOutside: true, knocks: true }, null);
+            expect(res.showAskAdmin).toBe(true);
+            expect(res.showInviteButton).toBe(false);
+            expect(res.showShareOutside).toBe(true);
+        });
+
+        it('an owner or admin sees Invite and share and never the Ask', () => {
+            for (const role of ['owner', 'admin']) {
+                const res = shareSays(closed, role);
+                expect(res.showInviteButton).toBe(true);
+                expect(res.showAskAdmin).toBe(false);
+            }
+        });
+
+        it('asks off (or an older node that says nothing): no Ask', () => {
+            expect(shareSays({ ...closed, inviteAsks: false }, null).showAskAdmin).toBe(false);
+            expect(shareSays({ door: 'admins', shareOutside: false }, null).showAskAdmin).toBe(false);
+            expect(shareSays({ ...closed, inviteAsks: null }, null).showAskAdmin).toBe(false);
+        });
+
+        it('invites off: no Ask and no line', () => {
+            expect(shareSays({ ...closed, invites: false }, null)).toEqual({ membersLine: null, outsideLine: null, showInviteButton: false, showAskAdmin: false, showShareOutside: false });
+            expect(shareSays({ ...closed, invites: false, shareOutside: true, knocks: true }, null).showAskAdmin).toBe(false);
+        });
+
+        it('the door is not admins (members, or a private preview with another door): no Ask', () => {
+            expect(shareSays({ door: 'members', inviteAsks: true, shareOutside: false }, null).showAskAdmin).toBe(false);
+            expect(shareSays({ door: 'members', inviteAsks: true, privatePreview: true, shareOutside: false }, null).showAskAdmin).toBe(false);
+            expect(shareSays({ door: 'open', inviteAsks: true }, null).showAskAdmin).toBe(false);
+        });
+
+        it('role not known yet (loading, or the node did not answer): no Ask, as for the invite action', () => {
+            expect(shareSays(closed, undefined).showAskAdmin).toBe(false);
+            expect(shareSays({ ...closed, shareOutside: true, knocks: true }, undefined).showAskAdmin).toBe(false);
+        });
+
+        it('settings unreadable: no Ask', () => {
+            expect(shareSays(null, null).showAskAdmin).toBe(false);
+            expect(shareSays({ inviteAsks: true }, null).showAskAdmin).toBe(false);
+        });
     });
 });

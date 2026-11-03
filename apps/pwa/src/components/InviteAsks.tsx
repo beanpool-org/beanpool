@@ -68,7 +68,8 @@ function Answered({ answer, onCopy, onShare }: { answer: InviteAskAnswer; onCopy
     );
 }
 
-function AskSheet({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
+/** The short ask form. ONE form: People → Invites and the Share sheet's "Ask an admin to invite someone" both open this one. */
+export function AskSheet({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
     const dialog = useRef<HTMLDivElement | null>(null);
     const first = useRef<HTMLInputElement | null>(null);
     useDialogFocus(dialog, onClose, { initialFocus: () => first.current });

@@ -40,6 +40,7 @@ vi.mock('react-native', () => {
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress({ stopPropagation() {}, nativeEvent: {} }); };
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
+        if (disabled) attrs.disabled = true;
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -876,5 +877,49 @@ describe('Cross-community unread notices at top of Chat (design R6)', () => {
         const row = buttonWithText('3 new messages in Castlemaine · Switch');
         expect(row).not.toBeNull();
         expect(row?.textContent).toBe('3 new messages in Castlemaine · Switch');
+    });
+
+    it('notice row is disabled and does not re-enter when a switch is in flight', async () => {
+        store.map.set('beanpool_notice_counts', JSON.stringify({
+            'https://castlemaine.example': { n: 1, seen: {} },
+        }));
+        store.map.set('beanpool_saved_nodes', JSON.stringify([
+            { url: 'https://castlemaine.example', name: 'Castlemaine' },
+        ]));
+
+        let resolveSwitch: () => void;
+        const pendingSwitch = new Promise<void>((r) => { resolveSwitch = r; });
+        const { openNoticeIn } = await import('../push-notice-switch');
+        vi.mocked(openNoticeIn).mockImplementationOnce(async (url: string, id: string | null, route: any) => {
+            openNoticeCalls.calls.push({ url, id, route });
+            await pendingSwitch;
+            return 'switched';
+        });
+
+        await renderIn('en');
+
+        const row = buttonWithText('1 new message in Castlemaine · Switch') as HTMLButtonElement;
+        expect(row).not.toBeNull();
+        expect(row.disabled).toBe(false);
+
+        // First click triggers switch
+        await act(async () => {
+            row.click();
+        });
+        expect(openNoticeCalls.calls.length).toBe(1);
+        expect(row.disabled).toBe(true);
+
+        // Second click while in flight does not call openNoticeIn again
+        await act(async () => {
+            row.click();
+        });
+        expect(openNoticeCalls.calls.length).toBe(1);
+
+        // Switch completes
+        await act(async () => {
+            resolveSwitch!();
+        });
+        await settle();
+        expect(row.disabled).toBe(false);
     });
 });

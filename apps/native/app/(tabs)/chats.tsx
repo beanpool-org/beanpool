@@ -97,17 +97,23 @@ export default function ChatsScreen() {
     const { recheck } = useNodeStatus();
     const otherNotices = useOtherCommunitiesNotices();
     const requestsHere = requests ?? (onGlobal > 0 ? { count: 0, conversations: [] } : null);
+    const [switchingCommunity, setSwitchingCommunity] = useState(false);
 
     const openOtherCommunity = async (url: string) => {
-        if (!identity?.publicKey) return;
-        await openNoticeIn(url, null, async () => '/(tabs)/chats', {
-            storage: AsyncStorage,
-            publicKey: identity.publicKey,
-            joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
-            switchUnderWay: communitySwitchUnderWay,
-            switchTo: switchCommunity,
-            recheck,
-        });
+        if (!identity?.publicKey || switchingCommunity || communitySwitchUnderWay()) return;
+        setSwitchingCommunity(true);
+        try {
+            await openNoticeIn(url, null, async () => '/(tabs)/chats', {
+                storage: AsyncStorage,
+                publicKey: identity.publicKey,
+                joinUnderWay: () => getPendingOnboarding().then((p) => !!p, () => true),
+                switchUnderWay: communitySwitchUnderWay,
+                switchTo: switchCommunity,
+                recheck,
+            });
+        } finally {
+            setSwitchingCommunity(false);
+        }
     };
     // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
     // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
@@ -914,6 +920,7 @@ export default function ChatsScreen() {
                         accessibilityLabel={label}
                         testID={`other-community-notice-${item.url}`}
                         style={styles.requestsRow}
+                        disabled={switchingCommunity || communitySwitchUnderWay()}
                         onPress={() => void openOtherCommunity(item.url)}
                     >
                         <Text style={styles.requestsRowText} numberOfLines={2}>{label}</Text>

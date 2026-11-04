@@ -48,6 +48,7 @@ import {
 import { addChannel } from './engine/creator-channels.js';
 import { setAgentPostsPerDay, AGENT_POSTS_PER_DAY_DEFAULT, agentPostsPerDay } from './agent/limits.js';
 import { WRITER_LIMITS } from './config/writer-limits.js';
+import { aWeekPasses } from './post-test-helper.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -117,7 +118,9 @@ function pollsUntil(author: string, max: number): { made: number; refused: strin
     }
     return { made, refused: '' };
 }
-const closeAllPolls = () => db.prepare(`UPDATE posts SET status = 'completed' WHERE type = 'poll'`).run();
+// Room made for the next poll: every poll closed, and a week on, so it is the ACTIVE-poll limits this suite holds and not the
+// week a member waits between polls (engine/poll-week.ts; held in test-poll-week.ts).
+const closeAllPolls = () => { db.prepare(`UPDATE posts SET status = 'completed' WHERE type = 'poll'`).run(); aWeekPasses(db); };
 
 /** A group `member` started `hoursAgo` (the rows assertMayStartGroupToday reads, as the groups route writes them). */
 function seedGroup(member: string, hoursAgo = 1): void {
@@ -262,6 +265,7 @@ async function main(): Promise<void> {
     const memFirst = newPoll(mem);
     assert(pausePost(memFirst.id, mem) && resumePost(memFirst.id, mem) && pollStatus(memFirst.id) === 'active', 'a member with room: their paused poll comes back up');
     pausePost(memFirst.id, mem);
+    aWeekPasses(db, mem); // a week on: pausing does not make room for another poll inside the week (test-poll-week.ts), so the resume is what is held here
     newPoll(mem);
     const memResume = refusal(() => resumePost(memFirst.id, mem));
     assert(/Rate limit: You can only have 1 active poll at a time/.test(memResume) && pollStatus(memFirst.id) === 'paused',

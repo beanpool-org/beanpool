@@ -6,7 +6,9 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import type { MarketplacePost } from '../lib/api';
 import L from 'leaflet';
-import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
+import { BRAND_COLOURS, MAP_TAP_CAP_ZOOM, STACK_LIST_SHARE, STACK_REST_MS, formatDate, livePostChange, pseudoLocalise, setLanguage, zoneLabelFor } from '@beanpool/core';
+import fs from 'node:fs';
+import path from 'node:path';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -2208,6 +2210,123 @@ describe("the poll form's note for a placeless listing (S4)", () => {
         await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
         expect(within(panel).queryByTestId('poll-placeless-note')).toBeNull();
         expect(me).not.toHaveBeenCalledWith('GET', '/api/community/me');
+    });
+});
+
+// A member starts one community poll a week (apps/server engine/poll-week.ts; @beanpool/core poll-week): the composer asks the node
+// when the Poll choice is open, and a member who can't start one yet reads the day in place of the fields and the Create button
+// while the audience is Everyone. A poll for one of their groups is not held to the week: the notice says so, and picking Group
+// gives the form back.
+describe("the poll form when the node says the next poll can't start yet", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        resetCommunityInfoOnce();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } } as any);
+        vi.spyOn(api, 'request').mockImplementation((async () => ({})) as any);
+    });
+    afterEach(() => { resetCommunityInfoOnce(); setLanguage('en'); });
+
+    const DAY = 86_400_000;
+    const SENTENCE = 'You can start one community poll a week. Your next one can start on';
+    const GROUP_NOTE = 'You can still start a poll for one of your groups. Choose Group above.';
+    const withGroups = () => vi.spyOn(api, 'getGroups').mockResolvedValue([
+        { id: 'grp-1', name: 'Garden Crew', viewerRole: 'member', viewerStatus: 'active' },
+    ] as any);
+    async function openPoll(nextAt: number | null) {
+        const asked = vi.spyOn(api, 'getPollNextStart').mockResolvedValue(nextAt);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Poll' })); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        return { panel, asked };
+    }
+
+    it('shows the day in place of the fields and the Create button', async () => {
+        const at = Date.now() + 5 * DAY;
+        const { panel } = await openPoll(at);
+        const notice = within(panel).getByTestId('poll-week-notice');
+        expect(notice.textContent).toContain(`${SENTENCE} ${formatDate(new Date(at), 'weekday-day-month')}.`);
+        expect(within(panel).queryByPlaceholderText('What should our community decide?')).toBeNull();
+        expect(within(panel).queryByPlaceholderText('Option 1')).toBeNull();
+        expect(within(panel).queryByRole('button', { name: '🗳️ Create Poll' })).toBeNull();
+        expect(notice.getAttribute('role')).toBe('status');
+    });
+
+    it('has the light and the dark theme in its classes, and wraps at 320 wide', async () => {
+        const { panel } = await openPoll(Date.now() + 2 * DAY);
+        const notice = within(panel).getByTestId('poll-week-notice');
+        expect(notice.className).toMatch(/text-purple-900/);
+        expect(notice.className).toMatch(/dark:text-purple-100/);
+        expect(notice.className).toMatch(/bg-purple-50/);
+        expect(notice.className).toMatch(/dark:bg-purple-950/);
+        expect(notice.style.overflowWrap).toBe('anywhere');
+    });
+
+    it("opens the form as it always did when the node has nothing to wait for, is an older one, or can't be asked", async () => {
+        const { panel } = await openPoll(null);
+        expect(within(panel).queryByTestId('poll-week-notice')).toBeNull();
+        expect(within(panel).getByPlaceholderText('What should our community decide?')).toBeTruthy();
+        expect(within(panel).getByRole('button', { name: '🗳️ Create Poll' })).toBeTruthy();
+    });
+
+    it('is asked each time the Poll choice opens, and not for an Offer', async () => {
+        const { panel, asked } = await openPoll(Date.now() + DAY);
+        expect(asked).toHaveBeenCalledTimes(1);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Offer/ })); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        expect(within(panel).queryByTestId('poll-week-notice')).toBeNull();
+        expect(asked).toHaveBeenCalledTimes(1);
+        asked.mockResolvedValue(null);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🗳️ Poll' })); });
+        await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+        expect(asked).toHaveBeenCalledTimes(2);
+        expect(within(panel).queryByTestId('poll-week-notice')).toBeNull();
+        expect(within(panel).getByPlaceholderText('What should our community decide?')).toBeTruthy();
+    });
+
+    it('in French, the sentence and the day are French', async () => {
+        const fr = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/fr.json'), 'utf8'));
+        setLanguage('fr', [fr]);
+        const at = Date.now() + 3 * DAY;
+        const { panel } = await openPoll(at);
+        const text = within(panel).getByTestId('poll-week-notice').textContent ?? '';
+        expect(text).toContain(formatDate(new Date(at), 'weekday-day-month'));
+        expect(text).not.toContain('You can start one community poll a week');
+    });
+
+    it('says a group poll is still open when the member has a group, and nothing about groups when they have none', async () => {
+        const none = await openPoll(Date.now() + 5 * DAY);
+        expect(within(none.panel).getByTestId('poll-week-notice').textContent).not.toContain(GROUP_NOTE);
+        expect(within(none.panel).queryByTestId('poll-week-group-note')).toBeNull();
+        cleanup();
+        withGroups();
+        const some = await openPoll(Date.now() + 5 * DAY);
+        await waitFor(() => expect(within(some.panel).getByTestId('poll-week-group-note').textContent).toBe(GROUP_NOTE));
+        expect(within(some.panel).getByTestId('poll-week-notice').textContent).toContain(SENTENCE);
+    });
+
+    it('gives the form back for a group, and takes it away again for Everyone: the week is for the whole community', async () => {
+        withGroups();
+        const at = Date.now() + 5 * DAY;
+        const { panel } = await openPoll(at);
+        await waitFor(() => expect(within(panel).getByRole('button', { name: /Group \(1\)/ })).toBeTruthy());
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Group \(1\)/ })); });
+        expect(within(panel).queryByTestId('poll-week-notice')).toBeNull();
+        expect(within(panel).getByPlaceholderText('What should our community decide?')).toBeTruthy();
+        expect(within(panel).getByRole('button', { name: '🗳️ Create Poll' })).toBeTruthy();
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Everyone/ })); });
+        expect(within(panel).getByTestId('poll-week-notice').textContent).toContain(`${SENTENCE} ${formatDate(new Date(at), 'weekday-day-month')}.`);
+        expect(within(panel).queryByRole('button', { name: '🗳️ Create Poll' })).toBeNull();
     });
 });
 

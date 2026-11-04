@@ -17,7 +17,7 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
-import { wrapCreatePost } from './post-test-helper.js';
+import { wrapCreatePost, aWeekPasses } from './post-test-helper.js';
 import { db, initSchema } from './db/db.js';
 import {
     createPost as rawCreatePost,
@@ -716,6 +716,7 @@ async function runTests() {
         // Set Dave as observer in gardenGroup
         db.prepare("INSERT OR REPLACE INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at) VALUES (?, ?, 'observer', 'active', 'now', 'now')")
             .run(gardenGroup.id, dave.pubKeyHex);
+        aWeekPasses(db, alice.pubKeyHex); // her second poll, a week on from the first (a member starts one a week, test-poll-week.ts)
         const groupPoll = createPost('poll', 'community', 'Garden Poll Question', '', 0, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
             audienceScope: 'group',
             targetGroupId: gardenGroup.id,
@@ -735,8 +736,9 @@ async function runTests() {
         const memberVote = votePoll(groupPoll.id, bob.pubKeyHex, 'opt_1');
         assert(memberVote.success, '10cc. Active group member Bob CAN vote on group-scoped poll');
 
-        // Close group poll so Alice can create another poll
+        // Close group poll so Alice can create another poll (a week on: a member starts one a week, test-poll-week.ts)
         closePoll(groupPoll.id, alice.pubKeyHex);
+        aWeekPasses(db, alice.pubKeyHex);
 
         // Direct poll addressed to Dave
         const directPoll = createPost('poll', 'community', 'Direct Poll For Dave', '', 0, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {

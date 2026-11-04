@@ -289,13 +289,19 @@ export function logAlertsLook(actor: string, flags: ReadonlyArray<{ members: str
     if (!named.length) return;
     assertPlainTablesWritable();
     const since = new Date(Date.now() - ALERTS_LOOK_WINDOW_MS).toISOString();
-    const seen = db.prepare("SELECT 1 FROM health_access_log WHERE actor_pubkey = ? AND token_id IS ? AND action = 'alerts_read' AND subject_pubkey = ? AND at > ? LIMIT 1");
+    const seen = db.prepare(ALERTS_SEEN_SQL);
     const insert = db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey, token_id, token_name) VALUES (?, ?, 'alerts_read', ?, ?, ?)");
     const tokenId = token?.id ?? null;
     db.transaction(() => {
         for (const m of named) if (!seen.get(actor, tokenId, m, since)) insert.run(crypto.randomBytes(16).toString('hex'), actor, m, tokenId, token ? token.name : null);
     })();
 }
+
+/**
+ * The question logAlertsLook asks once per named member: has this admin (or this token) looked at them in the window?
+ * Exported so a test can ask the database how it answers it: idx_health_access_log_look (schema.sql) serves it.
+ */
+export const ALERTS_SEEN_SQL = "SELECT 1 FROM health_access_log WHERE actor_pubkey = ? AND token_id IS ? AND action = 'alerts_read' AND subject_pubkey = ? AND at > ? LIMIT 1";
 
 export type TradeLookAction = 'disputes_listed' | 'dispute_opened' | 'stranded_escrows_read';
 

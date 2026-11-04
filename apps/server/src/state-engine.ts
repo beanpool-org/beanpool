@@ -8043,7 +8043,7 @@ export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfa
 
 // ===================== COMMUNITY HEALTH =====================
 
-export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
+export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
 export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; minAppVersionFrom: string | null; appFloors: Record<AppPlatform, PlatformFloor>; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
@@ -8189,28 +8189,9 @@ export function getCommunityHealth(): CommunityHealth {
     // ========== HEALTH FLAG DETECTION ==========
     const flags: HealthFlag[] = [];
     
-    // 1. Inactive Members: no transactions in N days, and must have joined > N days ago
-    try {
-        const inactiveRows = db.prepare(`
-            SELECT m.public_key, m.callsign FROM members m 
-            WHERE m.status = 'active' AND m.invited_by != 'genesis'
-            AND m.joined_at <= datetime('now', '-${t.inactiveMemberDays} days')
-            AND m.public_key NOT IN (
-                SELECT DISTINCT from_pubkey FROM transactions WHERE timestamp > datetime('now', '-${t.inactiveMemberDays} days')
-                UNION
-                SELECT DISTINCT to_pubkey FROM transactions WHERE timestamp > datetime('now', '-${t.inactiveMemberDays} days')
-            )
-        `).all() as any[];
-        if (inactiveRows.length > 0) {
-            flags.push({
-                type: 'inactive_member',
-                severity: 'warning',
-                description: `${inactiveRows.length} member${inactiveRows.length > 1 ? 's' : ''} with no activity for ${t.inactiveMemberDays}+ days`,
-                members: inactiveRows.map(r => r.public_key)
-            });
-        }
-    } catch (e) { console.error('Health flag check (inactive) failed:', e); }
-    
+    // There is no check 1. Members with no trades for a while are no flag: the owner does not need a scan for it (Marty,
+    // 4 Nov 2026). The count stays in `activity`; `inactiveMemberDays` still sets what that count looks back over.
+
     // 2. Wash Trading / Sybil Ring soft enforcement (Change 3)
     try {
         const enforcement = getWashTradingEnforcement();

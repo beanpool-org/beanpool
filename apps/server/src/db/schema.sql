@@ -1969,6 +1969,10 @@ CREATE TABLE IF NOT EXISTS health_access_log (
     at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+-- logAlertsLook asks once per named member whether this admin has looked in the last 24 hours (actor, action, member, time).
+-- Without this each ask read the whole table, and the table only grows. Only the columns every shape of the table has, so a
+-- file from before the token columns still makes it, and an older server opens a file that has it.
+CREATE INDEX IF NOT EXISTS idx_health_access_log_look ON health_access_log(actor_pubkey, action, subject_pubkey, at);
 
 -- A member's consent history from before the rule on what the admins can see (scratch/fable-design/DESIGN-balance-rule-fable.md
 -- §5, Marty's Q-C): every agreement and every withdrawal, kept as a record. Nothing writes here now and no route reads it;

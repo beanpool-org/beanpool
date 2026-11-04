@@ -7,7 +7,7 @@ import { ThreatReviewModal, ThreatItem, MemberItem } from './ThreatReviewModal';
 describe('ThreatReviewModal', () => {
     const mockThreat: ThreatItem = {
         id: 'threat-1',
-        type: 'CIRCULAR_VOUCH_RING',
+        type: 'sybil_ring',
         severity: 'critical',
         description: 'Detected 0.85 insularity with reciprocal flow ratio 0.45 gross: 1200.00 and 2 cohort component of 5 members for wash1-1784649014864123',
     };
@@ -32,7 +32,9 @@ describe('ThreatReviewModal', () => {
             />
         );
 
-        expect(screen.getByText('CIRCULAR_VOUCH_RING')).toBeInTheDocument();
+        // The heading is words, never the raw type the node sends (Marty, 4 Nov).
+        expect(screen.getByText('A tight ring of mostly new accounts')).toBeInTheDocument();
+        expect(screen.queryByText('sybil_ring')).not.toBeInTheDocument();
         expect(screen.getByText('critical')).toBeInTheDocument();
         expect(screen.getByText('Reciprocal Flow Ratio')).toBeInTheDocument();
         expect(screen.getByText('0.45')).toBeInTheDocument();
@@ -190,7 +192,7 @@ describe('ThreatReviewModal', () => {
     it('freezing for a security alert (not a report) still dismisses the alert', async () => {
         vi.useFakeTimers();
         const handleDismiss = vi.fn();
-        const alert: ThreatItem = { type: 'WASH TRADING', description: 'Suspicious activity for wash1-1784649014864123' };
+        const alert: ThreatItem = { type: 'wash_trading', description: 'Suspicious activity for wash1-1784649014864123' };
         try {
             render(
                 <ThreatReviewModal

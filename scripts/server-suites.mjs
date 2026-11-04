@@ -229,6 +229,7 @@ export const SUITES = [
     'test-admin-mcp-settings',
     'test-admin-mcp-suggestions',
     'test-admin-mcp-oauth',
+    'test-mcp-addresses',
     'test-mcp-owner-posts',
     'test-mcp-owner-reads',
     'test-mcp-owner-undo',

@@ -933,5 +933,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ Đường hầm của tên đã được trả lại đã dừng. Máy chủ này vẫn trả lời tại {addresses}.",
   "🫘 A project you backed changed its end date": "🫘 Một dự án bạn ủng hộ đã đổi ngày kết thúc",
   "🫘 Pledges went back to their backers": "🫘 Các cam kết đóng góp đã được trả lại cho người ủng hộ",
-  "🫘 Your pledge came back": "🫘 Cam kết đóng góp của bạn đã được trả lại"
+  "🫘 Your pledge came back": "🫘 Cam kết đóng góp của bạn đã được trả lại",
+  "Answer serve or step_aside.": "Hãy trả lời serve hoặc step_aside.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "Bạn đã bỏ phiếu, nên bạn tham gia bồi thẩm đoàn này. Bạn có thể đổi phiếu của mình cho đến khi cuộc bỏ phiếu đóng."
 }

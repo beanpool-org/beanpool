@@ -66,6 +66,13 @@ function main() {
         'duplicate landings are deduplicated'
     );
 
+    // 7. the First steps line that asks for a Need (cold-start N1) is a landing an app can say it opens
+    const firstNeed = parseLands('enterprise, first-need');
+    assert(
+        firstNeed.has('first-need') && firstNeed.has('enterprise') && firstNeed.size === 2,
+        'the landing "first-need" is read, beside the others'
+    );
+
     console.log(`\nAll ${count} parseLands checks passed successfully.`);
     process.exit(0);
 }

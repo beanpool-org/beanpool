@@ -117,10 +117,6 @@ vi.mock('../../components/TrustPickerSheet', () => ({ TrustPickerSheet: none, TR
 vi.mock('../../components/ActivityWaterfall', () => ({ ActivityWaterfall: none }));
 vi.mock('../../components/PollCard', () => ({ PollCard: ({ post }: { post: { id: string; title: string } }) => createElement('div', { 'data-poll': post.id }, post.title) }));
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: none }));
-vi.mock('../../components/EventCard', () => ({
-    EventCard: ({ post, myLocation }: { post: { id: string; title: string }; myLocation?: { lat: number } | null }) => createElement('div', { 'data-event': post.id, 'data-from': myLocation ? String(myLocation.lat) : '' }, post.title),
-    EVENT_ACCENT: '#0F766E',
-}));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: none }));
 vi.mock('../../components/NewPostTypeSheet', () => ({ NewPostTypeSheet: none }));
 vi.mock('../../components/OwnerWordsPrompt', () => ({ OwnerWordsPrompt: none }));
@@ -189,6 +185,32 @@ const toggleView = () => click(host.querySelector('[aria-label="Grid view"], [ar
 
 /** The card as a screen reader meets it: the one button named for the listing. */
 const cardOf = (title: string) => host.querySelector(`[role="button"][aria-label="Open listing: ${title}"]`);
+
+// An event is a small card too (style box P2, DESIGN-market-event-cards-fable.md §2.2): the real EventCard, one button that
+// opens the event, read out as the event, with no Going / Interested button inside it to land on.
+describe('the Market on the phone: an event card opens its event', () => {
+    const DAY = 86_400_000;
+    const event = {
+        ...listing('ev-market', 'Byron Bay Farmers Market', { type: 'event', category: 'events' }),
+        author_pubkey: 'host-key', event_start_at: new Date(Date.now() + DAY).toISOString(),
+        event_end_at: new Date(Date.now() + DAY + 4 * 3_600_000).toISOString(), event_place_name: 'Butler Street Reserve',
+        event_state: 'scheduled', goingCount: 3, interestedCount: 1, myRsvp: 'going',
+    };
+    beforeEach(() => holds([event, listing('pots', 'Pottery course')]));
+
+    it('list view: one button for the event, named for it with the member\'s mark; a press on its place opens the event', async () => {
+        await render();
+        const buttons = Array.from(host.querySelectorAll('[role="button"]')).filter(b => b.textContent?.includes('Byron Bay Farmers Market'));
+        expect(buttons).toHaveLength(1);
+        const card = buttons[0];
+        expect(card.getAttribute('aria-label')).toMatch(/^Event: Byron Bay Farmers Market, .+, Going ✓$/);
+        expect(card.querySelectorAll('[role="button"], button')).toHaveLength(0);
+        expect(card.textContent).not.toContain('Interested');
+        const place = Array.from(card.querySelectorAll('span')).find(s => s.textContent?.includes('Butler Street Reserve'));
+        await click(place!);
+        expect(go.pushes).toEqual(['/post/ev-market']);
+    });
+});
 
 describe('the Market on the phone: a small card opens its listing, not its owner', () => {
     beforeEach(() => holds([listing('pots', 'Pottery course')]));

@@ -340,6 +340,62 @@ describe('the grid and compact views keep their cards their own height too', () 
     });
 });
 
+// The style box, slice P2 (DESIGN-market-event-cards-fable.md §3 P2): an event is the Offer's list card. Laid out with Yoga at
+// 320 dp and 1.3x text: its picture is the card's own slot (80 wide, flush inside the 1 dp border, the card's full height), the
+// card is the Offer card's width at the same left edge, its own height (Marty, 4 Nov: "the big card doesnt need to conform to
+// the same size"), and no taller than 210 dp with Byron's longest title, pinned, a place and the member's mark.
+describe('an event in the list is the Offer card, and its own height', () => {
+    const DAY = 86_400_000;
+    const BYRON: any = {
+        id: 'ev-twilight', type: 'event', status: 'active', title: 'Byron Bay Twilight Market - Every Saturday', category: 'events',
+        author_pubkey: 'byron-key', author_callsign: 'Byron Markets', created_at: iso(now - 2 * 60_000),
+        event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 5 * 3_600_000), event_state: 'scheduled',
+        event_place_name: 'Railway Park, Jonson Street, Byron Bay', lat: -28.643, lng: 153.612,
+        pinnedAt: iso(now - 60_000), pinnedUntil: iso(now + 3 * DAY), myRsvp: 'going', goingCount: 4, interestedCount: 2, photos: [],
+    };
+    const OFFER = { ...LONE, id: 'p-offer', title: 'Vehicle Storage', created_at: iso(now - 60_000) };
+    /** The event's card: the Pressable is the card itself (an Offer's is the Pressable's child). */
+    const eventCard = () => host.querySelector('[data-testid="event-card-ev-twilight"]') as HTMLElement;
+
+    it("the picture is the slot: 80 wide, flush inside the border, the card's full height; the card the Offer's width at the same left edge", async () => {
+        await show([BYRON, OFFER]);
+        const card = eventCard();
+        expect(card).not.toBeNull();
+        const slot = card.firstElementChild as HTMLElement;
+        const text = card.lastElementChild as HTMLElement;
+        expect(slot.querySelector('[data-testid="category-tile"]')).not.toBeNull();
+        const offer = cardOf(OFFER.title).firstElementChild as HTMLElement;
+        for (const height of HEIGHTS) {
+            const l = lay(height);
+            expect(l.box(slot), `slot at ${height} dp`).toMatchObject({ left: 1, top: 1, width: 80 });
+            expect(l.height(slot), `slot at ${height} dp`).toBeCloseTo(l.height(card) - 2, 1);
+            // The card is its lines' height: the text column's, or the slot's 80, whichever is taller.
+            expect(l.height(card), `card at ${height} dp`).toBeCloseTo(Math.max(80, textNeeds(l, text)) + 2, 1);
+            expect(l.width(card)).toBe(l.width(offer));
+            expect(at(l, card).left).toBe(at(l, offer).left);
+        }
+        expect(new Set(heightsAcross(card)).size).toBe(1);
+        const l = lay(569);
+        console.log(`event card ${l.height(card)} dp, Offer card ${l.height(offer)} dp at 320 x 1.3`);
+        expect(l.height(card)).toBeLessThanOrEqual(210);
+        // No more than two of its loud lines (20 dp at 1x) taller than the Offer card beside it.
+        expect(l.height(card) - l.height(offer)).toBeLessThanOrEqual(2 * 20 * 1.3);
+    });
+
+    it('nothing on the card is wider than the card, and no button but the card itself', async () => {
+        await show([BYRON, OFFER]);
+        const card = eventCard();
+        const l = lay(569);
+        const cardRight = at(l, card).left + l.width(card);
+        for (const el of Array.from(card.querySelectorAll('*'))) {
+            expect(at(l, el).left + l.width(el), el.textContent ?? el.tagName).toBeLessThanOrEqual(cardRight + 0.5);
+        }
+        expect(card.querySelectorAll('button')).toHaveLength(0);
+        expect(card.textContent).toContain('Going ✓');
+        expect(card.textContent).not.toContain('Interested');
+    });
+});
+
 // Byron's phone, 4 Nov (Android): "the pinned one is smaller. and it looks bad". The Pinned block added a 16 dp margin of
 // its own inside a list that already pads 16 dp, so a pinned card sat 32 dp in from each edge and every other card 16 dp.
 // Laid out with Yoga at 320 dp and 1.3x text: a pinned card and a card under TODAY are the same width at the same left

@@ -9,6 +9,7 @@ import {
     MARKET_CARD_SHELL,
     MARKET_CARD_TYPE,
     MARKET_CHIP,
+    MARKET_SCRIM_PILL,
     MARKET_GRID_TEXT_BLOCK,
     MARKET_GRID_TEXT_BLOCK_REM,
     gridTextBlockHeight,
@@ -29,6 +30,10 @@ describe('the shell (§1.1)', () => {
     it('has one card shadow and one floating shadow for the map pop-up', () => {
         expect(MARKET_CARD_SHELL.shadow).toEqual({ offsetY: 2, opacity: 0.05, blur: 8, elevation: 2 });
         expect(MARKET_CARD_SHELL.floatingShadow).toEqual({ offsetY: 10, opacity: 0.15, blur: 20, elevation: 20 });
+    });
+
+    it('sets the map pop-up 16 in from the screen, its ✕ 28 round and 8 in from the corner (slice M1)', () => {
+        expect(MARKET_CARD_SHELL.popUp).toEqual({ margin: 16, close: { size: 28, inset: 8, type: { size: 12, weight: 800 } } });
     });
 
     it('gives each size its photo: 80 wide in the list, 4:3 cropped at 50% 33% in the grid, 32 with radius 8 in a compact row', () => {
@@ -59,6 +64,17 @@ describe('the one chip (§1.2)', () => {
         for (const size of ['list', 'grid', 'compact'] as const) {
             expect(Object.keys(MARKET_CARD_TYPE[size]), size).not.toContain('chip');
         }
+    });
+});
+
+describe('the scrim pill on a grid photo (§1.2, slice P3\')', () => {
+    it('is padded 8 by 4 with corners 8 and a 1 edge, in a row 8 in from the photo\'s edges with 4 between', () => {
+        expect(MARKET_SCRIM_PILL).toEqual({ paddingHorizontal: 8, paddingVertical: 4, radius: 8, borderWidth: 1, inset: 8, gap: 4, quiet: { size: 10, weight: 700 } });
+    });
+
+    it('a loud pill\'s words are the grid\'s price type; a quiet pill\'s are smaller', () => {
+        expect(MARKET_CARD_TYPE.grid.price).toEqual({ size: 13, weight: 700 });
+        expect(MARKET_SCRIM_PILL.quiet.size).toBeLessThan(MARKET_CARD_TYPE.grid.price.size);
     });
 });
 
@@ -150,6 +166,7 @@ describe('the library', () => {
     it('is on the barrel both apps import from', () => {
         expect(barrel.MARKET_CARD_SHELL).toBe(MARKET_CARD_SHELL);
         expect(barrel.MARKET_CHIP).toBe(MARKET_CHIP);
+        expect(barrel.MARKET_SCRIM_PILL).toBe(MARKET_SCRIM_PILL);
         expect(barrel.MARKET_CARD_TYPE).toBe(MARKET_CARD_TYPE);
         expect(barrel.gridTextBlockHeight).toBe(gridTextBlockHeight);
     });

@@ -247,8 +247,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             </h3>
 
             {/* Background Context (if provided) */}
+            {/* In the grid two lines at most, so the poll fits its 2 x 2 square (DESIGN-market-grid-sizes-fable.md §2.3); the
+                whole of it is on the poll's page. */}
             {livePost.description && (
-                <p className="text-xs text-nature-600 dark:text-nature-400 mb-3 whitespace-pre-wrap leading-relaxed">
+                <p data-testid="poll-description" className={`text-xs text-nature-600 dark:text-nature-400 mb-3 whitespace-pre-wrap leading-relaxed${isGrid ? ' line-clamp-2' : ''}`}>
                     {livePost.description}
                 </p>
             )}
@@ -479,8 +481,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* The words, for the poll's maker and the owners. */}
             {offersOther && !visitor && (isAuthor || ownerHere) && <PollOtherAnswers postId={livePost.id} />}
 
-            {/* Village Notice */}
-            {!visitor && (
+            {/* Village Notice: the re-vote line is not in the grid, where the ballot note above says which ballot it is and the
+                square has no row to spare (§2.3); it stays in list and compact and on the poll's page. A sealed poll's line
+                stays everywhere: an answer there is final, and the grid's answers can be pressed. */}
+            {!visitor && (!isGrid || sealed) && (
             <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-400 text-center">
                 <span aria-hidden="true">ℹ️ </span>{sealed ? pollOtherLines.sealedNote() : openVote ? t('Open vote · Re-voting overwrites choice') : t('Anonymous vote · Re-voting overwrites choice')}
             </p>

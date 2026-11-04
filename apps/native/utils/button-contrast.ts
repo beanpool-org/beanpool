@@ -14,6 +14,10 @@
  *     a Pressable's `({ pressed }) => [...]`, and a StyleSheet.create table found through `styles`, `useStyles(...)`,
  *     `useStyles(makeStyles)`, `useMemo(() => makeStyles(...))` or `makeStyles(...)`, also when several tables are
  *     destructured from one call (`const { styles, profileStyles } = useMemo(() => makeStyles(...))`: each name finds its own).
+ *   - the Market's style box (components/market-card-shell.ts, FOLLOWED_MODULES): `shell.x` from its StyleSheet table; its chips,
+ *     `<CardChip role="offer" />` or `role={a ? 'offer' : 'need'}`, as a ground and its words, one pair per role the prop can be;
+ *     its tones as colours, `shell.tones.event.bg` or `const tone = shell.tones.event` then `tone.fg`, each from `chipTones(colors)`
+ *     in the theme being measured; and `cardType(...)` spread into a style, which sets a size and a weight and never a colour.
  *   - colours as `colors.a.b` (also `c.a.b`), `palette.x`, hex/rgb/rgba strings, and a local `const X = '#...'`.
  *   - `theme === 'dark'`, `dark`, `isDark` and their negations are folded for the theme being measured.
  *   - any other condition is a switch: the background and the words are measured under the SAME setting of it, so
@@ -409,14 +413,26 @@ function lookup(tree: unknown, path: string[]): unknown {
     return path.reduce<unknown>((n, k) => (n && typeof n === 'object' ? (n as Record<string, unknown>)[k] : undefined), tree);
 }
 
+/** A colour as written at `at` (its own file and line, the module's when the screen followed a table into it). */
+function paintOf(raw: string, expr: string, at: ts.Node, ctx: Ctx): Colour {
+    const rgba = parseColour(raw);
+    const own = fileOf(at, ctx.sf);
+    return rgba ? { rgba, expr, line: lineOf(at, ctx.sf), ...(own !== ctx.sf ? { in: own.fileName } : {}) } : { unresolved: expr };
+}
+
+/** `colors.a.b`, `palette.x`, `lightColors.x` or `darkColors.x` looked up in the theme being measured; undefined for any other root. */
+function treeColour(root: string, path: string[], at: ts.Node, expr: string, ctx: Ctx): Colour | undefined {
+    const tree = COLOUR_ROOTS.has(root) ? (isBoundAround(root, at) ? TREES[ctx.theme] : lightColors) : root === 'palette' ? palette
+        : root === 'lightColors' ? lightColors : root === 'darkColors' ? darkColors : undefined;
+    if (!tree) return undefined;
+    const hit = lookup(tree, path);
+    return typeof hit === 'string' ? paintOf(hit, expr, at, ctx) : { unresolved: expr };
+}
+
 function colourLeaf(e: ts.Expression, ctx: Ctx, depth: number): Colour | null {
     const expr = textOf(e, ctx.sf);
     const line = lineOf(e, ctx.sf);
-    const own = fileOf(e, ctx.sf);
-    const make = (raw: string): Colour => {
-        const rgba = parseColour(raw);
-        return rgba ? { rgba, expr, line, ...(own !== ctx.sf ? { in: own.fileName } : {}) } : { unresolved: expr };
-    };
+    const make = (raw: string): Colour => paintOf(raw, expr, e, ctx);
     if (ts.isStringLiteralLike(e)) return make(e.text);
     if (ts.isIdentifier(e) && e.text === 'undefined') return null;
     if (e.kind === ts.SyntaxKind.NullKeyword) return null;
@@ -433,12 +449,11 @@ function colourLeaf(e: ts.Expression, ctx: Ctx, depth: number): Colour | null {
     }
     const p = pathOf(e);
     if (p && p.path.length > 0) {
-        const tree = COLOUR_ROOTS.has(p.root) ? (isBoundAround(p.root, e) ? TREES[ctx.theme] : lightColors) : p.root === 'palette' ? palette
-            : p.root === 'lightColors' ? lightColors : p.root === 'darkColors' ? darkColors : undefined;
-        if (tree) {
-            const hit = lookup(tree, p.path);
-            return typeof hit === 'string' ? make(hit) : { unresolved: expr };
-        }
+        const direct = treeColour(p.root, p.path, e, expr, ctx);
+        if (direct) return direct;
+        // `shell.tones.event.bg`, or `tone.bg` after `const tone = shell.tones.event`: a colour the style box builds.
+        const boxed = boxColour(p.root, p.path, e, ctx, depth);
+        if (boxed) return boxed;
     }
     return { unresolved: expr };
 }
@@ -461,6 +476,103 @@ function colourOptions(e0: ts.Expression, ctx: Ctx, depth = 0): Option<Colour | 
 function withMerge<T>(o: Option<T>, cond: Cond): Option<T>[] {
     const merged = mergeCond(o.cond, cond);
     return merged ? [{ cond: merged, v: o.v }] : [];
+}
+
+// ── The style box's values (not tables): its chip tones ───────────────────────────────────────────────────────────
+
+/**
+ * Where a path through a value built in a followed module leaves what can be read statically: `expr` is the expression the
+ * path reached, `rest` what is still to be looked up in it (`colors.market.offer` with `['bg']` left is `colors.market.offer.bg`).
+ */
+interface Member { expr: ts.Expression; rest: string[] }
+
+/**
+ * Follows `path` through the value a node evaluates to: a function's returned expression, a hook's function (`useStyles(fn)`,
+ * `useMemo(() => ...)`), an object literal's property (a later spread or property wins, as in the object), a local or imported
+ * name, until it reaches a colour expression. `makeCardShell(colors)` -> `{ ...styles, tones: chipTones(colors) }` -> `tones` ->
+ * `chipTones` -> `{ offer: colors.market.offer, ... }` -> `offer` -> `colors.market.offer` with `bg` left over. Undefined when
+ * any step is a shape it cannot follow (a computed key, a prop, a call it has no function for).
+ */
+function memberOf(n: ts.Node, path: string[], hops = 0): Member | undefined {
+    // useCardShell -> useStyles(fn) -> fn -> makeCardShell -> { tones } -> chipTones -> { role } -> { bg } is nine steps today.
+    if (hops > 16) return undefined;
+    const e = ts.isExpression(n) ? unwrap(n) : n;
+    if (ts.isFunctionDeclaration(e) || ts.isArrowFunction(e) || ts.isFunctionExpression(e)) {
+        const ret = returnedExpression(e);
+        return ret ? memberOf(ret, path, hops + 1) : undefined;
+    }
+    if (ts.isObjectLiteralExpression(e)) {
+        if (path.length === 0) return undefined;
+        for (const p of [...e.properties].reverse()) {
+            if (ts.isSpreadAssignment(p)) {
+                const hit = memberOf(p.expression, path, hops + 1);
+                if (hit) return hit;
+                continue;
+            }
+            if (propName(p) !== path[0]) continue;
+            const init = ts.isPropertyAssignment(p) ? p.initializer : ts.isShorthandPropertyAssignment(p) ? p.name : undefined;
+            return init ? memberOf(init, path.slice(1), hops + 1) : undefined;
+        }
+        return undefined;
+    }
+    if (ts.isCallExpression(e)) {
+        const fns: ts.Node[] = [];
+        if (ts.isIdentifier(e.expression)) fns.push(findDecl(e.expression.text, e) ?? importedDecl(e.expression.text, e) ?? e);
+        for (const arg of e.arguments) fns.push(ts.isIdentifier(arg) ? (findDecl(arg.text, arg) ?? importedDecl(arg.text, arg) ?? arg) : arg);
+        for (const fn of fns) {
+            if (fn === e || !(ts.isFunctionDeclaration(fn) || ts.isArrowFunction(fn) || ts.isFunctionExpression(fn))) continue;
+            const hit = memberOf(fn, path, hops + 1);
+            if (hit) return hit;
+        }
+        return undefined;
+    }
+    if (ts.isIdentifier(e)) {
+        const decl = findDecl(e.text, e) ?? importedDecl(e.text, e);
+        return decl && decl !== n ? memberOf(decl, path, hops + 1) : undefined;
+    }
+    if (!ts.isExpression(e)) return undefined;
+    if (pathOf(e)) return { expr: e, rest: path };
+    return path.length === 0 ? { expr: e, rest: [] } : undefined;
+}
+
+/** The colour a `Member` is: the expression itself, or its path with what was left over added (named as `colors.market.offer.bg`). */
+function colourAt(m: Member | undefined, ctx: Ctx, depth: number): Colour | null {
+    if (!m) return null;
+    if (m.rest.length === 0) return colourLeaf(m.expr, ctx, depth + 1);
+    const p = pathOf(m.expr);
+    if (!p) return null;
+    return treeColour(p.root, [...p.path, ...m.rest], m.expr, [textOf(m.expr, ctx.sf), ...m.rest].join('.'), ctx) ?? null;
+}
+
+/** Is `name` a function of a followed module, imported into the file `at` is in (`useCardShell`, `makeCardShell`)? */
+const isFollowedFunction = (name: string, at: ts.Node) => {
+    const fn = importedDecl(name, at);
+    return !!fn && ts.isFunctionDeclaration(fn);
+};
+
+/**
+ * A colour the style box builds, read through the value a screen holds it in: `shell.tones.event.bg` where
+ * `const shell = useCardShell()`, or `tone.bg` where `const tone = shell.tones.event` (a few aliases deep). Only a name that
+ * leads to a call of a followed module's function is read; any other `x.y` is still unresolved. Null when it is not one.
+ */
+function boxColour(root: string, path: string[], at: ts.Node, ctx: Ctx, depth: number): Colour | null {
+    let name = root;
+    let tail = path;
+    let from = at;
+    for (let hop = 0; hop < 3; hop++) {
+        const decl = findDecl(name, from);
+        const init = decl && !ts.isFunctionLike(decl) ? unwrap(decl as ts.Expression) : undefined;
+        if (!init) return null;
+        if (ts.isCallExpression(init) && ts.isIdentifier(init.expression) && isFollowedFunction(init.expression.text, init)) {
+            return colourAt(memberOf(init, tail), ctx, depth);
+        }
+        const inner = pathOf(init);
+        if (!inner) return null;
+        name = inner.root;
+        tail = [...inner.path, ...tail];
+        from = init;
+    }
+    return null;
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -520,6 +632,24 @@ function returnedExpression(fn: ts.ArrowFunction | ts.FunctionExpression | ts.Fu
     return ret?.expression;
 }
 
+/**
+ * Helpers of a followed module that return text metrics only (a size, a weight, a line height), spread into its styles:
+ * `loud: { ...cardType(LIST.loud), color: colors.text.body }`. They never set a colour, so they are not an unread style. The
+ * size they set is not read either, so those words are held to the 4.5:1 bar (the size default), the stricter one; a card's
+ * type is far under the 24 px (18.66 bold) where the bar drops to 3. A test reads the helper in the real module and fails if it
+ * ever mentions a colour (utils/__tests__/button-contrast.test.ts).
+ */
+const METRICS_ONLY_CALLS = new Set(['cardType']);
+
+/** Is `e` a call of one of METRICS_ONLY_CALLS declared in a followed module (written in it, or imported from it)? */
+function isMetricsCall(e: ts.Expression): boolean {
+    if (!ts.isCallExpression(e) || !ts.isIdentifier(e.expression) || !METRICS_ONLY_CALLS.has(e.expression.text)) return false;
+    const decl = findDecl(e.expression.text, e) ?? importedDecl(e.expression.text, e);
+    if (!decl || !ts.isFunctionDeclaration(decl)) return false;
+    const file = decl.getSourceFile().fileName;
+    return [...FOLLOWED_MODULES].some((m) => file === `${m}.ts` || file === `${m}.tsx`);
+}
+
 /** Every setting of the background / words / size a style expression can produce. Anything unreadable adds nothing. */
 function evalStyle(e0: ts.Expression, ctx: Ctx, depth = 0): Alt[] {
     const e = unwrap(e0);
@@ -557,6 +687,7 @@ function evalStyle(e0: ts.Expression, ctx: Ctx, depth = 0): Alt[] {
     if (ts.isCallExpression(e) && ts.isPropertyAccessExpression(e.expression) && e.expression.name.text === 'flatten' && e.arguments[0]) {
         return evalStyle(e.arguments[0], ctx, depth + 1);
     }
+    if (isMetricsCall(e)) return [emptyAlt()];
     const p = pathOf(e);
     if (p && p.path.length === 1) {
         // styles.x, from the StyleSheet.create table `styles` was declared with
@@ -749,6 +880,42 @@ function contentOf(node: ts.Node): Content {
     return 'glyph';
 }
 
+/** The roles a CardChip's `role` can be, each under the switch that chooses it: `role="quiet"`, `role={x ? 'offer' : 'need'}`. Null for any other shape. */
+function roleOptions(e0: ts.Expression, ctx: Ctx): Option<string>[] | null {
+    const e = unwrap(e0);
+    if (ts.isStringLiteralLike(e)) return [{ cond: new Map(), v: e.text }];
+    if (ts.isConditionalExpression(e)) {
+        const [whenTrue, whenFalse] = [settingsWhere(e.condition, true, ctx), settingsWhere(e.condition, false, ctx)];
+        const a = whenTrue.length ? roleOptions(e.whenTrue, ctx) : [];
+        const b = whenFalse.length ? roleOptions(e.whenFalse, ctx) : [];
+        if (!a || !b) return null;
+        return [...whenTrue.flatMap((c) => a.flatMap((o) => withMerge(o, c))), ...whenFalse.flatMap((c) => b.flatMap((o) => withMerge(o, c)))];
+    }
+    return null;
+}
+
+/**
+ * The style box's chip (`<CardChip role="offer" label=... />`, components/market-card-shell.ts): a View filled with its role's
+ * ground and a Text in its role's ink, both from the module's `chipTones(colors)`. The scanner does not look inside a component,
+ * so the chip is read here as that View and Text: one alternative per role the `role` prop can be, each carrying the role's
+ * ground and ink in the theme being measured. Null when this is not the box's CardChip (it is then a component boundary as
+ * before); a `role` that is not a string or a choice between strings counts as an unread style.
+ */
+function chipAlts(opening: ts.JsxOpeningLikeElement, ctx: Ctx): Alt[] | null {
+    const box = importedDecl('CardChip', opening);
+    if (!box || !ts.isFunctionDeclaration(box)) return null;
+    const tones = box.getSourceFile().statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s) && s.name?.text === 'chipTones');
+    const role = opening.attributes.properties.find((p): p is ts.JsxAttribute => ts.isJsxAttribute(p) && p.name.getText(ctx.sf) === 'role')?.initializer;
+    const roleExpr = role && ts.isStringLiteral(role) ? role : role && ts.isJsxExpression(role) ? role.expression : undefined;
+    const roles = tones && roleExpr ? roleOptions(roleExpr, ctx) : null;
+    if (!tones || !roles) {
+        ctx.opaque.count++;
+        return [emptyAlt()];
+    }
+    const tone = (name: string, key: 'bg' | 'fg'): Colour => colourAt(memberOf(tones, [name, key]), ctx, 0) ?? { unresolved: `CardChip role "${name}" ${key}` };
+    return simplify(roles.map(({ cond, v }): Alt => ({ cond, props: { bg: tone(v, 'bg'), color: tone(v, 'fg') } })));
+}
+
 function scanFile(file: string, text: string, stats: Stats, found: Map<string, Finding>): void {
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     stats.files++;
@@ -830,8 +997,10 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
             };
             // A ScrollView's children are drawn on its contentContainerStyle (a sheet's fill is usually there).
             const scrolled = tag.endsWith('ScrollView') ? styleOf('contentContainerStyle') : null;
-            const own = scrolled ? simplify(cross(styleOf('style') ?? [emptyAlt()], scrolled)) : styleOf('style') ?? [emptyAlt()];
-            const boxed = PLAIN_BOXES.has(tag) || TEXTS.has(tag);
+            // The style box's chip is a ground and its words in one element (see chipAlts).
+            const chip = tag === 'CardChip' ? chipAlts(opening, ctx) : null;
+            const own = chip ?? (scrolled ? simplify(cross(styleOf('style') ?? [emptyAlt()], scrolled)) : styleOf('style') ?? [emptyAlt()]);
+            const boxed = PLAIN_BOXES.has(tag) || TEXTS.has(tag) || chip !== null;
             // The element's own `disabled` prop says which settings leave it inactive, however its fill is chosen.
             const disabledProp = attr('disabled');
             const disabledCases: Case[] | null = !disabledProp ? null
@@ -853,7 +1022,7 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
                         // An opaque fill hides what is above it: only its own switches chose the ground the words sit on.
                         c = bg.rgba.a >= 0.995 ? { cond, paints: [bg], disabled, styled: [...alt.cond.keys()] } : { cond, paints: [...c.paints, bg], poison: c.poison, disabled, styled };
                     }
-                    if (TEXTS.has(tag) && alt.props.color) check(opening, alt.props.color, alt.props, c, cond, contentOf(node));
+                    if ((TEXTS.has(tag) || chip) && alt.props.color) check(opening, alt.props.color, alt.props, c, cond, contentOf(node));
                     next.push(c);
                     // A component taking its label's style as a prop: the label sits on this element's background.
                     if (!boxed) {

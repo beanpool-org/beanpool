@@ -40,6 +40,11 @@ export const MARKET_CARD_SHELL = {
     shadow: { offsetY: 2, opacity: 0.05, blur: 8, elevation: 2 },
     /** The map pop-up's: the card plus a floating shadow. */
     floatingShadow: { offsetY: 10, opacity: 0.15, blur: 20, elevation: 20 },
+    /**
+     * The map pop-up (DESIGN-card-style-box-fable.md §2, slice M1): the list card 16 in from the screen's edges, and its one
+     * other control, the ✕: 28 round, 8 in from the card's top-right corner, on the subtle ground, its glyph 12/800.
+     */
+    popUp: { margin: 16, close: { size: 28, inset: 8, type: type(12, 800) } },
     /** The photo slot of each size. */
     photo: {
         /** Beside the text, flush under the card's left corners, the card's full height. */
@@ -66,6 +71,23 @@ export const MARKET_CHIP = {
     paddingHorizontal: 6,
     paddingVertical: 2,
     radius: 6,
+} as const;
+
+/**
+ * §1.2 The scrim pill: words on a grid tile's photo (📌 PINNED, a price, your mark on an event, PENDING, YOU, a deal), on
+ * `overlay.scrim` with its `scrimEdge`, in `text.inverse`, as the phone's tile has drawn them. Padding 8 across by 4 down,
+ * corners 8, a 1 edge. The pills sit in one row along the photo's foot, `inset` from its edges and `gap` apart; the type chip
+ * (the one chip) sits in the photo's top-left corner, the same `inset` in. A loud pill's words (the price, the mark) are the
+ * grid's `price` type; a quiet pill's (PINNED, an event's CANCELLED / UPDATED) are `quiet`.
+ */
+export const MARKET_SCRIM_PILL = {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    radius: 8,
+    borderWidth: 1,
+    inset: 8,
+    gap: 4,
+    quiet: type(10, 700),
 } as const;
 
 /** §1.3 The type scale, by size of card. */

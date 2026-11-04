@@ -195,10 +195,10 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
 
     it('profile setup: the no-Beans card in place of the three about Beans, and no Ledger tip', () => {
         const setup = read('app/profile-setup.tsx');
-        expect(setup).toContain('<OnboardingGuide beansOn={beansOn(nodeProfile?.features)} />');
+        expect(setup).toContain('<OnboardingGuide beansOn={beansOn(nodeProfile?.features)} community={otherDoorUrl ? communityName({ url: otherDoorUrl, alias: otherDoorAlias }) : undefined} />');
         expect(setup).toContain('{howItWorksSubtitle(nodeProfile?.features)}');
         const guide = read('components/OnboardingGuide.tsx');
-        expect(guide).toContain('export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean })');
+        expect(guide).toContain('export function OnboardingGuide({ beansOn = true, community }: { beansOn?: boolean; community?: string })');
         const at = (s: string) => { const i = guide.indexOf(s); expect(i, s).toBeGreaterThan(0); return i; };
         const open = at('{beansOn ? (');
         const other = at(') : (');

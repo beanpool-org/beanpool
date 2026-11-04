@@ -1,6 +1,8 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventCard, EventDetail } from './EventCard';
+import { MarketplaceCard } from './MarketplaceCard';
+import { CARD_INK, LIST_PHOTO, LIST_PHOTO_FILL, chip, listCard } from './market-card-shell';
 import * as api from '../lib/api';
 
 vi.mock('../lib/api', async () => {
@@ -433,7 +435,9 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
 
     // Decision 1: an event should sit among the offers, so the photo takes the same size, crop and rounding the
     // offer card uses in that view — MarketplaceCard's 110px banner in the grid, its 80px square in the list.
-    it('matches the offer card: a banner in the grid, a square thumbnail in the list', () => {
+    // W2 of the style box (DESIGN-card-style-box-fable.md §1.1; DESIGN-market-event-cards-fable.md §3 W2): in the list the
+    // event IS the offer's card: the same frame, and the photo flush under its left corners, the card's full height.
+    it('matches the offer card: a banner in the grid; in the list the same box, the photo flush and the card\'s full height', () => {
         const { unmount } = renderAt320(<EventCard post={withPhoto} identity={identity} />);
         const grid = within(screen.getByTestId('event-card')).getByRole('img');
         expect(grid.className).toMatch(/h-\[110px\]/);
@@ -442,13 +446,71 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
         expect(grid.className).toMatch(/rounded-xl/);
         unmount();
 
-        renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="list" />);
-        const list = within(screen.getByTestId('event-card')).getByRole('img');
-        expect(list.className).toMatch(/w-20/);
-        expect(list.className).toMatch(/h-20/);
-        expect(list.className).toMatch(/object-cover/);
-        expect(list.className).toMatch(/rounded-xl/);
-        expect(list.className).toMatch(/flex-shrink-0/);
+        renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="list" onOpen={() => {}} />);
+        const card = screen.getByTestId('event-card');
+        // The frame is the box's list card: no padding of its own, so nothing sits between its edge and the photo.
+        expect(card.className.startsWith(listCard())).toBe(true);
+        expect(card.className).not.toMatch(/(^|\s)p-\d/);
+        const open = within(card).getByRole('button', { name: /Open event/ });
+        expect(open.className).toMatch(/(^|\s)p-0(\s|$)/);
+        // The photo slot is the first thing in the card's one tap target, 80 wide and stretched to the card's height.
+        const slot = screen.getByTestId('event-list-photo');
+        expect(open.firstElementChild).toBe(slot);
+        expect(slot.className).toBe(LIST_PHOTO);
+        // The event tile holds the slot until the photo has drawn (card-photo-blank), then the photo covers the slot.
+        expect(within(slot).getByTestId('category-tile')).toBeInTheDocument();
+        const img = slot.querySelector('img')!;
+        fireEvent.load(img);
+        expect(within(slot).queryByTestId('category-tile')).toBeNull();
+        expect(within(card).getByRole('img')).toBe(img);
+        expect(img).toHaveAttribute('alt', baseEvent.title);
+        expect(img.className).toBe(`${LIST_PHOTO_FILL} object-cover`);
+        // No fixed height anywhere on the card: it takes the height its lines need (Marty, 4 Nov 2026).
+        for (const el of [card, open, slot, img]) expect(el.className).not.toMatch(/(^|\s)h-\d/);
+    });
+
+    it('in the list, an event card and an offer card are drawn from the same box', () => {
+        const { container } = renderAt320(
+            <>
+                <EventCard post={withPhoto} identity={identity} viewMode="list" />
+                <MarketplaceCard post={{ ...baseEvent, type: 'offer', photos: ['/uploads/offer.jpg'] } as any} viewMode="list" />
+            </>,
+        );
+        const event = screen.getByTestId('event-card');
+        const offer = screen.getByTestId('listing-list-card');
+        expect(event.className.startsWith(listCard())).toBe(true);
+        expect(offer.className.startsWith(listCard())).toBe(true);
+        expect(screen.getByTestId('event-list-photo').className).toBe(screen.getByTestId('listing-list-photo').className);
+        // The type chips are the one chip, in their own colours.
+        expect(screen.getByTestId('event-type-chip').className).toBe(chip('event'));
+        expect(container.querySelectorAll('[data-testid="event-type-chip"]')).toHaveLength(1);
+    });
+
+    // The style box's check (DESIGN-card-style-box-fable.md §4, W2): no raw violet and no nature-950 ground left on a list
+    // card; the event violet is core's `tile.event` token, the ground the card token, in light and dark alike.
+    it('the list card has no raw violet class and no nature-950 ground, pinned, updated, hosting or going', () => {
+        const pinned = { pinnedAt: new Date().toISOString(), pinnedUntil: new Date(Date.now() + 86_400_000).toISOString() };
+        const cases: any[] = [
+            { ...withPhoto, ...pinned },
+            { ...baseEvent, eventState: 'updated', eventRepeat: { freq: 'weekly', interval: 1, byDay: 'SA', time: '09:00', minutes: 180 } },
+            { ...baseEvent, eventRsvps: [], myRsvp: null },
+            { ...baseEvent, myRsvp: null },
+        ];
+        for (const post of cases) {
+            const { container, unmount } = renderAt320(<EventCard post={post} identity={identity} viewMode="list" />);
+            // Each case draws the line it is here for, so the check below reads its classes.
+            if (post.eventRepeat) expect(container.querySelector('[data-testid="event-repeat-caption"]')).not.toBeNull();
+            if (post.eventState === 'updated') expect(container.querySelector('[data-testid="event-state-badge"]')).not.toBeNull();
+            if (post.pinnedAt) expect(container.querySelector('[data-testid="event-pinned-chip"]')).not.toBeNull();
+            if (post.eventRsvps) expect(container.querySelector('[data-testid="event-hosting"]')).not.toBeNull();
+            const all = Array.from(container.querySelectorAll('[class]')).map(e => e.getAttribute('class')).join(' ');
+            expect(all).not.toMatch(/violet-/);
+            expect(all).not.toMatch(/nature-950/);
+            unmount();
+        }
+        // The when is in the event token.
+        renderAt320(<EventCard post={baseEvent} identity={identity} viewMode="list" />);
+        expect(within(screen.getByTestId('event-card')).getByText(/SAT 28 SEP/).className).toContain(CARD_INK.event);
     });
 
     // Decision 1 again, in the one view where matching the offer card means showing nothing: MarketplaceCard's
@@ -471,6 +533,8 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
         renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="list" rsvpOnCard />);
         const card = screen.getByTestId('event-card');
         expect(card.className).toMatch(/overflow-hidden/);
+        // The list photo is the picture hook's (card-photo-blank): the tile holds the slot until the photo has drawn.
+        fireEvent.load(card.querySelector('img')!);
         const img = within(card).getByRole('img');
         const going = screen.getByRole('button', { name: 'Going ✓' });
         expect(going.className).toContain('min-h-[48px]');

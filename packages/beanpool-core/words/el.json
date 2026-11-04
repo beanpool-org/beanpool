@@ -1972,5 +1972,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} σε άλλη κοινότητα · Δεν μπορείτε να το αγοράσετε ή να το πάρετε εδώ.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} στην κοινότητα {community} · Δεν μπορείτε να το αγοράσετε ή να το πάρετε μέχρι να σας καλωσορίσει η κοινότητα {community}.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 Εξερευνήστε την παγκόσμια κοινότητα"
+  "🌍 Look around the global community": "🌍 Εξερευνήστε την παγκόσμια κοινότητα",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Μια κριτική επιτροπή στην οποία επιλεχθήκατε περιμένει την απάντησή σας. Απαντήστε μέσα σε μία ημέρα, αλλιώς η θέση σας περνά στο επόμενο μέλος που θα επιλεγεί με κλήρωση.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "Μια κριτική επιτροπή στην οποία συμμετέχετε κλείνει σε περίπου μία ημέρα. Ανοίξτε το BeanPool για να ψηφίσετε.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "Το μέλος για το οποίο αποφασίζει η κριτική επιτροπή σας απάντησε στην υπόθεση. Ανοίξτε το BeanPool για να διαβάσετε την απάντηση.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "Επιλεχθήκατε σε μια κριτική επιτροπή της κοινότητάς σας και η ψηφοφορία της κλείνει σε λιγότερο από δύο ημέρες. Ανοίξτε το BeanPool για να συμμετάσχετε ή να παραμερίσετε.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "Επιλεχθήκατε σε μια κριτική επιτροπή της κοινότητάς σας. Ανοίξτε το BeanPool μέσα σε τρεις ημέρες για να συμμετάσχετε ή να παραμερίσετε."
 }

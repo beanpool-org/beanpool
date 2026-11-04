@@ -25,7 +25,23 @@
  * grid's first cell with its 📌 PINNED pill, the first stream card is beside it in the same row, and no card is drawn twice.
  * The lattice (PG2, §2.2, §2.5): the local case holds a poll too; every Offer / Need tile is half the row less the gutter, the
  * tiles of a row are one height, each tile's text block is four rows (24 + (4 x 18 + 3 x 4) x 1.3 = 133.2 dp), and the poll is
- * a row of its own at the list's width. An event in the grid is still the list card until P3': its height is printed, not held.
+ * a row of its own at the list's width. An event is a tile on the lattice too (P3'): held to the same width, row height and text
+ * block as the Offer / Need tiles, with its date and time rows, no button inside it and its mark ("Going ✓") whole on the photo;
+ * the counts are the page's in the grid. The local case's Repair Café has counts and no answer; the global case holds the
+ * member's own event (no mark: the host's line is the page's) and one they are going to.
+ * The when rows (#2885 review): an event's date row and time row are each whole, never cut (scrollWidth > clientWidth fails).
+ * The global grid case holds an event that ends the next day (the date, then its start time) and a Byron event read in another
+ * zone: the browser's clock is set to Queensland (Perth while NSW is off daylight time, so the two clocks always differ), and
+ * that tile shows the reader's own time with "🕒 your time" whole at the start of its last row, never the place's bare time.
+ * The four calls of DESIGN-grid-event-rows-fable.md: the local grid case holds a group-only event (a 🔒 pill on the photo's foot,
+ * named with the whole sentence, and its place still in row 4) and an online event (row 2 the reader's bare span, "your time"
+ * in no row, only in the tile's name); the global grid case holds a member's copy (row 4 "from {community}", no place).
+ * Every event tile fails when any of its four rows is cut (the row's scrollWidth > clientWidth: something drawn past its box),
+ * when a date or time piece it shows is cut by its own "…", or when its time row, as shown, ends in a dash.
+ *
+ * Fonts: Chromium on a Mac draws the system font, wider than Android's Roboto (a plain "10:26–14:26" is 113.5 dp in it, in a
+ * 110 dp row). Pass Android's own Roboto to measure what a phone draws, e.g. pulled from an emulator's /system/fonts:
+ *   node apps/native/e2e/market-order-320.mjs --view grid --font <Roboto-Regular.ttf> --shots <dir>
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -46,6 +62,13 @@ if (VIEW !== 'list' && VIEW !== 'grid') { console.log('--view is list or grid');
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? path.resolve(process.argv[shotsAt + 1]) : null;
 if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
+const fontAt = process.argv.indexOf('--font');
+const FONT = fontAt > 0 ? fs.readFileSync(path.resolve(process.argv[fontAt + 1])) : null;
+// The reader's zone for the grid's cross-zone event (a Byron event, NSW clock): Queensland while NSW is on daylight time, else
+// Perth, so the reader's clock always differs from the place's whatever the date the harness runs on.
+const zoneOffset = (tz, ms) => Math.round((Date.parse(new Date(ms).toLocaleString('sv-SE', { timeZone: tz }).replace(' ', 'T') + 'Z') - ms) / 60000);
+const CROSS_AT = Date.now() + 28 * 60 * 60 * 1000;
+const READER_TZ = zoneOffset('Australia/Sydney', CROSS_AT) !== zoneOffset('Australia/Brisbane', CROSS_AT) ? 'Australia/Brisbane' : 'Australia/Perth';
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'market-order-320-'));
 
@@ -229,6 +252,10 @@ globalThis.__identity = { publicKey: 'my-own-member-key', callsign: 'Kim' };
 const MIN = 60 * 1000;
 const ago = (min) => new Date(Date.now() - min * MIN).toISOString();
 const ahead = (min) => new Date(Date.now() + min * MIN).toISOString();
+// An instant on NSW's wall clock, "YYYY-MM-DDTHH:MM", as a node stores an event's local clock; the cross-zone event's start.
+const placeClock = (iso) => new Date(iso).toLocaleString('sv-SE', { timeZone: 'Australia/Sydney' }).slice(0, 16).replace(' ', 'T');
+window.__crossStart = ahead(60 * 28);
+window.__onlineStart = ahead(60 * 27);
 const post = (id, title, extra = {}) => ({
     id, title, type: 'offer', status: 'active', category: 'food', author_pubkey: 'k-' + id, author_callsign: 'Neighbour', author_energy_cycled: 0,
     credits: 5, price_type: 'fixed', photos: '[]', lat: -28.6, lng: 153.5, description: '', created_at: ago(5), ...extra,
@@ -254,6 +281,14 @@ if (c === 'local') {
         ...(${JSON.stringify(VIEW)} === 'grid' ? [
             post('poll', 'Where should the new tool shed go?', { type: 'poll', category: 'general', created_at: ago(30), author_callsign: 'Dee' }),
             post('r', 'Seedlings every week from the nursery bench', { created_at: ago(50), author_callsign: 'Lee', repeatable: 1 }),
+            // DESIGN-grid-event-rows calls 1 and 3: a group-only event, and an online one hosted on NSW's clock, read in the
+            // browser's other zone.
+            post('evgroup', 'Working bee at the garden', { type: 'event', category: 'events', created_at: ago(12), author_callsign: 'Gardeners',
+                event_start_at: ahead(60 * 22), event_end_at: ahead(60 * 24), event_state: 'scheduled', event_place_name: 'Community Garden',
+                audience_scope: 'group', target_group_id: 'g-garden', target_group_name: 'Byron Bay Community Gardeners' }),
+            post('evonline', 'Seed library call', { type: 'event', category: 'events', created_at: ago(14), lat: null, lng: null, author_callsign: 'Seed Library',
+                event_start_at: window.__onlineStart, event_end_at: ahead(60 * 29), event_state: 'scheduled', event_online: 1,
+                event_start_local: placeClock(window.__onlineStart), event_end_local: placeClock(ahead(60 * 29)), event_tz: 'Australia/Sydney' }),
         ] : []),
     ];
 } else if (c === 'newsince' || c === 'newsince-day') {
@@ -285,6 +320,21 @@ if (c === 'local') {
         post('g6', 'Byron Bay Farmers Market — Weekly Thursday', { type: 'event', category: 'events', created_at: ago(60 * 3), lat: -28.66, lng: 153.6,
             author_callsign: 'Byron Markets', event_start_at: ahead(60 * 30), event_end_at: ahead(60 * 34), event_state: 'scheduled',
             event_place_name: 'Butler Street Reserve', myRsvp: 'going', credits: 0 }),
+        // The when rows (#2885): an event that ends the next day, and a Byron event (NSW clock) read in the browser's other zone.
+        ...(${JSON.stringify(VIEW)} === 'grid' ? [
+            post('g7', 'Seed swap weekend', { type: 'event', category: 'events', created_at: ago(60 * 4), lat: -28.55, lng: 153.5,
+                author_callsign: 'Seed Library', event_start_at: ahead(60 * 26), event_end_at: ahead(60 * 50), event_state: 'scheduled',
+                event_place_name: 'Mullumbimby Hall', credits: 0 }),
+            post('g8', 'Byron Bay Twilight Market', { type: 'event', category: 'events', created_at: ago(60 * 6), lat: -28.64, lng: 153.61,
+                author_callsign: 'Byron Markets', event_start_at: window.__crossStart, event_end_at: ahead(60 * 32), event_state: 'scheduled',
+                event_start_local: placeClock(window.__crossStart), event_end_local: placeClock(ahead(60 * 32)), event_tz: 'Australia/Sydney',
+                event_place_name: 'Railway Park', credits: 0 }),
+            // DESIGN-grid-event-rows call 2: a member's copy of a Mullumbimby event, as global's cached column holds it.
+            post('g9', 'Mullum Music Night', { type: 'event', category: 'events', created_at: ago(60 * 2), lat: -28.55, lng: 153.5,
+                author_callsign: 'Mullum Arts', event_start_at: ahead(60 * 40), event_end_at: ahead(60 * 43), event_state: 'scheduled',
+                event_place_name: 'Civic Hall', credits: 0,
+                shown_from: JSON.stringify({ host: 'mullum.example', postId: 'ev-music', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask' }) }),
+        ] : []),
         post('g3', 'Proofread a grant', { type: 'need', category: 'education', created_at: ago(60 * 5), lat: -27.47, lng: 153.03, author_callsign: 'Kai', credits: 0 }),
         post('g4', 'Surplus pumpkins', { created_at: ago(60 * 26), lat: -28.2, lng: 153.4, author_callsign: 'Pat', credits: 0 }),
         post('g5', 'Melbourne bike (beyond 250 km)', { created_at: ago(30), lat: -37.81, lng: 144.96, author_callsign: 'Far', credits: 0 }),
@@ -309,9 +359,12 @@ await build({
     nodePaths: [path.join(NATIVE, 'node_modules'), path.resolve(NATIVE, '../../node_modules')],
 });
 
-const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=${WIDTH}"><style>html,body,#root{margin:0;padding:0;width:${WIDTH}px;overflow-x:hidden}</style></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>`;
+// With --font, every line is drawn in that font (Android's Roboto: its weight axis gives 500, 700 and 800 as a phone draws them).
+const fontCss = FONT ? `@font-face{font-family:'PhoneFont';src:url(/font.ttf);font-weight:100 900}#root,#root *{font-family:'PhoneFont',sans-serif!important}` : '';
+const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=${WIDTH}"><style>html,body,#root{margin:0;padding:0;width:${WIDTH}px;overflow-x:hidden}${fontCss}</style></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>`;
 const server = http.createServer((req, res) => {
     if (req.url?.startsWith('/bundle.js')) { res.setHeader('content-type', 'text/javascript'); res.end(fs.readFileSync(outfile)); return; }
+    if (FONT && req.url?.startsWith('/font.ttf')) { res.setHeader('content-type', 'font/ttf'); res.end(FONT); return; }
     res.setHeader('content-type', 'text/html'); res.end(html);
 });
 await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -322,7 +375,7 @@ let failures = 0;
 const fail = (msg) => { failures++; console.log('  FAIL', msg); };
 for (const scheme of ['light', 'dark']) {
     for (const which of VIEW === 'grid' ? ['local', 'global'] : ['local', 'global', 'newsince', 'newsince-day']) {
-        const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 2 });
+        const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 2, ...(VIEW === 'grid' ? { timezoneId: READER_TZ } : {}) });
         const errors = [];
         page.on('pageerror', e => errors.push(String(e)));
         page.on('console', m => { if (process.env.DEBUG_TEXT) console.log('  [console.' + m.type() + ']', m.text().slice(0, 300)); if (m.type() === 'error') errors.push(m.text()); });
@@ -333,7 +386,8 @@ for (const scheme of ['light', 'dark']) {
             await page.click('[aria-label="Grid view"]');
             await page.waitForTimeout(700);
         }
-        console.log(`${which} / ${scheme}${VIEW === 'grid' ? ' / grid' : ''}`);
+        if (FONT) await page.evaluate(() => document.fonts.ready);
+        console.log(`${which} / ${scheme}${VIEW === 'grid' ? ` / grid / reader in ${READER_TZ}` : ''}`);
         if (errors.length) fail(`page errors: ${errors.join(' | ').slice(0, 300)}`);
         const result = await page.evaluate(([W, TITLES]) => {
             const text = document.body.innerText;
@@ -370,9 +424,9 @@ for (const scheme of ['light', 'dark']) {
                         cut: ['event-mark', 'event-counts'].filter(id => { const e = card.querySelector(`[data-testid="${id}"]`); return e && (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1); }),
                         buttons: card.querySelectorAll('[role="button"]').length, text: card.innerText.split('\n').filter(Boolean) };
                 }),
-                // The grid's tiles (an Offer / Need / Pulse tile is its own button, market-card-<id>), each with its text block;
-                // the poll; the events (still the list card until P3').
-                tiles: Array.from(document.querySelectorAll('[data-testid^="market-card-"]')).map(card => {
+                // The grid's tiles (an Offer / Need / Pulse tile is its own button, market-card-<id>; an event's, event-card-<id>,
+                // since P3'), each with its text block; the poll.
+                tiles: Array.from(document.querySelectorAll('[data-testid^="market-card-"], [data-testid^="event-card-"]')).map(card => {
                     const r = card.getBoundingClientRect();
                     const block = card.querySelector('[data-testid="grid-text-block"]');
                     const b = block ? block.getBoundingClientRect() : null;
@@ -382,7 +436,50 @@ for (const scheme of ['light', 'dark']) {
                         title: (card.innerText || '').split('\n').filter(Boolean).slice(-3).join(' / ').slice(0, 40) };
                 }),
                 polls: Array.from(document.querySelectorAll('[data-testid="poll-card"]')).map(p => { const r = p.getBoundingClientRect(); return { left: r.left, width: r.width, top: r.top, bottom: r.bottom }; }),
-                eventTiles: Array.from(document.querySelectorAll('[data-testid^="event-card-"]')).map(e => { const r = e.getBoundingClientRect(); return { id: e.getAttribute('data-testid'), top: r.top, height: r.height, width: r.width }; }),
+                // An event tile (P3'): its rows, any button inside it, its mark whole, and no counts.
+                eventTiles: Array.from(document.querySelectorAll('[data-testid^="event-card-"]')).map(e => {
+                    const block = e.querySelector('[data-testid="grid-text-block"]');
+                    const mark = e.querySelector('[data-testid="event-mark"]');
+                    // The when rows (the date, the time) and the "your time" label: each whole, never cut.
+                    const whole = (el) => !el || el.scrollWidth <= el.clientWidth + 1;
+                    // The time row's pieces (core timePieces): those on its one line are shown; one laid on the line under its
+                    // clip is not.
+                    const timeRow = e.querySelector('[data-testid="event-time-row"]');
+                    const rowBottom = timeRow ? timeRow.getBoundingClientRect().bottom : Infinity;
+                    // A tile drawn before the pieces (one time Text, no row of its own) is read as one piece, so its cut still fails.
+                    const pieces = timeRow ? Array.from(timeRow.children) : [e.querySelector('[data-testid="event-time"]')].filter(Boolean);
+                    const shownPieces = pieces.filter(x => x.getBoundingClientRect().top < rowBottom - 0.5);
+                    const timeShown = shownPieces.map(x => x.textContent).join('');
+                    const whenRows = [e.querySelector('[data-testid="event-when"]'), ...shownPieces];
+                    const yours = e.querySelector('[data-testid="event-your-time"]');
+                    const lastRow = block ? block.children[3] : null;
+                    const lock = e.querySelector('[data-testid="event-group-chip"]');
+                    // The cross-zone and online events' start on this browser's clock, "15:00" (the app's clock drops a leading zero).
+                    const ownOf = { 'event-card-g8': window.__crossStart, 'event-card-evonline': window.__onlineStart }[e.getAttribute('data-testid')];
+                    const own = ownOf ? new Date(ownOf) : null;
+                    return { id: e.getAttribute('data-testid'), rows: block ? Array.from(block.children).map(r => r.innerText.replace(/\n/g, '')) : null,
+                        label: e.getAttribute('aria-label'),
+                        cutRows: whenRows.map((el, i) => (whole(el) ? null : `${i ? 'time' : 'date'} piece "${el.innerText}" (${el.scrollWidth} in ${el.clientWidth})`)).filter(Boolean),
+                        // A row is cut when something in it is drawn past its box (a row of pieces that never wraps, a label that
+                        // never gives way): its scrollWidth beyond its clientWidth, from a box that draws. A piece that has given
+                        // way to nothing (0 wide, as row 4's place beside "🕒 your time" in a wide font) draws nothing there.
+                        rowCuts: block ? Array.from(block.children).map((r, i) => {
+                            const edge = r.getBoundingClientRect().right;
+                            const past = Array.from(r.querySelectorAll('*')).some(x => { const b = x.getBoundingClientRect(); return b.width > 0.5 && b.right > edge + 1; });
+                            return r.scrollWidth > r.clientWidth + 1 && past ? `row ${i + 1} "${r.innerText.replace(/\n/g, ' ')}" (${r.scrollWidth} in ${r.clientWidth})` : null;
+                        }).filter(Boolean) : [],
+                        timeShown, timePieces: pieces.map(x => x.textContent), timeRow: !!timeRow,
+                        lock: lock ? { text: lock.innerText, label: lock.getAttribute('aria-label'), inFoot: !!lock.closest('[data-testid="grid-badge-row"]'), cut: !whole(lock) || Array.from(lock.querySelectorAll('*')).some(x => !whole(x)) } : null,
+                        whenWidths: whenRows.map(el => (el ? `${el.scrollWidth}/${el.clientWidth}` : '-')).join(' '),
+                        yours: yours ? yours.innerText : null,
+                        // Cut by its own "…" (its text wider than its box), or drawn past the row's end. An inline label has no box
+                        // of its own (clientWidth 0), and inside a longer truncating line the line's "…" can fall in it: that fails too.
+                        yoursCut: yours && lastRow ? yours.clientWidth === 0 || !whole(yours) || yours.getBoundingClientRect().right > lastRow.getBoundingClientRect().right + 0.5 : false,
+                        ownStart: own ? `${own.getHours()}:${String(own.getMinutes()).padStart(2, '0')}` : null,
+                        buttons: e.querySelectorAll('[role="button"]').length, mark: mark ? mark.innerText : null,
+                        markCut: mark ? Array.from(mark.querySelectorAll('*')).some(x => x.scrollWidth > x.clientWidth + 1) : false,
+                        counts: !!e.querySelector('[data-testid="event-counts"]') };
+                }),
                 // Each title's card (its nearest button) and where the member sees it: for the grid's first-cells check.
                 cards: TITLES.map(title => {
                     const leaves = Array.from(document.querySelectorAll('#root *')).filter(e => e.children.length === 0 && (e.textContent || '').includes(title));
@@ -429,10 +526,76 @@ for (const scheme of ['light', 'dark']) {
                 const hs = r.tiles.map(t => t.height);
                 if (Math.max(...hs) - Math.min(...hs) > 0.5) fail(`a row's tiles differ in height: ${r.tiles.map(t => `${t.id} ${t.height}`).join(', ')}`);
             }
-            const lone = rows.filter(r => r.tiles.length === 1 && !result.eventTiles.some(e => Math.abs(e.top - r.top) < 1));
-            console.log('  tiles:', result.tiles.map(t => `${t.id.replace('market-card-', '')} ${Math.round(t.height * 10) / 10}`).join(', '),
-                '| rows', rows.length, '| events (list card until P3\')', result.eventTiles.map(e => `${e.id} ${Math.round(e.height)}`).join(', ') || 'none');
+            const lone = rows.filter(r => r.tiles.length === 1);
+            console.log('  tiles:', result.tiles.map(t => `${t.id.replace('market-card-', '')} ${Math.round(t.height * 10) / 10}`).join(', '), '| rows', rows.length);
             if (lone.length > 1) fail(`${lone.length} rows hold a lone tile; only the last may`);
+            // The events (P3'): tiles on the lattice (held above with the rest), four rows each, no button inside, the mark whole.
+            if ((which === 'local' || which === 'global') && !result.eventTiles.length) fail('no event tile drawn');
+            for (const e of result.eventTiles) {
+                if (!e.rows || e.rows.length !== 4) fail(`${e.id}: its text block holds ${e.rows && e.rows.length} rows, not 4`);
+                for (const cut of e.cutRows) fail(`${e.id}: its when ${cut} is cut`);
+                for (const cut of e.rowCuts) fail(`${e.id}: its ${cut} is cut`);
+                // Call 4: the end piece drops whole, so the row never shows a dash with nothing after it.
+                if (/[–-]\s*$/.test(e.timeShown)) fail(`${e.id}: its time row ends in a dash: "${e.timeShown}"`);
+                if (!e.timeRow) fail(`${e.id}: its time is not the row of whole pieces (event-time-row)`);
+                if (!e.timeShown && e.timePieces.length) fail(`${e.id}: its time row shows no piece of ${e.timePieces.join(' ')}`);
+                // Every clock on the tile is the reader's own: "your time" is in no row but the cross-zone label's (row 4).
+                if (e.rows && e.rows.slice(0, 3).some(r => /your time/.test(r))) fail(`${e.id}: a row says "your time": ${e.rows.slice(0, 3).join(' | ')}`);
+                if (e.yoursCut) fail(`${e.id}: its "${e.yours}" label is cut`);
+                if (e.buttons) fail(`${e.id}: ${e.buttons} button(s) inside the tile`);
+                if (e.markCut) fail(`${e.id}: its mark "${e.mark}" is cut`);
+                if (e.counts) fail(`${e.id}: the counts are drawn on the tile`);
+            }
+            console.log('  events:', result.eventTiles.map(e => `${e.id} [${(e.rows || []).join(' | ')}]${e.mark ? ` mark ${e.mark}` : ''}${e.lock ? ` lock ${e.lock.text}` : ''} (time shown "${e.timeShown}" of ${e.timePieces.join(' ')}; when ${e.whenWidths})`).join(' || '));
+            if (which === 'local') {
+                // Call 1: the group-only event's 🔒 pill on the photo's foot, named with the whole sentence; row 4 still its place.
+                const group = result.eventTiles.find(e => e.id === 'event-card-evgroup');
+                if (!group) fail('the group-only event is not drawn');
+                else {
+                    if (!group.lock) fail('the group-only event has no 🔒 pill');
+                    else {
+                        if (group.lock.text !== '🔒' || !group.lock.inFoot) fail(`the group-only event's pill is "${group.lock.text}", ${group.lock.inFoot ? '' : 'not '}on the photo's foot`);
+                        if (group.lock.label !== '🔒 Only Byron Bay Community Gardeners can see this') fail(`the 🔒 pill is named "${group.lock.label}"`);
+                        if (group.lock.cut) fail('the 🔒 pill is cut');
+                    }
+                    if (!group.rows[3].startsWith('📍')) fail(`the group-only event's row 4 is "${group.rows[3]}", not its place`);
+                    if (!/Only Byron Bay Community Gardeners can see this/.test(group.label || '')) fail(`the group-only tile's name does not say who can see it: ${group.label}`);
+                }
+                if (result.eventTiles.some(e => e.id !== 'event-card-evgroup' && e.lock)) fail('a tile that is not group-only has a 🔒 pill');
+                // Call 3: the online event's row 2 is the reader's own bare span; "your time" in no row, only in its name.
+                const online = result.eventTiles.find(e => e.id === 'event-card-evonline');
+                if (!online) fail('the online event is not drawn');
+                else {
+                    if (online.rows.some(r => /your time/.test(r)) || online.yours) fail(`the online event says "your time" in a row: ${online.rows.join(' | ')}`);
+                    if (!online.timeShown.startsWith(online.ownStart)) fail(`the online event's time row "${online.timeShown}" is not the reader's own start ${online.ownStart}`);
+                    if (online.rows[3] !== '💻 Online') fail(`the online event's row 4 is "${online.rows[3]}"`);
+                    if (!/your time/.test(online.label || '')) fail(`the online tile's name lost "your time": ${online.label}`);
+                }
+            }
+            if (which === 'global') {
+                // Call 2: the copy's row 4 is where it is from, in the place's stead.
+                const copy = result.eventTiles.find(e => e.id === 'event-card-g9');
+                if (!copy) fail('the copy is not drawn');
+                else {
+                    if (!copy.rows[3].startsWith('from ') || copy.rows[3].includes('📍') || copy.rows.some(r => r.includes('Civic Hall'))) fail(`the copy's row 4 is "${copy.rows[3]}", not "from {community}"`);
+                    if (copy.mark) fail(`the copy has a mark: ${copy.mark}`);
+                }
+            }
+            if (which === 'global' && !result.eventTiles.some(e => e.mark === 'Going ✓')) fail('the event the member is going to shows no "Going ✓" on its tile');
+            if (which === 'global') {
+                // The two-day event: the date row holds no time, the time row no date (its start; the end is on the page).
+                const two = result.eventTiles.find(e => e.id === 'event-card-g7');
+                if (!two) fail('the event that ends the next day is not drawn');
+                else if (/\d:\d\d/.test(two.rows[0]) || /[A-Z]/.test(two.rows[1])) fail(`the two-day event's rows mix the date and the time: ${two.rows.slice(0, 2).join(' | ')}`);
+                // The Byron event read in another zone: the reader's own start, and "🕒 your time" opening the last row.
+                const cross = result.eventTiles.find(e => e.id === 'event-card-g8');
+                if (!cross) fail('the event read across the zone line is not drawn');
+                else {
+                    if (!cross.rows[1].startsWith(cross.ownStart)) fail(`the cross-zone event's time row "${cross.rows[1]}" is not the reader's own start ${cross.ownStart}`);
+                    if (cross.yours !== '🕒 your time' || !cross.rows[3].startsWith('🕒 your time')) fail(`the cross-zone event's last row "${cross.rows[3]}" does not open with "🕒 your time"`);
+                }
+                if (result.eventTiles.some(e => e.id !== 'event-card-g8' && e.yours)) fail('a tile in the reader\'s own clock says "your time"');
+            }
             if (which === 'local') {
                 if (result.polls.length !== 1) fail(`expected one poll, found ${result.polls.length}`);
                 for (const p of result.polls) {

@@ -600,25 +600,31 @@ export function placeIsExact(places: ExactPlaces, row: { id: string; author_pubk
  * Who has a post's place exactly (exactPlacesFor, from the post's side): its author, the keepers of an enterprise
  * author, and for an event its convenor hosts and the people Going who may read its note. For a copy sent to many
  * (apps/server state-engine.ts broadcast), every other socket's copy carries the neighbourhood.
+ *
+ * Each query below is written `<small table> CROSS JOIN members`, the small table first, on purpose: SQLite keeps the
+ * written order of a CROSS JOIN. As a plain JOIN, and with no sqlite_stat1 (no node runs ANALYZE), it plans from members
+ * (idx_members_member_keys, is_visitor = 0) and probes the small table once per member: every account on the node, for
+ * each new or changed listing on a node where anyone can join (openMembership: state-engine.ts, its only caller outside tests), 0.35 s
+ * a call at 100,000 accounts (scratch/capacity-1104 finding 5). Same rows either way. The two queries that hold the member's own key (isEventHost, enterprisesKeptBy) plan from that key and stay JOIN.
  */
 export function exactPlaceReaders(db: Db, row: { id: string; author_pubkey: string; type?: string | null; audience_scope?: string | null; target_group_id?: string | null; event_host_lets_in?: number | null }): Set<string> {
     const readers = new Set<string>([row.author_pubkey]);
     for (const r of prepared(db, `
         SELECT o.member_pubkey FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
+        CROSS JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.treasury_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0`).all(row.author_pubkey) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
     if (row.type !== 'event') return readers;
     if (row.audience_scope === 'group' && row.target_group_id) {
         for (const r of prepared(db, `
             SELECT gm.member_pubkey FROM group_members gm
-            JOIN members m ON m.public_key = gm.member_pubkey
+            CROSS JOIN members m ON m.public_key = gm.member_pubkey
             WHERE gm.group_id = ? AND gm.role = 'convenor' AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0`)
             .all(row.target_group_id) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
     }
     try {
         const letsIn = row.event_host_lets_in === 1;
         for (const r of prepared(db, `
-            SELECT r.member_pubkey FROM event_rsvps r JOIN members m ON m.public_key = r.member_pubkey
+            SELECT r.member_pubkey FROM event_rsvps r CROSS JOIN members m ON m.public_key = r.member_pubkey
             WHERE r.post_id = ? AND r.status = 'going' AND m.is_visitor = 0${letsIn ? " AND COALESCE(r.let_in_at, '') != ''" : ''}`)
             .all(row.id) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
     } catch {

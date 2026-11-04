@@ -1,8 +1,14 @@
 /**
  * EventDetail — `/post/:id` for an event (docs/events-on-the-map.md §3 "Event detail", slice 3).
  *
- * Photo, big date and time, RSVP, place name with "Show on map", description, host line, the private note in
- * a shaded box when the viewer may see it, and for a host the list of who has RSVPd plus Cancel event.
+ * The page is drawn from the Market card's style box (DESIGN-detail-pages-fable.md §2, slice DP1; components/market-card-shell.ts),
+ * in one order: the card's chips, the loud lines (the when in the event's ink, the title, the place with "Show on map"),
+ * Going / Interested, the photo at 4:3 (the event's tile without one), the quiet row (the chat, Share, Add to calendar), the
+ * reminder and the note for people who are going as boxes, the description, the host's box, the host's guest list, Report.
+ * The answer comes right after the loud lines, before the picture and the reading (DESIGN-detail-pages-frame-fable.md §1.4);
+ * a repeating event's next dates are one compact line above it. That it is on the first screen is measured
+ * (event-page-shell-render.test.ts: at 320 × 569 and 1.3×, its top ≤ 500 dp and its bottom ≤ 569, with a photo, without,
+ * and with the dates opened). The counts show only once someone has answered.
  *
  * What the viewer may see is the node's decision, not this screen's: the local row gives a first paint, then
  * a signed by-id fetch returns my RSVP, the note (host and Going only) and the RSVP list (hosts only). The note
@@ -23,7 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { copyFromLine, eventCopyOf, t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@beanpool/core';
+import { copyFromLine, eventCopyOf, t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine, upperCase, MARKET_CARD_SHELL as SHELL } from '@beanpool/core';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent, unpinPostOnNode } from '../utils/db';
 import { isPostPinned, pinnedDetailLine, showPinMenu, pinFailureText } from '../utils/pins';
 import { usePinRole } from '../utils/use-pin-role';
@@ -31,7 +37,8 @@ import { PinSheet } from './PinSheet';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
 import { PostTagChips } from './PostTagChips';
-import { EVENT_ACCENT } from './EventCard';
+import { CategoryTile } from './CategoryTile';
+import { CardChip, useCardShell } from './market-card-shell';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
@@ -72,7 +79,11 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
+    // The style box (components/market-card-shell.ts): the card's chips, the page's boxes and buttons.
+    const shell = useCardShell();
     const { identity } = useIdentity();
+    // The photo frame's height, once laid out: 4:3 of the column's width (the carousel needs a number).
+    const [photoHeight, setPhotoHeight] = useState(0);
 
     // The node's reader view for this member; null until it arrives (or when offline).
     const [view, setView] = useState<any | null>(null);
@@ -198,6 +209,8 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     let photos: string[] = [];
     if (Array.isArray(post.photos)) photos = post.photos;
     else if (typeof post.photos === 'string') { try { photos = JSON.parse(post.photos); } catch { photos = []; } }
+    // What the carousel would draw (it skips an empty or a "null" path): with none, the frame is the event's tile instead.
+    const shownPhotos = photos.filter((u) => typeof u === 'string' && u.trim() !== '' && u !== 'null' && u !== 'undefined');
 
     const handleRsvp = async (tapped: EventRsvpStatus) => {
         const next = nextRsvp(counts.mine, tapped);
@@ -295,6 +308,27 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
 
+    // The quiet row's first button, the event chat: for the host and anyone Going, or its waiting form while the host has not
+    // let the member in. Its words are a sentence, so it takes the row's first line whole; Share and Add to calendar share the next.
+    const chatItem = letInState === 'waiting' ? (
+        <View style={[shell.pageButton, styles.chatBtn, styles.chatBtnDisabled]} accessibilityRole="button" accessibilityState={{ disabled: true }}
+            accessibilityLabel={eventChatWaitingText()} testID="event-chat-waiting">
+            <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {eventChatWaitingText()}</Text>
+        </View>
+    ) : !copy && canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) ? (
+        <Pressable
+            onPress={() => router.push({ pathname: `/chat/${post.id}`, params: { event: '1' } })}
+            style={[shell.pageButton, styles.chatBtn]}
+            accessibilityRole="button"
+            accessibilityLabel={eventChatEntryLabel({ ...p, goingCount: counts.going })}
+            testID="event-chat-open"
+        >
+            <Text style={[shell.pageButtonText, styles.chatBtnText]} numberOfLines={1}>
+                💬 {eventChatEntryLabel({ ...p, goingCount: counts.going })}
+            </Text>
+        </Pressable>
+    ) : null;
+
     const rsvpButton = (status: EventRsvpStatus, label: string) => {
         const selected = counts.mine === status;
         const disabled = (closed && !selected) || !!pending;
@@ -302,7 +336,7 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
             <Pressable
                 onPress={() => handleRsvp(status)}
                 disabled={disabled}
-                style={[styles.rsvpBtn, selected && styles.rsvpBtnSelected, disabled && styles.rsvpBtnDisabled]}
+                style={[shell.pageButton, styles.rsvpBtn, selected && styles.rsvpBtnSelected, disabled && styles.rsvpBtnDisabled]}
                 accessibilityRole="button"
                 accessibilityLabel={selected ? t('{label}, selected. Tap to clear', { label }) : label}
                 accessibilityState={{ selected, disabled, busy: pending === status }}
@@ -312,10 +346,10 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                   * buttons size to their own labels, so swapping the label out for the spinner would shrink the
                   * button under the finger and re-flow a stacked row mid-tap.
                   */}
-                <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{selected ? t('{label} ✓', { label }) : label}</Text>
+                <Text style={[shell.pageButtonText, styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{selected ? t('{label} ✓', { label }) : label}</Text>
                 {pending === status && (
                     <View style={styles.rsvpSpinner} pointerEvents="none">
-                        <ActivityIndicator size="small" color={selected ? '#fff' : colors.event.ink} />
+                        <ActivityIndicator size="small" color={selected ? colors.event.on : colors.event.ink} />
                     </View>
                 )}
             </Pressable>
@@ -353,24 +387,26 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
               * KeyboardAvoidingView around a plain ScrollView, which shrank the page but never scrolled to the field.
               */}
             <KeyboardAwareScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                {photos.length > 0 && (
-                    <View style={{ marginBottom: 14 }}>
-                        <PhotoCarousel photos={photos} height={200} borderRadius={14} />
-                    </View>
-                )}
+                {/*
+                  * One column, the parts in DESIGN-detail-pages-fable.md §2.1's order, drawn from the style box
+                  * (components/market-card-shell.ts): the card's chips, the loud lines, the answer, the photo, the quiet row,
+                  * the boxes, the description, the host, the rest, Report. The answer comes right under the loud lines; the picture and reading come after.
+                  */}
+                {/*
+                  * 1. The chip row: the list card's own chips, in its order. Not the card's 🔒 group chip: the page says who can see
+                  * it once, under the host's box (11), as the hosted-by box has it.
+                  */}
+                <View style={[shell.chipRow, styles.chipRow]} testID="event-chip-row">
+                    <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
+                    {isPostPinned(p) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
+                    {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}
+                    {badge === 'UPDATED' && <CardChip shell={shell} role="event" label={t('UPDATED', undefined, 'event')} testID="event-state-chip" />}
+                </View>
 
-                {badge && (
-                    <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
-                        <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : colors.event.ink }]}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>
-                    </View>
-                )}
-                <Text style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
-                {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
-                {!!hostLine && <Text style={styles.timeNote}>{hostLine}</Text>}
-                {!!eventRepeatCaption(p) && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {eventRepeatCaption(p)}</Text>}
+                {/* 2. The pin line. */}
                 {isPostPinned(p) && (
-                    <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} testID="pinned-detail-line">
-                        <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600', flex: 1 }} numberOfLines={2}>
+                    <View style={styles.pinLine} testID="pinned-detail-line">
+                        <Text style={styles.pinLineText} numberOfLines={2}>
                             {pinnedDetailLine(p)}
                         </Text>
                         {isOwnEvent(p, identity?.publicKey) && (
@@ -393,15 +429,25 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                 style={{ paddingHorizontal: 8, paddingVertical: 4 }}
                             >
-                                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg }}>{t('Take the pin off')}</Text>
+                                <Text style={styles.unpinText}>{t('Take the pin off')}</Text>
                             </Pressable>
                         )}
                     </View>
                 )}
-                <Text style={styles.title}>{p.title}</Text>
+
+                {/*
+                  * 4. The loud lines, the card's three in the card's order: the when, the title, the place. A repeating event's next
+                  * dates (six on a by-id read) are compact here: the first and "and 5 more", which opens the list and the host's controls.
+                  */}
+                <Text testID="event-when" style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
+                {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
+                {!!hostLine && <Text style={styles.timeNote}>{hostLine}</Text>}
+                {!!eventRepeatCaption(p) && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {eventRepeatCaption(p)}</Text>}
+                <Text style={styles.title} testID="event-title">{p.title}</Text>
                 {!!view && (
                     <EventNextDates
                         post={view}
+                        compact
                         isHost={isHost && !closed}
                         onChanged={(next) => setView(next)}
                         onChangeThisDateOnly={(next) => {
@@ -411,48 +457,6 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                     />
                 )}
                 {ended && !cancelled && <Text style={styles.endedNote}>{t('This event has ended.')}</Text>}
-
-                {!copy && <Text style={styles.counts} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
-                {isHost ? (
-                    <Text style={styles.hostingLine} accessibilityRole="text">{t("You're hosting this event")}</Text>
-                ) : copy ? (
-                    !closed && <EventCopyDoor copy={copy} />
-                ) : (
-                    <View style={styles.rsvpRow}>
-                        {rsvpButton('going', t('Going'))}
-                        {rsvpButton('interested', t('Interested'))}
-                    </View>
-                )}
-
-                {letInLine && !closed && (
-                    <Text style={styles.letInLine} accessibilityLiveRegion="polite" testID="event-let-in-line">{letInLine}</Text>
-                )}
-
-                {/* Send it on, and put it in a diary. Neither needs the node, so neither depends on its age. */}
-                <EventShareAndCalendar post={p} />
-                {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
-                {!isHost && !copy && (
-                    <EventReminder post={p} myRsvp={counts.mine} viewerPublicKey={identity?.publicKey} />
-                )}
-
-                {letInState === 'waiting' && (
-                    <View style={[styles.chatBtn, styles.chatBtnDisabled]} accessibilityRole="button" accessibilityState={{ disabled: true }}
-                        accessibilityLabel={eventChatWaitingText()} testID="event-chat-waiting">
-                        <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {eventChatWaitingText()}</Text>
-                    </View>
-                )}
-                {!copy && canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) && (
-                    <Pressable
-                        onPress={() => router.push({ pathname: `/chat/${post.id}`, params: { event: '1' } })}
-                        style={styles.chatBtn}
-                        accessibilityRole="button"
-                        accessibilityLabel={eventChatEntryLabel({ ...p, goingCount: counts.going })}
-                    >
-                        <Text style={styles.chatBtnText} numberOfLines={1}>
-                            💬 {eventChatEntryLabel({ ...p, goingCount: counts.going })}
-                        </Text>
-                    </Pressable>
-                )}
 
                 {online && (
                     <View style={styles.placeRow}>
@@ -490,17 +494,67 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                     <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: hostName })}</Text>
                 )}
 
+                {/* 7. The answer: Going / Interested for a member, the host's line, a copy's door; the counts once someone has answered. */}
+                <View style={styles.action} testID="event-action">
+                    {isHost ? (
+                        <Text style={styles.hostingLine} accessibilityRole="text">{t("You're hosting this event")}</Text>
+                    ) : copy ? (
+                        !closed && <EventCopyDoor copy={copy} />
+                    ) : (
+                        <View style={styles.rsvpRow}>
+                            {rsvpButton('going', t('Going'))}
+                            {rsvpButton('interested', t('Interested'))}
+                        </View>
+                    )}
+                    {/* Nothing while nobody has answered (the card's rule): "0 going · 0 interested" reads as a dead community. */}
+                    {!copy && counts.going + counts.interested > 0 && (
+                        <Text style={styles.counts} numberOfLines={2} testID="event-counts">👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>
+                    )}
+                    {letInLine && !closed && (
+                        <Text style={styles.letInLine} accessibilityLiveRegion="polite" testID="event-let-in-line">{letInLine}</Text>
+                    )}
+                </View>
+
+                {/*
+                  * 7a. The photo, under the answer (DESIGN-detail-pages-frame-fable.md §1.4): 4:3, the column's width, under the
+                  * column's corners (the grid tile's frame, so the page shows the picture the member tapped). No photo: the event's
+                  * tile, 3:1, inside the column. 16 under the answer (the action's margin), 16 over the quiet row.
+                  */}
+                {shownPhotos.length > 0 ? (
+                    <View style={styles.photoFrame} testID="event-photo-frame" onLayout={(e) => setPhotoHeight(Math.round(e.nativeEvent.layout.height))}>
+                        {photoHeight > 0 && <PhotoCarousel photos={shownPhotos} height={photoHeight} borderRadius={SHELL.radius} />}
+                    </View>
+                ) : (
+                    <View style={styles.tileBanner} testID="event-tile-banner">
+                        <CategoryTile kind="event" size="banner" />
+                    </View>
+                )}
+
+                {/*
+                  * 8. The quiet row: the chat, Share, Add to calendar, in the neutral outline. Share and the calendar need no node,
+                  * so they are there whatever its age; the chat is the page's, for the host and anyone Going.
+                  */}
+                <View style={styles.quietRow} testID="event-quiet-row">
+                    {chatItem}
+                    <EventShareAndCalendar post={p} />
+                </View>
+
+                {/* 9. Remind me and the note for people who are going: boxes. The host is running it and has no RSVP, so no reminder (decision 2). */}
+                {!isHost && !copy && (
+                    <EventReminder post={p} myRsvp={counts.mine} viewerPublicKey={identity?.publicKey} />
+                )}
                 {note ? (
-                    <View style={styles.noteBox}>
-                        <Text style={styles.noteLabel}>{t('NOTE FOR PEOPLE WHO ARE GOING')}</Text>
+                    <View style={[shell.pageBox, styles.box]} testID="event-note-box">
+                        <Text style={[shell.boxLabel, styles.noteLabel]}>{t('NOTE FOR PEOPLE WHO ARE GOING')}</Text>
                         <Text style={styles.noteText} selectable>{note}</Text>
                     </View>
                 ) : null}
 
+                {/* 10. The description and the tags. */}
                 {!!p.description && <Text style={styles.description}>{p.description}</Text>}
                 <PostTagChips tags={p.tags} freeTags={p.freeTags ?? p.free_tags} />
 
-                {/* A copy has no host: the line names where it comes from. Otherwise the host is the same box as a listing's "POSTED BY". */}
+                {/* 11. A copy has no host: the line names where it comes from. Otherwise the host is the same box as a listing's "POSTED BY". */}
                 {copy?.from && (
                     <Text style={styles.hostLine} numberOfLines={2}>{copyFromLine(copy.from)}</Text>
                 )}
@@ -520,12 +574,14 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 {!copy && isGroupOnly && !!groupName && (
                     <Text style={styles.hostAudience} testID="event-host-audience">{t('🔒 Only {group} can see this.', { group: groupName })}</Text>
                 )}
+
+                {/* 12. The host's: show it on the global community, and the guest list box. */}
                 {isHost && !!view && (
                     <ShowOnGlobalHostRow event={view} enabled={onLocalCommunity && !copy && !closed && !online && !isGroupOnly && view.authorPublicKey === identity?.publicKey} />
                 )}
 
                 {isHost && (
-                    <View style={styles.hostBox}>
+                    <View style={[shell.pageBox, styles.hostBox]} testID="event-host-box">
                         {hostView && (<Pressable
                             onPress={() => setShowRsvps(s => !s)}
                             style={styles.hostRowBtn}
@@ -606,6 +662,7 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                     </View>
                 )}
 
+                {/* 13. Report, last. */}
                 {!isHost && identity?.publicKey && (
                     <>
                         <Pressable onPress={() => setReporting((r) => !r)} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel={t('Report event')} accessibilityState={{ expanded: reporting }}>
@@ -643,7 +700,11 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     );
 }
 
-const makeStyles = ({ colors, theme }: ThemeContextType) =>
+// The page's rhythm (DESIGN-detail-pages-fable.md §2.3, as DESIGN-detail-pages-frame-fable.md §3 amends it): 8 between lines
+// inside a part, 12 from the last loud line to the answer, 16 from the answer to the photo and from the photo to the quiet row,
+// 16 between parts.
+// Radii, chips, box shells and button heights come from the style box (components/market-card-shell.ts), colours from the tokens.
+const makeStyles = ({ colors }: ThemeContextType) =>
     StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: {
@@ -655,76 +716,80 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         backLabel: { color: colors.text.body, fontSize: 15, fontWeight: '700', marginLeft: 4 },
         headerTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '800', color: colors.text.body, letterSpacing: 1 },
         scroll: { padding: 16 },
-        badge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, marginBottom: 6 },
-        badgeUpdated: {
-            backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.2)' : '#f5f3ff',
-            borderColor: theme === 'dark' ? '#6d28d9' : '#ddd6fe',
-        },
-        badgeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
-        when: { fontSize: 22, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
+        chipRow: { marginBottom: 8 },
+        pinLine: { marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        pinLineText: { fontSize: 13, color: colors.text.secondary, fontWeight: '600', flex: 1 },
+        unpinText: { fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg },
+        // The loud line: the when, in the event's ink, louder than anything but the title.
+        when: { fontSize: 18, fontWeight: '800', lineHeight: 24, color: colors.event.ink, marginBottom: 4 },
         whenCancelled: { textDecorationLine: 'line-through', color: colors.text.secondary },
-        timeNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 6 },
-        repeats: { fontSize: 14, fontWeight: '700', color: colors.accent.primary, marginBottom: 6 },
-        joinLink: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 12 },
-        title: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8 },
-        endedNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },
-        counts: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },
+        timeNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 4 },
+        repeats: { fontSize: 14, fontWeight: '700', color: colors.accent.primary, marginBottom: 4 },
+        title: { fontSize: 20, fontWeight: '800', lineHeight: 26, color: colors.text.heading, marginTop: 4, marginBottom: 4 },
+        endedNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 4 },
+        placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+        place: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text.body },
+        joinLink: { fontSize: 13, color: colors.text.secondary, marginBottom: 4 },
+        roughPlace: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginBottom: 4 },
+        linkBtn: { minHeight: 48, justifyContent: 'center', flexShrink: 0 },
+        link: { fontSize: 14, fontWeight: '700', color: colors.text.link },
+        // 4:3 of the column's width, under the column's corners; 3:1 for the tile when there is no photo.
+        photoFrame: {
+            width: '100%', aspectRatio: SHELL.photo.grid.aspectWidth / SHELL.photo.grid.aspectHeight,
+            borderRadius: SHELL.radius, overflow: 'hidden', backgroundColor: colors.surface.subtle, marginTop: 0, marginBottom: 16,
+        },
+        tileBanner: { width: '100%', aspectRatio: 3, borderRadius: SHELL.radius, overflow: 'hidden', marginTop: 0, marginBottom: 16 },
+        action: { marginTop: 12, marginBottom: 16 },
         // Sized to the label, wrapping to a second row rather than ellipsizing it — the same fix the card and the
         // web EventCard carry. This row's text is 15sp, so it runs out of width sooner than the card's 14sp.
-        rsvpRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+        rsvpRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+        // Colour marks the commit (§2.7): the outline and its words in the event's ink; chosen, the event's fill with its words.
         rsvpBtn: {
-            flexGrow: 1, flexBasis: 'auto', flexShrink: 0, minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT,
-            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, backgroundColor: colors.surface.card,
+            flexGrow: 1, flexBasis: 'auto', flexShrink: 0, borderWidth: 1.5, borderColor: colors.event.ink,
+            paddingHorizontal: 6, backgroundColor: colors.surface.card,
         },
-        rsvpBtnSelected: { backgroundColor: EVENT_ACCENT },
+        rsvpBtnSelected: { backgroundColor: colors.event.fill, borderColor: colors.event.fill },
         rsvpBtnDisabled: { opacity: 0.5 },
-        rsvpText: { fontSize: 15, fontWeight: '700', color: colors.event.ink },
-        rsvpTextSelected: { color: '#fff' },
+        rsvpText: { color: colors.event.ink },
+        rsvpTextSelected: { color: colors.event.on },
         rsvpTextBusy: { opacity: 0 },
         rsvpSpinner: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+        counts: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 6 },
+        letInLine: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginTop: 6 },
+        // The quiet row: the chat, then EventShareAndCalendar's Share and Add to calendar, wrapping by whole buttons, never cut.
+        quietRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'flex-start' },
+        // Its chat: the neutral outline, its own line in the row (a sentence's words, never cut beside Share).
         chatBtn: {
-            minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, marginBottom: 14,
-            borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT, backgroundColor: colors.surface.card,
+            flexGrow: 1, flexBasis: '100%', paddingHorizontal: 12, alignItems: 'flex-start',
+            borderWidth: 1.5, borderColor: colors.border.strong, backgroundColor: colors.surface.card,
         },
-        chatBtnText: { fontSize: 15, fontWeight: '700', color: colors.event.ink },
-        chatBtnDisabled: { borderColor: colors.border.default, backgroundColor: colors.surface.subtle, paddingVertical: 8 },
+        chatBtnText: { color: colors.text.body },
+        chatBtnDisabled: { borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle, paddingVertical: 8 },
         chatBtnWaitingText: { fontSize: 14, fontWeight: '600', color: colors.text.secondary, lineHeight: 19 },
-        letInLine: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginBottom: 14 },
+        // A page box's place in the column; the box itself is the style box's.
+        box: { marginBottom: 16 },
+        noteLabel: { color: colors.event.ink, marginBottom: 8 },
+        noteText: { fontSize: 15, color: colors.text.body, lineHeight: 21 },
+        description: { fontSize: 15, color: colors.text.body, lineHeight: 22, marginBottom: 16 },
+        hostLine: { fontSize: 14, color: colors.text.secondary, marginBottom: 16 },
+        // The host's box sits in the page's own 16 dp padding (the listing's page has none, so its box carries 20 dp of margin).
+        hostCard: { marginHorizontal: 0, marginBottom: 16 },
+        // A group-only event says who can see it, just under the host's box.
+        hostAudience: { fontSize: 14, color: colors.text.secondary, marginTop: -8, marginBottom: 16 },
+        hostBox: { paddingVertical: 4, marginBottom: 16 },
         waitingCount: { fontSize: 14, fontWeight: '700', color: colors.text.body, paddingBottom: 8 },
         letAllBtn: {
             minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 12, borderWidth: 1.5,
-            borderColor: EVENT_ACCENT, marginBottom: 8, paddingHorizontal: 12,
+            borderColor: colors.event.ink, marginBottom: 8, paddingHorizontal: 12,
         },
         letAllText: { fontSize: 14, fontWeight: '700', color: colors.event.ink },
         letInBtn: {
             minHeight: 44, minWidth: 88, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1.5,
-            borderColor: EVENT_ACCENT, paddingHorizontal: 10, flexShrink: 0,
+            borderColor: colors.event.ink, paddingHorizontal: 10, flexShrink: 0,
         },
-        letInBtnOn: { backgroundColor: EVENT_ACCENT },
+        letInBtnOn: { backgroundColor: colors.event.fill, borderColor: colors.event.fill },
         letInText: { fontSize: 14, fontWeight: '700', color: colors.event.ink },
-        letInTextOn: { color: colors.text.inverse },
-        placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-        place: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text.body },
-        roughPlace: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: -6, marginBottom: 12 },
-        linkBtn: { minHeight: 48, justifyContent: 'center', flexShrink: 0 },
-        link: { fontSize: 14, fontWeight: '700', color: colors.text.link },
-        noteBox: {
-            backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.15)' : '#f5f3ff',
-            borderColor: theme === 'dark' ? '#6d28d9' : '#ddd6fe', borderWidth: 1, borderRadius: 12,
-            padding: 12, marginBottom: 14,
-        },
-        noteLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5, color: colors.event.ink, marginBottom: 4 },
-        noteText: { fontSize: 15, color: colors.text.body, lineHeight: 21 },
-        description: { fontSize: 15, color: colors.text.body, lineHeight: 22, marginBottom: 14 },
-        hostLine: { fontSize: 14, color: colors.text.secondary, marginBottom: 14 },
-        // The host's box sits in the page's own 16 dp padding (the listing's page has none, so its box carries 20 dp of margin).
-        hostCard: { marginHorizontal: 0, marginBottom: 14 },
-        // A group-only event says who can see it, just under the host's box.
-        hostAudience: { fontSize: 14, color: colors.text.secondary, marginTop: -6, marginBottom: 14 },
-        hostBox: {
-            borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, backgroundColor: colors.surface.card,
-            paddingHorizontal: 12, paddingVertical: 4, marginBottom: 14,
-        },
+        letInTextOn: { color: colors.event.on },
         hostRowBtn: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
         hostRowText: { fontSize: 15, fontWeight: '700', color: colors.text.body, flexShrink: 1 },
         rsvpEmpty: { fontSize: 14, color: colors.text.secondary, paddingVertical: 8 },
@@ -732,12 +797,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rsvpName: { flex: 1, fontSize: 14, color: colors.text.body },
         // Gives way to a longer language's word (up to half the row) rather than pushing the name off; shrinks to fit.
         rsvpStatus: { fontSize: 13, fontWeight: '700', color: colors.event.ink, flexShrink: 1, maxWidth: '45%' },
-        hostingLine: { fontSize: 15, fontWeight: '700', color: colors.event.ink, marginBottom: 14 },
+        hostingLine: { fontSize: 15, fontWeight: '700', color: colors.event.ink },
         editBtn: {
-            minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12, backgroundColor: EVENT_ACCENT,
+            minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12, backgroundColor: colors.event.fill,
             marginTop: 4, marginBottom: 4, paddingHorizontal: 12,
         },
-        editText: { fontSize: 15, fontWeight: '800', color: '#fff' },
+        editText: { fontSize: 15, fontWeight: '800', color: colors.event.on },
         editBlocked: { fontSize: 14, color: colors.text.secondary, paddingVertical: 10 },
         copyBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
         copyText: { fontSize: 15, fontWeight: '700', color: colors.event.ink },

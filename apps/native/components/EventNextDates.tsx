@@ -11,7 +11,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
-import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, seriesDatesShown, seriesPassedDateEndMs, t } from '@beanpool/core';
+import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, seriesDatesShown, seriesPassedDateEndMs, t, tn } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { setEventDateCancelled } from '../utils/db';
 import { eventLineWords } from './event-lines';
@@ -27,6 +27,12 @@ interface Props {
     onChangeThisDateOnly?: (post: any, date: string) => void;
     /** For the render tests: the confirm step, which is Alert on a phone. */
     confirm?: (title: string, message: string, onYes: () => void) => void;
+    /**
+     * The event page's form (DESIGN-detail-pages-fable.md: the action on the first screen): the first date and "and 5 more",
+     * one button that opens the whole list, where the host's controls are. Six dates in full sit between the title and the
+     * photo and push Going / Interested down by about 114 dp at 320 dp and 1.3× text (event-page-shell-render.test.ts).
+     */
+    compact?: boolean;
 }
 
 /** The longest a timer may wait (setTimeout's limit); a later end is checked again then. */
@@ -39,8 +45,10 @@ function alertConfirm(title: string, message: string, onYes: () => void) {
     ]);
 }
 
-export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, confirm = alertConfirm }: Props) {
+export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, confirm = alertConfirm, compact = false }: Props) {
     const styles = useStyles(makeStyles);
+    // Compact, the rest waits for a tap; once opened it stays open, so the host's line and controls stay where they acted.
+    const [open, setOpen] = useState(!compact);
     const [busy, setBusy] = useState<string | null>(null);
     const [line, setLine] = useState<string | null>(null);
     const [problem, setProblem] = useState<string | null>(null);
@@ -74,6 +82,24 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
             setBusy(null);
         }
     };
+
+    // Compact: the heading, the first date and how many more, one button that opens the list. One date has no more to open.
+    if (!open && dates.length > 1) {
+        const first = dates[0];
+        return (
+            <Pressable testID="event-next-dates-open" style={styles.compact} onPress={() => setOpen(true)}
+                accessibilityRole="button" accessibilityState={{ expanded: false }}>
+                <Text style={styles.heading}>{t('Next dates')}</Text>
+                <View style={styles.listWrap}>
+                    <View style={styles.row}>
+                        <Text style={[styles.date, first.cancelled && styles.dateCancelled]}>{seriesDateLabel(first.date)}</Text>
+                        {first.cancelled && <Text style={styles.cancelledTag}>{t('Cancelled')}</Text>}
+                    </View>
+                    <Text style={styles.linkText}>{tn(dates.length - 1, 'and {n} more', 'and {n} more')}</Text>
+                </View>
+            </Pressable>
+        );
+    }
 
     return (
         <View testID="event-next-dates" style={styles.box}>
@@ -121,6 +147,8 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
 const makeStyles = ({ colors }: ThemeContextType) =>
     StyleSheet.create({
         box: { marginBottom: 12 },
+        // A loud line's 4 below, as the when and the title have: the 48 dp button carries its own room round the words.
+        compact: { minHeight: 48, justifyContent: 'center', marginBottom: 4 },
         heading: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
         line: { flexShrink: 1, fontSize: 15, fontWeight: '700', color: colors.text.body, marginBottom: 4 },
         listWrap: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 2 },
@@ -129,7 +157,8 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         date: { fontSize: 15, fontWeight: '700', color: colors.text.body },
         dateCancelled: { textDecorationLine: 'line-through', color: colors.text.secondary },
         cancelledTag: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase', color: colors.feedback.danger.fg },
-        link: { minHeight: 44, justifyContent: 'center' },
+        // 48, the page's touch target (the 320 harness holds every button to it); drawn only once the list is open.
+        link: { minHeight: 48, justifyContent: 'center' },
         linkText: { fontSize: 14, fontWeight: '700', color: colors.text.link, textDecorationLine: 'underline' },
         linkDanger: { fontSize: 14, fontWeight: '700', color: colors.feedback.danger.fg, textDecorationLine: 'underline' },
         problem: { fontSize: 13, fontWeight: '600', color: colors.feedback.danger.fg, marginTop: 4 },

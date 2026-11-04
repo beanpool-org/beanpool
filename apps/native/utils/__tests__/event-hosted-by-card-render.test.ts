@@ -82,6 +82,7 @@ vi.mock('../../components/MemberAvatar', () => ({
 import { EventDetail } from '../../components/EventDetail';
 import { HIDDEN_AUTHOR } from '../posts-view';
 import { darkColors, lightColors } from '../../constants/colors';
+import { MARKET_CARD_SHELL } from '@beanpool/core';
 
 let root: Root; let host: HTMLDivElement;
 beforeEach(() => {
@@ -125,8 +126,10 @@ describe("an event's own screen: the host is a box like a listing's \"POSTED BY\
             const card = styleOf(b);
             expect(card.backgroundColor, theme).toBe(colors.surface.card);
             expect(card.borderColor, theme).toBe(colors.border.default);
-            expect(card.borderRadius).toBe(16);
-            expect(card.padding).toBe(16);
+            // The style box's page box (DESIGN-detail-pages-fable.md §2.2, DP1): the card's corners and its one text padding.
+            expect(card.borderRadius).toBe(MARKET_CARD_SHELL.radius);
+            expect(card.padding).toBe(MARKET_CARD_SHELL.textPadding);
+            expect([card.borderRadius, card.padding]).toEqual([14, 12]);
             const label = styleOf(spanWith(b, 'HOSTED BY')!);
             expect(label.color, theme).toBe(colors.text.muted);
             expect(label.fontSize).toBe(10);
@@ -161,7 +164,7 @@ describe("an event's own screen: the host is a box like a listing's \"POSTED BY\
         expect(push).toHaveBeenCalledWith({ pathname: '/public-profile', params: { publicKey: HOST_KEY, callsign: 'Hana' } });
     });
 
-    it('is a target well past 44 dp: the face (48) and the card\'s padding (2 × 16) alone make 80', async () => {
+    it('is a target well past 44 dp: the face (48) and the card\'s padding (2 × 12) alone make 72', async () => {
         await draw();
         const b = box()!;
         const card = styleOf(b);

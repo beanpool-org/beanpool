@@ -20,6 +20,8 @@
  *   8. The prune-branch confirmation's figures, GET /branches/:pubkey/prune: on a node bigger than a page, a branch whose
  *      root is on page 1 and whose members are on the last pages is counted whole, with its debts and surpluses, as the
  *      prune then settles them with the Commons; the same owners as the prune, each look in the access log, no names.
+ *      Where the community votes, a branch of one (a direct removal only its vote makes) is refused its figures as the
+ *      prune refuses it, with no figure and no look logged; a branch of more than one still gets them.
  *
  * Run: SERVER_SUITES_ONLY=test-admin-data-pages TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -37,6 +39,7 @@ import { db } from './db/db.js';
 import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
+import { setSwitchOverride } from './config/node-profile.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -331,7 +334,11 @@ async function main() {
     const looksAfter = db.prepare(`SELECT COUNT(*) FROM health_access_log WHERE action = 'offboard_preview'`).pluck().get() as number;
     assert(looksAfter - looksBefore === 5 && branchKeys.every(k => looks.includes(k)),
         `each balance in the totals is a look in the owners' access log, as the offboarding preview's is (${looksAfter - looksBefore} lines)`);
+    // A branch of one is an owner's to prune where the community does not vote (the switch off: the global node, or an
+    // operator who turned votes off). This node is local, where it votes by default: 8b reads the same with the switch on.
+    setSwitchOverride('decisions', false);
     const leaf = await get(`/api/local/admin/branches/${kidB}/prune`, ownerSession);
+    setSwitchOverride('decisions', true);
     assert(leaf.status === 200 && leaf.json?.members === 1 && leaf.json.surplus === 10 && leaf.json.badDebt === 0 && leaf.json.net === 10,
         `a branch of one: 1 member, 10 surplus (${JSON.stringify(leaf.json)})`);
     const nobody = await get(`/api/local/admin/branches/${'ab'.repeat(32)}/prune`, ownerSession);
@@ -361,6 +368,38 @@ async function main() {
     const prunedNow = db.prepare(`SELECT COUNT(*) FROM members WHERE public_key IN (SELECT value FROM json_each(?)) AND status = 'pruned'`).pluck().get(JSON.stringify(branchKeys));
     assert(pruned.status === 200 && commonsMoved === preview.json.net && prunedNow === preview.json.members,
         `the owner's prune removes the ${prunedNow} members the figures counted and moves the Commons by their net, ${commonsMoved} (${pruned.status} ${JSON.stringify(pruned.json)})`);
+
+    // Where the community votes, a branch of one is a direct removal only its vote makes (branchRemovalRefusal): the
+    // figures are refused as the prune and the offboarding preview refuse it, before any balance is read, so the owner
+    // learns nothing of that member's balance and the owners' log shows no look "while removing them".
+    console.log('\n── 8b. Where the community votes: a branch of one is refused its figures, before any balance is read ──');
+    setSwitchOverride('decisions', true);
+    const voteLeaf = branchMember('Vote Leaf', '2027-02-01T00:00:00.000Z', 'genesis', -42.17);
+    const voteRoot = branchMember('Vote Root', '2027-02-01T00:01:00.000Z', 'genesis', 8);
+    const voteKid = branchMember('Vote Kid', '2027-02-01T00:02:00.000Z', voteRoot, -3);
+    reconcileLedgerFromDb();
+    const leafLooks = () => db.prepare(`SELECT COUNT(*) FROM health_access_log WHERE action = 'offboard_preview' AND subject_pubkey = ?`).pluck().get(voteLeaf) as number;
+    const allLooks = () => db.prepare(`SELECT COUNT(*) FROM health_access_log WHERE action = 'offboard_preview'`).pluck().get() as number;
+    const leafLooksBefore = leafLooks();
+    const allLooksBefore = allLooks();
+    const voteFigures = await get(`/api/local/admin/branches/${voteLeaf}/prune`, ownerSession);
+    const votePrune = await post(`/api/local/admin/branches/${voteLeaf}/prune`, ownerSession, {});
+    const voteOffboard = await get(`/api/local/admin/members/${voteLeaf}/offboard/preview`, ownerSession);
+    assert(voteFigures.status === 400 && voteFigures.json?.code === 'removal_is_the_vote' && typeof voteFigures.json?.error === 'string',
+        `a leaf member at -42.17: the figures are refused, removal_is_the_vote (${voteFigures.status} ${JSON.stringify(voteFigures.json)})`);
+    assert(votePrune.status === 400 && votePrune.json?.code === voteFigures.json?.code && votePrune.json?.error === voteFigures.json?.error
+        && voteOffboard.status === 400 && voteOffboard.json?.code === voteFigures.json?.code,
+        `in the words the prune (${votePrune.status}) and the offboarding preview (${voteOffboard.status}) refuse it in`);
+    assert(['members', 'badDebt', 'surplus', 'net'].every(k => !(k in (voteFigures.json ?? {}))) && !JSON.stringify(voteFigures.json ?? {}).includes('42.17'),
+        `none of the figures, and not the member's balance, in the refusal (${Object.keys(voteFigures.json ?? {}).join(', ')})`);
+    assert(leafLooks() === leafLooksBefore && allLooks() === allLooksBefore,
+        `no look in the owners' access log for a removal the node refuses (${allLooks() - allLooksBefore} new lines)`);
+    const voteBranch = await get(`/api/local/admin/branches/${voteRoot}/prune`, ownerSession);
+    assert(voteBranch.status === 200 && voteBranch.json?.members === 2 && voteBranch.json.badDebt === 3 && voteBranch.json.surplus === 8 && voteBranch.json.net === 5
+        && allLooks() - allLooksBefore === 2,
+        `a branch of more than one, an owner's to prune where the community votes, still gets its figures and its 2 looks (${voteBranch.status} ${JSON.stringify(voteBranch.json)})`);
+    const voteStill = db.prepare(`SELECT COUNT(*) FROM members WHERE public_key IN (?, ?, ?) AND status != 'pruned'`).pluck().get(voteLeaf, voteRoot, voteKid);
+    assert(voteStill === 3, 'and nobody was pruned by those reads or the refused prune');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

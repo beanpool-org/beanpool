@@ -2153,7 +2153,9 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
 // removes and the Beans it settles with the Commons, over the whole subtree (state-engine branchPrunePreview), not the
 // pages of members the console holds. The same owners as the prune; totals only, no names. Each balance in the totals is
 // a look at a member's balance while removing them, as the offboarding preview is: a line each in the access log the
-// owners read, all written before the answer, or no answer.
+// owners read, all written before the answer, or no answer. A removal the node refuses where the community votes (a
+// branch of one: branchRemovalRefusal, as the prune asks it) is refused here the same way, before any balance is read, so
+// no look is logged and no figure is sent for it (as the offboarding preview refuses: member-wizards.ts removalToSettle).
 router.get('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove a whole invite branch')) return;
@@ -2164,6 +2166,12 @@ router.get('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!getMember(root)) {
         ctx.status = 404;
         ctx.body = { error: 'Member not found' };
+        return;
+    }
+    const refusal = branchRemovalRefusal(root, actor);
+    if (refusal) {
+        ctx.status = 400;
+        ctx.body = { error: refusal, code: REMOVAL_IS_THE_VOTE_CODE };
         return;
     }
     await heavyRead(ctx, 'admin-branch-prune-preview', () => {

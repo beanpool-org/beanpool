@@ -850,7 +850,12 @@ describe('the start form by kind and the new-poll form in the pseudo-locale (Fab
         await renderIn('xx', createElement(NewPollModal, { visible: true, onClose() {} }));
         expect(host.textContent).toContain(pseudoLocalise('New Community Poll'));
         expect(host.querySelector('[data-testid="poll-placeless-note"]')?.textContent).toContain(pseudoLocalise("You haven't set your area, so members nearby won't see this poll in their list; they can still find it by searching. Set it in Settings → Your area to show it near you."));
-        expect(byPlaceholder('Option {n}'.replace('{n}', '1'))).toBeNull();
+        // Option 1 is drawn from the keyed sentence 'Option {n}', the number put in after it is padded. This used to read
+        // `byPlaceholder('Option 1')` toBeNull: the sentence with the number already in ('Option 1', 8 characters, 3 tildes at
+        // 35 %) differed from the keyed one (10 characters, 4 tildes) by a tilde. At the 40 % pad of slice T4 both pad to
+        // 4 tildes, so that query finds the correct placeholder and cannot tell the two forms apart. What keeps a number out
+        // of the key is t()'s type (a string literal or a word() key) and words:check; here the keyed form is asserted present.
+        expect(host.querySelector(`input[placeholder="${pseudoLocalise('Option {n}').replace('{n}', '1')}"]`)).not.toBeNull();
         expect(host.querySelector(`input[placeholder="${pseudoLocalise('Option {n}').replace('{n}', '2')}"]`)).not.toBeNull();
         expect(bypassing(), 'form').toEqual([]);
         await click(byLabel(pseudoLocalise('Add another poll option')), 'Add Option');

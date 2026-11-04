@@ -10,7 +10,8 @@
  * a quiet block in its category's emoji, as its listings show it, when it has none.
  */
 import { useState, type ReactNode } from 'react';
-import { formatCount, listPhotoUrl, t, type ShopCategory } from '@beanpool/core';
+import { formatCount, t, type ShopCategory } from '@beanpool/core';
+import { ListPhoto } from './ListPhoto';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
 import { Sentence } from './Sentence';
@@ -172,15 +173,16 @@ export function ShopfrontText({ title, text, boxed, lines = 4, testID }: { title
 
 /** A listing's picture: its own photo (the node's small copy), or its category tile. */
 function ListingPicture({ l, className, size = 'thumb' }: { l: ShopfrontListing; className: string; emojiClass?: string; size?: 'grid' | 'thumb' }) {
-    const [failed, setFailed] = useState(false);
-    const url = l.photo && !failed ? resolveAvatarUrl(listPhotoUrl(l.photo)) : null;
     return (
         <span className={`${className} bg-nature-100 dark:bg-nature-800 flex items-center justify-center overflow-hidden`} aria-hidden="true">
-            {url ? (
-                <img src={url} alt="" onError={() => setFailed(true)} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} />
-            ) : (
-                <CategoryTile category={l.category} size={size} />
-            )}
+            <ListPhoto
+                photo={l.photo}
+                resolve={(url) => resolveAvatarUrl(url)}
+                alt=""
+                className="w-full h-full object-cover"
+                style={{ objectPosition: '50% 33%' }}
+                fallback={<CategoryTile category={l.category} size={size} />}
+            />
         </span>
     );
 }

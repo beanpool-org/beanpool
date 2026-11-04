@@ -293,7 +293,7 @@ import { communityKey } from '../../tools/community';
 import { keepToolPhoto, toolPhotoUri } from '../../tools/photos';
 import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/builder';
 import { composerDraft, openNeedComposer, openStarterOffer, OFFER_DRAFT_KEY, STARTER_DRAFT_SOURCE } from '../../tools/doors';
-import { decideDraftOpen } from '../compose-options';
+import { clearDraftToolMarker, decideDraftOpen } from '../compose-options';
 import { remindersToSchedule, scheduleToolReminders, toolReminderRoute, cancelToolReminders, TOOL_REMINDER_CHANNEL } from '../../tools/reminders';
 import { ToolButton, ToolButtons, ToolChips, ToolEmpty, ToolField, ToolNote, ToolRow, ToolScreen, ToolSection } from '../../tools/ui';
 import { ToolHomeBody, afterModal, backupLine } from '../../tools/frame';
@@ -1572,6 +1572,26 @@ describe("the doors write the composer's own draft (app/new-listing.tsx, map.tsx
             expect(await goOn).toBe(true);
             expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postTitle: 'An hour of help', tool: STARTER_DRAFT_SOURCE });
             expect(nav.pushed).toEqual(['/new-listing?newPost=offer']);
+        });
+
+        it('a starter draft the composer never opened (it stopped at "Finish your profile first") is replaced by the next pick without asking; one the member has opened is theirs and is asked about', async () => {
+            setLanguage('en');
+            await openStarterOffer(HOUR);
+            const unopened = JSON.parse(store.map.get(OFFER_DRAFT_KEY)!);
+            expect(unopened).toMatchObject({ source: 'tool', tool: STARTER_DRAFT_SOURCE });
+            // Back on Home after the profile: another pick, nothing asked.
+            alerts.said.length = 0;
+            await openStarterOffer({ ...HOUR, title: 'Lend a tool', category: 'tools', credits: 0, priceType: 'fixed' });
+            expect(alerts.said).toEqual([]);
+            expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postTitle: 'Lend a tool', tool: STARTER_DRAFT_SOURCE });
+            // The composer opened it (the marker is cleared as it does, and the member's edits are saved): now it is theirs.
+            store.map.set(OFFER_DRAFT_KEY, JSON.stringify({ ...clearDraftToolMarker(unopened), postTitle: 'An hour of help in my own words' }));
+            const asked = openStarterOffer(HOUR);
+            await settle(3);
+            expect(alerts.said).toEqual(['Replace your unfinished post?', 'You have an unfinished post on the map. Going on replaces it.']);
+            alerts.buttons.find((b) => b.text === 'Cancel')!.onPress!();
+            expect(await asked).toBe(false);
+            expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postTitle: 'An hour of help in my own words' });
         });
 
         it('forgets a "Put this in your shop" choice an earlier List sheet left: this is not that Offer', async () => {

@@ -208,7 +208,9 @@ export default function HomeScreen() {
     const [addOpen, setAddOpen] = useState(false);
     // "What could you offer?" (slice O2): First steps' Post your first Offer opens it; the community's price guide is read as it opens.
     const [starterOpen, setStarterOpen] = useState(false);
-    const [starterGuide, setStarterGuide] = useState<PricingGuideItem[] | null>(null);
+    // The guide as read from this community: another community's is never shown here (the phone can be bound to a new one while Home stays up).
+    const [starterGuide, setStarterGuide] = useState<{ url: string | null; items: PricingGuideItem[] } | null>(null);
+    const starterBusy = useRef(false);
     const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
     /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
     const [notOnAccount, setNotOnAccount] = useState(false);
@@ -942,17 +944,25 @@ export default function HomeScreen() {
     const profile = answer?.profile ?? 'local';
     const showsBeans = answer?.features.beans !== false;
     // The sheet's rows are made as it opens (the stars and the guide as they are then, in the language then); shut, nothing is made.
-    const starter = useMemo(() => (starterOpen ? starterSheet(interests, { beans: showsBeans, guide: starterGuide }) : null), [starterOpen, interests, showsBeans, starterGuide]);
+    const starter = useMemo(
+        () => (starterOpen ? starterSheet(interests, { beans: showsBeans, guide: starterGuide && starterGuide.url === url ? starterGuide.items : null }) : null),
+        [starterOpen, interests, showsBeans, starterGuide, url],
+    );
     useEffect(() => {
         if (!starterOpen) return;
         let live = true;
-        void readPricingGuide(url).then((g) => { if (live && g) setStarterGuide(g); });
+        void readPricingGuide(url).then((g) => { if (live && g) setStarterGuide({ url, items: g }); });
         return () => { live = false; };
     }, [starterOpen, url]);
     // A row opens the composer with its draft; the sheet stays up if the member keeps the unfinished post that would be replaced.
     const onStarterPick = useCallback((row: StarterRow) => {
+        // One pick at a time: a second tap while the first is writing its draft would open the composer twice.
+        if (starterBusy.current) return;
+        starterBusy.current = true;
         // The door is read as a row is tapped: it brings the photo picker's modules, which Home itself never needs.
-        void import('../../tools/doors').then((doors) => doors.openStarterOffer(row.opening)).then((opened) => { if (opened) setStarterOpen(false); }, () => { /* the composer did not open: the sheet stays, nothing was posted */ });
+        void import('../../tools/doors').then((doors) => doors.openStarterOffer(row.opening))
+            .then((opened) => { if (opened) setStarterOpen(false); }, () => { /* the composer did not open: the sheet stays, nothing was posted */ })
+            .finally(() => { starterBusy.current = false; });
     }, []);
     const onStarterOther = useCallback(() => {
         setStarterOpen(false);

@@ -132,6 +132,20 @@ export async function openNeedComposer(owner: string, tool: string, draft: ToolN
     router.push('/new-listing?newPost=need');
 }
 
+/**
+ * Whether the draft on the phone is a starter draft the composer never opened: its marker is still on it (the composer
+ * clears the marker as it opens the draft), as when it stopped at "Finish your profile first". The member never saw it,
+ * so replacing it with another pick asks nothing; once the composer has opened it, it is theirs and is asked about.
+ */
+async function unopenedStarterDraft(): Promise<boolean> {
+    try {
+        const d = JSON.parse(await AsyncStorage.getItem(OFFER_DRAFT_KEY) ?? 'null');
+        return !!d && d.source === 'tool' && d.tool === STARTER_DRAFT_SOURCE;
+    } catch {
+        return false;
+    }
+}
+
 /** The marker the starter sheet's draft carries as its `tool` ({@link composerDraft}): not a tool, but the same "a door has just opened the composer". */
 export const STARTER_DRAFT_SOURCE = 'starter-offers';
 
@@ -146,7 +160,7 @@ export const STARTER_DRAFT_SOURCE = 'starter-offers';
  * not that Offer. Returns false when the member chose to keep their unfinished post.
  */
 export async function openStarterOffer(opening: StarterOpening): Promise<boolean> {
-    if (await unfinishedPostHere() && !await replaceUnfinishedPost()) return false;
+    if (await unfinishedPostHere() && !await unopenedStarterDraft() && !await replaceUnfinishedPost()) return false;
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const draft = composerDraft(
         'offer', { title: opening.title, description: opening.description, category: opening.category, credits: opening.credits ?? 0, priceType: opening.priceType },

@@ -154,9 +154,9 @@ vi.mock('../../components/ExampleListings', () => ({
 vi.mock('../db', () => ({ getMarketplaceTransactions: vi.fn(async () => []), getUnreadByConversation: vi.fn(async () => []) }));
 // The sheet of starter drafts (slice O2): the community's price guide it reads as it opens, and the composer door a row calls.
 // Their own tests: tools-template.test.ts (the door), starter-offers.test.ts (the guide read).
-const starterWorld = vi.hoisted(() => ({ guide: null as unknown, opened: [] as unknown[], opens: true }));
+const starterWorld = vi.hoisted(() => ({ guide: null as unknown, opened: [] as unknown[], opens: true, hold: Promise.resolve() as Promise<void> }));
 vi.mock('../starter-offers', () => ({ readPricingGuide: vi.fn(async () => starterWorld.guide) }));
-vi.mock('../../tools/doors', () => ({ openStarterOffer: vi.fn(async (opening: unknown) => { starterWorld.opened.push(opening); return starterWorld.opens; }) }));
+vi.mock('../../tools/doors', () => ({ openStarterOffer: vi.fn(async (opening: unknown) => { starterWorld.opened.push(opening); await starterWorld.hold; return starterWorld.opens; }) }));
 vi.mock('../pulse', () => ({ resolvePulseThumbnailUrl: (u: string | null, i: { id: string }) => (u ? `${u}/api/pulse/items/${i.id}/thumbnail` : null) }));
 // The phone's place (H4: the global node's "near you"): allowed or not, and the last one known. Home must never ask.
 const loc = vi.hoisted(() => ({ status: 'denied', last: null as null | { coords: { latitude: number; longitude: number } }, asked: 0 }));
@@ -4668,6 +4668,34 @@ describe('What could you offer? (cold start O2): the sheet First steps opens, th
             category: 'labour', credits: 25, priceType: 'hourly',
         }]);
         expect(sheet()).toBeNull();
+    });
+
+    it('a second tap while the first pick is still opening the composer opens it once, not twice', async () => {
+        await render();
+        await open();
+        // The door is still writing the first pick's draft (held here) when the member taps again.
+        let release!: () => void;
+        starterWorld.hold = new Promise<void>((resolve) => { release = resolve; });
+        try {
+            await act(async () => { (document.querySelector('[data-testid="starter-offer-tools.1"]') as HTMLElement).click(); });
+            await settle(3);
+            expect(starterWorld.opened).toHaveLength(1);
+            await act(async () => { (document.querySelector('[data-testid="starter-offer-garden.1"]') as HTMLElement).click(); });
+            await settle(3);
+            expect(starterWorld.opened).toHaveLength(1);
+            expect(sheet()).not.toBeNull();
+        } finally {
+            release();
+            starterWorld.hold = Promise.resolve();
+        }
+        await settle(3);
+        expect(starterWorld.opened).toHaveLength(1);
+        expect(sheet()).toBeNull();
+        // Once it has opened, the next pick (the sheet opened again) goes through as ever.
+        await open();
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-garden.1"]') as HTMLElement).click(); });
+        await settle(3);
+        expect(starterWorld.opened).toHaveLength(2);
     });
 
     it('when the member keeps the unfinished post the door would have replaced, the sheet stays for another pick', async () => {

@@ -116,6 +116,8 @@ import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
+import { createLightsOutRoutes } from './routes/lights-out.js';
+import { lightsOutGuard } from './services/lights-out.js';
 import { createAppAddressesRoutes } from './routes/app-addresses.js';
 import { createCommunityCardRoutes } from './routes/community-card.js';
 import { createOwnerUnlockRoutes } from './routes/owner-unlock.js';
@@ -1575,6 +1577,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.
     app.use(identityReadOnlyGuard);
+    // Lights-out (services/lights-out.ts, design §2.7): while the hall is open, address changes are refused, and the first
+    // write that changes the record (a member's, an owner's or an admin's) is noted for the stand-down offer.
+    app.use(lightsOutGuard);
 
     // JSON body parser middleware
     app.use(async (ctx, next) => {
@@ -1986,6 +1991,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAgentSuggestionRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
+        createLightsOutRoutes(deps),
         createOwnerUnlockRoutes(deps),
         createMarketplaceRoutes(deps),
         createEventsRoutes(deps),

@@ -3,6 +3,7 @@
  * Friends, Recovery, Push Notifications, Preferences, Ratings routes.
  */
 
+import { publicLightsOut } from '../services/lights-out.js';
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
@@ -853,6 +854,10 @@ router.get('/api/community/info', async (ctx) => {
         // Where members' copies go (config/recovery-copies.ts, vault rethink VR2): `vault`, `server` or `none`. The apps
         // read it where a copy is made; an app from before it ignores it.
         recoveryCopies: recoveryCopies(),
+        // Lights-out (services/lights-out.ts publicLightsOut, design §2.1 item 2): whether the hall is open here, at what
+        // address, how old the record is, and where phones go home to (`{ on: false, home }` while off). Always present on a
+        // node that knows lights-out, so the phone tells it from an older one (absent).
+        lightsOut: publicLightsOut(),
     };
     // A tag of the reader and the answer, so an app asking again for what it holds gets a 304 (slice L0). Never shared:
     // a signer's answer carries their own count, and nobody's needs an edge (the counts are cached here already). The JSON
@@ -1021,7 +1026,9 @@ router.get('/api/community/health', async (ctx) => {
     // update. Anything else (an older app, the web app, a monitor) can't say which kind of phone it is on, and gets the
     // lower of the two platforms' floors (getUnnamedAppFloor): MIN_APP_VERSION, as always, unless both platforms have
     // been raised past it.
-    const health = getPublicCommunityHealth();
+    // `lightsOut`: as /api/community/info carries it (services/lights-out.ts publicLightsOut): the phone's health ping is how
+    // it learns the hall opened, or closed and where home is (design §2.5).
+    const health = { ...getPublicCommunityHealth(), lightsOut: publicLightsOut() };
     const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
     ctx.vary(APP_VERSION_HEADER);
     ctx.body = app ? { ...health, minAppVersion: getPlatformFloor(app.platform) } : health;

@@ -634,6 +634,7 @@ export const SUITES = [
     'test-tls-first-boot',
     'test-acme-http01',
     'test-plain-http-gate',
+    'test-lights-out',
     'test-apk-on-node',
     'test-key-succession',
     'test-dm-former-keys-readers',

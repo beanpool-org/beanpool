@@ -325,6 +325,10 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
 
         it('a burst of wide doorbells owes one sync, not one each', async () => {
             const socket = await signedIn();
+            // The wait drawn at the burst's first doorbell is near its 5 minutes, so the timer cannot fire inside the 100 s
+            // burst. Left to the real Math.random, it did about 1 run in 3: the owed sync ran mid-burst, which is right, but it
+            // made this test flaky.
+            vi.spyOn(Math, 'random').mockReturnValue(0.999);
             for (let i = 0; i < 20; i++) {
                 const [, event] = WIDE[i % WIDE.length];
                 socket.onmessage({ data: JSON.stringify(event) });

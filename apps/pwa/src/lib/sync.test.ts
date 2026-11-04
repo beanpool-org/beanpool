@@ -824,6 +824,8 @@ describe('PWA WebSocket Pong Watchdog', () => {
         for (const [name, event] of WIDE) {
             it(`${name}: no refresh now, one within 5 minutes`, async () => {
                 const { socket, read } = await memberSocket();
+                // A wait near its 5 minutes, so it cannot fall inside the 2.5 s checked below (the real Math.random can).
+                vi.spyOn(Math, 'random').mockReturnValue(0.999);
                 socket.onmessage({ data: JSON.stringify(event) });
                 await vi.advanceTimersByTimeAsync(2_500);
                 expect(read).not.toHaveBeenCalled();
@@ -847,6 +849,10 @@ describe('PWA WebSocket Pong Watchdog', () => {
 
         it('a burst of wide doorbells owes one refresh, not one each', async () => {
             const { socket, read } = await memberSocket();
+            // The wait drawn at the burst's first doorbell is near its 5 minutes, so the timer cannot fire inside the 100 s
+            // burst. Left to the real Math.random, it did about 1 run in 3: the owed refresh ran mid-burst, which is right, but
+            // it made this test flaky.
+            vi.spyOn(Math, 'random').mockReturnValue(0.999);
             for (let i = 0; i < 20; i++) {
                 socket.onmessage({ data: JSON.stringify(WIDE[i % WIDE.length][1]) });
                 await vi.advanceTimersByTimeAsync(5_000);

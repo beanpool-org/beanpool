@@ -125,21 +125,22 @@ export function makeCardShell(colors: Colors) {
  * `gridTextBlockHeight`. Rows 1 and 2 are the title's box (its two lines and the gap between them), rows 3 and 4 a box each,
  * so the block is the same height whatever a tile holds, and every tile in a row puts its author and its last line at the
  * same place. A scale that is not a positive number counts as 1, as core's does. No colour here: the theme's are in the table.
+ * A StyleSheet table, so the phone's contrast scan (utils/button-contrast.ts) reads it where the grid tile uses it.
  */
 export function gridTextBlock(fontScale: number) {
     const scale = Number.isFinite(fontScale) && fontScale > 0 ? fontScale : 1;
     const { rowHeight, rowGap } = MARKET_GRID_TEXT_BLOCK;
     const row = rowHeight * scale;
-    return {
-        block: { height: gridTextBlockHeight(scale), padding: SHELL.textPadding, gap: rowGap * scale, overflow: 'hidden' as const },
+    return StyleSheet.create({
+        block: { height: gridTextBlockHeight(scale), padding: SHELL.textPadding, gap: rowGap * scale, overflow: 'hidden' },
         titleBox: { height: 2 * row + rowGap * scale },
         /** Row 3: the author (an 18 dp avatar and a name) or a copy's line, centred in the row. */
-        row: { height: row, justifyContent: 'center' as const },
+        row: { height: row, justifyContent: 'center' },
         /** Row 4: one line that is cut, never wrapped: the distance first, then one chip at most, spaced as a chip row. */
-        lastRow: { height: row, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, overflow: 'hidden' as const },
+        lastRow: { height: row, flexDirection: 'row', alignItems: 'center', gap: 6, overflow: 'hidden' },
         /** Row 4's distance and its chip: each gives way and is cut at the row's end rather than pushed past it. */
         lastRowPiece: { flexShrink: 1, minWidth: 0 },
-    };
+    });
 }
 
 export type GridTextBlock = ReturnType<typeof gridTextBlock>;

@@ -92,6 +92,21 @@ describe('answering Other', () => {
         expect(screen.queryByTestId('poll-other-answers')).toBeNull();
     });
 
+    // G2 (DESIGN-market-grid-sizes-fable.md §2.3): the grid drops the re-vote notice (the ballot note says which ballot it is),
+    // but a sealed poll keeps its line there too: an answer there is final, and the grid's answers can be pressed.
+    it('in the grid a sealed poll still says the answer is final; an open vote\'s re-vote notice is in the list only', () => {
+        const sealed = render(<PollCard post={poll()} identity={me} viewMode="grid" />);
+        expect(screen.getByText(/Your answer is final/)).toBeTruthy();
+        sealed.unmount();
+        const open = poll({ pollOpenVote: true, userVotedOptionId: 'opt_1' });
+        const grid = render(<PollCard post={open} identity={me} viewMode="grid" />);
+        expect(screen.queryByText(/Re-voting overwrites/)).toBeNull();
+        expect(screen.getByTestId('poll-open-ballot-note')).toBeTruthy();
+        grid.unmount();
+        render(<PollCard post={open} identity={me} viewMode="list" />);
+        expect(screen.getByText(/Re-voting overwrites/)).toBeTruthy();
+    });
+
     it('a poll that offers no Other shows no box and asks the node nothing', async () => {
         render(<PollCard post={poll({ pollOptions: [{ id: 'opt_1', text: 'Buses' }, { id: 'opt_2', text: 'Beans' }] })} identity={me} />);
         expect(screen.queryByTestId('poll-other-answers')).toBeNull();

@@ -42,6 +42,9 @@ describe('MarketplaceCard pinned chip', () => {
         const chip = screen.getByTestId('card-pinned-chip');
         expect(chip).toBeInTheDocument();
         expect(chip).toHaveTextContent('📌 PINNED');
+        // G2 (DESIGN-market-grid-sizes-fable.md §2.1, §2.2): on the photo's foot, as the phone draws it, not a row under the
+        // photo (that row made a pinned tile 30 px taller than its neighbour).
+        expect(chip.parentElement).toBe(screen.getByTestId('grid-badge-row'));
     });
 
     it('does NOT render 📌 PINNED chip when pin has expired', () => {

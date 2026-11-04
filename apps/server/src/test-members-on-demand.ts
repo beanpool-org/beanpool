@@ -355,7 +355,10 @@ async function main() {
     (process.stderr as any).write = (chunk: any, ...rest: any[]) => { written.push(String(chunk)); return err(chunk, ...rest); };
     const secretName = people[7].pubKeyHex;
     const before = heavyReadStats().admitted;
-    const forms = [`keys=${secretName},${asked[1]}`, 'q=Zqxv', `lat=${BUSY.lat}&lng=${BUSY.lng}&limit=50`];
+    // The name searched holds a '~', which base64, base64url and hex never do: a node's own random files (the TLS key
+    // under data/tls) can't hold it by chance, as a bare 'Zqxv' did once in about 15,000 runs (#2881's queue run).
+    const searched = 'Zq~xv';
+    const forms = [`keys=${secretName},${asked[1]}`, `q=${encodeURIComponent(searched)}`, `lat=${BUSY.lat}&lng=${BUSY.lng}&limit=50`];
     let ok = 0;
     for (const f of forms) for (let i = 0; i < 200; i++) if ((await get(`/api/members?${f}`, i % 2 ? reader : second)).status === 200) ok++;
     (process.stdout as any).write = out;
@@ -372,12 +375,12 @@ async function main() {
             if (e.isDirectory()) walk(p);
             else if (!/\.(db|sqlite)(-wal|-shm)?$|state\.db/.test(e.name) && fs.statSync(p).size < 50_000_000) {
                 const text = fs.readFileSync(p, 'latin1');
-                if (text.includes(secretName) || text.includes('Zqxv')) fileHits.push(p);
+                if (text.includes(secretName) || text.includes(searched)) fileHits.push(p);
             }
         }
     };
     if (process.env.BEANPOOL_DATA_DIR) walk(process.env.BEANPOOL_DATA_DIR);
-    assert(!written.some(l => l.includes(secretName) || l.includes('Zqxv')) && fileHits.length === 0,
+    assert(!written.some(l => l.includes(secretName) || l.includes(searched)) && fileHits.length === 0,
         `nothing written while they ran names the key looked up or the name searched (${written.length} lines, files: ${fileHits.join(', ') || 'none'})`);
 
     // ── 8. by-area listings: the author's face, and a renamed author's rows ──

@@ -206,5 +206,23 @@ describe('PollCard (PWA)', () => {
                 view.unmount();
             }
         });
+
+        // G2 (DESIGN-market-grid-sizes-fable.md §2.3): so the poll fits its 2 x 2 square, its description is two lines at
+        // most in the grid (the whole of it on the poll's page), and the anonymous re-vote notice is left out there (the
+        // ballot note says which ballot it is). List and compact keep both.
+        it('clamps the description to two lines and leaves out the re-vote notice in the grid only', () => {
+            const anonymous = { ...mockPost, pollOpenVote: false, pollVotes: [] };
+            const grid = render(<PollCard post={anonymous} identity={mockIdentity} viewMode="grid" />);
+            expect(screen.getByTestId('poll-description').className).toMatch(/(^|\s)line-clamp-2(\s|$)/);
+            expect(screen.queryByText(/Re-voting overwrites/)).toBeNull();
+            expect(screen.getByTestId('poll-anonymous-note')).toBeTruthy();
+            grid.unmount();
+            for (const viewMode of [undefined, 'list' as const, 'compact' as const]) {
+                const view = render(<PollCard post={anonymous} identity={mockIdentity} viewMode={viewMode} />);
+                expect(screen.getByTestId('poll-description').className).not.toContain('line-clamp');
+                expect(screen.getByText(/Anonymous vote · Re-voting overwrites choice/)).toBeTruthy();
+                view.unmount();
+            }
+        });
     });
 });

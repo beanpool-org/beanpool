@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { tierForCredit } from '@beanpool/core';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
+import { t } from '../../lib/fresh-proof';
+import { FLAG_WORDS as FW, flagHeading } from '../../lib/flag-words';
 import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { RolesViewer } from './NodeRolesPanel';
 import type { NodeProfile } from '../../lib/profiles';
@@ -666,15 +668,15 @@ export function MembersModule({
 
                     <div className="space-y-2 text-xs">
                         {flags.map((flag: SecurityFlagItem, idx: number) => (
-                            <div key={idx} className="p-3 bg-nature-950/80 border border-red-900/60 rounded-xl flex items-start justify-between gap-3">
-                                <div className="space-y-1 min-w-0 break-words">
-                                    <div className="flex items-center gap-2">
+                            <div key={idx} className="p-3 bg-nature-950/80 border border-red-900/60 rounded-xl flex flex-wrap items-start justify-between gap-3">
+                                <div className="space-y-1 min-w-0 break-words flex-1 basis-40">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase font-mono ${
                                             flag.severity === 'critical' ? 'bg-bp-danger-fill text-bp-danger-on' : 'bg-bp-gold-fill text-bp-gold-on'
                                         }`}>
                                             {flag.severity || 'ALERT'}
                                         </span>
-                                        <span className="font-mono font-bold text-red-300 uppercase">{flag.type}</span>
+                                        <span className="font-bold text-red-300">{flagHeading(flag)}</span>
                                     </div>
                                     <p className="text-nature-200 m-0">{flag.description}</p>
                                 </div>
@@ -682,7 +684,7 @@ export function MembersModule({
                                     onClick={() => setActiveThreat(flag)}
                                     className="px-3 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink text-[11px] font-bold transition-all border border-red-800 shrink-0"
                                 >
-                                    Review Threat
+                                    {t(FW.reviewButton)}
                                 </button>
                             </div>
                         ))}

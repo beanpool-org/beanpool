@@ -12,6 +12,7 @@ import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fet
 import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { t } from '../../lib/fresh-proof';
+import { flagHeading } from '../../lib/flag-words';
 
 /** The node demands a reason of at least this many characters; members see it on the vote. */
 export const MIN_SUSPEND_REASON = 10;
@@ -656,7 +657,7 @@ export function MemberDetailModal({
                             {activeMemberFlags.map((flag: MemberFlag, idx: number) => (
                                 <div key={idx} className="p-2.5 bg-red-950/60 border border-red-900/60 rounded-xl text-xs space-y-1">
                                     <div className="flex items-center justify-between">
-                                        <span className="font-mono font-bold text-red-300 uppercase text-[10px]">{flag.type}</span>
+                                        <span className="font-bold text-red-300 text-[11px] break-words min-w-0">{flagHeading(flag)}</span>
                                         <span className="px-1.5 py-0.5 rounded bg-bp-danger-fill text-bp-danger-on font-mono text-[9px] uppercase font-bold">
                                             {flag.severity || 'ALERT'}
                                         </span>

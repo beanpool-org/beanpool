@@ -189,6 +189,15 @@ async function main() {
             && timerRun.delinquent_accounts === after.delinquentCount && timerRun.cohort_anomalies === after.cohortAnomalies,
             `The timer's rows are the one-go numbers (${JSON.stringify(timerRun)} vs ${JSON.stringify(after)})`);
 
+        // --- Test 8: members with no trades are no flag (Marty, 4 Nov: "do I really care about inactive users? ... I dont think I need to scan for this") ---
+        const idle = 'idleA-' + Date.now();
+        seedMember(idle, 0, 200); // joined 200 days ago, no trades at all
+        db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(user1, idle);
+        const health8 = getCommunityHealth();
+        assert(health8.activity.inactiveMemberCount >= 1, `The member who has not traded is still in the activity count (${health8.activity.inactiveMemberCount})`);
+        assert(!health8.flags.some(f => (f.type as string) === 'inactive_member'), `No inactive-member flag is raised (${JSON.stringify(health8.flags.map(f => f.type))})`);
+        assert(!health8.flags.some(f => f.members.includes(idle)), 'No flag names the member who has not traded');
+
         console.log(`\n${passed}/${run} checks passed.`);
         if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
         console.log('⭐️ Backend Visibility Monitors tests PASSED.');

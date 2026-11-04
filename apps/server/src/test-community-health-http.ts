@@ -33,7 +33,7 @@ process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, getBalance, injectSystemMessage, createDecision, getCommonsBalance } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost as rawCreatePost, getBalance, injectSystemMessage, createDecision, getCommonsBalance, clearWashTradingCache } from './state-engine.js';
 import { wrapCreatePost } from './post-test-helper.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
@@ -634,9 +634,9 @@ async function main(): Promise<void> {
         "the built-in page's two buttons that show who the alerts name say an admin's first look at each member in 24 hours is logged");
     assert(![policy, guide, operatorPage, privacyPage].some((t) => notSeen.test(t)),
         'no text says an admin never sees a trade: every admin sees some (disputes, memberStats, fraud flags)');
-    // Wording 3 (round 4): memberStats' posts and messages counts, the ring alert (names, no Beans), the inactivity alert,
+    // Wording 3 (round 4): memberStats' posts and messages counts, the ring alert (names, no Beans),
     // the pair's one-to-one chat only, and the operator's whole database with its backups, snapshots and standby copies.
-    const tradeList = "a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in the two members' one-to-one chat, which an admin can't read if it is private), so that a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note); a fraud alert that names two members who buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; a fraud alert that names a member and the members they invited when those members send them Beans past a limit within a set number of days, with the Beans in total and how many of the members they invited have traded with no one but them; a fraud alert that names a group of members, at least half of them new, who trade mostly with each other, with how much of the group's trading is with each other but no Beans; and an alert that names the members who have had no Beans move in or out for a set number of days";
+    const tradeList = "a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in the two members' one-to-one chat, which an admin can't read if it is private), so that a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note); a fraud alert that names two members who buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; a fraud alert that names a member and the members they invited when those members send them Beans past a limit within a set number of days, with the Beans in total and how many of the members they invited have traded with no one but them; and a fraud alert that names a group of members, at least half of them new, who trade mostly with each other, with how much of the group's trading is with each other but no Beans";
     // Fix round 2 (r4177719409): a look at a trade is logged every time; a look at the alerts that name a member once in
     // 24 hours per admin and member (the first look), so no text says every alerts look is logged.
     const loggedTrades = "Every look at one of those trades is logged, with who looked, when, and at which trades";
@@ -658,11 +658,11 @@ async function main(): Promise<void> {
     assert(/## What any admin can see of your trades/.test(guide) && /\*\*A trade that isn't finished yet, or that an admin settled\.\*\* Both members, the listing, the price, and the messages in the one-to-one chat of the two members\./.test(guide)
         && /\*\*Fraud alerts that name members,\*\* with Beans\. One names two members who buy from each other back and forth, about evenly, past a limit\. It shows the Beans in total and how evenly they went each way\. Another names a member and the members they invited, when those members send them Beans past a limit within a set number of days\. It shows the Beans in total and how many of the members they invited have traded with no one but them\./.test(guide)
         && /\*\*A fraud alert that names a group of members,\*\* at least half of them new, who trade mostly with each other\. It shows how much of the group's trading is with each other, but no Beans\./.test(guide)
-        && /\*\*An alert that names the members who have had no Beans move in or out\*\* for a set number of days\./.test(guide)
+        && !/move in or out|have had no Beans/.test(guide)
         && /\*\*A trade whose Beans were left stuck when a member was removed on an older server\.\*\* The trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note, so that an owner can write the stuck Beans off\./.test(guide)
         && /\*\*Every look at one of these trades is logged:\*\* who looked, when, and at which trades\. \*\*A look at the alerts that name a member is logged\*\* the first time each admin opens them, and again at that admin's first look after 24 hours; the looks in between add no line\. The owner and the admins can see that log in Community health, as a list of its own beside the list of who looked at a balance\./.test(guide)
         && guide.includes("The member stats the admins see show how many posts each member has up and messages they have sent, and of trades only the whole community's totals: how many trades were finished or cancelled and what the finished ones came to, never one member's. Community health also shows the owner and the admins how far new members get, as a whole: how many reached a first trade, in steps of 5, and how long that typically took. It names nobody, and it shows no first-trade number or typical time for fewer than 5 people.\n\n" + trustProfile.replace("each member's trust profile", "each member's **trust profile**") + "\n\nNothing else of your trades.\n"),
-        'the members\' guide lists the same five, says every look at a trade is logged and an alerts look once in 24 hours per admin and member, the owner sees the log, member stats carry only totals, every member sees the trust profile, and nothing else');
+        'the members\' guide lists the same four (and no alert about members who have not traded: it is no flag any more), says every look at a trade is logged and an alerts look once in 24 hours per admin and member, the owner sees the log, member stats carry only totals, every member sees the trust profile, and nothing else');
     assert(/Every look at one of those trades is logged, and a look at the alerts that name you is logged the first time each admin opens them in 24 hours\. The owner and the admins can see that log\. The admins also see how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours; and, as every member does, your trust profile, unlogged\./.test(privacyPage)
         && privacyPage.includes("- Your trust badge, your reviews (nobody else can see who wrote a review), and your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. The admins see it as any member does, and it isn't logged.")
         && /an admin settled, a trade whose Beans were left stuck when a member was removed on an older server, fraud alerts,/.test(privacyPage),
@@ -703,9 +703,17 @@ async function main(): Promise<void> {
     assert(disputes9.status === 200 && logRows() === before9 + 1 && listLine9?.action === 'disputes_listed' && listLine9?.actor_pubkey === ada.pk
         && JSON.stringify(JSON.parse(listLine9?.detail ?? 'null')) === JSON.stringify(shownIds9),
         `an admin's read of the disputes list is a line: who, and the ids of the trades it showed (${disputes9.status} ${JSON.stringify(listLine9)} ${JSON.stringify(shownIds9)})`);
-    // An alert that names a member: Bea, invited by Ada (the inactivity alert passes over the genesis-invited) and here
-    // 200 days, has moved no Beans in the 30 days it looks back (inactive_member names her).
-    db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(ada.pk, bea.pk);
+    // An alert that names members: two who bought from each other for 600 Beans each way, a wash-trading pair (wash_trading
+    // names both). Members with no trades for a while used to be this alert; they are no flag any more (Marty, 4 Nov).
+    const washA9 = makeMember('Washerone');
+    const washB9 = makeMember('Washertwo');
+    for (const [buyer, seller] of [[washA9.pk, washB9.pk], [washB9.pk, washA9.pk]]) {
+        const postId = 'wash9-post-' + crypto.randomBytes(4).toString('hex');
+        db.prepare("INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'test', 'test', 600, ?, 'completed')").run(postId, seller);
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?, ?, ?, ?, 600, 'completed', ?)")
+            .run('wash9-' + crypto.randomBytes(4).toString('hex'), postId, buyer, seller, new Date().toISOString());
+    }
+    clearWashTradingCache();
     const before9b = logRows();
     const data9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);
     const named9 = [...new Set(((data9.body?.health?.flags ?? []) as any[]).flatMap((f) => f.members ?? []))].sort();

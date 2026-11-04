@@ -133,7 +133,9 @@ describe('MemberDetailModal', () => {
         );
 
         expect(screen.getByText('Security Alerts & Flags (1)')).toBeInTheDocument();
-        expect(screen.getByText('SUSPICIOUS_ACTIVITY')).toBeInTheDocument();
+        // Words for the flag, never the raw type the node sends (Marty, 4 Nov); a type this manager does not know reads in general words.
+        expect(screen.getByText('Something on this server needs a look')).toBeInTheDocument();
+        expect(screen.queryByText('SUSPICIOUS_ACTIVITY')).not.toBeInTheDocument();
         expect(screen.getByText('Flagged node for pubkey-1234567890-abcdef anomaly')).toBeInTheDocument();
     });
 

@@ -220,7 +220,7 @@ export interface Thresholds {
     // Health flags
     washTradingWindowHours: number;  // Window for wash trading detection (default: 24)
     washTradingMinTxns: number;      // Min txns in window to flag (default: 4)
-    inactiveMemberDays: number;      // Days with no activity to flag (default: 30)
+    inactiveMemberDays: number;      // Days with no trades that make a member count as inactive in the health counts (default: 30). It raises no flag.
     isolatedBranchMinTxns: number;   // Min internal txns to flag isolation (default: 3)
     maxProjectExpiryDays: number;    // Max days allowed for crowdfund expiry (default: 365)
     // Sybil funnel detection

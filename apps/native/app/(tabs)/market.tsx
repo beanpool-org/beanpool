@@ -1654,7 +1654,10 @@ export default function MarketScreen() {
 
     let listData: any[] = [];
     if (viewMode === 'grid') {
-        listData = filteredPosts;
+        // The grid has no headings: the pins (three at most, newest pin first) are its first cells, each with its 📌 PINNED pill on
+        // the photo, and the stream carries on in the same row, so no cell is left empty (DESIGN-market-grid-sizes-fable.md §2.1,
+        // Marty 4 Nov). marketPins already took them out of the stream, so none is drawn twice. List and compact keep the block.
+        listData = [...pinnedPosts, ...filteredPosts];
     } else {
         if (filter === 'for-you') {
             // What you said you would be at, above what you might like: it is the one part of For You you
@@ -2044,7 +2047,8 @@ export default function MarketScreen() {
         );
     };
 
-    // The worldwide community's one line above the list, under the Pinned block: the list is the newest, inside the circle round the member's area.
+    // The worldwide community's one line above the list, under the Pinned block (in the grid the pins are the list's first cells, so
+    // it is above them): the list is the newest, inside the circle round the member's area.
     const newestLine = market.circle && filteredPosts.length > 0 ? (
         <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
             <Text testID="market-newest-within" numberOfLines={2}style={{ fontSize: 13, fontWeight: '600', color: colors.text.secondary }}>
@@ -2066,29 +2070,21 @@ export default function MarketScreen() {
 
     // Pinned posts block (DESIGN-pinning-fable.md §0.2, §2.2, §2.9). It sits inside the list's own 16 dp of padding and takes
     // the spacing of the stream's own rows: no margin of its own at the sides or the top, and each card keeps only the bottom
-    // margin its style gives it (8 dp in the list and compact views, 16 dp in the grid), so a pinned card is the same width,
-    // at the same left edge, as every other card (tester Byron, 4 Nov).
-    const pinnedCards = (pinnedPosts.length > 0 && !categoryPanel.open) ? (
+    // margin its style gives it (8 dp in the list and compact views), so a pinned card is the same width, at the same left edge,
+    // as every other card (tester Byron, 4 Nov). The grid draws no block: its pins are listData's first cells (see listData), so
+    // only the list and compact views have a Pinned heading.
+    const pinnedCards = (viewMode !== 'grid' && pinnedPosts.length > 0 && !categoryPanel.open) ? (
         <View style={{ marginBottom: 8 }} testID="market-pinned-block">
             <View style={styles.sectionHeader} testID="pinned-section-header">
                 <Text style={styles.sectionHeaderText}>{upperCase(t('Pinned'))}</Text>
                 <View style={styles.sectionHeaderLine} />
             </View>
             <View>
-                {viewMode === 'grid' ? (
-                    Array.from({ length: Math.ceil(pinnedPosts.length / 2) }, (_, i) => pinnedPosts.slice(i * 2, i * 2 + 2)).map(pair => (
-                        <View key={pair[0].id} style={{ flexDirection: 'row', gap: 16 }}>
-                            {pair.map(item => <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>)}
-                            {pair.length === 1 ? <View style={{ flex: 1 }} /> : null}
-                        </View>
-                    ))
-                ) : (
-                    pinnedPosts.map(item => (
-                        <View key={item.id}>
-                            {renderItem({ item })}
-                        </View>
-                    ))
-                )}
+                {pinnedPosts.map(item => (
+                    <View key={item.id}>
+                        {renderItem({ item })}
+                    </View>
+                ))}
             </View>
         </View>
     ) : null;

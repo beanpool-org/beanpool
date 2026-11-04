@@ -112,11 +112,13 @@ describe('MarketplaceCard S5 design requirements', () => {
         expect(titleEl.className).toContain('line-clamp-2');
     });
 
-    it('list thumb is 80 px (w-20 h-20)', () => {
+    // W2 of the style box (DESIGN-card-style-box-fable.md §1.1): the list photo is 80 wide and the card's full height, at
+    // least 80 (flush under the card's left corners, no longer an 80 x 80 square inset in padding).
+    it('list thumb is 80 px wide, at least 80 tall, and stretched to the card (w-20 min-h-20 self-stretch)', () => {
         const { container } = render(<MarketplaceCard post={basePost} viewMode="list" />);
-        // The thumbnail container in list mode
-        const thumbContainer = container.querySelector('.w-20.h-20');
+        const thumbContainer = container.querySelector('.w-20.min-h-20.self-stretch');
         expect(thumbContainer).not.toBeNull();
+        expect(container.querySelector('.w-20.h-20')).toBeNull();
     });
 
     it('grid card picture wrapper has 4:3 aspect ratio (aspect-[4/3]) and crop anchored to top third (market-card-43)', () => {

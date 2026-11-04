@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
     HOME_TIPS, allTipsSeen, dismissTips, emptyTipsRecord, localDay, nextTip, readTipsRecord, restartTips, tipNow,
-    tipOnLanding, tipsCaption, tipsFor, tipsNextLabel, type TipsNode, type TipsRecord,
+    tipOnLanding, tipText, tipsCaption, tipsFor, tipsNextLabel, type TipsNode, type TipsRecord,
 } from '../home-tips.js';
 
 const LOCAL: TipsNode = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } };
@@ -95,6 +95,14 @@ describe('home tips: the wording (approved 8 Oct 2026, word for word)', () => {
         expect(text('what-this-is')).toBe('BeanPool is neighbours helping neighbours. You offer what you can do or spare, and ask for what you need.');
         expect(text('words')).toBe('Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.');
         expect(text('guide')).toBe("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.");
+    });
+
+    it('the last tip says "hold one to drag it" only where the app can drag (the web); an app that cannot drag keeps the arrows-only sentence', () => {
+        const last = HOME_TIPS.find(t => t.id === 'guide')!;
+        expect(tipText(last)).toBe("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.");
+        expect(tipText(last, true)).toBe("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards: hold one to drag it.");
+        // Every other tip is the same sentence either way.
+        for (const tip of HOME_TIPS.filter(t => t.id !== 'guide')) expect(tipText(tip, true), tip.id).toBe(tipText(tip));
     });
 
     it('the caption and the button labels', () => {

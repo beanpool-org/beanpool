@@ -15,6 +15,16 @@
  * It checks, in the live layout, what the pictures are meant to show: nothing wider than the screen, the headings and cards
  * in order, the line's words, the reads the page made. A non-zero exit means one of those is wrong.
  *
+ * The style box's list card (W2, DESIGN-card-style-box-fable.md §1; DESIGN-market-event-cards-fable.md §3 W2), measured on
+ * every listing and event list card, in the local case at 320 px x 1.3 and again at 1280 px beside a 256 px stand-in for
+ * the sidebar (`web-local-list-1280-*`): the picture's box starts at the card's left edge (inside its border) and is the
+ * card's full height, 80 wide; a photo, once drawn, covers it; the corners are 14, the ground the card token; every chip
+ * is the one chip (10/800, 2 x 6, corners 6); the when is the event token and a title the page's ink.
+ *
+ * #2873: an Elder's listing in the longest category ("📜 Mindset & Philosophy"): every chip ends inside its card (a chip
+ * longer than its row ends in an ellipsis), and the Elder's 3 px gold left border holds in dark as in light. The same
+ * list again in Malayalam and German (`?lang=`), whose category words are longer still (`web-local-list-c-yesterday-ml-*`).
+ *
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
@@ -55,14 +65,19 @@ const PINNED_EVENT = eventPost('ev-pin', 'Byron Bay Twilight Market - Every Satu
     pinnedAt: at(10, 3, 9, 0), pinnedUntil: new Date(2026, 10, 10, 9, 0).toISOString(),
 });
 
+const ELDER_TITLE = 'Meditation circle';
+
 const LOCAL = [
     listing('ana-1', 'Bike tune-up', 'Ana', at(10, 3, 14, 0)),
     listing('ana-2', 'Firewood, split', 'Ana', at(10, 3, 13, 30)),
     listing('ana-3', 'Chook manure, bagged', 'Ana', at(10, 3, 13, 0)),
-    listing('lee-1', 'Kombucha scoby', 'Lee', at(10, 3, 12, 0), { category: 'food' }),
+    // A listing and an event with a photo, so the flush picture is measured with a photo drawn as well as with the tile.
+    listing('lee-1', 'Kombucha scoby', 'Lee', at(10, 3, 12, 0), { category: 'food', photos: ['/assets/header-bg.png'] }),
     listing('sam-1', 'Lift to Lismore', 'Sam', at(10, 2, 23, 59), { type: 'need' }),
+    // An Elder (the ⛰️ tier) in the category with the longest words, priced so the price takes the chip row's far end.
+    listing('kai-1', ELDER_TITLE, 'Kai', at(10, 2, 12, 0), { category: 'mindset', credits: 25, priceType: 'hourly', authorEnergyCycled: 5000 }),
     eventPost('ev-1', 'Repair Cafe', at(8, 20, 9, 0), new Date(2026, 10, 4, 10, 0)),
-    eventPost('ev-2', 'Garden day', at(9, 30, 9, 0), new Date(2026, 10, 10, 9, 0), { myRsvp: 'going' }),
+    eventPost('ev-2', 'Garden day', at(9, 30, 9, 0), new Date(2026, 10, 10, 9, 0), { myRsvp: 'going', photos: ['/assets/neon-vines-banner.png'] }),
     PINNED_EVENT,
 ];
 // The node's page is the newest changed: the six-week-old event is not in it, and is read beside it.
@@ -75,8 +90,8 @@ const GLOBAL_POSTS = [
     listing('g-4', 'Spare ladder', 'Bo', at(10, 1, 10, 0), { distanceKm: 3, category: 'tools' }),
 ];
 
-async function open(browser, origin, { dark, global }) {
-    const context = await browser.newContext({ viewport: { width: 320, height: 900 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
+async function open(browser, origin, { dark, global, width = 320, scale = 1.3, sidebar = false, lang = null }) {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
     await context.addInitScript(([mode, list]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
@@ -104,11 +119,100 @@ async function open(browser, origin, { dark, global }) {
     await context.route('**/ws**', (route) => route.abort());
     const page = await context.newPage();
     await page.clock.setFixedTime(NOW);
-    await page.goto(`${origin}/e2e/harness.html`, { waitUntil: 'load' });
-    await page.addStyleTag({ content: TEXT_SCALE_CSS(1.3) });
+    await page.goto(`${origin}/e2e/harness.html${lang ? `?lang=${lang}` : ''}`, { waitUntil: 'load' });
+    await page.addStyleTag({ content: TEXT_SCALE_CSS(scale) });
+    // The app shell's sidebar is w-64 (App.tsx): a 256 px stand-in on the left, so the Market has the width it has in the app.
+    if (sidebar) {
+        await page.addStyleTag({ content: `body { padding-left: ${SIDEBAR}px; } body::before { content: ''; position: fixed; left: 0; top: 0; bottom: 0; width: ${SIDEBAR}px; background: var(--bg-secondary); border-right: 1px solid var(--border-primary); }` });
+    }
     await page.waitForSelector(global ? 'text=Sourdough starter' : 'text=Bike tune-up', { timeout: 20_000 });
     await settle(page);
     return { context, page, reads };
+}
+
+const SIDEBAR = 256;
+
+/**
+ * Every list card on the page, measured on the style box (W2). The picture slot's offsets are from the card's padding box
+ * (inside its border, which is 1 px, or an Elder's 3 px on the left), so 0 means flush. Waits for the photos to draw first.
+ */
+async function listCards(page) {
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('[data-testid="listing-list-photo"], [data-testid="event-list-photo"]'))
+        .every(slot => !slot.querySelector('img') || !slot.querySelector('[data-testid="category-tile"]')), null, { timeout: 15_000 }).catch(() => {});
+    return page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="listing-list-card"], [data-testid="event-card"]')).map((card) => {
+        const css = getComputedStyle(card);
+        const c = card.getBoundingClientRect();
+        const slot = card.querySelector('[data-testid="listing-list-photo"], [data-testid="event-list-photo"]');
+        const s = slot?.getBoundingClientRect();
+        const img = slot?.querySelector('img');
+        const drawn = !!img && !slot.querySelector('[data-testid="category-tile"]');
+        const i = img?.getBoundingClientRect();
+        const chips = Array.from(card.querySelectorAll('[data-testid="listing-list-chips"] > span, [data-testid="event-chips"] > span')).map((el) => {
+            const st = getComputedStyle(el);
+            return `${st.fontSize}/${st.fontWeight} ${st.paddingTop} ${st.paddingRight} r${st.borderTopLeftRadius} ${st.whiteSpace === 'nowrap' ? 'one-line' : 'wraps'} ${st.textOverflow}`;
+        });
+        // The card's inside edge on the right (inside its border): a chip past it is cut by the card's corners.
+        const inner = c.left + card.clientLeft + card.clientWidth;
+        const chipsOut = Array.from(card.querySelectorAll('[data-testid="listing-list-chips"] > span, [data-testid="event-chips"] > span'))
+            .filter(el => el.getBoundingClientRect().right > inner + 0.5).map(el => el.textContent);
+        const when = card.querySelector('[data-testid="event-when"] span');
+        const title = card.querySelector('h3');
+        // A listing's head (the chips and the floated price): the title starts one row gap under the lower of the two.
+        const headParts = [card.querySelector('[data-testid="listing-list-price"]'), ...card.querySelectorAll('[data-testid="listing-list-chips"] > span')].filter(Boolean);
+        const headGap = title && headParts.length ? +(title.getBoundingClientRect().top - Math.max(...headParts.map(e => e.getBoundingClientRect().bottom))).toFixed(2) : null;
+        return {
+            name: (title?.textContent ?? card.querySelector('button')?.getAttribute('aria-label') ?? '').slice(0, 40),
+            kind: card.getAttribute('data-testid'),
+            width: Math.round(c.width), over: card.scrollWidth > card.clientWidth + 1,
+            slotLeft: s ? +(s.left - c.left - card.clientLeft).toFixed(2) : null,
+            slotTop: s ? +(s.top - c.top - card.clientTop).toFixed(2) : null,
+            slotGap: s ? +(card.clientHeight - s.height).toFixed(2) : null,
+            slotWidth: s ? +s.width.toFixed(2) : null,
+            height: Math.round(c.height),
+            photo: drawn ? Math.max(Math.abs(i.left - s.left), Math.abs(i.top - s.top), Math.abs(i.width - s.width), Math.abs(i.height - s.height)) : null,
+            radius: css.borderTopLeftRadius, ground: css.backgroundColor,
+            left: `${css.borderLeftWidth} ${css.borderLeftColor}`,
+            chips, chipsOut, headGap,
+            when: when ? getComputedStyle(when).color : null,
+            titleInk: title ? getComputedStyle(title).color : null,
+        };
+    }));
+}
+
+/**
+ * The style box's checks on what listCards() measured (the numbers are core's market-card-shell.ts and brand-colours.ts).
+ * `scale` is the text scale the page was opened at: TEXT_SCALE_CSS scales the root font, so every rem size (the photo's
+ * 80, a chip's padding and corners) and every arbitrary px font size scales with it; the card's px corners do not.
+ */
+function checkListCards(cards, { label, dark, maxWidth, photos, scale, count = 9, events = 3, elders = 1 }) {
+    const INK = dark ? { ground: 'rgb(42, 50, 42)', event: 'rgb(196, 181, 253)', title: 'rgb(246, 244, 240)', outline: 'rgb(67, 78, 67)' }
+        : { ground: 'rgb(255, 255, 255)', event: 'rgb(91, 33, 182)', title: 'rgb(29, 35, 29)', outline: 'rgb(220, 227, 220)' };
+    const px = (n) => `${+(n * scale).toFixed(2)}px`;
+    const near = (v, d = 0.5) => v !== null && Math.abs(v) <= d;
+    check(cards.length === count && cards.filter(c => c.kind === 'event-card').length === events, `${label}: ${cards.length} list cards (${count - events} listings, ${events} events)`);
+    const bad = cards.filter(c => !(near(c.slotLeft) && near(c.slotTop) && near(c.slotGap, 1) && near(c.slotWidth - 80 * scale, 0.05)));
+    check(bad.length === 0, `${label}: every list card's picture starts at its left edge and is its full height, ${px(80)} wide (${JSON.stringify(bad.length ? bad : cards.map(c => `${c.name}: ${c.height}px`))})`);
+    const drawn = cards.filter(c => c.photo !== null);
+    check(drawn.length === photos && drawn.every(c => c.photo <= 0.5), `${label}: the ${photos} photos drew and each covers its slot (${JSON.stringify(drawn.map(c => [c.name, c.photo]))})`);
+    check(cards.every(c => c.width <= maxWidth && !c.over), `${label}: no list card is wider than ${maxWidth}px or overflows itself (${cards.map(c => c.width).join(', ')})`);
+    const out = cards.filter(c => c.chipsOut.length);
+    check(out.length === 0, `${label}: every chip ends inside its card (${JSON.stringify(out.map(c => [c.name, c.chipsOut]))})`);
+    // #2873: the Elder's band is trust.star's gold, 3 px, in dark as in light; every other card keeps its 1 px outline.
+    const lefts = cards.map(c => [c.name, c.left, c.name.startsWith(ELDER_TITLE) ? '3px rgb(251, 191, 36)' : `1px ${INK.outline}`]);
+    const elderSeen = cards.filter(c => c.name.startsWith(ELDER_TITLE)).length;
+    check(elderSeen === elders && lefts.every(([, got, want]) => got === want),
+        `${label}: the Elder's left border is 3px gold, every other card's its 1px outline (${JSON.stringify(lefts.filter(([, got, want]) => got !== want).length ? lefts : [...new Set(lefts.map(l => l[1]))])})`);
+    check(cards.every(c => c.radius === '14px' && c.ground === INK.ground), `${label}: corners 14 and the card ground ${INK.ground} (${JSON.stringify([...new Set(cards.map(c => `${c.radius} ${c.ground}`))])})`);
+    const chips = [...new Set(cards.flatMap(c => c.chips))];
+    // The group lock is the one chip that wraps; there is none in this fixture. A chip longer than its row ends in "…".
+    const one = `${px(10)}/800 ${px(2)} ${px(6)} r${px(6)} one-line ellipsis`;
+    check(chips.length === 1 && chips[0] === one, `${label}: every chip is the one chip, 10/800, 2 x 6, corners 6, one line, at ${scale}x text (${JSON.stringify(chips)})`);
+    const eventCards = cards.filter(c => c.kind === 'event-card');
+    check(eventCards.every(c => c.when === INK.event), `${label}: the when is the event token ${INK.event} (${JSON.stringify(eventCards.map(c => c.when))})`);
+    const listings = cards.filter(c => c.kind === 'listing-list-card');
+    const gaps = listings.map(c => c.headGap);
+    check(gaps.every(g => g !== null && Math.abs(g - 4 * scale) <= 0.5), `${label}: a listing's title starts ${px(4)} under its chips and its price, rows 4 apart (${JSON.stringify(gaps)})`);
+    check(listings.every(c => c.titleInk === INK.title), `${label}: a listing's title is the page's ink ${INK.title} (${JSON.stringify([...new Set(listings.map(c => c.titleInk))])})`);
 }
 
 /** The headings and the card titles in page order (a heading is the small uppercase tracking-widest span). */
@@ -139,7 +243,7 @@ try {
             check(JSON.stringify(seq) === JSON.stringify([
                 'Pinned', PINNED_EVENT.title,
                 'Today', 'Bike tune-up', 'Firewood, split', 'Kombucha scoby', 'Repair Cafe', 'Chook manure, bagged',
-                'Yesterday', 'Lift to Lismore', 'This Week', 'Garden day',
+                'Yesterday', 'Lift to Lismore', ELDER_TITLE, 'This Week', 'Garden day',
             ]), `${theme} local: the pinned event first, calendar days, the old event back under Today, the third of the day last (${seq.join(' | ')})`);
             check(reads.some(r => r.type === 'event'), `${theme} local: the events were read beside the listings`);
             // W1 (DESIGN-market-event-cards-fable.md): the card is one button; the pin is a chip above the date, not in its row;
@@ -176,6 +280,7 @@ try {
             const repairCard = ev.find(e => e.title.includes('Repair Cafe'));
             check(repairCard?.counts?.includes('4 going · 2 interested') && repairCard.answer === null, `${theme} local: Repair Cafe shows its counts (${repairCard?.counts})`);
             check(ev.every(e => e.wide <= 320 && !e.over), `${theme} local: no event card is wider than the screen or overflows itself`);
+            checkListCards(await listCards(page), { label: `${theme} local 320`, dark, maxWidth: 320, photos: 2, scale: 1.3 });
             // Pictures of the list: from the Pinned heading (the pinned event), the Today heading (the events with counts), the
             // Yesterday heading, and This Week (the event I am Going to); the last two are below the first screen.
             for (const [name, heading] of [['a-pinned', 'Pinned'], ['b-today', 'Today'], ['c-yesterday', 'Yesterday'], ['d-this-week', 'This Week']]) {
@@ -186,6 +291,34 @@ try {
                 await page.waitForTimeout(150);
                 await page.screenshot({ path: path.join(out, `web-local-list-${name}-${theme}.png`) });
             }
+            await context.close();
+        }
+
+        for (const lang of ['ml', 'de']) {
+            // #2873: the same list in a language whose category words run longer than English's (Malayalam "📜 മനോഭാവവും
+            // തത്ത്വചിന്തയും", German "📜 Lebensart & Philosophie"): every chip still ends inside its card.
+            const { context, page } = await open(browser, server.origin, { dark, global: false, lang });
+            const shown = await page.evaluate(() => document.documentElement.lang);
+            check(shown === lang, `${theme} local ${lang}: the page is in ${lang} (${shown})`);
+            const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+            check(wide <= 320, `${theme} local ${lang}: nothing wider than the screen (${wide}px)`);
+            checkListCards(await listCards(page), { label: `${theme} local ${lang} 320`, dark, maxWidth: 320, photos: 2, scale: 1.3 });
+            await page.evaluate((title) => {
+                const el = [...document.querySelectorAll('h3')].find(e => e.textContent.trim() === title);
+                if (el) window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 200);
+            }, ELDER_TITLE);
+            await page.waitForTimeout(150);
+            await page.screenshot({ path: path.join(out, `web-local-list-c-yesterday-${lang}-${theme}.png`) });
+            await context.close();
+        }
+
+        {
+            // A desktop window: 1280 px at 1x text, the Market beside the sidebar (the style box's W2 shot "web also 1280 + sidebar").
+            const { context, page } = await open(browser, server.origin, { dark, global: false, width: 1280, scale: 1, sidebar: true });
+            const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+            check(wide <= 1280, `${theme} local 1280: nothing wider than the window (${wide}px)`);
+            checkListCards(await listCards(page), { label: `${theme} local 1280 + sidebar`, dark, maxWidth: 1280 - SIDEBAR, photos: 2, scale: 1 });
+            await page.screenshot({ path: path.join(out, `web-local-list-1280-${theme}.png`) });
             await context.close();
         }
 
@@ -201,6 +334,8 @@ try {
             check(JSON.stringify(seq) === JSON.stringify(['Today', 'Sourdough starter', 'Surplus pumpkins', 'Yesterday', 'Proofread a grant', 'This Week', 'Spare ladder']),
                 `${theme} global: newest first, not nearest (${seq.join(' | ')})`);
             check(reads.some(r => r.lat != null && r.sort === 'recent') && !reads.some(r => r.sort === 'distance'), `${theme} global: the node was asked for sort=recent`);
+            // Each card here has its distance line under who: the picture still runs the card's full height.
+            checkListCards(await listCards(page), { label: `${theme} global 320`, dark, maxWidth: 320, photos: 0, scale: 1.3, count: 4, events: 0, elders: 0 });
             await page.screenshot({ path: path.join(out, `web-global-line-${theme}.png`) });
             await context.close();
         }

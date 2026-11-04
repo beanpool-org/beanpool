@@ -108,7 +108,13 @@ describe('Ask an admin to invite someone, in the share sheet (phone)', () => {
             el!.dispatchEvent(new Event('input', { bubbles: true }));
         });
     };
-    const render = async () => { await act(async () => { root.render(createElement(SharePostButtons, { post: POST }) as any); }); await flush(); await flush(); };
+    // The ways are in the one Share button's sheet (DP2): draw the post's Share, then open it.
+    const render = async () => {
+        await act(async () => { root.render(createElement(SharePostButtons, { post: POST }) as any); });
+        await flush(); await flush();
+        await click(get('share-open-button'));
+        expect(get('share-sheet')).not.toBeNull();
+    };
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -131,7 +137,8 @@ describe('Ask an admin to invite someone, in the share sheet (phone)', () => {
 
         await click(get('share-ask-admin-button'));
         await until(() => !!get('invite-ask-sheet'));
-        // The same sheet People → Invites opens: two lines, and Send waits for both.
+        // The Share sheet has gone; the same sheet People → Invites opens: two lines, and Send waits for both.
+        expect(get('share-sheet')).toBeNull();
         expect(get('invite-ask-sheet')).not.toBeNull();
         expect(container.querySelectorAll('input').length).toBe(2);
         expect((get('invite-ask-send') as HTMLButtonElement).disabled).toBe(true);

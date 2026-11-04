@@ -27,6 +27,9 @@ interface Props {
     hue?: CardHue;
     onHeight?: (height: number) => void;
     onHold?: () => void;
+    /** In Arrange: the band's arrows, and the body quiet (components/HomeCard.tsx). */
+    arrange?: Parameters<typeof HomeCard>[0]['arrange'];
+    quiet?: boolean;
 }
 
 export function YourToolsCard({
@@ -44,6 +47,8 @@ export function YourToolsCard({
     hue,
     onHeight,
     onHold,
+    arrange,
+    quiet,
 }: Props) {
     // Only tools with a Home card and a web half in this build are offered.
     const available = useMemo(
@@ -101,7 +106,7 @@ export function YourToolsCard({
     }, [publicKey, reload, chosen]);
 
     return (
-        <HomeCard id={id} title={title} menu={menu} style={style} hue={hue} onHeight={onHeight} onHold={onHold}>
+        <HomeCard id={id} title={title} menu={menu} style={style} hue={hue} onHeight={onHeight} onHold={onHold} arrange={arrange} quiet={quiet}>
             {chosen.length === 0 ? (
                 <p data-testid="home-tools-empty" className="m-0 mb-3 text-sm text-text-secondary">
                     {t('Add a tool to keep it here.')}

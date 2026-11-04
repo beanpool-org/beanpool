@@ -571,3 +571,44 @@ describe('colour parsing', () => {
         expect(parseColour('hsl(0, 0%, 0%)')).toBeNull();
     });
 });
+
+// The Market's style box (components/market-card-shell.ts, slice P2): every card reads its shell from one module through
+// `useCardShell()`, so the scanner follows that import into the module's StyleSheet.create table instead of losing the cards.
+describe('a table built in the style box module is followed there', () => {
+    const SCREEN = `
+        import { useCardShell } from '../components/market-card-shell';
+        export function Card() {
+            const shell = useCardShell();
+            return <Pressable style={shell.card}><Text style={shell.mark}>Going ✓</Text></Pressable>;
+        }`;
+    const shellModule = (ink: string) => `
+        import { StyleSheet } from 'react-native';
+        import { useStyles } from '../app/ThemeContext';
+        export function makeCardShell(colors) {
+            return StyleSheet.create({ card: { backgroundColor: colors.surface.card }, mark: { color: ${ink} } });
+        }
+        export function useCardShell() { return useStyles(({ colors }) => makeCardShell(colors)); }`;
+
+    it('reads the card and its words from the module, in both themes', () => {
+        const r = scanSource(FILE, SCREEN, [], { 'components/market-card-shell.ts': shellModule('colors.tile.event.ink') });
+        expect(r.stats.unreadTables.size).toBe(0);
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1 });
+        expect(r.findings).toEqual([]);
+    });
+
+    it('sees a pair under the bar in the module (the following can fail)', () => {
+        const r = scanSource(FILE, SCREEN, [], { 'components/market-card-shell.ts': shellModule('colors.surface.card') });
+        expect(r.findings.length).toBeGreaterThan(0);
+        // Named where it is written: the module's own file and line, not the screen's.
+        expect(r.findings[0].words).toMatchObject({ expr: 'colors.surface.card', in: 'components/market-card-shell.ts', line: 5 });
+        expect(formatReport(r)).toContain('colors.surface.card = #ffffff  (components/market-card-shell.ts:5)');
+        expect(r.findings[0].file).toBe(FILE);
+    });
+
+    it('without the module, or from a module it does not follow, the table is still a missing one', () => {
+        expect(scanSource(FILE, SCREEN).stats.unreadTables.get(FILE)).toEqual(['shell']);
+        const elsewhere = SCREEN.replace('../components/market-card-shell', '../components/other-styles');
+        const r = scanSource(FILE, elsewhere, [], { 'components/other-styles.ts': shellModule('colors.tile.event.ink') });
+        expect(r.stats.unreadTables.get(FILE)).toEqual(['shell']);
+    });
+});

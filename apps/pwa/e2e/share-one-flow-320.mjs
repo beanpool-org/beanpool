@@ -49,8 +49,7 @@ const MEASURE = () => {
         if (!hidden && (r.right > vw + 0.5 || r.left < -0.5)) out.push(`${name(el)} spans ${Math.round(r.left)}..${Math.round(r.right)} of ${vw}`);
         const cuts = (cs.overflow === 'hidden' || cs.overflowX === 'hidden' || cs.overflow === 'clip') && el.scrollWidth > el.clientWidth + 1;
         if (!hidden && cuts && cs.textOverflow !== 'ellipsis' && /\p{L}/u.test(el.textContent || '')) out.push(`${name(el)} cuts its words (${el.scrollWidth} > ${el.clientWidth})`);
-        if (el.matches('[data-testid="share-ask-admin"] button') && r.height < 44) out.push(`the button ${name(el)} is ${Math.round(r.height)} px tall, under 44`);
-        if (el.matches('[data-testid="invite-and-share"] button') && r.height < 44) out.push(`the button ${name(el)} is ${Math.round(r.height)} px tall, under 44`);
+        if (el.matches('[data-testid="share-ask-admin"] button, [data-testid="invite-and-share"] button, [data-testid="share-button"], [role="menuitem"]') && r.height < 44) out.push(`the button ${name(el)} is ${Math.round(r.height)} px tall, under 44`);
         if (el.matches('fieldset label') && r.height < 44) out.push(`the choice ${name(el)} is ${Math.round(r.height)} px tall, under 44`);
         if (el.matches('fieldset label span') && el.scrollWidth > el.clientWidth) out.push(`the words of ${name(el)} spill out of it (${el.scrollWidth} > ${el.clientWidth})`);
     }
@@ -103,6 +102,9 @@ try {
                 });
             }, [theme, FONT_SCALE]);
             await page.goto(`${base}/e2e/invite-and-share-harness.html?lang=en`, { waitUntil: 'networkidle' });
+            // One Share button (DW2): the ways, and the line under each, are in the menu it opens.
+            await page.waitForSelector('[data-testid="share-button"]', { timeout: 20_000 });
+            await page.click('[data-testid="share-button"]');
             await page.waitForSelector('[data-testid="share-members-button"]', { timeout: 20_000 });
             await page.waitForSelector('[data-testid="share-members-note"]', { timeout: 20_000 });
             await page.waitForTimeout(800);

@@ -50,6 +50,13 @@ const samplePost: MarketplacePost = {
     repeatable: false,
 };
 
+/**
+ * The page shows ONE button, Share (DESIGN-detail-pages-fable.md §2.5, slice DW2); the ways this member has here, each with
+ * its sentence, are the items of the menu it opens. Every row of the share-says table is proved through that menu: a check
+ * on an item reads it open, so "no item" can never mean "the menu was never opened".
+ */
+const openShare = () => fireEvent.click(screen.getByTestId('share-button'));
+
 describe('SharePostButtons — share-says table rows (web)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -67,6 +74,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
+        openShare();
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-outside-button')).toBeInTheDocument();
@@ -88,6 +96,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
+        openShare();
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only.');
@@ -111,6 +120,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
+        openShare();
 
         await waitFor(() => {
             expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only, and only admins invite here.');
@@ -119,7 +129,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         // The line, and no invite action at all (the seam for Ask an admin, #2775). Give the button's own lookups time to land.
         await act(async () => { await new Promise(r => setTimeout(r, 30)); });
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
-        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
         expect(screen.queryByTestId('share-outside-button')).toBeNull();
     });
 
@@ -134,6 +144,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
+        openShare();
 
         await waitFor(() => {
             expect(screen.getByTestId('invite-and-share-button')).toBeInTheDocument();
@@ -154,6 +165,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
+        openShare();
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
@@ -174,6 +186,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             const { unmount } = render(<SharePostButtons post={samplePost} />);
             unmountFn = unmount;
         });
+        openShare();
 
         await waitFor(() => {
             expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only, and only admins invite here.');
@@ -189,6 +202,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
+        openShare();
 
         await waitFor(() => {
             expect(screen.getByTestId('invite-and-share-button')).toBeInTheDocument();
@@ -204,12 +218,13 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         await act(async () => {
             render(<SharePostButtons post={samplePost} />);
         });
+        openShare();
 
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
         expect(screen.queryByTestId('share-outside-line')).toBeNull();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
-        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
     });
 
     it('Row 1 with joining paused: the outside line never promises to ask to join', async () => {
@@ -218,6 +233,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             features: { shareOutside: true, door: 'members', knocks: false },
         } as any);
         await act(async () => { render(<SharePostButtons post={samplePost} />); });
+        openShare();
         expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone with the link can read this listing for 7 days, without names or faces. You can stop it any time.');
         expect(screen.getByTestId('share-outside-line').textContent).not.toMatch(/ask to join/);
     });
@@ -228,6 +244,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             features: { shareOutside: true, door: 'members', knocks: true },
         } as any);
         await act(async () => { render(<SharePostButtons post={samplePost} />); });
+        openShare();
         // ONE note: the 7 days, no names or faces and "you can stop it" read together, not as two notes.
         expect(screen.getByTestId('share-outside-line')).toHaveTextContent('for 7 days, without names or faces');
         expect(screen.getByTestId('share-outside-line')).toHaveTextContent('You can stop it any time.');
@@ -240,6 +257,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             features: { shareOutside: true, door: 'members', knocks: true },
         } as any);
         await act(async () => { render(<SharePostButtons post={{ ...samplePost, type: 'event' } as MarketplacePost} />); });
+        openShare();
         expect(screen.getByTestId('share-outside-line')).toHaveTextContent('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
         expect(screen.getByTestId('share-outside-line').textContent).not.toMatch(/listing/);
     });
@@ -252,6 +270,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         let answer: (r: string | null) => void = () => {};
         vi.mocked(api.myNodeRoleOnce).mockReturnValue(new Promise(res => { answer = res; }));
         await act(async () => { render(<SharePostButtons post={samplePost} />); });
+        openShare();
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
@@ -270,10 +289,11 @@ describe('SharePostButtons — share-says table rows (web)', () => {
         } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(undefined);
         await act(async () => { render(<SharePostButtons post={samplePost} />); });
+        openShare();
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
-        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
     });
 
     it('a guest here (not a member) is not offered Invite and share; a member and a page that does not say are', async () => {
@@ -281,18 +301,28 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             profile: 'local',
             features: { shareOutside: false, door: 'members' },
         } as any);
+        // Read open, and after the part's own lookups have had time to land: a menu that was never opened proves nothing.
+        const settle = () => act(async () => { await new Promise(r => setTimeout(r, 30)); });
         const { unmount } = render(<SharePostButtons post={samplePost} isMember={false} />);
+        openShare();
+        await settle();
+        expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
         expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
         unmount();
         const second = render(<SharePostButtons post={samplePost} isMember={null} />);
+        openShare();
+        await settle();
+        expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
-        second.unmount();
         expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
+        second.unmount();
         const third = render(<SharePostButtons post={samplePost} isMember={true} />);
+        openShare();
         await screen.findByTestId('invite-and-share-button');
         third.unmount();
         render(<SharePostButtons post={samplePost} />);
+        openShare();
         await screen.findByTestId('invite-and-share-button');
     });
 
@@ -302,6 +332,7 @@ describe('SharePostButtons — share-says table rows (web)', () => {
             features: { shareOutside: false, door: 'members', invites: false },
         } as any);
         await act(async () => { render(<SharePostButtons post={samplePost} />); });
+        openShare();
         expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
         expect(screen.queryByTestId('share-members-note')).toBeNull();

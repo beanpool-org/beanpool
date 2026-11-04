@@ -28,7 +28,7 @@ A new member's Home starts nearly empty: one card, **Getting started**, between 
 After you tap **Skip** on the tour, a one-line tip appears under the first card. Tap **✕** to put it away. After **Done** it does not show.
 
 - On the phone it says "This is your Home. Add a card at the bottom, or hold a card to arrange." It is shown once, and never again, whether or not you tap **✕**. Adding or removing a card also puts it away.
-- In the web app it says the same words. It comes back each time you open Home, until you tap **✕**.
+- In the web app it says "This is your Home. Add a card at the bottom. Hold a card to drag it, or use the arrows." It comes back each time you open Home, until you tap **✕**.
 
 ## Your cards
 

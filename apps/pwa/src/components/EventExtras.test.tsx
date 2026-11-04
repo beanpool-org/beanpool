@@ -231,12 +231,15 @@ describe('"Remind me" on an event (decision 2)', () => {
 describe('Share and Add to calendar (decisions 3 and 4)', () => {
     const LINK = 'https://mullum.beanpool.org/?post=ev-1';
     const TEXT = `Working bee at the hall\nSAT 28 SEP · 9:00–12:00\nBindarrabi Hall\n${LINK}`;
+    // Share is ONE button (DESIGN-detail-pages-fable.md §2.5, slice DW2): the ways are the items of the menu it opens.
+    const openShare = () => fireEvent.click(screen.getByTestId('event-share'));
+    const shareWithMembers = () => { openShare(); fireEvent.click(screen.getByTestId('share-members-button')); };
 
     it('hands the title, when, where and the link to the share sheet', async () => {
         const share = vi.fn(async () => {});
         Object.defineProperty(navigator, 'share', { value: share, configurable: true, writable: true });
         render(<EventDetail post={event} identity={identity} />);
-        fireEvent.click(screen.getByTestId('event-share'));
+        shareWithMembers();
         await waitFor(() => expect(share).toHaveBeenCalledWith({ title: 'Working bee at the hall', text: TEXT, url: LINK }));
         delete (navigator as any).share;
     });
@@ -246,7 +249,7 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true, writable: true });
         render(<EventDetail post={event} identity={identity} />);
-        fireEvent.click(screen.getByTestId('event-share'));
+        shareWithMembers();
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(TEXT));
         expect(await screen.findByTestId('event-share-note')).toHaveTextContent('Link copied.');
     });
@@ -257,7 +260,7 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         const writeText = vi.fn(async () => {});
         Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true, writable: true });
         render(<EventDetail post={event} identity={identity} />);
-        fireEvent.click(screen.getByTestId('event-share'));
+        shareWithMembers();
         await waitFor(() => expect((navigator as any).share).toHaveBeenCalled());
         expect(writeText).not.toHaveBeenCalled();
         expect(screen.queryByTestId('event-share-note')).toBeNull();
@@ -367,16 +370,21 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         open.mockRestore();
     });
 
-    it('the Share row on an event gets the share-says line', () => {
+    it('the Share row on an event gets the share-says line, under Share with members in the menu', () => {
         render(<EventDetail post={event} identity={identity} />);
+        // Before the tap: one Share button, and none of the sentences on the page.
+        expect(screen.queryByTestId('event-share-members-note')).toBeNull();
+        openShare();
         const note = screen.getByTestId('event-share-members-note');
         expect(note).toBeInTheDocument();
         expect(note).toHaveTextContent('This link opens for members only.');
+        expect(screen.getByTestId('share-members-button')).toContainElement(note);
     });
 
     it('the event Share row says "event" (not "listing") under Share outside', () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'members', shareOutside: true, knocks: true } } as any);
         render(<EventDetail post={event} identity={identity} />);
+        openShare();
         const line = screen.getByTestId('share-outside-line');
         expect(line).toHaveTextContent('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
         expect(line.textContent).not.toMatch(/listing/);
@@ -387,7 +395,10 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'admins', shareOutside: false } } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(undefined);
         render(<EventDetail post={event} identity={identity} />);
+        openShare();
         await waitFor(() => expect(api.myNodeRoleOnce).toHaveBeenCalled());
+        // Read open: the menu is there, with Share with members alone in it, and no line under it.
+        expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('event-share-members-note')).toBeNull();
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
     });
@@ -395,6 +406,7 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
     it('one flow: a member who may invite sees exactly ONE invite action on an event, and the line', async () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'members', shareOutside: false } } as any);
         render(<EventDetail post={event} identity={identity} />);
+        openShare();
         await screen.findByTestId('invite-and-share-button');
         expect(screen.getAllByTestId('invite-and-share-button')).toHaveLength(1);
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
@@ -406,9 +418,10 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'admins', shareOutside: false } } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
         render(<EventDetail post={event} identity={identity} />);
+        openShare();
         await waitFor(() => expect(screen.getByTestId('event-share-members-note')).toHaveTextContent('only admins invite here'));
         await new Promise(r => setTimeout(r, 30));
-        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
         expect(screen.queryByTestId('invite-someone-button')).toBeNull();
     });
 
@@ -416,9 +429,11 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         vi.mocked(features.useCommunityInfo).mockReturnValue({ features: { door: 'admins', shareOutside: false } } as any);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(undefined);
         render(<EventDetail post={event} identity={identity} />);
+        openShare();
         await waitFor(() => expect(api.myNodeRoleOnce).toHaveBeenCalled());
         await new Promise(r => setTimeout(r, 30));
-        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
         expect(screen.queryByTestId('event-share-members-note')).toBeNull();
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
     });

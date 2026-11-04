@@ -81,20 +81,24 @@ const STUBS = {
     'use-node-profile': `export const useNodeProfile = () => ({ profile: 'local', features: globalThis.__features, checkedAt: '' });`,
     'identity': `export const loadIdentity = async () => ({ publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(64), callsign: 'Robin' });`,
     'nodes': `export const isGuestNode = async () => false;`,
-    'node-admin': `export const askNodeRole = async () => ({ role: globalThis.__role ?? null, communityName: 'Castlemaine' }); export const readPersistedNodeRole = async () => undefined;`,
+    'node-admin': `export const askNodeRole = async () => ({ role: globalThis.__role ?? null, communityName: 'Castlemaine' }); export const cachedNodeRoleHeard = askNodeRole; export const persistNodeRole = async () => {}; export const readPersistedNodeRole = async () => undefined;`,
+    // A member here (the Share button's ways are a member's), as share-one-flow-320.mjs stubs it.
+    'NodeStatusContext': `export const useNodeStatus = () => ({ recognition: 'member', nodeUrl: 'https://castlemaine.beanpool.org', recheck: async () => 'member' });`,
     'db': `export const askCanVouch = async () => !!globalThis.__canVouch;`,
     'crypto': `export const buildSignedHeaders = async () => ({});`,
     'peek': `export const makePeekLink = async () => ({ link: 'https://castlemaine.beanpool.org/?post=p&peek=t', expiresAt: '' }); export const peekStopsHere = () => 0;`,
+    // The ask form (#2775) is opened by a tap these shots never make; stubbed as share-one-flow-320.mjs does.
+    'InviteAsks': `export const AskSheet = () => null;`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec, importer = '') => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
     const base = path.basename(spec);
-    if (['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile'].includes(base)) return base;
+    if (['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'InviteAsks', 'NodeStatusContext'].includes(base)) return base;
     // The key, the stored communities, the role and the balance are the button's own reads: stubbed for it alone, so the
     // real modules still serve everything else that imports them.
-    return ['identity', 'nodes', 'node-admin', 'db', 'crypto'].includes(base) && /^(invite-and-share|InviteAndShare)\./.test(path.basename(importer)) ? base : null;
+    return ['identity', 'nodes', 'node-admin', 'db', 'crypto'].includes(base) && /^(invite-and-share|InviteAndShare|use-share-role)\./.test(path.basename(importer)) ? base : null;
 };
 
 // ─── The page: each case renders the real screens for one state ─────────────────────────────────────────────────────
@@ -226,7 +230,12 @@ try {
         }
         console.log(`${found.length ? '✗' : '✓'} ${label}${found.length ? `: ${found.length} problem(s)` : ''}`);
     };
-    const open = async (query) => { await page.goto(`${base}/?${query}`); await page.waitForTimeout(250); };
+    // Invite and share is a way in the one Share button's sheet (DP2): each state opens the sheet first.
+    const open = async (query) => {
+        await page.goto(`${base}/?${query}`);
+        await page.locator('[data-testid="share-open-button"]').click();
+        await page.waitForTimeout(250);
+    };
 
     for (const lang of ['en', 'ta']) {
         for (const scheme of ['light', 'dark']) {
@@ -234,7 +243,7 @@ try {
             const q = (who) => `scheme=${scheme}&lang=${lang}&who=${who}`;
             await open(q('member'));
             await page.locator('[data-testid="invite-and-share-button"]').waitFor();
-            await measure(`${tag} · the button, closed`);
+            await measure(`${tag} · the way in the sheet, closed`);
             await open(q('voucher'));
             await page.locator('[data-testid="invite-and-share-button"]').click();
             await page.locator('[role="radio"]').first().waitFor();

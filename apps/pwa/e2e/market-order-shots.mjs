@@ -42,10 +42,17 @@ const listing = (id, title, author, createdAt, over = {}) => ({
     authorPublicKey: `member-${author.toLowerCase()}`, authorCallsign: author, authorEnergyCycled: 40, photos: [],
     createdAt, updatedAt: createdAt, lat: -28.6, lng: 153.4, ...over,
 });
-const eventPost = (id, title, createdAt, start) => ({
+const eventPost = (id, title, createdAt, start, over = {}) => ({
     ...listing(id, title, 'Eve', createdAt, { category: 'community' }), type: 'event', credits: 0,
     eventStartAt: start.toISOString(), eventEndAt: new Date(start.getTime() + 2 * 3600_000).toISOString(), eventPlaceName: 'Civic hall',
-    eventState: 'scheduled', goingCount: 4, interestedCount: 2, myRsvp: null,
+    eventState: 'scheduled', goingCount: 4, interestedCount: 2, myRsvp: null, ...over,
+});
+
+// W1 of DESIGN-market-event-cards-fable.md: a PINNED event whose title, place and date are Byron-length, with nobody
+// answered yet (its "0 going · 0 interested" line is not drawn), and an event I am Going to (my answer, no buttons).
+const PINNED_EVENT = eventPost('ev-pin', 'Byron Bay Twilight Market - Every Saturday', at(10, 2, 9, 0), new Date(2026, 10, 7, 16, 0), {
+    eventPlaceName: 'Railway Park, Jonson Street, Byron Bay', goingCount: 0, interestedCount: 0,
+    pinnedAt: at(10, 3, 9, 0), pinnedUntil: new Date(2026, 10, 10, 9, 0).toISOString(),
 });
 
 const LOCAL = [
@@ -55,7 +62,8 @@ const LOCAL = [
     listing('lee-1', 'Kombucha scoby', 'Lee', at(10, 3, 12, 0), { category: 'food' }),
     listing('sam-1', 'Lift to Lismore', 'Sam', at(10, 2, 23, 59), { type: 'need' }),
     eventPost('ev-1', 'Repair Cafe', at(8, 20, 9, 0), new Date(2026, 10, 4, 10, 0)),
-    eventPost('ev-2', 'Garden day', at(9, 30, 9, 0), new Date(2026, 10, 10, 9, 0)),
+    eventPost('ev-2', 'Garden day', at(9, 30, 9, 0), new Date(2026, 10, 10, 9, 0), { myRsvp: 'going' }),
+    PINNED_EVENT,
 ];
 // The node's page is the newest changed: the six-week-old event is not in it, and is read beside it.
 const LOCAL_FEED = LOCAL.filter(p => p.id !== 'ev-1');
@@ -129,12 +137,48 @@ try {
             const wide = await page.evaluate(() => document.documentElement.scrollWidth);
             check(wide <= 320, `${theme} local: nothing wider than the screen (${wide}px)`);
             check(JSON.stringify(seq) === JSON.stringify([
+                'Pinned', PINNED_EVENT.title,
                 'Today', 'Bike tune-up', 'Firewood, split', 'Kombucha scoby', 'Repair Cafe', 'Chook manure, bagged',
                 'Yesterday', 'Lift to Lismore', 'This Week', 'Garden day',
-            ]), `${theme} local: calendar days, the old event back under Today, the third of the day last (${seq.join(' | ')})`);
+            ]), `${theme} local: the pinned event first, calendar days, the old event back under Today, the third of the day last (${seq.join(' | ')})`);
             check(reads.some(r => r.type === 'event'), `${theme} local: the events were read beside the listings`);
-            // Two pictures of the list: from the Today heading, and from the Yesterday heading (it is below the first screen).
-            for (const [name, heading] of [['a-today', 'Today'], ['b-yesterday', 'Yesterday']]) {
+            // W1 (DESIGN-market-event-cards-fable.md): the card is one button; the pin is a chip above the date, not in its row;
+            // my answer is text; "0 going · 0 interested" is not drawn; the counts are, once someone has answered.
+            const ev = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="event-card"]')).map((card) => {
+                const when = card.querySelector('[data-testid="event-when"]');
+                const row = when?.parentElement;
+                const pin = card.querySelector('[data-testid="event-pinned-chip"]');
+                const type = card.querySelector('[data-testid="event-type-chip"]');
+                // `event-when` is display: contents (it has no box), so its row is what is measured.
+                const lineBoxes = (el) => (el ? new Set(Array.from(el.querySelectorAll('span')).map(s => Math.round(s.getBoundingClientRect().top))).size : 0);
+                return {
+                    title: card.querySelector('button')?.getAttribute('aria-label') ?? '',
+                    buttons: card.querySelectorAll('button').length,
+                    rsvpRow: !!card.querySelector('[data-testid="event-rsvp-row"]'),
+                    answer: card.querySelector('[data-testid="event-my-answer"]')?.textContent ?? null,
+                    counts: card.querySelector('[data-testid="event-counts"]')?.textContent ?? null,
+                    zeroLine: /\b0 going/.test(card.textContent),
+                    typeChip: type?.textContent ?? null,
+                    pinInDate: !!(pin && row?.contains(pin)),
+                    pinAboveDate: !!(pin && row && pin.getBoundingClientRect().bottom <= row.getBoundingClientRect().top + 1),
+                    dateLines: lineBoxes(row),
+                    wide: card.getBoundingClientRect().width,
+                    over: card.scrollWidth > card.clientWidth + 1,
+                };
+            }));
+            check(ev.length === 3 && ev.every(e => e.buttons === 1 && !e.rsvpRow), `${theme} local: ${ev.length} event cards, each with one button (the one that opens it) and no Going / Interested row`);
+            check(ev.every(e => e.typeChip === 'EVENT'), `${theme} local: every event card leads with the EVENT chip`);
+            const pinnedCard = ev.find(e => e.title.includes(PINNED_EVENT.title));
+            check(!!pinnedCard && pinnedCard.pinAboveDate && !pinnedCard.pinInDate, `${theme} local: the PINNED chip is above the date, not in its row (${JSON.stringify(pinnedCard)})`);
+            check(!!pinnedCard && !pinnedCard.zeroLine && pinnedCard.counts === null, `${theme} local: nobody has answered, so no "0 going · 0 interested"`);
+            const goingCard = ev.find(e => e.title.includes('Garden day'));
+            check(goingCard?.answer === 'Going ✓' && goingCard.counts === null, `${theme} local: Garden day shows my answer "Going ✓" as text (${goingCard?.answer})`);
+            const repairCard = ev.find(e => e.title.includes('Repair Cafe'));
+            check(repairCard?.counts?.includes('4 going · 2 interested') && repairCard.answer === null, `${theme} local: Repair Cafe shows its counts (${repairCard?.counts})`);
+            check(ev.every(e => e.wide <= 320 && !e.over), `${theme} local: no event card is wider than the screen or overflows itself`);
+            // Pictures of the list: from the Pinned heading (the pinned event), the Today heading (the events with counts), the
+            // Yesterday heading, and This Week (the event I am Going to); the last two are below the first screen.
+            for (const [name, heading] of [['a-pinned', 'Pinned'], ['b-today', 'Today'], ['c-yesterday', 'Yesterday'], ['d-this-week', 'This Week']]) {
                 await page.evaluate((h) => {
                     const el = [...document.querySelectorAll('span.tracking-widest')].find(e => e.textContent.trim() === h);
                     if (el) window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 12);

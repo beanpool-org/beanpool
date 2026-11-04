@@ -81,9 +81,10 @@ describe('"Your events" (decision 1)', () => {
         expect(cards).toHaveLength(2);
         expect(within(cards[0]).getByRole('button', { name: /Open event/ }).textContent).toContain('Working bee at the hall');
         expect(within(cards[1]).getByRole('button', { name: /Open event/ }).textContent).toContain('Seed swap');
-        // The viewer's own RSVP is on the filled button, from the row the node sent.
-        expect(within(cards[0]).getByRole('button', { name: 'Going ✓' })).toHaveAttribute('aria-pressed', 'true');
-        expect(within(cards[1]).getByRole('button', { name: 'Interested ✓' })).toHaveAttribute('aria-pressed', 'true');
+        // The viewer's own RSVP is shown as text on the card (Marty, 4 Nov 2026: cards open, pages act), from the row the node sent.
+        expect(within(cards[0]).getByTestId('event-my-answer')).toHaveTextContent('Going ✓');
+        expect(within(cards[1]).getByTestId('event-my-answer')).toHaveTextContent('Interested ✓');
+        for (const card of cards) expect(within(card).getAllByRole('button')).toHaveLength(1);
     });
 
     it('never claims nobody is going: this route carries no counts, so the card leaves the line out', async () => {

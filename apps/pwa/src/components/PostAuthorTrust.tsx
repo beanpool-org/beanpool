@@ -94,7 +94,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
         return (
             <>
                 <div
-                    className={`flex items-center gap-1 ${publicKey ? 'cursor-pointer hover:opacity-80' : ''} ${focusRing} ${className}`}
+                    className={`flex items-center gap-1 ${isInteractive ? 'cursor-pointer hover:opacity-80' : ''} ${focusRing} ${className}`}
                     onClick={handleClick}
                     {...interactiveProps}
                 >
@@ -129,7 +129,7 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
     return (
         <>
             <div
-                className={`flex items-center gap-1.5 ${publicKey ? 'cursor-pointer hover:opacity-80' : ''} ${focusRing} ${className}`}
+                className={`flex items-center gap-1.5 ${isInteractive ? 'cursor-pointer hover:opacity-80' : ''} ${focusRing} ${className}`}
                 onClick={handleClick}
                 {...interactiveProps}
             >

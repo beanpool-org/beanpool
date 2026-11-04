@@ -477,8 +477,10 @@ describe('Every door lands on the enterprise page', () => {
         return nav.replaced;
     }
 
-    it("a post's author (PostAuthorTrust, the Market's cards and the post screen)", async () => {
-        await render(createElement(PostAuthorTrust, { pubkey: ENTERPRISE, callsign: ENTERPRISE_NAME, mode: 'full' }));
+    // A chip on a small card is display only now (Marty, 4 Nov: a tap anywhere on a small card opens the item, never its owner), so
+    // the Market's and the shop's cards pass `navigable={false}` and PostAuthorTrust is a door only where it is asked to be one.
+    it("a post's author (PostAuthorTrust, where it is navigable)", async () => {
+        await render(createElement(PostAuthorTrust, { pubkey: ENTERPRISE, callsign: ENTERPRISE_NAME, mode: 'full', navigable: true }));
         await press(host.querySelector(`[aria-label="View ${ENTERPRISE_NAME}'s profile"]`)!);
         expect(nav.pushed).toHaveLength(1);
         expect(await follow(nav.pushed[0])).toEqual([{ pathname: '/treasury-detail', params: { publicKey: ENTERPRISE, name: ENTERPRISE_NAME } }]);
@@ -503,7 +505,7 @@ describe('Every door lands on the enterprise page', () => {
         expect(await follow(nav.pushed[0])).toEqual([{ pathname: '/treasury-detail', params: { publicKey: ENTERPRISE, name: ENTERPRISE_NAME } }]);
     });
 
-    // The doors inside whole screens (post/[id], chat/[id], People, the protected map) are read from their source: each
+    // The doors inside whole screens (post/[id], chat/[id], People, an event's own screen) are read from their source: each
     // opens someone by key only through this one screen, so the redirect above is theirs too. A door that opened the
     // Trust Profile any other way, or a new door, fails here until it is looked at.
     it('every door in the app opens someone by key through /public-profile with their publicKey, and nothing else draws a Trust Profile', () => {
@@ -535,8 +537,8 @@ describe('Every door lands on the enterprise page', () => {
         expect(doors).toEqual({
             [path.join('app', 'post', '[id].tsx')]: 3,
             [path.join('app', 'chat', '[id].tsx')]: 2,
-            [path.join('app', '(tabs)', 'map.tsx')]: 1,
-            // An event's own screen: the host's box ("HOSTED BY", components/AuthorCard.tsx) opens the host, as a listing's "POSTED BY" does.
+            // The map's small cards open the item and never its owner (4 Nov), so the map is no longer a door. An event's own screen
+            // is: the host's box ("HOSTED BY", components/AuthorCard.tsx) opens the host, as a listing's "POSTED BY" does.
             [path.join('components', 'EventDetail.tsx')]: 1,
             // The full Community Pulse list: a row about a member opens them.
             [path.join('app', '(tabs)', 'market.tsx')]: 1,

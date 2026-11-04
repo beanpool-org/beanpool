@@ -51,7 +51,22 @@ afterEach(() => { cleanup(); backToEnglish(); vi.restoreAllMocks(); });
 describe('an event in the pseudo-locale', () => {
     it('the card: the time, the counts and Going ✓ / Interested; a cancelled one', async () => {
         await showIn('xx');
-        const { unmount } = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} />);
+        // The Market's card: the chip, my answer as text, and no buttons.
+        const market = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} />);
+        expect(bracketed()).toBeGreaterThan(2);
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+        expect(screen.getByTestId('event-type-chip').textContent).toBe(xx('EVENT'));
+        expect(screen.getByTestId('event-my-answer').textContent).toBe(xx('{label} ✓').replace('{label}', xx('Going')));
+        expect(screen.queryByRole('button', { pressed: true })).toBeNull();
+        market.unmount();
+
+        // Nobody's answer but the counts, once someone has answered.
+        const counts = render(<EventCard post={{ ...event, myRsvp: null }} identity={identity} onOpen={vi.fn()} />);
+        expect(screen.getByText(xx('{going} going · {interested} interested').replace('{going}', '7').replace('{interested}', '3'))).toBeInTheDocument();
+        counts.unmount();
+
+        // The map's preview card: the buttons and the counts.
+        const { unmount } = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} rsvpOnCard />);
         expect(bracketed()).toBeGreaterThan(2);
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
         expect(screen.getByRole('button', { pressed: true }).textContent).toBe(xx('{label} ✓').replace('{label}', xx('Going')));
@@ -94,7 +109,17 @@ describe('an event in the pseudo-locale', () => {
 
 describe('an event in English', () => {
     it('in English nothing is bracketed, and the words are as they were', async () => {
-        const { unmount } = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} />);
+        // The Market's card: one button, my answer in its label and as text, the chip.
+        const market = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} />);
+        expect(bracketed()).toBe(0);
+        expect(screen.getByRole('button', { name: 'Open event: Working bee at the hall, Going ✓' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Going ✓' })).toBeNull();
+        expect(screen.getByTestId('event-my-answer').textContent).toBe('Going ✓');
+        expect(screen.getByTestId('event-type-chip').textContent).toBe('EVENT');
+        market.unmount();
+
+        // The map's preview card keeps its two buttons and the counts.
+        const { unmount } = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} rsvpOnCard />);
         expect(bracketed()).toBe(0);
         expect(screen.getByRole('button', { name: 'Open event: Working bee at the hall' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Going ✓' })).toBeInTheDocument();

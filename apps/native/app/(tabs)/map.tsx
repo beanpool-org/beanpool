@@ -257,6 +257,7 @@ export default function MapScreen() {
         eventPreviewBadge: { fontSize: 11, fontWeight: '800', color: colors.event.ink, borderWidth: 1, borderColor: EVENT_ACCENT, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
         eventPreviewMeta: { fontSize: 14, color: colors.text.secondary, marginTop: 2 },
         previewCard: { backgroundColor: colors.surface.card, margin: 16, borderRadius: 24, padding: 0, flexDirection: 'row', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 20, overflow: 'hidden' },
+        previewTap: { flex: 1, flexDirection: 'row' },
         previewThumb: { width: 125, height: '100%', minHeight: 125, borderTopLeftRadius: 24, borderBottomLeftRadius: 24, borderTopRightRadius: 0, borderBottomRightRadius: 0, backgroundColor: colors.surface.subtle },
         previewThumbPlaceholder: { width: 125, height: '100%', minHeight: 125, borderTopLeftRadius: 24, borderBottomLeftRadius: 24, borderTopRightRadius: 0, borderBottomRightRadius: 0, justifyContent: 'center', alignItems: 'center' },
         previewInfo: { flex: 1, padding: 14, justifyContent: 'center' },
@@ -725,7 +726,16 @@ export default function MapScreen() {
                     <SafeAreaView style={styles.previewCardWrapper} pointerEvents="box-none">
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Close preview')} style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
                         <Animated.View style={[styles.previewCard, styles.eventPreviewCard]}>
-                            <View style={styles.eventPreviewBody}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Open event: {title}', { title: card.title })}
+                                testID="map-preview-open"
+                                style={styles.eventPreviewBody}
+                                onPress={() => {
+                                    setSelectedPostPreview(null);
+                                    router.push(`/post/${selectedPostPreview.id}`);
+                                }}
+                            >
                                 <View style={styles.eventPreviewWhenRow}>
                                     <Text style={styles.eventPreviewWhen} numberOfLines={2}>{card.when}</Text>
                                     {card.badge && <Text style={styles.eventPreviewBadge} numberOfLines={1}>{card.badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>}
@@ -733,8 +743,9 @@ export default function MapScreen() {
                                 <Text style={styles.previewTitle} numberOfLines={2}>{card.title}</Text>
                                 {card.place && <Text style={styles.eventPreviewMeta} numberOfLines={1}>📍 {card.place}</Text>}
                                 <Text style={styles.eventPreviewMeta} numberOfLines={1}>👥 {card.going}</Text>
+                                {/* The button keeps its look and its press; the card around it is the one thing a screen reader meets. */}
                                 <Pressable
-                                    accessibilityRole="button"
+                                    accessible={false}
                                     style={[styles.previewActionBtn, { backgroundColor: EVENT_ACCENT, marginTop: 10 }]}
                                     onPress={() => {
                                         setSelectedPostPreview(null);
@@ -743,7 +754,7 @@ export default function MapScreen() {
                                 >
                                     <Text style={styles.previewActionText}>{t('View event')}</Text>
                                 </Pressable>
-                            </View>
+                            </Pressable>
                             <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
                                 <Text style={styles.previewCloseText}>✕</Text>
                             </Pressable>
@@ -757,6 +768,16 @@ export default function MapScreen() {
                 <SafeAreaView style={styles.previewCardWrapper} pointerEvents="box-none">
                     <Pressable accessibilityRole="button" accessibilityLabel={t('Close preview')} style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
                     <Animated.View style={styles.previewCard}>
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Open listing: {title}', { title: selectedPostPreview.title })}
+                            testID="map-preview-open"
+                            style={styles.previewTap}
+                            onPress={() => {
+                                setSelectedPostPreview(null);
+                                router.push(`/post/${selectedPostPreview.id}`);
+                            }}
+                        >
                         {selectedPostPreview.photos && selectedPostPreview.photos.length > 0 && 
                          typeof selectedPostPreview.photos[0] === 'string' &&
                          selectedPostPreview.photos[0].trim() !== '' &&
@@ -787,11 +808,7 @@ export default function MapScreen() {
                             {previewCopy ? (
                                 <Text style={styles.previewCopyLine} testID="map-preview-copy-line">{copyPriceLine(previewCopy)}</Text>
                             ) : (
-                                <Pressable
-                                    accessibilityRole="button"
-                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}
-                                    onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: selectedPostPreview.author_pubkey, callsign: selectedPostPreview.author_callsign || t('Unknown') } })}
-                                >
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }} testID="map-preview-author">
                                     <MemberAvatar 
                                         avatarUrl={selectedPostPreview.author_avatar}
                                         pubkey={selectedPostPreview.author_pubkey || ''}
@@ -803,10 +820,11 @@ export default function MapScreen() {
                                             ? t('{name} ✨ Elder', { name: selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown') })
                                             : selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown')}
                                     </Text>
-                                </Pressable>
+                                </View>
                             )}
+                            {/* The button keeps its look and its press; the card around it is the one thing a screen reader meets. */}
                             <Pressable
-                                accessibilityRole="button"
+                                accessible={false}
                                 style={[styles.previewActionBtn, { backgroundColor: selectedPostPreview.type === 'offer' ? colors.brand.fill : colors.action.fab }]}
                                 onPress={() => {
                                     setSelectedPostPreview(null);
@@ -816,6 +834,7 @@ export default function MapScreen() {
                                 <Text style={styles.previewActionText}>{t('View Details')}</Text>
                             </Pressable>
                         </View>
+                        </Pressable>
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
                             <Text style={styles.previewCloseText}>✕</Text>
                         </Pressable>

@@ -52,7 +52,6 @@ import { onSyncActivity } from '../lib/sync';
 import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
 } from '../lib/live-posts';
-import { ImageLightbox } from '../components/ImageLightbox';
 import { MapCalendar, CARD_STOPS_AT_CALENDAR_CLASS, CHIPS_STOP_AT_CALENDAR_CLASS, calendarPanelWidth } from '../components/MapCalendar';
 import { ScrollHintRow } from '../components/ScrollHintRow';
 import { MapStackList } from '../components/MapStackList';
@@ -469,28 +468,21 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     useEffect(() => {
         if (stackKeys && !stackOpen && pinsFromPosts) setStackList(stackDropped);
     }, [stackKeys, stackOpen, pinsFromPosts]);
-    const [lightboxState, setLightboxState] = useState<{
-        isOpen: boolean;
-        photos: string[];
-        initialIndex: number;
-        title?: string;
-        triggerElement?: HTMLElement | null;
-    } | null>(null);
-    // A post over the map, the composer or a photo wins: the list neither opens nor closes under them.
+    // A post over the map or the composer wins: the list neither opens nor closes under them. (No card here opens a photo
+    // any more: a card's photo is part of the card and opens the item, whose own page has the enlarge.)
     const stackBlocked = useRef(false);
-    stackBlocked.current = covered || showNewPost || pinDropMode || !!lightboxState?.isOpen;
+    stackBlocked.current = covered || showNewPost || pinDropMode;
     const previewRef = useRef(previewPost);
     previewRef.current = previewPost;
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const [inactiveEnterpriseKeys, setInactiveEnterpriseKeys] = useState<Set<string>>(new Set());
     const [enterprises, setEnterprises] = useState<EnterpriseMapPin[]>([]);
 
-    // Keyboard accessibility: Escape closes preview card or stack list (defers to lightbox if open)
+    // Keyboard accessibility: Escape closes preview card or stack list
     useEffect(() => {
         if ((!previewPost && !stackOpen) || covered) return;
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
             if (e.key === 'Escape') {
-                if (lightboxState?.isOpen) return;
                 e.preventDefault();
                 e.stopPropagation();
                 setPreviewPost(null);
@@ -499,7 +491,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [previewPost, stackOpen, lightboxState?.isOpen, covered]);
+    }, [previewPost, stackOpen, covered]);
 
     // A pin's card takes the list's place.
     useEffect(() => {
@@ -2594,6 +2586,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 ? (lat, lng) => haversineDistance(near.circle.lat, near.circle.lng, lat, lng) : null, near)}
                         onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                         onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
+                        // The map's preview is one card, not a list, and the web's only way to answer from the map.
+                        rsvpOnCard
                     />
                     <div className="flex gap-2">
                         <button
@@ -2619,11 +2613,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             // A visitor's pin card (G9a §7): the listing's title and "near here", since the pin is its area's centre, and
             // the way to its detail sheet. No price, no name, no badge.
             <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
-                <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800">
+                {/* A tap anywhere on the card opens the listing (Marty, 4 Nov); the View Details button is the same door for the
+                    keyboard and a screen reader, described by the title. The ✕ is the one other control and does not open it. */}
+                <div
+                    data-testid="map-preview-tap"
+                    onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
+                    className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 cursor-pointer"
+                >
                     {/* A 44 px target, as the event card's ✕ (48 px) is: the small circle sits where it was, inside it. */}
                     <button
                         type="button"
-                        onClick={() => setPreviewPost(null)}
+                        onClick={(e) => { e.stopPropagation(); setPreviewPost(null); }}
                         aria-label={t('Close preview')}
                         className="absolute top-1 right-1 min-w-[44px] min-h-[44px] p-0 rounded-full bg-transparent flex items-center justify-center border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
@@ -2637,12 +2637,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-center pr-6">
-                        <span data-testid="map-preview-title" className="text-base font-extrabold text-gray-900 dark:text-white leading-tight break-words">
+                        <span id="map-preview-title-text" data-testid="map-preview-title" className="text-base font-extrabold text-gray-900 dark:text-white leading-tight break-words">
                             {previewPost.title}
                         </span>
                         <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-2">{t('near here')}</span>
                         <button
-                            onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
+                            onClick={(e) => { e.stopPropagation(); if (onNavigate) onNavigate('marketplace', previewPost.id); }}
+                            aria-describedby="map-preview-title-text"
                             className="min-h-[44px] py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer bg-indigo-600 hover:bg-indigo-700"
                         >
                             {t('View Details')}
@@ -2653,35 +2654,32 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         )}
         {previewPost && previewPost.type !== 'event' && !visitor && (
             <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
-                <div className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
-                    <button 
-                        onClick={() => setPreviewPost(null)}
+                {/* A tap anywhere on the card opens the listing, the owner's name included (Marty, 4 Nov): the name is shown, not
+                    pressed. The View Details button is the same door for the keyboard and a screen reader, described by the title.
+                    The ✕ is the one other control and does not open it; the photo is part of the card. */}
+                <div
+                    data-testid="map-preview-tap"
+                    onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
+                    className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors cursor-pointer"
+                >
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setPreviewPost(null); }}
                         aria-label={t('Close preview')}
                         className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-200 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
                     >
                         ✕
                     </button>
                     {previewPost.photos && previewPost.photos.length > 0 ? (
-                        <button
-                            type="button"
-                            onClick={(e) =>
-                                setLightboxState({
-                                    isOpen: true,
-                                    photos: previewPost.photos!,
-                                    initialIndex: 0,
-                                    title: previewPost.title,
-                                    triggerElement: e.currentTarget,
-                                })
-                            }
-                            aria-label={t('View enlarged photo: {title}', { title: previewPost.title })}
-                            className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
-                        >
+                        // The photo is part of the card: a tap on it opens the listing (Marty's standing rule); the enlarge lives
+                        // on the listing's own page. A small copy that fails steps down to the full photo, then the category tile
+                        // (#2838), never an empty slot.
+                        <div className="w-[90px] h-[90px] rounded-2xl overflow-hidden shrink-0">
                             <ListPhoto
                                 photo={previewPost.photos[0]}
                                 fallback={<span className="w-full h-full flex items-center justify-center text-4xl bg-gray-100 dark:bg-nature-800" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
                                 alt="" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800"
                             />
-                        </button>
+                        </div>
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">
                             <span className="text-4xl">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>
@@ -2694,7 +2692,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             </span>
                         </div>
                         <div className="flex items-baseline justify-between gap-2 mb-1">
-                            <span data-testid="map-preview-title" className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors flex-1 min-w-0">
+                            <span id="map-preview-title-text" data-testid="map-preview-title" className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors flex-1 min-w-0">
                                 {previewPost.title}
                             </span>
                             {/* A member's copy has no price here: `credits` is 0, and its line below says what it is at home. */}
@@ -2712,7 +2710,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 </span>
                             )}
                         <button
-                            onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
+                            onClick={(e) => { e.stopPropagation(); if (onNavigate) onNavigate('marketplace', previewPost.id); }}
+                            aria-describedby="map-preview-title-text"
                             className={`py-2 px-4 rounded-xl border-none font-bold text-sm cursor-pointer shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98] ${
                                 previewPost.type === 'offer' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                             }`}
@@ -3685,16 +3684,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 setShowPricingGuide(false);
             }}
         />
-        {lightboxState?.isOpen && (
-            <ImageLightbox
-                isOpen={lightboxState.isOpen}
-                photos={lightboxState.photos}
-                initialIndex={lightboxState.initialIndex}
-                title={lightboxState.title}
-                triggerElement={lightboxState.triggerElement}
-                onClose={() => setLightboxState(null)}
-            />
-        )}
     </>
     );
 }

@@ -359,6 +359,10 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     { id: 'shop', hue: 'clay', name: word('Your shop and tools'), line: word('Your shop, and things you can do on your own.'), group: 'you', asks: 'node', onNode: everywhere },
     { id: 'events', hue: 'violet', name: word('Coming up'), line: word('Events coming up soon.'), group: 'around', asks: 'node', onNode: everywhere },
     { id: 'market', hue: 'orange', name: word('New in the Market'), globalName: word('Near you'), line: word('The newest listings near you.'), group: 'around', asks: 'node', onNode: everywhere },
+    // What neighbours are asking for, the Needs a member can answer with nothing (DESIGN-cold-start-trades-fable.md §2.4, slice
+    // N1): real open Needs only, the member's stars first, and no body while there are none. On every node, since the worldwide
+    // community has Needs too (it gets the card, not the push).
+    { id: 'asked', hue: 'orange', name: word('Asked near you'), line: word('Things neighbours are asking for, what you star first.'), group: 'around', asks: 'node', onNode: everywhere },
     {
         id: 'search', hue: 'orange', name: word('A saved search'), line: word('Listings that match words you choose, near you.'), group: 'around',
         multiple: { max: 5 }, asks: 'node', onNode: everywhere, readSettings: readSearchSettings,
@@ -446,15 +450,17 @@ export const HOME_V1_CARD_IDS: readonly string[] = [
 /** The usual five (§3): the same on a local community and on the worldwide one. */
 export const HOME_NEWCOMER_FIVE: readonly string[] = ['steps', 'tips', 'market', 'events', 'notices'];
 /** Cards that ride along in the starter set without counting: each shows only while its own rule says. */
-const NEWCOMER_RIDERS: readonly string[] = ['safety', 'interests'];
+const NEWCOMER_RIDERS: readonly string[] = ['safety', 'interests', 'asked'];
 
 /**
  * The starter set (DESIGN-getting-started-fable.md §1): the usual five, with "Your way back in" (shown only on its
- * schedule) first and "What are you into?" (shown while nothing is starred) after Tips. What Home holds after the tour is
- * skipped, or done with no card picked: Home is never left empty.
+ * schedule) first and "What are you into?" (shown while nothing is starred) after Tips, and "Asked near you" (drawn only
+ * while a neighbour has an open Need to show) after the Market (DESIGN-cold-start-trades-fable.md §2.4). What Home holds
+ * after the tour is skipped, or done with no card picked: Home is never left empty.
  */
 export const HOME_STARTER_SET: readonly string[] = [
-    NEWCOMER_RIDERS[0], HOME_NEWCOMER_FIVE[0], HOME_NEWCOMER_FIVE[1], NEWCOMER_RIDERS[1], ...HOME_NEWCOMER_FIVE.slice(2),
+    NEWCOMER_RIDERS[0], HOME_NEWCOMER_FIVE[0], HOME_NEWCOMER_FIVE[1], NEWCOMER_RIDERS[1], HOME_NEWCOMER_FIVE[2], NEWCOMER_RIDERS[2],
+    ...HOME_NEWCOMER_FIVE.slice(3),
 ];
 
 /** The starter set as card instances. */

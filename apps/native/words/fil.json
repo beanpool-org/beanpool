@@ -6983,5 +6983,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "Hindi masuri ng {community} ang mga sign-in ngayon, kaya walang naidagdag. Pakisubukang muli mamaya.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "Hindi tumatanggap ang {community} ng {provider} sign-in. Maaari kang sumubok ng iba.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "Hindi maabot ang {community} ngayon, kaya walang naidagdag. Suriin ang iyong koneksyon at subukang muli.",
-  "HOSTED BY": "HOST"
+  "HOSTED BY": "HOST",
+  "Open event: {title}": "Buksan ang event: {title}",
+  "Open listing: {title}": "Buksan ang listahan: {title}"
 }

@@ -45,6 +45,7 @@ import { setMemberArea } from './engine/member-area.js';
 import { WORDS_PROVIDER } from './engine/door-signal.js';
 import { registerOpenJoin } from './engine/open-join.js';
 import { db } from './db/db.js';
+import { nextPollStartAt, memberNextPollStartAt } from './engine/poll-week.js';
 import { admitAgentEdit, agentCreatesToday, agentEditsToday, resetAgentLimits, setAgentPostsPerDay } from './agent/limits.js';
 
 let BASE = '';
@@ -719,6 +720,21 @@ async function main(): Promise<void> {
         assert(/ask the owner once per conversation/.test(named('poll_results')?.description ?? ''), 'the tool says to ask once before reading them');
         assert(/typed poll answers/.test(JSON.stringify(await a.getInstructions?.())), 'and so does the welcome');
         assert(getPosts({ id: otherPoll, includeAllScopes: true })[0]?.status === 'completed', 'and the assistant changed nothing by reading');
+
+        // ── 12c. A poll a week ───────────────────────────────────────────────────────────────────────
+        // A member starts one a week (engine/poll-week.ts, held in test-poll-week.ts). An assistant is always an owner's, and an
+        // owner is held to the Settings limit and not the week, so this suite's many polls went through. Every one is still a start:
+        // the owner's own week, were they a member again, runs from the latest of them.
+        section('── 12c. A poll a week: an owner\'s assistant is not held, and its starts are counted ──');
+        clearBoard();
+        const startsBefore = (db.prepare("SELECT COUNT(*) AS c FROM posts WHERE author_pubkey = ? AND type = 'poll' AND created_via LIKE 'assistant:%'").get(owner.pub) as { c: number }).c;
+        const weekPoll = await made({ question: 'And one more, straight after?' });
+        const weekRow = row(weekPoll);
+        assert(startsBefore > 1 && !!weekRow, `the assistant made ${startsBefore} polls for its owner inside one week, and one more went through (an owner is not held to the week)`);
+        const ownersNext = nextPollStartAt(owner.pub);
+        assert(ownersNext === new Date(Date.parse(weekRow.created_at) + 7 * DAY).toISOString(), `its latest start is counted: were the owner a member, their next poll could start ${ownersNext}`);
+        assert(memberNextPollStartAt(owner.pub, null) === ownersNext && memberNextPollStartAt(owner.pub, 100) === null,
+            'so a member reads it from that start, and an owner or admin (a number from ownerAdminLimit) reads none');
 
         // ── 13. No Bean moved ────────────────────────────────────────────────────────────────────────
         section('── 13. No Bean moved ──');

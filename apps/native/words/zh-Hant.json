@@ -6730,5 +6730,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community} 目前無法檢查登入方式，因此未新增任何內容。請稍後再試。",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} 不支援 {provider} 登入。你可以嘗試其他登入方式。",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "目前無法連線至 {community}，因此未新增任何內容。請檢查網路連線後重試。",
-  "HOSTED BY": "主辦方"
+  "HOSTED BY": "主辦方",
+  "Open event: {title}": "開啟活動：{title}",
+  "Open listing: {title}": "開啟刊登：{title}"
 }

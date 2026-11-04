@@ -2835,7 +2835,7 @@ describe('Getting started in the web app: a newcomer\'s Home is the card alone, 
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         fireEvent.click(await screen.findByTestId('home-start-skip'));
         await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'skipped' })]));
-        expect(layoutWrites().at(-1)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices']);
+        expect(layoutWrites().at(-1)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'events', 'notices']);
         await waitFor(() => expect(cardIds()).not.toContain('start'));
         expect(cardIds()).toEqual(expect.arrayContaining(['market', 'community']));
     });

@@ -7,11 +7,14 @@
  * - Duration selector: 3, 7 (default), or 14 days.
  * - Open vote: off by default, so the poll is anonymous (everyone sees only the totals). On, members see who chose
  *   what. Fixed once someone has voted (Marty, 2026-09-28).
- * - Rate limit awareness: 1 open poll per member, 5 per node.
+ * - Rate limit awareness: 1 open poll per member, 5 per node, and one community poll started a week per member. A member who
+ *   cannot start one yet is told the day when the form opens, in place of its fields (the node's answer, @beanpool/core
+ *   poll-week). This form is always for the whole community, which is what the week counts; a poll for a group is not held to
+ *   it, and the phone has no group poll (the web composer does, and says so).
  * - Franchise: active members only, credit_frozen = 0.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -30,9 +33,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
-import { createPost } from '../utils/db';
+import { createPost, getPollNextStart } from '../utils/db';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
-import { placelessListingNote, pollOtherLines, t, tn } from '@beanpool/core';
+import { placelessListingNote, pollOtherLines, pollWeekNotice, t, tn } from '@beanpool/core';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { nearbyListingsOn, useMyArea } from '../utils/member-area';
 import { signedRequestWords } from './signed-request-lines';
@@ -71,6 +74,15 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
     const nodeHasOther = nodeProfile?.features?.pollOther === true;
     const byArea = nearbyListingsOn(nodeProfile?.features);
     const placelessNote = placelessListingNote(byArea, useMyArea(visible && byArea, identity));
+    // A member starts one community poll a week: asked each time the form opens, so a member who can't yet reads the day before typing a
+    // word. Nothing is held back while it is asked, or when the node can't say (an older node, offline): the node checks at Create.
+    const [waitUntil, setWaitUntil] = useState<number | null>(null);
+    useEffect(() => {
+        if (!visible || !identity?.publicKey) { setWaitUntil(null); return; }
+        let cancelled = false;
+        getPollNextStart().then((at) => { if (!cancelled) setWaitUntil(at); });
+        return () => { cancelled = true; };
+    }, [visible, identity?.publicKey]);
 
     const handleAddOption = () => {
         if (options.length < 4) {
@@ -183,6 +195,9 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             <Text style={styles.cancelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                         </Pressable>
                         <Text style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('New Community Poll')}</Text>
+                        {waitUntil !== null ? (
+                            <View style={styles.postBtnGap} />
+                        ) : (
                         <Pressable
                             onPress={handleCreatePoll}
                             disabled={submitting}
@@ -199,8 +214,28 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                 <Text style={styles.postText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Create')}</Text>
                             )}
                         </Pressable>
+                        )}
                     </View>
 
+                    {waitUntil !== null ? (
+                    <ScrollView style={styles.body} contentContainerStyle={{ paddingBottom: 40 }} testID="poll-week-notice">
+                        <View style={styles.waitBanner}>
+                            <Text style={styles.noticeIcon}>🗳️</Text>
+                            <View style={{ flex: 1, marginLeft: 10 }}>
+                                <Text style={styles.waitText} accessibilityLiveRegion="polite">{pollWeekNotice(waitUntil)}</Text>
+                            </View>
+                        </View>
+                        <Pressable
+                            onPress={onClose}
+                            style={styles.waitClose}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Close')}
+                            testID="poll-week-close"
+                        >
+                            <Text style={styles.waitCloseText}>{t('Close')}</Text>
+                        </Pressable>
+                    </ScrollView>
+                    ) : (
                     <ScrollView
                         ref={scrollRef}
                         {...keepCaretVisible}
@@ -352,6 +387,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                             <Text style={styles.openVoteHint} testID="poll-placeless-note" accessibilityLiveRegion="polite">{t('📍 {note}', { note: t(placelessNote) })}</Text>
                         )}
                     </ScrollView>
+                    )}
                 </View>
             </KeyboardAvoidingView>
         </Modal>
@@ -410,6 +446,41 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontSize: 14,
             fontWeight: '800',
             color: '#fff',
+        },
+        // Where Create stood, while the form is a notice: Cancel and the title keep their places.
+        postBtnGap: {
+            minWidth: 48,
+            flexShrink: 0,
+        },
+        // The notice and its Close are drawn from the central colour tokens, so light and dark are one place's job.
+        waitBanner: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.surface.card,
+            borderColor: colors.border.strong,
+            borderWidth: 1,
+            borderRadius: 12,
+            padding: 14,
+            marginBottom: 18,
+        },
+        waitText: {
+            fontSize: 15,
+            lineHeight: 21,
+            fontWeight: '600',
+            color: colors.text.body,
+        },
+        waitClose: {
+            minHeight: 48,
+            borderRadius: 12,
+            paddingVertical: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.surface.subtle,
+        },
+        waitCloseText: {
+            fontSize: 15,
+            fontWeight: '700',
+            color: colors.text.body,
         },
         body: {
             flex: 1,

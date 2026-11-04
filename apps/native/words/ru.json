@@ -7489,5 +7489,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community} сейчас не может проверить способы входа, поэтому ничего не добавлено. Пожалуйста, попробуйте позже.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} не принимает вход через {provider}. Вы можете попробовать другой.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "Сейчас не удаётся связаться с {community}, поэтому ничего не добавлено. Проверьте подключение и попробуйте снова.",
-  "HOSTED BY": "ОРГАНИЗАТОР"
+  "HOSTED BY": "ОРГАНИЗАТОР",
+  "Open event: {title}": "Открыть событие: {title}",
+  "Open listing: {title}": "Открыть объявление: {title}"
 }

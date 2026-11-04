@@ -61,6 +61,17 @@ To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and 
 
 The server also asks Google Play and the App Store for the newest BeanPool phone app, shortly after it starts and every 6 hours, and tells members' phones, so an old app can show that an update is available. To stop it asking, put DISABLE_APP_STORE_CHECK=true in .env and run docker compose up -d (with the new docker-compose.yml, as above). The server then never asks either store. Phones are told of no newer app, and the app's floor (see Raising the app's floor) shows its banner only: no app is stopped with the full-screen update, because the server never holds anyone to a version it has not seen in the store. Home's **Phone app versions** card says the check is off.
 
+## The Android app on your local network
+
+Your server carries the BeanPool Android app as an APK file, so a phone without the app can get it from your server, even with the internet down. It is the same file as on beanpool.org/android: the app Google signs for Google Play, never older than 1.2.93. Before the server keeps one, it checks the file's SHA-256 against its release notes and its signature against BeanPool's signing certificate (46:AA:D0:CB:…:6C:81).
+
+- **What ships:** the server's image holds the newest APK there was when it was built: about 160 MB on disk, about 73 MB to download. It is a layer of its own, so an update downloads it again only when the APK or the server's base image changed. A server built from source by deploy.sh has none in its image, and fetches one itself the first time it is online.
+- **Where it is served:** a phone on your local network opens /android at your server's address on the network, for example http://192.168.1.10/android: a short page with the version, the size, the file's SHA-256, the three install steps in the phone's language, and the Download button. The web app's welcome screen shows such a phone **Get the Android app**.
+- **Who can reach it:** only a request straight from your local network. Never one through the Cloudflare tunnel, through a proxy of your own, through Docker's port proxy, or from the internet: those get the same "not found" as an address that does not exist, so nobody outside learns the file is there, and nobody can download it again and again on your data.
+- **Keeping it current:** once a day, while it is online, the server asks GitHub (api.github.com) for a newer APK. It downloads one (about 160 MB) into data/apk only when there is one, and only with room on the disk above PHOTO_MIN_FREE_DISK_MB (see Disk space). It keeps one copy, and deletes it once an update brings that version in the image. A download that does not check out is deleted, and the APK it had is still served. Offline, it serves what it has.
+
+To stop the daily check, put DISABLE_APK_UPDATE_CHECK=true in .env and run docker compose up -d: the APK in the image is still served. To hide the link, put HIDE_APK_LINK=true in .env: the page and the file are still there for whoever types the address on your network.
+
 ## Checking from outside
 
 These addresses answer without signing in, so a monitoring service or a phone browser can check them:

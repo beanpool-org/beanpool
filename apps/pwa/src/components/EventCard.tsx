@@ -279,7 +279,7 @@ function EventWhen({ post, className, testId, hostLine = false, repeatClassName 
                 </span>
             )}
             {hostLine && parts?.hostLine && (
-                <span data-testid="event-when-host" className="block w-full min-w-0 break-words text-sm font-semibold text-nature-600 dark:text-nature-400 leading-snug">
+                <span data-testid="event-when-host" className={`block w-full min-w-0 break-words text-sm font-semibold ${PAGE_INK.secondary} leading-snug`}>
                     {parts.hostLine}
                 </span>
             )}

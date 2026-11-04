@@ -91,7 +91,7 @@ export function AuthorCard({ label, pubkey, callsign, avatarUrl, loadingAvatar =
                     {/* Star rating */}
                     <p className="text-amber-500 text-sm mb-1.5 flex items-center flex-wrap gap-1">
                         {'★'.repeat(Math.round(ratings.average))}{'☆'.repeat(5 - Math.round(ratings.average))}
-                        <span className="text-nature-500 text-xs ml-1 font-medium">
+                        <span className="text-nature-700 dark:text-nature-300 text-xs ml-1 font-medium">
                             {ratings.count > 0 ? (
                                 <>
                                     {t('{average} ({n})', { average: formatNumber(ratings.average, 1), n: ratings.count })}

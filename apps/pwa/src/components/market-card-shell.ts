@@ -198,8 +198,8 @@ export const PAGE_TYPE = {
 export const PAGE_INK = {
     /** The page's own words: the place, the description, a box's words. */
     body: 'text-nature-800 dark:text-nature-200',
-    /** The clock notes, the counts, the hints. */
-    secondary: 'text-nature-600 dark:text-nature-300',
+    /** The clock notes, the counts, the hints: nature-700, because they sit on the page ground too (oat-100, where nature-600 is 4.3:1). */
+    secondary: 'text-nature-700 dark:text-nature-300',
     /** The event violet as words: the when, the repeat line, "You're hosting this event", Show on map. */
     event: 'text-bp-ink-event',
     /** 🚩 Report. */

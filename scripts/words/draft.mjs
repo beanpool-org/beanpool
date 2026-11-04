@@ -453,6 +453,9 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
             briefLines.push('A sentence that has one of these English terms must carry the rendering in the last column (or one of its "also fine" forms);');
             briefLines.push('every number in the English must be in your translation as a digit; BeanPool and a typed word like CONFIRM stay exactly as written;');
             briefLines.push('a word marked "never use" must not appear. `node scripts/words/words.mjs check` fails on a new miss.');
+            briefLines.push('A term marked "name" is the term where it is capitalised as a name ("Post an Offer"). A capitalised verb or plain plural that opens a');
+            briefLines.push('sentence or label ("Offer to help", "Needs you", "Chat with {name}", "People who joined") or a heading in capitals is NOT the term: translate it as');
+            briefLines.push('the sentence needs, and do not force the glossary word in.');
             briefLines.push('');
             briefLines.push(glossaryForBrief(glossaryTerms, lang));
             briefLines.push('');

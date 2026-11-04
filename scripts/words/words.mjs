@@ -872,7 +872,7 @@ async function main(argv) {
             const next = updatedRatchet(baseline, violations, { raise: i >= 0 ? argv[i + 1] ?? '' : null });
             if (next.error) {
                 console.error(`words:check --update — refused: ${next.error.length} problem(s) are not in the baseline. Fix the translation (see`);
-                console.error('scripts/words/GLOSSARY.csv), or, when a rise is truly needed (a new glossary row), say why: --update --raise "<reason>".');
+                console.error('scripts/words/GLOSSARY.csv), or, when a rise is truly needed (a new glossary row, or a word that is not the term: "false positive: <term> as a verb"), say why: --update --raise "<reason>".');
                 for (const v of next.error.slice(0, 20)) console.error(`  ${describeViolation(v)}`);
                 return 1;
             }
@@ -894,6 +894,8 @@ async function main(argv) {
             if (fresh.length) {
                 console.error(`words:check — ${fresh.length} glossary/numbers/untranslatable problem(s) not in ${GLOSSARY_BASELINE}${baseline ? '' : ' (no baseline: words:check --update records one)'}:`);
                 console.error('  fix the translation (scripts/words/GLOSSARY.csv has the terms); never record a new problem.');
+                console.error('  Only if the English word is not the term (a verb or a plain plural such as "Offer →", a name inside another name such as "Google Maps"),');
+                console.error('  the translation is right: then say so with words:check --update --raise "false positive: <term> as a verb" (the reason is kept in the file).');
                 for (const v of fresh.slice(0, 40)) console.error(`  ${describeViolation(v)}`);
                 if (fresh.length > 40) console.error(`  … and ${fresh.length - 40} more`);
             }

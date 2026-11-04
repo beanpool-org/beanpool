@@ -9,7 +9,9 @@
 // - meaning   one line: what the word means in BeanPool (never the two words Marty has ruled out: see FORBIDDEN_IN_MEANINGS).
 // - flags     `;`-separated: `untranslatable` (stays as written in every language), `forbidden` (never appears in a translation),
 //             `name` (matches only the capitalised or upper-case word: "Offer" is the post, "offer" is the verb; "Home" is the
-//             screen, "home address" is not), and notes for translators: `terminology`, `money`, `safety`, `operator`.
+//             screen, "home address" is not; not where the capital only opens a sentence before a lower-case word, "Offer to help",
+//             "Needs you", "People who joined", nor in a heading in capitals), and notes for translators: `terminology`, `money`,
+//             `safety`, `operator`.
 //             A typed word (an upper-case `untranslatable` row like CONFIRM) matches only where the sentence says to type it.
 // - language  the rendering, then ` | ` and its allowed variants. Empty = no rendering yet (nothing is checked, nothing is invented).
 //             A `forbidden` row lists the renderings that are ruled out. A trailing `~` is a stem: any word that starts with it.

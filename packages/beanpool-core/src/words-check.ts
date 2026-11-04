@@ -208,7 +208,8 @@ export interface GlossaryTerm {
     meaning: string;
     /**
      * `untranslatable` (stays as written), `forbidden` (never in a translation), `name` (matches only the capitalised or upper-case
-     * word: "Offer" is the post, "offer" is the verb); others (`terminology`, `money`, `safety`, `operator`) are notes for translators.
+     * word: "Offer" is the post, "offer" is the verb; not where the capital only opens a sentence, "Offer to help", or in a
+     * heading in capitals: see termIn); others (`terminology`, `money`, `safety`, `operator`) are notes for translators.
      */
     flags: readonly string[];
     /**
@@ -284,6 +285,39 @@ export function hasRendering(text: string, rendering: string): boolean {
     return fold(word).length >= 4 && search(fold(text), fold(word));
 }
 
+/** Text with no lower-case letter and at least two words: a heading in capitals. Its capitals say nothing about which word is a name. */
+function inCapitalsOnly(text: string): boolean {
+    return text === text.toUpperCase() && text !== text.toLowerCase() && (text.match(/\p{L}+/gu) ?? []).length >= 2;
+}
+
+/**
+ * Is the word at `at`..`end` capitalised only because it opens a sentence, before a lower-case word ("Offer to help", "Needs you",
+ * "Chat with {name}", "People who joined")? Then the capital is the sentence's, not the name's, and the word may be the verb or the
+ * plain plural. A sentence opens at the start of the text (after any emoji, quote or bracket) or after . ? ! … and a space. A word
+ * after an arrow ("Settings → Chat memory") is a place, not a new sentence.
+ */
+function opensSentenceBeforeLowercase(plain: string, at: number, end: number): boolean {
+    const before = plain.slice(0, at);
+    const opens = /^[^\p{L}\p{N}]*$/u.test(before) || /[.?!…][)"'”’»\]]*\s+$/u.test(before);
+    return opens && /^\s+\p{Ll}/u.test(plain.slice(end));
+}
+
+/**
+ * Does this English sentence carry the glossary term? A term flagged `name` is the term only where its capital tells it from the
+ * verb or the plain word, so it is not found where the capital only opens a sentence before a lower-case word
+ * (opensSentenceBeforeLowercase), nor in a heading in capitals (inCapitalsOnly). Any other term is found wherever termPattern
+ * finds it. That leaves the label itself ("Offer", "Offers", "Offer Details"), and the name in the middle of a sentence.
+ */
+export function termIn(term: GlossaryTerm, plain: string): boolean {
+    const re = termPattern(term);
+    if (!term.flags.includes('name') || isTypedWord(term)) return re.test(plain);
+    if (inCapitalsOnly(plain)) return false;
+    for (const m of plain.matchAll(new RegExp(re.source, `${re.flags}g`))) {
+        if (!opensSentenceBeforeLowercase(plain, m.index!, m.index! + m[0].length)) return true;
+    }
+    return false;
+}
+
 /** The glossary problems of one translated sentence (no `forbidden` here: see forbiddenProblems). */
 function glossaryProblems(lang: string, english: string, text: string, glossary: readonly GlossaryTerm[]): RuleFinding[] {
     const plain = plainEnglish(english);
@@ -292,7 +326,7 @@ function glossaryProblems(lang: string, english: string, text: string, glossary:
         if (term.flags.includes('forbidden') || term.flags.includes('untranslatable')) continue;
         const renderings = term.renderings[lang];
         if (!renderings || renderings.length === 0) continue;
-        if (!termPattern(term).test(plain)) continue;
+        if (!termIn(term, plain)) continue;
         if (renderings.some((r) => hasRendering(text, r))) continue;
         const shown = renderings.map((r) => (r.endsWith('~') ? `"${r.slice(0, -1)}…"` : `"${r}"`)).join(' or ');
         out.push({ rule: 'glossary', what: term.term, problem: `"${term.term}" is ${shown} in ${lang}, and the translation has neither` });
@@ -326,10 +360,11 @@ export function numbersOf(sentence: string): string[] {
         return String((cp - start) % 10);
     });
     const out: string[] = [];
-    // Between two groups of digits: a point, comma or apostrophe; a no-break or thin space (\p{Zs} but the plain one); or a plain
-    // space only when exactly three digits follow ("1 000").
-    for (const m of ascii.matchAll(/(?<![A-Za-z\d])\d+(?:(?:[.,'’]|(?!\x20)\p{Zs}|\x20(?=\d{3}(?!\d)))\d+)*/gu)) {
-        const groups = m[0].split(/[.,'’\p{Zs}]/u);
+    // Between two groups of digits: a point, comma or apostrophe; the Arabic decimal and thousands marks (U+066B ٫, U+066C ٬: what
+    // Persian, and Arabic or Urdu in their own digits, write "۱٫۵" and "۱٬۰۰۰" with); a no-break or thin space (\p{Zs} but the plain
+    // one); or a plain space only when exactly three digits follow ("1 000").
+    for (const m of ascii.matchAll(/(?<![A-Za-z\d])\d+(?:(?:[.,'’\u066B\u066C]|(?!\x20)\p{Zs}|\x20(?=\d{3}(?!\d)))\d+)*/gu)) {
+        const groups = m[0].split(/[.,'’\u066B\u066C\p{Zs}]/u);
         const last = groups[groups.length - 1];
         const thousands = groups.length > 1 && last.length === 3 && groups[0] !== '0';
         out.push(thousands ? groups.join('') : groups.length > 1 ? `${groups.slice(0, -1).join('')}.${last}` : groups[0]);

@@ -89,6 +89,52 @@ test('numbersOf reads digits of any script, separators of any country, and leave
     assert.deepEqual(numbersOf(''), []);
 });
 
+test('the Arabic decimal and thousands marks are separators: a correct Persian decimal passes (PR #2829 review, numbers)', async () => {
+    const { numbersOf } = await loadCoreChecks(ROOT);
+    assert.deepEqual(numbersOf('۱٫۵٪ و ۱٬۰۰۰'), ['1.5', '1000'], 'U+066B is the decimal mark and U+066C the thousands mark');
+    assert.deepEqual(numbersOf('برای مثال ۱۲٫۵۰'), ['12.50']);
+    assert.deepEqual(numbersOf('٠٫١٢٥ و ١٬٥٠٠'), ['0.125', '1500'], 'Arabic-Indic digits too');
+    // Through words:check as it runs: the English has 1.5, the Persian has it written with its own marks.
+    assert.deepEqual((await judge('fa', '1.5% fee: You will receive {amount} B.', 'کارمزد ۱٫۵٪: شما {amount} B دریافت می‌کنید.')).rules, []);
+    assert.deepEqual((await judge('fa', 'For example 12.50', 'برای مثال ۱۲٫۵۰')).rules, []);
+    assert.deepEqual((await judge('fa', 'Up to 1,000 Beans', 'تا ۱٬۰۰۰ لوبیا')).rules, []);
+    // The check still fails where a number is really gone, in the same script.
+    assert.deepEqual((await judge('fa', 'A fee of 1.5% applies', 'کارمزد ۲٫۵٪ اعمال می‌شود')).rules, ['numbers: the English has 1.5 and the translation does not']);
+});
+
+test('a `name` term is not found where its capital only opens a sentence before a lower-case word, or where the text is all capitals (PR #2829 review, glossary)', async () => {
+    // A correct translation of a label that starts with the verb, or with a plain plural, is not a problem.
+    assert.deepEqual((await judge('es', 'Offer to help', 'Ofrecer ayuda')).rules, [], 'Offer is the verb here, not the post');
+    assert.deepEqual((await judge('es', 'Needs review', 'Requiere revisión')).rules, []);
+    assert.deepEqual((await judge('es', 'Needs you', 'Te necesita')).rules, []);
+    assert.deepEqual((await judge('fr', 'Chat with {name}', 'Discuter avec {name}')).rules, []);
+    assert.deepEqual((await judge('pt', 'Map your skills', 'Descreva suas habilidades')).rules, []);
+    assert.deepEqual((await judge('fr', 'People who joined this week.', 'Les personnes arrivées cette semaine.')).rules, [], 'the plain plural');
+    // After a full stop, a question mark, an emoji.
+    assert.deepEqual((await judge('es', 'Recommended for deep accuracy. Maps your primary archetype.', 'Recomendado para más precisión. Describe tu arquetipo.')).rules, []);
+    assert.deepEqual((await judge('es', '✋ Offer to Fulfill', '✋ Ofrecer cumplir')).rules, []);
+    assert.deepEqual((await judge('ru', 'Let {n} in? People who tap Going later still wait.', 'Впустить {n}? Те, кто нажмёт «Иду» позже, всё равно ждут.')).rules, []);
+    // A heading in capitals: its capitals say nothing about which word is a name.
+    assert.deepEqual((await judge('es', 'WHAT DO YOU NEED?', '¿QUÉ NECESITAS?')).rules, []);
+    assert.deepEqual((await judge('ru', '📌 NOTE FOR PEOPLE WHO ARE GOING', '📌 ЗАМЕТКА ДЛЯ ТЕХ, КТО ИДЁТ')).rules, []);
+
+    // What still counts: a name that is the label itself, a name in the middle of a sentence, a Title Case label.
+    const needs = (r) => r.map((x) => x.replace(/: .*"(\w+)" is .*/, ' $1'));
+    assert.deepEqual(needs((await judge('es', 'Offer', 'Ayuda')).rules), ['glossary Offer'], 'a label of one word is the term');
+    assert.deepEqual(needs((await judge('es', 'Offers', 'Ayudas')).rules), ['glossary Offer']);
+    assert.deepEqual((await judge('es', 'Offers', 'Ofertas')).rules, []);
+    assert.deepEqual(needs((await judge('es', 'Post an Offer', 'Publicar ayuda')).rules), ['glossary Offer'], 'in the middle of a sentence');
+    assert.deepEqual(needs((await judge('es', 'Offer Details', 'Detalles de la ayuda')).rules), ['glossary Offer'], 'a label in Title Case');
+    assert.deepEqual(needs((await judge('es', 'Settings → Chat memory', 'Ajustes → Memoria de conversación')).rules), ['glossary Chat'], 'after an arrow is a place, not a new sentence');
+    // The verb opens the sentence, the post is named in the middle of it: only the post is held to the glossary.
+    assert.deepEqual((await judge('es', 'Offer to Fulfill this Need?', '¿Ofrecer cumplir esta Necesidad?')).rules, []);
+    assert.deepEqual(needs((await judge('es', 'Offer to Fulfill this Need?', '¿Ofrecer cumplir esta petición?')).rules), ['glossary Need']);
+    // A word that is not flagged `name` is found in any case, at the start of a sentence too.
+    assert.equal((await judge('es', 'Group chat rules', 'Reglas de la charla')).rules.length, 1);
+    // A text that is a single word in capitals is still the label itself.
+    assert.deepEqual(needs((await judge('es', 'OFFERS', 'AYUDAS')).rules), ['glossary Offer']);
+});
+
 test('a key with "group" whose es value lacks the glossary term fails', async () => {
     const english = 'Only the coordinator can rename this group';
     const bad = await judge('es', english, 'Solo el coordinador puede cambiar el nombre de este chat');
@@ -363,6 +409,8 @@ test('words:draft --briefs embeds the glossary with the language\'s renderings, 
         await writeBriefs({ root: tmp, dir: briefs, langs: ['es'], extracted });
         const withGlossary = fs.readFileSync(path.join(briefs, 'brief-es.md'), 'utf8');
         assert.match(withGlossary, /## Glossary \(scripts\/words\/GLOSSARY\.csv\)/);
+        // A drafter is told a capitalised verb is not the term, so it does not force "Oferta de ayuda" into "Offer to help" (PR #2829 review).
+        assert.match(withGlossary, /"Offer to help"[\s\S]*NOT the term/);
         assert.match(withGlossary, /^\| Offer \| a post, offering help \| terminology \| Oferta \|$/m);
         assert.match(withGlossary, /^\| BeanPool \| the mark \| untranslatable \| keep exactly as written \|$/m);
         // After the style rules, before the items to draft; the same text on a second run.

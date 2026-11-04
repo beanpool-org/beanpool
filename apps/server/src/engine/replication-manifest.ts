@@ -413,7 +413,7 @@ export const TABLES: Record<string, TableEntry> = {
     decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason owner_decided_at owner_decided_by owner_decided_reason owner_decision_carried_at'),
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
-    decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
+    decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at answered_at reminded_at'),
     // The pool a removal jury was drawn from (engine/removal-jury.ts, DESIGN-removal-jury-fable.md §3): with the roll above
     // and the decision's params, a restored node serves the same draw and never redraws.
     decision_jury_pools: plain('decision_id pool created_at updated_at'),
@@ -787,6 +787,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
     knockAnswersNoneSince: { kind: 'per-server', reason: "when this server's measure of how it answers requests to join began saying 'none' (engine/knocks.ts knockAnswersForDirectory); a standby that takes over starts its own count, which only delays the directory's demotion" },
     friendsAddedYouSince: { kind: 'per-server', reason: "when this server began telling members who added them; an add from before it is never news (engine/friends-added-you.ts)" },
+    juryHolds: { kind: 'per-server', reason: "when this server's tick found formal Decisions off while a removal jury sat, which a juror's 48 and 72 hours leave out (engine/removal-jury.ts JURY_HOLDS_KEY); a standby that takes over starts with none, so a time off before it counts toward a seat there" },
     // These two and standby_health hold internet addresses: 7 days at most, and none in any copy of the database
     // (services/address-retention.ts).
     takeover_envelope_holders: { kind: 'per-server', reason: 'which standbys hold this server\'s take-over envelope' },

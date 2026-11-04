@@ -20,7 +20,7 @@ import {
 import { projectEndDate } from '../engine/unfunded-pledges.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
-import { decisionsOn, madeWithoutVote, replyToRemovalCase, removalCaseReport, tallyForReader, juryForReader, isBranchVote } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, replyToRemovalCase, removalCaseReport, tallyForReader, juryForReader, answerJurySeat, isBranchVote } from '../decisions-engine.js';
 import { noteNewReport } from '../services/alerts.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
@@ -256,6 +256,24 @@ router.get('/api/commons/decisions/:id/jury', async (ctx) => {
     const jury = decision && decision.scopeKind === 'community' ? juryForReader(decision, actor) : null;
     if (!jury) { ctx.status = 404; ctx.body = { error: word('Decision not found') }; return; }
     ctx.body = { jury };
+});
+
+// A seated juror answers their seat (DESIGN-removal-jury-j2-calls-fable.md call 2 point 3, slice J2b; decisions-engine
+// answerJurySeat): `serve`, and then vote, or `step_aside`, before voting, with no reason asked, and the next member of the
+// draw is seated. The verified signer only. A member not seated is refused in the words a member not drawn is, whoever they
+// are. Answers the signer's own read of the jury (juryForReader), as GET .../jury does.
+router.post('/api/commons/decisions/:id/jury/answer', async (ctx) => {
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    if (!actor) { ctx.status = 401; ctx.body = { error: word('A signed request is required') }; return; }
+    const { answer } = (ctx as any).requestBody || {};
+    const result = answerJurySeat(ctx.params.id, actor, answer);
+    if (!result.success) {
+        ctx.status = result.status;
+        ctx.body = result.code === FEATURE_OFF ? { error: result.error, code: result.code, feature: 'decisions' } : { error: result.error };
+        return;
+    }
+    const decision = getDecision(ctx.params.id);
+    ctx.body = { success: true, jury: decision ? juryForReader(decision, actor) : null };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {

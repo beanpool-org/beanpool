@@ -17,8 +17,10 @@ import { createRoot, type Root } from 'react-dom/client';
 const push = vi.hoisted(() => vi.fn());
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, disabled, testID } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, disabled, testID, hitSlop, style } = props;
         const attrs: Record<string, unknown> = {};
+        if (hitSlop !== undefined) attrs['data-hitslop'] = JSON.stringify(hitSlop);
+        if (style) attrs['data-style'] = JSON.stringify(Object.assign({}, ...[style].flat(Infinity).filter(Boolean)));
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole === 'button') attrs.role = 'button';
@@ -75,6 +77,22 @@ describe('an event\'s own screen: the host is the way to their profile', () => {
         await act(async () => { button!.click(); });
         expect(push).toHaveBeenCalledTimes(1);
         expect(push).toHaveBeenCalledWith({ pathname: '/public-profile', params: { publicKey: HOST_KEY, callsign: 'Hana' } });
+    });
+
+    // Old phones at 1.3x text (Opus review of #2839, minor): a press aimed at the host's name must land. The line is one text line
+    // (never shorter than its font size) plus the margin under it, which sits inside the button; the slop adds the rest, so the
+    // target reaches 44 dp at normal text and only grows with the text size.
+    it('the host button reaches a 44 dp target, as the Market author chip does', async () => {
+        await draw();
+        const button = hostButton()!;
+        const slop = JSON.parse(button.getAttribute('data-hitslop') || '{}');
+        const line = JSON.parse(button.querySelector('span')!.getAttribute('data-style') || '{}');
+        const target = (line.fontSize ?? 0) + (line.marginBottom ?? 0) + (slop.top ?? 0) + (slop.bottom ?? 0);
+        expect(line.fontSize).toBeGreaterThan(0);
+        expect(target).toBeGreaterThanOrEqual(44);
+        // A press just left or right of the name still lands; the slop never goes negative.
+        expect(slop.left ?? 0).toBeGreaterThanOrEqual(0);
+        expect(slop.right ?? 0).toBeGreaterThanOrEqual(0);
     });
 
     it('a member\'s copy of an event has no host to open: the line is plain', async () => {

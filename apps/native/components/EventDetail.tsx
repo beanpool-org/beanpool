@@ -512,6 +512,10 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                             accessibilityRole="button"
                             accessibilityLabel={t("View {name}'s profile", { name: hostName })}
                             testID="event-host-open"
+                            // The line is one text line plus the 14 dp under it, which sits inside the button: short of a 44 dp target for
+                            // thumbs on old phones at 1.3x text. The slop adds the rest without moving anything (pinned in
+                            // event-host-opens-profile-render.test.ts).
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: hostKey, callsign: hostName } })}
                         >
                             {line}

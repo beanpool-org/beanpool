@@ -4,8 +4,9 @@
  * detail) still gets the photos' own URLs, keys and all. A card's photo is part of the card (4 Nov): it opens the listing,
  * never a photo viewer of its own.
  */
-import { fireEvent, render } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LIST_PHOTO_QUEUED_MS } from '@beanpool/core';
 import { MarketplaceCard } from './MarketplaceCard';
 import type { MarketplacePost } from '../lib/marketplace';
 
@@ -68,6 +69,9 @@ describe('MarketplaceCard picture ladder: banner before tile', () => {
         const { container, queryByTestId } = render(<MarketplaceCard post={postWithBannerOnly} viewMode={viewMode} />);
         const img = container.querySelector(`img[alt="${postWithBannerOnly.title}"]`);
         expect(img?.getAttribute('src')).toBe('/api/shops/s1/photo?v=17&k=KEY0');
+        // card-photo-blank: the tile holds the slot until the banner has loaded.
+        expect(queryByTestId('category-tile')).toBeInTheDocument();
+        fireEvent.load(img!);
         expect(queryByTestId('category-tile')).toBeNull();
     });
 
@@ -75,6 +79,8 @@ describe('MarketplaceCard picture ladder: banner before tile', () => {
         const { container, queryByTestId } = render(<MarketplaceCard post={postWithBannerOnly} viewMode="compact" />);
         const img = container.querySelector('img');
         expect(img?.getAttribute('src')).toBe('/api/shops/s1/photo?v=17&k=KEY0');
+        expect(queryByTestId('category-tile')).toBeInTheDocument();
+        fireEvent.load(img!);
         expect(queryByTestId('category-tile')).toBeNull();
     });
 
@@ -122,6 +128,7 @@ describe('MarketplaceCard picture ladder: a banner that fails gives way to the t
         const NEW = '/api/shops/s1/photo?v=18&k=KEY1';
         rerender(<MarketplaceCard post={{ ...bannerOnly, authorBannerUrl: NEW } as unknown as MarketplacePost} viewMode="grid" />);
         expect(container.querySelector(`img[alt="${post.title}"]`)?.getAttribute('src')).toBe(NEW);
+        fireEvent.load(container.querySelector(`img[alt="${post.title}"]`)!);
         expect(queryByTestId('category-tile')).toBeNull();
     });
 
@@ -129,6 +136,7 @@ describe('MarketplaceCard picture ladder: a banner that fails gives way to the t
         const both = { ...post, authorBannerUrl: BANNER } as unknown as MarketplacePost;
         const { container } = render(<MarketplaceCard post={both} viewMode={viewMode} />);
         const img = () => container.querySelector(`img[alt="${post.title}"]`);
+        fireEvent.error(img()!);
         fireEvent.error(img()!);
         fireEvent.error(img()!);
         expect(container.querySelector(`img[src="${BANNER}"]`)).toBeNull();
@@ -141,14 +149,16 @@ describe('MarketplaceCard picture ladder: a banner that fails gives way to the t
 describe('MarketplaceCard picture ladder: a listing photo whose small copy fails steps down', () => {
     const ALT = `img[alt="${post.title}"]`;
 
-    it.each(['grid', 'list', 'compact'] as const)('the %s card draws the photo\'s own URL, then the tile, once the small copy fails', (viewMode) => {
+    it.each(['grid', 'list', 'compact'] as const)("the %s card asks the small copy once more past every cache, then the photo's own URL, then the tile", (viewMode) => {
         const { container, queryByTestId } = render(<MarketplaceCard post={post} viewMode={viewMode} />);
         expect(container.querySelector(ALT)?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2`);
 
         fireEvent.error(container.querySelector(ALT)!);
+        expect(container.querySelector(ALT)?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2&retry=1`);
+
+        fireEvent.error(container.querySelector(ALT)!);
         expect(container.querySelector(ALT)?.getAttribute('src')).toBe(PHOTOS[0]);
         expect(container.querySelector(ALT)?.getAttribute('src')).not.toContain('size=thumb2');
-        expect(queryByTestId('category-tile')).toBeNull();
 
         fireEvent.error(container.querySelector(ALT)!);
         expect(container.querySelector(ALT)).toBeNull();
@@ -158,6 +168,11 @@ describe('MarketplaceCard picture ladder: a listing photo whose small copy fails
     // The photo is part of the card and opens the item (Marty, 4 Nov: small cards open the item); enlarging is on the item's page.
     it.each(['grid', 'list'] as const)('the %s card has no photo button at any step of the ladder', (viewMode) => {
         const { container, queryByLabelText } = render(<MarketplaceCard post={post} viewMode={viewMode} />);
+        expect(queryByLabelText(`View enlarged photo: ${post.title}`)).toBeNull();
+        expect(container.querySelector(`${ALT}`)?.closest('button')).toBeNull();
+        fireEvent.error(container.querySelector(ALT)!);
+        // card-photo-blank: the small copy is asked once more past every cache first, and that step has no photo button either.
+        expect(container.querySelector(ALT)?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2&retry=1`);
         expect(queryByLabelText(`View enlarged photo: ${post.title}`)).toBeNull();
         expect(container.querySelector(`${ALT}`)?.closest('button')).toBeNull();
         fireEvent.error(container.querySelector(ALT)!);
@@ -172,6 +187,7 @@ describe('MarketplaceCard picture ladder: a listing photo whose small copy fails
         const { container, rerender, queryByTestId } = render(<MarketplaceCard post={post} viewMode="grid" />);
         fireEvent.error(container.querySelector(ALT)!);
         fireEvent.error(container.querySelector(ALT)!);
+        fireEvent.error(container.querySelector(ALT)!);
         rerender(<MarketplaceCard post={{ ...post } as unknown as MarketplacePost} viewMode="grid" />);
         expect(container.querySelector(ALT)).toBeNull();
         expect(queryByTestId('category-tile')).toBeInTheDocument();
@@ -181,10 +197,48 @@ describe('MarketplaceCard picture ladder: a listing photo whose small copy fails
         const { container, rerender, queryByTestId } = render(<MarketplaceCard post={post} viewMode="grid" />);
         fireEvent.error(container.querySelector(ALT)!);
         fireEvent.error(container.querySelector(ALT)!);
+        fireEvent.error(container.querySelector(ALT)!);
         expect(queryByTestId('category-tile')).toBeInTheDocument();
         const NEW = '/api/marketplace/posts/p1/photos/0?v=18&k=KEY9';
         rerender(<MarketplaceCard post={{ ...post, photos: [NEW] } as unknown as MarketplacePost} viewMode="grid" />);
         expect(container.querySelector(ALT)?.getAttribute('src')).toBe(`${NEW}&size=thumb2`);
+        fireEvent.load(container.querySelector(ALT)!);
         expect(queryByTestId('category-tile')).toBeNull();
+    });
+});
+
+// card-photo-blank (Marty, 4 Nov 2026): GLOBAL's "Apples needed" showed an empty slot, no photo and no tile, while its small
+// copy was served fine; the picture sent neither load nor error. The web card holds the same rule as the phone's.
+describe('MarketplaceCard: never an empty slot while the photo loads', () => {
+    const ALT = `img[alt="${post.title}"]`;
+    afterEach(() => { vi.useRealTimers(); });
+
+    it.each(['grid', 'list', 'compact'] as const)('the %s card draws the tile until its photo has loaded, the photo unseen and untappable meanwhile', (viewMode) => {
+        const { container, queryByTestId } = render(<MarketplaceCard post={post} viewMode={viewMode} />);
+        const img = () => container.querySelector<HTMLImageElement>(ALT)!;
+        expect(queryByTestId('category-tile')).toBeInTheDocument();
+        expect(img().style.opacity).toBe('0');
+        expect(img().style.pointerEvents).toBe('none');
+        fireEvent.load(img());
+        expect(queryByTestId('category-tile')).toBeNull();
+        expect(img().style.opacity).toBe('');
+    });
+
+    it('the grid keeps its crop once the photo has drawn', () => {
+        const { container } = render(<MarketplaceCard post={post} viewMode="grid" />);
+        fireEvent.load(container.querySelector(ALT)!);
+        expect(container.querySelector<HTMLImageElement>(ALT)!.style.objectPosition).toBe('50% 33%');
+    });
+
+    it.each(['grid', 'list', 'compact'] as const)('the %s card counts a photo that neither loads nor fails in time as failed, down to the tile', (viewMode) => {
+        vi.useFakeTimers();
+        const { container, queryByTestId } = render(<MarketplaceCard post={post} viewMode={viewMode} />);
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS); });
+        expect(container.querySelector(ALT)?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2&retry=1`);
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS); });
+        expect(container.querySelector(ALT)?.getAttribute('src')).toBe(PHOTOS[0]);
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS); });
+        expect(container.querySelector(ALT)).toBeNull();
+        expect(queryByTestId('category-tile')).toBeInTheDocument();
     });
 });

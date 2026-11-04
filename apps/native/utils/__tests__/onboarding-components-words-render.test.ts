@@ -233,7 +233,24 @@ describe('How BeanPool works (OnboardingGuide)', () => {
         const page = await mount(createElement(OnboardingGuide, { beansOn: false }));
         expect(page.textContent).toContain(pseudoLocalise('🌍 A place to meet'));
         expect(page.textContent).not.toContain(pseudoLocalise('Ledger'));
+        // The global community's card, naming it, as it was.
+        expect(page.textContent).toContain(pseudoLocalise('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.'));
         check('the guide, without Beans');
+    });
+
+    it("without Beans at another community's open door: its name in the card, never the global community's (issue #2563)", async () => {
+        const page = await mount(createElement(OnboardingGuide, { beansOn: false, community: 'Riverbend' }));
+        expect(page.textContent).toContain(pseudoLocalise('🌍 A place to meet'));
+        expect(page.textContent).toContain(pseudoLocalise('{name} has no Beans: credit, the Commons and trading in Beans live in communities that use them, which you join with an invite from a member.').replace('{name}', 'Riverbend'));
+        expect(page.textContent).not.toContain(pseudoLocalise('The global community is for meeting people and finding a community near you.'));
+        expect(page.textContent).not.toContain(pseudoLocalise('Ledger'));
+        check("the guide, without Beans, at another community's door");
+    });
+
+    it('with Beans a community name changes nothing: the three cards about Beans, as before', async () => {
+        const page = await mount(createElement(OnboardingGuide, { beansOn: true, community: 'Riverbend' }));
+        expect(page.textContent).toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
+        expect(page.textContent).not.toContain('Riverbend');
     });
 });
 

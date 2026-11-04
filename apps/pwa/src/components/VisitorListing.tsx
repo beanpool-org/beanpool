@@ -70,7 +70,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
             aria-label={visitorCardName(post, beans, distanceKm)}
             className="self-start w-full min-w-0 text-left bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 shadow-sm flex flex-row gap-3 cursor-pointer hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
         >
-            <span className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
+            <span className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
                 <ListPhoto
                     photo={photo}
                     fallback={<CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="thumb" />}

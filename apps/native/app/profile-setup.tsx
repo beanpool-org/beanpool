@@ -12,6 +12,9 @@ import { OnboardingGuide } from '../components/OnboardingGuide';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { beansOn } from '../utils/node-profile';
 import { howItWorksSubtitle } from '../utils/beans-off';
+import { communityName } from '../utils/community-name';
+import { doorNodeAt } from '../utils/open-door';
+import { getSavedNodes } from '../utils/nodes';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../utils/avatar-value';
@@ -64,6 +67,20 @@ export default function ProfileSetupScreen() {
     useEffect(() => {
         AsyncStorage.getItem('beanpool_anchor_url').then(setAnchorUrl).catch(() => setAnchorUrl(null));
     }, []);
+    // Another community's open door (slice S2; issue #2563): the Beans-off card of the guide says that community's own name,
+    // not "the global community". The name is the phone's saved one (every join path saves the node's own, as the one-way-back
+    // card reads it), else the host: nothing is asked of any node here. Only where the card is drawn: Beans off, not the global.
+    const otherDoorUrl = anchorUrl && doorNodeAt(anchorUrl)?.global !== true && !beansOn(nodeProfile?.features) ? anchorUrl : null;
+    const [otherDoorAlias, setOtherDoorAlias] = useState<string | null>(null);
+    useEffect(() => {
+        if (!otherDoorUrl) { setOtherDoorAlias(null); return; }
+        let live = true;
+        const same = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
+        void getSavedNodes().catch(() => []).then((saved) => {
+            if (live) setOtherDoorAlias(saved.find((n) => same(n.url, otherDoorUrl))?.alias ?? null);
+        });
+        return () => { live = false; };
+    }, [otherDoorUrl]);
     // The name the steps start from is this community's own (read from its members row below), never the phone's:
     // `identity.callsign` is only the join pre-fill, and is whatever name the member last chose in ANY community
     // (Profile S2). Until the row is read the box is empty, or holds the name the door joined with.
@@ -443,7 +460,7 @@ export default function ProfileSetupScreen() {
                         <>
                             <Text style={styles.title}>{t('🫘 How BeanPool works')}</Text>
                             <Text style={styles.subtitle}>{howItWorksSubtitle(nodeProfile?.features)}</Text>
-                            <OnboardingGuide beansOn={beansOn(nodeProfile?.features)} />
+                            <OnboardingGuide beansOn={beansOn(nodeProfile?.features)} community={otherDoorUrl ? communityName({ url: otherDoorUrl, alias: otherDoorAlias }) : undefined} />
                             {error && <Text style={styles.error}>{error}</Text>}
                             <Pressable
                                 style={[styles.primaryBtn, loading && styles.disabledBtn]}

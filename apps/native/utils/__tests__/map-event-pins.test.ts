@@ -783,6 +783,18 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             expect(leaving.indexOf('liveFeatures()')).toBeLessThan(leaving.indexOf('features.clear()'));
         });
 
+        it('android: a marker taken off while the map is off the window leaves its old group, or later removes are skipped and it stays on the map, red or over a bubble', () => {
+            const library = dirname(createRequire(__filename).resolve('react-native-maps/package.json'));
+            const java = readFileSync(join(library, 'android/src/main/java/com/rnmaps/maps/MapView.java'), 'utf8');
+            const start = java.indexOf('public void removeFeatureAt');
+            const marker = java.slice(start, java.indexOf('feature instanceof MapHeatmap', start));
+            expect(marker).toContain('feature instanceof MapMarker');
+            // Off the window attacherGroup is null, so removing it from the group did nothing: the marker stayed a child of
+            // the old group, its next insert made Fabric mark it re-added, and Fabric skipped every later remove of it.
+            expect(marker).toContain('safeRemoveFromParent(feature)');
+            expect(marker).not.toContain('safeRemoveFeatureFromAttacherGroup(feature)');
+        });
+
         it('lifts a bubble tapped low on the map clear of where the list comes up', async () => {
             // The map's first region is centred just north of this, and the bubble sits low on the view.
             const low = { lat: -28.5398 - 0.0922 * 0.4, lng: 153.4996 };

@@ -381,6 +381,55 @@ describe('the sentences join-link.ts, add-words.ts and door-work.ts write: in En
         expect(linkRefusalWords(timed, 'google')).toBe(timed.message);
     });
 
+    it("at another community's open door (issue #2563): every refusal that names the global community names that community instead, and none says \"global\"", () => {
+        const community = 'Mullum Hall';
+        const naming = reasons.filter((reason) => /global community/i.test(LINK_MESSAGES[reason]));
+        // The ten that name a community; the five that do not (rate limit, a sign-in not usable or not checked, a replaced key, a failed add).
+        expect(naming.sort()).toEqual(['account_closed', 'already_joined', 'already_linked', 'door_closed', 'door_key_missing', 'not_a_member', 'not_words_member', 'removed', 'unreachable', 'unsupported']);
+        for (const provider of ['google', 'apple', 'facebook'] as const) {
+            const providerName = SSO_PROVIDER_NAMES[provider];
+            for (const reason of reasons) {
+                const message = LINK_MESSAGES[reason].replace('{provider}', providerName).replace('{when}', 'later');
+                const answer = { kind: 'refused', reason, message } as Extract<LinkAnswer, { kind: 'refused' }>;
+                const said = linkRefusalWords(answer, provider, community);
+                expect(said, reason).not.toMatch(/global/i);
+                if (naming.includes(reason)) {
+                    expect(said, reason).toContain(community);
+                    // The same sentence with the community's name where the global community's was.
+                    expect(said, reason).toBe(message.replace(/\b[Tt]he global community\b/, community));
+                } else {
+                    expect(said, reason).toBe(message);
+                }
+                // In another language it is still the words layer's, with the community's name in it.
+                setLanguage('xx');
+                const pseudo = linkRefusalWords(answer, provider, community);
+                expect(pseudo, reason).toMatch(/^\[.*\]$/s);
+                if (naming.includes(reason)) expect(pseudo, reason).toContain(community);
+                setLanguage('en');
+            }
+        }
+        // No community given: the global community's, exactly as before.
+        const closed = { kind: 'refused', reason: 'door_closed', message: LINK_MESSAGES.door_closed } as Extract<LinkAnswer, { kind: 'refused' }>;
+        expect(linkRefusalWords(closed, 'google')).toBe("The global community isn't adding sign-ins right now. Nothing was changed. Please try again later.");
+        // A sentence with a time in it, or one the node worded itself, is shown as it came at any door.
+        const timed = { kind: 'refused', reason: 'rate_limited', message: LINK_MESSAGES.rate_limited.replace('{when}', 'in 5 minutes') } as Extract<LinkAnswer, { kind: 'refused' }>;
+        expect(linkRefusalWords(timed, 'google', community)).toBe(timed.message);
+    });
+
+    it("the sheet opened for another community says that community's name in its refusal, never the global community's", async () => {
+        link.answer = { kind: 'refused', reason: 'door_closed', message: LINK_MESSAGES.door_closed };
+        await renderIn('en', sheet({ community: 'Mullum Hall' }));
+        await click(host.querySelector('[data-sso="google"]'), 'Google');
+        expect(host.querySelector('[role="alert"]')?.textContent).toBe("Mullum Hall isn't adding sign-ins right now. Nothing was changed. Please try again later.");
+        expect(host.textContent).not.toMatch(/global community/i);
+        // Without a community, the sheet is the global community's, as it was.
+        act(() => root.unmount());
+        root = createRoot(host);
+        await renderIn('en', sheet());
+        await click(host.querySelector('[data-sso="google"]'), 'Google');
+        expect(host.querySelector('[role="alert"]')?.textContent).toBe("The global community isn't adding sign-ins right now. Nothing was changed. Please try again later.");
+    });
+
     it('the added notice, with a copy at the vault, at the community, and none', () => {
         for (const at of ['vault', 'community'] as const) {
             vault.at = at;

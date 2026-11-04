@@ -51,7 +51,7 @@ pnpm words:draft --report [--langs <l1,l2>]
 Exits with code `0`, or `2` when a scan fails (stderr `words:draft: SCAN ERROR — <what failed>`, and no `words:draft: … missing` line, so a heartbeat never reads a failed scan as a clean tree). Outputs:
 1. Website pages status (or `website pages: skipped (S6 not yet implemented)` until slice S6 exists).
 2. Per-language breakdown:
-   - App words per catalog (`packages/beanpool-core/words`, `apps/native/words`, `apps/pwa/words`, `apps/server/words`): missing, stale (0), and orphaned.
+   - App words per catalog (`packages/beanpool-core/words`, `apps/native/words`, `apps/pwa/words`, `apps/server/words`): missing, stale (0), and orphaned. What counts as missing follows the tests (2.4).
    - Guide titles & summaries (`packages/beanpool-guide/content/<lang>/manifest.json`): missing and stale.
    - Guide pages (`packages/beanpool-guide/content/<lang>/<section>/<slug>.md`): missing (no file) and stale (source-hash behind).
    - SAFETY/MONEY count: missing and stale items requiring meaning-check.
@@ -84,6 +84,14 @@ The director meaning-checks translations touching sensitive security or financia
 - **Beans amounts**: currency balances, circulation fees, and transfer amounts.
 - **limits**: partner limits, rate limits, and credit lines.
 - **privacy**: profile visibility, admin access, "who can see".
+
+### 2.4 What counts as missing: the tests decide
+
+`--report` and `--briefs` list a key as missing only if drafting it cannot turn a test red (4 Nov, #2841 and #2842: a round gave the phone and web catalogs a bare `Your deals` and broke `your-deals-words.test.ts`).
+
+**A sentence core's own sources use is core's.** The phone and the web app load `[their catalog, core's]` for a language, core's last, so a copy of a core sentence in an app catalog would never show; `your-deals-words.test.ts` forbids it for `Your deals`. In `draft.mjs`, `APP_CATALOG_DEFS` marks these packages `throughCore` (`native`, `pwa`; not the server, whose refusals use its own catalog alone). A key such a package uses that core's sources also use is missing in core only. It is still a used key there, so an older copy is not orphaned.
+
+Every other sentence is an ordinary key, drafted one language at a time, so a round for some languages (`--langs`) asks for all of them. That includes the welcome screens' sentences: `language-switch-render.test.ts` reads each language's own catalog and shows the English where it has none (#2847), so a language may have them before the others do.
 
 ---
 

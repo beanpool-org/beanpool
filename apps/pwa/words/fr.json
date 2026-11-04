@@ -4387,7 +4387,6 @@
   "Your community’s server didn’t answer, so this payment may have gone through. Press Try again: the same payment is never paid twice. If you change it or leave this page, check your Ledger before you pay again.": "Le serveur de votre communauté n’a pas répondu, donc ce paiement a peut-être abouti. Appuyez sur Réessayer : le même paiement n’est jamais payé deux fois. Si vous le modifiez ou quittez cette page, vérifiez votre Registre avant de payer à nouveau.",
   "Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.": "Le serveur de votre communauté a refusé ce paiement sans dire pourquoi, donc rien n’a été payé. Réessayez dans une minute.",
   "Your credit opens with a first trade.": "Votre crédit s’ouvre avec un premier échange.",
-  "Your deals": "Vos accords",
   "Your deals in progress ›": "Vos accords en cours ›",
   "Your enterprise": "Votre entreprise",
   "Your first message goes to {name} as a request. You can write more once they accept.": "Votre premier message part vers {name} sous forme de demande. Vous pourrez en écrire d’autres une fois la demande acceptée.",

@@ -414,7 +414,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 onClick={onOpen}
                 disabled={!onOpen}
                 // The label stands in for what is inside the button, so a viewer's own answer rides at its end.
-                aria-label={myAnswer ? `${openLabel}, ${myAnswer}` : openLabel}
+                aria-label={[openLabel, hosting ? t("You're hosting this event") : null, myAnswer].filter(Boolean).join(', ')}
                 className={`w-full min-w-0 text-left bg-transparent border-0 p-0 flex cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg ${
                     asRow ? 'flex-row items-start gap-3' : 'flex-col gap-1'
                 }`}

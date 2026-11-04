@@ -306,6 +306,8 @@ describe('EventCard without buttons (the Market, Your events)', () => {
         renderAt320(<EventCard post={hosted} identity={identity} />);
         expect(screen.getByTestId('event-hosting')).toHaveTextContent("You're hosting this event");
         expect(screen.getByTestId('event-hosting').closest('button')).toBe(screen.getByRole('button', { name: /^Open event: / }));
+        // The label stands in for what is inside the button, so a screen reader still hears that this is theirs.
+        expect(screen.getByRole('button', { name: /^Open event: / })).toHaveAccessibleName(/, You're hosting this event$/);
         expect(screen.getByTestId('event-counts')).toHaveTextContent('7 going · 3 interested');
         expect(screen.queryByTestId('event-my-answer')).toBeNull();
     });

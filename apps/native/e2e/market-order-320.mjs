@@ -18,6 +18,11 @@
  * Screenshots go to --shots <dir> (not committed).
  *
  *   node apps/native/e2e/market-order-320.mjs --shots <dir>
+ *   node apps/native/e2e/market-order-320.mjs --view grid --shots <dir>
+ *
+ * --view grid (market grid PG1, DESIGN-market-grid-sizes-fable.md §2.1) taps the real "Grid view" button, then runs the cases
+ * `local` and `global` (the New since line is a list-view line). In the grid there is no Pinned heading or block: the pin is the
+ * grid's first cell with its 📌 PINNED pill, the first stream card is beside it in the same row, and no card is drawn twice.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -32,6 +37,9 @@ const NATIVE = path.resolve(HERE, '..');
 const SCALE = 1.3;
 const WIDTH = 320;
 const HEIGHT = 1300; // tall, so one shot holds the whole list: the real phone scrolls it
+const viewAt = process.argv.indexOf('--view');
+const VIEW = viewAt > 0 ? process.argv[viewAt + 1] : 'list';
+if (VIEW !== 'list' && VIEW !== 'grid') { console.log('--view is list or grid'); process.exit(2); }
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? path.resolve(process.argv[shotsAt + 1]) : null;
 if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -292,21 +300,31 @@ const browser = await chromium.launch();
 let failures = 0;
 const fail = (msg) => { failures++; console.log('  FAIL', msg); };
 for (const scheme of ['light', 'dark']) {
-    for (const which of ['local', 'global', 'newsince', 'newsince-day']) {
+    for (const which of VIEW === 'grid' ? ['local', 'global'] : ['local', 'global', 'newsince', 'newsince-day']) {
         const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 2 });
         const errors = [];
         page.on('pageerror', e => errors.push(String(e)));
         page.on('console', m => { if (process.env.DEBUG_TEXT) console.log('  [console.' + m.type() + ']', m.text().slice(0, 300)); if (m.type() === 'error') errors.push(m.text()); });
         await page.goto(`http://127.0.0.1:${port}/?case=${which}&scheme=${scheme}`);
         await page.waitForTimeout(1500);
-        console.log(`${which} / ${scheme}`);
+        if (VIEW === 'grid') {
+            // The Market opens in list view; its view button goes list → grid.
+            await page.click('[aria-label="Grid view"]');
+            await page.waitForTimeout(700);
+        }
+        console.log(`${which} / ${scheme}${VIEW === 'grid' ? ' / grid' : ''}`);
         if (errors.length) fail(`page errors: ${errors.join(' | ').slice(0, 300)}`);
-        const result = await page.evaluate((W) => {
+        const result = await page.evaluate(([W, TITLES]) => {
             const text = document.body.innerText;
             let past = 0;
+            const pastIn = new Set();   // which card each such element is in, to say whose fault it is
             for (const el of Array.from(document.querySelectorAll('#root *'))) {
                 const r = el.getBoundingClientRect();
-                if (r.width > 0 && r.height > 0 && r.right > W + 1 && getComputedStyle(el).position !== 'fixed') past++;
+                if (r.width > 0 && r.height > 0 && r.right > W + 1 && getComputedStyle(el).position !== 'fixed') {
+                    past++;
+                    const card = el.closest('[role="button"]');
+                    pastIn.add(((card || el).innerText || '').split('\n').filter(Boolean).slice(0, 2).join(' / ').slice(0, 48));
+                }
             }
             const line = Array.from(document.querySelectorAll('[data-testid="market-newest-within"]'))[0];
             const since = Array.from(document.querySelectorAll('[data-testid="new-since-line"]'));
@@ -314,15 +332,26 @@ for (const scheme of ['light', 'dark']) {
                 sinceCount: since.length, sinceText: since[0] ? since[0].textContent : null,
                 sinceCut: since[0] ? Array.from(since[0].querySelectorAll('*')).some(e => e.scrollHeight > e.clientHeight + 1 && e.clientHeight > 0) : false,
                 sinceHeight: since[0] ? since[0].getBoundingClientRect().height : null,
-                text, past, sideways: document.documentElement.scrollWidth > W,
+                text, past, pastIn: Array.from(pastIn), sideways: document.documentElement.scrollWidth > W,
                 lineText: line ? line.textContent : null, lineHeight: line ? line.getBoundingClientRect().height : null,
                 lineScrollH: line ? line.scrollHeight : null, lineClientH: line ? line.clientHeight : null,
                 distances: Array.from(document.querySelectorAll('[data-testid="card-distance"]')).map(e => e.textContent),
+                pinnedHeaders: document.querySelectorAll('[data-testid="pinned-section-header"]').length,
+                pinnedBlocks: document.querySelectorAll('[data-testid="market-pinned-block"]').length,
+                pinnedChips: document.querySelectorAll('[data-testid="pinned-chip"]').length,
+                // Each title's card (its nearest button) and where the member sees it: for the grid's first-cells check.
+                cards: TITLES.map(title => {
+                    const leaves = Array.from(document.querySelectorAll('#root *')).filter(e => e.children.length === 0 && (e.textContent || '').includes(title));
+                    const card = leaves[0] ? (leaves[0].closest('[role="button"]') || leaves[0]) : null;
+                    const r = card ? card.getBoundingClientRect() : null;
+                    return { title, drawn: leaves.length, left: r ? r.left : null, top: r ? r.top : null, width: r ? r.width : null,
+                        pill: card ? card.querySelectorAll('[data-testid="pinned-chip"]').length : 0 };
+                }),
             };
-        }, WIDTH);
+        }, [WIDTH, ['Bike pump to share', 'Lemons, a bucket', 'Lift to Lismore Thursday', 'Repair Café', 'Firewood, split', 'Someone to mind two goats']]);
         if (process.env.DEBUG_TEXT) console.log(JSON.stringify(result.text.slice(0, 600)), await page.evaluate(() => Array.from(document.querySelectorAll('#root *')).filter(e => e.scrollHeight > 0 && getComputedStyle(e).overflowY !== 'visible').map(e => e.tagName + ':' + e.clientHeight + '/' + e.scrollHeight + ':' + e.children.length).join(' ')));
         if (result.sideways) fail('sideways scroll');
-        if (result.past) fail(`${result.past} element(s) drawn past the ${WIDTH}dp edge`);
+        if (result.past) fail(`${result.past} element(s) drawn past the ${WIDTH}dp edge, in: ${result.pastIn.map(s => `"${s}"`).join(', ')}`);
         for (const gone of ['UPCOMING EVENTS', 'NEAREST FIRST']) if (result.text.includes(gone)) fail(`heading still drawn: ${gone}`);
         if (which !== 'newsince' && which !== 'newsince-day' && result.sinceCount) fail(`the New since line is drawn where there is no stamp: ${result.sinceCount}`);
         if (which === 'newsince' || which === 'newsince-day') {
@@ -334,6 +363,26 @@ for (const scheme of ['light', 'dark']) {
                 : ['TODAY', 'Lemons', 'Firewood', 'NEW SINCE YOU LAST LOOKED', 'YESTERDAY', 'Someone to mind']).map(x => t.indexOf(x));
             if (order.some(i => i < 0) || order.some((v, i) => i && v < order[i - 1])) fail(`order wrong: ${order}`);
             console.log('  line height', result.sinceHeight);
+        } else if (which === 'local' && VIEW === 'grid') {
+            // The pin is the grid's first cell, with its pill on the photo; the stream carries on in the same row; nothing twice.
+            if (result.pinnedHeaders || result.pinnedBlocks) fail(`the grid draws a Pinned heading/block: ${result.pinnedHeaders} heading(s), ${result.pinnedBlocks} block(s)`);
+            if (result.pinnedChips !== 1) fail(`expected one 📌 PINNED pill (one pin), found ${result.pinnedChips}`);
+            for (const c of result.cards) if (c.drawn !== 1) fail(`"${c.title}" is drawn ${c.drawn} times`);
+            const placed = result.cards.filter(c => c.top != null).sort((a, b) => a.top - b.top || a.left - b.left);
+            const pin = result.cards.find(c => c.title === 'Bike pump to share');
+            if (placed[0] !== pin) fail(`the first cell is "${placed[0] && placed[0].title}", not the pin`);
+            if (!pin.pill) fail('the pin has no 📌 PINNED pill on its card');
+            if (pin.left !== 16) fail(`the pin starts at ${pin.left}, not the list's left edge (16)`);
+            const beside = placed.filter(c => c !== pin && Math.abs(c.top - pin.top) < 1);
+            if (beside.length !== 1) fail(`the pin's row holds ${beside.length + 1} card(s), not two: a cell is left empty`);
+            else if (!(beside[0].left > pin.left) || Math.abs(beside[0].width - pin.width) > 1) fail('the card beside the pin is not its twin to the right');
+            if (result.lineText) fail('local community drew the Newest within line');
+            console.log('  cells:', placed.map(c => `${c.title} @${Math.round(c.left)},${Math.round(c.top)}`).join(' | '));
+        } else if (which === 'global' && VIEW === 'grid') {
+            if (result.pinnedHeaders || result.pinnedBlocks || result.pinnedChips) fail('the global grid has no pins, but draws a Pinned heading, block or pill');
+            if (result.lineText !== 'Newest within 250 km of your area.') fail(`global line: ${result.lineText}`);
+            if (result.text.includes('Melbourne bike')) fail('a listing beyond 250 km was drawn');
+            if (!result.distances.length) fail('no distances on the cards');
         } else if (which === 'local') {
             const t = result.text;
             const order = ['PINNED', 'TODAY', 'Repair Café', 'YESTERDAY'].map(s => t.indexOf(s));
@@ -347,7 +396,7 @@ for (const scheme of ['light', 'dark']) {
             if (result.lineScrollH > result.lineClientH + 1) fail('the line is cut: its words do not fit at 320dp and 1.3x');
             console.log('  distances:', result.distances.join(', '));
         }
-        if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `market-order-${which}-${scheme}.png`) });
+        if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `market-order-${which}${VIEW === 'grid' ? '-grid' : ''}-${scheme}.png`) });
         await page.close();
     }
 }

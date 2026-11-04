@@ -232,6 +232,12 @@ const WIDTH = 320;
 const HEIGHTS = [569, 1200, 2400];
 const lay = (height: number) => layOut(list(), { width: WIDTH, height }, { fontScale: 1.3 });
 const heightsAcross = (el: Element) => HEIGHTS.map((h) => lay(h).height(el));
+/** An element's left edge and top in the list's own coordinates: Yoga gives each box in its parent's, so add them up. */
+function at(l: ReturnType<typeof lay>, el: Element) {
+    let left = 0, top = 0;
+    for (let e: Element | null = el; e && e !== list(); e = e.parentElement) { const b = l.box(e); left += b.left; top += b.top; }
+    return { left, top };
+}
 /**
  * What a list row's text column needs, from where its children sit: the column is stretched to the card, so its own height
  * says nothing about the card. The 12 dp of padding above and below.
@@ -338,12 +344,6 @@ describe('a pinned card is the same width as every other card', () => {
     const STREAM_A = plain('str-a', 'Stream bicycle repairs', 1 * 60_000);
     const STREAM_B = plain('str-b', 'Stream guitar lessons', 2 * 60_000);
 
-    /** An element's left edge and top in the list's own coordinates: Yoga gives each box in its parent's, so add them up. */
-    function at(l: ReturnType<typeof lay>, el: Element) {
-        let left = 0, top = 0;
-        for (let e: Element | null = el; e && e !== list(); e = e.parentElement) { const b = l.box(e); left += b.left; top += b.top; }
-        return { left, top };
-    }
     /** A listing's card box: in the list and compact views the card is the pressable's child; in the grid it is the pressable. */
     let view: 'list' | 'grid' | 'compact' = 'list';
     const row = (title: string) => (view === 'grid' ? cardOf(title) : cardOf(title).firstElementChild) as HTMLElement;
@@ -402,6 +402,98 @@ describe('a pinned card is the same width as every other card', () => {
         const [pinRows, streamRows] = [gap(row(PIN_A.title), row(PIN_C.title)), gap(row(STREAM_A.title), row(STREAM_C.title))];
         expect(streamRows).toBe(16);
         expect(pinRows).toBe(streamRows);
+    });
+});
+
+// Marty, 4 Nov ("go with the fable recs", DESIGN-market-grid-sizes-fable.md §0.4 pick 1, §2.1, slice PG1): a Pinned heading over
+// one pin and a half-empty row is a lie, and a pair with a spacer wasted a cell. In the grid there is no Pinned block: the pins
+// are the grid's first cells, newest pin first, each with its 📌 PINNED pill on the photo, and the stream carries on in the same
+// row. List and compact keep the heading and the block. A pin is never drawn twice. Laid out with Yoga at 320 dp, 1.3x text.
+describe('the grid has no Pinned block: its pins are the first cells, and the stream carries on in the same row', () => {
+    const DAY = 86_400_000;
+    const pinned = (id: string, title: string, pinnedAgoMs: number) => ({ ...LONE, id, title, created_at: iso(now - 9 * 60_000), pinnedAt: iso(now - pinnedAgoMs), pinnedUntil: iso(now + 3 * DAY) });
+    const plain = (id: string, title: string, ageMs: number) => ({ ...LONE, id, title, created_at: iso(now - ageMs) });
+    // Pinned out of order on purpose: the newest pin is the one pinned a minute ago.
+    const OLDEST_PIN = pinned('pin-old', 'Pinned oldest sourdough', 30 * 60_000);
+    const NEWEST_PIN = pinned('pin-new', 'Pinned newest spades', 1 * 60_000);
+    const MIDDLE_PIN = pinned('pin-mid', 'Pinned middle honey', 10 * 60_000);
+    const S1 = plain('s1', 'Stream bicycle repairs', 1 * 60_000);
+    const S2 = plain('s2', 'Stream guitar lessons', 2 * 60_000);
+    const S3 = plain('s3', 'Stream hedge trimming', 3 * 60_000);
+
+    /** How many outermost cards carry this title: a post drawn twice is two. */
+    const drawn = (title: string) => Array.from(host.querySelectorAll('button')).filter(b => b.textContent?.includes(title) && !b.parentElement?.closest('button')).length;
+    /** The rows as a member sees them: the titles grouped by the card's top, each row left to right. */
+    function rowsOf(l: ReturnType<typeof lay>, titles: string[]): string[][] {
+        const placed = titles.map(title => ({ title, ...at(l, cardOf(title)) })).sort((a, b) => a.top - b.top || a.left - b.left);
+        const rows: { top: number; titles: string[] }[] = [];
+        for (const p of placed) {
+            const row = rows.find(r => Math.abs(r.top - p.top) < 1);
+            if (row) row.titles.push(p.title); else rows.push({ top: p.top, titles: [p.title] });
+        }
+        return rows.map(r => r.titles);
+    }
+    const pill = (title: string) => cardOf(title).querySelector('[data-testid="pinned-chip"]');
+
+    it('one pin: no heading, no block; the pin is the first cell and the first stream card is beside it in the same row', async () => {
+        await show([S1, NEWEST_PIN, S2, S3], 'grid');
+        expect(host.querySelector('[data-testid="pinned-section-header"]')).toBeNull();
+        expect(host.querySelector('[data-testid="market-pinned-block"]')).toBeNull();
+        const l = lay(569);
+        expect(rowsOf(l, [NEWEST_PIN.title, S1.title, S2.title, S3.title])).toEqual([[NEWEST_PIN.title, S1.title], [S2.title, S3.title]]);
+        // The pin is the first cell of the first row, at the list's left edge, as wide as the card beside it.
+        expect(at(l, cardOf(NEWEST_PIN.title))).toEqual({ left: 16, top: at(l, cardOf(S1.title)).top });
+        expect(l.width(cardOf(NEWEST_PIN.title))).toBe(l.width(cardOf(S1.title)));
+        for (const p of [NEWEST_PIN, S1, S2, S3]) expect(drawn(p.title), p.title).toBe(1);
+    });
+
+    it('three pins, newest pin first, then the stream: [pin, pin], [pin, stream], [stream, stream]; no empty cell, none drawn twice', async () => {
+        await show([S1, OLDEST_PIN, S2, NEWEST_PIN, S3, MIDDLE_PIN], 'grid');
+        expect(host.querySelector('[data-testid="pinned-section-header"]')).toBeNull();
+        expect(host.querySelector('[data-testid="market-pinned-block"]')).toBeNull();
+        const all = [NEWEST_PIN, MIDDLE_PIN, OLDEST_PIN, S1, S2, S3].map(p => p.title);
+        expect(rowsOf(lay(569), all)).toEqual([
+            [NEWEST_PIN.title, MIDDLE_PIN.title],
+            [OLDEST_PIN.title, S1.title],
+            [S2.title, S3.title],
+        ]);
+        for (const title of all) expect(drawn(title), title).toBe(1);
+    });
+
+    it('a fourth live pin is not one of the three: it is drawn once, in the stream, not above it', async () => {
+        const FOURTH = pinned('pin-4th', 'Pinned fourth lamps', 50 * 60_000);
+        await show([S1, FOURTH, NEWEST_PIN, MIDDLE_PIN, OLDEST_PIN], 'grid');
+        expect(host.querySelector('[data-testid="market-pinned-block"]')).toBeNull();
+        const all =[NEWEST_PIN, MIDDLE_PIN, OLDEST_PIN, FOURTH, S1].map(p => p.title);
+        for (const title of all) expect(drawn(title), title).toBe(1);
+        const rows = rowsOf(lay(569), all);
+        expect(rows[0]).toEqual([NEWEST_PIN.title, MIDDLE_PIN.title]);
+        expect(rows[1][0]).toBe(OLDEST_PIN.title);
+    });
+
+    it('the 📌 PINNED pill is on the pinned cells\' photos, and only on those', async () => {
+        await show([S1, NEWEST_PIN, S2], 'grid');
+        expect(pill(NEWEST_PIN.title)?.textContent).toContain('PINNED');
+        expect(pill(S1.title)).toBeNull();
+        expect(pill(S2.title)).toBeNull();
+    });
+
+    it.each(['list', 'compact'] as const)('%s view: the Pinned heading and block are as before, above the stream, each card once', async (view) => {
+        await show([S1, NEWEST_PIN, S2], view);
+        const block = host.querySelector('[data-testid="market-pinned-block"]');
+        expect(block).not.toBeNull();
+        expect(host.querySelector('[data-testid="pinned-section-header"]')?.textContent).toContain('PINNED');
+        expect(block!.contains(cardOf(NEWEST_PIN.title))).toBe(true);
+        expect(block!.contains(cardOf(S1.title))).toBe(false);
+        const l = lay(569);
+        expect(at(l, cardOf(NEWEST_PIN.title)).top).toBeLessThan(at(l, cardOf(S1.title)).top);
+        for (const p of [NEWEST_PIN, S1, S2]) expect(drawn(p.title), p.title).toBe(1);
+    });
+
+    it('no pins: the grid is the stream alone, two to a row, with no heading', async () => {
+        await show([S1, S2, S3], 'grid');
+        expect(host.querySelector('[data-testid="pinned-section-header"]')).toBeNull();
+        expect(rowsOf(lay(569), [S1.title, S2.title, S3.title])).toEqual([[S1.title, S2.title], [S3.title]]);
     });
 });
 

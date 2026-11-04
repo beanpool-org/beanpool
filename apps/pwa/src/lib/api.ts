@@ -6,7 +6,7 @@
 import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool/core';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
-import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer } from '@beanpool/core';
+import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
 import { readCommunityCard, t, type DmLineDisclosure, type DmLineSig, type VouchLevel } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
@@ -2557,6 +2557,12 @@ export interface DecisionTally {
     minYes?: number;
     /** A pause's own vote fewer than 3 members could vote on, so its quorum can't be met: an owner may decide it. */
     tooFewToVote?: boolean;
+    /**
+     * A vote a drawn jury decides (removal jury J1): while it is open the node sends `turnout` and none of the split
+     * (yesWeight, noWeight, totalWeight, supportRatio, passed are absent then), so the card counts jurors (J2a, J3).
+     */
+    decider?: 'jury';
+    turnout?: JuryTurnout;
 }
 
 export interface DecisionWithTally extends Decision {
@@ -2620,6 +2626,25 @@ export async function replyToRemovalCase(decisionId: string, reply: string): Pro
  */
 export async function reportRemovalCase(decisionId: string): Promise<{ success: boolean; duplicate?: boolean }> {
     return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/report`, {});
+}
+
+/**
+ * The jury of a vote a jury decides (removal jury, GET …/jury): its pool, the draw's facts and the signer's own seat, and
+ * after close who voted and who didn't serve. Signed: the node answers members only. Null for a vote no jury decides.
+ */
+export async function getDecisionJury(decisionId: string): Promise<ServedJury | null> {
+    try {
+        const res = await request<{ jury: ServedJury | null }>('GET', `/api/commons/decisions/${encodeURIComponent(decisionId)}/jury`);
+        return res.jury ?? null;
+    } catch (e) {
+        if (isRouteMissing(e)) return null;
+        throw e;
+    }
+}
+
+/** A seated juror's answer to their seat (J2b): Serve, or Step aside (no reason asked). The node answers with their jury read. */
+export async function answerJurySeat(decisionId: string, answer: 'serve' | 'step_aside'): Promise<{ success: boolean; jury: ServedJury | null }> {
+    return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/jury/answer`, { answer });
 }
 
 // ===================== COMMUNITY TREASURIES =====================

@@ -209,7 +209,7 @@ function entryName(e: JuryEntry): string {
 /** The two closed lists (call 2 point 2): who voted, and who didn't serve, never why. Null while the vote is open. */
 export function juryClosedLists(jury: Pick<ServedJury, 'voted' | 'didNotServe'>): { voted: string; didNotServe: string; note: string } | null {
     if (!Array.isArray(jury.voted) && !Array.isArray(jury.didNotServe)) return null;
-    const names = (list: JuryEntry[] | undefined) => (list && list.length ? list.map(entryName).join(', ') : t('nobody', 'an empty list of names'));
+    const names = (list: JuryEntry[] | undefined) => (list && list.length ? list.map(entryName).join(', ') : t('nobody', undefined, 'an empty list of names'));
     return {
         voted: t('Voted: {names}', { names: names(jury.voted) }),
         didNotServe: t("Didn't serve: {names}", { names: names(jury.didNotServe) }),

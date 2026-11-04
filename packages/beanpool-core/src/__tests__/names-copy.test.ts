@@ -140,11 +140,70 @@ describe('§8.2 every single-field change refuses', () => {
         expect(open(forgedPayload(me, pin, { v: 1, pin: { ...kept, copy: { seq: 2 } } }), me)).toMatchObject({ ok: false, reason: 'bad_copy', detail: 'seq' });
     });
 
-    it('another account, another community, another address', () => {
+    it('another account, another community (another address is not a refusal: §5.6 (b), below)', () => {
         const { me, copy } = scene();
         expect(open(wireCopy(copy), admin())).toMatchObject({ ok: false, reason: 'bad_copy', detail: 'not_mine' });
         expect(open(wireCopy(copy), me, ADDR, 'ffffffffffffffff')).toMatchObject({ ok: false, reason: 'bad_copy', detail: 'other_community' });
-        expect(open(wireCopy(copy), me, 'https://elsewhere.example.org')).toEqual({ ok: false, reason: 'other_address', detail: 'other_address', address: ADDR });
+        expect(open(wireCopy(copy), me, 'https://elsewhere.example.org')).toMatchObject({ ok: true, otherAddress: ADDR });
+    });
+});
+
+/**
+ * The copy belongs to the community, not to an address (scratch/fable-design/DESIGN-names-list-web-fable.md §5.6 (b), slice
+ * S0b): a node reached by two names (Byron: mullum and byron) restores an admin's own copy under either. The address stays
+ * in the signed header and in the box's associated data; it is said, never a refusal. The community id still is.
+ */
+describe('§5.6 (b) the copy across a community\'s addresses (S0b)', () => {
+    const MULLUM = 'https://mullum.example.org';
+    const BYRON = 'https://byron.example.org';
+    const SAVED = '2026-11-01T05:16:00Z';
+
+    it('M5: a copy saved under mullum restores under byron, says where it was saved, and the next copy names byron', () => {
+        const { me, pin, state } = scene();
+        const underMullum = makeNamesCopy({ pin, address: MULLUM, me, savedAt: SAVED });
+        expect(underMullum.header.split('\n')[2]).toBe(MULLUM);
+        const r = restoreNamesCopy(wireCopy(underMullum), { me, communityId: CID, address: BYRON });
+        expect(r).toEqual({ ok: true, pin: { ...pin, seen: [] }, copy: expect.objectContaining({ address: MULLUM, seq: 1, savedAt: SAVED }), otherAddress: MULLUM });
+        if (!r.ok) return;
+        // The §3 cross-checks run on it as on any restored copy.
+        expect(checkNamesCopyAgainst(r.pin, r.copy, state, { seq: 1 })).toEqual({ ok: true });
+        // The next copy is made for this device's address, and restores under it with nothing to say.
+        const next = makeNamesCopy({ pin: namesPinForNextCopy(r.pin), address: BYRON, me, savedAt: SAVED });
+        expect(next.header.split('\n')[2]).toBe(BYRON);
+        const back = restoreNamesCopy(wireCopy(next), { me, communityId: CID, address: BYRON });
+        expect(back).toMatchObject({ ok: true, copy: { address: BYRON, seq: 2 } });
+        expect(back).not.toHaveProperty('otherAddress');
+        // A phone still on mullum takes it too, and is told byron saved it.
+        expect(restoreNamesCopy(wireCopy(next), { me, communityId: CID, address: MULLUM })).toMatchObject({ ok: true, otherAddress: BYRON });
+    });
+
+    it('M6: a copy of another community id is still refused, under any address; and the address is still signed and sealed', () => {
+        const { me, pin } = scene();
+        const other = namesPinForNextCopy(emptyNamesPin('ffffffffffffffff', me.publicKey));
+        const theirs = makeNamesCopy({ pin: other, address: MULLUM, me, savedAt: SAVED });
+        for (const address of [MULLUM, BYRON]) {
+            expect(restoreNamesCopy(wireCopy(theirs), { me, communityId: CID, address })).toEqual({ ok: false, reason: 'bad_copy', detail: 'other_community' });
+        }
+        // Another account's copy under another address: not this admin's.
+        const stranger = admin();
+        const strangers = makeNamesCopy({ pin: namesPinForNextCopy(emptyNamesPin(CID, stranger.publicKey)), address: MULLUM, me: stranger, savedAt: SAVED });
+        expect(restoreNamesCopy(wireCopy(strangers), { me, communityId: CID, address: BYRON })).toMatchObject({ ok: false, reason: 'bad_copy', detail: 'not_mine' });
+        // The address line changed by the server: the signature fails. Re-signed by the owner: the box (sealed to the
+        // address it was saved under) doesn't open.
+        const mine = makeNamesCopy({ pin, address: MULLUM, me, savedAt: SAVED });
+        const lines = mine.header.split('\n');
+        lines[2] = BYRON;
+        const moved = lines.join('\n');
+        expect(restoreNamesCopy({ ...wireCopy(mine), header: moved }, { me, communityId: CID, address: BYRON })).toMatchObject({ ok: false, reason: 'bad_copy', detail: 'signature' });
+        const resigned = { header: moved, signature: bytesToHex(ed25519.sign(utf8ToBytes(moved), hexToBytes(me.privateKey))), box: mine.box };
+        expect(restoreNamesCopy(resigned, { me, communityId: CID, address: BYRON })).toMatchObject({ ok: false, reason: 'bad_copy', detail: 'box' });
+    });
+
+    it('the same address says nothing', () => {
+        const { me, copy } = scene();
+        const r = restoreNamesCopy(wireCopy(copy), { me, communityId: CID, address: ADDR });
+        expect(r).toMatchObject({ ok: true });
+        expect(r).not.toHaveProperty('otherAddress');
     });
 });
 

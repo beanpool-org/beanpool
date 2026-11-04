@@ -117,6 +117,28 @@ export const LIST_TYPE = {
 export const LIST_BEAN_PX = 14;
 
 /**
+ * §1.1, §2 The map's pop-up (slice M1): the list card itself, lifted off the map by the floating shadow, with a ✕. This
+ * goes round the card's tap target, so the shadow follows the card's own corners.
+ */
+export const POP_UP = 'rounded-[14px] shadow-[0_10px_20px_rgba(0,0,0,0.15)]';
+
+/**
+ * The pop-up's ✕: the card's one other control, beside its tap target (never inside it, so no control sits in another).
+ * A 44 px target in the card's top end corner, the 28 px circle drawn inside it, 6 from the card's edges.
+ */
+export const POP_UP_CLOSE = 'absolute top-0 end-0 z-10 min-w-[44px] min-h-[44px] p-1.5 flex items-start justify-end rounded-[14px] bg-transparent border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500';
+
+/** The ✕'s circle: 28 across, the quiet ground and ink. */
+export const POP_UP_CLOSE_DOT = 'w-7 h-7 rounded-full bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 flex items-center justify-center text-xs font-extrabold';
+
+/**
+ * The room a pop-up card's first row keeps for the ✕'s circle: at its end, so its chips and price stop short of it, and in
+ * height, so the line under it starts below the circle at any text size (the circle grows with the text; a chip's 10 px
+ * words do not). Measured at 320 x 1.3: without the height an event's date ran under the circle (map-pop-up-card-shots.mjs).
+ */
+export const POP_UP_CLOSE_ROOM = 'pe-8 min-h-6';
+
+/**
  * The grid (slice G2, DESIGN-market-grid-sizes-fable.md §2.2 to §2.4): a lattice. Every tile in a row is the same height,
  * because each is the photo (4:3, following the column) over a text block of exactly four rows (in rem, following the text
  * size), and each tile fills its cell. The gutter is the box's 16 (`gap-4`, from `gap-3.5`).

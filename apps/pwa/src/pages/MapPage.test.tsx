@@ -428,7 +428,9 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true));
         act(() => { mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-map-pin'))!.listeners['click']?.(); });
         const preview = await view!.findByTestId('map-preview-card');
-        expect(view!.getByTestId('map-copy-line')).toHaveTextContent("20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.");
+        // The pin card is the Market's list card (M1): the copy's line is the list card's, and there is no price.
+        expect(within(preview).getByTestId('listing-copy-line')).toHaveTextContent("20 Beans in Mullumbimby · You can't buy or take this until Mullumbimby welcomes you.");
+        expect(within(preview).queryByTestId('listing-list-price')).toBeNull();
         expect(preview.textContent).not.toMatch(/0B/);
     });
 
@@ -477,7 +479,9 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         expect(cardClasses).toContain('w-[calc(100%-2rem)]');
     });
 
-    it('the member map preview places the price beside the title and does not collide with the close button', async () => {
+    // The pin card is the Market's list card (M1, DESIGN-card-style-box-fable.md §1.2): the price is at the far end of the chip
+    // row above the title, as on the Market, and that row keeps room at its end for the ✕, which sits beside the card's tap target.
+    it('the member map preview places the price at the end of the chip row and keeps it clear of the close button', async () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => {
             view = render(<MapPage identity={mockIdentity} />);
@@ -487,14 +491,17 @@ describe('MapPage: guest balance and the pages that open over the map', () => {
         act(() => { postMarker.listeners['click']?.(); });
 
         const previewWrapper = await view!.findByTestId('map-preview-card');
-        const titleEl = view!.getByTestId('map-preview-title');
-        // The price sits in the same row container beside the title
-        const row = titleEl.parentElement as HTMLElement;
-        expect(row).toHaveTextContent(post.title);
-        expect(row).toHaveTextContent(`${post.credits}B`);
-        // The close button is positioned separately and has an accessible label
+        expect(within(previewWrapper).getByTestId('listing-list-title')).toHaveTextContent(post.title);
+        // The price sits in the chip row (the card's first row), at its end, with the bean sign
+        const head = within(previewWrapper).getByTestId('listing-list-head');
+        expect(within(head).getByTestId('listing-list-price')).toHaveTextContent(String(post.credits));
+        expect(within(head).getByRole('img', { name: 'B' })).toBeInTheDocument();
+        // That row stops short of the ✕ (the box's room, pe-8), and the ✕ is positioned separately, labelled, and outside the
+        // card's tap target
+        expect(head.className.split(/\s+/)).toContain('pe-8');
         const closeBtn = previewWrapper.querySelector('button[aria-label="Close preview"]');
         expect(closeBtn).toBeInTheDocument();
+        expect(within(previewWrapper).getByTestId('map-preview-tap').contains(closeBtn)).toBe(false);
     });
 
     it("the New Post panel in the member's language: its title, the reach chooser and the submit button for an Offer, an Event and a Poll", async () => {
@@ -2016,7 +2023,9 @@ describe('the global lobby on the map (G9b)', () => {
         expect(within(card).getByTestId('map-preview-title')).toHaveTextContent('Sourdough loaves');
         expect(within(card).getByTestId('map-preview-near')).toHaveTextContent('near here');
         expect(card).not.toHaveTextContent(/0B|Elder|hidden/);
-        fireEvent.click(within(card).getByRole('button', { name: 'View Details' }));
+        // No View button (M1): the card is the one door, named by the listing.
+        expect(within(card).queryByRole('button', { name: /View/ })).toBeNull();
+        fireEvent.click(within(card).getByRole('button', { name: 'Open listing: Sourdough loaves' }));
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-bread');
     });
 

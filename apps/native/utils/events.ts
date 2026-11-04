@@ -8,8 +8,8 @@
  */
 
 import {
-    eventWhenParts, deviceLocalClock, zoneLabelFor, zonePlaceFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
-    LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type WordKey,
+    eventWhenParts, eventTileWhen, deviceLocalClock, zoneLabelFor, zonePlaceFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
+    LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type EventTileWhen, type WordKey,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
     listingFreeTags, postTagsOf, storedFreeTags, copyFromLine, eventCopyOf, eventRepeatOf, isOnlineEvent, isLocalDate,
 } from '@beanpool/core';
@@ -1037,15 +1037,34 @@ export function checkEventLink(raw: string): { ok: true; link: string | null } |
  * reader's own for an online one ("your time"). An event from a node before zones reads in device time, as before.
  */
 export function eventWhen(post: any): EventWhenParts | null {
+    const input = eventWhenInput(post);
+    return input ? eventWhenParts(input) : null;
+}
+
+/** The node's clocks for an event and this phone's rendering of its instant: what core's when functions read. */
+function eventWhenInput(post: any) {
     const f = eventTimeFields(post);
     const start = f.startAt ? new Date(f.startAt) : null;
     if (!start || isNaN(start.getTime())) return null;
     const end = f.endAt ? new Date(f.endAt) : defaultEventEnd(start);
-    return eventWhenParts({
+    return {
         startAt: f.startAt, endAt: f.endAt, startLocal: f.startLocal, endLocal: f.endLocal, tz: f.tz, online: f.online,
         deviceStart: deviceLocalClock(start),
         deviceEnd: isNaN(end.getTime()) ? null : deviceLocalClock(end),
-    });
+    };
+}
+
+/**
+ * The Market grid tile's date row and time row (core eventTileWhen), and the when its label speaks. When the rows are the
+ * reader's own clock (`yours`: in person, the reader's clock differs from the place's), the spoken when is the reader's
+ * whole line with "your time", built as the online line is; otherwise it is the card's line.
+ */
+export function eventTileWhenFor(post: any): (EventTileWhen & { spoken: string }) | null {
+    const input = eventWhenInput(post);
+    const rows = input ? eventTileWhen(input) : null;
+    if (!input || !rows) return null;
+    const own = rows.yours ? eventWhenParts({ ...input, online: true }) : null;
+    return { ...rows, spoken: own ? `${own.first}${own.sep}${own.second}` : formatEventWhenFor(post) };
 }
 
 /** The first line as one string, "SAT 17 OCT · 20:50–22:50"; '' when the event has no readable start. */

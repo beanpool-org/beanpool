@@ -8,7 +8,7 @@ import { BringBackMemberWizard } from './BringBackMemberWizard';
 import { OffboardMemberWizard } from './OffboardMemberWizard';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { useTimeout } from '../../lib/use-timeout';
-import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fetchAdminDecisions, fetchRekeyStatusApi } from '../../lib/node-client';
+import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fetchAdminDecisions, fetchRekeyStatusApi, fetchBranchPruneFigures } from '../../lib/node-client';
 import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { t } from '../../lib/fresh-proof';
@@ -47,7 +47,6 @@ interface MemberDetailModalProps {
     profiles?: Record<string, unknown>[];
     flags?: MemberFlag[];
     members?: any[];
-    accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
     isFrozen: boolean;
     isVoucher?: boolean;
     isOperator?: boolean;
@@ -86,7 +85,6 @@ export function MemberDetailModal({
     profiles = [],
     flags = [],
     members = [],
-    accounts,
     isFrozen,
     isVoucher,
     isOperator,
@@ -259,17 +257,19 @@ export function MemberDetailModal({
     const effectiveViewerRole: MemberNodeRole | null = viewerRole !== undefined ? viewerRole : 'owner';
 
     // Counts the OTHER owners, and lets this member's live role stand for them: the members list and ownerCount were
-    // loaded before any grant made in this panel, so this member's own row in them can be stale.
+    // loaded before any grant made in this panel, so this member's own row in them can be stale. The node's count
+    // (ownerCount: MembersModule reads it from the node's counts) before the list, which holds only the pages read so
+    // far (capacity fix 3): another owner off page 1 is still another owner.
     const effectiveIsSoleOwner = useMemo(() => {
         if (currentRole !== 'owner') return false;
         if (typeof isSoleOwner === 'boolean') return isSoleOwner;
-        if (Array.isArray(members) && members.length > 0) {
-            const others = members.filter((m) => m && (m.publicKey || m.pubkey) !== pubkey && (m.nodeRole || m.role) === 'owner').length;
-            return others === 0;
-        }
         if (typeof ownerCount === 'number') {
             const listedRole = (nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null;
             return ownerCount - (listedRole === 'owner' ? 1 : 0) <= 0;
+        }
+        if (Array.isArray(members) && members.length > 0) {
+            const others = members.filter((m) => m && (m.publicKey || m.pubkey) !== pubkey && (m.nodeRole || m.role) === 'owner').length;
+            return others === 0;
         }
         return true;
     }, [currentRole, isSoleOwner, ownerCount, members, pubkey, nodeRole, member?.nodeRole]);
@@ -918,8 +918,7 @@ export function MemberDetailModal({
             {showPruneBranch && (
                 <PruneBranchModal
                     rootMember={member as any}
-                    members={members}
-                    accounts={accounts}
+                    loadFigures={(pk) => fetchBranchPruneFigures(nodeUrl || (typeof window !== 'undefined' ? window.location.origin : ''), pk, adminPassword, tfaToken)}
                     onConfirm={async (pk, code) => {
                         await onPruneBranch?.(pk, ...(code ? [code] : []));
                         onClose();

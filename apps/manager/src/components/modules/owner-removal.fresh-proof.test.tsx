@@ -51,15 +51,17 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Prune branch with an owner in it (S4a)', () => {
     const root = { publicKey: owner, callsign: 'anna' };
-    const press = () => {
-        render(<PruneBranchModal rootMember={root} members={[root]} onConfirm={(pk, code) => pruneInviteBranch(NODE, pk, 'pw', undefined, code).then(() => {})} onClose={() => {}} />);
+    // The node's figures for the branch are in before Confirm can be pressed (PruneBranchModal).
+    const press = async () => {
+        render(<PruneBranchModal rootMember={root} loadFigures={() => Promise.resolve({ members: 1, badDebt: 0, surplus: 0, net: 0 })} onConfirm={(pk, code) => pruneInviteBranch(NODE, pk, 'pw', undefined, code).then(() => {})} onClose={() => {}} />);
         fireEvent.change(screen.getByPlaceholderText(/Type "anna" to confirm/i), { target: { value: 'anna' } });
+        await waitFor(() => expect(screen.getByRole('button', { name: /Prune Entire Branch/i })).toBeEnabled());
         fireEvent.click(screen.getByRole('button', { name: /Prune Entire Branch/i }));
     };
 
     it('password viewer: the box; a wrong code stays; a new code re-sends the same prune once with `code`', async () => {
         const sent = mockNode(`/branches/${owner}/prune`, [[401, CODE_ASK], [401, WRONG], [200, { success: true }]]);
-        press();
+        await press();
         await enterCode('prune-branch-proof', '111111');
         await waitFor(() => expect(screen.getByTestId('prune-branch-proof-error')).toHaveTextContent('Invalid 2FA code'));
         expect(screen.getByTestId('prune-branch-proof-confirm')).toBeDisabled();
@@ -72,7 +74,7 @@ describe('Prune branch with an owner in it (S4a)', () => {
 
     it('phone viewer, hand-off stale: the Manage-again sentence; nothing re-sent', async () => {
         const sent = mockNode(`/branches/${owner}/prune`, [[403, STEP_UP]]);
-        press();
+        await press();
         expect(await screen.findByTestId('prune-branch-proof-step-up')).toHaveTextContent('Press Manage on your phone again');
         expect(sent).toHaveLength(1);
         expect(screen.queryByText(/❌/)).toBeNull();

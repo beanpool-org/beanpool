@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { TIER_LEVELS, tierForCredit, tierIndexForName } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
-import { pruneInviteBranch, getTfaSessionToken, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
+import { pruneInviteBranch, fetchBranchPruneFigures, getTfaSessionToken, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
 import { PruneBranchModal } from './PruneBranchModal';
 import { LoadMoreRow } from '../../lib/node-data-pages';
 import { nodeCredential } from '../../lib/profiles';
@@ -39,9 +39,6 @@ export function AncestryTreePanel({
         return Array.isArray(nodeData?.members) ? (nodeData!.members as MemberItem[]) : [];
     }, [nodeData?.members]);
 
-    const accounts = useMemo(() => {
-        return Array.isArray(nodeData?.accounts) ? (nodeData!.accounts as Record<string, unknown>[]) : [];
-    }, [nodeData?.accounts]);
 
     const profiles = useMemo(() => {
         return Array.isArray(nodeData?.profiles) ? (nodeData!.profiles as Array<{ publicKey?: string; pubkey?: string; status?: string; [key: string]: unknown }>) : [];
@@ -744,8 +741,7 @@ export function AncestryTreePanel({
                         pubkey: pruneTarget.pubkey,
                         callsign: pruneTarget.callsign,
                     }}
-                    members={members}
-                    accounts={accounts}
+                    loadFigures={(pk) => fetchBranchPruneFigures(activeNode.url, pk, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))}
                     onClose={() => setPruneTarget(null)}
                     onConfirm={handleExecutePrune}
                 />

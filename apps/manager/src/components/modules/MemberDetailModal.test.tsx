@@ -344,25 +344,25 @@ describe('MemberDetailModal', () => {
         expect(screen.queryByText("Only an owner can change this member's role.")).not.toBeInTheDocument();
     });
 
-    it('forwards accounts to PruneBranchModal and surfaces calculated financial impact', async () => {
+    it("opens PruneBranchModal on the node's figures for the whole branch, and surfaces its financial impact", async () => {
         const childMember = {
             publicKey: 'child-pubkey-789',
             callsign: 'ChildMember',
             invitedBy: 'pubkey-1234567890-abcdef',
         };
-        const mockAccounts = [
-            { publicKey: 'pubkey-1234567890-abcdef', balance: -150 },
-            { publicKey: 'child-pubkey-789', balance: 350 },
-        ];
+        // The root owing 150 and the child holding 350, as the node works them out over the whole branch.
+        const figures = vi.spyOn(nodeClient, 'fetchBranchPruneFigures').mockResolvedValue({ members: 2, badDebt: 150, surplus: 350, net: 200 });
 
         render(
             <MemberDetailModal
                 member={mockMember}
                 members={[mockMember, childMember]}
-                accounts={mockAccounts}
                 isFrozen={false}
                 onToggleFreeze={vi.fn()}
                 onPruneBranch={vi.fn()}
+                nodeUrl="https://node.example"
+                adminPassword="pw"
+                tfaToken="tfa"
                 onClose={vi.fn()}
             />
         );
@@ -371,8 +371,10 @@ describe('MemberDetailModal', () => {
         expect(pruneBranchBtn).toBeInTheDocument();
         await userEvent.click(pruneBranchBtn);
 
-        // Verify PruneBranchModal opened with accounts passed through
+        // Verify PruneBranchModal opened on the node's figures for this member's branch
         expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
+        expect(await screen.findByText('2')).toBeInTheDocument();
+        expect(figures).toHaveBeenCalledWith('https://node.example', 'pubkey-1234567890-abcdef', 'pw', 'tfa');
         expect(document.getElementById('prune-debt-written-off')?.textContent).toContain('150 🫘 bad debt');
         expect(document.getElementById('prune-credit-confiscated')?.textContent).toContain('350 🫘 credit');
         expect(document.getElementById('prune-net-impact')?.textContent).toContain('+200 🫘');

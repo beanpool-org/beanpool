@@ -1081,7 +1081,6 @@ export function MembersModule({
                     viewerRole={effectiveViewerRole}
                     ownerCount={ownerCount}
                     members={members}
-                    accounts={nodeData?.accounts}
                     nodeUrl={activeNodeUrl}
                     adminPassword={adminPassword}
                     tfaToken={tfaToken}

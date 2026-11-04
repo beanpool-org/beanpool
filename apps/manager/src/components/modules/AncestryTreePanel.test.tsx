@@ -11,6 +11,8 @@ vi.mock('../../lib/node-client', async (importOriginal) => {
     return {
         ...actual,
         pruneInviteBranch: vi.fn().mockResolvedValue({ ok: true }),
+        // The prune's figures come from the node, for the whole branch (PruneBranchModal); answered in beforeEach.
+        fetchBranchPruneFigures: vi.fn(),
     };
 });
 
@@ -24,6 +26,8 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
 
     beforeEach(() => {
         vi.restoreAllMocks();
+        // The prune dialog reads the branch's figures from the node before Confirm opens (PruneBranchModal).
+        vi.mocked(nodeClient.fetchBranchPruneFigures).mockResolvedValue({ members: 3, badDebt: 0, surplus: 0, net: 0 });
     });
 
     const realPayload = {

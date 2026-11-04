@@ -1300,6 +1300,36 @@ export async function pruneNodeUser(
     return res.json();
 }
 
+/**
+ * What pruning a branch would do, as the node works it out over the whole branch: the members it removes, the debts the
+ * Commons pays, the surpluses it takes back, and what the Commons gains or pays overall (net). Not the console's pages of
+ * members, which hold only those read so far (capacity fix 3).
+ */
+export interface BranchPruneFigures {
+    members: number;
+    badDebt: number;
+    surplus: number;
+    net: number;
+}
+
+/** The branch's figures for the prune's confirmation (GET /api/local/admin/branches/:pubkey/prune): owners only, as the prune. */
+export async function fetchBranchPruneFigures(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<BranchPruneFigures> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/branches/${encodeURIComponent(pubkey.trim())}/prune`);
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    const figures = { members: data?.members, badDebt: data?.badDebt, surplus: data?.surplus, net: data?.net };
+    if (!Object.values(figures).every((n) => typeof n === 'number' && Number.isFinite(n))) {
+        throw new Error("The node's answer has no figures for this branch");
+    }
+    return figures as BranchPruneFigures;
+}
+
 /** Remove a member and everyone they invited. A branch with an owner in it asks the fresh proof, as pruneNodeUser. */
 export async function pruneInviteBranch(
     nodeUrl: string,

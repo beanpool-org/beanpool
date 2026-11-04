@@ -10,6 +10,7 @@
  */
 
 import { LanguageSwitch } from '../components/LanguageSwitch';
+import { NodeApkLink } from '../components/NodeApkLink';
 import { BoldWords } from '../components/BoldWords';
 import { Sentence } from '../components/Sentence';
 import { isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
@@ -1460,6 +1461,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 <p style={{ color: 'var(--text-muted)', marginBottom: '2rem', lineHeight: 1.6 }}>
                     {t('Your identity is yours. It lives on this device, backed by cryptography — no passwords, no central accounts.')}
                 </p>
+                {/* The Android APK from this community's server: only a phone on its local network sees it (lights-out H3). */}
+                <NodeApkLink />
 
                 <div data-testid="welcome-card" className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm p-8 max-[359px]:px-4" style={{
                     borderRadius: '16px',

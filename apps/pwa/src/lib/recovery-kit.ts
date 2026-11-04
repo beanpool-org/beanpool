@@ -2,8 +2,13 @@
  * The recovery kit on the web: the same page the phone prints (@beanpool/core's recoveryKitHtml), printed from a frame
  * that exists only while the browser's print runs. The browser's print dialog already offers "Save as PDF", so the web
  * has one action. Optional: nothing here gates joining.
+ *
+ * The page's own sentences are in the language the web app is showing (core's printedKitLines(), asked for when the page
+ * is made); the 12 words on it are English words in every language. This file is on the words' key path and reaches the
+ * words layer in no way (core __tests__/recovery-path-files.test.ts): the lines come from core's own module, which is
+ * handed no word. The three sentences below stay English here; components/key-lines.ts says them in the member's language.
  */
-import { recoveryKitHtml, type RecoveryKit } from '@beanpool/core';
+import { printedKitLines, recoveryKitHtml, type RecoveryKit } from '@beanpool/core';
 import { getNodeApiUrl } from './api';
 
 export const KIT_WEB_LABEL = 'Print or save your recovery kit';
@@ -94,7 +99,7 @@ export async function printRecoveryKit(words: readonly string[], print?: (w: Win
     removeKitFrame();
     let html: string;
     try {
-        html = recoveryKitHtml(webKit(words));
+        html = recoveryKitHtml(webKit(words), printedKitLines());
     } catch {
         return 'failed';
     }

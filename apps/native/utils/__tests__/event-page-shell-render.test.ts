@@ -6,9 +6,9 @@
  * light and in dark. The Mullum market is the fixture (§2.9's): a two-line title, a repeat caption, a one-line place, a photo,
  * and, as the node sends it by id, its next six dates (drawn by the real EventNextDates, compact).
  *
- * It proves the order (the answer is the first button after the loud lines, before Share, the description and the host), the
- * 4:3 photo frame (288 × 216 in a 288 dp column), where the answer row lands (§2.9's stop is measured, and still open with a
- * photo: see its block), the next dates compact (the first and "and 5 more", one button that opens the list), HOSTED BY as
+ * It proves the order (the answer is the first button after the loud lines, before the photo, Share, the description and the
+ * host: DESIGN-detail-pages-frame-fable.md §1.4), the 4:3 photo frame (288 × 216 in a 288 dp column, 16 dp under the answer),
+ * where the answer row lands (the frame decision's stop, §2: its top ≤ 500 dp, its bottom ≤ 569; see its block), the next dates compact (the first and "and 5 more", one button that opens the list), HOSTED BY as
  * the page box and no grey host line, the counts only above zero, the boxes and buttons on the style box's numbers and the
  * event's library colours, nothing wider than the screen, and none of the old raw violets anywhere.
  */
@@ -214,7 +214,7 @@ function screen(): { layout: Layout; abs: (el: Element) => { left: number; top: 
 describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, colors) => {
     beforeEach(() => { themeIs.now = theme; });
 
-    it('a member who has not answered: the chips, the loud lines, the 4:3 photo, then Going / Interested right under it', async () => {
+    it('a member who has not answered: the chips, the loud lines, Going / Interested, then the 4:3 photo under them', async () => {
         await draw(MULLUM, { ...BY_ID, myRsvp: null });
         // The card's chips, not the old badge: EVENT on the event's tile pair.
         const chip = byId('event-type-chip')!;
@@ -228,20 +228,22 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
         expect(host.textContent).toContain('↻ ');
 
         // Going is the first button after the loud lines. Their one button is the next dates' opener (the place's "Show on map"
-        // is a link): the dates are part of the loud lines, above the photo.
+        // is a link): the dates are part of the loud lines, above the answer. The photo comes under the answer
+        // (DESIGN-detail-pages-frame-fable.md §1.4): title → next dates → Going → the photo → Share → description → HOSTED BY → Report.
         const title = byId('event-title')!;
         const going = buttonNamed('Going')!;
+        const frame = byId('event-photo-frame')!;
         const afterTitle = Array.from(host.querySelectorAll('[role="button"]')).filter((b) => before(title, b));
         expect(afterTitle[0], 'the first button after the title: the next dates, compact').toBe(byId('event-next-dates-open'));
-        expect(before(afterTitle[0], byId('event-photo-frame')!), 'the dates above the photo').toBe(true);
         expect(afterTitle[1], 'the first button after the loud lines').toBe(going);
         expect(buttonNamed('Interested')).toBeTruthy();
-        // Then Share, the description, the host's box, Report: the answer before the reading.
+        // Then the photo, Share, the description, the host's box, Report: the answer before the picture and the reading.
         const share = buttonNamed('Share this event')!;
         const description = spanWith(MULLUM.description)!;
         const hosted = spanWith('HOSTED BY')!;
         const report = buttonNamed('Report event')!;
-        for (const [a, b, what] of [[going, share, 'Going, then Share'], [share, description, 'Share, then the description'],
+        for (const [a, b, what] of [[title, afterTitle[0], 'the title, then the next dates'], [afterTitle[0], going, 'the next dates, then Going'],
+            [going, frame, 'Going, then the photo'], [frame, share, 'the photo, then Share'], [share, description, 'Share, then the description'],
             [description, hosted, 'the description, then HOSTED BY'], [hosted, report, 'HOSTED BY, then Report']] as const) {
             expect(before(a, b), what).toBe(true);
         }
@@ -251,12 +253,12 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
 
         const { abs } = screen();
         // The photo frame: 4:3 of the 288 dp column, under the column's corners.
-        const frame = byId('event-photo-frame')!;
         expect(abs(frame).width).toBeCloseTo(288, 0);
         expect(abs(frame).height).toBeCloseTo(216, 0);
         expect(styleOf(frame)).toMatchObject({ borderRadius: MARKET_CARD_SHELL.radius, overflow: 'hidden' });
-        // The answer row sits right under the photo (12 dp): nothing but the loud lines and the photo above it.
-        expect(abs(going.parentElement!).top - (abs(frame).top + abs(frame).height)).toBeCloseTo(12, 0);
+        // The photo sits 16 dp under the answer row (the action's own margin; the frame has none above it).
+        const action = abs(byId('event-action')!);
+        expect(abs(frame).top - (action.top + action.height), "the frame's top: the answer row's bottom + 16").toBeCloseTo(16, 0);
         // Both answers are 48 tall at least, side by side in the column.
         expect(abs(going).height).toBeGreaterThanOrEqual(48);
         expect(abs(going).top).toBeCloseTo(abs(buttonNamed('Interested')!).top, 0);
@@ -396,64 +398,73 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
 });
 
 /**
- * §2.9's stop condition for the frame (DP1: "Stop if the answer row's top passes 500 dp on the Mullum fixture at 1.3×; then the
- * frame goes to 3:2 before anything else"), measured on the Mullum market as the node sends it by id, with its six next dates
- * (the review of #2880, finding 1). The answer row's top, from the screen's top (the status bar's 24 included), on a 569 dp
- * screen:
+ * The stop (DESIGN-detail-pages-frame-fable.md §2, which replaces §2.9's): on the Mullum fixture as the node sends it by id, at
+ * 320 × 569 with the text at 1.3× (the status bar's 24 included), with a photo, without, and with the six dates opened, the
+ * answer's top is at or under 500 dp and its bottom (Going's) on the 569 dp screen. The photo is under the answer (§1.4), so
+ * the answer no longer moves with the picture. The answer row's top, and Going's bottom, from the screen's top:
  *
- *                                        a photo (4:3)   no photo (the tile, 3:1)
- *   no next dates (a one-off event)          586             466
- *   the six dates in full (opened)           700.3           580.3   (no photo: Going's bottom at 628, past the screen)
- *   the six dates compact (as drawn)         639.5           519.5   (no photo: Going's bottom at 567.5, on the screen)
+ *                                        a photo (4:3)              no photo (the tile, 3:1)
+ *   the six dates compact (as drawn)     415.5  · Going 463.5       415.5  · Going 463.5
+ *   the six dates opened                 476.25 · Going 524.25      476.25 · Going 524.25
+ *   no next dates (a one-off event)      362    · Going 410         362    · Going 410
  *
- * Compact, the dates take 53.5 dp, not 114.3: without a photo the whole answer row stays on the first screen. With a photo it
- * is not on the first screen, with the dates or without them, at 4:3 or at 3:2 (the status bar, the header as it is, the
- * column's padding, a two-line when and the 48 dp place row come to about 100 dp more than §2.9 counted). That is the frame
- * decision the PR asks for. `it.fails` keeps the stop in view: once a layout brings the row above 500 this case fails, and
- * becomes a plain `it`.
+ * Before the move (the photo above the answer) the row was at 639.5 / 700.3 / 586 with a photo and 519.5 / 580.3 / 466
+ * without: the photo block (8 + 216 + 12, or 8 + 96 + 12 for the tile) came out from above it, and the action's 12 went in.
  */
 const answerRowTop = (abs: ReturnType<typeof screen>['abs']) => abs(byId('event-action')!).top;
+const goingBottom = (abs: ReturnType<typeof screen>['abs']) => { const b = abs(buttonNamed('Going')!); return b.top + b.height; };
 const openTheDates = async () => {
     const open = byId('event-next-dates-open');
     expect(open, 'the compact next dates').toBeTruthy();
     await act(async () => { open!.click(); });
     await settle(2);
 };
-describe('§2.9 stop condition, measured (OPEN with a photo: the PR asks)', () => {
-    it.fails("the answer row's top is at or above 500 dp on the Mullum fixture at 320 × 569 and 1.3× text", async () => {
+describe("the stop, measured: the answer's top ≤ 500 dp and its bottom ≤ 569 at 320 × 569 and 1.3× text", () => {
+    it("the answer row's top is at or above 500 dp on the Mullum fixture with a photo, and Going is whole on the first screen", async () => {
         await draw(MULLUM, { ...BY_ID, myRsvp: null });
-        const rowTop = answerRowTop(screen().abs);
+        const { abs } = screen();
+        const rowTop = answerRowTop(abs);
         expect(rowTop, `the answer row's top at ${Math.round(rowTop)} dp`).toBeLessThanOrEqual(500);
+        expect(goingBottom(abs), "Going's bottom, on the 569 dp screen").toBeLessThanOrEqual(569);
     });
 
-    it('with no next dates (a one-off event): the row at 586 dp with a photo, 466 without', async () => {
+    it('with a photo: the row at 415.5 dp with the dates compact, 476.25 with all six open; Going on the screen in both', async () => {
+        await draw(MULLUM, { ...BY_ID, myRsvp: null });
+        let { abs } = screen();
+        expect(answerRowTop(abs)).toBeCloseTo(415.5, 1);
+        expect(goingBottom(abs)).toBeCloseTo(463.5, 1);
+        await openTheDates();
+        ({ abs } = screen());
+        expect(answerRowTop(abs)).toBeCloseTo(476.25, 1);
+        expect(goingBottom(abs), "opened, Going's bottom is still on the 569 dp screen").toBeLessThanOrEqual(569);
+        expect(goingBottom(abs)).toBeCloseTo(524.25, 1);
+    });
+
+    it('no photo: the same 415.5 compact and 476.25 opened; the answer does not move with the picture', async () => {
+        const bare = { ...MULLUM, photos: [] };
+        await draw(bare, { ...BY_ID, photos: [], myRsvp: null });
+        let { abs } = screen();
+        expect(answerRowTop(abs)).toBeCloseTo(415.5, 1);
+        expect(goingBottom(abs)).toBeCloseTo(463.5, 1);
+        await openTheDates();
+        ({ abs } = screen());
+        expect(answerRowTop(abs)).toBeCloseTo(476.25, 1);
+        expect(goingBottom(abs), "opened, Going's bottom is on the 569 dp screen").toBeLessThanOrEqual(569);
+        expect(goingBottom(abs)).toBeCloseTo(524.25, 1);
+    });
+
+    it('with no next dates (a one-off event): the row at 362 dp with a photo and without; Going on the screen', async () => {
         await draw(MULLUM, { ...MULLUM, myRsvp: null });
-        expect(answerRowTop(screen().abs)).toBeCloseTo(586, 1);
+        let { abs } = screen();
+        expect(answerRowTop(abs)).toBeCloseTo(362, 1);
+        expect(goingBottom(abs)).toBeCloseTo(410, 1);
         act(() => root.unmount());
         root = createRoot(host);
         const bare = { ...MULLUM, photos: [] };
         await draw(bare, { ...bare, myRsvp: null });
-        expect(answerRowTop(screen().abs)).toBeCloseTo(466, 1);
-    });
-
-    it('with a photo: the row at 639.5 dp with the dates compact, 700.3 with all six open', async () => {
-        await draw(MULLUM, { ...BY_ID, myRsvp: null });
-        expect(answerRowTop(screen().abs)).toBeCloseTo(639.5, 1);
-        await openTheDates();
-        expect(answerRowTop(screen().abs)).toBeCloseTo(700.3, 1);
-    });
-
-    it('no photo: with the dates compact the whole answer row is on the first screen; all six open push it past the edge', async () => {
-        const bare = { ...MULLUM, photos: [] };
-        await draw(bare, { ...BY_ID, photos: [], myRsvp: null });
-        let { abs } = screen();
-        expect(answerRowTop(abs)).toBeCloseTo(519.5, 1);
-        const going = () => abs(buttonNamed('Going')!);
-        expect(going().top + going().height, "Going's bottom, on the 569 dp screen").toBeLessThanOrEqual(569);
-        await openTheDates();
         ({ abs } = screen());
-        expect(answerRowTop(abs)).toBeCloseTo(580.3, 1);
-        expect(going().top + going().height, "opened, Going's bottom is past the screen").toBeGreaterThan(569);
+        expect(answerRowTop(abs)).toBeCloseTo(362, 1);
+        expect(goingBottom(abs)).toBeCloseTo(410, 1);
     });
 });
 

@@ -2,12 +2,13 @@
  * EventDetail — `/post/:id` for an event (docs/events-on-the-map.md §3 "Event detail", slice 3).
  *
  * The page is drawn from the Market card's style box (DESIGN-detail-pages-fable.md §2, slice DP1; components/market-card-shell.ts),
- * in one order: the card's chips, the loud lines (the when in the event's ink, the title, the place with "Show on map"), the
- * photo at 4:3 (the event's tile without one), Going / Interested, the quiet row (the chat, Share, Add to calendar), the
+ * in one order: the card's chips, the loud lines (the when in the event's ink, the title, the place with "Show on map"),
+ * Going / Interested, the photo at 4:3 (the event's tile without one), the quiet row (the chat, Share, Add to calendar), the
  * reminder and the note for people who are going as boxes, the description, the host's box, the host's guest list, Report.
- * The answer comes before the reading, right under the photo; a repeating event's next dates are one compact line above it.
- * Whether it is on the first screen is measured, not promised (event-page-shell-render.test.ts, §2.9: open at 320 dp and
- * 1.3× with a photo). The counts show only once someone has answered.
+ * The answer comes right after the loud lines, before the picture and the reading (DESIGN-detail-pages-frame-fable.md §1.4);
+ * a repeating event's next dates are one compact line above it. That it is on the first screen is measured
+ * (event-page-shell-render.test.ts: at 320 × 569 and 1.3×, its top ≤ 500 dp and its bottom ≤ 569, with a photo, without,
+ * and with the dates opened). The counts show only once someone has answered.
  *
  * What the viewer may see is the node's decision, not this screen's: the local row gives a first paint, then
  * a signed by-id fetch returns my RSVP, the note (host and Going only) and the RSVP list (hosts only). The note
@@ -388,8 +389,8 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
             <KeyboardAwareScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                 {/*
                   * One column, the parts in DESIGN-detail-pages-fable.md §2.1's order, drawn from the style box
-                  * (components/market-card-shell.ts): the card's chips, the loud lines, the photo, the answer, the quiet row,
-                  * the boxes, the description, the host, the rest, Report. The answer comes right under the photo; reading comes after.
+                  * (components/market-card-shell.ts): the card's chips, the loud lines, the answer, the photo, the quiet row,
+                  * the boxes, the description, the host, the rest, Report. The answer comes right under the loud lines; the picture and reading come after.
                   */}
                 {/*
                   * 1. The chip row: the list card's own chips, in its order. Not the card's 🔒 group chip: the page says who can see
@@ -493,20 +494,6 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                     <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: hostName })}</Text>
                 )}
 
-                {/*
-                  * 5. The photo: 4:3, the column's width, under the column's corners (the grid tile's frame, so the page shows the
-                  * picture the member tapped). No photo: the event's tile, 3:1, inside the column.
-                  */}
-                {shownPhotos.length > 0 ? (
-                    <View style={styles.photoFrame} testID="event-photo-frame" onLayout={(e) => setPhotoHeight(Math.round(e.nativeEvent.layout.height))}>
-                        {photoHeight > 0 && <PhotoCarousel photos={shownPhotos} height={photoHeight} borderRadius={SHELL.radius} />}
-                    </View>
-                ) : (
-                    <View style={styles.tileBanner} testID="event-tile-banner">
-                        <CategoryTile kind="event" size="banner" />
-                    </View>
-                )}
-
                 {/* 7. The answer: Going / Interested for a member, the host's line, a copy's door; the counts once someone has answered. */}
                 <View style={styles.action} testID="event-action">
                     {isHost ? (
@@ -527,6 +514,21 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                         <Text style={styles.letInLine} accessibilityLiveRegion="polite" testID="event-let-in-line">{letInLine}</Text>
                     )}
                 </View>
+
+                {/*
+                  * 7a. The photo, under the answer (DESIGN-detail-pages-frame-fable.md §1.4): 4:3, the column's width, under the
+                  * column's corners (the grid tile's frame, so the page shows the picture the member tapped). No photo: the event's
+                  * tile, 3:1, inside the column. 16 under the answer (the action's margin), 16 over the quiet row.
+                  */}
+                {shownPhotos.length > 0 ? (
+                    <View style={styles.photoFrame} testID="event-photo-frame" onLayout={(e) => setPhotoHeight(Math.round(e.nativeEvent.layout.height))}>
+                        {photoHeight > 0 && <PhotoCarousel photos={shownPhotos} height={photoHeight} borderRadius={SHELL.radius} />}
+                    </View>
+                ) : (
+                    <View style={styles.tileBanner} testID="event-tile-banner">
+                        <CategoryTile kind="event" size="banner" />
+                    </View>
+                )}
 
                 {/*
                   * 8. The quiet row: the chat, Share, Add to calendar, in the neutral outline. Share and the calendar need no node,
@@ -698,7 +700,9 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     );
 }
 
-// The page's rhythm (DESIGN-detail-pages-fable.md §2.3): 8 between lines inside a part, 12 round the photo, 16 between parts.
+// The page's rhythm (DESIGN-detail-pages-fable.md §2.3, as DESIGN-detail-pages-frame-fable.md §3 amends it): 8 between lines
+// inside a part, 12 from the last loud line to the answer, 16 from the answer to the photo and from the photo to the quiet row,
+// 16 between parts.
 // Radii, chips, box shells and button heights come from the style box (components/market-card-shell.ts), colours from the tokens.
 const makeStyles = ({ colors }: ThemeContextType) =>
     StyleSheet.create({
@@ -732,10 +736,10 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         // 4:3 of the column's width, under the column's corners; 3:1 for the tile when there is no photo.
         photoFrame: {
             width: '100%', aspectRatio: SHELL.photo.grid.aspectWidth / SHELL.photo.grid.aspectHeight,
-            borderRadius: SHELL.radius, overflow: 'hidden', backgroundColor: colors.surface.subtle, marginTop: 8, marginBottom: 12,
+            borderRadius: SHELL.radius, overflow: 'hidden', backgroundColor: colors.surface.subtle, marginTop: 0, marginBottom: 16,
         },
-        tileBanner: { width: '100%', aspectRatio: 3, borderRadius: SHELL.radius, overflow: 'hidden', marginTop: 8, marginBottom: 12 },
-        action: { marginBottom: 16 },
+        tileBanner: { width: '100%', aspectRatio: 3, borderRadius: SHELL.radius, overflow: 'hidden', marginTop: 0, marginBottom: 16 },
+        action: { marginTop: 12, marginBottom: 16 },
         // Sized to the label, wrapping to a second row rather than ellipsizing it — the same fix the card and the
         // web EventCard carry. This row's text is 15sp, so it runs out of width sooner than the card's 14sp.
         rsvpRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

@@ -280,3 +280,29 @@ describe('finding 3: the asking is bounded (an hour of Market use, a focus every
         expect(node.asks).toBe(1);
     });
 });
+
+// Home's Arrange hands the card a band for as long as it is open (components/home/quiet.ts): the card's inside goes quiet, but
+// it is the same inside. Draw it bare in one state and wrapped in the other and React rebuilds it on Arrange › and on Done (the
+// review of #2867): the buttons' places are measured again and anything the card holds starts over.
+describe('Home\'s Arrange band: the card\'s inside is not rebuilt when the band goes up or comes down', () => {
+    it('the same elements stand through no band → band → no band', async () => {
+        await startOneWayBack(who.identity.publicKey, GLOBAL);
+        await render('landing');
+        const inside = (): Element[] => Array.from(document.querySelectorAll('button, span'));
+        const before = inside();
+        expect(before.length).toBeGreaterThan(2);
+        expect(warning()).toBe(true);
+        const draw = (band?: ReactNode) => act(async () => {
+            root!.render(createElement(OneWayBackCard, { place: 'landing', band }) as unknown as Parameters<Root['render']>[0]);
+        });
+        await draw(createElement('div', { 'data-testid': 'band' }, 'ONE WAY BACK'));
+        await settle();
+        expect(document.querySelector('[data-testid="band"]')).not.toBeNull();
+        expect(before.filter(e => !e.isConnected).map(e => e.textContent)).toEqual([]);
+        await draw(undefined);
+        await settle();
+        expect(document.querySelector('[data-testid="band"]')).toBeNull();
+        expect(before.filter(e => !e.isConnected).map(e => e.textContent)).toEqual([]);
+        expect(warning()).toBe(true);
+    });
+});

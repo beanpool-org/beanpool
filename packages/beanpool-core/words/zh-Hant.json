@@ -1914,5 +1914,10 @@
   "{price} in another community · You can't buy or take this here.": "在另一個社群：{price} · 你不能在這裡購買或領取。",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "在 {community}：{price} · 在 {community} 歡迎你加入之前，你不能購買或領取。",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 瀏覽全球社群"
+  "🌍 Look around the global community": "🌍 瀏覽全球社群",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "你被抽中參加的陪審團正在等你回覆。請在一天內回覆，否則你的席位會交給下一位被抽中的成員。",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "你所在的陪審團大約一天後截止。開啟 BeanPool 投票。",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "你的陪審團正在審議的那位成員已經回應了這件事。開啟 BeanPool 閱讀。",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "你被抽中加入你所在社群的陪審團，其投票將在不到 2 天內截止。開啟 BeanPool 選擇擔任或讓位。",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "你被抽中加入你所在社群的陪審團。請在 3 天內開啟 BeanPool 選擇擔任或讓位。"
 }

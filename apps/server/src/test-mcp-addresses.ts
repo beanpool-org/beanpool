@@ -7,15 +7,19 @@
  *
  *   1. The field's shape, one published address per state the S1 check can leave: own, other, other-origin, silence (a new
  *      name with its age, and an old one), tls, not asked (a home-network name; a name that points at one from here), and
- *      not checked yet. The main address first, each with its host, kind, main, answers, checkedAt, step and the one next step
- *      in English words an assistant passes on.
+ *      not checked yet. The main address first, each with its host, kind, main, answers, checkedAt, step, the one next step
+ *      in English words an assistant passes on, and its standing (none here).
  *   2. Only published addresses: no former name, no loopback name, whatever the row holds for them.
  *   3. Nothing beyond host, time and the step's words (the /check page's rule): never a number or name a host points at, a
  *      tunnel's name, a key, the time this server's key last answered, or a member's name. Reading it asks nothing and
  *      writes nothing.
  *   4. An admin's grant reads it too: Settings shows the same report to owners and admins (routes/app-addresses.ts).
  *   5. A standby's server_health is today's, key for key: a standby checks nothing (address-check.ts runRound).
- *   6. A grant whose maker is now a member gets what it got before: 401, and no answer at all.
+ *   6. A BeanPool name the address service says is nobody's, another community's, or has no record of (at risk, or a
+ *      contradiction: registrar-name-watch.ts nameStandings) while the check found this server there: the assistant reads
+ *      the standing in the Addresses screen's words and the screen's next step, never "Nothing to do", side by side with
+ *      Settings' report (routes/app-addresses.ts appAddressesReport), as the Opus review of #2835 measured it.
+ *   7. A grant whose maker is now a member gets what it got before: 401, and no answer at all.
  *
  * Run: SERVER_SUITES_ONLY=test-mcp-addresses TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -36,7 +40,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { ADDRESS_CHECK_WORDS, addressNextStep, wordsFor } from '@beanpool/core';
+import {
+    ADDRESS_CHECK_WORDS, ADDRESS_SCREEN_WORDS, addressNextStep, addressReachSentence, addressStandingText, wordsFor,
+} from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, updateNodeConfig } from './state-engine.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
@@ -45,6 +51,8 @@ import { forgetOwnAddresses, publishedAddresses, primaryAddress } from './engine
 import { setNodeRole } from './config/node-role.js';
 import { db } from './db/db.js';
 import { ADDRESS_CHECK_KEY } from './services/address-check.js';
+import { NAME_WATCH_KEY } from './services/registrar-name-watch.js';
+import { appAddressesReport } from './routes/app-addresses.js';
 import { nodePubkeyHex } from './services/registrar-client.js';
 import { loadOrCreateIdentity, setPrivateKeyForTests } from './p2p.js';
 import { AGENT_TOOLS } from './agent/tools.js';
@@ -102,7 +110,7 @@ async function health(client: Client): Promise<any> {
 /** server_health's keys before this slice: what a standby, and every grant before, gets. */
 const TODAY_KEYS = ['communityAlerts', 'crashLoop', 'diskUsedPercent', 'memory', 'serverAlerts', 'standbyIncident', 'tlsFallback', 'uncleanStop', 'watchdog'];
 /** Each row's keys, and nothing else. */
-const ROW_KEYS = ['answers', 'checkedAt', 'host', 'kind', 'main', 'nextStep', 'step'];
+const ROW_KEYS = ['answers', 'checkedAt', 'host', 'kind', 'main', 'nextStep', 'standing', 'step'];
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 async function main(): Promise<void> {
@@ -201,7 +209,7 @@ async function main(): Promise<void> {
         assert(rows[0]?.host === 'byron.beanpool.org' && rows[0]?.main === true && rows.filter((r) => r.main).length === 1,
             `the main address comes first, the only one marked main (${JSON.stringify(rows[0])})`);
         assert(rows.length > 0 && rows.every((r) => JSON.stringify(Object.keys(r).sort()) === JSON.stringify(ROW_KEYS)),
-            `each row has host, kind, main, answers, checkedAt, step and nextStep, nothing else (${JSON.stringify(rows.map((r) => Object.keys(r).sort().join()).filter((k, i, a) => a.indexOf(k) === i))})`);
+            `each row has host, kind, main, answers, checkedAt, step, nextStep and standing, nothing else (${JSON.stringify(rows.map((r) => Object.keys(r).sort().join()).filter((k, i, a) => a.indexOf(k) === i))})`);
         const expect: Array<[string, Record<string, unknown>]> = [
             ['byron.beanpool.org', { kind: 'beanpool-name', main: true, answers: 'silence', checkedAt: isoAgo(1), step: 'new-name', nextStep: words('new-name', 12) }],
             ['shire.example.org', { kind: 'own-domain', main: false, answers: 'own', checkedAt: isoAgo(2), step: 'fine', nextStep: 'Answers as this server. Nothing to do.' }],
@@ -233,9 +241,10 @@ async function main(): Promise<void> {
             && ['beanpool-name', 'number', 'own-domain'].includes(r.kind) && typeof r.main === 'boolean'
             && [null, 'own', 'other', 'other-origin', 'silence', 'tls'].includes(r.answers)
             && (r.checkedAt === null || ISO.test(r.checkedAt))
+            && r.standing === null
             && (STEP_WORDS.has(r.nextStep) || (r.step === 'new-name' && /^Made \d+ minutes? ago\./.test(r.nextStep)))));
         assert(rows.length > 0 && strays.length === 0,
-            `every value is a published host, a kind, yes or no, an answer word, a time or a next step's words (${JSON.stringify(strays)})`);
+            `every value is a published host, a kind, yes or no, an answer word, a time, a next step's words or no standing (${JSON.stringify(strays)})`);
         const all = JSON.stringify(h);
         const ours = nodePubkeyHex().toLowerCase();
         // The /check page's fingerprint is `····` and the key's last four: four hex digits alone could be any number here.
@@ -270,8 +279,87 @@ async function main(): Promise<void> {
         const hBack = await health(client);
         assert(Array.isArray(hBack?.addresses) && hBack.addresses.length === published.length, 'the main server again: the addresses are back');
 
-        // ── 6. A member's grant ──
-        console.log("── 6. A grant whose maker is a member now gets what it got before: nothing ──");
+        // ── 6. A name with a standing: never "Nothing to do" where Settings warns ──
+        // Opus review of #2835 (server-addresses.ts:61): the check found this server at the name (`own`, step fine), but the
+        // address service says it is nobody's, another community's, or has no record of it. Settings' report
+        // (appAddressesReport, the Addresses screen's data) is read side by side with the assistant's answer, and the screen's
+        // own rule (core addressStandingText, addressReachSentence) is applied to the report: the two must say the same.
+        console.log('── 6. A BeanPool name the address service says is not simply ours: its standing, never "Nothing to do" ──');
+        const NAME = 'byron.beanpool.org';
+        const HOLDER = 'ab'.repeat(32);
+        const writeRow = (key: string, value: unknown) => db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+            .run(key, JSON.stringify(value));
+        writeRow(ADDRESS_CHECK_KEY, { ...checks, [NAME]: { checkedAt: ago(1), answers: 'own', ownAt: ago(1), dns: dnsSaw([], { cname: [TUNNEL] }) } });
+        const setStatus = (status: string) => {
+            updateNodeConfig({ registrarNames: [{ ...entry(NAME, 'current', isoAgo(12)), status }, entry('oldname.beanpool.org', 'former', isoAgo(9000))] } as any);
+            forgetOwnAddresses();
+        };
+        const isoDay = (iso: string) => iso.slice(0, 10);
+        const states: Array<{ label: string; status: string; watch: Record<string, unknown> | null; state: string | null; says: string | null; words: string | null }> = [
+            {
+                label: 'the address service says no community holds it', status: 'live', watch: { checkedAt: ago(1), registrar: 'free', registrarAt: ago(1) },
+                state: 'at-risk', says: 'free', words: `The address service says no community holds ${NAME}. Members' apps that use it are still accepted.`,
+            },
+            {
+                label: 'it says another community holds it, and nothing answers there', status: 'live',
+                watch: { checkedAt: ago(1), registrar: 'other', registrarAt: ago(1), holderKey: HOLDER, edge: 'silence', edgeAt: ago(1) },
+                state: 'at-risk', says: 'other',
+                words: `The address service says another community holds ${NAME}. Members' apps that use it are still accepted. This server checks what answers there before it stops accepting it.`,
+            },
+            {
+                label: 'it says another community holds it, but it still leads here', status: 'live',
+                watch: { checkedAt: ago(1), registrar: 'other', registrarAt: ago(1), holderKey: HOLDER, edge: 'own', edgeAt: ago(1), ownAt: ago(1) },
+                state: 'contradiction', says: 'other',
+                words: `The address service says another community holds ${NAME}, but ${NAME} still leads to this server. It stays accepted.`,
+            },
+            {
+                label: 'it has no record of it (an address service that lost its data)', status: 'none', watch: null,
+                state: 'at-risk', says: 'none', words: `The address service has no record of ${NAME}. Members' apps that use it are still accepted.`,
+            },
+            {
+                label: 'it says the name is this community\'s (nothing to say)', status: 'live',
+                watch: { checkedAt: ago(1), registrar: 'you', registrarAt: ago(1), state: 'live', entryAtYou: 'current/live' },
+                state: null, says: null, words: null,
+            },
+        ];
+        try {
+            for (const c of states) {
+                setStatus(c.status);
+                if (c.watch) writeRow(NAME_WATCH_KEY, { [NAME]: c.watch });
+                else db.prepare('DELETE FROM node_config WHERE key = ?').run(NAME_WATCH_KEY);
+                const settings = appAddressesReport().addresses.find((a: any) => a.address === NAME) as any;
+                const got = ((await health(client))?.addresses ?? []).find((r: any) => r.host === NAME);
+                assert((settings?.standing?.state ?? null) === c.state && settings?.reach?.step === 'fine',
+                    `${c.label}: Settings' report has standing ${c.state} and the check found this server (${JSON.stringify({ standing: settings?.standing, step: settings?.reach?.step })})`);
+                if (c.state === null) {
+                    assert(got?.standing === null && got?.nextStep === en.t(ADDRESS_CHECK_WORDS.fine) && got?.step === 'fine',
+                        `${c.label}: no standing, and the next step is the check's own "Nothing to do" (${JSON.stringify(got)})`);
+                    continue;
+                }
+                const screenWords = addressStandingText(settings, isoDay)?.text;
+                const screenStep = addressReachSentence(settings.reach.step, settings.reach.minutes, true, en);
+                assert(got?.standing?.state === settings.standing.state && got?.standing?.registrarSays === settings.standing.registrarSays
+                    && got?.standing?.registrarSays === c.says,
+                `${c.label}: the assistant reads standing ${c.state}, the address service saying ${c.says}, as Settings does (${JSON.stringify(got?.standing)})`);
+                assert(got?.standing?.words === c.words && got?.standing?.words === screenWords,
+                    `${c.label}: in the Addresses screen's words, which say what to do (${JSON.stringify(got?.standing?.words)})`);
+                assert(!!got && !/Nothing to do/i.test(got.nextStep) && got.nextStep === screenStep && got.nextStep === en.t(ADDRESS_SCREEN_WORDS.reachFine),
+                    `${c.label}: the next step is the screen's "${screenStep}", never "Nothing to do" (${JSON.stringify(got?.nextStep)})`);
+                assert(!JSON.stringify(got).includes(HOLDER), `${c.label}: never the key the address service named`);
+            }
+        } finally {
+            setStatus('live');
+            db.prepare('DELETE FROM node_config WHERE key = ?').run(NAME_WATCH_KEY);
+            writeRow(ADDRESS_CHECK_KEY, checks);
+        }
+        // A minute may have passed since section 1: the new name's age in its next step is the one thing that can move.
+        const settled = (rows: any[] | undefined) => JSON.stringify((rows ?? []).map(({ nextStep, ...r }: any) => r));
+        const hRestored = await health(client);
+        assert(Array.isArray(hRestored?.addresses) && settled(hRestored.addresses) === settled(h.addresses) && hRestored.addresses.every((r: any) => r.standing === null),
+            'the name as it was: the addresses read as at the start, none with a standing');
+
+        // ── 7. A member's grant ──
+        console.log("── 7. A grant whose maker is a member now gets what it got before: nothing ──");
         revokeNodeRole(owner3.pub, 'owner', owner.pub);
         const memberCall = await call('POST', '/mcp', {
             headers: { Accept: 'application/json, text/event-stream', ...bearer(tMember.body.token) },

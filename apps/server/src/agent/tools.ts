@@ -53,7 +53,7 @@ import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
 import { OWNER_READ_TOOLS } from './owner-reads.js';
 import { OWNER_TAKEDOWN_TOOLS, takedownsSummary } from './owner-takedowns.js';
 import { OWNER_SEED_TOOLS } from './owner-seeds.js';
-import { serverAddresses, NOT_CHECKED_STEP, SERVER_ADDRESS_KINDS } from './server-addresses.js';
+import { serverAddresses, NOT_CHECKED_STEP, SERVER_ADDRESS_KINDS, SERVER_ADDRESS_STANDINGS } from './server-addresses.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, suggestionAsks, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
@@ -145,6 +145,11 @@ const SERVER_ADDRESS_ROW = OBJ({
     checkedAt: STR_OR_NULL,
     step: STR,
     nextStep: STR,
+    standing: {
+        type: ['object', 'null'],
+        properties: { state: { type: 'string', enum: [...SERVER_ADDRESS_STANDINGS] }, registrarSays: STR_OR_NULL, words: STR },
+        required: ['state', 'registrarSays', 'words'],
+    },
 });
 
 function clampLimit(v: unknown, def = 20): number {
@@ -318,7 +323,10 @@ export const AGENT_TOOLS: AgentTool[] = [
             + "`addresses`: each published address of this community, main first, with its host, its kind, whether it is the main one, "
             + 'what answered there when this server last checked it (own: this server; other: a server with another key; other-origin: '
             + "something that isn't a BeanPool server; silence: nothing; tls: a certificate phones refuse; null: not asked, or "
-            + `step ${NOT_CHECKED_STEP}), when, and the one next step in words to pass on. The check looks from this server every `
+            + `step ${NOT_CHECKED_STEP}), when, and the one next step in words to pass on. A BeanPool name the address service doesn't `
+            + "simply give this community has a `standing` (at-risk or contradiction: what the address service says, and Settings' "
+            + 'words for it, which say what to do; pass those on with the next step, which then never says there is nothing to do), '
+            + 'otherwise null. The check looks from this server every '
             + '15 minutes and can be wrong where phones are right: the check link it may name is https://<that host>/check, opened '
             + 'on a phone on mobile data',
         never: "a flag's members or description, an alert's detail, the alerts channel's address, what a name points at, a "

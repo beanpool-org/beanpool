@@ -262,14 +262,15 @@ async function main() {
     const shape0 = readShape().settings.removalDecider;
     assert(shape0.configured === 'automatic' && shape0.value === 'automatic' && shape0.source === 'default' && shape0.lock === null && shape0.poolSize === 151,
         `How this community works reads Who decides a removal: Automatic, the default, no lock, 151 could serve, FrozenFay among them (${JSON.stringify(shape0)})`);
-    // A member's read of the community says the rule, for "How this community works" on the phone and the web; a read that
-    // isn't a member's says nothing of it.
+    // A member's read of the community says the rule, for "How this community works" on the phone and the web, beside its
+    // features and never in them (config/features-for.ts removalDeciderFor); a read that isn't a member's says nothing of it.
     const meRead = await signed('GET', '/api/community/me', gen);
-    assert(meRead.status === 200 && meRead.body?.features?.removalDecider === 'automatic',
-        `a member's /api/community/me says who decides a removal: automatic (${meRead.status} ${JSON.stringify(meRead.body?.features?.removalDecider)})`);
-    const { featuresFor } = await import('./config/features-for.js');
-    assert(!('removalDecider' in featuresFor(null)) && !('removalDecider' in featuresFor(keypair('NotAMember').pk)),
+    assert(meRead.status === 200 && meRead.body?.removalDecider === 'automatic' && !('removalDecider' in (meRead.body?.features ?? {})),
+        `a member's /api/community/me says who decides a removal beside its features: automatic (${meRead.status} ${JSON.stringify(meRead.body?.removalDecider)}, in features: ${JSON.stringify(meRead.body?.features?.removalDecider)})`);
+    const { featuresFor, removalDeciderFor } = await import('./config/features-for.js');
+    assert(removalDeciderFor(null) === undefined && removalDeciderFor(keypair('NotAMember').pk) === undefined,
         'and a read that is no member\'s carries no rule');
+    assert(![null, keypair('NotAMember').pk, gen.pk].some((who) => 'removalDecider' in featuresFor(who)), 'and no reader\'s features carry it, a member\'s included');
     const byDefault = nextSubject();
     const autoVote = pauseOf(byDefault);
     assert(paramsOf(autoVote).decider === 'jury' && paramsOf(autoVote).jury?.size === 12 && paramsOf(autoVote).jury?.poolSize === 150,

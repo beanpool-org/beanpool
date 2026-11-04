@@ -587,7 +587,11 @@ async function main(): Promise<void> {
         nodeConfig: (await call('GET', null, '/api/node/config', undefined, owner)).body,
         info: (await call('GET', null, '/api/community/info')).body,
         me: (await call('GET', sam, '/api/community/me')).body,
-        homeFeatures: (await call('GET', sam, '/api/home')).body?.features,
+        ...await (async () => {
+            const home = (await call('GET', sam, '/api/home')).body;
+            // Who decides a removal, which a member's Home says beside its features (removal jury J3).
+            return { homeFeatures: home?.features, homeRemovalDecider: home?.removalDecider };
+        })(),
         knownFloor: (await call('GET', null, '/api/local/admin/known-floor', undefined, owner)).body,
     });
     const SETUPS: [string, () => void][] = [
@@ -605,18 +609,21 @@ async function main(): Promise<void> {
         const features = after.me?.features ?? {};
         const nodeBase = { ...np.getNodeFeatures(), door: getDoor() };
         const expectsFloor = Boolean(np.getNodeFeatures().beans && confirmationDialOn(db));
-        // A member's read also says who decides a removal (removal jury J3, config/features-for.ts), whatever the floor.
-        const memberBase = { ...nodeBase, removalDecider: 'automatic' };
-        const want = Object.keys(expectsFloor ? { ...memberBase, knownFloor: 1000, debtLinePct: 50, quietDays: 60 } : memberBase).sort();
+        const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: 1000, debtLinePct: 50, quietDays: 60 } : nodeBase).sort();
         assert(isDeepStrictEqual(Object.keys(features).sort(), want),
             `${label}: a member's features carry expected fields (${Object.keys(features).length} fields)`);
-        assert(features.removalDecider === 'automatic', `${label}: a member's features say who decides a removal: automatic, the default (${features.removalDecider})`);
+        // Who decides a removal (removal jury J3): a member's answers say it beside the features, never in them
+        // (config/features-for.ts removalDeciderFor), whatever the floor.
+        assert(after.me?.removalDecider === 'automatic' && after.homeRemovalDecider === 'automatic',
+            `${label}: a member's /api/community/me and /api/home say who decides a removal beside the features: automatic, the default (${after.me?.removalDecider}, ${after.homeRemovalDecider})`);
         if (expectsFloor) {
             assert(features.knownFloor === 1000 && features.debtLinePct === 50 && features.quietDays === 60, `${label}: knownFloor is 1000 for member, with the rule's two lines beside it`);
         } else {
             assert(!('knownFloor' in features), `${label}: no knownFloor when dial or beans off`);
         }
         assert(!['knownFloor', 'debtLinePct', 'quietDays'].some((k) => k in (after.info?.features ?? {})), `${label}: public info never carries knownFloor or the lines: the join screen reads /api/community/known-rule`);
+        assert(!('removalDecider' in (after.info?.features ?? {})) && !('removalDecider' in (after.info ?? {})),
+            `${label}: nor who decides a removal, which a visitor is never told (design §4.3: a visitor gets nothing new)`);
         assert(isDeepStrictEqual(Object.keys(after.homeFeatures ?? {}).sort(), want), `${label}: and so do Home's`);
         assert(after.nodeConfig?.acceptKnocks === np.getProfileSwitches().knocks && after.nodeConfig?.door === getDoor(),
             `${label}: node/config still answers acceptKnocks and door (${after.nodeConfig?.acceptKnocks}, ${after.nodeConfig?.door})`);
@@ -646,8 +653,9 @@ async function main(): Promise<void> {
         for (const path of ['/api/community/me', '/api/home']) {
             const r = await call('GET', sam, path);
             assert(r.status === 200 && r.body?.features?.knownFloor === 1000
-                && isDeepStrictEqual(Object.keys(r.body.features).sort(), [...nodeKeys, 'knownFloor', 'debtLinePct', 'quietDays', 'removalDecider'].sort()),
+                && isDeepStrictEqual(Object.keys(r.body.features).sort(), [...nodeKeys, 'knownFloor', 'debtLinePct', 'quietDays'].sort()),
                 `${view}: an active member's ${path} carries knownFloor 1000 beside the node's features (${show(r)})`);
+            assert(r.body?.removalDecider === 'automatic', `${view}: and says who decides a removal beside them, automatic (${show(r)})`);
         }
 
         // A reader who does not: no knownFloor, and no member-only field of any kind (the node's own keys, the visitors' own set).
@@ -670,6 +678,7 @@ async function main(): Promise<void> {
                     assert(features && !('knownFloor' in features) && isDeepStrictEqual(Object.keys(features).sort(), nodeKeys),
                         `${view}: ${who}: ${path} carries the node's features and no knownFloor (${Object.keys(features ?? {}).sort().join(', ')})`);
                 }
+                assert(!('removalDecider' in (r.body ?? {})), `${view}: ${who}: ${path} says nothing of who decides a removal (${show(r)})`);
             }
             if (home.status === 200 && id && (who === 'a suspended member' || who === 'a disabled account')) {
                 assert(home.body?.me?.standing === 'suspended', `${view}: ${who}: Home calls them suspended, the visitors' cards (${home.body?.me?.standing})`);

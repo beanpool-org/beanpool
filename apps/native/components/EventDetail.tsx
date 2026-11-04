@@ -5,7 +5,9 @@
  * in one order: the card's chips, the loud lines (the when in the event's ink, the title, the place with "Show on map"), the
  * photo at 4:3 (the event's tile without one), Going / Interested, the quiet row (the chat, Share, Add to calendar), the
  * reminder and the note for people who are going as boxes, the description, the host's box, the host's guest list, Report.
- * The answer is on the first screen; the counts show only once someone has answered.
+ * The answer comes before the reading, right under the photo; a repeating event's next dates are one compact line above it.
+ * Whether it is on the first screen is measured, not promised (event-page-shell-render.test.ts, §2.9: open at 320 dp and
+ * 1.3× with a photo). The counts show only once someone has answered.
  *
  * What the viewer may see is the node's decision, not this screen's: the local row gives a first paint, then
  * a signed by-id fetch returns my RSVP, the note (host and Going only) and the RSVP list (hosts only). The note
@@ -387,7 +389,7 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 {/*
                   * One column, the parts in DESIGN-detail-pages-fable.md §2.1's order, drawn from the style box
                   * (components/market-card-shell.ts): the card's chips, the loud lines, the photo, the answer, the quiet row,
-                  * the boxes, the description, the host, the rest, Report. The answer is on the first screen; reading comes after.
+                  * the boxes, the description, the host, the rest, Report. The answer comes right under the photo; reading comes after.
                   */}
                 {/*
                   * 1. The chip row: the list card's own chips, in its order. Not the card's 🔒 group chip: the page says who can see
@@ -432,7 +434,10 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                     </View>
                 )}
 
-                {/* 4. The loud lines, the card's three in the card's order: the when, the title, the place. */}
+                {/*
+                  * 4. The loud lines, the card's three in the card's order: the when, the title, the place. A repeating event's next
+                  * dates (six on a by-id read) are compact here: the first and "and 5 more", which opens the list and the host's controls.
+                  */}
                 <Text testID="event-when" style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
                 {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
                 {!!hostLine && <Text style={styles.timeNote}>{hostLine}</Text>}
@@ -441,6 +446,7 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 {!!view && (
                     <EventNextDates
                         post={view}
+                        compact
                         isHost={isHost && !closed}
                         onChanged={(next) => setView(next)}
                         onChangeThisDateOnly={(next) => {

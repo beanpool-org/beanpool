@@ -3,12 +3,14 @@
  * The event page on the style box (DESIGN-detail-pages-fable.md §2 and §3 slice DP1; Marty, 4 Nov 2026: "All Fable's picks"):
  * components/EventDetail.tsx drawn for real, with what it draws (EventExtras' Share, Add to calendar and Remind me, the Share
  * button, the host's box), and laid out with Yoga (yoga-dom-layout.ts) at the floor: 320 dp wide, 569 tall, text at 1.3×, in
- * light and in dark. The Mullum market is the fixture (§2.9's): a two-line title, a repeat caption, a one-line place, a photo.
+ * light and in dark. The Mullum market is the fixture (§2.9's): a two-line title, a repeat caption, a one-line place, a photo,
+ * and, as the node sends it by id, its next six dates (drawn by the real EventNextDates, compact).
  *
  * It proves the order (the answer is the first button after the loud lines, before Share, the description and the host), the
- * 4:3 photo frame (288 × 216 in a 288 dp column), the answer row on the first screen (its top above 500 dp: §2.9's stop),
- * HOSTED BY as the page box and no grey host line, the counts only above zero, the boxes and buttons on the style box's
- * numbers and the event's library colours, nothing wider than the screen, and none of the old raw violets anywhere.
+ * 4:3 photo frame (288 × 216 in a 288 dp column), where the answer row lands (§2.9's stop is measured, and still open with a
+ * photo: see its block), the next dates compact (the first and "and 5 more", one button that opens the list), HOSTED BY as
+ * the page box and no grey host line, the counts only above zero, the boxes and buttons on the style box's numbers and the
+ * event's library colours, nothing wider than the screen, and none of the old raw violets anywhere.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../components/useKeepCaretVisible', () => ({ useKeepCaretVisible: () => ({ scrollRef: { current: null }, scrollProps: {} }) }));
@@ -114,6 +116,7 @@ vi.mock('../db', () => ({
     getBalance: async () => null,
     getTreasuries: async () => [],
     fetchGroups: async () => [],
+    setEventDateCancelled: async () => ({}),
 }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => ({ profile: 'local', checkedAt: '2026-11-04T00:00:00.000Z', features: { beans: true } }) }));
 vi.mock('../haptics', () => ({ hapticTick: () => {} }));
@@ -127,9 +130,8 @@ vi.mock('../../components/PhotoCarousel', async () => {
     return { PhotoCarousel: (p: { height?: number; borderRadius?: number }) => h('div', { 'data-testid': 'event-carousel', 'data-height': String(p.height), 'data-radius': String(p.borderRadius), 'data-style': JSON.stringify({ height: p.height }) }) };
 });
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
-vi.mock('../../components/EventNextDates', () => ({ EventNextDates: () => null }));
 
-import { MARKET_CARD_SHELL } from '@beanpool/core';
+import { MARKET_CARD_SHELL, seriesDateLabel } from '@beanpool/core';
 import { EventDetail } from '../../components/EventDetail';
 import { darkColors, lightColors } from '../../constants/colors';
 
@@ -145,6 +147,23 @@ const MULLUM = {
     photos: ['https://mullum.example/uploads/market.webp'], goingCount: 0, interestedCount: 0,
     tags: ['food'],
 };
+/**
+ * What the node adds to a repeating event on a by-id read (packages/beanpool-engine/src/posts.ts, EVENT_NEXT_DATES = 6): its
+ * next six dates, the event's own date first (the date its when line shows), then, as the market runs, the third Saturday of
+ * each month after it ("Sat 19 Dec").
+ */
+function nextSixDates(start: Date) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dates = [`${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`];
+    for (let m = 1; dates.length < 6; m++) {
+        const first = new Date(Date.UTC(start.getFullYear(), start.getMonth() + m, 1));
+        dates.push(new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 15 + ((6 - first.getUTCDay() + 7) % 7))).toISOString().slice(0, 10));
+    }
+    return dates.map((date) => ({ date, startLocal: `${date}T08:00`, startAt: `${date}T08:00:00+10:00`, endAt: `${date}T14:00:00+10:00`, cancelled: false }));
+}
+const NEXT_DATES = nextSixDates(new Date(MULLUM.eventStartAt));
+/** The Mullum market as the node sends it by id: the cached row and its six next dates. */
+const BY_ID = { ...MULLUM, eventNextDates: NEXT_DATES };
 const RSVPS = [{ memberPubkey: '1'.repeat(64), memberCallsign: 'Sam', status: 'going', updatedAt: '2026-11-01T00:00:00.000Z' }];
 
 const THEMES = [['light', lightColors], ['dark', darkColors as unknown as typeof lightColors]] as const;
@@ -195,8 +214,8 @@ function screen(): { layout: Layout; abs: (el: Element) => { left: number; top: 
 describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, colors) => {
     beforeEach(() => { themeIs.now = theme; });
 
-    it('a member who has not answered: the chips, the loud lines, the 4:3 photo, then Going / Interested on the first screen', async () => {
-        await draw(MULLUM, { ...MULLUM, myRsvp: null });
+    it('a member who has not answered: the chips, the loud lines, the 4:3 photo, then Going / Interested right under it', async () => {
+        await draw(MULLUM, { ...BY_ID, myRsvp: null });
         // The card's chips, not the old badge: EVENT on the event's tile pair.
         const chip = byId('event-type-chip')!;
         expect(chip, 'the EVENT chip').toBeTruthy();
@@ -208,11 +227,14 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
         expect(styleOf(byId('event-title'))).toMatchObject({ fontSize: 20, fontWeight: '800', color: colors.text.heading });
         expect(host.textContent).toContain('↻ ');
 
-        // Going is the first button after the title block (the place's "Show on map" is a link, part of the loud lines).
+        // Going is the first button after the loud lines. Their one button is the next dates' opener (the place's "Show on map"
+        // is a link): the dates are part of the loud lines, above the photo.
         const title = byId('event-title')!;
         const going = buttonNamed('Going')!;
-        const firstAfter = Array.from(host.querySelectorAll('[role="button"]')).find((b) => before(title, b));
-        expect(firstAfter, 'the first button after the title').toBe(going);
+        const afterTitle = Array.from(host.querySelectorAll('[role="button"]')).filter((b) => before(title, b));
+        expect(afterTitle[0], 'the first button after the title: the next dates, compact').toBe(byId('event-next-dates-open'));
+        expect(before(afterTitle[0], byId('event-photo-frame')!), 'the dates above the photo').toBe(true);
+        expect(afterTitle[1], 'the first button after the loud lines').toBe(going);
         expect(buttonNamed('Interested')).toBeTruthy();
         // Then Share, the description, the host's box, Report: the answer before the reading.
         const share = buttonNamed('Share this event')!;
@@ -241,7 +263,7 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
     });
 
     it('nothing is wider than the screen, and no raw violet is drawn anywhere', async () => {
-        await draw(MULLUM, { ...MULLUM, myRsvp: 'going', goingCount: 3, interestedCount: 1, eventPrivateNote: 'Stall holders park behind the hall.' });
+        await draw(MULLUM, { ...BY_ID, myRsvp: 'going', goingCount: 3, interestedCount: 1, eventPrivateNote: 'Stall holders park behind the hall.' });
         const { abs } = screen();
         for (const el of Array.from(host.querySelectorAll('[data-style]'))) {
             // A Text inside a Text is part of its line, and laid out with it; a closed sheet is not on the page.
@@ -257,7 +279,7 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
     });
 
     it('a member who is Going: the chosen answer on the event fill, the counts once someone has answered, the quiet row and the note as boxes', async () => {
-        await draw(MULLUM, { ...MULLUM, myRsvp: 'going', goingCount: 3, interestedCount: 1, eventPrivateNote: 'Stall holders park behind the hall.' });
+        await draw(MULLUM, { ...BY_ID, myRsvp: 'going', goingCount: 3, interestedCount: 1, eventPrivateNote: 'Stall holders park behind the hall.' });
         const chosen = buttonNamed('Going, selected. Tap to clear')!;
         expect(chosen, 'the chosen answer').toBeTruthy();
         expect(styleOf(chosen)).toMatchObject({ backgroundColor: colors.event.fill, borderColor: colors.event.fill, minHeight: 48, borderRadius: 12 });
@@ -305,7 +327,7 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
     });
 
     it('HOSTED BY is the page box, after the description; the grey "Hosted by" line is gone', async () => {
-        await draw(MULLUM, { ...MULLUM, myRsvp: null });
+        await draw(MULLUM, { ...BY_ID, myRsvp: null });
         const label = spanWith('HOSTED BY')!;
         expect(label, 'the HOSTED BY label').toBeTruthy();
         expect(styleOf(label)).toMatchObject({ fontSize: 10, fontWeight: '800', letterSpacing: 1.5, color: colors.text.muted, marginBottom: 8 });
@@ -318,7 +340,7 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
 
     it('the host: their line in the event ink where the answer goes, and the guest list on the page box', async () => {
         who.key = HOST;
-        await draw(MULLUM, { ...MULLUM, eventRsvps: RSVPS, goingCount: 1 });
+        await draw(MULLUM, { ...BY_ID, eventRsvps: RSVPS, goingCount: 1 });
         expect(buttonNamed('Going')).toBeUndefined();
         const hosting = spanWith("You're hosting this event")!;
         expect(styleOf(hosting).color).toBe(colors.event.ink);
@@ -331,8 +353,35 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
         expect(buttonNamed('Report event')).toBeUndefined();
     });
 
+    it('a repeating event: its next dates compact, the first and "and 5 more", one 48 dp button that opens all six', async () => {
+        await draw(MULLUM, { ...BY_ID, myRsvp: null });
+        const open = byId('event-next-dates-open')!;
+        expect(open.getAttribute('role')).toBe('button');
+        expect(open.textContent).toBe(`Next dates${seriesDateLabel(NEXT_DATES[0].date)}and 5 more`);
+        expect(host.querySelectorAll('[data-testid="event-next-date"]')).toHaveLength(0);
+        expect(styleOf(spanWith('and 5 more'))).toMatchObject({ color: colors.text.link, textDecorationLine: 'underline' });
+        const { abs } = screen();
+        expect(abs(open).height).toBeGreaterThanOrEqual(48);
+        expect(abs(open).width).toBeCloseTo(288, 0);
+        await act(async () => { open.click(); });
+        await settle(2);
+        expect(byId('event-next-dates-open')).toBeNull();
+        expect(Array.from(host.querySelectorAll('[data-testid="event-next-date"]')).map((d) => d.textContent))
+            .toEqual(NEXT_DATES.map((d) => seriesDateLabel(d.date)));
+    });
+
+    it("the host: the same compact line; opened, each date with the host's controls", async () => {
+        who.key = HOST;
+        await draw(MULLUM, { ...BY_ID, eventRsvps: RSVPS, goingCount: 1 });
+        expect(host.querySelectorAll('[data-testid="event-date-cancel"]')).toHaveLength(0);
+        await act(async () => { byId('event-next-dates-open')!.click(); });
+        await settle(2);
+        expect(host.querySelectorAll('[data-testid="event-date-cancel"]')).toHaveLength(6);
+        expect(host.querySelectorAll('[data-testid="event-date-move"]')).toHaveLength(6);
+    });
+
     it('no photo: the event tile, 3:1, inside the column; a cancelled event says so in a danger chip', async () => {
-        await draw({ ...MULLUM, photos: [] }, { ...MULLUM, photos: [], eventState: 'cancelled', myRsvp: null });
+        await draw({ ...MULLUM, photos: [] }, { ...BY_ID, photos: [], eventState: 'cancelled', myRsvp: null });
         expect(byId('event-photo-frame')).toBeNull();
         const banner = byId('event-tile-banner')!;
         const { abs } = screen();
@@ -348,31 +397,69 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
 
 /**
  * §2.9's stop condition for the frame (DP1: "Stop if the answer row's top passes 500 dp on the Mullum fixture at 1.3×; then the
- * frame goes to 3:2 before anything else"). Measured here it does not hold, at 4:3 or at 3:2 (the PR says what, and asks): the
- * status bar (24), the header as it is (65), the column's padding (16), a two-line when at 18/800 × 1.3 and the 48 dp place row
- * with its "Show on map" link come to about 100 dp more than §2.9 counted. `it.fails` keeps the stop in view: once a layout
- * brings the row above 500 this case fails, and becomes a plain `it`.
+ * frame goes to 3:2 before anything else"), measured on the Mullum market as the node sends it by id, with its six next dates
+ * (the review of #2880, finding 1). The answer row's top, from the screen's top (the status bar's 24 included), on a 569 dp
+ * screen:
+ *
+ *                                        a photo (4:3)   no photo (the tile, 3:1)
+ *   no next dates (a one-off event)          586             466
+ *   the six dates in full (opened)           700.3           580.3   (no photo: Going's bottom at 628, past the screen)
+ *   the six dates compact (as drawn)         639.5           519.5   (no photo: Going's bottom at 567.5, on the screen)
+ *
+ * Compact, the dates take 53.5 dp, not 114.3: without a photo the whole answer row stays on the first screen. With a photo it
+ * is not on the first screen, with the dates or without them, at 4:3 or at 3:2 (the status bar, the header as it is, the
+ * column's padding, a two-line when and the 48 dp place row come to about 100 dp more than §2.9 counted). That is the frame
+ * decision the PR asks for. `it.fails` keeps the stop in view: once a layout brings the row above 500 this case fails, and
+ * becomes a plain `it`.
  */
-describe('§2.9 stop condition, measured (OPEN: the PR asks)', () => {
+const answerRowTop = (abs: ReturnType<typeof screen>['abs']) => abs(byId('event-action')!).top;
+const openTheDates = async () => {
+    const open = byId('event-next-dates-open');
+    expect(open, 'the compact next dates').toBeTruthy();
+    await act(async () => { open!.click(); });
+    await settle(2);
+};
+describe('§2.9 stop condition, measured (OPEN with a photo: the PR asks)', () => {
     it.fails("the answer row's top is at or above 500 dp on the Mullum fixture at 320 × 569 and 1.3× text", async () => {
-        await draw(MULLUM, { ...MULLUM, myRsvp: null });
-        const { abs } = screen();
-        const rowTop = abs(buttonNamed('Going')!.parentElement!).top;
+        await draw(MULLUM, { ...BY_ID, myRsvp: null });
+        const rowTop = answerRowTop(screen().abs);
         expect(rowTop, `the answer row's top at ${Math.round(rowTop)} dp`).toBeLessThanOrEqual(500);
     });
 
-    it('where it is today: under the photo, at the number the PR quotes', async () => {
+    it('with no next dates (a one-off event): the row at 586 dp with a photo, 466 without', async () => {
         await draw(MULLUM, { ...MULLUM, myRsvp: null });
-        const { abs } = screen();
-        const row = abs(buttonNamed('Going')!.parentElement!);
-        // 586 dp from the screen's top (the status bar's 24 included), at 4:3; held so a change to it is seen.
-        expect(Math.round(row.top)).toBe(586);
+        expect(answerRowTop(screen().abs)).toBeCloseTo(586, 1);
+        act(() => root.unmount());
+        root = createRoot(host);
+        const bare = { ...MULLUM, photos: [] };
+        await draw(bare, { ...bare, myRsvp: null });
+        expect(answerRowTop(screen().abs)).toBeCloseTo(466, 1);
+    });
+
+    it('with a photo: the row at 639.5 dp with the dates compact, 700.3 with all six open', async () => {
+        await draw(MULLUM, { ...BY_ID, myRsvp: null });
+        expect(answerRowTop(screen().abs)).toBeCloseTo(639.5, 1);
+        await openTheDates();
+        expect(answerRowTop(screen().abs)).toBeCloseTo(700.3, 1);
+    });
+
+    it('no photo: with the dates compact the whole answer row is on the first screen; all six open push it past the edge', async () => {
+        const bare = { ...MULLUM, photos: [] };
+        await draw(bare, { ...BY_ID, photos: [], myRsvp: null });
+        let { abs } = screen();
+        expect(answerRowTop(abs)).toBeCloseTo(519.5, 1);
+        const going = () => abs(buttonNamed('Going')!);
+        expect(going().top + going().height, "Going's bottom, on the 569 dp screen").toBeLessThanOrEqual(569);
+        await openTheDates();
+        ({ abs } = screen());
+        expect(answerRowTop(abs)).toBeCloseTo(580.3, 1);
+        expect(going().top + going().height, "opened, Going's bottom is past the screen").toBeGreaterThan(569);
     });
 });
 
 describe('the photo frame hands the carousel its own height', () => {
     it('once laid out, the carousel draws at the frame\'s height with the shell\'s corners', async () => {
-        await draw(MULLUM, { ...MULLUM, myRsvp: null });
+        await draw(MULLUM, { ...BY_ID, myRsvp: null });
         expect(byId('event-carousel')).toBeNull();
         await act(async () => { layouts.get('event-photo-frame')!({ nativeEvent: { layout: { x: 0, y: 0, width: 288, height: 216 } } }); });
         const carousel = byId('event-carousel')!;

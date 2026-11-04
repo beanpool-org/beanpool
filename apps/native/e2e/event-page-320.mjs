@@ -7,12 +7,17 @@
  * the names the app imports from it) and the page, its boxes, the Share button and its sheet real. A stand-in for a phone:
  * Android's fonts and line breaks differ.
  *
- * The fixture is the Mullum market (Marty's shot, 4 Nov): a two-line title, a repeat caption, a photo. Cases:
- *   member   a member who has not answered: Going / Interested, no counts
- *   going    a member who is Going: the chosen answer, the counts, the chat in the quiet row, Remind me, the note
- *   host     the host: "You're hosting this event", the counts, the guest list box with Edit event, no Report
- *   copy     a member's copy on the global community: the copy's door, the "from" line, no host box
- *   nophoto  the member case with no photo: the event's tile, 3:1
+ * The fixture is the Mullum market (Marty's shot, 4 Nov): a two-line title, a repeat caption, a photo, and the six next dates
+ * the node sends by id (compact on the page: the first and "and 5 more"). Cases:
+ *   member           a member who has not answered: Going / Interested, no counts
+ *   going            a member who is Going: the chosen answer, the counts, the chat in the quiet row, Remind me, the note
+ *   host             the host: "You're hosting this event", the counts, the guest list box with Edit event, no Report
+ *   copy             a member's copy on the global community: the copy's door, the "from" line, no host box
+ *   nophoto          the member case with no photo: the event's tile, 3:1
+ *   member-nodates   the member case with no next dates (a one-off event, or before the node answers), for the numbers
+ *   nophoto-nodates  the same with no photo
+ *   member-open      the member case with the next dates opened: all six (nophoto-open: the same with no photo)
+ *   host-open        the host's case opened: each date with Cancel this date and Change this date only
  *
  * Each case, each scheme, fails on: the page scrolling sideways; text past the edge or cut; a button under 47.5dp; text under
  * 4.5:1 (3:1 large). It prints where the answer row's top lands (§2.9 counts it against 500dp). Shots go to --shots <dir>
@@ -201,7 +206,8 @@ globalThis.__theme = { theme: scheme, colors };
 const ME = '9'.repeat(64);
 const HOST = '7'.repeat(64);
 const c = q.get('case') || 'member';
-globalThis.__identity = { publicKey: c === 'host' ? HOST : ME, privateKey: '8'.repeat(64), callsign: c === 'host' ? 'Damo' : 'Wren' };
+const hosting = c === 'host' || c === 'host-open';
+globalThis.__identity = { publicKey: hosting ? HOST : ME, privateKey: '8'.repeat(64), callsign: hosting ? 'Damo' : 'Wren' };
 // A 4:3 photo of a market, drawn, from the harness's own server: no network.
 const PHOTO = location.origin + '/market.svg';
 const DAY = 86400000;
@@ -214,12 +220,22 @@ const base = {
     eventStartAt: start.toISOString(), eventEndAt: new Date(start.getTime() + 6 * 3600000).toISOString(), eventTz: 'Australia/Sydney',
     eventRepeat: { freq: 'monthly', interval: 1, byDay: 'SA', pos: 3 },
     eventPlaceName: 'Summers Park', lat: -28.5537, lng: 153.4994,
-    photos: c === 'nophoto' ? [] : [PHOTO], goingCount: 0, interestedCount: 0, tags: ['food'],
+    photos: c.startsWith('nophoto') ? [] : [PHOTO], goingCount: 0, interestedCount: 0, tags: ['food'],
 };
+// What the node adds on a by-id read of a repeating event (packages/beanpool-engine/src/posts.ts, EVENT_NEXT_DATES = 6): the
+// next six dates, the event's own date first (the one its when line shows), then the third Saturday of each month after it.
+const pad = (n) => String(n).padStart(2, '0');
+const nextDates = [start.getFullYear() + '-' + pad(start.getMonth() + 1) + '-' + pad(start.getDate())];
+for (let m = 1; nextDates.length < 6; m++) {
+    const first = new Date(Date.UTC(start.getFullYear(), start.getMonth() + m, 1));
+    nextDates.push(new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 15 + ((6 - first.getUTCDay() + 7) % 7))).toISOString().slice(0, 10));
+}
+const byIdDates = nextDates.map((date) => ({ date, startLocal: date + 'T08:00', startAt: date + 'T08:00:00+10:00', endAt: date + 'T14:00:00+10:00', cancelled: false }));
 let post = base;
-let view = { ...base, myRsvp: null };
-if (c === 'going') view = { ...base, myRsvp: 'going', goingCount: 3, interestedCount: 1, eventPrivateNote: 'Stall holders park behind the hall, not on the oval.' };
-if (c === 'host') view = { ...base, goingCount: 3, interestedCount: 1, eventRsvps: [
+const byId = /-nodates$/.test(c) ? base : { ...base, eventNextDates: byIdDates };
+let view = { ...byId, myRsvp: null };
+if (c === 'going') view = { ...byId, myRsvp: 'going', goingCount: 3, interestedCount: 1, eventPrivateNote: 'Stall holders park behind the hall, not on the oval.' };
+if (c === 'host' || c === 'host-open') view = { ...byId, goingCount: 3, interestedCount: 1, eventRsvps: [
     { memberPubkey: '1'.repeat(64), memberCallsign: 'Sam', status: 'going', updatedAt: '2026-11-01T00:00:00.000Z' },
     { memberPubkey: '2'.repeat(64), memberCallsign: 'Tia', status: 'interested', updatedAt: '2026-11-01T00:00:00.000Z' },
 ] };
@@ -331,20 +347,31 @@ try {
     };
 
     for (const scheme of ['light', 'dark']) {
-        for (const c of ['member', 'going', 'host', 'copy', 'nophoto']) {
+        for (const c of ['member', 'going', 'host', 'copy', 'nophoto', 'member-nodates', 'nophoto-nodates', 'member-open', 'nophoto-open', 'host-open']) {
             const tag = `${scheme} · ${c}`;
             await page.goto(`${base}/?scheme=${scheme}&case=${c}`);
             await page.locator('[data-testid="event-chip-row"]').waitFor();
             await page.waitForTimeout(600);
+            // The next dates as a member opens them: the compact line's one button, then the whole list.
+            if (c.endsWith('-open')) {
+                await page.locator('[data-testid="event-next-dates-open"]').click();
+                await page.locator('[data-testid="event-next-date"]').first().waitFor();
+            }
             await measure(tag);
             // Where the answer (or the host's line, or the copy's door) starts, from the screen's top.
             const at = await page.evaluate(() => {
                 const action = document.querySelector('[data-testid="event-action"]');
                 const photo = document.querySelector('[data-testid="event-photo-frame"]') || document.querySelector('[data-testid="event-tile-banner"]');
                 const p = photo?.getBoundingClientRect();
-                return { action: action ? Math.round(action.getBoundingClientRect().top) : null, photo: p ? `${Math.round(p.width)} x ${Math.round(p.height)}` : null };
+                const going = document.querySelector('[aria-label="Going"]')?.getBoundingClientRect();
+                const dates = document.querySelector('[data-testid="event-next-dates-open"]') || document.querySelector('[data-testid="event-next-dates"]');
+                return {
+                    action: action ? Math.round(action.getBoundingClientRect().top) : null, photo: p ? `${Math.round(p.width)} x ${Math.round(p.height)}` : null,
+                    going: going ? Math.round(going.bottom) : null, dates: dates ? Math.round(dates.getBoundingClientRect().height) : 0,
+                };
             });
-            rows.push(`${tag}: the answer row's top at ${at.action} dp, the picture ${at.photo}`);
+            const onScreen = at.going == null ? '' : `, Going's bottom at ${at.going} dp (${at.going <= SCREEN ? 'on' : 'past'} the ${SCREEN} dp screen)`;
+            rows.push(`${tag}: the answer row's top at ${at.action} dp${onScreen}, the next dates ${at.dates} dp tall, the picture ${at.photo}`);
             if (SHOTS) {
                 const name = `phone-event-${scheme}-${c}`;
                 // The page as a member scrolls it, one 569dp screen at a time, to the end (a little under the last button).

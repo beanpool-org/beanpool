@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { LIST_PHOTO_WAIT_MS, listPhotoUrl, nextListPhotoUrl } from '@beanpool/core';
+import { LIST_PHOTO_QUEUED_MS, listPhotoUrl, nextListPhotoUrl } from '@beanpool/core';
+import { joinPhotoLine } from './list-photo-line';
 
 /**
  * The photo a list card's picture is drawing, and when to give up on it (card-photo-retry, then card-photo-blank, Marty
@@ -9,14 +10,21 @@ import { LIST_PHOTO_WAIT_MS, listPhotoUrl, nextListPhotoUrl } from '@beanpool/co
  *
  * An <img> whose request never ends fires neither load nor error, and a browser sets no limit on it. So a card does not
  * wait for onError alone: `drawn` is true only once the photo it shows has fired load, and the card draws its tile or
- * fallback until then; a photo that has neither loaded nor failed within LIST_PHOTO_WAIT_MS counts as failed and takes
- * the same step down (@beanpool/core nextListPhotoUrl: the small copy once more past every cache, the photo's own URL,
- * then nothing). An <img> has no progress event, so the web counts from when the browser asks for the picture.
+ * fallback until then; a photo that has neither loaded nor failed in time counts as failed and takes the same step down
+ * (@beanpool/core nextListPhotoUrl: the small copy once more past every cache, the photo's own URL, then nothing).
  *
- * That is at once for an eager <img>. A `lazy` one off screen is not asked for at all (review of #2853, finding 1: a
- * wait that started at mount stepped MapStackList's and Home's lazy photos down to their fallback before they were ever
- * fetched, and they never loaded): its wait starts once it has been in view with the URL it shows (`ref` takes the <img>
- * and an IntersectionObserver watches it). A step down to a new URL while it is out of view waits for it to come back.
+ * "In time" counts from when its request starts, never before (the phone's rule, apps/native/components/useListPhotoSteps.ts).
+ * An <img> shows neither that start nor its bytes, so the web follows the two steps the browser takes:
+ *  - the browser asks for it: at once for an eager <img>; a `lazy` one off screen is not asked for at all (review of
+ *    #2853, finding 1: a wait that started at mount stepped MapStackList's and Home's lazy photos down to their fallback
+ *    before they were ever fetched, and they never loaded), so its wait starts once it has been in view with the URL it
+ *    shows (`ref` takes the <img> and an IntersectionObserver watches it). A step down to a new URL while it is out of
+ *    view waits for it to come back;
+ *  - its request starts: a browser runs at most 6 requests to one host at once and the rest wait with no event (round 3
+ *    of that review: the Market page's 50 eager cards on a 25 KB/s link drew 12, and 38 were stepped down unfetched and
+ *    stayed on their tile). The page keeps the same line (lib/list-photo-line.ts) and the wait starts at the photo's turn.
+ * From its turn it has LIST_PHOTO_QUEUED_MS, the phone's wait for a load that may still be queued: the web cannot tell
+ * a request still in the browser's line from one that has stalled, nor see bytes arrive, so it has no shorter wait.
  *
  * The URL that failed is kept beside its step, not a flag, so a new URL a later read brings starts again from its small
  * copy.
@@ -51,6 +59,17 @@ export function useListPhotoSteps(photo: string | null | undefined, resolve?: (u
     useEffect(() => { if (watch && inView && src) setSeenSrc(src); }, [watch, inView, src]);
     const asked = !!src && (!watch || seenSrc === src);
 
+    // Its place in the browser's line for its host, from when the browser asks for it until it has drawn, failed or moved
+    // to another URL (a new URL joins at the back, as the browser's new request does); the URL whose turn has come.
+    const [turnSrc, setTurnSrc] = useState<string | null>(null);
+    const inLine = asked && !drawn;
+    useEffect(() => {
+        if (!inLine || !src) return;
+        const leave = joinPhotoLine(src, () => setTurnSrc(src));
+        return () => { leave(); setTurnSrc((at) => (at === src ? null : at)); };
+    }, [inLine, src]);
+    const started = !!src && turnSrc === src;
+
     const fail = useCallback((p: string, failed: string) => {
         setSteppedDown({ photo: p, shown: nextListPhotoUrl(p, failed) });
     }, []);
@@ -62,12 +81,12 @@ export function useListPhotoSteps(photo: string | null | undefined, resolve?: (u
     }, []);
     useEffect(() => {
         stop();
-        if (!photo || !shown || !src || drawn || !asked) return stop;
+        if (!photo || !shown || !src || drawn || !started) return stop;
         const p = photo;
         const failed = shown;
-        timer.current = setTimeout(() => { timer.current = null; fail(p, failed); }, LIST_PHOTO_WAIT_MS);
+        timer.current = setTimeout(() => { timer.current = null; fail(p, failed); }, LIST_PHOTO_QUEUED_MS);
         return stop;
-    }, [photo, shown, src, drawn, asked, fail, stop]);
+    }, [photo, shown, src, drawn, started, fail, stop]);
 
     return {
         shown,

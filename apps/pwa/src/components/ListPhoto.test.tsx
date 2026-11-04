@@ -5,7 +5,7 @@
  */
 import { act, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LIST_PHOTO_WAIT_MS } from '@beanpool/core';
+import { LIST_PHOTO_QUEUED_MS } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 
 const PHOTO = '/api/marketplace/posts/p1/photos/0?v=17&k=KEY0';
@@ -109,18 +109,20 @@ describe('ListPhoto: never an empty slot while the photo loads', () => {
         expect(img()!.getAttribute('aria-hidden')).toBeNull();
     });
 
-    it('a photo that neither loads nor fails within LIST_PHOTO_WAIT_MS counts as failed and steps down, to the fallback at last', () => {
+    // An <img> shows neither its request starting nor its bytes, so the web waits the phone's budget for a load that may
+    // still be queued (review of #2853, round 3), from its turn in the browser's line: at once for the only photo.
+    it('a photo that neither loads nor fails within LIST_PHOTO_QUEUED_MS of its turn counts as failed and steps down, to the fallback at last', () => {
         vi.useFakeTimers();
         const { container, queryByTestId } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" />);
         const src = () => container.querySelector('img')?.getAttribute('src');
-        act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS - 1); });
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS - 1); });
         expect(src()).toBe(`${PHOTO}&size=thumb2`);
         act(() => { vi.advanceTimersByTime(1); });
         expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
         expect(queryByTestId('the-tile')).toBeInTheDocument();
-        act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS); });
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS); });
         expect(src()).toBe(PHOTO);
-        act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS); });
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS); });
         expect(container.querySelector('img')).toBeNull();
         expect(queryByTestId('the-tile')).toBeInTheDocument();
     });
@@ -129,7 +131,7 @@ describe('ListPhoto: never an empty slot while the photo loads', () => {
         vi.useFakeTimers();
         const { container } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" />);
         fireEvent.load(container.querySelector('img')!);
-        act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS * 5); });
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS * 5); });
         expect(container.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO}&size=thumb2`);
     });
 
@@ -137,7 +139,7 @@ describe('ListPhoto: never an empty slot while the photo loads', () => {
         vi.useFakeTimers();
         const refuseSmall = (url: string) => (url.includes('size=thumb2') ? null : url);
         const { container, queryByTestId } = render(<ListPhoto photo={PHOTO} resolve={refuseSmall} fallback={fallback} alt="" />);
-        act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS * 3); });
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS * 3); });
         expect(container.querySelector('img')).toBeNull();
         expect(queryByTestId('the-tile')).toBeInTheDocument();
     });
@@ -166,16 +168,16 @@ describe('ListPhoto: a lazy photo off screen is never stepped down until it is i
     });
     const after = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
 
-    it('waits nothing while it is out of view, then LIST_PHOTO_WAIT_MS once it is in view', () => {
+    it('waits nothing while it is out of view, then LIST_PHOTO_QUEUED_MS once it is in view', () => {
         vi.useFakeTimers();
         const { container, queryByTestId } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" loading="lazy" />);
         const src = () => container.querySelector('img')?.getAttribute('src');
         inView(false);
-        after(LIST_PHOTO_WAIT_MS * 10);
+        after(LIST_PHOTO_QUEUED_MS * 10);
         expect(src()).toBe(`${PHOTO}&size=thumb2`);
         expect(queryByTestId('the-tile')).toBeInTheDocument();
         inView(true);
-        after(LIST_PHOTO_WAIT_MS - 1);
+        after(LIST_PHOTO_QUEUED_MS - 1);
         expect(src()).toBe(`${PHOTO}&size=thumb2`);
         after(1);
         expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
@@ -189,12 +191,12 @@ describe('ListPhoto: a lazy photo off screen is never stepped down until it is i
         inView(true);
         after(1000);
         inView(false);
-        after(LIST_PHOTO_WAIT_MS - 1000);
+        after(LIST_PHOTO_QUEUED_MS - 1000);
         expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
-        after(LIST_PHOTO_WAIT_MS * 5);
+        after(LIST_PHOTO_QUEUED_MS * 5);
         expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
         inView(true);
-        after(LIST_PHOTO_WAIT_MS);
+        after(LIST_PHOTO_QUEUED_MS);
         expect(src()).toBe(PHOTO);
     });
 
@@ -205,7 +207,7 @@ describe('ListPhoto: a lazy photo off screen is never stepped down until it is i
         inView(true);
         fireEvent.error(container.querySelector('img')!);
         expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
-        after(LIST_PHOTO_WAIT_MS);
+        after(LIST_PHOTO_QUEUED_MS);
         expect(src()).toBe(PHOTO);
     });
 
@@ -217,18 +219,104 @@ describe('ListPhoto: a lazy photo off screen is never stepped down until it is i
         for (let i = 0; i < 3; i++) fireEvent.error(container.querySelector('img')!);
         expect(container.querySelector('img')).toBeNull();
         rerender(<ListPhoto photo={PHOTO_2} fallback={fallback} alt="" loading="lazy" />);
-        after(LIST_PHOTO_WAIT_MS * 3);
+        after(LIST_PHOTO_QUEUED_MS * 3);
         expect(container.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO_2}&size=thumb2`);
         inView(true);
-        after(LIST_PHOTO_WAIT_MS);
+        after(LIST_PHOTO_QUEUED_MS);
         expect(container.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO_2}&size=thumb2&retry=1`);
     });
 
-    it('an eager photo is not watched: the browser asks for it at once, so its wait starts at once', () => {
+    it('an eager photo is not watched: the browser asks for it at once, so the only one has its turn and its wait at once', () => {
         vi.useFakeTimers();
         const { container } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" />);
         expect(observers).toHaveLength(0);
-        after(LIST_PHOTO_WAIT_MS);
+        after(LIST_PHOTO_QUEUED_MS);
         expect(container.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
+    });
+});
+
+// Review of #2853, round 3: a browser runs at most 6 requests to one host at once, and an <img> waiting its turn fires no
+// event. The Market page draws 50 eager cards; a wait that started at mount stepped the later ones down before their
+// requests had started (50 photos on a 25 KB/s link: 12 drew, 38 stayed on their tile). The wait starts at a photo's turn.
+describe("ListPhoto: an eager photo waiting its turn in the browser's line is never stepped down", () => {
+    afterEach(() => { vi.useRealTimers(); });
+    const photoN = (i: number) => `/api/marketplace/posts/p${i}/photos/0?v=1&k=K${i}`;
+    const after = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+    it('the 7th and 8th photo for one host have no wait until one ahead of them has drawn or stepped down', () => {
+        vi.useFakeTimers();
+        const { container } = render(
+            <div>
+                {Array.from({ length: 8 }, (_, i) => <ListPhoto key={i} photo={photoN(i)} fallback={fallback} alt={`p${i}`} />)}
+            </div>,
+        );
+        const img = (i: number) => container.querySelector<HTMLImageElement>(`img[alt="p${i}"]`)!;
+        const src = (i: number) => img(i).getAttribute('src');
+        const small = (i: number) => `${photoN(i)}&size=thumb2`;
+
+        // 30 s in, the first photo draws: the 7th's request starts now.
+        after(LIST_PHOTO_QUEUED_MS / 2);
+        fireEvent.load(img(0));
+        // 60 s: the 2nd to 6th, asked at once and never answered, step down; the 7th and 8th have not waited that long.
+        after(LIST_PHOTO_QUEUED_MS / 2);
+        expect([1, 2, 3, 4, 5].map(src)).toEqual([1, 2, 3, 4, 5].map((i) => `${small(i)}&retry=1`));
+        expect(src(6)).toBe(small(6));
+        expect(src(7)).toBe(small(7));
+        // The 7th steps down LIST_PHOTO_QUEUED_MS after its turn, not before.
+        after(LIST_PHOTO_QUEUED_MS / 2 - 1);
+        expect(src(6)).toBe(small(6));
+        after(1);
+        expect(src(6)).toBe(`${small(6)}&retry=1`);
+        // The 8th's turn came at 60 s, when the 2nd to 6th moved on.
+        expect(src(7)).toBe(small(7));
+        after(LIST_PHOTO_QUEUED_MS / 2 - 1);
+        expect(src(7)).toBe(small(7));
+        after(1);
+        expect(src(7)).toBe(`${small(7)}&retry=1`);
+        // The first, drawn, is never stepped down.
+        expect(src(0)).toBe(small(0));
+    });
+
+    it('a photo that drew, failed or went frees its place: the next one in line has its turn then', () => {
+        vi.useFakeTimers();
+        const { container, rerender } = render(
+            <div>
+                {Array.from({ length: 9 }, (_, i) => <ListPhoto key={i} photo={photoN(i)} fallback={fallback} alt={`p${i}`} />)}
+            </div>,
+        );
+        const src = (i: number) => container.querySelector(`img[alt="p${i}"]`)?.getAttribute('src');
+        after(10_000);
+        fireEvent.error(container.querySelector('img[alt="p0"]')!); // its retry joins the back of the line, behind the 9th
+        after(10_000);
+        rerender(
+            <div>
+                {Array.from({ length: 9 }, (_, i) => (i === 1 ? null : <ListPhoto key={i} photo={photoN(i)} fallback={fallback} alt={`p${i}`} />))}
+            </div>,
+        );
+        // At 60 s the 3rd to 6th step down; the 7th (turn at 10 s) and the 8th (turn at 20 s) have not waited that long,
+        // and the 1st's retry (turn at 60 s, behind the 9th) has not either.
+        after(LIST_PHOTO_QUEUED_MS - 20_000);
+        expect([2, 3, 4, 5].map(src)).toEqual([2, 3, 4, 5].map((i) => `${photoN(i)}&size=thumb2&retry=1`));
+        expect(src(6)).toBe(`${photoN(6)}&size=thumb2`);
+        expect(src(7)).toBe(`${photoN(7)}&size=thumb2`);
+        after(10_000);
+        expect(src(6)).toBe(`${photoN(6)}&size=thumb2&retry=1`);
+        expect(src(7)).toBe(`${photoN(7)}&size=thumb2`);
+        after(10_000);
+        expect(src(7)).toBe(`${photoN(7)}&size=thumb2&retry=1`);
+        expect(src(0)).toBe(`${photoN(0)}&size=thumb2&retry=1`);
+    });
+
+    it('a photo for another host is not held behind this host\'s line', () => {
+        vi.useFakeTimers();
+        const node = (url: string) => `https://node.example${url}`;
+        const { container } = render(
+            <div>
+                {Array.from({ length: 6 }, (_, i) => <ListPhoto key={i} photo={photoN(i)} fallback={fallback} alt={`p${i}`} />)}
+                <ListPhoto photo={photoN(9)} resolve={node} fallback={fallback} alt="elsewhere" />
+            </div>,
+        );
+        after(LIST_PHOTO_QUEUED_MS);
+        expect(container.querySelector('img[alt="elsewhere"]')?.getAttribute('src')).toBe(node(`${photoN(9)}&size=thumb2&retry=1`));
     });
 });

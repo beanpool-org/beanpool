@@ -5,7 +5,7 @@
  */
 import { act, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LIST_PHOTO_WAIT_MS } from '@beanpool/core';
+import { LIST_PHOTO_QUEUED_MS } from '@beanpool/core';
 import { MarketplaceCard } from './MarketplaceCard';
 import type { MarketplacePost } from '../lib/marketplace';
 
@@ -219,11 +219,11 @@ describe('MarketplaceCard: never an empty slot while the photo loads', () => {
     it.each(['grid', 'list', 'compact'] as const)('the %s card counts a photo that neither loads nor fails in time as failed, down to the tile', (viewMode) => {
         vi.useFakeTimers();
         const { container, queryByTestId } = render(<MarketplaceCard post={post} viewMode={viewMode} />);
-        act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS); });
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS); });
         expect(container.querySelector(ALT)?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2&retry=1`);
-        act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS); });
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS); });
         expect(container.querySelector(ALT)?.getAttribute('src')).toBe(PHOTOS[0]);
-        act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS); });
+        act(() => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS); });
         expect(container.querySelector(ALT)).toBeNull();
         expect(queryByTestId('category-tile')).toBeInTheDocument();
     });

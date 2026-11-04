@@ -9,8 +9,9 @@
  * has fired load, and a photo that neither loads nor fails in time counts as failed (lib/use-list-photo-steps.ts). The
  * <img> is there from the start, out of the layout, unseen and untappable, so it loads, and takes the slot once drawn.
  * Until then it covers its containing block, so the element ListPhoto sits in (the slot) must be `relative` (or
- * otherwise positioned): then the hidden photo stays inside the slot (review of #2853, finding 2). A `loading="lazy"`
- * photo's wait starts once it is in view (finding 1).
+ * otherwise positioned): then the hidden photo stays inside the slot (review of #2853, finding 2). The wait starts when
+ * the photo's request can: a `loading="lazy"` photo once it is in view (finding 1), and every photo at its turn in the
+ * browser's line for its host, 6 at once (round 3, lib/list-photo-line.ts).
  *
  * `resolve` turns the URL it is about to draw into the address the page loads (an app-relative URL onto the node); the photo
  * it steps down from is the one it was given. A `resolve` that answers `null` is a refusal (resolveAvatarUrl's allow-list,

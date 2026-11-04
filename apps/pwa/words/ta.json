@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 இந்தச் செய்தியைச் சரிபார்க்க முடியவில்லை, எனவே இது காட்டப்படவில்லை.",
   "🗳️ Create Poll": "🗳️ வாக்கெடுப்பை உருவாக்கு",
   "🟢 List an Offer first to post Needs": "🟢 தேவைகளைப் பதிவிட முதலில் ஒரு சலுகையைப் பதிவிடவும்",
-  "🤝 Chosen": "🤝 தேர்ந்தெடுக்கப்பட்டது"
+  "🤝 Chosen": "🤝 தேர்ந்தெடுக்கப்பட்டது",
+  "Done. This is now your photo here.": "முடிந்தது. இது இப்போது இங்கே உங்கள் புகைப்படம்.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "புகைப்படம் மட்டுமே நகலெடுக்கப்படும். இங்கே உங்கள் பெயரும் சுயவிவரத்தின் மற்ற பகுதிகளும் அப்படியே இருக்கும்.",
+  "Use the photo from {community} here?": "{community}-இல் உள்ள புகைப்படத்தை இங்கே பயன்படுத்தவா?",
+  "Use the photo you chose last here?": "நீங்கள் கடைசியாகத் தேர்ந்தெடுத்த புகைப்படத்தை இங்கே பயன்படுத்தவா?",
+  "Use this photo here": "இந்தப் புகைப்படத்தை இங்கே பயன்படுத்து"
 }

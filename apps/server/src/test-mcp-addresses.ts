@@ -20,6 +20,8 @@
  *      the standing in the Addresses screen's words and the screen's next step, never "Nothing to do", side by side with
  *      Settings' report (routes/app-addresses.ts appAddressesReport), as the Opus review of #2835 measured it.
  *   7. A grant whose maker is now a member gets what it got before: 401, and no answer at all.
+ *   8. The operator manual's AI page (packages/beanpool-guide/operators/server/ai-assistant.md) lists the addresses under
+ *      Health, and its "What it never sees" says which addresses: any but the community's own.
  *
  * Run: SERVER_SUITES_ONLY=test-mcp-addresses TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -353,7 +355,7 @@ async function main(): Promise<void> {
             writeRow(ADDRESS_CHECK_KEY, checks);
         }
         // A minute may have passed since section 1: the new name's age in its next step is the one thing that can move.
-        const settled = (rows: any[] | undefined) => JSON.stringify((rows ?? []).map(({ nextStep, ...r }: any) => r));
+        const settled = (rows: any[] | undefined) => JSON.stringify((rows ?? []).map((r: any) => ({ ...r, nextStep: undefined })));
         const hRestored = await health(client);
         assert(Array.isArray(hRestored?.addresses) && settled(hRestored.addresses) === settled(h.addresses) && hRestored.addresses.every((r: any) => r.standing === null),
             'the name as it was: the addresses read as at the start, none with a standing');
@@ -372,6 +374,20 @@ async function main(): Promise<void> {
         // The table the server runs: the tool is the same row everyone reads (no second tool for this).
         assert(AGENT_TOOLS.filter((t) => /published address/.test(t.reads)).map((t) => t.name).join() === 'server_health',
             'server_health is the one tool that reads the addresses');
+
+        // ── 8. The operator manual's AI page says so (design §5.3; Opus review of #2835, tools.ts:316) ──
+        // The page owners read of what an assistant reads, which is also what goes to the company that runs it.
+        console.log("── 8. The operator manual's AI page lists the addresses under Health ──");
+        const aiPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/operators/server/ai-assistant.md', import.meta.url), 'utf8');
+        const healthLine = /^- \*\*Health\*\*: .*$/m.exec(aiPage)?.[0] ?? '';
+        assert(/each address the community publishes/.test(healthLine) && /main one/.test(healthLine) && /last checked/.test(healthLine)
+            && /next step/.test(healthLine) && /what the address service says and what to do/.test(healthLine)
+            && /Never what an address points at, or a server's key\./.test(healthLine),
+        `its Health line names each published address, the main one, what the last check found, the next step, a name's standing, and never what it points at (${healthLine.slice(0, 120)}…)`);
+        const neverSees = /## What it never sees\n\n(.*)$/m.exec(aiPage)?.[1] ?? '';
+        assert(neverSees.startsWith('Messages and chats, balances, keys, any address but the community\'s own (under Health, above), photos,')
+            && !/keys, addresses,/.test(neverSees),
+        `its "What it never sees" no longer says an assistant never sees any address, but which (${neverSees.slice(0, 120)}…)`);
     } catch (e) {
         console.error(e);
         process.exitCode = 1;

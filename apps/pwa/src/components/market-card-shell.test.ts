@@ -10,7 +10,11 @@ import { pathToFileURL } from 'node:url';
 import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, type CardType } from '@beanpool/core';
-import { CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, GRID, GRID_PHOTO, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, gridChip, gridTile, listCard } from './market-card-shell';
+import {
+    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL,
+    GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
+    PAGE_TYPE, chip, gridChip, gridTile, listCard,
+} from './market-card-shell';
 
 const classes = (s: string) => s.split(/\s+/).filter(Boolean);
 
@@ -83,6 +87,9 @@ function typeOf(s: string): { size?: number; weight?: number; line?: number } {
         if (c in SIZE) size = SIZE[c];
         const px = c.match(/^text-\[(\d+)px\]$/);
         if (px) size = Number(px[1]);
+        // The page's words are in rem (a member's larger text grows them): 1 rem is 16 px.
+        const rem = c.match(/^text-\[(\d*\.?\d+)rem\]$/);
+        if (rem) size = Number(rem[1]) * 16;
         if (c in WEIGHT) weight = WEIGHT[c];
         if (c === 'leading-tight') lineFactor = 1.25;
         if (c === 'leading-snug') lineFactor = 1.375;
@@ -90,6 +97,8 @@ function typeOf(s: string): { size?: number; weight?: number; line?: number } {
         if (fixed) line = Number(fixed[1]) * 4;
         const fixedPx = c.match(/^leading-\[(\d+)px\]$/);
         if (fixedPx) line = Number(fixedPx[1]);
+        const fixedRem = c.match(/^leading-\[(\d*\.?\d+)rem\]$/);
+        if (fixedRem) line = Number(fixedRem[1]) * 16;
     }
     if (line === undefined && lineFactor !== undefined && size !== undefined) line = size * lineFactor;
     return line === undefined ? { size, weight } : { size, weight, line };
@@ -258,5 +267,46 @@ describe('the grid tile holds core\'s numbers', () => {
         const all = [GRID, GRID_POLL_CELL, gridTile(), gridTile({ elder: true }), gridTile({ pulse: true }), GRID_PHOTO, GRID_TEXT,
             GRID_TITLE, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
+    });
+});
+
+describe('the page\'s parts hold core\'s numbers too (DESIGN-detail-pages-fable.md §2.2, slice DW1)', () => {
+    const page = MARKET_CARD_TYPE.page;
+
+    it('a page box: the card\'s corners 14, its 1 px outline, its ground and shadow, its 12 of padding', () => {
+        expect(radius(PAGE_BOX)).toBe(MARKET_CARD_SHELL.radius);
+        expect(classes(PAGE_BOX)).toEqual(expect.arrayContaining(['border', 'border-nature-200', 'dark:border-nature-800', 'bg-[var(--bg-card)]', 'shadow-sm']));
+        expect(spacing(PAGE_BOX, 'p')).toBe(MARKET_CARD_SHELL.textPadding);
+    });
+
+    it.each(Object.entries(BOX_LABEL))('the %s box label: 10/800, letter-spaced 1.5, 8 above what it names', (_, label) => {
+        expect(typeOf(label)).toEqual(asType(page.boxLabel));
+        expect(classes(label)).toContain(`tracking-[${page.boxLabelSpacing}px]`);
+        expect(spacing(label, 'mb')).toBe(8);
+    });
+
+    it('a page button: 48 tall, corners 12, 15/700; Going / Interested on the page are the same type', () => {
+        for (const b of Object.values(PAGE_BUTTON)) {
+            expect(classes(b)).toContain(`min-h-[${page.buttonHeight}px]`);
+            expect(radius(b)).toBe(page.buttonRadius);
+            const { size, weight } = typeOf(b);
+            expect({ size, weight }).toEqual({ size: page.button.size, weight: page.button.weight });
+        }
+        const { size, weight } = typeOf(PAGE_ANSWER_TYPE);
+        expect({ size, weight }).toEqual({ size: page.button.size, weight: page.button.weight });
+    });
+
+    it('the description is 15 on 22', () => {
+        expect(typeOf(PAGE_TYPE.description)).toEqual({ size: page.descriptionSize, weight: undefined, line: page.descriptionLine });
+    });
+
+    it('every page colour is core\'s role or the card\'s own ground and inks: no raw violet, purple, blue or nature-950', () => {
+        const all = [PAGE_BOX, ...Object.values(BOX_LABEL), ...Object.values(PAGE_BUTTON), ...Object.values(EVENT_ANSWER),
+            ...Object.values(PAGE_TYPE), ...Object.values(PAGE_INK)].join(' ');
+        expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
+        // The event's colours are core's event roles: the fill under white words, and the ink as words and outline.
+        expect(classes(EVENT_ANSWER.chosen)).toEqual(expect.arrayContaining(['bg-bp-event-fill', 'text-bp-event-on', 'hover:bg-bp-event-hover']));
+        expect(classes(EVENT_ANSWER.open)).toEqual(expect.arrayContaining(['border-bp-ink-event', 'text-bp-ink-event', 'bg-[var(--bg-card)]']));
+        expect(PAGE_INK.event).toBe('text-bp-ink-event');
     });
 });

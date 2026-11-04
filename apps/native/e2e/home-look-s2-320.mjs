@@ -4,9 +4,9 @@
  * (home-look-s2) Home's colour by what a card is about, and the dot before a card is on Home, at 320dp wide with the
  * phone's text at 1.3×, light and dark: node apps/native/e2e/home-look-s2-320.mjs --shots <dir>
  *
- * The app's own HomeCard, FoldedLine and AddCardSheet through react-native-web in headless Chromium (as arrange-320.mjs).
+ * The app's own HomeCard and AddCardSheet through react-native-web in headless Chromium (as arrange-320.mjs).
  * Checks: no sideways scroll, text inside 320dp, and every picker row's dot is 10dp and leaves its name at least 140dp.
- * Screenshots: home (the cards), arrange (the same cards folded), picker (Add a card), each light and dark.
+ * Screenshots: home (the cards), arrange (the same cards, arrows on their bands, insides quiet), picker (Add a card), each light and dark.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -60,7 +60,6 @@ import { View, ScrollView, Text } from 'react-native';
 import { homeCardHue, searchFromMarket } from '@beanpool/core';
 import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { HomeCard } from ${JSON.stringify(path.join(NATIVE, 'components/home/HomeParts'))};
-import { FoldedLine } from ${JSON.stringify(path.join(NATIVE, 'components/home/ArrangeParts'))};
 import { AddCardSheet } from ${JSON.stringify(path.join(NATIVE, 'components/home/AddCardSheet'))};
 import { pickerGroups } from ${JSON.stringify(path.join(NATIVE, 'utils/home-cards'))};
 
@@ -87,14 +86,15 @@ const CARDS = [
     chat('chat-ent', 'The bakery', 'enterprise'),
 ];
 
-const home = (folded) => (
+// Arrange is Home itself (slice A3): the same cards, their bands carrying the arrows and their insides quiet.
+const home = (arranging) => (
     <View style={{ height: '100vh', backgroundColor: colors.surface.page }}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}>
             <View testID="shot-list">
                 {CARDS.map((c, i) => (
-                    <HomeCard key={c.id} id={c.id} caption={c.caption} colors={colors} hue={c.hue} testID={'home-card-' + c.id} onMenu={folded ? undefined : noop}
-                        arrange={folded ? { label: c.caption, canUp: i > 0, canDown: i < CARDS.length - 1, onMove: noop } : undefined}>
-                        {folded ? <FoldedLine id={c.id} text={c.line} colors={colors} /> : <Text style={{ color: colors.text.secondary, fontSize: 13 }}>{c.line}</Text>}
+                    <HomeCard key={c.id} id={c.id} caption={c.caption} colors={colors} hue={c.hue} testID={'home-card-' + c.id} onMenu={arranging ? undefined : noop}
+                        arrange={arranging ? { label: c.caption, canUp: i > 0, canDown: i < CARDS.length - 1, onMove: noop } : undefined} quiet={arranging}>
+                        <Text style={{ color: colors.text.secondary, fontSize: 13 }}>{c.line}</Text>
                     </HomeCard>
                 ))}
             </View>

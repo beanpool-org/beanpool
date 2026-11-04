@@ -16,6 +16,7 @@
  * fetch fails the run instead of escaping.
  *
  *   node e2e/event-card-shots.mjs      # writes e2e/shots/*.png, exits non-zero on a split or overflowing label
+ *   node e2e/event-card-shots.mjs --detail   # the event's page instead (DW1): see detailShots below
  *
  * Run from apps/pwa — Tailwind reads its config from the working directory.
  */
@@ -92,6 +93,148 @@ const MEASURE = () => {
     });
 };
 
+/**
+ * `--detail`: the event's PAGE (EventDetail, slice DW1 of DESIGN-detail-pages-fable.md), photographed and measured in place of
+ * the grid. The harness draws it at `?detail=<case>` inside the Market's own page wrapper. For every shot, in light and dark:
+ *
+ *   1. nothing scrolls sideways and nothing ends past the screen's edge;
+ *   2. no button's words are cut (a button as wide as its words, or wrapping them whole);
+ *   3. every button on the page is at least 48 px tall (the tag chips are PostTagChips' own, 44 by design, and left out);
+ *   4. every line of words is 4.5:1 against what is behind it (3:1 for large words), disabled controls excepted (WCAG);
+ *   5. the RSVP labels as above: one line each, inside their buttons.
+ *
+ * It prints where Going starts from the top of the screen at 320 px and 130% text, the number the phone's DP1 stops at
+ * (500 dp on its 569 dp screen, with its header and status bar), and saves a first-screen shot (320 × 569) beside the
+ * full page. Every /api and /ws request is aborted and counted: the page asks the node for the host's ratings, the community's
+ * features and the member's reminders, and each answers as an older or unreachable node would, which the page handles.
+ */
+const DETAIL_CASES = [
+    { name: 'phone-320-130pc', width: 320, height: 569, fontScale: 1.3, cases: ['member', 'going', 'host', 'copy', 'no-photo', 'posted-by'] },
+    { name: 'tablet-800', width: 800, height: 1000, fontScale: 1, cases: ['member', 'host'] },
+    { name: 'desktop-1280', width: 1280, height: 900, fontScale: 1, cases: ['member', 'host'] },
+    { name: 'desktop-1440', width: 1440, height: 900, fontScale: 1, cases: ['member', 'going'] },
+];
+
+/** Runs in the page: the page's geometry and its words' contrast. */
+const MEASURE_DETAIL = () => {
+    const vw = document.documentElement.clientWidth;
+    const detail = document.querySelector('[data-testid="event-detail"]');
+    const parse = (c) => {
+        const m = c.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/);
+        return m ? [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])] : null;
+    };
+    const lum = ([r, g, b]) => {
+        const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    };
+    const over = (top, under) => {
+        const a = top[3];
+        return [top[0] * a + under[0] * (1 - a), top[1] * a + under[1] * (1 - a), top[2] * a + under[2] * (1 - a), 1];
+    };
+    /** The colour behind an element: its own and its ancestors' grounds, composited down to the first opaque one. */
+    const behind = (el) => {
+        const layers = [];
+        for (let n = el; n; n = n.parentElement) {
+            const c = parse(getComputedStyle(n).backgroundColor);
+            if (c && c[3] > 0) { layers.push(c); if (c[3] >= 1) break; }
+        }
+        let colour = [255, 255, 255, 1];
+        for (const l of layers.reverse()) colour = l[3] >= 1 ? l : over(l, colour);
+        return colour;
+    };
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+
+    const pastEdge = [];
+    const cut = [];
+    const small = [];
+    const lowContrast = [];
+    for (const el of detail.querySelectorAll('*')) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) continue;
+        if (r.right > vw + 0.5 || r.left < -0.5) pastEdge.push(`${el.tagName.toLowerCase()} "${(el.textContent || '').trim().slice(0, 40)}" ${Math.round(r.left)}..${Math.round(r.right)} > ${vw}`);
+        if (el.tagName === 'BUTTON' || el.tagName === 'A') {
+            const label = (el.textContent || '').trim().slice(0, 40);
+            if (el.scrollWidth > el.clientWidth + 1) cut.push(`"${label}" ${el.scrollWidth} > ${el.clientWidth}`);
+            const inTags = !!el.closest('[data-testid="post-tag-chips"]');
+            if (!inTags && r.height < 47.5) small.push(`"${label}" is ${Math.round(r.height)} px tall`);
+        }
+        const own = Array.from(el.childNodes).filter((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+        if (own.length === 0) continue;
+        const text = own.map((n) => n.textContent).join('').trim();
+        // A colour emoji is drawn in its own colours, not the text's.
+        if (!/[\p{L}\p{N}]/u.test(text)) continue;
+        if (el.closest('button:disabled')) continue;
+        const cs = getComputedStyle(el);
+        const fg = parse(cs.color);
+        if (!fg) continue;
+        const bg = behind(el);
+        const size = parseFloat(cs.fontSize);
+        const bold = Number(cs.fontWeight) >= 700;
+        const need = size >= 24 || (bold && size >= 18.66) ? 3 : 4.5;
+        const got = ratio(fg[3] < 1 ? over(fg, bg) : fg, bg);
+        if (got < need) lowContrast.push(`"${text.slice(0, 40)}" ${got.toFixed(2)}:1 (needs ${need})`);
+    }
+    const going = Array.from(detail.querySelectorAll('button')).find((b) => /^Going/.test((b.textContent || '').trim()));
+    return {
+        sideways: document.documentElement.scrollWidth > vw,
+        pastEdge, cut, small, lowContrast,
+        goingTop: going ? Math.round(going.getBoundingClientRect().top + window.scrollY) : null,
+        pageHeight: Math.round(document.documentElement.scrollHeight),
+    };
+};
+
+async function detailShots(browser, failures, countBlocked) {
+    const lines = [];
+    for (const theme of ['light', 'dark']) {
+        for (const c of DETAIL_CASES) {
+            for (const which of c.cases) {
+                const context = await browser.newContext({ viewport: { width: c.width, height: c.height }, colorScheme: theme });
+                await context.route('**/*', (route) => {
+                    const url = route.request().url();
+                    if (url.includes('/api/') || url.startsWith('ws')) { countBlocked(); return route.abort(); }
+                    return route.continue();
+                });
+                const page = await context.newPage();
+                const pageErrors = [];
+                page.on('pageerror', (e) => pageErrors.push(e.message));
+                await page.goto(`${base}/e2e/event-card-harness.html?detail=${which}`, { waitUntil: 'networkidle' });
+                await page.evaluate(([t, scale]) => {
+                    document.documentElement.classList.toggle('dark', t === 'dark');
+                    document.documentElement.classList.toggle('dark-theme', t === 'dark');
+                    document.documentElement.style.fontSize = `${scale * 100}%`;
+                }, [theme, c.fontScale]);
+                await page.waitForSelector('[data-testid="event-detail"]');
+                await page.evaluate(() => document.fonts.ready);
+                await page.waitForTimeout(150);
+
+                const shot = `detail-${which}-${c.name}-${theme}`;
+                await page.screenshot({ path: path.join(OUT_DIR, `${shot}.png`), fullPage: true });
+                if (c.width === 320) await page.screenshot({ path: path.join(OUT_DIR, `${shot}-first-screen.png`) });
+
+                const m = await page.evaluate(MEASURE_DETAIL);
+                const rows = await page.evaluate(MEASURE);
+                if (m.sideways) failures.push(`${shot}: the page scrolls sideways`);
+                for (const f of m.pastEdge) failures.push(`${shot}: past the edge: ${f}`);
+                for (const f of m.cut) failures.push(`${shot}: a button's words are cut: ${f}`);
+                for (const f of m.small) failures.push(`${shot}: under the 48 px target: ${f}`);
+                for (const f of m.lowContrast) failures.push(`${shot}: under AA: ${f}`);
+                for (const r of rows) {
+                    for (const b of r.buttons) {
+                        if (b.lines !== 1) failures.push(`${shot}: "${b.label}" occupies ${b.lines} line boxes`);
+                        if (b.labelOverflows) failures.push(`${shot}: "${b.label}" overflows its button`);
+                    }
+                }
+                if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
+                lines.push(`${shot.padEnd(44)} Going at ${m.goingTop ?? '—'} px, page ${m.pageHeight} px tall`);
+                await context.close();
+            }
+        }
+    }
+    return lines;
+}
+
+const DETAIL_ONLY = process.argv.includes('--detail');
+
 const server = await createServer({ configFile: path.join(PWA_DIR, 'vite.config.ts'), root: PWA_DIR, server: { port: 0 } });
 await server.listen();
 const base = `http://localhost:${server.httpServer.address().port}`;
@@ -101,8 +244,10 @@ const browser = await chromium.launch();
 const failures = [];
 let blocked = 0;
 
+let detailLines = [];
 try {
-    for (const theme of ['light', 'dark']) {
+    if (DETAIL_ONLY) detailLines = await detailShots(browser, failures, () => { blocked++; });
+    for (const theme of (DETAIL_ONLY ? [] : ['light', 'dark'])) {
         for (const c of CASES) {
             const context = await browser.newContext({
                 viewport: { width: c.width, height: c.height },
@@ -158,10 +303,18 @@ try {
     await server.close();
 }
 
-console.log(`\nnode requests blocked: ${blocked} (0 expected — the harness needs none)`);
+if (DETAIL_ONLY) {
+    for (const l of detailLines) console.log(l);
+    // The page asks for the host's ratings, the community's features and the reminders: each is refused here, as no node.
+    console.log(`\nnode requests blocked: ${blocked} (the page's own reads, each refused: nothing reached a node)`);
+} else {
+    console.log(`\nnode requests blocked: ${blocked} (0 expected — the harness needs none)`);
+}
 if (failures.length) {
     console.error(`\nFAILED:\n${failures.map((f) => `  - ${f}`).join('\n')}`);
     process.exit(1);
 }
-console.log(`\nOK — every RSVP label whole and on one line, every target >= 48px, nothing overflowing, in all ${CASES.length * 2} shots.`);
+console.log(DETAIL_ONLY
+    ? `\nOK — the event page: nothing past the edge or cut, every button >= 48px, every line at AA, in all ${detailLines.length} shots.`
+    : `\nOK — every RSVP label whole and on one line, every target >= 48px, nothing overflowing, in all ${CASES.length * 2} shots.`);
 console.log(OUT_DIR);

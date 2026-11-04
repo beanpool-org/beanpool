@@ -11,7 +11,8 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
     const shellSrc = source('components/market-card-shell.ts');
 
     it('grid card title clamps to two lines (numberOfLines={2})', () => {
-        expect(marketSrc).toMatch(/<Text\s+style=\{styles\.gridCardTitle\}\s+numberOfLines=\{2\}>/);
+        // Its style is the box's since PG2 (components/market-card-shell.ts gridTitle), inside the four-row text block.
+        expect(marketSrc).toMatch(/<Text\s+style=\{shell\.gridTitle\}\s+numberOfLines=\{2\}>/);
     });
 
     it('grid card enforces badge precedence: PENDING > YOU > RECURRING (at most one status chip)', () => {
@@ -96,11 +97,11 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         expect(marketSrc).toMatch(/size="grid"\s+contentPosition=\{MARKET_GRID_CROP\}/);
     });
 
-    it('grid card moves RECURRING under the picture into gridTextContent (market-card-43)', () => {
+    it('grid card moves RECURRING under the picture into the text block (market-card-43; the four-row block since PG2)', () => {
         const gridBadgeRowBlock = marketSrc.split('testID="grid-badge-row"')[1]?.split('</View>')[0] || '';
         expect(gridBadgeRowBlock).not.toContain('RECURRING');
 
-        const gridTextBlock = marketSrc.split('styles.gridTextContent')[1]?.split('</Pressable>')[0] || '';
+        const gridTextBlock = marketSrc.split('style={gridBlock.block}')[1]?.split('</Pressable>')[0] || '';
         expect(gridTextBlock).toContain('RECURRING');
     });
 });

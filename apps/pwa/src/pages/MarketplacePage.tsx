@@ -2147,7 +2147,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </p>
                         )}
                         {authorProfile?.contact && authorProfile.contact.visibility !== 'hidden' && (
-                            <p className="text-xs text-nature-500 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block border border-nature-100 dark:border-nature-800">
+                            <p className="text-xs text-nature-700 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block max-w-full [overflow-wrap:anywhere] border border-nature-100 dark:border-nature-800">
                                 📧 {authorProfile.contact.value}
                             </p>
                         )}

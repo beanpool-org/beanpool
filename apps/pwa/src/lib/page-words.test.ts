@@ -23,6 +23,12 @@ vi.mock('../../words/es.json', async () => {
     };
 });
 
+// A language with NONE of these sentences: French, with both of its catalogs (this app's and core's) standing in as empty
+// FIXTURES. The "not translated" case below needs a language whose catalogs lack the two sentences; the real French is full
+// now (the machine-drafting passes fill every language), so a real language can never stand for "not translated" again.
+vi.mock('../../words/fr.json', () => ({ default: {} }));
+vi.mock('@beanpool/core/words/fr.json', () => ({ default: {} }));
+
 const ENGLISH_DESCRIPTION = 'BeanPool — Local-first independent community marketplace';
 const description = () => document.querySelector('meta[name="description"]')?.getAttribute('content') ?? undefined;
 

@@ -1990,7 +1990,7 @@ export default function MarketScreen() {
                                 {!!item.repeatable && <CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} />}
                                 {/* #108: on the card, not just the detail view */}
                                 {item.cash_also_needed === 1 && <CardChip shell={shell} role="warn" label={t('💸 CASH TOO')} />}
-                                {groupScopeBadgeText && <CardChip shell={shell} role="quiet" label={groupScopeBadgeText} />}
+                                {groupScopeBadgeText && <CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" wrap />}
                             </View>
                             {!isPulse && showsBeans && !copy && (
                                 <CurrencyDisplay

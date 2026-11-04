@@ -60,8 +60,9 @@ export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
     const photo = eventCoverPhoto(post);
     // A member's copy, on the global community: where it is from, and nothing to answer here.
     const copy = eventCopyOf(post);
-    const groupName = post.targetGroupName || post.target_group_name;
-    const groupOnly = (post.audienceScope === 'group' || post.audience_scope === 'group') && !!groupName;
+    // A group-only event says who can see it, read as the listing card beside it reads it (market.tsx).
+    const groupOnly = post.audience_scope === 'group' || post.audienceScope === 'group' || !!post.target_group_id || !!post.targetGroupId;
+    const groupName = post.target_group_name || post.targetGroupName || t('Group');
 
     // One status line. The member's own answer is the mark, the selected button's own words on the page ("Going ✓"); the host
     // reads that they are hosting; anyone else sees the counts once someone has answered, and nothing while nobody has
@@ -111,7 +112,7 @@ export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
                     {isPostPinned(post) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
                     {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}
                     {badge === 'UPDATED' && <CardChip shell={shell} role="event" label={t('UPDATED', undefined, 'event')} testID="event-state-chip" />}
-                    {groupOnly && <CardChip shell={shell} role="quiet" label={t('🔒 Only {group} can see this', { group: groupName })} />}
+                    {groupOnly && <CardChip shell={shell} role="quiet" label={t('🔒 Only {group} can see this', { group: groupName })} testID="event-group-chip" wrap />}
                 </View>
                 <Text testID="event-when" style={[shell.loud, styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
                 {!!timeNote && <Text style={styles.timeNote} numberOfLines={2}>{timeNote}</Text>}

@@ -198,6 +198,18 @@ describe('the chip row, and the when kept whole', () => {
         expect(byTestId('event-state-chip')?.textContent).toBe('CANCELLED');
     });
 
+    it('a group-only event says who can see it in a quiet chip that wraps, never cut; with no group name, "Group", as a listing does', async () => {
+        await show({ ...MARKET, audienceScope: 'group', targetGroupId: 'g-1', targetGroupName: 'Byron Bay Community Gardeners' });
+        const chip = byTestId('event-group-chip');
+        expect(chip?.textContent).toBe('🔒 Only Byron Bay Community Gardeners can see this');
+        expect(styleOf(chip).backgroundColor).toBe(lightColors.chip.quiet.bg);
+        expect(chip?.firstElementChild?.getAttribute('data-lines')).toBeNull();
+        await show({ ...MARKET, targetGroupId: 'g-1' });
+        expect(byTestId('event-group-chip')?.textContent).toBe('🔒 Only Group can see this');
+        await show(MARKET);
+        expect(byTestId('event-group-chip')).toBeNull();
+    });
+
     it('UPDATED is the event chip', async () => {
         await show({ ...MARKET, eventState: 'updated' });
         const chip = byTestId('event-state-chip');

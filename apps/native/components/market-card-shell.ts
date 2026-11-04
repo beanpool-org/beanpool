@@ -113,9 +113,12 @@ export function useCardShell(): CardShell {
     return useStyles(({ colors }) => makeCardShell(colors));
 }
 
-/** One chip of the set: its role's ground and ink, the one size, one line. */
-export function CardChip({ shell, role, label, testID }: { shell: CardShell; role: CardChipRole; label: string; testID?: string }) {
+/**
+ * One chip of the set: its role's ground and ink, the one size, one line. `wrap` is for the one chip that is a sentence, the
+ * group's lock ("🔒 Only {group} can see this"): it wraps inside the chip rather than lose its words beside the price.
+ */
+export function CardChip({ shell, role, label, testID, wrap = false }: { shell: CardShell; role: CardChipRole; label: string; testID?: string; wrap?: boolean }) {
     const tone = shell.tones[role];
     return createElement(View, { testID, style: [shell.chip, { backgroundColor: tone.bg }] },
-        createElement(Text, { style: [shell.chipText, { color: tone.fg }], numberOfLines: 1 }, label));
+        createElement(Text, { style: [shell.chipText, { color: tone.fg }], numberOfLines: wrap ? undefined : 1 }, label));
 }

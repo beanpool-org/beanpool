@@ -1013,7 +1013,9 @@ async function main() {
     // §5.1: a juror and Sue re-keyed while it is open. The roll, the votes and the vote's subject move to the new keys; the
     // pool and the key the vote was drawn for don't, and the closed lists say what each entry was drawn as.
     const sueSeated = rollOf(sueAgain).filter(r => r.status === 'on').map(r => byKey.get(r.k)!).filter(j => j && statusOf(j) === 'active');
-    const moving = sueSeated.find(j => j !== frozenJuror)!;
+    // Never Ada or Gwen, whose keys the rest of the suite signs with (Gus's case below leaves them out the same way). Gwen
+    // paused this one, so Ada can be seated on it; re-keyed, her old key paused nobody after (1 run of 110: Cal's case).
+    const moving = sueSeated.find(j => j !== frozenJuror && j !== ada && j !== gen)!;
     const votedBefore = [de.castDecisionVote(sueAgain, frozenJuror.pk, true), de.castDecisionVote(sueAgain, moving.pk, true)];
     const rekey = (who: Id): Id => {
         const next = keypair(who.callsign);

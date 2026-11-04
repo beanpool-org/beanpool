@@ -18,7 +18,7 @@ import { trackInfoRead } from './request-signing-version';
 
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { readRecoveryCopiesRule, type RecoveryCopiesRule } from './vault-config';
-import { featureModeFor, normaliseLang, word, type FeatureMode, type Lang, type ShowcaseFeature, type WordKey } from '@beanpool/core';
+import { featureModeFor, normaliseLang, shapeFeaturesOf, word, type FeatureMode, type Lang, type ShowcaseFeature, type WordKey } from '@beanpool/core';
 
 /** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
 export { GLOBAL_NODE_URL };
@@ -106,6 +106,11 @@ export interface NodeFeatures {
      */
     knownFloor?: number;
     /**
+     * Who decides a removal (apps/server config/removal-decider.ts), in a member's read: "How this community works" says the
+     * rule (core removalDeciderLine). Absent from a node older than slice J3, which then draws no line.
+     */
+    removalDecider?: 'automatic' | 'everyone' | 'jury';
+    /**
      * The rule's two lines, which a member's read says beside the floor (apps/server config/features-for.ts): the community's
      * public settings, not a member's. "How this community works" states the rule from them, on every way into it.
      */
@@ -126,7 +131,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 /** The numbers a member's read says beside the switches: the floor and the rule's two lines, kept and carried together. */
 const NUMBER_KEYS = ['knownFloor', 'debtLinePct', 'quietDays'] as const;
 
-const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | typeof NUMBER_KEYS[number]>> = [
+const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | 'removalDecider' | typeof NUMBER_KEYS[number]>> = [
     'pins',
     'pollOther',
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
@@ -202,6 +207,16 @@ function cacheKey(url: string): string {
 }
 
 /**
+ * A member's own answer (GET /api/community/me): its `features` (W1, the node's own set), and who decides a removal, which
+ * the answer says beside them, never in them (apps/server config/features-for.ts removalDeciderFor, slice J3), read as one
+ * set, as "How this community works" reads it. Null when the answer says no features (an older node).
+ */
+export function readReaderFeatures(body: unknown): NodeFeatures | null {
+    const features = shapeFeaturesOf(body && typeof body === 'object' ? (body as { features?: object; removalDecider?: unknown }) : null);
+    return features ? readNodeProfile({ features })?.features ?? null : null;
+}
+
+/**
  * Read the profile out of an info answer, or null when the answer is not one.
  *
  * Only the exact string `global` makes a node global: anything else, including an answer that does
@@ -226,6 +241,9 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
             if (typeof f[key] === 'number') features[key] = f[key] as number;
         }
         if (DOORS.includes(f.door as NodeDoor)) features.door = f.door as NodeDoor;
+        // Who decides a removal (slice J3): one of the three rules, or nothing. A member's answer says it beside its features,
+        // never in them; readReaderFeatures puts it here.
+        if (f.removalDecider === 'automatic' || f.removalDecider === 'everyone' || f.removalDecider === 'jury') features.removalDecider = f.removalDecider;
         const n = f.nearbyListings as { radiusKm?: unknown; max?: unknown } | undefined;
         if (n && typeof n === 'object' && typeof n.radiusKm === 'number' && n.radiusKm > 0 && typeof n.max === 'number' && n.max > 0) {
             features.nearbyListings = { radiusKm: n.radiusKm, max: n.max };
@@ -456,6 +474,7 @@ export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?
         if (typeof reader[key] === 'number') out[key] = reader[key];
     }
     if (reader.door) out.door = reader.door;
+    if (reader.removalDecider) out.removalDecider = reader.removalDecider;
     return out;
 }
 

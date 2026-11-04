@@ -62,7 +62,7 @@ import {
 import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
-import { featuresFor } from '../config/features-for.js';
+import { featuresFor, removalDeciderFor } from '../config/features-for.js';
 import { confirmationOf } from '../engine/community-health.js';
 import { getStartCommunityUrl } from '../config/start-community.js';
 import { recoveryCopies } from '../config/recovery-copies.js';
@@ -897,9 +897,12 @@ router.get('/api/community/me', async (ctx) => {
     }
     ctx.set('Cache-Control', 'private, no-store');
     // `features`: the reader's own effective set (config/features-for.ts), today the node's, as /api/community/info says.
+    // Beside it, never in it, who decides a removal, to a reader who reads as a member (removalDeciderFor, slice J3).
+    const removalRule = removalDeciderFor(actor);
     ctx.body = {
         publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor),
         features: featuresFor(actor),
+        ...(removalRule ? { removalDecider: removalRule } : {}),
         // Whether the rule on what the admins can see applies to them, and since when: a new `confirmedAt` is a new
         // confirmation, so the app shows its card again (engine/community-health.ts confirmationOf).
         ...confirmationOf(actor),

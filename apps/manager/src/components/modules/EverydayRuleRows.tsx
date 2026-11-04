@@ -11,6 +11,8 @@ import {
     fetchCommunityShape,
     updateCommunityShape,
     getConsequenceSentence,
+    REMOVAL_DECIDER_CHOICES,
+    removalDeciderName,
 } from '../../lib/community-shape';
 import { RowControls, ShapeRow, visitorsDisplay } from './ShapeRows';
 import { ChangesLog } from './ChangesLog';
@@ -27,7 +29,7 @@ export type EverydayGroup = 'taking' | 'rules' | 'found' | 'connections';
 /** The settings each card shows the Changes lines of. */
 const GROUP_LOG: Record<EverydayGroup, string[]> = {
     taking: ['join', 'knocks'],
-    rules: ['dmRequests', 'probation', 'autoHide', 'autoHideReports', 'autoMute'],
+    rules: ['dmRequests', 'probation', 'autoHide', 'autoHideReports', 'autoMute', 'removalDecider'],
     found: ['listed', 'doorCheck', 'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth'],
     connections: [],
 };
@@ -293,6 +295,59 @@ export function EverydayRuleRows({ activeNode, viewer, group, title, intro }: Ev
                         </ShapeRow>
                     );
                 })}
+                {/* Who decides a removal (removal jury, DESIGN-removal-jury-fable.md §6): its lock refuses only A jury, so the row
+                    opens whatever it says, and A jury is the one choice it holds back while fewer than 36 could serve. */}
+                {group === 'rules' && settings.removalDecider && (
+                    <ShapeRow
+                        id="removalDecider"
+                        icon="⚖️"
+                        name={t('Who decides a removal')}
+                        summary={t('When an admin pauses a member, a vote decides whether they are removed.')}
+                        extraLine={t('{n} members could serve on a jury today.').replace('{n}', settings.removalDecider.poolSize.toLocaleString('en'))}
+                        displayValue={removalDeciderName(settings.removalDecider.configured)}
+                        lock={settings.removalDecider.lock}
+                        isOwner={canEdit}
+                        isOpen={open === 'removalDecider'}
+                        onToggle={() => toggle('removalDecider', settings.removalDecider!.configured)}
+                        allowExpandWithLock={canEdit}
+                    >
+                        <div className="space-y-3 pt-2">
+                            <fieldset className="space-y-2 border-0 p-0 m-0" role="radiogroup" aria-label={t('Who decides a removal')}>
+                                <legend className="sr-only">{t('Who decides a removal')}</legend>
+                                {REMOVAL_DECIDER_CHOICES.map((choice) => {
+                                    const heldBack = choice.rule === 'jury' && settings.removalDecider!.lock?.code === 'pool_too_small';
+                                    return (
+                                        <label key={choice.rule} className={`flex items-start gap-2.5 text-xs text-white select-none ${heldBack ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                                            <input
+                                                type="radio"
+                                                name="shape-removal-decider-radio"
+                                                value={choice.rule}
+                                                checked={draft === choice.rule}
+                                                disabled={heldBack}
+                                                onChange={() => setDraft(choice.rule)}
+                                                className="mt-0.5 accent-terra-500"
+                                            />
+                                            <div>
+                                                <span className="font-bold">{choice.name}</span>
+                                                <p className="text-[11px] text-nature-400 m-0 mt-0.5">{choice.words}</p>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
+                            </fieldset>
+                            <RowControls
+                                onSave={() => save('removalDecider', draft)}
+                                onCancel={cancel}
+                                consequence={consequence}
+                                note={note}
+                                onNoteChange={setNote}
+                                saving={saving}
+                                error={rowError}
+                                saveDisabled={draft === settings.removalDecider.configured}
+                            />
+                        </div>
+                    </ShapeRow>
+                )}
                 {group === 'found' && (
                     <>
                         <ShapeRow

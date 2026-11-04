@@ -18,7 +18,7 @@ import {
 } from '../utils/db';
 import { beansOn, type NodeFeatures } from '../utils/node-profile';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
-import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, isJuryVote, juryTurnoutLine, juryTurnoutOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
     DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, minYesLine,
     notExecutedLine, ownerDecisionLine, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine,
@@ -28,6 +28,7 @@ import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark
 import { samplePoolVoting } from './showcase/sample-screens';
 import { signedRequestWords } from './signed-request-lines';
 import { RemovalReplySheet } from './RemovalReplySheet';
+import { JuryPanel, JuryTurnoutBox } from './JuryPanel';
 
 /**
  * The question Decide's button and the Commons "+" ask before a Decision can be proposed, whole, in the member's language.
@@ -915,6 +916,48 @@ export function DecideSection({
                             const creditsLine = isQuadratic ? voiceCreditsLine(myPoolVoting) : null;
                             const yesDisabled = votingId === item.id || buttons.yes.disabled || !!blocker;
                             const noDisabled = votingId === item.id || buttons.no.disabled || !!blocker;
+                            // A vote a drawn jury decides (removal jury J3): the node sends no split while it is open, and only a
+                            // seated juror votes (JuryPanel asks the node for the reader's seat).
+                            const jury = isJuryVote(item);
+                            const voteButtons = (
+                                <View style={styles.voteButtonsRow}>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel={buttons.yes.label}
+                                        accessibilityState={{ disabled: yesDisabled }}
+                                        style={[styles.voteBtn, styles.voteBtnYes, (buttons.yes.disabled || !!blocker) && styles.voteBtnCurrent]}
+                                        disabled={yesDisabled}
+                                        onPress={() => handleVote(item, true)}
+                                    >
+                                        {votingId === item.id ? (
+                                            <ActivityIndicator color="#fff" size="small" />
+                                        ) : (
+                                            <>
+                                                <MaterialCommunityIcons name="thumb-up" size={16} color="#fff" />
+                                                <Text style={styles.voteBtnText}>{buttons.yes.label}</Text>
+                                            </>
+                                        )}
+                                    </Pressable>
+
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel={buttons.no.label}
+                                        accessibilityState={{ disabled: noDisabled }}
+                                        style={[styles.voteBtn, styles.voteBtnNo, (buttons.no.disabled || !!blocker) && styles.voteBtnCurrent]}
+                                        disabled={noDisabled}
+                                        onPress={() => handleVote(item, false)}
+                                    >
+                                        {votingId === item.id ? (
+                                            <ActivityIndicator color="#fff" size="small" />
+                                        ) : (
+                                            <>
+                                                <MaterialCommunityIcons name="thumb-down" size={16} color="#fff" />
+                                                <Text style={styles.voteBtnText}>{buttons.no.label}</Text>
+                                            </>
+                                        )}
+                                    </Pressable>
+                                </View>
+                            );
 
                             // §3.8 Removal ballot text
                             const targetName = item.params?.memberName || item.subject?.slice(0, 8) || t('Member');
@@ -1007,7 +1050,12 @@ export function DecideSection({
                                         </View>
                                     )}
 
-                                    {/* Metrics: Quorum Progress & Tally */}
+                                    {/* Metrics: Quorum Progress & Tally; a jury's count of jurors, never a split */}
+                                    {jury ? (
+                                        <View style={styles.metricsContainer}>
+                                            <JuryTurnoutBox decision={item} name={targetName} />
+                                        </View>
+                                    ) : (
                                     <View style={styles.metricsContainer}>
                                         {/* Quorum */}
                                         <View>
@@ -1061,6 +1109,7 @@ export function DecideSection({
                                             {minYesLine(tally) && <Text style={styles.electorateText} testID="min-yes-line">{minYesLine(tally)}</Text>}
                                         </View>
                                     </View>
+                                    )}
 
                                     {/* Voting Action Section */}
                                     <View style={styles.voteSection}>
@@ -1123,45 +1172,14 @@ export function DecideSection({
                                                 <LocalCommunityMark variant="action" feature="decisions" label={t('👎 Vote NO')} />
                                             </View>
                                         ) : isOwnRemoval(item, identity?.publicKey) ? (
-                                            <Text style={styles.blockerText} testID="own-removal-note">{t("This vote is about you, so you can't vote on it.")}</Text>
+                                            <>
+                                                <Text style={styles.blockerText} testID="own-removal-note">{t("This vote is about you, so you can't vote on it.")}</Text>
+                                                {jury && <JuryPanel decision={item} open me={identity?.publicKey} name={targetName} onRefresh={onRefresh} />}
+                                            </>
+                                        ) : jury ? (
+                                            <JuryPanel decision={item} open me={identity?.publicKey} name={targetName} voteButtons={voteButtons} onRefresh={onRefresh} />
                                         ) : (
-                                            <View style={styles.voteButtonsRow}>
-                                                <Pressable
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={buttons.yes.label}
-                                                    accessibilityState={{ disabled: yesDisabled }}
-                                                    style={[styles.voteBtn, styles.voteBtnYes, (buttons.yes.disabled || !!blocker) && styles.voteBtnCurrent]}
-                                                    disabled={yesDisabled}
-                                                    onPress={() => handleVote(item, true)}
-                                                >
-                                                    {votingId === item.id ? (
-                                                        <ActivityIndicator color="#fff" size="small" />
-                                                    ) : (
-                                                        <>
-                                                            <MaterialCommunityIcons name="thumb-up" size={16} color="#fff" />
-                                                            <Text style={styles.voteBtnText}>{buttons.yes.label}</Text>
-                                                        </>
-                                                    )}
-                                                </Pressable>
-
-                                                <Pressable
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={buttons.no.label}
-                                                    accessibilityState={{ disabled: noDisabled }}
-                                                    style={[styles.voteBtn, styles.voteBtnNo, (buttons.no.disabled || !!blocker) && styles.voteBtnCurrent]}
-                                                    disabled={noDisabled}
-                                                    onPress={() => handleVote(item, false)}
-                                                >
-                                                    {votingId === item.id ? (
-                                                        <ActivityIndicator color="#fff" size="small" />
-                                                    ) : (
-                                                        <>
-                                                            <MaterialCommunityIcons name="thumb-down" size={16} color="#fff" />
-                                                            <Text style={styles.voteBtnText}>{buttons.no.label}</Text>
-                                                        </>
-                                                    )}
-                                                </Pressable>
-                                            </View>
+                                            voteButtons
                                         )}
                                         <Text style={styles.secretNote} testID="secret-ballot-note">
                                             {preview ? t('Secret ballot: members see the totals, never who voted how.') : t('🔒 Secret ballot: members see the totals, never who voted how.')}
@@ -1205,6 +1223,9 @@ export function DecideSection({
                         filteredPastDecisions.map(item => {
                             const { tally } = item;
                             const supportPct = Math.round(tally.supportRatio * 100);
+                            // A closed jury vote counts its jurors (removal jury J3), and its panel says how it ended.
+                            const juryTurnout = isJuryVote(item) ? juryTurnoutOf(tally) : null;
+                            const turnoutWords = juryTurnout ? juryTurnoutLine(juryTurnout) : turnoutLine(tally);
 
                             let badgeStyle: any = styles.statusFailed;
                             let textStyle: any = styles.statusTextFailed;
@@ -1246,13 +1267,23 @@ export function DecideSection({
                                     <View style={styles.metricsContainer}>
                                         <View style={styles.metricRow}>
                                             <Text style={styles.metricLabel}>
-                                                {tally.quorumMet ? t('Turnout: {line} (Met)', { line: turnoutLine(tally) }) : t('Turnout: {line} (Unmet)', { line: turnoutLine(tally) })}
+                                                {tally.quorumMet ? t('Turnout: {line} (Met)', { line: turnoutWords }) : t('Turnout: {line} (Unmet)', { line: turnoutWords })}
                                             </Text>
                                             <Text style={styles.metricValue}>
                                                 {t('Yes: {yes} ({pct}%) · No: {no}', { yes: tally.yesWeight, pct: supportPct, no: tally.noWeight })}
                                             </Text>
                                         </View>
                                     </View>
+
+                                    {isJuryVote(item) && (
+                                        <JuryPanel
+                                            decision={item}
+                                            open={false}
+                                            me={identity?.publicKey}
+                                            name={item.params?.memberName || item.subject?.slice(0, 8) || t('Member')}
+                                            onRefresh={onRefresh}
+                                        />
+                                    )}
 
                                     {/* Who Authorised Each Executed Effect (§3.7, §3.8) */}
                                     <View style={styles.historyProvenanceBox}>

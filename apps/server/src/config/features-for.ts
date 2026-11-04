@@ -9,6 +9,7 @@ import { getDoor, type Door } from './door.js';
 import { db } from '../db/db.js';
 import { confirmationDialOn, knownFloor, readsAsMember } from '@beanpool/engine';
 import { healthSettings } from '../engine/community-health.js';
+import { removalDecider, type RemovalDecider } from './removal-decider.js';
 
 export type ReaderFeatures = NodeFeatures & { door: Door };
 
@@ -23,4 +24,17 @@ export function featuresFor(actor: string | null | undefined): ReaderFeatures {
         res.quietDays = quietDays;
     }
     return res;
+}
+
+/**
+ * Who decides a removal here (config/removal-decider.ts), for a reader who reads as a member, else undefined: "How this
+ * community works" says it on the phone and the web (core removalDeciderLine, slice J3). GET /api/community/me and
+ * GET /api/home say it as `removalDecider` BESIDE `features`, never in them: `features` is the node's own set, key for key,
+ * for every reader, but for a member's known floor and its two lines (W1, S5; test-node-profile holds it to exactly that),
+ * and a visitor gets nothing new from the community's settings
+ * (DESIGN-community-shape-settings-fable.md §4.3), so the rule is a member's fact, as `probation` and `area` are. The rule,
+ * never how many could serve today: that number would tell roughly how big the community is.
+ */
+export function removalDeciderFor(actor: string | null | undefined): RemovalDecider | undefined {
+    return actor && readsAsMember(db, actor) ? removalDecider() : undefined;
 }

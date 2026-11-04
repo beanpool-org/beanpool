@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 এই বার্তা যাচাই করা যায়নি, তাই এটি দেখানো হচ্ছে না।",
   "🗳️ Create Poll": "🗳️ পোল তৈরি করুন",
   "🟢 List an Offer first to post Needs": "🟢 প্রয়োজনসমূহ পোস্ট করতে আগে একটি প্রস্তাব তালিকাভুক্ত করুন",
-  "🤝 Chosen": "🤝 বেছে নেওয়া হয়েছে"
+  "🤝 Chosen": "🤝 বেছে নেওয়া হয়েছে",
+  "Done. This is now your photo here.": "হয়ে গেছে। এটি এখন এখানে আপনার ছবি।",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "শুধু ছবিটি কপি করা হয়। এখানে আপনার নাম ও প্রোফাইলের বাকি সব যেমন আছে তেমনই থাকে।",
+  "Use the photo from {community} here?": "{community}-এর ছবিটি এখানে ব্যবহার করবেন?",
+  "Use the photo you chose last here?": "সবশেষ বেছে নেওয়া ছবিটি এখানে ব্যবহার করবেন?",
+  "Use this photo here": "এই ছবিটি এখানে ব্যবহার করুন"
 }

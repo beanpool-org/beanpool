@@ -211,6 +211,56 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
         });
     });
 
+    describe('Arrange in place (DESIGN-home-arrange-in-place-fable.md §2.1, slice A1)', () => {
+        const band = { label: 'Coming up', canUp: true, canDown: true, onMove: vi.fn() };
+
+        it('the body goes quiet: dimmed, inert, hidden from a screen reader, taking no tap; the band, and its arrows, stay live', () => {
+            render(<HomeCard id="events" title="Coming up" arrange={band} quiet menu={{ onRemove: vi.fn() }}><button type="button">Calendar ›</button></HomeCard>);
+            const body = screen.getByTestId('card-body-events');
+            expect(body).toHaveAttribute('aria-hidden', 'true');
+            expect(body).toHaveAttribute('inert');
+            expect(body.style.opacity).toBe('0.55');
+            expect(body.style.pointerEvents).toBe('none');
+            expect(body).toContainElement(screen.getByText('Calendar ›'));
+            // The band is the card's own, with arrows where Tune and "…" were.
+            expect(screen.queryByTestId('home-card-menu')).toBeNull();
+            expect(screen.getByTestId('home-arrange-up-events')).toBeEnabled();
+            expect(screen.getByTestId('card-band-events')).not.toHaveAttribute('inert');
+            expect(screen.getByRole('heading', { name: 'Coming up' })).toBeInTheDocument();
+        });
+
+        it('a card that is not quiet has no wrapper at all, and a quiet one is the same box: no padding or margin of its own', () => {
+            const { container, rerender } = render(<HomeCard id="events" title="Coming up"><p>body</p></HomeCard>);
+            const section = () => container.querySelector('section')!;
+            const band = () => screen.getByTestId('card-band-events');
+            const plain = { section: section().className, band: band().className };
+            expect(screen.queryByTestId('card-body-events')).toBeNull();
+            rerender(<HomeCard id="events" title="Coming up" arrange={{ label: 'Coming up', canUp: true, canDown: true }} quiet><p>body</p></HomeCard>);
+            // Arrange used to fold the card (pb-2, mb-2): now the card is exactly the box it is on Home, or a card would change its cell.
+            expect({ section: section().className, band: band().className }).toEqual(plain);
+            const wrapper = screen.getByTestId('card-body-events');
+            expect(wrapper.className).toBe('');
+            expect(wrapper.parentElement).toBe(section());
+        });
+
+        it('Stays here: no arrows, the word says so, and the body is as quiet as any', () => {
+            render(<HomeCard id="community" title="Your community" arrange={{ label: 'Your community', stays: true }} quiet><p>body</p></HomeCard>);
+            expect(screen.getByTestId('home-arrange-stays-community')).toHaveTextContent('Stays here');
+            expect(screen.queryByTestId('home-arrange-up-community')).toBeNull();
+            expect(screen.getByTestId('card-body-community')).toHaveAttribute('inert');
+        });
+
+        it('the arrows are 44 px targets that do not grow the 48 px band (-my-1, as the "…" has)', () => {
+            render(<HomeCard id="events" title="Coming up" arrange={band}><p>body</p></HomeCard>);
+            for (const dir of ['up', 'down']) {
+                const arrow = screen.getByTestId(`home-arrange-${dir}-events`);
+                expect(arrow.className).toContain('min-h-[44px]');
+                expect(arrow.className).toContain('-my-1');
+            }
+            expect(screen.getByTestId('card-band-events').className).toContain('min-h-[48px]');
+        });
+    });
+
     it('reports its measured height via onHeight callback (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
         const onHeight = vi.fn();
         vi.stubGlobal('ResizeObserver', class {

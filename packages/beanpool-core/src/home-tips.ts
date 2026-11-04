@@ -91,7 +91,7 @@ export const HOME_TIPS: readonly HomeTip[] = [
 ];
 
 /** A tip's sentence as an app says it: through t(), the drag sentence where that app's cards can be dragged. */
-export const tipText = (tip: HomeTip, drag = false): string => t(drag && tip.dragText ? tip.dragText : tip.text);
+export const tipText = (tip: HomeTip, drag = false): string => (drag && tip.dragText ? t(tip.dragText) : t(tip.text));
 
 /** The tips this node shows this reader, in order. */
 export function tipsFor(node: TipsNode, role: TipsRole): HomeTip[] {

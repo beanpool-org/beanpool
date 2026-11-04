@@ -6,6 +6,7 @@
 import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { HomeAnswer, HomeLayout, HomeLayoutV2 } from '../lib/home-cards';
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -1511,6 +1512,22 @@ describe('Arrange', () => {
         expect(screen.queryByTestId('card-body-market')).toBeNull();
         expect(body().length).toBeGreaterThan(0);
         expect(cardIds()).toEqual(before);
+    });
+
+    it('a tap in a quiet body reaches nothing until Done: a pointer cannot land on the row, and Done gives it back', async () => {
+        const onNavigate = vi.fn();
+        layout3();
+        render(<HomePage identity={ME} onNavigate={onNavigate} />);
+        await screen.findByTestId('home-card-pulse');
+        const user = userEvent.setup();
+        openArrange();
+        // pointer-events: none on the body (user-event refuses to click through it, as a browser would): no row, no link, no button.
+        await expect(user.click(body()[0])).rejects.toThrow(/pointer-events/);
+        await expect(user.click(within(screen.getByTestId('home-card-community')).getByTestId('home-arrange-open'))).rejects.toThrow(/pointer-events/);
+        expect(onNavigate).not.toHaveBeenCalled();
+        doneArrange();
+        await user.click(body()[0]);
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', expect.anything());
     });
 
     it('every control has a name, and Tab meets them in the member\'s order: Done, then each card\'s arrows, then Add a card, then Reset; the quiet bodies hold none', async () => {

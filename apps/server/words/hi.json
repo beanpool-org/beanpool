@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -962,5 +962,13 @@
   "The record is the one this laptop holds.": "रिकॉर्ड वही है जो इस लैपटॉप के पास है।",
   "This laptop's key ends in {key}. Compare it with the poster.": "इस लैपटॉप की कुंजी {key} पर समाप्त होती है। इसे पोस्टर से मिलाएँ।",
   "Turn on airplane mode, then turn Wi-Fi back on.": "एयरप्लेन मोड चालू करें, फिर Wi-Fi दोबारा चालू करें।",
-  "Open in the BeanPool app": "BeanPool ऐप में खोलें"
+  "Open in the BeanPool app": "BeanPool ऐप में खोलें",
+  "You can start one community poll a week. Your next one can start in {n} hour.|You can start one community poll a week. Your next one can start in {n} hours.": {
+    "one": "आप हफ़्ते में एक ही सामुदायिक पोल शुरू कर सकते हैं। आपका अगला पोल {n} घंटे बाद शुरू हो सकता है।",
+    "other": "आप हफ़्ते में एक ही सामुदायिक पोल शुरू कर सकते हैं। आपका अगला पोल {n} घंटे बाद शुरू हो सकता है।"
+  },
+  "You can start one community poll a week. Your next one can start in {n} day.|You can start one community poll a week. Your next one can start in {n} days.": {
+    "one": "आप हफ़्ते में एक ही सामुदायिक पोल शुरू कर सकते हैं। आपका अगला पोल {n} दिन बाद शुरू हो सकता है।",
+    "other": "आप हफ़्ते में एक ही सामुदायिक पोल शुरू कर सकते हैं। आपका अगला पोल {n} दिन बाद शुरू हो सकता है।"
+  }
 }

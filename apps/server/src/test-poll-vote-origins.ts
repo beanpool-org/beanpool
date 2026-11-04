@@ -48,7 +48,7 @@ import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { solveDoorWorkSync } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { wrapCreatePost } from './post-test-helper.js';
+import { wrapCreatePost, aWeekPasses } from './post-test-helper.js';
 import { initStateEngine, seedGenesisMember, grantNodeRole, createPost as rawCreatePost, createGroup, joinGroup, exportSyncState } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import * as stateEngine from './state-engine.js';
@@ -176,6 +176,8 @@ const setJoined = (id: Id, ms: number) => db.prepare('UPDATE members SET joined_
 
 const OPTIONS = [{ id: 'opt_yes', text: 'Yes' }, { id: 'opt_no', text: 'No' }, { id: 'opt_maybe', text: 'Maybe' }];
 async function makePoll(author: Id, title: string, extra: Record<string, unknown> = {}): Promise<string> {
+    // A member starts one poll a week (engine/poll-week.ts, held in test-poll-week.ts): a week on from their last, so it is the ballot this suite holds.
+    aWeekPasses(db, author.pk);
     const r = await call('POST', author, '/api/marketplace/posts', {
         type: 'poll', category: 'community', title, description: '', authorPublicKey: author.pk, pollOptions: OPTIONS, durationDays: 7, ...extra,
     });

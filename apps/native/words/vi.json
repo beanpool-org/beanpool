@@ -6730,5 +6730,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community} hiện không thể kiểm tra đăng nhập, nên chưa có gì được thêm. Vui lòng thử lại sau.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} không chấp nhận đăng nhập bằng {provider}. Bạn có thể thử hình thức khác.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "Hiện không thể kết nối tới {community}, nên chưa có gì được thêm. Kiểm tra kết nối mạng của bạn và thử lại.",
-  "HOSTED BY": "TỔ CHỨC BỞI"
+  "HOSTED BY": "TỔ CHỨC BỞI",
+  "Open event: {title}": "Mở sự kiện: {title}",
+  "Open listing: {title}": "Mở bài đăng: {title}"
 }

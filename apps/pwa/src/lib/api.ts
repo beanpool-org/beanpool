@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
-import { readCommunityCard, t, type DmLineDisclosure, type DmLineSig, type VouchLevel } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, t, type DmLineDisclosure, type DmLineSig, type VouchLevel } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -1851,6 +1851,19 @@ export interface PollOtherRead {
     answers: Array<{ id: string; words: string; reported: boolean }>;
     removed: number;
     canRemove: boolean;
+}
+
+/**
+ * When the node says this member's next poll can start (a member starts one a week, engine/poll-week.ts), asked before the poll
+ * form opens: the time in ms, or null when they may start one now, when the node is one from before the rule, or when it cannot
+ * be asked. It gates nothing: the node checks again at Create.
+ */
+export async function getPollNextStart(): Promise<number | null> {
+    try {
+        return pollNextStartMs(await request<unknown>('GET', POLL_NEXT_START_PATH));
+    } catch {
+        return null;
+    }
 }
 
 export async function getPollOtherAnswers(postId: string): Promise<PollOtherRead> {

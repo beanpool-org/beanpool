@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { setMemberPhoto } from '@beanpool/engine';
 import { POLL_OTHER_WORDS_MAX } from '@beanpool/core';
+import { aWeekPasses } from './post-test-helper.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -121,7 +122,9 @@ async function main() {
 
     // A member has one open poll and a node five: each poll here closes the ones before it, but the one being read.
     let keep = '';
-    const clearRoom = () => db.prepare("UPDATE posts SET status = 'completed' WHERE type = 'poll' AND status = 'active' AND id != ?").run(keep);
+    // Room for the next poll: the others closed, and a week on, so it is Other this suite holds and not the week a member waits
+    // between polls (engine/poll-week.ts, held in test-poll-week.ts).
+    const clearRoom = () => { db.prepare("UPDATE posts SET status = 'completed' WHERE type = 'poll' AND status = 'active' AND id != ?").run(keep); aWeekPasses(db); };
     const makePoll = async (extra: Record<string, unknown>, by: Id = maker) => (clearRoom(), post('/api/marketplace/posts', {
         type: 'poll', category: 'community', title: `What is missing? ${crypto.randomBytes(3).toString('hex')}`, description: '', authorPublicKey: by.pubKeyHex,
         pollOptions: [{ id: 'opt_1', text: 'Buses' }, { id: 'opt_2', text: 'Beans' }], durationDays: 7, ...extra,

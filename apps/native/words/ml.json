@@ -6983,5 +6983,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community}-ന് ഇപ്പോൾ സൈൻ-ഇന്നുകൾ പരിശോധിക്കാൻ കഴിയില്ല, അതിനാൽ ഒന്നും ചേർത്തിട്ടില്ല. ദയവായി പിന്നീട് വീണ്ടും ശ്രമിക്കുക.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} {provider} സൈൻ-ഇൻ സ്വീകരിക്കുന്നില്ല. നിങ്ങൾക്ക് മറ്റൊന്ന് പരീക്ഷിക്കാം.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "{community}-മായി ഇപ്പോൾ ബന്ധപ്പെടാൻ കഴിയുന്നില്ല, അതിനാൽ ഒന്നും ചേർത്തിട്ടില്ല. നിങ്ങളുടെ കണക്ഷൻ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.",
-  "HOSTED BY": "ഹോസ്റ്റ് ചെയ്തത്"
+  "HOSTED BY": "ഹോസ്റ്റ് ചെയ്തത്",
+  "Open event: {title}": "ഇവന്റ് തുറക്കുക: {title}",
+  "Open listing: {title}": "ലിസ്റ്റിംഗ് തുറക്കുക: {title}"
 }

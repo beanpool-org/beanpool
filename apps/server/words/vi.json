@@ -2,9 +2,9 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-03",
+    "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -955,5 +955,11 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "Sổ ghi tính đến {when}. Các giao dịch đã làm kể từ đó trên máy chủ cũ không có ở đây.",
   "The record is the one this laptop holds.": "Sổ ghi này là bản mà máy tính xách tay này đang giữ.",
   "This laptop's key ends in {key}. Compare it with the poster.": "Khóa của máy tính xách tay này kết thúc bằng {key}. Hãy so sánh với áp phích.",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "Bật chế độ máy bay, rồi bật lại Wi-Fi."
+  "Turn on airplane mode, then turn Wi-Fi back on.": "Bật chế độ máy bay, rồi bật lại Wi-Fi.",
+  "You can start one community poll a week. Your next one can start in {n} hour.|You can start one community poll a week. Your next one can start in {n} hours.": {
+    "other": "Bạn chỉ có thể bắt đầu một cuộc thăm dò cộng đồng mỗi tuần. Cuộc thăm dò tiếp theo của bạn có thể bắt đầu sau {n} giờ."
+  },
+  "You can start one community poll a week. Your next one can start in {n} day.|You can start one community poll a week. Your next one can start in {n} days.": {
+    "other": "Bạn chỉ có thể bắt đầu một cuộc thăm dò cộng đồng mỗi tuần. Cuộc thăm dò tiếp theo của bạn có thể bắt đầu sau {n} ngày."
+  }
 }

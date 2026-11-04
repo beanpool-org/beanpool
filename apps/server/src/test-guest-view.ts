@@ -1423,7 +1423,7 @@ async function main(): Promise<void> {
             'POST /api/local/connectors/remove', 'GET /api/local/dashboard', 'POST /api/local/federation/links/ceiling',
             'GET /api/local/status', 'POST /api/local/update-identity', 'POST /api/local/verify-password',
             'GET /api/map/enterprises',
-            'POST /api/marketplace/polls/close', 'POST /api/marketplace/polls/vote', 'GET /api/marketplace/posts', 'POST /api/marketplace/posts',
+            'POST /api/marketplace/polls/close', 'GET /api/marketplace/polls/next-start', 'POST /api/marketplace/polls/vote', 'GET /api/marketplace/posts', 'POST /api/marketplace/posts',
             // A post shared outside (front doors S6, routes/peek.ts): the read opens only with a ticket (test-peek-ticket).
             'GET /api/marketplace/posts/:id',
             'GET /api/marketplace/posts/:id/chat', 'POST /api/marketplace/posts/:id/chat/message', 'POST /api/marketplace/posts/:id/chat/remove',

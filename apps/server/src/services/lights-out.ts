@@ -317,7 +317,11 @@ const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  *     raises their session epoch, so it counts;
  *   - the reads Settings sends as POST (the body carries the password or a filter): what opening Settings asks for, so an
  *     owner who opens it in the hall to turn the switch off still gets the offer. Each was read for a write (#2822);
- *     POST /api/local/admin/community-health is not one (it saves the health settings) and counts.
+ *     POST /api/local/admin/community-health is not one (it saves the health settings) and counts. What the Network tab
+ *     (where the switch is) and the Backups tab send as they open is pinned in apps/manager/src/lib/hall-reads.json:
+ *     the manager's hall-reads.test.tsx records it from the real tabs, and test-lights-out section 5 sends it here.
+ *     POST /api/local/admin/snapshots/config reads and saves on one route, so it counts; Settings reads the schedule
+ *     from snapshots/list instead (takeover/status runs the same re-seal check the node's own timer runs).
  *
  * Kept complete by its shape: a route is a hall write unless it is named here, so a new route counts until someone shows
  * it changes nothing, and a read left off this list only withholds the offer (§3.6 case 1 then: the hall's copy is the
@@ -338,6 +342,9 @@ export const NOT_HALL_WRITES: readonly string[] = [
     'POST /api/local/admin/backup-status', 'POST /api/local/admin/standby-health',
     'POST /api/local/admin/offbox-backups/status', 'POST /api/local/admin/offbox-backups/list',
     'POST /api/local/admin/app-addresses/check',
+    'POST /api/local/admin/snapshots/list', 'POST /api/local/admin/takeover/status', 'POST /api/local/admin/takeover/words-checks',
+    'POST /api/local/admin/takeover/progress', 'POST /api/local/admin/replication-access', 'POST /api/local/admin/replication-token/status',
+    'POST /api/local/admin/replication-config/get',
 ];
 const NOT_HALL_WRITE_SET = new Set(NOT_HALL_WRITES);
 

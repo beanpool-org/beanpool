@@ -21,8 +21,9 @@
  *   4. §2.7: address changes refused while on (409), allowed again once off;
  *   5. the epoch: a server never restored is not raised; a restored copy is raised once (max(own, file) + 1, since now) and
  *      never again for that restore; one that took over after its restore is not; recordAsOf is the backup's made-at;
- *      the stand-down offer on OFF with no hall writes or only Settings' reads, none after a member wrote or an owner
- *      changed something in Settings; every write route the node serves counts but the ones NOT_HALL_WRITES names;
+ *      the stand-down offer on OFF with no hall writes or only Settings' reads (what its Network and Backups tabs send as
+ *      they open, from apps/manager/src/lib/hall-reads.json), none after a member wrote or an owner changed something in
+ *      Settings; every write route the node serves counts but the ones NOT_HALL_WRITES names;
  *   6. the switch is in no copy: a sealed backup's node_config.json and its take-over bundle, a snapshot, the redacted
  *      config; the manifest says per-server; the stager leaves it out;
  *   7. `beanpool lights-out`: the node takes the request within 2 s and answers; the log keeps a SECURITY line; a request
@@ -392,6 +393,31 @@ console.log('\n5. The epoch raise on a restored copy, the record as of, stand do
     check('opening Settings in the hall: its POST reads answer 200', readStatus.every((s) => s.endsWith(' 200')), readStatus.join(', '));
     off = await offPhone();
     check('off after only Settings\' reads → still the stand-down offer', off.json?.lightsOut?.hallWrites === false && off.json?.lightsOut?.standDown?.offered === true, JSON.stringify(off.json?.lightsOut));
+    // What the tabs really send as they open (review of fix round 1, #2822): the Network tab (where the switch is) and
+    // the Backups tab, recorded from Settings' own components by apps/manager's hall-reads.test.tsx into hall-reads.json.
+    // Each tab opened alone in a fresh hall, then OFF: still the offer. The schedule is read from snapshots/list
+    // (snapshots/config also saves, so it counts).
+    const hallReads = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'manager', 'src', 'lib', 'hall-reads.json'), 'utf8')) as { tabs: Record<string, string[]> };
+    const tabs = Object.entries(hallReads.tabs);
+    check(`hall-reads.json names the tabs (${tabs.map(([t]) => t).join(', ')}), the Network tab's schedule read among them`,
+        tabs.length >= 3 && (hallReads.tabs.network ?? []).includes('POST /api/local/admin/snapshots/list')
+        && !tabs.some(([, sent]) => sent.some((r) => r.includes('/snapshots/config'))), JSON.stringify(hallReads.tabs.network));
+    for (const [tab, sent] of tabs) {
+        await onPhone();
+        const answered: string[] = [];
+        for (const r of sent) {
+            const [method, p] = [r.slice(0, r.indexOf(' ')), r.slice(r.indexOf(' ') + 1)];
+            answered.push(`${p} ${(await send(LAN, method, p, HALL, settings, '{}')).status}`);
+        }
+        check(`opening the ${tab} tab in the hall: the ${sent.length} POSTs it sends answer 200`, sent.length > 0 && answered.every((s) => s.endsWith(' 200')), answered.join(', '));
+        off = await offPhone();
+        check(`… off after opening it → still the stand-down offer`, off.json?.lightsOut?.hallWrites === false && off.json?.lightsOut?.standDown?.offered === true, JSON.stringify(off.json?.lightsOut));
+    }
+    await onPhone();
+    const schedRead = await send(LAN, 'POST', '/api/local/admin/snapshots/config', HALL, settings, '{}');
+    off = await offPhone();
+    check('snapshots/config (it reads and saves on one route) still counts, read or not: no offer after it', schedRead.status === 200
+        && off.json?.lightsOut?.hallWrites === true && off.json?.lightsOut?.standDown === null, `${schedRead.status} ${JSON.stringify(off.json?.lightsOut)}`);
     await onPhone();
     const annBody = JSON.stringify({ title: 'Hall', body: 'We are in the hall tonight.' });
     const announced = await send(LAN, 'POST', '/api/local/admin/announcements', HALL, settings, annBody);

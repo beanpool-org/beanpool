@@ -7,21 +7,24 @@
  * the names the app imports from it) and the page, its boxes, the Share button and its sheet real. A stand-in for a phone:
  * Android's fonts and line breaks differ.
  *
- * The fixture is the Mullum market (Marty's shot, 4 Nov): a two-line title, a repeat caption, a photo, and the six next dates
- * the node sends by id (compact on the page: the first and "and 5 more"). Cases:
+ * The fixture is the Mullum market (Marty's shot, 4 Nov): a two-line title, a repeat rule, a photo, and the six next dates
+ * the node sends by id (behind the rule on the page: "↻ Monthly, third Saturday · Next dates", one button under the when,
+ * DESIGN-web-dates-stop-fable.md §4). Cases:
  *   member           a member who has not answered: Going / Interested, no counts
  *   going            a member who is Going: the chosen answer, the counts, the chat in the quiet row, Remind me, the note
  *   host             the host: "You're hosting this event", the counts, the guest list box with Edit event, no Report
  *   copy             a member's copy on the global community: the copy's door, the "from" line, no host box
  *   nophoto          the member case with no photo: the event's tile, 3:1
- *   member-nodates   the member case with no next dates (a one-off event, or before the node answers), for the numbers
+ *   member-nodates   the member case with no next dates (an older node, or before the node answers): the rule alone
  *   nophoto-nodates  the same with no photo
  *   member-open      the member case with the next dates opened: all six (nophoto-open: the same with no photo)
  *   host-open        the host's case opened: each date with Cancel this date and Change this date only
  *
  * Each case, each scheme, fails on: the page scrolling sideways; text past the edge or cut; a button under 47.5dp; text under
- * 4.5:1 (3:1 large); the answer row's top past 500dp, or the answer's bottom (Going's; the host's line, the copy's door) past
- * the 569dp screen (the stop, DESIGN-detail-pages-frame-fable.md §2). It prints where both land. Shots go to --shots <dir>
+ * 4.5:1 (3:1 large); in a state a member arrives in, the answer row's top past 500dp, or the answer's bottom (Going's; the
+ * host's line, the copy's door) past the 569dp screen (the stop, DESIGN-detail-pages-frame-fable.md §2); with the list a member
+ * opened (member-open, nophoto-open), the answer row's top past the 569dp screen (DESIGN-web-dates-stop-fable.md §2). It
+ * prints where both land. Shots go to --shots <dir>
  * (not committed): the page one 569dp screen at a time, the first is what a member sees on opening it.
  *
  *   node apps/native/e2e/event-page-320.mjs --shots <dir>
@@ -40,6 +43,12 @@ const ROOT = path.resolve(NATIVE, '../..');
 const SCALE = 1.3;
 const WIDTH = 320;
 const SCREEN = 569; // 320 x 16:9, the floor's whole screen
+// The stop (DESIGN-detail-pages-frame-fable.md §2): in every state a member arrives in, the answer row's top at or above 500dp.
+const STOP = 500;
+// The list a member opened themselves is exempt from 500 but keeps the answer's top on the first screen
+// (DESIGN-web-dates-stop-fable.md §2): it is their own tap and the dates are what they asked to read, so the list may push
+// the answer down, never off the screen. The host's opened date manager is not gated (see below).
+const OPENED_STOP = SCREEN;
 const TALL = 1500; // the whole page in one shot: the real phone scrolls it
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? path.resolve(process.argv[shotsAt + 1]) : null;
@@ -377,13 +386,16 @@ try {
             const dp = (n) => (n == null ? '—' : String(Math.round(n * 10) / 10));
             const whose = at.going ? "Going's" : "the answer's";
             rows.push(`${tag}: the answer row's top at ${dp(at.action)} dp, ${whose} bottom at ${dp(at.answer)} dp, the photo's top at ${dp(at.photoTop)} dp, the next dates ${at.dates} dp tall, the picture ${at.photo}`);
-            // The stop (DESIGN-detail-pages-frame-fable.md §2): fail, not print. Not on host-open: the host opened their own date
-            // manager (six dates, each with Cancel and Change, about 610dp by itself), and their line is no answer to make; it is
-            // printed above, and the stop's cases are the member's (§1.4's table), the host's compact page and the copy.
+            // The stop (DESIGN-detail-pages-frame-fable.md §2): fail, not print. The states a member arrives in at STOP and the
+            // screen; the member's opened list at OPENED_STOP. Not on host-open: the host opened their own date manager (six
+            // dates, each with Cancel and Change, about 610dp by itself), and their line is no answer to make; it is printed
+            // above, and the stop's cases are the member's (§1.4's table), the host's compact page and the copy.
+            const opened = c === 'member-open' || c === 'nophoto-open';
             if (c !== 'host-open') {
                 if (at.action == null) problems.push(`${tag}: no answer row`);
-                else if (at.action > 500) problems.push(`${tag}: the answer row's top at ${dp(at.action)} dp, past 500`);
-                if (at.answer != null && at.answer > SCREEN) problems.push(`${tag}: ${whose} bottom at ${dp(at.answer)} dp, past the ${SCREEN} dp screen`);
+                else if (opened && at.action > OPENED_STOP) problems.push(`${tag}: opened, the answer row's top at ${dp(at.action)} dp, past the ${OPENED_STOP} dp screen`);
+                else if (!opened && at.action > STOP) problems.push(`${tag}: the answer row's top at ${dp(at.action)} dp, past ${STOP}`);
+                if (!opened && at.answer != null && at.answer > SCREEN) problems.push(`${tag}: ${whose} bottom at ${dp(at.answer)} dp, past the ${SCREEN} dp screen`);
             }
             if (SHOTS) {
                 const name = `phone-event-${scheme}-${c}`;
@@ -411,4 +423,4 @@ if (problems.length) {
     console.log(problems.map((p) => `  ✗ ${p}`).join('\n'));
     process.exit(1);
 }
-console.log('Every state holds: no sideways scroll, nothing past the edge or cut, every button 48dp, text at 4.5:1 or better, the answer on the first screen (top ≤ 500dp, bottom ≤ 569dp).');
+console.log(`Every state holds: no sideways scroll, nothing past the edge or cut, every button 48dp, text at 4.5:1 or better, the answer on the first screen (top ≤ ${STOP}dp and bottom ≤ ${SCREEN}dp as a member arrives; top ≤ ${OPENED_STOP}dp with the list they opened).`);

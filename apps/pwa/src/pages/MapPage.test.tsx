@@ -3544,6 +3544,24 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         expect(calls.filter(c => c.includes('/api/shops/mine/close'))).toEqual([]);
     });
 
+    // Slice O2 (#2894 review): Home's starter Offer says shop: false. For a member with no shop, a draft that says nothing ticks
+    // "Put this in your shop" ("Your shop opens with it."), so a newcomer's first Offer would open a shop; this one never does.
+    it('a draft that says shop: false opens with "Put this in your shop" unticked for a member with no shop; one that says nothing is ticked', async () => {
+        vi.stubGlobal('fetch', async (url: string) => {
+            const path = url.replace(/^https?:\/\/[^/]+/, '');
+            if (path === '/api/shops/mine') return { ok: true, status: 200, json: async () => ({ shop: null }) };
+            return { ok: false, status: 404, json: async () => ({}) };
+        });
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={{ ...draft, shop: false }} />); });
+        let panel = await view!.findByTestId('map-new-post-panel');
+        expect(await within(panel).findByTestId('composer-shop-toggle', {}, { timeout: 3000 })).toHaveAttribute('aria-checked', 'false');
+        view!.unmount();
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} />); });
+        panel = await view!.findByTestId('map-new-post-panel');
+        expect(await within(panel).findByTestId('composer-shop-toggle', {}, { timeout: 3000 })).toHaveAttribute('aria-checked', 'true');
+    });
+
     it('the composer opened from a tool gets "Put this in your shop" tick, ticked by default when the member has a shop, and submits with shopId', async () => {
         const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'p-new' } as any });
         vi.stubGlobal('fetch', async (url: string) => {

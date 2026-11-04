@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
     livePostChange,
     pushedPostIsStale,
@@ -20,6 +20,11 @@ import {
     MESSAGE_BACKSTOP_ALIVE_MS,
     MESSAGE_BACKSTOP_DOWN_MS,
     MESSAGE_BACKSTOP_TICK_MS,
+    WIDE_DOORBELL_TYPES,
+    WIDE_SYNC_SPREAD_MS,
+    wideSyncDelayMs,
+    isWideDoorbell,
+    createDeferredSync,
 } from '../live-updates.js';
 
 // The shape the node's `new_post` / `post_updated` broadcasts carry to a member socket: `publicBroadcastPost` of a
@@ -297,5 +302,152 @@ describe('the message backstop (slice L0)', () => {
             }
         }
         expect(MESSAGE_BACKSTOP_DOWN_MS).toBe(MESSAGE_BACKSTOP_TICK_MS);
+    });
+});
+
+describe('wide doorbells (capacity REPORT bottleneck 2)', () => {
+    const ME = 'a'.repeat(64);
+    const OTHER = 'b'.repeat(64);
+
+    it('are the five events the node sends every member socket that only a few screens show', () => {
+        expect([...WIDE_DOORBELL_TYPES].sort()).toEqual(['group_created', 'group_updated', 'profile_updated', 'system_announcement', 'user_pruned']);
+    });
+
+    it('a group made or changed, and an announcement, are wide for everyone', () => {
+        for (const type of ['group_created', 'group_updated', 'system_announcement']) {
+            expect(isWideDoorbell({ type }, ME)).toBe(true);
+            expect(isWideDoorbell({ type }, null)).toBe(true);
+        }
+    });
+
+    // Review of #2899 (live-updates.ts:229): the node sends an open group's create or change to every socket, and a
+    // private group's only to its members (state-engine.ts createGroup, updateGroup, updateGroupPolicy, afterGroupVote,
+    // addPlaceCircleMember). Only the first is the storm; the rest keep their immediate refresh.
+    it("a group made or changed is wide only when the group it carries is open", () => {
+        const open = { id: 'g1', name: 'Seed swap', joinPolicy: 'open', memberCount: 12 };
+        for (const type of ['group_created', 'group_updated']) {
+            expect(isWideDoorbell({ type, group: open }, ME)).toBe(true);
+            expect(isWideDoorbell({ type, group: open }, null)).toBe(true);
+        }
+        // updateGroup / updateGroupPolicy on a private group: to its members only.
+        for (const joinPolicy of ['invite_only', 'request_to_join']) {
+            const group = { id: 'g2', name: 'Kitchen roster', joinPolicy, memberCount: 4 };
+            expect(isWideDoorbell({ type: 'group_updated', group }, ME)).toBe(false);
+            // createGroup of a group that is not open: to its creator only.
+            expect(isWideDoorbell({ type: 'group_created', group }, ME)).toBe(false);
+        }
+        // A private group closed by vote (afterGroupVote 'closed', no target): group_updated to its members only.
+        expect(isWideDoorbell({ type: 'group_updated', group: { id: 'g3', name: 'Old bees', joinPolicy: 'request_to_join', memberCount: 3 } }, ME)).toBe(false);
+        // Someone seated in a place circle (addPlaceCircleMember): group_created to that one member. A circle stays invite-only.
+        expect(isWideDoorbell({ type: 'group_created', group: { id: 'c1', name: 'Near you', joinPolicy: 'invite_only', kind: 'circle', memberCount: 2 } }, ME)).toBe(false);
+        // A group with no policy said is not open.
+        expect(isWideDoorbell({ type: 'group_updated', group: { id: 'g4', name: 'Unsaid' } }, ME)).toBe(false);
+    });
+
+    it("a card change or removal is wide unless it names the member themself; one naming nobody is wide", () => {
+        for (const type of ['profile_updated', 'user_pruned']) {
+            expect(isWideDoorbell({ type, publicKey: OTHER }, ME)).toBe(true);
+            expect(isWideDoorbell({ type, publicKey: ME }, ME)).toBe(false);
+            expect(isWideDoorbell({ type }, ME)).toBe(true);
+            expect(isWideDoorbell({ type, publicKey: '' }, ME)).toBe(true);
+            // A socket with no member's key: nobody is "themself".
+            expect(isWideDoorbell({ type, publicKey: ME }, null)).toBe(true);
+        }
+    });
+
+    it('nothing else is: a message, a listing, a trade, a join, garbage', () => {
+        for (const ev of [{ type: 'new_message' }, { type: 'new_post' }, { type: 'post_removed' }, { type: 'transaction_completed' },
+            { type: 'member_joined' }, { type: 'group_member_updated' }, {}, null, 'group_created', [{ type: 'group_created' }]]) {
+            expect(isWideDoorbell(ev, ME)).toBe(false);
+        }
+    });
+
+    it('the deferred sync waits a uniformly random 0 to 5 minutes', () => {
+        expect(WIDE_SYNC_SPREAD_MS).toBe(300_000);
+        expect(wideSyncDelayMs(() => 0)).toBe(0);
+        expect(wideSyncDelayMs(() => 0.5)).toBe(150_000);
+        expect(wideSyncDelayMs(() => 0.999999)).toBeLessThan(300_000);
+    });
+
+    function harness(random = 0.5) {
+        let clock = 1_000_000;
+        let startedAt = 0;
+        const timers: Array<{ at: number; fn: () => void; id: number }> = [];
+        let nextId = 1;
+        const run = vi.fn();
+        const d = createDeferredSync({
+            run,
+            lastSyncStartedAt: () => startedAt,
+            now: () => clock,
+            random: () => random,
+            setTimer: (fn, ms) => { const id = nextId++; timers.push({ at: clock + ms, fn, id }); return id; },
+            clearTimer: (id) => { const i = timers.findIndex(t => t.id === id); if (i >= 0) timers.splice(i, 1); },
+        });
+        const advance = (ms: number) => {
+            clock += ms;
+            for (const t of [...timers].sort((x, y) => x.at - y.at)) {
+                if (t.at > clock) continue;
+                timers.splice(timers.indexOf(t), 1);
+                t.fn();
+            }
+        };
+        return { d, run, advance, timers, syncStarts: () => { startedAt = clock; } };
+    }
+
+    it('one ask: one sync, after its random wait, not before', () => {
+        const h = harness(0.5);
+        h.d.ask();
+        expect(h.d.isPending()).toBe(true);
+        h.advance(149_999);
+        expect(h.run).not.toHaveBeenCalled();
+        h.advance(1);
+        expect(h.run).toHaveBeenCalledTimes(1);
+        expect(h.d.isPending()).toBe(false);
+    });
+
+    it('a burst of asks sets one timer and runs one sync', () => {
+        const h = harness(0.9);
+        for (let i = 0; i < 50; i++) { h.d.ask(); h.advance(1_000); }
+        expect(h.timers.length).toBeLessThanOrEqual(1);
+        h.advance(300_000);
+        expect(h.run).toHaveBeenCalledTimes(1);
+    });
+
+    it('a sync started after the last ask takes its place; one started before a later ask does not', () => {
+        const h = harness(0.5);
+        h.d.ask();
+        h.advance(10_000);
+        h.syncStarts();
+        h.advance(200_000);
+        expect(h.run).not.toHaveBeenCalled();
+
+        h.d.ask();
+        h.advance(10_000);
+        h.syncStarts();
+        h.advance(10_000);
+        h.d.ask();
+        h.advance(200_000);
+        expect(h.run).toHaveBeenCalledTimes(1);
+    });
+
+    it('a sync started before the ask (already running when the doorbell came) does not take its place', () => {
+        const h = harness(0.5);
+        h.syncStarts();
+        h.advance(1);
+        h.d.ask();
+        h.advance(200_000);
+        expect(h.run).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancel drops the owed sync; a later ask sets a new one', () => {
+        const h = harness(0.5);
+        h.d.ask();
+        h.d.cancel();
+        expect(h.d.isPending()).toBe(false);
+        h.advance(300_000);
+        expect(h.run).not.toHaveBeenCalled();
+        h.d.ask();
+        h.advance(300_000);
+        expect(h.run).toHaveBeenCalledTimes(1);
     });
 });

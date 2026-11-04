@@ -10,6 +10,7 @@ import {
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
+    starterSheet, type PricingGuideItem, type StarterRow,
 } from '@beanpool/core';
 import { readSaveSearchParam } from '../../utils/market-filters';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
@@ -33,6 +34,8 @@ import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreview
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { ArrangeAddTile, ArrangeBar, ArrangeReset, ArrangeStrip, type StripRow } from '../../components/home/ArrangeParts';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
+import { StarterOffersSheet } from '../../components/home/StarterOffersSheet';
+import { readPricingGuide } from '../../utils/starter-offers';
 import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
@@ -203,6 +206,11 @@ export default function HomeScreen() {
     // Arrange (DESIGN-home-arrange-in-place-fable.md): Home itself, its cards carrying their arrows and gone quiet.
     const [arranging, setArranging] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
+    // "What could you offer?" (slice O2): First steps' Post your first Offer opens it; the community's price guide is read as it opens.
+    const [starterOpen, setStarterOpen] = useState(false);
+    // The guide as read from this community: another community's is never shown here (the phone can be bound to a new one while Home stays up).
+    const [starterGuide, setStarterGuide] = useState<{ url: string | null; items: PricingGuideItem[] } | null>(null);
+    const starterBusy = useRef(false);
     const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
     /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
     const [notOnAccount, setNotOnAccount] = useState(false);
@@ -878,8 +886,9 @@ export default function HomeScreen() {
     }, []);
 
     const onStep = useCallback((step: StepLine['id']) => {
-        // The global node's first post is an Offer too: something free or for swap (Beans are off there).
-        if (step === 'offer' || step === 'post') router.push({ pathname: '/new-listing', params: { newPost: 'offer' } });
+        // The first Offer (and the global node's first post, free or for swap: Beans are off there) starts from a sheet of drafts
+        // drawn from what the member starred; "Something else" in it is the blank composer this opened before.
+        if (step === 'offer' || step === 'post') setStarterOpen(true);
         else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
         else if (step === 'interests') openTune();
         else if (step === 'ask') router.push('/find-community');
@@ -934,6 +943,31 @@ export default function HomeScreen() {
     const homeWord = word && stored ? { url: stored.url, standing: word } : null;
     const profile = answer?.profile ?? 'local';
     const showsBeans = answer?.features.beans !== false;
+    // The sheet's rows are made as it opens (the stars and the guide as they are then, in the language then); shut, nothing is made.
+    const starter = useMemo(
+        () => (starterOpen ? starterSheet(interests, { beans: showsBeans, guide: starterGuide && starterGuide.url === url ? starterGuide.items : null }) : null),
+        [starterOpen, interests, showsBeans, starterGuide, url],
+    );
+    useEffect(() => {
+        if (!starterOpen) return;
+        let live = true;
+        void readPricingGuide(url).then((g) => { if (live && g) setStarterGuide({ url, items: g }); });
+        return () => { live = false; };
+    }, [starterOpen, url]);
+    // A row opens the composer with its draft; the sheet stays up if the member keeps the unfinished post that would be replaced.
+    const onStarterPick = useCallback((row: StarterRow) => {
+        // One pick at a time: a second tap while the first is writing its draft would open the composer twice.
+        if (starterBusy.current) return;
+        starterBusy.current = true;
+        // The door is read as a row is tapped: it brings the photo picker's modules, which Home itself never needs.
+        void import('../../tools/doors').then((doors) => doors.openStarterOffer(row.opening))
+            .then((opened) => { if (opened) setStarterOpen(false); }, () => { /* the composer did not open: the sheet stays, nothing was posted */ })
+            .finally(() => { starterBusy.current = false; });
+    }, []);
+    const onStarterOther = useCallback(() => {
+        setStarterOpen(false);
+        router.push({ pathname: '/new-listing', params: { newPost: 'offer' } });
+    }, []);
     const invitesOn = !!answer && invitesForReader(answer.features, role);
     const ordered = cardOrder(shown, pins);
     const tailor = canTailor(answer);
@@ -1413,6 +1447,14 @@ export default function HomeScreen() {
                     colors={colors}
                     onAdd={onPick}
                     onClose={() => setAddOpen(false)}
+                />
+                <StarterOffersSheet
+                    visible={starterOpen}
+                    sheet={starter}
+                    colors={colors}
+                    onPick={onStarterPick}
+                    onOther={onStarterOther}
+                    onClose={() => setStarterOpen(false)}
                 />
                 <CardSettingsSheet
                     visible={!!settingsFor && tailor}

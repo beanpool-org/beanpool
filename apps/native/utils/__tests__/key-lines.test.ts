@@ -115,7 +115,7 @@ const WHOLE: string[] = [
     claimOutcomeMessage({ kind: 'braked', retryAfter: null }, 'Riverbend'),
     "The claim didn't reach the server. Try again.", 'The claim could not be made.',
     NO_OTHER_COMMUNITY_LINE, SIGN_OUT_FROM_SETTINGS_LINE,
-    NAMES_COPY.copyUnreachable, NAMES_COPY.copyBad, NAMES_COPY.copyTooBig, NAMES_COPY.copyNotSaved, NAMES_COPY.copyNewer, NAMES_COPY.startAfresh,
+    NAMES_COPY.copyUnreachable, NAMES_COPY.copyBad, NAMES_COPY.copyTooBig, NAMES_COPY.copyNotSaved, NAMES_COPY.secondDevice, NAMES_COPY.startAfresh,
     firstSentence(NAMES_COPY.who).first, NAMES_COPY.who, NAMES_COPY.whoMore, NAMES_COPY.whoLess, NAMES_COPY.compareListKey, NAMES_COPY.refusedDifferent,
     NAMES_COPY.refusedDifferentNone, NAMES_COPY.wait([]), NAMES_COPY.otherCommunity, NAMES_COPY.missingRecord, NAMES_COPY.waitNewKey([]),
     NAMES_COPY.tooMany, NAMES_COPY.notReady, NAMES_COPY.reloading, NAMES_COPY.openAgainButton, NAMES_COPY.notShownToMembers,
@@ -187,6 +187,9 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
         { line: NAMES_COPY.codeMismatch('Wren'), names: ['@Wren'] },
         { line: NAMES_COPY.mismatch('Wren'), names: ['@Wren'] },
         { line: NAMES_COPY.matched('Wren'), names: ['@Wren'] },
+        { line: NAMES_COPY.checkAgainOtherDevice('Wren'), names: ['@Wren'] },
+        { line: NAMES_COPY.newKeyCarried(['Wren']), names: ['@Wren'] },
+        { line: NAMES_COPY.newKeyCarried(['Wren', 'Ash']), names: ['@Wren and @Ash'] },
         // A copy saved under the community's other address (DESIGN-names-list-web-fable.md §5.6 (b), §5.7 copyOtherAddress).
         { line: NAMES_COPY.copyOtherAddress('https://mullum.beanpool.org', 'https://byron.beanpool.org'), names: ['https://mullum.beanpool.org', 'https://byron.beanpool.org'] },
 

@@ -105,13 +105,18 @@ const MEASURE = () => {
  *
  * It prints where Going starts from the top of the screen at 320 px and 130% text, the number the phone's DP1 stops at
  * (500 dp on its 569 dp screen, with its header and status bar), and saves a first-screen shot (320 × 569) beside the
- * full page. At 320 px the run FAILS when the answer's top is past ANSWER_STOP_PX in any case (DESIGN-detail-pages-frame-fable.md
- * §2): Going where there is one, else the answer block (the host's line, a copy's door), from the top of the page as drawn
- * here (the wrapper's padding and the Back line included). Every /api and /ws request is aborted and counted: the page asks the node for the host's ratings, the community's
+ * full page. At 320 px the run FAILS when the answer's top is past ANSWER_STOP_PX in any case a member arrives in
+ * (DESIGN-detail-pages-frame-fable.md §2), or past OPENED_STOP_PX once they have opened the next dates themselves
+ * (DESIGN-web-dates-stop-fable.md §2): Going where there is one, else the answer block (the host's line, a copy's door), from
+ * the top of the page as drawn here (the wrapper's padding and the Back line included). It prints the dates' opener (its
+ * height and lines) and, under 768 px, the photo's (or the tile's) gap to the quiet row, which FAILS off 16 (× the text size;
+ * DESIGN-detail-pages-frame-fable.md §3). Every /api and /ws request is aborted and counted: the page asks the node for the host's ratings, the community's
  * features and the member's reminders, and each answers as an older or unreachable node would, which the page handles.
  */
 const DETAIL_CASES = [
     { name: 'phone-320-130pc', width: 320, height: 569, fontScale: 1.3, cases: ['member', 'going', 'host', 'copy', 'no-photo', 'dates', 'dates-open', 'posted-by'] },
+    // The same at 100% text: the opener on one line (DESIGN-web-dates-stop-fable.md §1).
+    { name: 'phone-320', width: 320, height: 569, fontScale: 1, cases: ['dates'] },
     { name: 'tablet-800', width: 800, height: 1000, fontScale: 1, cases: ['member', 'host'] },
     { name: 'desktop-1280', width: 1280, height: 900, fontScale: 1, cases: ['member', 'host'] },
     { name: 'desktop-1440', width: 1440, height: 900, fontScale: 1, cases: ['member', 'going'] },
@@ -119,6 +124,14 @@ const DETAIL_CASES = [
 
 /** The answer's top at 320 px and 130% text may be no lower than this (DESIGN-detail-pages-frame-fable.md §2.1). */
 const ANSWER_STOP_PX = 500;
+/**
+ * The same once the member has opened the next dates (`dates-open`): no lower than the first screen's foot, so Going's top
+ * is still on it. Opening the list is the member's own tap and the dates are what they asked to read, so it may push the
+ * answer down, but not off the screen (DESIGN-web-dates-stop-fable.md §2; the host's opened list is never gated).
+ */
+const OPENED_STOP_PX = 569;
+/** The cases drawn after the member's own tap, gated at OPENED_STOP_PX; every other case is an arrival, at ANSWER_STOP_PX. */
+const OPENED_CASES = new Set(['dates-open']);
 
 /** Runs in the page: the page's geometry and its words' contrast. */
 const MEASURE_DETAIL = () => {
@@ -182,12 +195,34 @@ const MEASURE_DETAIL = () => {
     const going = Array.from(detail.querySelectorAll('button')).find((b) => /^Going/.test((b.textContent || '').trim()));
     const action = detail.querySelector('[data-testid="event-action"]');
     const actionRect = action ? action.getBoundingClientRect() : null;
+    // The dates' opener: its height, and its lines (each text line box, clustered by its middle).
+    const opener = detail.querySelector('[data-testid="event-next-dates-open"]');
+    let openerLines = null;
+    if (opener) {
+        const mids = [];
+        const walker = document.createTreeWalker(opener, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (!n.textContent.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            for (const r of range.getClientRects()) mids.push(r.top + r.height / 2);
+        }
+        mids.sort((a, b) => a - b);
+        openerLines = mids.reduce((acc, m) => (acc.length && m - acc[acc.length - 1] < 8 ? acc : [...acc, m]), []).length;
+    }
+    // The photo (or the tile) to the quiet row: the rest of the page's top less the picture's foot.
+    const picture = detail.querySelector('[data-testid="event-photo"]') || detail.querySelector('[data-testid="event-tile-banner"]');
+    const body = detail.querySelector('[data-testid="event-body"]');
+    const photoGap = picture && body ? body.getBoundingClientRect().top - picture.getBoundingClientRect().bottom : null;
     return {
         sideways: document.documentElement.scrollWidth > vw,
         pastEdge, cut, small, lowContrast,
         goingTop: going ? Math.round(going.getBoundingClientRect().top + window.scrollY) : null,
         // The answer block's top, for the cases with no Going (the host's line, a copy's door); null when it draws nothing.
         answerTop: actionRect && actionRect.height > 0 ? Math.round(actionRect.top + window.scrollY) : null,
+        openerHeight: opener ? Math.round(opener.getBoundingClientRect().height * 10) / 10 : null,
+        openerLines,
+        photoGap: photoGap == null ? null : Math.round(photoGap * 10) / 10,
         pageHeight: Math.round(document.documentElement.scrollHeight),
     };
 };
@@ -240,10 +275,17 @@ async function detailShots(browser, failures, countBlocked) {
                 }
                 if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
                 const answer = m.goingTop ?? m.answerTop;
-                if (c.width === 320 && answer != null && answer > ANSWER_STOP_PX) {
-                    failures.push(`${shot}: the answer starts at ${answer} px, past the ${ANSWER_STOP_PX} px stop`);
+                const stop = OPENED_CASES.has(which) ? OPENED_STOP_PX : ANSWER_STOP_PX;
+                if (c.width === 320 && answer != null && answer > stop) {
+                    failures.push(`${shot}: the answer starts at ${answer} px, past the ${stop} px stop${OPENED_CASES.has(which) ? ' (opened)' : ''}`);
                 }
-                lines.push(`${shot.padEnd(44)} Going at ${m.goingTop ?? '—'} px, the answer at ${m.answerTop ?? '—'} px, page ${m.pageHeight} px tall`);
+                // 16 from the photo or the tile to the quiet row on the phone, in rem, so 20.8 at 130% text.
+                const gapWanted = 16 * c.fontScale;
+                if (c.width < 768 && m.photoGap != null && Math.abs(m.photoGap - gapWanted) > 0.5) {
+                    failures.push(`${shot}: the photo to the quiet row is ${m.photoGap} px, not ${gapWanted}`);
+                }
+                lines.push(`${shot.padEnd(44)} Going at ${m.goingTop ?? '—'} px, the answer at ${m.answerTop ?? '—'} px (stop ${c.width === 320 ? stop : '—'}), `
+                    + `the opener ${m.openerHeight ?? '—'} px / ${m.openerLines ?? '—'} lines, photo → quiet row ${m.photoGap ?? '—'} px, page ${m.pageHeight} px tall`);
                 await context.close();
             }
         }

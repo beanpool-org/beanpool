@@ -68,7 +68,8 @@ const mullum: any = {
 };
 /**
  * The six dates the node sends with the market on a by-id read (`eventNextDates`), every third Saturday: the page draws them
- * compact, the first and "and 5 more" (`?detail=dates`), and `?detail=dates-open` is the same page after a tap opens the list.
+ * behind the rule, "↻ Every 3 weeks on Saturday · Next dates" (`?detail=dates`), and `?detail=dates-open` is the same page
+ * after a tap opens the list. The other cases send no dates, as a list read does: the rule alone, in the same slot.
  */
 const NEXT_DATES = [0, 21, 42, 63, 84, 105].map((days) => {
     const at = new Date(START + days * 24 * HOUR);

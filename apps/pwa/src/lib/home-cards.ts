@@ -451,13 +451,26 @@ export function stepsSaySomething(answer: HomeAnswer, interests: readonly string
 }
 
 /**
- * The second line of an "Asked near you" row ("20 Beans · 2h ago", "Free · 3d ago"): what the Need pays, where Beans show, then how
- * long ago it was asked. A Need that asks nothing says Free; a node that sent no figure, or one without Beans, says no price.
- * Never a price the node did not send. `priceWords`: the page's own wording of an amount of Beans.
+ * The unit after a Need's price, in the words the web Market card writes it with (MarketplaceCard `priceUnit`, so no new words):
+ * per hour, day, week or month; none for a fixed price (a total) or a kind this build does not know.
  */
-export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'createdAt'>, beansOn: boolean, priceWords: (credits: number) => string): string {
+export function askedUnit(priceType: string | null | undefined): string {
+    if (priceType === 'hourly') return t('/hr', undefined, 'price per hour');
+    if (priceType === 'daily') return t('/day', undefined, 'price per day');
+    if (priceType === 'weekly') return t('/wk', undefined, 'price per week');
+    if (priceType === 'monthly') return t('/mo', undefined, 'price per month');
+    return '';
+}
+
+/**
+ * The second line of an "Asked near you" row ("20 Beans · 2h ago", "20 Beans /hr · 2h ago", "Free · 3d ago"): what the Need pays,
+ * with its unit when it is priced by the hour, day, week or month (the Need it opens says the same), where Beans show, then how
+ * long ago it was asked. A Need that asks nothing says Free, with no unit; a node that sent no figure, or one without Beans, says
+ * no price. Never a price the node did not send. `priceWords`: the page's own wording of an amount of Beans.
+ */
+export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'priceType' | 'createdAt'>, beansOn: boolean, priceWords: (credits: number) => string): string {
     const price = beansOn && typeof p.credits === 'number' && Number.isFinite(p.credits)
-        ? (p.credits > 0 ? priceWords(p.credits) : t('Free', undefined, 'price'))
+        ? (p.credits > 0 ? [priceWords(p.credits), askedUnit(p.priceType)].filter(Boolean).join(' ') : t('Free', undefined, 'price'))
         : null;
     return [price, formatRelativeTime(p.createdAt)].filter(Boolean).join(' · ');
 }

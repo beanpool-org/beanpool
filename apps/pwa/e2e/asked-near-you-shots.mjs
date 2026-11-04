@@ -34,8 +34,8 @@ const answer = () => ({
         events: { items: [{ id: 'e0', title: 'Seed swap', startsAt: new Date(NOW + 86_400_000).toISOString(), endsAt: null, place: 'Town Hall', rsvp: null }], radiusKm: null },
         market: { items: [{ id: 'p0', type: 'offer', title: 'Pottery lessons', category: 'arts', credits: 10, photoUrl: null }], total14d: 1, more: false },
         asked: { items: [
-            { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, createdAt: ago(2), photoUrl: null },
-            { id: 'n2', title: 'Someone to dig a bed, and a long title that has to wrap whole on a phone', category: 'labour', credits: 40, createdAt: ago(26), photoUrl: null },
+            { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, priceType: 'hourly', createdAt: ago(2), photoUrl: null },
+            { id: 'n2', title: 'Someone to dig a bed, and a long title that has to wrap whole on a phone', category: 'labour', credits: 300, priceType: 'monthly', createdAt: ago(26), photoUrl: null },
             { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', credits: 0, createdAt: ago(72), photoUrl: null },
         ] },
         community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
@@ -94,8 +94,8 @@ try {
             check(rows.every((r) => r.inside && !r.cut), `${label}: every row stays inside the card and no words are cut`);
             // The member's star (labour) puts the dig-a-bed Need first; the node's order holds inside each part.
             const line = (title) => rows.find((r) => r.text.includes(title))?.text ?? '';
-            check(rows[0].text.includes('Someone to dig a bed') && /40 Beans · 1d ago/.test(rows[0].text), `${label}: the starred Need leads, "40 Beans · 1d ago"`);
-            check(/20 Beans · 2h ago/.test(line('trailer')) && /Free · 3d ago/.test(line('Lismore')), `${label}: the price lines read "20 Beans · 2h ago" and "Free · 3d ago"`);
+            check(rows[0].text.includes('Someone to dig a bed') && /300 Beans \/mo · 1d ago/.test(rows[0].text), `${label}: the starred Need leads, "300 Beans /mo · 1d ago"`);
+            check(/20 Beans \/hr · 2h ago/.test(line('trailer')) && /Free · 3d ago/.test(line('Lismore')), `${label}: the price lines read "20 Beans /hr · 2h ago" and "Free · 3d ago"`);
             const more = await page.getByTestId('home-asked-all').boundingBox();
             check(!!more && more.height >= 44, `${label}: See all Needs is at least 44 px tall (${Math.round(more?.height ?? 0)} px)`);
             const step = await page.getByRole('button', { name: "To do: Ask for one thing you'd pay a neighbour for" }).boundingBox();

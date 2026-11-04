@@ -504,6 +504,24 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
         expect(askedFacts(need('a', { createdAt: 'nonsense' }), true, beansWords)).toBe('20 Beans');
     });
 
+    it('a Need priced by the hour, day, week or month keeps its unit (the Market card\'s own words); a fixed price, Free and no price carry none', () => {
+        const at = (over: Partial<NonNullable<HomeCards['asked']>['items'][number]>) => askedFacts(need('a', over), true, beansWords);
+        expect(at({ credits: 20, priceType: 'hourly' })).toMatch(/^20 Beans \/hr · .+/);
+        expect(at({ credits: 15, priceType: 'daily' })).toMatch(/^15 Beans \/day · .+/);
+        expect(at({ credits: 90, priceType: 'weekly' })).toMatch(/^90 Beans \/wk · .+/);
+        expect(at({ credits: 300, priceType: 'monthly' })).toMatch(/^300 Beans \/mo · .+/);
+        // A fixed price is a total: the line is as it was.
+        expect(at({ credits: 20, priceType: 'fixed' })).toMatch(/^20 Beans · .+/);
+        expect(at({ credits: 20 })).toMatch(/^20 Beans · .+/);
+        // Free says Free, never "Free /hr"; no Beans and no figure draw no unit either.
+        expect(at({ credits: 0, priceType: 'hourly' })).toMatch(/^Free · .+/);
+        expect(askedFacts(need('a', { credits: 20, priceType: 'hourly' }), false, beansWords)).not.toMatch(/\/|Beans|Free/);
+        expect(at({ credits: undefined, priceType: 'hourly' })).not.toMatch(/\/|Beans|Free/);
+        // A kind this build does not know says no unit rather than a made-up one.
+        expect(at({ credits: 20, priceType: 'yearly' })).toMatch(/^20 Beans · .+/);
+        expect(at({ credits: 20, priceType: 'hourly', createdAt: 'nonsense' })).toBe('20 Beans /hr');
+    });
+
     it('First steps: the Need line follows the interests line, once there is an Offer, with the invite line after it', () => {
         const keys = (s: object, m = me({ firstOffer: false })) => stepLines(answer({ steps: { ...steps, ...s } }, { me: m }), []).map(l => l.key);
         expect(keys({ firstOffer: true, firstNeed: false })).toEqual(['firstOffer', 'photo', 'interests', 'firstNeed', 'invite']);

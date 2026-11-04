@@ -75,8 +75,8 @@ const now = Date.now();
 const H = 3600000;
 const ago = (h) => new Date(now - h * H).toISOString();
 const items = [
-    { id: 'n2', title: 'Someone to dig a bed, and a long title that has to wrap whole on a phone', category: 'labour', credits: 40, createdAt: ago(26), photoUrl: null },
-    { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, createdAt: ago(2), photoUrl: null },
+    { id: 'n2', title: 'Someone to dig a bed, and a long title that has to wrap whole on a phone', category: 'labour', credits: 300, priceType: 'monthly', createdAt: ago(26), photoUrl: null },
+    { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, priceType: 'hourly', createdAt: ago(2), photoUrl: null },
     { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', credits: 0, createdAt: ago(72), photoUrl: null },
 ];
 const lines = stepLines({ joinedAt: ago(72), firstOffer: true, firstNeed: false, firstPost: true, photo: true, interests: true, invited: false, area: false, knocked: null }, true);
@@ -171,7 +171,7 @@ try {
         check(m.wide <= WIDTH, `${scheme}: no sideways scroll (${m.wide} wide)`);
         check(m.rows.length === 3, `${scheme}: three rows`);
         check(m.rows.every((r) => r.h >= 44 && r.inside && !r.cut), `${scheme}: every row is at least 44dp (least ${Math.min(...m.rows.map((r) => r.h))}), inside the card, no words cut`);
-        check(m.rows.some((r) => /20 Beans · 2h ago/.test(r.text)) && m.rows.some((r) => /Free · 3d ago/.test(r.text)) && m.rows.some((r) => /40 Beans · 1d ago/.test(r.text)), `${scheme}: the second lines read "20 Beans · 2h ago", "Free · 3d ago", "40 Beans · 1d ago"`);
+        check(m.rows.some((r) => /20 Beans \/Hr · 2h ago/.test(r.text)) && m.rows.some((r) => /Free · 3d ago/.test(r.text)) && m.rows.some((r) => /300 Beans \/Mo · 1d ago/.test(r.text)), `${scheme}: the second lines read "20 Beans /Hr · 2h ago", "300 Beans /Mo · 1d ago", "Free · 3d ago"`);
         check(m.link >= 44 && m.step >= 44, `${scheme}: See all Needs (${m.link}dp) and the step line (${m.step}dp) are at least 44dp`);
         check(/Ask for one thing you'd pay a neighbour for/.test(m.text), `${scheme}: the step line reads in full`);
         if (SHOTS) {

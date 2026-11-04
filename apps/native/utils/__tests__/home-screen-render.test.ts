@@ -435,7 +435,7 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
         ];
     };
     /** A local member whose list holds the card after the Market, with the Needs the node sent and First steps as it stands. */
-    function withAsked(over: { items?: ReturnType<typeof NEEDS> | null; firstNeed?: boolean; firstOffer?: boolean; stars?: string[] } = {}): HomeAnswer {
+    function withAsked(over: { items?: Array<ReturnType<typeof NEEDS>[number] & { priceType?: string }> | null; firstNeed?: boolean; firstOffer?: boolean; stars?: string[] } = {}): HomeAnswer {
         const a = localMember();
         const list = a.layout!.cards;
         const at = list.findIndex(c => c.type === 'market');
@@ -466,6 +466,28 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
         // The caption is the card's name, and the card says nothing of a unit or an unlock.
         expect(document.querySelector('[data-testid="home-card-asked"]')!.textContent).toContain('Asked near you');
         expect(document.querySelector('[data-testid="home-card-asked"]')!.textContent).not.toMatch(/Ʀ|unlock|resilience|survival/i);
+    });
+
+    it('a Need priced by the hour or the month says so, on the row and in the sentence a screen reader hears; a fixed price and Free are as before', async () => {
+        const [fixed, , free] = NEEDS();
+        node.answer = withAsked({ items: [
+            { ...fixed, id: 'n1', credits: 20, priceType: 'hourly' },
+            { ...fixed, id: 'n2', title: 'Someone to mind the shop', credits: 300, priceType: 'monthly' },
+            { ...fixed, id: 'n3', title: 'Lift to Lismore Thursday', credits: 25, priceType: 'fixed' },
+            { ...free, id: 'n4', priceType: 'hourly' },
+        ] });
+        await render();
+        const row = (id: string) => document.querySelector(`[data-testid="home-asked-${id}"]`) as HTMLElement;
+        expect(row('n1').textContent).toContain('20 Beans /Hr · 2h ago');
+        expect(row('n1').getAttribute('aria-label')).toMatch(/^Need: Borrow a trailer Saturday\. 20 Beans \/Hr · 2h ago\. [^.]+\. Opens the listing\.$/);
+        expect(row('n2').textContent).toContain('300 Beans /Mo · ');
+        expect(row('n2').getAttribute('aria-label')).toContain('300 Beans /Mo · ');
+        // A fixed price is a total, and Free never carries a unit.
+        expect(row('n3').textContent).toContain('25 Beans · ');
+        expect(row('n3').textContent).not.toContain('/');
+        expect(row('n4').textContent).toContain('Free · 3d ago');
+        expect(row('n4').textContent).not.toContain('/');
+        expect(row('n4').getAttribute('aria-label')).not.toContain('/');
     });
 
     it('a tap anywhere on a row opens the Need; See all Needs opens the Market on its Needs pill', async () => {

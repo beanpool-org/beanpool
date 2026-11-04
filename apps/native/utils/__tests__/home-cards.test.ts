@@ -1308,6 +1308,22 @@ describe('Asked near you and "Ask for one thing you\'d pay a neighbour for" (col
         expect(askedFacts(need('a', { credits: undefined }), true, NOW)).toBe('2h ago');
     });
 
+    it('a Need priced by the hour, day, week or month keeps its unit (the Market card\'s own words); a fixed price, Free and no price carry none', () => {
+        expect(askedFacts(need('a', { credits: 20, priceType: 'hourly' }), true, NOW)).toBe('20 Beans /Hr · 2h ago');
+        expect(askedFacts(need('a', { credits: 15, priceType: 'daily' }), true, NOW)).toBe('15 Beans /Dy · 2h ago');
+        expect(askedFacts(need('a', { credits: 90, priceType: 'weekly' }), true, NOW)).toBe('90 Beans /Wk · 2h ago');
+        expect(askedFacts(need('a', { credits: 300, priceType: 'monthly' }), true, NOW)).toBe('300 Beans /Mo · 2h ago');
+        // A fixed price is a total: the line is as it was.
+        expect(askedFacts(need('a', { credits: 20, priceType: 'fixed' }), true, NOW)).toBe('20 Beans · 2h ago');
+        expect(askedFacts(need('a', { credits: 20 }), true, NOW)).toBe('20 Beans · 2h ago');
+        // Free says Free, never "Free /Hr"; no Beans and no figure draw no unit either.
+        expect(askedFacts(need('a', { credits: 0, priceType: 'hourly' }), true, NOW)).toBe('Free · 2h ago');
+        expect(askedFacts(need('a', { credits: 20, priceType: 'hourly' }), false, NOW)).toBe('2h ago');
+        expect(askedFacts(need('a', { credits: undefined, priceType: 'hourly' }), true, NOW)).toBe('2h ago');
+        // A kind this build does not know says no unit rather than a made-up one.
+        expect(askedFacts(need('a', { credits: 20, priceType: 'yearly' }), true, NOW)).toBe('20 Beans · 2h ago');
+    });
+
     it('First steps: the Need line comes after the interests line, once there is an Offer, with the invite line after it', () => {
         const ids = (s: NonNullable<HomeCards['steps']>) => stepLines(s, false).map(l => l.id);
         expect(ids(steps({ firstOffer: true, firstNeed: false }))).toEqual(['offer', 'photo', 'interests', 'need', 'invite']);

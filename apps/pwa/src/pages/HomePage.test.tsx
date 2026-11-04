@@ -4866,7 +4866,7 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
     ];
     const MEMBER = { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: ['arts'], area: null, firstOffer: true, standing: 'member' as const, tour: TOUR_ENDED };
     /** A member whose list holds the card after the Market; `steps` as the node sends it; the star `arts`. */
-    const asked = (items: ReturnType<typeof askedItems> | null = askedItems(), steps: Record<string, unknown> = {}, over: Partial<HomeAnswer> = {}) => answer({
+    const asked = (items: Array<ReturnType<typeof askedItems>[number] & { priceType?: string }> | null = askedItems(), steps: Record<string, unknown> = {}, over: Partial<HomeAnswer> = {}) => answer({
         layout: v2(['steps', 'market', 'asked', 'events']),
         me: MEMBER,
         ...over,
@@ -4895,6 +4895,28 @@ describe('Asked near you, and the First steps line for a Need (cold-start N2)', 
         fireEvent.click(rows()[1]);
         expect(nav).toHaveBeenCalledWith('marketplace', 'n1');
         expect(screen.getByTestId('home-card-asked')).not.toHaveTextContent(/Ʀ|unlock|resilience|survival/i);
+    });
+
+    it('a Need priced by the hour or the month says so, on the row and in its label; a fixed price and Free are as before', async () => {
+        const [first, , free] = askedItems();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(asked([
+            { ...first, id: 'n1', title: 'Borrow a trailer Saturday', credits: 20, priceType: 'hourly' },
+            { ...first, id: 'n2', title: 'Someone to mind the shop', credits: 300, priceType: 'monthly' },
+            { ...first, id: 'n3', title: 'Dig a bed', credits: 25, priceType: 'fixed' },
+            { ...free, id: 'n4', title: 'Lift to Lismore Thursday', priceType: 'hourly' },
+        ])));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-asked');
+        const row = (title: string) => rows().find(r => r.textContent?.includes(title))!;
+        expect(row('Borrow a trailer')).toHaveTextContent('20 Beans /hr · 2h ago');
+        expect(row('Borrow a trailer')).toHaveAttribute('aria-label', 'Need, Borrow a trailer Saturday, 20 Beans /hr · 2h ago');
+        expect(row('mind the shop')).toHaveTextContent('300 Beans /mo · 2h ago');
+        expect(row('mind the shop')).toHaveAttribute('aria-label', 'Need, Someone to mind the shop, 300 Beans /mo · 2h ago');
+        // A fixed price is a total, and Free never carries a unit.
+        expect(row('Dig a bed')).toHaveAttribute('aria-label', 'Need, Dig a bed, 25 Beans · 2h ago');
+        expect(row('Dig a bed')).not.toHaveTextContent('/');
+        expect(row('Lift to Lismore')).toHaveAttribute('aria-label', 'Need, Lift to Lismore Thursday, Free · 3d ago');
+        expect(row('Lift to Lismore')).not.toHaveTextContent('/');
     });
 
     it('See all Needs opens the Market on its Needs pill', async () => {

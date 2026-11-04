@@ -974,13 +974,26 @@ export function marketInOrder<T extends { category: string; distanceKm?: number 
 }
 
 /**
- * The second line of an "Asked near you" row ("20 Beans · 2h ago", "Free · 3d ago"): what the Need pays, where Beans show, then
- * how long ago it was asked. A Need that asks nothing says Free; a node that sent no figure, or one without Beans, says no price.
- * Never a price the node did not send.
+ * The unit after a Need's price, in the words the Market's list card writes it with (market.tsx `priceUnit`, so no new words):
+ * per hour, day, week or month; none for a fixed price (a total) or a kind this build does not know.
  */
-export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'createdAt'>, showsBeans: boolean, nowMs: number = Date.now()): string {
+export function askedUnit(priceType: string | null | undefined): string {
+    if (priceType === 'hourly') return t('/Hr', undefined, 'price per hour');
+    if (priceType === 'daily') return t('/Dy', undefined, 'price per day');
+    if (priceType === 'weekly') return t('/Wk', undefined, 'price per week');
+    if (priceType === 'monthly') return t('/Mo', undefined, 'price per month');
+    return '';
+}
+
+/**
+ * The second line of an "Asked near you" row ("20 Beans · 2h ago", "20 Beans /Hr · 2h ago", "Free · 3d ago"): what the Need pays,
+ * with its unit when it is priced by the hour, day, week or month (the Need it opens says the same), where Beans show, then how
+ * long ago it was asked. A Need that asks nothing says Free, with no unit; a node that sent no figure, or one without Beans, says
+ * no price. Never a price the node did not send.
+ */
+export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'priceType' | 'createdAt'>, showsBeans: boolean, nowMs: number = Date.now()): string {
     const price = showsBeans && typeof p.credits === 'number' && Number.isFinite(p.credits)
-        ? (p.credits > 0 ? beansAmount(p.credits) : t('Free', undefined, 'a listing with no price'))
+        ? (p.credits > 0 ? [beansAmount(p.credits), askedUnit(p.priceType)].filter(Boolean).join(' ') : t('Free', undefined, 'a listing with no price'))
         : null;
     return [price, timeAgoInWords(p.createdAt, nowMs)].filter(Boolean).join(' · ');
 }

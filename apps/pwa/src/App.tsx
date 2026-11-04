@@ -1265,6 +1265,7 @@ export function App() {
                                     addCardType={addHomeCard}
                                     onAddCardTaken={clearAddHomeCard}
                                     onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
+                                    onComposer={openComposerFromTool}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
                                     askedCommunity={askedCommunity}
                                     onAskedCommunitySeen={clearAskedCommunity}

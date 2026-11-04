@@ -52,14 +52,14 @@ describe('the doors to the listing form', () => {
             'app/(tabs)/map.tsx': ['params.newPost', "'true'"],
             // "Post your first Offer", the activity list's create, the empty Market's "+ Post a Deal", and the chooser's pick.
             'app/(tabs)/market.tsx': ["'true'", "'true'", "'true'", 'type'],
-            // Home's "post an Offer" steps, First steps' "Ask for one thing" (N2), and Home's chooser's pick.
-            'app/(tabs)/index.tsx': ["'offer'", "'need'", 'type'],
+            // First steps' "Ask for one thing" (N2), Home's "post an Offer" steps (their sheet's "Something else"), and Home's chooser's pick.
+            'app/(tabs)/index.tsx': ["'need'", "'offer'", 'type'],
             // A month with no events: "No events coming up yet. Start one ›"
             'app/calendar.tsx': ["'event'"],
             // A pulse post's "Post Your Own Offer →", and "Contribution Required"'s "➕ Create an Offer".
             'app/post/[id].tsx': ["'true'", "'true'"],
-            // A tool's Offer (through the List sheet) and its Need.
-            'tools/doors.ts': ["'offer'", "'need'"],
+            // A tool's Offer (through the List sheet) and its Need, and the Offer a starter draft opens (Home's "What could you offer?").
+            'tools/doors.ts': ["'offer'", "'need'", "'offer'"],
         });
         // Every fixed value a door passes is one the screen reads.
         for (const v of ['true', 'offer', 'need', 'poll', 'event']) expect(parseNewPostParam(v), v).not.toBeNull();

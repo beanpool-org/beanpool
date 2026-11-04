@@ -277,20 +277,7 @@ export default function MarketScreen() {
         },
         chipDivider: { width: 1, height: 24, backgroundColor: colors.border.default, alignSelf: 'center' },
 
-        // Cards
-        card: {
-            backgroundColor: colors.surface.card,
-            borderRadius: 14,
-            marginBottom: 8,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 8,
-            elevation: 2,
-            overflow: 'hidden'
-        },
+        // Cards: the shell is the style box's (shell.card); these are the variants the screen lays over it.
         elderCard: {
             borderLeftWidth: 3,
             borderLeftColor: colors.trust.star,

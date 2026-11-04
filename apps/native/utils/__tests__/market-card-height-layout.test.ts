@@ -636,9 +636,12 @@ describe('the grid is rows on a lattice: a pair is one height, the text block fo
         expect(last.textContent).toContain('Byron Bay Permaculture Growers');
         expect(last.textContent).not.toContain('RECURRING');
         expect(full.querySelectorAll('[data-testid="card-group-chip"]')).toHaveLength(1);
+        // Nothing in the tile ends past its right edge, the long lock chip least of all (it is cut inside row 4).
         const l = lay(569);
         const right = at(l, full).left + l.width(full);
-        for (const el of Array.from(full.querySelectorAll('*'))) expect(at(l, el).left, el.textContent ?? el.tagName).toBeLessThan(right);
+        for (const el of Array.from(full.querySelectorAll('*'))) expect(at(l, el).left + l.width(el), el.textContent ?? el.tagName).toBeLessThanOrEqual(right + 0.5);
+        const chip = full.querySelector('[data-testid="card-group-chip"]')!;
+        expect(at(l, chip).left + l.width(chip)).toBeLessThanOrEqual(at(l, last).left + l.width(last) + 0.5);
         // Without the lock, RECURRING; with neither (and no distance off the worldwide community), a blank last row.
         expect(cardOf(REPEATS.title).querySelector('[data-testid="grid-last-row"]')!.textContent).toBe('↻ RECURRING');
         expect(cardOf(SHORT.title).querySelector('[data-testid="grid-last-row"]')!.textContent).toBe('');
@@ -724,6 +727,35 @@ describe('the layout check sees the fault it is here for', () => {
         const scroll = div({ flexGrow: 1, flexShrink: 1, overflow: 'scroll' }, content);
         return { scroll, row, slot, tile };
     }
+
+    // PG2: a grid tile's row 4 holds the distance and one chip side by side, in the box's styles (gridTextBlock). Built by hand
+    // at a tile's inner width (136 - 2 - 24 = 110 dp), 1.3x text: each piece gives way, so the long lock chip ends inside the
+    // row; laid out rigid (flexShrink 0, the fault) it runs past it. The screen test cannot reach this pair: a distance needs the
+    // worldwide community's circle.
+    it("row 4's distance and lock chip end inside the tile; laid out rigid, the chip runs past it", async () => {
+        const { gridTextBlock } = await import('../../components/market-card-shell');
+        const b = gridTextBlock(1.3);
+        const span = (style: Record<string, unknown>, text: string) => {
+            const e = document.createElement('span');
+            e.setAttribute('data-style', JSON.stringify(style));
+            e.setAttribute('data-lines', '1');
+            e.textContent = text;
+            return e;
+        };
+        const rowWith = (piece: Record<string, unknown>) => {
+            const chip = div({ flexShrink: 0, maxWidth: '100%', paddingHorizontal: 6, paddingVertical: 2 }, span({ fontSize: 10 }, '🔒 Only Byron Bay Permaculture Growers can see this'));
+            const row = div(b.lastRow as Record<string, unknown>, span({ fontSize: 14, lineHeight: 18, ...piece }, '📍 141 km'), div(piece, chip));
+            const scroll = div({ flexGrow: 1, flexShrink: 1, overflow: 'scroll' }, div({ width: 110 }, row));
+            const l = layOut(scroll, { width: WIDTH, height: 569 }, { fontScale: 1.3 });
+            // The chip's right edge in the row's coordinates: its wrapper's left plus its own.
+            return { right: l.box(chip.parentElement!).left + l.box(chip).left + l.width(chip), width: l.width(row) };
+        };
+        const kept = rowWith(b.lastRowPiece as Record<string, unknown>);
+        expect(kept.width).toBe(110);
+        expect(kept.right).toBeLessThanOrEqual(kept.width + 0.5);
+        const rigid = rowWith({ flexShrink: 0 });
+        expect(rigid.right).toBeGreaterThan(rigid.width + 10);
+    });
 
     it('a percentage-height slot makes a lone card far taller than its own 116 dp', () => {
         // 90 dp of text, 24 of padding and a 1 dp border all round; the list around it adds 90 above and 380 below.

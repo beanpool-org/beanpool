@@ -23,7 +23,6 @@ import {
 } from './draft.mjs';
 import { guideBodyHash, loadGuide } from '../../packages/beanpool-guide/src/guide.mjs';
 import { guideSourceHash } from '../../packages/beanpool-guide/src/titles.mjs';
-import { ALL_OR_NONE_GROUPS, cardSentences, groupSentences, WELCOME_DOORS_FILE, WELCOME_SCREEN_FILE } from './all-or-none.mjs';
 import { ROOT, baselineBase, catalogLangs, extractRepo, loadCoreChecks } from './words.mjs';
 
 function makeTempDir(prefix = 'words-draft-test-') {
@@ -723,8 +722,9 @@ test('step 1 of Section C creates target directory and drafts pages successfully
 //
 //   (a) a sentence core's own sources use is core's alone in the phone and the web app (your-deals-words.test.ts forbids
 //       the bare "Your deals" in their catalogs), so the tool must not ask for it there;
-//   (b) the welcome screens' sentences must be in every phone catalog or in none (language-switch-render.test.ts), so the
-//       tool must not ask for them one language at a time.
+//   (b) the welcome screens' sentences are ordinary keys: language-switch-render.test.ts reads each language's own catalog
+//       (#2847), so a round for some languages may draft them. The tool once held them back for a round of every language,
+//       for a rule no test holds (#2846 review, 4 Nov); (b) fails if that comes back.
 
 /** Write files (relative path -> text) under `tmp`. */
 function writeTree(tmp, files) {
@@ -801,6 +801,8 @@ function catalogSection(brief, folder, lang) {
 
 const keyLine = (key) => `- **Key**: ${JSON.stringify(key)}`;
 
+// The welcome screens' two files, as the phone has them. (The extractor knows `word` and `t` by their import, or from a
+// words hook, as in the real files.)
 const WELCOME_SOURCE = `
 import { Alert } from 'react-native';
 export function Welcome() {
@@ -823,13 +825,11 @@ export function Other() {
     return [t('Plain other'), t('Shared')];
 }
 `;
-// (The extractor knows `word` and `t` by their import, or from a words hook, as in the real files.)
 const coreSource = (...keys) => `import { word } from './words.js';\nexport const shared = [${keys.map((k) => `word(${JSON.stringify(k)})`).join(', ')}];\n`;
-const GROUP_KEYS = ['Door A', 'Welcome A', 'Welcome B'];
-// Used on the welcome screens' cards or not: an alert's words are drawn by the phone, which the test leaves out of the group.
-const ORDINARY_KEYS = ['Also in an alert', 'In an alert', 'Plain other'];
+// Every phone key of the fixture except core's "Shared".
+const PHONE_KEYS = ['Also in an alert', 'Door A', 'In an alert', 'Plain other', 'Welcome A', 'Welcome B'];
 
-/** A small tree with the welcome screens' two files, one more phone file, core's sources and a catalog for every language. */
+/** A small tree with the welcome screens' two files at their real paths, one more phone file, core's sources and a catalog for every language. */
 async function welcomeTree(tmp, { coreKeys = ['Shared'], have = {}, translatedGuide = [] } = {}) {
     writeTree(tmp, {
         'apps/native/app/welcome.tsx': WELCOME_SOURCE,
@@ -883,8 +883,7 @@ test('(a) on this tree no list asks the phone or the web app for "Your deals", o
     for (const [lang, result] of Object.entries(scan)) {
         for (const catalog of ['native', 'pwa']) {
             for (const item of result.byCatalog[catalog].missingKeys) {
-                // (A group's rule can need a copy of a core sentence: then it is tagged, and asked everywhere.)
-                assert.ok(!coreKeys.has(item.key) || (item.group && !item.group.allAtOnce), `${lang} ${catalog} is asked for "${item.key}", which core translates`);
+                assert.ok(!coreKeys.has(item.key), `${lang} ${catalog} is asked for "${item.key}", which core translates`);
             }
         }
     }
@@ -902,172 +901,66 @@ test('(a) on this tree no list asks the phone or the web app for "Your deals", o
     }
 });
 
-test('(b) a welcome sentence no catalog has yet waits for a round that covers every language, and a partial brief says so', async () => {
+test('(b) a round for some languages asks for the welcome sentences like any others: nothing is held back for a round of every language', async () => {
     const tmp = makeTempDir();
     try {
+        // The welcome screens' sentences are in no catalog yet, as on the tree the #2846 review measured.
         await welcomeTree(tmp);
         const scan = await scanAppWords({ root: tmp, langs: ['es'] });
         const native = missingByKey(scan, 'es', 'native');
-        // "Shared" is core's. An alert's words are the phone's own dialogs: the test does not group them, so they are ordinary keys.
-        assert.deepEqual(Object.keys(native).sort(), [...GROUP_KEYS, ...ORDINARY_KEYS].sort());
-        for (const key of GROUP_KEYS) assert.equal(native[key].group?.allAtOnce, true, key);
-        for (const key of ORDINARY_KEYS) assert.equal(native[key].group, undefined, key);
-        assert.equal(scan.es.byCatalog.native.allAtOnce, 3);
-        assert.equal(scan.es.allAtOnce, 3);
+        // "Shared" is core's. Every other key is asked for, the alert's words and the screens' cards alike.
+        assert.deepEqual(Object.keys(native).sort(), PHONE_KEYS);
+        for (const [key, item] of Object.entries(native)) assert.equal(item.group, undefined, `${key} belongs to no group`);
 
-        // A brief for four languages: the ordinary keys are asked, the group is marked and left out.
+        // The four-language groups the machine-drafting rounds run in (es/pt/fr/ru here).
         const dir = path.join(tmp, 'briefs4');
         const out = await captureLog(() => writeBriefs({ root: tmp, dir, langs: ['es', 'pt', 'fr', 'ru'] }));
         for (const lang of ['es', 'pt', 'fr', 'ru']) {
             const brief = fs.readFileSync(path.join(dir, `brief-${lang}.md`), 'utf8');
             const section = catalogSection(brief, 'apps/native/words', lang);
-            for (const key of GROUP_KEYS) assert.ok(!brief.includes(keyLine(key)), `${lang}: "${key}" is not asked for`);
-            for (const key of ORDINARY_KEYS) assert.ok(section.includes(keyLine(key)), `${lang}: "${key}" is asked for`);
-            assert.match(section, /\(3 missing\)/);
-            assert.match(section, /Not in this brief \(draft in all languages at once\): 3 sentences of the welcome screens \(apps\/native\/utils\/__tests__\/language-switch-render\.test\.ts\)/);
-            assert.match(brief, /Not in this brief: 3 sentences that are drafted in all languages at once/);
+            for (const key of PHONE_KEYS) assert.ok(section.includes(`${keyLine(key)}\n`), `${lang}: "${key}" is asked for, as an ordinary key`);
+            assert.match(section, /\(6 missing\)/);
+            assert.ok(!/all languages at once|ALL-AT-ONCE|COMPLETE THE SET|Not in this brief|in every language's|would turn it red/i.test(brief), `${lang}: the brief gives no reason to leave a sentence out`);
         }
-        assert.match(out, /left out 3 all-at-once sentence\(s\) of the welcome screens/);
+        assert.ok(!/left out|all-at-once/i.test(out), 'the run leaves nothing out');
+        assert.match(out, /wrote 4 brief\(s\)/);
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 });
 
-test('(b) a brief that covers every language asks for the welcome group in all of them, tagged, and --max-keys never cuts it', async () => {
+test('(b) a welcome sentence some language already has is asked for in the others as an ordinary key; --max-keys cuts it like any key', async () => {
     const tmp = makeTempDir();
     try {
-        await welcomeTree(tmp);
-        const dir = path.join(tmp, 'briefs24');
-        await captureLog(() => writeBriefs({ root: tmp, dir }));
-        assert.equal(fs.readdirSync(dir).filter((f) => /^brief-.*\.md$/.test(f)).length, 24);
-        for (const lang of ['es', 'ko', 'zh-Hant']) {
-            const brief = fs.readFileSync(path.join(dir, `brief-${lang}.md`), 'utf8');
-            const section = catalogSection(brief, 'apps/native/words', lang);
-            for (const key of GROUP_KEYS) assert.ok(section.includes(`${keyLine(key)} [ALL-AT-ONCE: welcome screens]`), `${lang}: "${key}" is asked for, tagged`);
-            for (const key of ORDINARY_KEYS) assert.ok(section.includes(keyLine(key)) && !section.includes(`${keyLine(key)} [`), `${lang}: "${key}" is an ordinary key`);
-            assert.ok(!brief.includes('draft in all languages at once'), `${lang}: nothing is left out`);
-            assert.match(section, /language-switch-render\.test\.ts needs each of these sentences in every language's apps\/native\/words catalog or in none/);
-        }
+        await welcomeTree(tmp, { have: { 'apps/native/words': { pt: { 'Welcome A': 'Bem-vindo A' } } } });
+        const scan = await scanAppWords({ root: tmp, langs: ['es', 'pt'] });
+        assert.deepEqual(Object.keys(missingByKey(scan, 'es', 'native')).sort(), PHONE_KEYS, 'es: all asked for');
+        assert.deepEqual(Object.keys(missingByKey(scan, 'pt', 'native')).sort(), PHONE_KEYS.filter((k) => k !== 'Welcome A'), 'pt: all but its own');
 
-        // The cap counts the ordinary keys only (core's "Shared" takes the one this run allows).
-        const capped = path.join(tmp, 'briefs24-capped');
-        await captureLog(() => writeBriefs({ root: tmp, dir: capped, maxKeys: 1 }));
-        const brief = fs.readFileSync(path.join(capped, 'brief-es.md'), 'utf8');
-        const section = catalogSection(brief, 'apps/native/words', 'es');
-        for (const key of GROUP_KEYS) assert.ok(section.includes(keyLine(key)), `"${key}" is kept by the cap`);
-        for (const key of ORDINARY_KEYS) assert.ok(!section.includes(keyLine(key)), `"${key}" is cut by the cap`);
-        assert.match(section, /and 3 more keys \(capped by --max-keys\)/);
-    } finally {
-        fs.rmSync(tmp, { recursive: true, force: true });
-    }
-});
-
-test('(b) once some catalog has a welcome sentence, every other catalog is asked for it (tagged), core\'s copy or not', async () => {
-    const tmp = makeTempDir();
-    try {
-        // Portuguese has "Welcome A"; "Door A" is core's too, and is in no catalog yet.
-        await welcomeTree(tmp, { coreKeys: ['Shared', 'Door A'], have: { 'apps/native/words': { pt: { 'Welcome A': 'Bem-vindo A' } } } });
-        let scan = await scanAppWords({ root: tmp, langs: ['es', 'pt'] });
-        let es = missingByKey(scan, 'es', 'native');
-        assert.equal(es['Welcome A'].group.allAtOnce, false, 'the set is begun: asked everywhere it is missing');
-        assert.equal(es['Welcome B'].group.allAtOnce, true);
-        assert.equal(es['Door A'], undefined, 'no catalog has it, and core translates it: nothing is asked');
-        assert.equal(missingByKey(scan, 'pt', 'native')['Welcome A'], undefined, 'pt has it');
-        assert.equal(scan.es.byCatalog.native.allAtOnce, 1);
-
-        // A partial brief asks for the unfinished set, and only for that part of the group.
-        const dir = path.join(tmp, 'briefs4');
-        await captureLog(() => writeBriefs({ root: tmp, dir, langs: ['es', 'pt', 'fr', 'ru'] }));
-        const esBrief = catalogSection(fs.readFileSync(path.join(dir, 'brief-es.md'), 'utf8'), 'apps/native/words', 'es');
-        assert.ok(esBrief.includes(`${keyLine('Welcome A')} [COMPLETE THE SET: welcome screens]`));
-        assert.ok(!esBrief.includes(keyLine('Welcome B')) && !esBrief.includes(keyLine('Door A')));
-        assert.match(esBrief, /Not in this brief \(draft in all languages at once\): 1 sentence of the welcome screens/);
-        const ptBrief = catalogSection(fs.readFileSync(path.join(dir, 'brief-pt.md'), 'utf8'), 'apps/native/words', 'pt');
-        assert.ok(!ptBrief.includes(keyLine('Welcome A')));
-
-        // Russian takes "Door A": the test now needs it in every catalog, so core's copy no longer stands for the phone's.
-        writeTree(tmp, { 'apps/native/words/ru.json': JSON.stringify({ _meta: { language: 'ru' }, 'Door A': 'Дверь A' }) });
-        scan = await scanAppWords({ root: tmp, langs: ['es'] });
-        es = missingByKey(scan, 'es', 'native');
-        assert.equal(es['Door A'].group.allAtOnce, false);
-    } finally {
-        fs.rmSync(tmp, { recursive: true, force: true });
-    }
-});
-
-test('(b) a language whose only work left is the all-at-once group gets no brief from a partial run, and one from a run for every language', async () => {
-    const tmp = makeTempDir();
-    try {
-        // Spanish has every ordinary key and all of the guide: only the welcome group is left.
-        const done = Object.fromEntries([...ORDINARY_KEYS].map((k) => [k, `es: ${k}`]));
-        await welcomeTree(tmp, { have: { 'apps/native/words': { es: done }, 'packages/beanpool-core/words': { es: { Shared: 'Compartido' } } }, translatedGuide: ['es'] });
-        const status = await draftStatus({ root: tmp, langs: ['es'] });
-        assert.equal(status.perLang.es.hasWork, true, 'the report still counts them as missing');
-        assert.equal(status.perLang.es.missing, 3);
-        assert.equal(status.perLang.es.allAtOnce, 3);
-        assert.equal(status.coversEveryLanguage, false);
-
-        const dir = path.join(tmp, 'briefs');
-        const out = await captureLog(() => writeBriefs({ root: tmp, dir, langs: ['es'] }));
-        assert.equal(fs.existsSync(path.join(dir, 'brief-es.md')), false, 'nothing to ask in this run');
-        assert.match(out, /wrote 0 brief\(s\)/);
-        assert.match(out, /left out 3 all-at-once sentence\(s\) of the welcome screens/);
-
-        await captureLog(() => writeBriefs({ root: tmp, dir }));
+        // The cap counts every key the same (core's "Shared" takes the first, then five of the phone's are cut).
+        const dir = path.join(tmp, 'briefs-capped');
+        await captureLog(() => writeBriefs({ root: tmp, dir, langs: ['es'], maxKeys: 2 }));
         const brief = fs.readFileSync(path.join(dir, 'brief-es.md'), 'utf8');
-        for (const key of GROUP_KEYS) assert.ok(brief.includes(`${keyLine(key)} [ALL-AT-ONCE: welcome screens]`), key);
+        const section = catalogSection(brief, 'apps/native/words', 'es');
+        assert.equal(PHONE_KEYS.filter((key) => section.includes(keyLine(key))).length, 1, 'one phone key is listed');
+        assert.match(section, /and 5 more keys \(capped by --max-keys\)/);
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
 });
 
-test('(b) the report marks all-at-once sentences in the count and names the round they wait for', async () => {
+test('(b) the report counts the welcome sentences as plain missing words, with no "all-at-once" line', async () => {
     const tmp = makeTempDir();
     try {
         await welcomeTree(tmp);
         const out = await captureLog(() => reportDraft({ root: tmp, langs: ['es', 'pt'] }));
-        assert.match(out, /^ {4}native: 6 missing \(3 all-at-once\), 0 stale, 0 orphaned$/m);
+        assert.match(out, /^ {4}native: 6 missing, 0 stale, 0 orphaned$/m);
         assert.match(out, /^ {4}core: 1 missing, 0 stale, 0 orphaned$/m);
-        assert.match(out, /^All-at-once .*draft them in one round that covers every language\):$/m);
-        assert.match(out, /^ {2}welcome screens: 3 sentences in apps\/native\/words \(apps\/native\/utils\/__tests__\/language-switch-render\.test\.ts\)$/m);
+        assert.ok(!/all-at-once/i.test(out));
         // The heartbeat's summary line keeps its shape, and the README's language-list grep still finds only languages.
         assert.match(out, /^words:draft: \d+ missing, \d+ stale across 2 languages$/m);
         assert.deepEqual(out.split('\n').filter((line) => /^[a-z]{2,3}(-[A-Za-z]+)?:/.test(line)).map((line) => line.replace(/:.*/, '')), ['es', 'pt']);
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
-});
-
-test('the welcome group is read by the test and by the tool from one source (all-or-none.mjs)', () => {
-    // The phone's own dialogs, and what only the web draws, are not on the cards: the test does not group them.
-    const source = [
-        "const a = t('Keep me');",
-        "Alert.alert(t('In an alert'), t('Also in an alert'));",
-        'const b = t("It\'s kept");',
-        "authenticateUser(t('Behind the lock'));",
-        "{Platform.OS === 'web' && (<Text>{t('Only the web draws me')}</Text>)}",
-        "const c = t('Two\\nlines');",
-        "const d = t('Keep me');",
-    ].join('\n');
-    assert.deepEqual(cardSentences(source), ['Keep me', "It's kept", 'Two\nlines', 'Keep me']);
-
-    // The real group: the files exist, and it holds the sentences language-switch-render.test.ts names.
-    const group = ALL_OR_NONE_GROUPS.find((g) => g.name === 'welcome screens');
-    assert.ok(group);
-    for (const rel of group.sources) assert.ok(fs.existsSync(path.join(ROOT, rel)), `${rel} exists`);
-    const sentences = groupSentences(group, ROOT);
-    assert.ok(sentences.size >= 40, 'the test itself expects at least 40');
-    assert.ok(sentences.has('Welcome to BeanPool'));
-    assert.ok(sentences.has('🌍 Explore BeanPool worldwide'));
-
-    // The test reads them through this module, not through a list of its own.
-    const testSource = fs.readFileSync(path.join(ROOT, group.test), 'utf8');
-    assert.match(testSource, /import \{ cardSentences, WELCOME_DOORS_FILE, WELCOME_SCREEN_FILE \} from '\.\.\/\.\.\/\.\.\/\.\.\/scripts\/words\/all-or-none\.mjs';/);
-    assert.match(testSource, /const keys = cardSentences\(source\);/);
-    assert.ok(!/\bonCards\b/.test(testSource), 'the test keeps no copy of the dialog filter');
-    // ...and the two files it reads are the group's, named once in all-or-none.mjs, not written out again in the test.
-    assert.deepEqual([...group.sources], [WELCOME_SCREEN_FILE, WELCOME_DOORS_FILE]);
-    assert.match(testSource, /readFileSync\(path\.resolve\(REPO_ROOT, WELCOME_SCREEN_FILE\), 'utf8'\)/);
-    assert.match(testSource, /readFileSync\(path\.resolve\(REPO_ROOT, WELCOME_DOORS_FILE\), 'utf8'\)/);
-    assert.ok(!/['"`](?:\.\.\/)*(?:apps\/native\/)?(?:app\/welcome|components\/WelcomeDoors)\.tsx['"`]/.test(testSource), 'the test keeps no path list of its own');
 });

@@ -87,7 +87,6 @@ import { currentLanguage, pseudoLocalise, setLanguage, type UiLang } from '@bean
 import { LanguageProvider, useWords, whenLanguagePicked } from '../../components/LanguageProvider';
 import { LanguageRow, LanguageSwitch } from '../../components/LanguagePicker';
 import { LANGUAGE_NAMES, LANGUAGE_PREFERENCE_KEY, languageHeader } from '../language-choice';
-import { cardSentences, WELCOME_DOORS_FILE, WELCOME_SCREEN_FILE } from '../../../../scripts/words/all-or-none.mjs';
 import YourAreaScreen from '../../app/your-area';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
@@ -327,10 +326,8 @@ describe('Your area at 320 dp with 1.3× text, in xx, ru, fr, ar (left to right 
 describe('the welcome and join screens\' words at 320 dp with 1.3× text', () => {
     // The home screen's two doors and the lines under them are components/WelcomeDoors.tsx's (DESIGN-global-entry §B.3):
     // its words and lines are the screen's, so they are read with it.
-    // The two files' paths come from scripts/words/all-or-none.mjs, the one place that lists them (the drafting tool reads the same).
-    const REPO_ROOT = path.resolve(__dirname, '../../../..');
-    const doorsSource = fs.readFileSync(path.resolve(REPO_ROOT, WELCOME_DOORS_FILE), 'utf8');
-    const source = fs.readFileSync(path.resolve(REPO_ROOT, WELCOME_SCREEN_FILE), 'utf8') + '\n' + doorsSource;
+    const doorsSource = fs.readFileSync(path.resolve(__dirname, '../../components/WelcomeDoors.tsx'), 'utf8');
+    const source = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8') + '\n' + doorsSource;
     // The home screen's two big buttons: one line in English, a second line for a longer language, shrinking to 0.6 at most.
     const ONE_LINE_BUTTONS = ['🎟️ Join with an invite', '🌍 Explore BeanPool worldwide'];
     // homeContent padding 24 a side, memberBtn paddingHorizontal 12 a side: the label's line.
@@ -360,10 +357,27 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     const STEPS = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
     const STEP_WIDTH = (FLOOR - 2 * 24 - 2 * 8 - 3 * (12 + 2 * 2)) / 4;
     const ALL_LANGS: UiLang[] = ['xx', ...fs.readdirSync(NATIVE_WORDS).filter((f) => /^[A-Za-z-]+\.json$/.test(f)).map((f) => f.slice(0, -5) as UiLang)];
-    // The sentences on the phone's cards: what the phone's own dialogs say is taken out (it draws and wraps those itself).
-    // scripts/words/all-or-none.mjs reads them, and `words:draft` reads the same ones, so the drafting tool and this test
-    // measure one list of sentences.
-    const keys = cardSentences(source);
+    /**
+     * The source with what is not on a phone's card taken out: every call that hands its words to one of the phone's own
+     * dialogs (an alert, the phone's lock prompt), which the phone draws and wraps itself, and what only the web build
+     * draws. What is measured here is the phone's cards.
+     */
+    const onCards = (src: string) => {
+        let out = src;
+        for (const name of ['Alert.alert(', 'authenticateUser(', 'readWordsBehindLock(', "Platform.OS === 'web' && ("]) {
+            for (let at = out.indexOf(name); at >= 0; at = out.indexOf(name, at + 1)) {
+                let depth = 0;
+                let end = at + name.length - 1;
+                for (; end < out.length; end++) {
+                    if (out[end] === '(') depth++;
+                    else if (out[end] === ')' && --depth === 0) break;
+                }
+                out = out.slice(0, at) + ' '.repeat(end + 1 - at) + out.slice(end + 1);
+            }
+        }
+        return out;
+    };
+    const keys = Array.from(onCards(source).matchAll(/\bt\((['"])((?:(?!\1)[^\\]|\\.)*)\1/g)).map((m) => m[2].replace(/\\n/g, '\n').replace(/\\'/g, "'"));
     /**
      * What a member reads in `lang` for `key`: the catalog's translation where it has one, the English (the key) where it has
      * not: the app's own fallback (design §5: a missing translation is a fallback, never a break). Decided per language, never

@@ -3,7 +3,7 @@
  * browser keeps a photo from another community that can be copied into this one. Showing it sends nothing.
  */
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsPage } from './SettingsPage';
 import * as api from '../lib/api';
 import { rememberLastPhoto } from '../lib/last-photo';
@@ -32,6 +32,14 @@ beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('bp_node_url', HERE);
     vi.mocked(api.updateMemberProfile).mockClear();
+    // SettingsPage also reads things this file doesn't mock (node config, groups…). Answer them here, as the other Settings
+    // tests do, so no real fetch of a relative URL is left to reject after the test ends (an unhandled rejection that turned
+    // CI's vitest-pwa-2 red on main d7a5bbe2 with every test passing).
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })));
+});
+
+afterEach(() => {
+    vi.unstubAllGlobals();
 });
 
 describe('Settings → the web\'s copy on request', () => {

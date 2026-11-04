@@ -122,7 +122,16 @@ class Phone {
         const was = this.pin;
         const r = syncNames({ pin: this.pin, state, me: this.who });
         if (!(r.plan.kind === 'refused' && r.plan.reason === 'other_community')) this.pin = r.pin;
-        if (trustLog && was) for (const k of Object.keys(was.dropped)) if (r.pin.trusted.includes(k)) logTrust(this.pk, k, r.pin);
+        if (trustLog) {
+            // Re-admitted (rule 2): dropped before this sync and trusted after it, or dropped by a statement this sync took
+            // and vouched again in the same sync by a trusted header at or after it.
+            for (const k of Object.keys(was?.dropped ?? {})) if (r.pin.trusted.includes(k)) logTrust(this.pk, k, r.pin);
+            const had = new Set((was?.chain ?? []).map((l) => l.id));
+            for (const l of r.pin.chain) {
+                const g = had.has(l.id) ? undefined : r.generations.get(l.id);
+                for (const d of g?.drops ?? []) if (d !== g!.maker && r.pin.trusted.includes(d)) logTrust(this.pk, d, r.pin);
+            }
+        }
         return r;
     }
     /** An open as the app runs it: sync; make what the plan says (once); auto-share on ready. */
@@ -1315,6 +1324,8 @@ describe('I. Following the server back to a history this phone left (round 7, un
 let claimsSeen = 0;
 let claimsMade = 0;
 let claimsWithRemoval = 0;
+/** M7: how often a merge kept trusting a key one record had dropped (the oracle had something to judge). */
+let oracleLifts = 0;
 /** M7: what a merge must keep (ruling §3), checked after every merge of two records of one admin. */
 function checkMerge(a: NamesPin, b: NamesPin, m: { pin: NamesPin; recheck: string[] }, admin: string, world: World): void {
     const pin = m.pin;
@@ -1338,6 +1349,7 @@ function checkMerge(a: NamesPin, b: NamesPin, m: { pin: NamesPin; recheck: strin
     for (const r of [a, b]) {
         for (const [k, S] of Object.entries(r.dropped)) {
             if (!pin.trusted.includes(k)) continue;
+            oracleLifts++;
             expect(events.some((e) => e.key === k && e.known.has(S)), `a key trusted after the merge, dropped at ${S.slice(0, 8)} on a record`).toBe(true);
         }
     }
@@ -1426,11 +1438,13 @@ function propertyRun(seed: number, twoDevices = false): { readies: number; follo
             if (!tappedAt.has(p)) { p.pin = removeNamesKey(p.pin!, abe.pk); knowsTap(p); }
             continue;
         }
-        // M7: a check in person on one device (Abe only while his phone is his own).
-        if (twoDevices && rnd() < 0.06) {
+        // M7: a check in person on one device (Abe only while his phone is his own), most often of an admin this device
+        // dropped, so a merge meets a drop on one record and a later check on the other.
+        if (twoDevices && rnd() < 0.1) {
             const p = deviceOf(pick(honest));
-            const who = pick(step < lossAt ? [owen, bea, cy, abe, mia] : honest);
-            if (who.pk !== p.pk) p.check(who.pk);
+            const may = (step < lossAt ? [owen, bea, cy, abe, mia] : honest).filter((w) => w.pk !== p.pk);
+            const dropped = may.filter((w) => w.pk in (p.pin?.dropped ?? {}));
+            p.check(pick(dropped.length && rnd() < 0.8 ? dropped : may).pk);
             continue;
         }
         if (rnd() < 0.15) world.loseNextRetry = true;
@@ -1835,8 +1849,10 @@ describe('M. Two devices, one key (ruling DESIGN-names-list-merge-rule-fable.md 
                 }
             }, 60_000);
         }
-        it('the parts exercised what they check: merges, taps and ready opens counted', () => {
+        it('the parts exercised what they check: merges, rechecks, drops lifted by a later check, taps and ready opens counted', () => {
             expect(totals.merges).toBeGreaterThan(20);
+            expect(totals.recheck).toBeGreaterThan(0);
+            expect(oracleLifts).toBeGreaterThan(0);
             expect(totals.readies).toBeGreaterThan(20);
             expect(totals.taps).toBeGreaterThan(5);
         });

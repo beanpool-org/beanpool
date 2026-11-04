@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "BeanPool uses this to reach your community's laptop on the hall Wi-Fi when the internet is down."
+  }
+}

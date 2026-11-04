@@ -261,6 +261,18 @@ export async function keptIdentityAt(origin: string): Promise<CommunityIdentity 
     return readKeptIdentity((await readMap<CommunityIdentity>(COMMUNITY_IDENTITY_KEY))[origin]);
 }
 
+/**
+ * What the phone first verified its community to be at `origin` (an origin, as kept), or null when nothing is kept there.
+ * The hall door (utils/hall.ts) checks the hall laptop against it. Never throws: the same read as keptIdentityAt.
+ */
+export async function keptCommunityIdentity(origin: string): Promise<CommunityIdentity | null> {
+    try {
+        return await keptIdentityAt(origin);
+    } catch {
+        return null;
+    }
+}
+
 export type FollowCheck = 'same' | 'not-same' | 'unreachable';
 
 /**

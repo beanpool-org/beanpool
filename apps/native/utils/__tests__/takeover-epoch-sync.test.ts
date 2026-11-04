@@ -156,6 +156,25 @@ describe('a take-over: the epoch changes, the cursors go, and a whole sync repla
         expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-n:Seedlings']);
     });
 
+    // Lights-out H2 (scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §3.6 case 2): the hall laptop's restored record
+    // raised the epoch; nobody's trade there reached the cloud, whose epoch is LOWER. Going home is a change too.
+    it('going home from the hall: a lower epoch than the one held is a change, and the cloud\'s record replaces the hall\'s whole', async () => {
+        const H = listing('post-h', 'Soup in the hall', '2026-09-28T10:00:00.000Z');
+        Object.assign(node, { epoch: '2', whole: [H, B, A] });
+        await sync();
+        expect(store.get(EPOCH_KEY)).toBe('2');
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump', 'post-h:Soup in the hall']);
+
+        // Home: the rented server never had the hall's listing, and answers its own, lower, epoch.
+        Object.assign(node, { epoch: '1', whole: [B, A], delta: [] });
+        await sync();
+        const pulls = postsPulls();
+        expect(pulls).toHaveLength(2);
+        expect(isDelta(pulls[1])).toBe(false);
+        expect(titles()).toEqual(['post-a:Spare lemons', 'post-b:Bike pump']);
+        expect(store.get(EPOCH_KEY)).toBe('1');
+    });
+
     it('a listing past the whole pull\'s page stays: the answer only speaks for what changed after its oldest listing', async () => {
         const OLD = listing('post-old', 'Ladder', '2026-03-01T00:00:00.000Z');
         Object.assign(node, { epoch: '0', whole: [B, A, OLD] });

@@ -303,6 +303,12 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         await click(host.querySelector(`[aria-label="${pseudoLocalise('Grid view')}"]`), 'the view toggle');
         expect(byTestId('grid-badge-row')).not.toBeNull();
         expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();
+        // The grid's rows (PG2): the tiles two to a row, and the poll a row of its own, its words through t() as in the list.
+        expect(host.querySelectorAll('[data-testid="market-grid-row"]').length).toBeGreaterThan(0);
+        expect(host.querySelectorAll('[data-testid="poll-card"]')).toHaveLength(1);
+        expect(byTestId('poll-card')!.closest('[data-testid="market-grid-row"]')).toBeNull();
+        expect(host.textContent).toContain('Where should the market go?');
+        expect(host.querySelectorAll('[data-testid="grid-text-block"]').length).toBeGreaterThan(0);
         expect(bypassing()).toEqual([]);
         await click(host.querySelector(`[aria-label="${pseudoLocalise('Compact view')}"]`), 'the view toggle, again');
         expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();

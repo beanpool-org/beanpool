@@ -11,7 +11,7 @@
  */
 import { createElement } from 'react';
 import { StyleSheet, Text, View, type TextStyle } from 'react-native';
-import { MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, MARKET_CHIP, type CardType } from '@beanpool/core';
+import { MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, gridTextBlockHeight, type CardType } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 
 type Colors = ThemeContextType['colors'];
@@ -46,6 +46,7 @@ export function chipTones(colors: Colors): Record<CardChipRole, { bg: string; fg
 }
 
 const LIST = MARKET_CARD_TYPE.list;
+const GRID = MARKET_CARD_TYPE.grid;
 const SLOT = SHELL.photo.list.width;
 
 /** The box's styles for one theme. `useCardShell()` is this, made once per theme. */
@@ -102,9 +103,46 @@ export function makeCardShell(colors: Colors) {
         distance: { ...cardType(LIST.distance), color: colors.text.secondary },
         /** Going ✓ / Interested ✓, You're hosting this event: words, never a control, in the event's ink. */
         mark: { ...cardType(LIST.mark), color: colors.tile.event.ink },
+        /**
+         * The grid (DESIGN-market-grid-sizes-fable.md §2.2, §2.5, slice PG2) is a list of rows: two tiles side by side with the
+         * gutter between them and under the row, or a poll on its own, the list's width. A cell is half the row less the gutter
+         * and is stretched to the row's height; the tile fills its cell, so the two tiles of a row are one height.
+         */
+        gridRow: { flexDirection: 'row', gap: SHELL.gap.grid, marginBottom: SHELL.gap.grid },
+        gridCell: { flex: 1, minWidth: 0 },
+        gridTile: { flex: 1, marginBottom: 0 },
+        /** Rows 1 and 2 of the four: the title, two lines at most. */
+        gridTitle: { ...cardType(GRID.loud), color: colors.text.body },
+        /** Row 3 on a copy (its price there, in words) and row 4's distance: one line each. */
+        gridLine: { ...cardType(GRID.place), color: colors.text.secondary },
     });
     return { ...styles, tones: chipTones(colors) };
 }
+
+/**
+ * The grid tile's text block at the phone's font scale (§2.2): four rows of 18 with 4 between them, both scaled with the text
+ * (a phone scales a line height as it does a font size), inside 12 of padding that does not scale; core's
+ * `gridTextBlockHeight`. Rows 1 and 2 are the title's box (its two lines and the gap between them), rows 3 and 4 a box each,
+ * so the block is the same height whatever a tile holds, and every tile in a row puts its author and its last line at the
+ * same place. A scale that is not a positive number counts as 1, as core's does. No colour here: the theme's are in the table.
+ */
+export function gridTextBlock(fontScale: number) {
+    const scale = Number.isFinite(fontScale) && fontScale > 0 ? fontScale : 1;
+    const { rowHeight, rowGap } = MARKET_GRID_TEXT_BLOCK;
+    const row = rowHeight * scale;
+    return {
+        block: { height: gridTextBlockHeight(scale), padding: SHELL.textPadding, gap: rowGap * scale, overflow: 'hidden' as const },
+        titleBox: { height: 2 * row + rowGap * scale },
+        /** Row 3: the author (an 18 dp avatar and a name) or a copy's line, centred in the row. */
+        row: { height: row, justifyContent: 'center' as const },
+        /** Row 4: one line that is cut, never wrapped: the distance first, then one chip at most, spaced as a chip row. */
+        lastRow: { height: row, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, overflow: 'hidden' as const },
+        /** Row 4's distance and its chip: each gives way and is cut at the row's end rather than pushed past it. */
+        lastRowPiece: { flexShrink: 1, minWidth: 0 },
+    };
+}
+
+export type GridTextBlock = ReturnType<typeof gridTextBlock>;
 
 export type CardShell = ReturnType<typeof makeCardShell>;
 

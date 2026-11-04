@@ -31,7 +31,8 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
 import { MARKET_GRID_CROP, MarketCardPicture } from '../../components/MarketCardPicture';
-import { CardChip, useCardShell } from '../../components/market-card-shell';
+import { CardChip, gridTextBlock, useCardShell } from '../../components/market-card-shell';
+import { gridRows, type GridRow } from '../../utils/market-grid-rows';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
@@ -194,8 +195,10 @@ export default function MarketScreen() {
         return () => setHelpContext(null);
     }, [filter]));
     
-    // The style box (components/market-card-shell.ts): the list card's shell, its picture slot and its chips, shared with EventCard.
+    // The style box (components/market-card-shell.ts): the list card's shell, its picture slot and its chips, shared with EventCard;
+    // and the grid tile's four-row text block at this phone's font scale.
     const shell = useCardShell();
+    const gridBlock = useMemo(() => gridTextBlock(fontScale), [fontScale]);
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },
         listContent: { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 100 },
@@ -302,8 +305,6 @@ export default function MarketScreen() {
             shadowOpacity: 0.25,
             shadowRadius: 10,
         },
-        gridRow: { gap: 16 },
-        gridCard: { flex: 1, marginBottom: 16 },
         gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: 4 / 3 },
         gridImage: { width: '100%', height: '100%' },
         gridFallback: { backgroundColor: colors.surface.subtle, justifyContent: 'center', alignItems: 'center' },
@@ -313,8 +314,6 @@ export default function MarketScreen() {
         gridPriceEnd: { marginLeft: 'auto' },
         gridPriceText: { color: colors.text.inverse, fontSize: 13, fontWeight: 'bold' },
         gridTypeBadge: { position: 'absolute', top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-        gridTextContent: { padding: 12 },
-        gridCardTitle: { fontSize: 14, fontWeight: '700', color: colors.text.body, marginBottom: 4 },
         badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
         badgeOffer: { backgroundColor: colors.market.offer.bg, borderWidth: 0 },
         badgeNeed: { backgroundColor: colors.market.need.bg, borderWidth: 0 },
@@ -1664,7 +1663,9 @@ export default function MarketScreen() {
         // The grid has no headings: the pins (three at most, newest pin first) are its first cells, each with its 📌 PINNED pill on
         // the photo, and the stream carries on in the same row, so no cell is left empty (DESIGN-market-grid-sizes-fable.md §2.1,
         // Marty 4 Nov). marketPins already took them out of the stream, so none is drawn twice. List and compact keep the block.
-        listData = [...pinnedPosts, ...filteredPosts];
+        // The list's items are the grid's rows (utils/market-grid-rows.ts, slice PG2): two tiles that share one height, or a poll
+        // the list's whole width.
+        listData = gridRows([...pinnedPosts, ...filteredPosts]);
     } else {
         if (filter === 'for-you') {
             // What you said you would be at, above what you might like: it is the one part of For You you
@@ -1704,15 +1705,31 @@ export default function MarketScreen() {
     }
 
     // How far from the member's area, on each card of the worldwide community's circle (market.distances; none elsewhere).
-    const distanceLine = (item: any) => {
+    const distanceWords = (item: any) => {
         const km = market.distances?.get(String(item.id));
-        const words = km == null ? null : formatDistance(km);
+        return km == null ? null : formatDistance(km);
+    };
+    const distanceLine = (item: any) => {
+        const words = distanceWords(item);
         return words ? (
             <Text testID="card-distance" numberOfLines={1} style={{ fontSize: 12, fontWeight: '600', color: colors.text.secondary, marginTop: 2 }}>{t('📍 {distance}', { distance: words })}</Text>
         ) : null;
     };
 
     const renderItem = ({ item }: { item: any }) => {
+        if (item.isGridRow) {
+            // A row of the grid (utils/market-grid-rows.ts): a poll on its own, the list's width, as the list draws it; or two
+            // cells that the row stretches to one height, each tile filling its cell, so the pair is one height whatever each
+            // holds. A last odd tile keeps its half: an empty cell beside it holds the width.
+            const row: GridRow<any> = item;
+            if ('poll' in row) return renderItem({ item: row.poll });
+            return (
+                <View style={shell.gridRow} testID="market-grid-row">
+                    {row.pair.map(cell => <View key={cell.id} style={shell.gridCell}>{renderItem({ item: cell })}</View>)}
+                    {row.pair.length === 1 ? <View style={shell.gridCell} /> : null}
+                </View>
+            );
+        }
         if (item.isNewSince) {
             return (
                 <View style={styles.sectionHeader} testID="new-since-line">
@@ -1779,11 +1796,12 @@ export default function MarketScreen() {
         const openLabel = isPulse ? undefined : t('Open listing: {title}', { title: item.title });
 
         if (viewMode === 'grid') {
+            const gridDistance = distanceWords(item);
             return (
                 <Pressable
                     style={[
-                        styles.card,
-                        styles.gridCard,
+                        shell.card,
+                        shell.gridTile,
                         elderCard && styles.elderCard,
                         isPulse && styles.pulseCard,
                     ]}
@@ -1866,24 +1884,31 @@ export default function MarketScreen() {
                             </View>
                         )}
                     </View>
-                    <View style={styles.gridTextContent}>
-                        <Text style={styles.gridCardTitle} numberOfLines={2}>
-                            {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
-                        </Text>
-                        {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
-                        {distanceLine(item)}
-                        {!!item.repeatable && !isOwn && item.status !== 'pending' && (
-                            <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('↻ RECURRING')}</Text>
-                            </View>
-                        )}
-                        {groupScopeBadgeText && (
-                            <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                                <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
-                                    {groupScopeBadgeText}
-                                </Text>
-                            </View>
-                        )}
+                    {/* The text block is always four rows, whatever the tile holds (DESIGN-market-grid-sizes-fable.md §2.2): the
+                        title's two, the author (or a copy's line), and one last line that is cut, never wrapped: the distance,
+                        then one chip at most, the group's lock before RECURRING (a deal is on the photo). What a tile has no
+                        room for is on the page it opens. */}
+                    <View style={gridBlock.block} testID="grid-text-block">
+                        <View style={gridBlock.titleBox}>
+                            <Text style={shell.gridTitle} numberOfLines={2}>
+                                {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
+                            </Text>
+                        </View>
+                        <View style={gridBlock.row}>
+                            {copy
+                                ? <Text style={shell.gridLine} numberOfLines={1} testID="listing-copy-line">{copyPriceLine(copy)}</Text>
+                                : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
+                        </View>
+                        <View style={gridBlock.lastRow} testID="grid-last-row">
+                            {gridDistance ? (
+                                <Text testID="card-distance" style={[shell.gridLine, gridBlock.lastRowPiece]} numberOfLines={1}>{t('📍 {distance}', { distance: gridDistance })}</Text>
+                            ) : null}
+                            {groupScopeBadgeText ? (
+                                <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" /></View>
+                            ) : !!item.repeatable && !isOwn && item.status !== 'pending' ? (
+                                <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} /></View>
+                            ) : null}
+                        </View>
                     </View>
                 </Pressable>
             );
@@ -2028,14 +2053,9 @@ export default function MarketScreen() {
     ) : null;
 
     // The fill beneath the nearby listings (see fillRows): in the list's footer so every view mode has it. A grid takes its cards
-    // two to a row, as its FlatList does.
+    // in the grid's own rows, as its FlatList does (utils/market-grid-rows.ts).
     const fillCards = viewMode === 'grid'
-        ? Array.from({ length: Math.ceil(fillRows.length / 2) }, (_, i) => fillRows.slice(i * 2, i * 2 + 2)).map(pair => (
-            <View key={pair[0].id} style={{ flexDirection: 'row', gap: 16 }}>
-                {pair.map(item => <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>)}
-                {pair.length === 1 ? <View style={{ flex: 1 }} /> : null}
-            </View>
-        ))
+        ? gridRows(fillRows).map(row => <React.Fragment key={row.id}>{renderItem({ item: row })}</React.Fragment>)
         : fillRows.map(item => <View key={item.id}>{renderItem({ item })}</View>);
 
     // Pinned posts block (DESIGN-pinning-fable.md §0.2, §2.2, §2.9). It sits inside the list's own 16 dp of padding and takes
@@ -2091,7 +2111,6 @@ export default function MarketScreen() {
             <Animated.FlatList
                 ref={listRef}
                 key={viewMode}
-                numColumns={viewMode === 'grid' ? 2 : 1}
                 data={listData}
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
@@ -2105,7 +2124,6 @@ export default function MarketScreen() {
                     </>
                 ) : null}
                 contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset }]}
-                columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
                 showsVerticalScrollIndicator={false}
                 {...qr.listProps}
                 keyboardShouldPersistTaps="handled"

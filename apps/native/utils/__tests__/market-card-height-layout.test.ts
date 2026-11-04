@@ -465,8 +465,10 @@ describe('a pinned card is the same width as every other card', () => {
         const l = lay(569);
         const gap = (upper: HTMLElement, lower: HTMLElement) => at(l, lower).top - (at(l, upper).top + l.height(upper));
         const [pinRows, streamRows] = [gap(row(PIN_A.title), row(PIN_C.title)), gap(row(STREAM_A.title), row(STREAM_C.title))];
-        expect(streamRows).toBe(16);
-        expect(pinRows).toBe(streamRows);
+        // To a thousandth of a dp: since PG2 a tile's text block is 133.2 dp at 1.3x, which float32 Yoga (no pixel rounding
+        // here, setPointScaleFactor(0)) carries as 16.000015 between rows. A phone rounds to its pixels.
+        expect(streamRows).toBeCloseTo(16, 3);
+        expect(pinRows).toBeCloseTo(streamRows, 3);
     });
 });
 
@@ -559,6 +561,112 @@ describe('the grid has no Pinned block: its pins are the first cells, and the st
         await show([S1, S2, S3], 'grid');
         expect(host.querySelector('[data-testid="pinned-section-header"]')).toBeNull();
         expect(rowsOf(lay(569), [S1.title, S2.title, S3.title])).toEqual([[S1.title, S2.title], [S3.title]]);
+    });
+});
+
+// Slice PG2 (DESIGN-market-grid-sizes-fable.md §2.2, §2.5; Marty, 4 Nov 2026: "the other smaller tiles yes - the same seems
+// best"): the grid is rows on a lattice. Its FlatList draws rows, not posts: a pair of tiles in one row shares one height, each
+// tile's text block is four rows whatever it holds (24 + (4 x 18 + 3 x 4) x fontScale), and a poll is a row of its own, the
+// list's width, never a half cell. Laid out with Yoga at 320 dp and 1.3x text.
+describe('the grid is rows on a lattice: a pair is one height, the text block four rows, a poll the whole width', () => {
+    const DAY = 86_400_000;
+    const plain = (id: string, title: string, ageMs: number, extra: Record<string, unknown> = {}) => ({ ...LONE, id, title, repeatable: 0, created_at: iso(now - ageMs), ...extra });
+    // One tile with the least a tile can hold, one with the most: a one-line title and nothing else, against a two-line title,
+    // a photo, RECURRING and a group's lock (the lock is the one chip row 4 keeps).
+    const SHORT = plain('g-short', 'Eggs', 1 * 60_000);
+    const FULL = plain('g-full', 'Listing with a title long enough to need a second line and more', 2 * 60_000, {
+        repeatable: 1, photos: [PHOTO('g-full')], audience_scope: 'group', target_group_name: 'Byron Bay Permaculture Growers',
+    });
+    const C = plain('g-c', 'Hedge trimming', 3 * 60_000);
+    const D = plain('g-d', 'Piano tuning', 4 * 60_000);
+    const POLL = {
+        id: 'g-poll', type: 'poll', status: 'active', title: 'Where should the new tool shed go?', description: 'The working bee is on the 12th',
+        author_pubkey: 'dee-key', author_callsign: 'Dee', created_at: iso(now - 90_000), poll_closes_at: iso(now + 2 * DAY), pollOpenVote: true,
+        pollOptions: [{ id: 'o1', text: 'North of the hall', votes: 3 }, { id: 'o2', text: 'Behind the south barn', votes: 1 }, { id: 'o3', text: 'Beside the packing shed', votes: 0 }],
+        pollVotes: [],
+    };
+    const SCALE = 1.3;
+    const BLOCK = 24 + (4 * 18 + 3 * 4) * SCALE;
+    const blockOf = (card: Element) => card.querySelector('[data-testid="grid-text-block"]') as HTMLElement;
+    const pollCard = () => host.querySelector('[data-testid="poll-card"]') as HTMLElement;
+
+    it('a pair at 320 x 1.3: two tiles 136 wide and one height, the least a tile holds beside the most', async () => {
+        await show([SHORT, FULL, C, D], 'grid');
+        const [short, full] = [cardOf(SHORT.title), cardOf(FULL.title)];
+        const l = lay(569);
+        // One row, left to right.
+        expect(at(l, short).top).toBe(at(l, full).top);
+        expect(at(l, short).left).toBe(16);
+        expect(at(l, full).left).toBe(16 + 136 + 16);
+        expect(l.width(short)).toBe(136);
+        expect(l.width(full)).toBe(136);
+        expect(l.height(short)).toBe(l.height(full));
+        // Each block is the four rows, the same number, whatever the tile holds.
+        for (const card of [short, full]) expect(l.height(blockOf(card))).toBeCloseTo(BLOCK, 3);
+        // The tile is its picture and its block (inside a 1 dp border), and nothing else: a lattice by construction, not only
+        // by the row's stretch. The picture is 4:3 at the card's inner width.
+        for (const card of [short, full]) {
+            const picture = blockOf(card).previousElementSibling as HTMLElement;
+            expect(l.height(picture)).toBeCloseTo((136 - 2) * 3 / 4, 3);
+            expect(l.height(card)).toBeCloseTo(2 + (136 - 2) * 3 / 4 + BLOCK, 3);
+        }
+        console.log(`grid tile ${l.height(short).toFixed(1)} dp at 320 x 1.3, text block ${l.height(blockOf(short)).toFixed(1)} dp`);
+    });
+
+    it('the rows line up across the pair, and nothing in a block runs out of it', async () => {
+        await show([SHORT, FULL], 'grid');
+        const l = lay(569);
+        const rowsOf = (card: Element) => Array.from(blockOf(card).children).map(r => at(l, r).top - at(l, card).top);
+        expect(rowsOf(cardOf(SHORT.title))).toEqual(rowsOf(cardOf(FULL.title)));
+        for (const card of [cardOf(SHORT.title), cardOf(FULL.title)]) {
+            const block = blockOf(card);
+            const bottom = at(l, block).top + l.height(block) - 12;   // inside its 12 dp of padding
+            for (const r of Array.from(block.children)) expect(at(l, r).top + l.height(r), r.textContent ?? '').toBeLessThanOrEqual(bottom + 0.01);
+            // The title takes two rows at most.
+            const title = block.firstElementChild!.firstElementChild!;
+            expect(title.getAttribute('data-lines')).toBe('2');
+        }
+    });
+
+    it('row 4 is one line: the group\'s lock before RECURRING, one chip at most, cut at the tile\'s edge', async () => {
+        const REPEATS = plain('g-rep', 'Weekly veg box', 5 * 60_000, { repeatable: 1 });
+        await show([SHORT, FULL, REPEATS], 'grid');
+        const full = cardOf(FULL.title);
+        const last = full.querySelector('[data-testid="grid-last-row"]') as HTMLElement;
+        expect(last.textContent).toContain('Byron Bay Permaculture Growers');
+        expect(last.textContent).not.toContain('RECURRING');
+        expect(full.querySelectorAll('[data-testid="card-group-chip"]')).toHaveLength(1);
+        const l = lay(569);
+        const right = at(l, full).left + l.width(full);
+        for (const el of Array.from(full.querySelectorAll('*'))) expect(at(l, el).left, el.textContent ?? el.tagName).toBeLessThan(right);
+        // Without the lock, RECURRING; with neither (and no distance off the worldwide community), a blank last row.
+        expect(cardOf(REPEATS.title).querySelector('[data-testid="grid-last-row"]')!.textContent).toBe('↻ RECURRING');
+        expect(cardOf(SHORT.title).querySelector('[data-testid="grid-last-row"]')!.textContent).toBe('');
+    });
+
+    it('a poll is a row of its own at the list\'s width, 288 dp, never a half cell; the tiles pack round it', async () => {
+        await show([SHORT, POLL, FULL, C], 'grid');
+        const l = lay(569);
+        const poll = pollCard();
+        expect(poll).not.toBeNull();
+        expect(l.width(poll)).toBe(WIDTH - 32);
+        expect(at(l, poll).left).toBe(16);
+        // The tile that waited for its partner keeps it: SHORT and FULL share the first row, the poll is under it, C after.
+        expect(at(l, cardOf(SHORT.title)).top).toBe(at(l, cardOf(FULL.title)).top);
+        expect(at(l, poll).top).toBeGreaterThan(at(l, cardOf(SHORT.title)).top + l.height(cardOf(SHORT.title)));
+        expect(at(l, cardOf(C.title)).top).toBeGreaterThan(at(l, poll).top + l.height(poll));
+        // C is the last, odd tile: it keeps its half of the row.
+        expect(l.width(cardOf(C.title))).toBe(136);
+        expect(at(l, cardOf(C.title)).left).toBe(16);
+    });
+
+    it('the poll in the grid is the width of the poll in the list', async () => {
+        await show([SHORT, POLL], 'list');
+        const listWidth = lay(569).width(pollCard());
+        act(() => root.unmount());
+        root = createRoot(host);
+        await show([SHORT, POLL], 'grid');
+        expect(lay(569).width(pollCard())).toBe(listWidth);
     });
 });
 

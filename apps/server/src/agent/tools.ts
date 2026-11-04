@@ -7,8 +7,8 @@
  * answer carries a key, a balance of any member, a reporter, a DM, a photo, an address or URL (the node's own included:
  * links are Settings paths the assistant joins to the address in its welcome), a host, a log line, or a destination's name.
  * The one exception is what a tool is for: photo_upload_link answers an address on this node, which the assistant sends photos to.
- * This community's own hosts are no exception: node_overview's addressHost, and server_health's `addresses` (DNS robustness S6,
- * agent/server-addresses.ts), each host it publishes with what this server's check found there, never what a host points at.
+ * The other is this community's own hosts, which it publishes anyway: node_overview's addressHost, and server_health's
+ * `addresses` (DNS robustness S6, agent/server-addresses.ts), each with what this server's check found there, never what it points at.
  * (my_posts reads back an online event's join link, as the fenced text it is.)
  * Member-written text comes back only fenced (agent/fence.ts) and, in lists, only when `include_text` is asked for.
  *

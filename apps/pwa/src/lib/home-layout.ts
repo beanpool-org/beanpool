@@ -393,7 +393,16 @@ export function moveCard(
  * Every card that can't move, and every slot it stands in, stays where it is.
  */
 export function reorderAmong<T extends Pick<HomeCardInstance, 'id' | 'type'>>(items: readonly T[], id: string, to: number, pinned: readonly string[] = []): T[] {
-    const slots = items.flatMap((c, i) => (canMoveCard(c.type, pinned) ? [i] : []));
+    return reorderIds(items, items.filter(c => canMoveCard(c.type, pinned)).map(c => c.id), id, to);
+}
+
+/**
+ * The same, for the cards named in `movable` (their ids, in `items`' order): Arrange moves among the cards Home draws that
+ * stand on the member's list, which is a narrower set than the types that can move (a card with nothing to show is on
+ * the list and in no slot; the interests card opened from Tune is drawn and on no list).
+ */
+export function reorderIds<T extends Pick<HomeCardInstance, 'id'>>(items: readonly T[], movable: readonly string[], id: string, to: number): T[] {
+    const slots = items.flatMap((c, i) => (movable.includes(c.id) ? [i] : []));
     const order = slots.map(i => items[i]);
     const from = order.findIndex(c => c.id === id);
     const out = [...items];
@@ -453,8 +462,8 @@ export function fewerCardsNews(account: HomeLayoutV2 | null, local: HomeLayoutV2
 
 /** These three are word() keys: Home shows them through t(). */
 export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
-/** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or hold a card to arrange.');
+/** The one-time hint (§1.3), as the web says it: its cards can be dragged (DESIGN-home-arrange-in-place-fable.md §2.9). The phone's own line says "hold a card to arrange" until its drag lands. */
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom. Hold a card to drag it, or use the arrows.');
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
 export const SEARCH_OFFLINE_LINE = word('Shows when your community answers');
 

@@ -36,6 +36,8 @@ import { useCommunityInfo } from '../lib/features';
 import { AuthorCard, useMemberRatings } from './AuthorCard';
 import { CategoryTile } from './CategoryTile';
 import { PostTagChips } from './PostTagChips';
+import { ListPhoto } from './ListPhoto';
+import { CARD_INK, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, listCard } from './market-card-shell';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -103,10 +105,14 @@ function eventStateOf(post: MarketplacePost): EventStateKind | null {
         : ended ? 'ended' : post.eventState === 'updated' ? 'updated' : null;
 }
 
-/** Every chip on an event is the same small pill: 10px, extra bold, one line, never squeezed by its neighbour. */
+/**
+ * Every chip on an event is the same small pill: 10px, extra bold, one line, never squeezed by its neighbour. The list
+ * card draws the style box's chip (market-card-shell.ts, `box`); the grid card and the page keep this one until their
+ * own slices move them onto the box.
+ */
 const CHIP = 'flex-shrink-0 whitespace-nowrap text-[10px] font-extrabold tracking-wide px-2 py-0.5 rounded-md border border-transparent';
 
-function StateBadge({ post }: { post: MarketplacePost }) {
+function StateBadge({ post, box = false }: { post: MarketplacePost; box?: boolean }) {
     const state = eventStateOf(post);
     if (!state) return null;
     // Core's colour tokens, light and dark: UPDATED is the event violet; CANCELLED and ENDED are the danger chip.
@@ -114,7 +120,7 @@ function StateBadge({ post }: { post: MarketplacePost }) {
         ? 'bg-bp-tile-event-tint text-bp-tile-event-ink'
         : 'bg-bp-chip-danger-tint text-bp-chip-danger-ink';
     return (
-        <span data-testid="event-state-badge" className={`${CHIP} ${tone}`}>
+        <span data-testid="event-state-badge" className={box ? chip(state === 'updated' ? 'event' : 'danger') : `${CHIP} ${tone}`}>
             {state === 'cancelled' ? t('CANCELLED', undefined, 'event') : state === 'ended' ? t('ENDED', undefined, 'event') : t('UPDATED', undefined, 'event')}
         </span>
     );
@@ -126,22 +132,22 @@ function StateBadge({ post }: { post: MarketplacePost }) {
  * which keeps its whole line (Marty's Byron screenshot, 4 Nov 2026: the date wrapped to two lines on a pinned card).
  * No chip, no row.
  */
-function EventChips({ post, withType = false }: { post: MarketplacePost; withType?: boolean }) {
+function EventChips({ post, withType = false, box = false }: { post: MarketplacePost; withType?: boolean; box?: boolean }) {
     const pinned = pinLive(post as any);
     if (!withType && !pinned && !eventStateOf(post)) return null;
     return (
         <span data-testid="event-chips" className="flex flex-wrap items-center gap-1 min-w-0 w-full">
             {withType && (
-                <span data-testid="event-type-chip" className={`${CHIP} bg-bp-tile-event-tint text-bp-tile-event-ink`}>
+                <span data-testid="event-type-chip" className={box ? chip('event') : `${CHIP} bg-bp-tile-event-tint text-bp-tile-event-ink`}>
                     {upperCase(t('EVENT', undefined, 'event category tile label'))}
                 </span>
             )}
             {pinned && (
-                <span data-testid="event-pinned-chip" className={`${CHIP} bg-bp-chip-accent-tint text-bp-chip-accent-ink shadow-xs`}>
+                <span data-testid="event-pinned-chip" className={box ? chip('pinned') : `${CHIP} bg-bp-chip-accent-tint text-bp-chip-accent-ink shadow-xs`}>
                     {t('📌 PINNED')}
                 </span>
             )}
-            <StateBadge post={post} />
+            <StateBadge post={post} box={box} />
         </span>
     );
 }
@@ -219,7 +225,11 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
  * Under it, only when the viewer's clock differs from the place's, the second time (DESIGN-event-times §4): "Lagos time ·
  * 15:50 your time", its two halves whole in the same way. The detail adds an online event's host line.
  */
-function EventWhen({ post, className, testId, hostLine = false }: { post: MarketplacePost; className: string; testId?: string; hostLine?: boolean }) {
+function EventWhen({ post, className, testId, hostLine = false, repeatClassName = 'text-violet-800 dark:text-violet-200' }: {
+    post: MarketplacePost; className: string; testId?: string; hostLine?: boolean;
+    /** The repeat line's colour: the card's is the event token (`CARD_INK.event`); the page keeps its own until its slice. */
+    repeatClassName?: string;
+}) {
     const parts = eventWhenParts(post);
     const noteAt = parts?.note ? parts.note.indexOf(' · ') : -1;
     const repeats = eventRepeatCaption(post);
@@ -257,7 +267,7 @@ function EventWhen({ post, className, testId, hostLine = false }: { post: Market
             )}
             {/* A repeating event: still only its next date above, and the rule under it (DESIGN-event-times §4, §8). */}
             {repeats && (
-                <span data-testid="event-repeat-caption" className="block w-full min-w-0 break-words text-sm font-bold text-violet-800 dark:text-violet-200 leading-snug">
+                <span data-testid="event-repeat-caption" className={`block w-full min-w-0 break-words text-sm font-bold leading-snug ${repeatClassName}`}>
                     <span aria-hidden="true">↻ </span>{repeats}
                 </span>
             )}
@@ -355,15 +365,10 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     // The host gave the event a photo; the card showed everything but. It is read straight off the post, the way
     // the offer cards and the event page read theirs — there is no second resolver on the web client.
     const firstPhoto = p.photos && p.photos.length > 0 ? p.photos[0] : null;
-    // Compact is the one view where the offer card beside it has no photo: MarketplaceCard's compact branch is a
-    // single condensed row of emoji, title, price and badge, built to double the listings on screen. Matching the
-    // card beside it there means showing nothing — a thumbnail only this card had would make the event the odd
-    // one out again, in the view that can least afford the height.
-    const hasPicture = viewMode !== 'compact';
+    // The grid card shows the photo above its lines; the list card is the style box's (below). Compact has no picture
+    // yet: its row joins the box in its own slice (C1, DESIGN-card-style-box-fable.md §4).
+    const hasPicture = viewMode === 'grid';
     const photo = hasPicture ? firstPhoto : null;
-    // Only a photo or tile turns the card's text into a column beside a thumbnail. Without one the card is exactly what
-    // it has always been, in every view.
-    const asRow = hasPicture && viewMode === 'list';
 
     // The status line (DESIGN-market-event-cards-fable.md §2.2). Without the buttons the card says where the viewer
     // stands as text: a host reads that they are hosting, anyone else who answered reads their answer. A member's copy
@@ -375,11 +380,80 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     // The counts only once someone has answered; a viewer's own answer stands in their place, as the page has them.
     const counts = !copy && !myAnswer ? countsLine(p) : null;
     const openLabel = t('Open event: {title}', { title: p.title });
+    // The label stands in for what is inside the button, so a viewer's own answer rides at its end.
+    const label = [openLabel, hosting ? t("You're hosting this event") : null, myAnswer].filter(Boolean).join(', ');
+    const copyLine = copy?.from ? copyCardLine(copy.from) : null;
+
+    if (viewMode === 'list') {
+        // The list card on the Market's style box (components/market-card-shell.ts; DESIGN-card-style-box-fable.md §1, W2):
+        // the same card as an Offer's beside it. The photo, or the event tile until it has drawn (ListPhoto), is flush under
+        // the card's left corners and the card's full height; the lines beside it with 12 of padding: the chips, the when
+        // (16/900 in the event violet, whole pieces), the title (two lines), the place, and the viewer's mark or the counts.
+        // The card takes the height its lines need. A copy's line is one of them, so the photo runs beside it too.
+        return (
+            <div data-testid="event-card" className={`${listCard()} flex-wrap`}>
+                <button
+                    type="button"
+                    onClick={onOpen}
+                    disabled={!onOpen}
+                    aria-label={copyLine ? `${label}, ${copyLine}` : label}
+                    className="w-full min-w-0 flex flex-row items-stretch text-left bg-transparent border-0 p-0 cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-nature-500"
+                >
+                    <span data-testid="event-list-photo" className={LIST_PHOTO}>
+                        <ListPhoto
+                            photo={firstPhoto}
+                            alt={p.title}
+                            className={`${LIST_PHOTO_FILL} object-cover`}
+                            fallback={<span className={LIST_PHOTO_FILL}><CategoryTile kind="event" size="thumb" /></span>}
+                        />
+                    </span>
+                    <span className={LIST_TEXT}>
+                        <EventChips post={p} withType box />
+                        <EventWhen post={p} testId="event-when" className={`${LIST_TYPE.loud} ${CARD_INK.event}`} repeatClassName={CARD_INK.event} />
+                        <span dir="auto" className={`w-full min-w-0 break-words line-clamp-2 ${LIST_TYPE.second} ${CARD_INK.title}`}>
+                            {p.title}
+                        </span>
+                        {place && (
+                            <span className={`block w-full truncate ${LIST_TYPE.place} ${CARD_INK.secondary}`}>
+                                <span aria-hidden="true">{p.eventOnline ? '🌐 ' : '📍 '}</span>{place}
+                            </span>
+                        )}
+                        {hosting && (
+                            <span data-testid="event-hosting" className={`block w-full break-words ${LIST_TYPE.mark} ${CARD_INK.event}`}>
+                                {t("You're hosting this event")}
+                            </span>
+                        )}
+                        {myAnswer && (
+                            <span data-testid="event-my-answer" className={`block w-full break-words ${LIST_TYPE.mark} ${CARD_INK.event}`}>
+                                {myAnswer}
+                            </span>
+                        )}
+                        {/* The counts wrap rather than cut: "interested" is the longest word on the card in most languages. */}
+                        {counts && (
+                            <span data-testid="event-counts" className={`block w-full break-words ${LIST_TYPE.mark} ${CARD_INK.secondary}`}>
+                                <span aria-hidden="true">👥 </span>{counts}
+                            </span>
+                        )}
+                        {copyLine && (
+                            <span data-testid="event-copy-line" className="block w-full break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
+                                {copyLine}
+                            </span>
+                        )}
+                    </span>
+                </button>
+                {/* Only the map's preview asks for the buttons, and it is a grid card; here they keep a row of their own under the card's lines. */}
+                {rsvpOnCard && !visitor && !copy && <div className="basis-full px-3 pb-3"><RsvpButtons rsvp={rsvp} /></div>}
+                {rsvpOnCard && rsvp.error && (
+                    <p role="alert" className="basis-full m-0 px-3 pb-3 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>
+                )}
+            </div>
+        );
+    }
 
     const lines = (
         <>
             <EventChips post={p} withType />
-            <EventWhen post={p} testId="event-when" className="text-lg font-black text-violet-800 dark:text-violet-200 leading-tight" />
+            <EventWhen post={p} testId="event-when" className={`text-lg font-black leading-tight ${CARD_INK.event}`} repeatClassName={CARD_INK.event} />
             <span dir="auto" className="block w-full truncate text-base font-extrabold text-nature-950 dark:text-white leading-snug">
                 {p.title}
             </span>
@@ -413,30 +487,25 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 type="button"
                 onClick={onOpen}
                 disabled={!onOpen}
-                // The label stands in for what is inside the button, so a viewer's own answer rides at its end.
-                aria-label={[openLabel, hosting ? t("You're hosting this event") : null, myAnswer].filter(Boolean).join(', ')}
-                className={`w-full min-w-0 text-left bg-transparent border-0 p-0 flex cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg ${
-                    asRow ? 'flex-row items-start gap-3' : 'flex-col gap-1'
-                }`}
+                aria-label={label}
+                className="w-full min-w-0 text-left bg-transparent border-0 p-0 flex flex-col gap-1 cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg"
             >
                 {hasPicture && (
                     photo ? (
                         <img
                             src={photo}
                             alt={p.title}
-                            className={`object-cover rounded-xl bg-nature-100 dark:bg-nature-900 ${
-                                asRow ? 'w-20 h-20 flex-shrink-0' : 'w-full h-[110px] mb-1'
-                            }`}
+                            className="object-cover rounded-xl bg-nature-100 dark:bg-nature-900 w-full h-[110px] mb-1"
                         />
                     ) : (
-                        <div className={`overflow-hidden rounded-xl ${asRow ? 'w-20 h-20 flex-shrink-0' : 'w-full h-[110px] mb-1'}`}>
-                            <CategoryTile kind="event" size={asRow ? 'thumb' : 'grid'} />
+                        <div className="overflow-hidden rounded-xl w-full h-[110px] mb-1">
+                            <CategoryTile kind="event" size="grid" />
                         </div>
                     )
                 )}
-                {asRow ? <span className="min-w-0 flex-1 flex flex-col gap-1">{lines}</span> : lines}
+                {lines}
             </button>
-            {copy?.from && <p data-testid="event-copy-line" className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyCardLine(copy.from)}</p>}
+            {copyLine && <p data-testid="event-copy-line" className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyLine}</p>}
             {rsvpOnCard && !visitor && !copy && <RsvpButtons rsvp={rsvp} />}
             {rsvpOnCard && rsvp.error && (
                 <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>

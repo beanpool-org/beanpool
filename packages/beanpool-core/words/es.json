@@ -1972,5 +1972,10 @@
     "one": "{n} persona cerca de ti ayudaría a empezar una comunidad.",
     "other": "{n} personas cerca de ti ayudarían a empezar una comunidad."
   },
-  "{zone} · {hemisphere}": "{zone} · {hemisphere}"
+  "{zone} · {hemisphere}": "{zone} · {hemisphere}",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Un jurado para el que te eligieron espera tu respuesta. Responde dentro de un día o tu lugar pasará al siguiente miembro elegido.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "El jurado en el que estás cierra en aproximadamente un día. Abre BeanPool para votar.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "El miembro sobre el que decide tu jurado respondió al caso. Abre BeanPool para leer la respuesta.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "Te eligieron para un jurado de tu comunidad y su votación cierra en menos de 2 días. Abre BeanPool para formar parte del jurado o hacerte a un lado.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "Te eligieron para un jurado de tu comunidad. Abre BeanPool en los próximos 3 días para formar parte del jurado o hacerte a un lado."
 }

@@ -69,14 +69,17 @@ describe("an event's page: the host is a box like a listing's \"Posted by\"", ()
         expect(name.className.split(/\s+/)).toEqual(expect.arrayContaining(['font-bold', 'text-nature-950', 'dark:text-white']));
     });
 
-    it('holds at 320 px with 130% text: the name truncates in a shrinking column, the button spans the card, the face is bigger than a 48 px target', () => {
+    it('holds at 320 px with 130% text: the name wraps whole in a shrinking column (never cut short), the button spans the card, the face is bigger than a 48 px target', () => {
         Object.defineProperty(window, 'innerWidth', { value: 320, configurable: true, writable: true });
         document.documentElement.style.fontSize = '130%';
         render(<div style={{ width: 320 }}><EventDetail post={{ ...event, authorCallsign: 'The Mullumbimby Community Gardens and Seed Library Collective' }} identity={identity} /></div>);
         const button = hostButton();
         expect(button.className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', 'text-left']));
         const name = within(button).getByText(/Mullumbimby Community Gardens/);
-        expect(name.className.split(/\s+/)).toContain('truncate');
+        // Seen in a shot at 320 px × 130%: with `truncate` a name was cut to "Damo (Th" with no ellipsis, so it wraps instead.
+        expect(name.className.split(/\s+/)).toContain('break-words');
+        expect(name.className.split(/\s+/)).not.toContain('truncate');
+        expect(name.textContent).toBe('🤝The Mullumbimby Community Gardens and Seed Library Collective');
         expect(name.parentElement!.className.split(/\s+/)).toEqual(expect.arrayContaining(['flex-1', 'min-w-0']));
         const face = within(button).getByRole('img') as HTMLImageElement;
         expect(Number(face.getAttribute('width'))).toBeGreaterThanOrEqual(48);
@@ -105,6 +108,22 @@ describe("an event's page: the host is a box like a listing's \"Posted by\"", ()
         expect(hostButton().textContent).toContain('📤 5.0');
         expect(hostButton().textContent).toContain('📥 4.5');
         expect(hostButton().textContent).not.toContain('No ratings yet');
+    });
+
+    // Found re-reading the diff: the hook kept the last host's stars when the page was handed another event, so a host whose
+    // ratings could not be read showed somebody else's.
+    it("a page handed another event never shows the last host's ratings on the new one", async () => {
+        ratings({ ratings: [], average: 4.8, count: 6, asProvider: { average: 5, count: 3 }, asReceiver: { average: 4.5, count: 3 } });
+        const { rerender } = render(<EventDetail post={event} identity={identity} />);
+        await waitFor(() => expect(hostButton().textContent).toContain('4.8 (6)'));
+        vi.mocked(api.getMemberRatings).mockReset();
+        vi.mocked(api.getMemberRatings).mockRejectedValue(new Error('offline'));
+        rerender(<EventDetail post={{ ...event, id: 'ev-2', authorPublicKey: 'ivy-pk', authorCallsign: 'Ivy', authorAvatarUrl: null }} identity={identity} />);
+        await waitFor(() => expect(api.getMemberRatings).toHaveBeenCalledWith('ivy-pk'));
+        await waitFor(() => expect(hostButton().textContent).toContain('Ivy'));
+        expect(hostButton().textContent).toContain('No ratings yet');
+        expect(hostButton().textContent).not.toContain('4.8');
+        expect(hostButton().textContent).not.toContain('📤');
     });
 
     it('a rating the node cannot give leaves "No ratings yet", never a broken page', async () => {

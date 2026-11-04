@@ -29,6 +29,8 @@ const NO_RATINGS: AuthorRatings = { average: 0, count: 0 };
 export function useMemberRatings(pubkey: string | null | undefined): AuthorRatings {
     const [ratings, setRatings] = useState<AuthorRatings>(NO_RATINGS);
     useEffect(() => {
+        // A page handed another person starts from nothing: never the last person's stars on this one, nor while theirs load.
+        setRatings(NO_RATINGS);
         if (!pubkey) return;
         let live = true;
         try {
@@ -77,8 +79,9 @@ export function AuthorCard({ label, pubkey, callsign, avatarUrl, loadingAvatar =
                     <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={56} className="border-2 border-white shadow-sm" />
                 )}
                 <div className="flex-1 min-w-0">
-                    <p className="font-bold text-lg text-nature-950 dark:text-white mb-0.5 truncate flex items-center gap-1.5">
-                        <span className="text-base text-amber-600">🤝</span> {callsign}
+                    {/* The whole name, wrapping beside the face at 320 px and 130% text: a name cut short ("Damo (Th") says nobody's name. */}
+                    <p className="font-bold text-lg text-nature-950 dark:text-white mb-0.5 break-words">
+                        <span className="text-base text-amber-600 mr-1.5">🤝</span>{callsign}
                     </p>
                     {/* Star rating */}
                     <p className="text-amber-500 text-sm mb-1.5 flex items-center flex-wrap gap-1">
@@ -93,7 +96,7 @@ export function AuthorCard({ label, pubkey, callsign, avatarUrl, loadingAvatar =
                                         </span>
                                     )}
                                     {ratings.asReceiver && ratings.asReceiver.count > 0 && (
-                                        <span className="ml-1 text-[0.65rem] bg-indigo-50 px-1.5 py-0.5 rounded text-indigo-700">
+                                        <span className="ml-1 text-[0.65rem] bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded text-indigo-700 dark:text-indigo-300">
                                             📥 {formatNumber(ratings.asReceiver.average, 1)}
                                         </span>
                                     )}

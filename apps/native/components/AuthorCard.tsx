@@ -41,6 +41,8 @@ interface AuthorCardProps {
     style?: StyleProp<ViewStyle>;
 }
 
+const NO_RATING: AuthorRating = { average: null, count: 0 };
+
 const renderBeans = (rating: number): string => {
     const r = Math.round(rating) || 0;
     return '★'.repeat(Math.min(r, 5)) + '☆'.repeat(Math.max(0, 5 - r));
@@ -54,8 +56,10 @@ const reviewsLine = (average: number, count: number) =>
  * an extra on its screen: a rating that cannot be read leaves it saying "No ratings yet", never an error.
  */
 export function useMemberRating(pubkey: string | null | undefined): AuthorRating {
-    const [rating, setRating] = useState<AuthorRating>({ average: null, count: 0 });
+    const [rating, setRating] = useState<AuthorRating>(NO_RATING);
     useEffect(() => {
+        // A screen handed another person starts from nothing: never the last person's stars on this one, nor while theirs load.
+        setRating(NO_RATING);
         if (!pubkey || isHiddenAuthor(pubkey)) return;
         let live = true;
         try {

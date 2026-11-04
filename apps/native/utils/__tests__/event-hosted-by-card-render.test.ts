@@ -182,6 +182,21 @@ describe("an event's own screen: the host is a box like a listing's \"POSTED BY\
         expect(styleOf(stars).color).toBe(lightColors.trust.star);
     });
 
+    // Found re-reading the diff: the hook kept the last host's stars when the screen was handed another event, so a host whose
+    // ratings could not be read showed somebody else's.
+    it("a screen handed another event never shows the last host's ratings on the new one", async () => {
+        rating.answer = { average: 4.8, count: 6 };
+        await draw();
+        expect(box()!.textContent).toContain('(4.8) • 6 Reviews');
+        rating.answer = 'unreadable';
+        await draw({ id: 'ev-2', author_pubkey: 'ivy0'.repeat(16), author_callsign: 'Ivy', author_avatar: null });
+        expect(rating.asked).toEqual([HOST_KEY, 'ivy0'.repeat(16)]);
+        expect(box()!.textContent).toContain('🤝 Ivy');
+        expect(box()!.textContent).toContain('☆☆☆☆☆ No ratings yet');
+        expect(box()!.textContent).not.toContain('4.8');
+        expect(box()!.textContent).not.toContain('Reviews');
+    });
+
     it('a rating the node cannot give leaves "No ratings yet", never a broken page', async () => {
         rating.answer = 'unreadable';
         await draw();

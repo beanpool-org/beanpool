@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { App } from './App';
@@ -7,7 +7,13 @@ import { App } from './App';
  * The two doors "Asked near you" and First steps open (cold-start N2): "See all Needs" takes the Market to its Needs pill, and
  * "Ask for one thing you'd pay a neighbour for" opens the composer on a Need (not on Offer, not on whatever it was last on).
  * HomePage.test.tsx pins the calls the real Home makes; here App takes them the way it takes the Events pill's.
+ *
+ * App's MapPage is React.lazy: the first test to render it gets the node from the commit that inserts it, before the mock's effect has
+ * taken the door and drawn the kind. So the kind is waited for (same expected value), never read once from `findByTestId`. Read once,
+ * it failed intermittently for whichever test rendered MapPage first: the Need test in the full file (merge queue run 41912953363),
+ * and either test run alone. The door itself was never lost: App passed `openNewPost` and `initialPostType: 'need'` to MapPage.
  */
+const composerKind = (kind: string) => waitFor(() => expect(screen.getByTestId('map-page')).toHaveAttribute('data-composer', kind));
 if (typeof window !== 'undefined') {
     window.matchMedia = window.matchMedia || vi.fn().mockImplementation(() => ({
         matches: false, media: '', onchange: null,
@@ -49,7 +55,7 @@ vi.mock('./pages/HomePage', () => ({
         <div data-testid="home-page">
             <button data-testid="home-asked-all" onClick={() => onNavigate('marketplace', 'needs')}>See all Needs</button>
             <button data-testid="home-step-need" onClick={() => onNavigate('map-post-need')}>Ask for one thing</button>
-            <button data-testid="home-step-offer" onClick={() => onNavigate('map-post')}>Post your first Offer</button>
+            <button data-testid="home-step-offer" onClick={() => onNavigate('map-post')}>Something else (the blank composer)</button>
         </div>
     ),
 }));
@@ -85,12 +91,14 @@ describe('App: the doors of Asked near you and First steps\' Need line', () => {
     it('Ask for one thing you\'d pay a neighbour for opens the composer on a Need', async () => {
         render(<App />);
         fireEvent.click(await screen.findByTestId('home-step-need'));
-        expect(await screen.findByTestId('map-page')).toHaveAttribute('data-composer', 'need');
+        await composerKind('need');
     });
 
-    it('Post your first Offer is as it was: the composer opens with no kind named', async () => {
+    // The blank composer's door ('map-post'): Something else on O2's starter dialog and a finished first-Offer step go here. The
+    // Offer step itself opens the starter dialog first (HomePage.test.tsx), so this door is the one that stays as it was.
+    it('the blank composer door is as it was: the composer opens with no kind named', async () => {
         render(<App />);
         fireEvent.click(await screen.findByTestId('home-step-offer'));
-        expect(await screen.findByTestId('map-page')).toHaveAttribute('data-composer', 'as it was');
+        await composerKind('as it was');
     });
 });

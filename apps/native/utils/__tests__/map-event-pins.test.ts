@@ -157,8 +157,9 @@ vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return { useTheme: () => ({ theme: 'light', colors: lightColors }), useStyles: (f: any) => f({ theme: 'light', colors: lightColors }) };
 });
-// The event card's colour, from its own source (below): the card itself is not drawn here.
-vi.mock('../../components/EventCard', () => ({ EVENT_ACCENT: '#7c3aed' }));
+// The event's pin card is the Market's own EventCard (components/MapPreviewCard.tsx, slice M1), drawn for real; whose phone
+// this is, nobody's here (no 👤 YOU, no hosting line).
+vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: null }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 vi.mock('expo-image', () => ({ Image: (props: { source?: { uri?: string } }) => createElement('img', { 'data-uri': props.source?.uri ?? '' }) }));
 vi.mock('../photo-refresh', () => ({ refreshListingAfterPhotoError: () => {} }));
@@ -177,7 +178,7 @@ vi.mock('../../components/FilterChipPicker', () => ({
 vi.mock('../maps', () => ({ HAS_MAPS_KEY: true }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => null }));
 vi.mock('../market-global', () => ({ marketShowsBeans: () => true }));
-vi.mock('../db', () => ({ getPosts: async () => posts.now }));
+vi.mock('../db', () => ({ getPosts: async () => posts.now, getMemberRatings: async () => ({ average: 0, count: 0 }) }));
 
 import MapScreen from '../../app/(tabs)/map';
 import { buildVariantList, EVENT_PIN, PIN_ANCHOR, pinCacheKey } from '../../components/UnifiedMapPin';
@@ -254,6 +255,8 @@ const bubbles = () => Array.from(host.querySelectorAll<HTMLElement>('[data-marke
 const heading = () => Array.from(host.querySelectorAll('span')).find((s) => /at this spot$/.test(s.textContent ?? ''))?.textContent ?? null;
 const rows = () => Array.from(host.querySelectorAll<HTMLElement>('[data-list] button'));
 const closeButton = () => host.querySelector<HTMLElement>('[data-list]')!.parentElement!.querySelector<HTMLElement>('button[aria-label="Close"]')!;
+/** An event's pin card is up: the one button the map draws for an event's card, named for the event (map-preview-opens-render). */
+const eventCardUp = () => host.querySelector('[data-testid="map-preview-open"][aria-label^="Open event: "]') !== null;
 
 describe('the event pin in the variant list (UnifiedMapPin)', () => {
     it('holds exactly one event pin, whatever the events: violet, a calendar, no emoji, no elder ring, a key of its own', () => {
@@ -361,7 +364,7 @@ describe('an event on the map (app/(tabs)/map.tsx)', () => {
         await drawMap();
         await act(async () => { markerAt(BEE)!.click(); });
         await settle();
-        expect(host.textContent).toContain('View event');
+        expect(eventCardUp()).toBe(true);
         expect(host.textContent).toContain(BEE.title);
     });
 });
@@ -659,7 +662,7 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
         await act(async () => { markerAt(BEE)!.click(); });
         await settle(2);
         expect(heading()).toBeNull();
-        expect(host.textContent).toContain('View event');
+        expect(eventCardUp()).toBe(true);
     });
 
     it('a tap on another bubble that zooms closes the list: it does not sit over the new place', async () => {
@@ -696,7 +699,7 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             await settle(2);
             expect(heading()).toBe('3 at this spot');
             expect(rows()).toHaveLength(3);
-            expect(host.textContent).not.toContain('View event');
+            expect(eventCardUp()).toBe(false);
             expect(maps.moves).toEqual([]);
         });
 
@@ -710,7 +713,7 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
                 await act(async () => { pin.click(); });
                 await settle(2);
                 expect(heading()).toBe('3 at this spot');
-                expect(host.textContent).not.toContain('View event');
+                expect(eventCardUp()).toBe(false);
             }
         });
 
@@ -722,7 +725,7 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             await act(async () => { hiddenPin(AT).click(); });
             await settle(2);
             expect(heading()).toBeNull();
-            expect(host.textContent).not.toContain('View event');
+            expect(eventCardUp()).toBe(false);
             expect(maps.moves).toHaveLength(1);
             const viaPin = maps.moves[0];
             await act(async () => { root.unmount(); });
@@ -740,7 +743,7 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             expect(opacityAt(BEE)).toBe('1');
             await act(async () => { markerAt(BEE)!.click(); });
             await settle(2);
-            expect(host.textContent).toContain('View event');
+            expect(eventCardUp()).toBe(true);
             expect(heading()).toBeNull();
         });
 
@@ -881,7 +884,7 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             await act(async () => { markerAt(AT)!.click(); });
             await settle(2);
             expect(heading()).toBe('3 at this spot');
-            expect(host.textContent).not.toContain('View event');
+            expect(eventCardUp()).toBe(false);
         });
 
         it('android: lifting a stack clear of the list keeps the view: a negative delta swaps west and east and shows the Atlantic', async () => {
@@ -1015,7 +1018,7 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
 
         describe("with a pin's card up (Marty, 2 Nov, on 1.2.89)", () => {
             const tapPin = async (p: { lat: number; lng: number }) => { await act(async () => { markerAt(p)!.click(); }); await settle(2); };
-            const cardOpen = () => (host.textContent ?? '').includes('View event');
+            const cardOpen = eventCardUp;
             /** About 1.1 km north of the stack: a long way off the view at the cap. */
             const away = () => ev('away', metresNorth(1100), AT.lng);
             /** About 60 m east of the stack: its own pin at the cap, and the stack still near the middle with this pin centred. */
@@ -1175,10 +1178,10 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             await stopAt(zoomedOut);
             await act(async () => { markerAt({ lat: metresNorth(120), lng: AT.lng })!.click(); });
             await settle(2);
-            expect(host.textContent).toContain('View event');
+            expect(eventCardUp()).toBe(true);
             await stopAt(CAP);
             expect(heading()).toBeNull();
-            expect(host.textContent).toContain('View event');
+            expect(eventCardUp()).toBe(true);
         });
 
         it('does not open over the category panel', async () => {

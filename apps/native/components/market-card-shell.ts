@@ -47,6 +47,8 @@ export function chipTones(colors: Colors): Record<CardChipRole, { bg: string; fg
 
 const LIST = MARKET_CARD_TYPE.list;
 const SLOT = SHELL.photo.list.width;
+const POP_UP = SHELL.popUp;
+const CLOSE = POP_UP.close;
 
 /** The box's styles for one theme. `useCardShell()` is this, made once per theme. */
 export function makeCardShell(colors: Colors) {
@@ -102,6 +104,41 @@ export function makeCardShell(colors: Colors) {
         distance: { ...cardType(LIST.distance), color: colors.text.secondary },
         /** Going ✓ / Interested ✓, You're hosting this event: words, never a control, in the event's ink. */
         mark: { ...cardType(LIST.mark), color: colors.tile.event.ink },
+        /** A listing's price at the end of its chip row: the amount (and its unit) 16/800. */
+        price: { ...cardType(LIST.price), color: colors.text.body },
+        /** An Elder's card: the gold left border (§1.1 variants). */
+        elder: { borderLeftWidth: SHELL.variant.elderBorderLeft, borderLeftColor: colors.trust.star },
+        /**
+         * The map's pin card (map.tsx, MapPreviewCard; slice M1): the same card, 16 in from the screen's edges, with the floating
+         * shadow in place of the card's own.
+         */
+        floating: {
+            margin: POP_UP.margin,
+            // The card's own gap under it is an edge of its own, and an edge outranks `margin`: set it too.
+            marginBottom: POP_UP.margin,
+            shadowOffset: { width: 0, height: SHELL.floatingShadow.offsetY },
+            shadowOpacity: SHELL.floatingShadow.opacity,
+            shadowRadius: SHELL.floatingShadow.blur,
+            elevation: SHELL.floatingShadow.elevation,
+        },
+        /** Its ✕: 28 round, 8 in from the card's top-right corner (the card sits 16 in), on the subtle ground. */
+        close: {
+            position: 'absolute',
+            top: POP_UP.margin + CLOSE.inset,
+            right: POP_UP.margin + CLOSE.inset,
+            width: CLOSE.size,
+            height: CLOSE.size,
+            borderRadius: CLOSE.size / 2,
+            backgroundColor: colors.surface.subtle,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        closeText: { ...cardType(CLOSE.type), color: colors.text.secondary },
+        /**
+         * The pin card's first row (the chips, and a listing's price) stops short of the ✕: the ✕ and an inset either side of it,
+         * less the text column's own padding.
+         */
+        clearOfClose: { marginRight: CLOSE.size + 2 * CLOSE.inset - SHELL.textPadding },
     });
     return { ...styles, tones: chipTones(colors) };
 }

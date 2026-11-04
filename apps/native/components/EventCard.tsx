@@ -38,11 +38,17 @@ interface EventCardProps {
     post: any;
     currentPubkey?: string | null;
     myLocation?: { lat: number; lng: number } | null;
+    /**
+     * The map's pin card (components/MapPreviewCard.tsx, slice M1): this same card, floating over the map with the ✕ the pop-up
+     * draws over its top-right corner. Its press is the pop-up's (it closes as the event opens), it keeps the name the map's card
+     * has always had ("Open event: {title}", map-preview-opens-render), and its chip row stops short of the ✕.
+     */
+    popUp?: { onOpen: () => void };
 }
 
 const count = (n: unknown): number => Number(n ?? 0) || 0;
 
-export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
+export function EventCard({ post, currentPubkey, myLocation, popUp }: EventCardProps) {
     const shell = useCardShell();
     const styles = useStyles(makeStyles);
 
@@ -81,14 +87,15 @@ export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
     const label = badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when })
         : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when })
         : t('Event: {title}, {when}', { title: post.title, when });
+    const named = popUp ? t('Open event: {title}', { title: post.title }) : label;
 
     return (
         <Pressable
-            style={[shell.card, shell.list]}
-            onPress={() => router.push(`/post/${post.id}`)}
+            style={[shell.card, shell.list, popUp && shell.floating]}
+            onPress={popUp ? popUp.onOpen : () => router.push(`/post/${post.id}`)}
             accessibilityRole="button"
-            accessibilityLabel={mark ? `${label}, ${mark}` : label}
-            testID={`event-card-${post.id}`}
+            accessibilityLabel={mark ? `${named}, ${mark}` : named}
+            testID={popUp ? 'map-preview-open' : `event-card-${post.id}`}
         >
             {/*
               * The host's photo in the list card's slot, exactly as the Offer card beside it draws its own (market.tsx list
@@ -107,7 +114,7 @@ export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
                 tileBox={shell.listPhotoBox}
             />
             <View style={shell.listText}>
-                <View style={[shell.chipRow, styles.chipRow]}>
+                <View style={[shell.chipRow, styles.chipRow, popUp && shell.clearOfClose]}>
                     <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
                     {isPostPinned(post) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
                     {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}

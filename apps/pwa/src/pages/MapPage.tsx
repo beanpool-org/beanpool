@@ -2656,7 +2656,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                         <span className={chip('quiet')}>{previewCategory.emoji} <span>{t(previewCategory.label)}</span></span>
                                     )}
                                 </span>
-                                <span id="map-preview-title-text" data-testid="map-preview-title" dir="auto" className={`block w-full min-w-0 break-words line-clamp-2 ${LIST_TYPE.loud} ${CARD_INK.title}`}>
+                                <span data-testid="map-preview-title" dir="auto" className={`block w-full min-w-0 break-words line-clamp-2 ${LIST_TYPE.loud} ${CARD_INK.title}`}>
                                     {previewPost.title}
                                 </span>
                                 <span data-testid="map-preview-near" className={`block w-full truncate ${LIST_TYPE.place} ${CARD_INK.secondary}`}>

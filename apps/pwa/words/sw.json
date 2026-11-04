@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Ujumbe huu haukuweza kuthibitishwa, kwa hivyo haujaonyeshwa.",
   "🗳️ Create Poll": "🗳️ Unda Kura ya Maoni",
   "🟢 List an Offer first to post Needs": "🟢 Orodhesha Ofa kwanza ili kuchapisha Mahitaji",
-  "🤝 Chosen": "🤝 Imechaguliwa"
+  "🤝 Chosen": "🤝 Imechaguliwa",
+  "Done. This is now your photo here.": "Imekamilika. Hii sasa ni picha yako hapa.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "Ni picha pekee inayonakiliwa. Jina lako na sehemu nyingine ya wasifu wako hapa vinabaki kama vilivyo.",
+  "Use the photo from {community} here?": "Tumia picha kutoka {community} hapa?",
+  "Use the photo you chose last here?": "Tumia picha uliyochagua mwisho hapa?",
+  "Use this photo here": "Tumia picha hii hapa"
 }

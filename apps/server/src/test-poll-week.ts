@@ -1,14 +1,15 @@
 /**
- * A MEMBER STARTS ONE POLL A WEEK (Marty, 4 Nov 2026, brainstorming spam on the Market: "limit votes to 1 active owned voting
+ * A MEMBER STARTS ONE COMMUNITY POLL A WEEK (Marty, 4 Nov 2026, brainstorming spam on the Market: "limit votes to 1 active owned voting
  * card per person ... and also 1 a week - otherwise people could just keep placing them and deleting them every day and their
  * voting card is always at the top every day"). The first half, one ACTIVE poll each, was already the rule
  * (engine/posts.ts assertActivePollRoom, held in test-owner-admin-limits and test-polls). This holds the second
  * (engine/poll-week.ts), on the real engine and its database, and the route both apps ask before they open the poll form,
  * through the real signed HTTPS middleware.
  *
- *   1. The week, counted from when each poll was STARTED: a second poll inside 7 days is refused in plain words naming the day
- *      it can start, 30 seconds inside the week is still refused, 30 seconds past it goes, and a member who never started one
- *      is told nothing.
+ *   1. The week, counted from when each poll was STARTED: a second poll inside 7 days is refused in plain words saying how long
+ *      to wait (hours up to two days, days after, rounded UP so it is never early, and never a calendar day: a node has no time
+ *      zone), 30 seconds inside the week is still refused, 30 seconds past it goes, and a member who never started one is told
+ *      nothing. The refusal is the same for a start at 09:00 in Sydney (UTC+11, the live nodes) as for any other hour.
  *   2. Whatever became of the first poll, it still counts: closed early, run out, taken down by its author (a cancel, the row
  *      stays), removed by a moderator, taken off the board by the retention archive, paused. The row is the log: none of them
  *      deletes it, which this checks so that a future hard delete cannot slip past.
@@ -19,7 +20,14 @@
  *   5. The route the apps ask (GET /api/marketplace/polls/next-start): nothing for a member who may start one now, the date
  *      after a poll, nothing for an owner or an admin, a refusal for a request with no signature, never cached.
  *   6. The refusal on the way out, through the route that creates a poll: in English as written, and with X-Language: fr in
- *      French with the day written the French way (core's date tables), not as 11 Nov 2026.
+ *      French, from the server's own catalog (the plural form for the number).
+ *   7. ONLY A POLL FOR THE WHOLE COMMUNITY COUNTS (Marty, 4 Nov ~22:40: the limit is about "real estate in the market place"): a
+ *      poll for one of the author's groups (audience_scope 'group') or for one person ('direct') is neither held nor counted, in
+ *      either order with a community poll; the one-open-poll rule still counts every audience; the route answers for community
+ *      polls only.
+ *   8. A Decision is no poll: the other kinds of vote (Decisions, removal and jury votes, a group's convenor vote, rekey and
+ *      enterprise succession) are not rows of `posts`. A member held to the week by a community poll starts a Decision, and one
+ *      who started a Decision starts a poll.
  *
  * An owner's assistant makes its polls through this same door as the owner: test-mcp-owner-polls section 12c.
  *
@@ -32,13 +40,16 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
-import { formatDate, LANGUAGE_HEADER } from '@beanpool/core';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { LANGUAGE_HEADER, pluralKey } from '@beanpool/core';
 import { setMemberPhoto } from '@beanpool/engine';
 import { initTls } from './services/tls.js';
 import { db } from './db/db.js';
-import { initStateEngine, createPost, closePoll, removePost, adminDeletePost, pausePost, resumePost } from './state-engine.js';
+import { initStateEngine, createPost, closePoll, removePost, adminDeletePost, pausePost, resumePost, createGroup, joinGroup, createDecision } from './state-engine.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
-import { nextPollStartAt, POLL_START_WINDOW_MS } from './engine/poll-week.js';
+import { assertPollStartRoom, nextPollStartAt, POLL_START_WINDOW_MS } from './engine/poll-week.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -47,7 +58,8 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
-const DAY = 24 * 60 * 60 * 1000;
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 
 interface Id { pub: string; priv: crypto.KeyObject }
 function makeMember(callsign: string): Id {
@@ -74,9 +86,13 @@ const startedAt = (id: string): string => (db.prepare('SELECT created_at FROM po
 /** The poll was started `ms` ago (its start and nothing else moves). */
 const startedAgo = (id: string, ms: number): void => { db.prepare('UPDATE posts SET created_at = ? WHERE id = ?').run(new Date(Date.now() - ms).toISOString(), id); };
 const status = (id: string): { status: string; active: number } => db.prepare('SELECT status, active FROM posts WHERE id = ?').get(id) as { status: string; active: number };
-const WEEK = /^You can start one poll a week\. Your next one can start on (\d{1,2} [A-Z][a-z]{2} \d{4})\.$/;
-/** The day of an instant as the node writes it into the sentence: English, the UTC day. */
-const dayOf = (iso: string, lang: 'en' | 'fr' = 'en'): string => formatDate(new Date(iso), 'day-month-year', { utc: true, lang });
+/** A poll for a group or for one person, as POST /api/marketplace/posts makes it. */
+const newScopedPoll = (author: string, options: Record<string, unknown>) => createPost('poll', 'community', `Which day ${++n}?`, '', 0, 'fixed', author, undefined, undefined, undefined, false, undefined, false,
+    { pollOptions: [{ id: '1', text: 'Saturday' }, { id: '2', text: 'Sunday' }], ...options })!;
+const P = 'You can start one community poll a week. Your next one can start in ';
+const WEEK = /^You can start one community poll a week\. Your next one can start in (\d+) (hours?|days?)\.$/;
+/** How long the refusal says to wait, in ms, or null when the text is not that sentence. */
+const saidWait = (message: string): number | null => { const m = WEEK.exec(message); return m ? Number(m[1]) * (m[2].startsWith('hour') ? HOUR : DAY) : null; };
 
 let BASE = '';
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
@@ -118,16 +134,52 @@ async function main(): Promise<void> {
     const again = refusal(() => newPoll(ann.pub));
     const said = WEEK.exec(again);
     assert(!!said, `a second poll straight after is refused in plain words (${again})`);
-    assert(said?.[1] === dayOf(new Date(Date.parse(startedAt(first.id)) + POLL_START_WINDOW_MS).toISOString()),
-        `naming the day it can start, 7 days from when the first was started (${said?.[1]})`);
+    assert(said?.[1] === '7' && said?.[2] === 'days', `saying how long to wait: 7 days from when the first was started (${said?.[1]} ${said?.[2]})`);
     startedAgo(first.id, POLL_START_WINDOW_MS - 30_000);
-    assert(WEEK.test(refusal(() => newPoll(ann.pub))), '30 seconds inside the week it is still refused: the week is counted from the start, to the second');
+    assert(refusal(() => newPoll(ann.pub)) === 'You can start one community poll a week. Your next one can start in 1 hour.', '30 seconds inside the week it is still refused, in 1 hour (singular, and never "0 hours"): the week is counted from the start, to the second');
     startedAgo(first.id, POLL_START_WINDOW_MS + 30_000);
     assert(nextPollStartAt(ann.pub) === null && refusal(() => newPoll(ann.pub)) === '', '30 seconds past the week a second poll goes');
     const second = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'").get(ann.pub) as { id: string };
     assert(!!second, 'and is up');
     // The one-active-poll rule keeps its words, ahead of the week's: a member with a poll up is told that, as before.
     assert(/^Rate limit: You can only have 1 active poll at a time$/.test(refusal(() => newPoll(ann.pub))), 'a member with a poll still up is told that first, in the words it always had');
+
+    // ── 1b. The wait is said in hours and days, rounded up, and never as a calendar day ──────────
+    console.log('\n--- 1b. How long, never which day ---');
+    const syd = makeMember('Syd');
+    const sydPoll = newPoll(syd.pub);
+    closePoll(sydPoll.id, syd.pub);
+    // Wed 4 Nov 2026 09:00 in Sydney (UTC+11) is 22:00 UTC the day before: a node on UTC named 10 Nov for a poll that frees on
+    // Wed 11 Nov at 09:00 Sydney (the deciding review of this PR, first round). It names no day now.
+    const sydStart = Date.parse('2026-11-03T22:00:00.000Z');
+    db.prepare('UPDATE posts SET created_at = ? WHERE id = ?').run(new Date(sydStart).toISOString(), sydPoll.id);
+    const sentenceAt = (nowMs: number): string => refusal(() => assertPollStartRoom(syd.pub, null, 'public', nowMs));
+    const oldTz = process.env.TZ;
+    try {
+        for (const tz of ['Australia/Sydney', 'Pacific/Auckland', 'America/Los_Angeles', 'UTC']) {
+            process.env.TZ = tz;
+            const early = sentenceAt(Date.parse('2026-11-04T00:00:00.000Z'));          // Wed 4 Nov 11:00 Sydney
+            const evening = sentenceAt(Date.parse('2026-11-10T06:00:00.000Z'));        // Tue 10 Nov 17:00 Sydney: the day the old sentence named
+            assert(early === 'You can start one community poll a week. Your next one can start in 7 days.', `${tz}: two hours after a 09:00 Sydney start the wait is 7 days, rounded up from 6 days 22 hours (${early})`);
+            assert(evening === 'You can start one community poll a week. Your next one can start in 16 hours.', `${tz}: on Tue 10 Nov at 17:00 Sydney, the day the UTC sentence named and refused, it says 16 hours (${evening})`);
+            assert(!/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b|20\d\d/.test(early + evening), `${tz}: neither names a day, a month or a year`);
+        }
+    } finally {
+        if (oldTz === undefined) delete process.env.TZ; else process.env.TZ = oldTz;
+    }
+    const edge = (leftMs: number): string => sentenceAt(sydStart + POLL_START_WINDOW_MS - leftMs);
+    assert(edge(48 * HOUR) === 'You can start one community poll a week. Your next one can start in 48 hours.', 'two days to the millisecond is still counted in hours');
+    assert(edge(48 * HOUR + 1) === 'You can start one community poll a week. Your next one can start in 3 days.', 'one millisecond more is 3 days, rounded up');
+    assert(edge(HOUR) === 'You can start one community poll a week. Your next one can start in 1 hour.' && edge(HOUR + 1) === 'You can start one community poll a week. Your next one can start in 2 hours.', 'an hour exactly is 1 hour, a millisecond more is 2 hours');
+    let neverEarly = true, fine = true;
+    for (let left = 1; left < POLL_START_WINDOW_MS; left += 37 * 60_000 + 11_111) {
+        const said = saidWait(edge(left));
+        const unit = left <= 48 * HOUR ? HOUR : DAY;
+        if (said === null || said < left) neverEarly = false;
+        if (said !== null && said - left >= unit) fine = false;
+    }
+    assert(neverEarly, 'across the whole week, what it says is never less than the time left (never early)');
+    assert(fine, 'and never more than one hour (up to two days) or one day (after) too much');
 
     // ── 2. Whatever became of the poll, it counts ────────────────────────────────────────────────
     console.log('\n--- 2. Taken down, it still counts ---');
@@ -178,7 +230,8 @@ async function main(): Promise<void> {
     revokeNodeRole(adm.pub, 'admin', owner.pub);
     const demoted = refusal(() => newPoll(adm.pub));
     assert(WEEK.test(demoted), `an admin made a member again is held by the poll they started as admin (${demoted})`);
-    assert(WEEK.exec(demoted)?.[1] === dayOf(new Date(Date.parse(startedAt(lastAdminPoll.id)) + POLL_START_WINDOW_MS).toISOString()), 'from the latest of their starts');
+    const demotedLeft = Date.parse(startedAt(lastAdminPoll.id)) + POLL_START_WINDOW_MS - Date.now();
+    assert((saidWait(demoted) ?? 0) >= demotedLeft && (saidWait(demoted) ?? Infinity) - demotedLeft < DAY, 'counted from the latest of their starts');
     grantNodeRole(adm.pub, 'admin', owner.pub);
     assert(refusal(() => newPoll(adm.pub)) === '', 'and made admin again, they are not held again at once');
     const moe = makeMember('Moe');
@@ -229,15 +282,121 @@ async function main(): Promise<void> {
     const cyPoll = newPoll(cy.pub);
     closePoll(cyPoll.id, cy.pub);
     const body = { type: 'poll', category: 'community', title: 'Again?', description: '', authorPublicKey: cy.pub, pollOptions: [{ id: 'a', text: 'Yes' }, { id: 'b', text: 'No' }], durationDays: 7 };
-    const due = new Date(Date.parse(startedAt(cyPoll.id)) + POLL_START_WINDOW_MS).toISOString();
-    const day = dayOf(due);
     const english = await post('/api/marketplace/posts', body, cy);
-    assert(english.status === 400 && english.body?.error === `You can start one poll a week. Your next one can start on ${day}.`, `in English: the sentence as written (${english.status} ${JSON.stringify(english.body)})`);
+    assert(english.status === 400 && english.body?.error === 'You can start one community poll a week. Your next one can start in 7 days.', `in English: the sentence as written (${english.status} ${JSON.stringify(english.body)})`);
     const french = await post('/api/marketplace/posts', body, cy, { [LANGUAGE_HEADER]: 'fr' });
-    const frDate = dayOf(due, 'fr');
-    assert(french.status === 400 && typeof french.body?.error === 'string' && french.body.error.includes(frDate) && !french.body.error.includes(day) && frDate !== day,
-        `with X-Language: fr, in French with the day the French way, ${frDate}, not ${day} (${french.body?.error})`);
+    const frCatalog = JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../words/fr.json'), 'utf8'));
+    const frForms = frCatalog[pluralKey(
+        'You can start one community poll a week. Your next one can start in {n} day.',
+        'You can start one community poll a week. Your next one can start in {n} days.',
+    )] as { other?: string } | undefined;
+    assert(!!frForms?.other && french.status === 400 && french.body?.error === frForms.other.replace('{n}', '7'),
+        `with X-Language: fr, the server's own French for 7 days (${french.body?.error})`);
     assert(french.body?.error !== english.body?.error && !/^You can start/.test(french.body?.error ?? ''), 'and the sentence is French');
+    // The plural form is the language's own for the number: Russian and Arabic have four and six. 20.5 hours left is 21 hours.
+    const forms = (lang: string, one: string, other: string) => JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), `../words/${lang}.json`), 'utf8'))[pluralKey(one, other)] as Record<string, string>;
+    const HOURS = [P + '{n} hour.', P + '{n} hours.'] as const;
+    const hoursLeft = async (hours: number, lang: string) => {
+        startedAgo(cyPoll.id, POLL_START_WINDOW_MS - Math.round((hours - 0.5) * HOUR));
+        return (await post('/api/marketplace/posts', body, cy, { [LANGUAGE_HEADER]: lang })).body?.error;
+    };
+    const ru = forms('ru', ...HOURS), ar = forms('ar', ...HOURS);
+    assert(await hoursLeft(21, 'ru') === ru.one.replace('{n}', '21'), `Russian 21 hours takes the "one" form (${ru.one})`);
+    assert(await hoursLeft(2, 'ru') === ru.few.replace('{n}', '2'), `2 hours the "few" form (${ru.few})`);
+    assert(await hoursLeft(5, 'ru') === ru.many.replace('{n}', '5'), `5 hours the "many" form (${ru.many})`);
+    assert(await hoursLeft(2, 'ar') === ar.two, `Arabic 2 hours the "two" form, which writes the number in words (${ar.two})`);
+    assert(await hoursLeft(5, 'ar') === ar.few.replace('{n}', '5'), `and 5 hours the "few" form (${ar.few})`);
+    assert(await hoursLeft(3, 'ja') === forms('ja', ...HOURS).other.replace('{n}', '3'), 'and Japanese, with no plural forms, its one');
+
+    // ── 7. Only a poll for the whole community counts ────────────────────────────────────────────
+    console.log('\n--- 7. A group\'s poll and one person\'s are not the community\'s ---');
+    const gil = makeMember('Gil');
+    const ned = makeMember('Ned');
+    const garden = createGroup({ name: 'Garden Crew', createdBy: gil.pub, joinPolicy: 'open' });
+    const inGarden = { audienceScope: 'group', targetGroupId: garden.id };
+    const toNed = { audienceScope: 'direct', targetPubkey: ned.pub };
+    const closeAll = (author: string) => db.prepare("UPDATE posts SET status = 'completed' WHERE author_pubkey = ? AND type = 'poll'").run(author);
+    const comm = newPoll(gil.pub);
+    closePoll(comm.id, gil.pub);
+    assert(WEEK.test(refusal(() => newPoll(gil.pub))), 'setup: Gil started a community poll, so a second one is refused');
+    const g1Said = refusal(() => newScopedPoll(gil.pub, inGarden));
+    assert(g1Said === '', `but a poll for his group goes straight after (${g1Said})`);
+    const g1 = db.prepare("SELECT id, audience_scope AS scope, target_group_id AS gid FROM posts WHERE author_pubkey = ? AND type = 'poll' AND audience_scope = 'group'").get(gil.pub) as { id: string; scope: string; gid: string };
+    assert(g1?.scope === 'group' && g1.gid === garden.id, 'and it is stored as the group\'s (audience_scope group, the group\'s id)');
+    assert(/^Rate limit: You can only have 1 active poll at a time$/.test(refusal(() => newScopedPoll(gil.pub, inGarden))) && /^Rate limit: You can only have 1 active poll at a time$/.test(refusal(() => newScopedPoll(gil.pub, toNed))),
+        'the one-open-poll rule still counts it: a second poll of any audience is refused while the group\'s is up, in the words it always had');
+    closePoll(g1.id, gil.pub);
+    assert(refusal(() => newScopedPoll(gil.pub, inGarden)) === '', 'once it is closed, another for the group goes: a group\'s polls are not held to the week');
+    closeAll(gil.pub);
+    assert(refusal(() => newScopedPoll(gil.pub, toNed)) === '', 'and one for a single person');
+    closeAll(gil.pub);
+    assert(nextPollStartAt(gil.pub) === new Date(Date.parse(startedAt(comm.id)) + POLL_START_WINDOW_MS).toISOString(),
+        'his next community poll is counted from the community poll, not from the group\'s or the person\'s that came after');
+    assert(WEEK.test(refusal(() => newPoll(gil.pub))), 'and a community poll is still refused, after all of them');
+
+    const hana = makeMember('Hana');
+    joinGroup(garden.id, hana.pub);
+    const hg = newScopedPoll(hana.pub, inGarden);
+    closePoll(hg.id, hana.pub);
+    assert(nextPollStartAt(hana.pub) === null, 'a member whose only poll was for a group is told nothing');
+    assert(refusal(() => newPoll(hana.pub)) === '', 'and starts a community poll straight after the group\'s (the other order)');
+    closeAll(hana.pub);
+    assert(WEEK.test(refusal(() => newPoll(hana.pub))), 'which then counts: a second community poll is refused');
+
+    const ivo = makeMember('Ivo');
+    const toNedPoll = newScopedPoll(ivo.pub, toNed);
+    closePoll(toNedPoll.id, ivo.pub);
+    assert((db.prepare('SELECT audience_scope AS s, target_pubkey AS t FROM posts WHERE id = ?').get(toNedPoll.id) as { s: string; t: string }).s === 'direct', 'setup: a poll for one person is stored as direct');
+    assert(nextPollStartAt(ivo.pub) === null && refusal(() => newPoll(ivo.pub)) === '', 'a poll for one person is not counted: Ivo starts a community poll straight after');
+
+    const olga = makeMember('Olga');
+    const olgaPoll = newPoll(olga.pub);
+    closePoll(olgaPoll.id, olga.pub);
+    assert((db.prepare('SELECT audience_scope AS s FROM posts WHERE id = ?').get(olgaPoll.id) as { s: string }).s === 'public' && nextPollStartAt(olga.pub) !== null,
+        'a poll started with no audience named is stored as public (the community\'s), and counts');
+    const lola = makeMember('Lola');
+    const lolaPoll = newPoll(lola.pub);
+    closePoll(lolaPoll.id, lola.pub);
+    db.prepare("UPDATE posts SET audience_scope = 'group', target_group_id = ? WHERE id = ?").run(garden.id, lolaPoll.id);
+    assert(nextPollStartAt(lola.pub) === null, 'a poll stored for a group is not counted, however it began');
+
+    const hanaComm = db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND type = 'poll' AND audience_scope = 'public'").get(hana.pub) as { id: string };
+    const route = await get(NEXT_START, hana);
+    assert(route.status === 200 && route.body?.nextAt === new Date(Date.parse(startedAt(hanaComm.id)) + POLL_START_WINDOW_MS).toISOString(),
+        `the route answers for community polls: Hana is told when her community poll's week ends (${JSON.stringify(route.body)})`);
+    const jon = makeMember('Jon');
+    joinGroup(garden.id, jon.pub);
+    closePoll(newScopedPoll(jon.pub, toNed).id, jon.pub);
+    closePoll(newScopedPoll(jon.pub, inGarden).id, jon.pub);
+    const jonRoute = await get(NEXT_START, jon);
+    assert(jonRoute.status === 200 && jonRoute.body?.nextAt === null, 'and tells Jon, who only started one for a person and one for a group, nothing');
+
+    // ── 8. A Decision is no poll ─────────────────────────────────────────────────────────────────
+    console.log('\n--- 8. Decisions and the other votes are not polls ---');
+    const trade = (a: string, b: string) => {
+        const now = new Date().toISOString();
+        db.prepare("INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at) VALUES (?, ?, ?, ?, 20, 'completed', ?, ?)")
+            .run(`tx-${crypto.randomBytes(4).toString('hex')}`, `post-${crypto.randomBytes(4).toString('hex')}`, a, b, now, now);
+    };
+    const dee = makeMember('Dee');
+    trade(dee.pub, ned.pub);
+    const deePoll = newPoll(dee.pub);
+    closePoll(deePoll.id, dee.pub);
+    const deeWaits = nextPollStartAt(dee.pub);
+    assert(WEEK.test(refusal(() => newPoll(dee.pub))) && deeWaits !== null, 'setup: Dee started a community poll this week, so another poll is refused');
+    const postsBefore = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c;
+    let decisionId = '';
+    const decisionSaid = refusal(() => { decisionId = createDecision({ authorPubkey: dee.pub, title: 'Freeze Ned\'s credit', description: 'He did not deliver the tools', touches: 'member', effect: 'freeze_credit', subject: ned.pub }).id; });
+    assert(decisionSaid === '' && decisionId !== '', `and the same week she starts a Decision: the week does not hold it (${decisionSaid})`);
+    assert((db.prepare('SELECT COUNT(*) AS c FROM decisions WHERE id = ?').get(decisionId) as { c: number }).c === 1
+        && (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as { c: number }).c === postsBefore
+        && (db.prepare('SELECT COUNT(*) AS c FROM posts WHERE id = ?').get(decisionId) as { c: number }).c === 0,
+        'the Decision is a row of decisions and adds no row to posts: it is no poll');
+    assert(nextPollStartAt(dee.pub) === deeWaits, 'it moves nothing of Dee\'s week');
+    const eli = makeMember('Eli');
+    trade(eli.pub, ned.pub);
+    const eliDecision = refusal(() => createDecision({ authorPubkey: eli.pub, title: 'Pause the lending shelf', description: 'Until the tools are counted', touches: 'member', effect: 'suspend_member', subject: ned.pub }));
+    assert(eliDecision === '' && nextPollStartAt(eli.pub) === null && refusal(() => newPoll(eli.pub)) === '', `and a member who started a Decision starts a poll straight after (${eliDecision})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run && !process.exitCode ? 0 : 1);

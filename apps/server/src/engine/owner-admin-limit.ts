@@ -9,9 +9,10 @@
  *   - enterprises started in any 24 hours (enterprisesPerDay, 3), and still running (enterprisesLive, 20);
  *   - upcoming events in a pool (engine/posts.ts EVENT_UPCOMING_CAP, 5), by the role of the member acting: a keeper's for
  *     an enterprise's events, the host's for a group's;
- *   - their own active polls (1). The node-wide 5 active polls stays as it is, for everyone. The one poll a WEEK a member may
- *     start (engine/poll-week.ts, 4 Nov) is not a number of theirs: an owner or admin is held to this setting and not to the
- *     week, but every poll they start is counted, so an admin made a member again waits out the week from their last;
+ *   - their own active polls (1). The node-wide 5 active polls stays as it is, for everyone. The one community poll a WEEK a
+ *     member may start (engine/poll-week.ts, 4 Nov) is not a number of theirs: an owner or admin is held to this setting and
+ *     not to the week, but every community poll they start is counted, so an admin made a member again waits out the week
+ *     from their last;
  *   - invites made in any 24 hours (invitesPerDay, 20; an offline ticket by its maker's role, when someone joins with it)
  *     and invites unused at once (invitesUnused, 50) (Marty, 31 Oct ~20:35);
  *   - links added to the Pulse by hand in any 24 hours (pulseSubmissionsPerDay, 50) (the same).

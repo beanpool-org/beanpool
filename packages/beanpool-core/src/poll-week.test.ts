@@ -3,7 +3,7 @@
  * (apps/server engine/poll-week.ts is the rule; apps/native NewPollModal and apps/pwa MapPage are the screens).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { POLL_NEXT_START_PATH, pollNextStartMs, pollWeekNotice } from './poll-week.js';
+import { POLL_NEXT_START_PATH, pollNextStartMs, pollWeekGroupNote, pollWeekNotice } from './poll-week.js';
 import { formatDate, setLanguage } from './words.js';
 
 const NOW = Date.parse('2026-11-04T12:00:00.000Z');
@@ -31,11 +31,17 @@ describe('pollNextStartMs', () => {
 });
 
 describe('pollWeekNotice', () => {
-    it('is the node\'s own sentence with the day in the member\'s calendar', () => {
+    it('says it is the community poll that is held, with the day in the member\'s calendar', () => {
         const at = NOW + 5 * DAY;
-        expect(pollWeekNotice(at)).toBe(`You can start one poll a week. Your next one can start on ${formatDate(new Date(at), 'weekday-day-month')}.`);
+        expect(pollWeekNotice(at)).toBe(`You can start one community poll a week. Your next one can start on ${formatDate(new Date(at), 'weekday-day-month')}.`);
     });
     it('writes the day with the weekday, the day and the month, and not the year or the time', () => {
         expect(pollWeekNotice(NOW + 2 * DAY)).toMatch(/start on [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}\.$/);
+    });
+});
+
+describe('pollWeekGroupNote', () => {
+    it('says a poll for one of the member\'s groups is still open to them, and points at the Group choice', () => {
+        expect(pollWeekGroupNote()).toBe('You can still start a poll for one of your groups. Choose Group above.');
     });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * A member starts one poll a week (Marty, 4 Nov 2026; the node's half is apps/server engine/poll-week.ts). The phone's poll
+ * A member starts one community poll a week (Marty, 4 Nov 2026; the node's half is apps/server engine/poll-week.ts). The phone's poll
  * form says it BEFORE the member types: when the node says their next poll can't start yet (GET /api/marketplace/polls/next-start),
  * the form opens as a notice with the day, in place of its fields and its Create. Drawn for real (NewPollModal, as
  * place-shown-roughly-render.test.ts draws a screen), in the light and the dark theme, at the floor's 320 dp window:
@@ -105,11 +105,13 @@ for (const dark of [false, true]) {
             node.next = at;
             await draw();
             expect(notice()).toBeTruthy();
-            expect(host.textContent).toContain(`You can start one poll a week. Your next one can start on ${formatDate(new Date(at), 'weekday-day-month')}.`);
+            expect(host.textContent).toContain(`You can start one community poll a week. Your next one can start on ${formatDate(new Date(at), 'weekday-day-month')}.`);
             expect(questionBox()).toBeFalsy();
             expect(host.querySelectorAll('input').length).toBe(0);
             expect(button('Create poll')).toBeFalsy();
             expect(button('Create')).toBeFalsy();
+            // The phone's poll form is the community's alone (no group choice), so it says nothing of a group poll it could not offer.
+            expect(host.textContent).not.toContain('one of your groups');
         });
 
         it('has a Close that closes it, and the header\'s Cancel still does', async () => {
@@ -125,7 +127,7 @@ for (const dark of [false, true]) {
         it('reads in the notice\'s own colours at 4.5:1 or more, and at a size that holds at 1.3x text', async () => {
             node.next = Date.now() + 3 * DAY;
             await draw();
-            const text = Array.from(host.querySelectorAll('span')).find((s) => s.textContent?.startsWith('You can start one poll a week'))!;
+            const text = Array.from(host.querySelectorAll('span')).find((s) => s.textContent?.startsWith('You can start one community poll a week'))!;
             const banner = text.closest('[data-bg]')!;
             expect(contrast(text.getAttribute('data-color')!, banner.getAttribute('data-bg')!)).toBeGreaterThanOrEqual(4.5);
             expect(Number(text.getAttribute('data-font'))).toBeGreaterThanOrEqual(14);
@@ -138,7 +140,7 @@ for (const dark of [false, true]) {
             expect(notice()).toBeFalsy();
             expect(questionBox()).toBeTruthy();
             expect(button('Create poll')).toBeTruthy();
-            expect(host.textContent).not.toContain('You can start one poll a week');
+            expect(host.textContent).not.toContain('You can start one community poll a week');
         });
 
         it('is asked each time the form opens, and not while it is shut or for a phone with no account', async () => {
@@ -172,6 +174,6 @@ describe('in French', () => {
         const day = formatDate(new Date(at), 'weekday-day-month');
         expect(day).not.toBe(formatDate(new Date(at), 'weekday-day-month', { lang: 'en' }));
         expect(host.textContent).toContain(day);
-        expect(host.textContent).not.toContain('You can start one poll a week');
+        expect(host.textContent).not.toContain('You can start one community poll a week');
     });
 });

@@ -1130,9 +1130,10 @@ router.post('/api/marketplace/posts/:id/other-answers/:answerId/remove', async (
 });
 
 /**
- * When the signer may next start a poll (engine/poll-week.ts), asked by both apps before they open the poll form so a
- * member who may not yet is told the date before typing a word: `{ nextAt }`, an ISO time, or null when they may now. Null
- * for an owner or admin too, whose limit is the Settings one. The signer's own answer, never another member's, so never cached.
+ * When the signer may next start a poll for the whole community (engine/poll-week.ts), asked by both apps before they open the
+ * poll form so a member who may not yet is told the date before typing a word: `{ nextAt }`, an ISO time, or null when they
+ * may now. A poll for a group or for one person is not counted, so it does not move this. Null for an owner or admin too, whose
+ * limit is the Settings one. The signer's own answer, never another member's, so never cached.
  */
 router.get('/api/marketplace/polls/next-start', async (ctx) => {
     const actor = ctx.state?.actor as string | undefined;

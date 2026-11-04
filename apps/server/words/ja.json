@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -956,5 +956,10 @@
   "The record is the one this laptop holds.": "記録は、このノートパソコンが保持しているものです。",
   "This laptop's key ends in {key}. Compare it with the poster.": "このノートパソコンの鍵は{key}で終わります。ポスターと見比べてください。",
   "Turn on airplane mode, then turn Wi-Fi back on.": "機内モードをオンにしてから、Wi-Fiをもう一度オンにしてください。",
-  "You can start one poll a week. Your next one can start on {date}.": "投票を始められるのは週に1件までです。次の投票は{date}から始められます。"
+  "You can start one community poll a week. Your next one can start in {n} hour.|You can start one community poll a week. Your next one can start in {n} hours.": {
+    "other": "コミュニティ投票を始められるのは週に1件までです。次の投票は{n}時間後から始められます。"
+  },
+  "You can start one community poll a week. Your next one can start in {n} day.|You can start one community poll a week. Your next one can start in {n} days.": {
+    "other": "コミュニティ投票を始められるのは週に1件までです。次の投票は{n}日後から始められます。"
+  }
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-b app words 4 Nov 2026, unreviewed); claude-sonnet-5-5 (review fixes: operators console name kept in English; lights-out hall words from main); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-b app words 4 Nov 2026, unreviewed); claude-sonnet-5-5 (review fixes: operators console name kept in English; lights-out hall words from main); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -963,5 +963,12 @@
   "The record is the one this laptop holds.": "Το αρχείο είναι αυτό που έχει αυτός ο φορητός υπολογιστής.",
   "This laptop's key ends in {key}. Compare it with the poster.": "Το κλειδί αυτού του φορητού υπολογιστή τελειώνει σε {key}. Συγκρίνετέ το με την αφίσα.",
   "Turn on airplane mode, then turn Wi-Fi back on.": "Ενεργοποιήστε τη λειτουργία πτήσης και μετά ενεργοποιήστε ξανά το Wi-Fi.",
-  "You can start one poll a week. Your next one can start on {date}.": "Μπορείτε να ξεκινήσετε μία ψηφοφορία την εβδομάδα. Η επόμενη μπορεί να ξεκινήσει: {date}."
+  "You can start one community poll a week. Your next one can start in {n} hour.|You can start one community poll a week. Your next one can start in {n} hours.": {
+    "one": "Μπορείτε να ξεκινήσετε μία κοινοτική ψηφοφορία την εβδομάδα. Η επόμενη μπορεί να ξεκινήσει σε {n} ώρα.",
+    "other": "Μπορείτε να ξεκινήσετε μία κοινοτική ψηφοφορία την εβδομάδα. Η επόμενη μπορεί να ξεκινήσει σε {n} ώρες."
+  },
+  "You can start one community poll a week. Your next one can start in {n} day.|You can start one community poll a week. Your next one can start in {n} days.": {
+    "one": "Μπορείτε να ξεκινήσετε μία κοινοτική ψηφοφορία την εβδομάδα. Η επόμενη μπορεί να ξεκινήσει σε {n} ημέρα.",
+    "other": "Μπορείτε να ξεκινήσετε μία κοινοτική ψηφοφορία την εβδομάδα. Η επόμενη μπορεί να ξεκινήσει σε {n} ημέρες."
+  }
 }

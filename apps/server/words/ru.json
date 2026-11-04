@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-b app words 4 Nov 2026, unreviewed); claude-sonnet-5-5 (review fixes: operators console name kept in English, section name; lights-out hall words from main); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-b app words 4 Nov 2026, unreviewed); claude-sonnet-5-5 (review fixes: operators console name kept in English, section name; lights-out hall words from main); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
@@ -977,5 +977,16 @@
   "The record is the one this laptop holds.": "Данные — те, что хранятся на этом ноутбуке.",
   "This laptop's key ends in {key}. Compare it with the poster.": "Ключ этого ноутбука заканчивается на {key}. Сравните его с плакатом.",
   "Turn on airplane mode, then turn Wi-Fi back on.": "Включите режим полёта, а затем снова включите Wi-Fi.",
-  "You can start one poll a week. Your next one can start on {date}.": "Начать опрос можно один раз в неделю. Следующий можно начать: {date}."
+  "You can start one community poll a week. Your next one can start in {n} hour.|You can start one community poll a week. Your next one can start in {n} hours.": {
+    "one": "Начать опрос сообщества можно один раз в неделю. Следующий можно начать через {n} час.",
+    "few": "Начать опрос сообщества можно один раз в неделю. Следующий можно начать через {n} часа.",
+    "many": "Начать опрос сообщества можно один раз в неделю. Следующий можно начать через {n} часов.",
+    "other": "Начать опрос сообщества можно один раз в неделю. Следующий можно начать через {n} часа."
+  },
+  "You can start one community poll a week. Your next one can start in {n} day.|You can start one community poll a week. Your next one can start in {n} days.": {
+    "one": "Начать опрос сообщества можно один раз в неделю. Следующий можно начать через {n} день.",
+    "few": "Начать опрос сообщества можно один раз в неделю. Следующий можно начать через {n} дня.",
+    "many": "Начать опрос сообщества можно один раз в неделю. Следующий можно начать через {n} дней.",
+    "other": "Начать опрос сообщества можно один раз в неделю. Следующий можно начать через {n} дня."
+  }
 }

@@ -10,7 +10,7 @@
  */
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
-import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines, pollWeekNotice } from '@beanpool/core';
+import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines, pollWeekGroupNote, pollWeekNotice } from '@beanpool/core';
 import { copyPriceLine, eventCopyOf } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { usePollNextStart } from '../lib/poll-week';
@@ -363,9 +363,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const nearbyLimits = useNearbyLimits(!!identity && showNewPost && newPostType === 'poll');
     const pollAuthorArea = useMyArea(showNewPost && newPostType === 'poll' && nearbyLimits !== null);
     const pollPlacelessNote = placelessListingNote(nearbyLimits !== null, pollAuthorArea);
-    // A member starts one poll a week: asked each time the Poll choice is open, so a member who can't yet reads the day in place
-    // of the form (nothing is held back while it is asked, or where the node can't say; the node checks at Create).
+    // A member starts one poll a week for the whole community: asked each time the Poll choice is open, so a member who can't yet
+    // reads the day in place of the form (nothing is held back while it is asked, or where the node can't say; the node checks at
+    // Create). A poll for one of the member's groups is not held to the week, so the notice stands only while the audience is
+    // Everyone, and says a group is still open to them. `pollWeekHolds` is that: it replaces the fields and the Create button.
     const pollWaitUntil = usePollNextStart(!!identity && showNewPost && newPostType === 'poll');
+    const pollWeekHolds = newPostType === 'poll' && pollWaitUntil !== null && audienceScope === 'public';
     const [newPostCategory, setNewPostCategory] = useState('general');
     const [newPostTags, setNewPostTags] = useState<string[]>([]);
     const [newPostFreeTags, setNewPostFreeTags] = useState<string[]>([]);
@@ -3222,9 +3225,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         )}
                     </div>
                 ) : newPostType === 'poll' ? (
-                    pollWaitUntil !== null ? (
+                    pollWeekHolds && pollWaitUntil !== null ? (
                     <p data-testid="poll-week-notice" role="status" className="m-0 mb-4 p-4 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/30 text-[15px] leading-relaxed font-semibold text-purple-900 dark:text-purple-100" style={{ overflowWrap: 'anywhere' }}>
                         🗳️ {pollWeekNotice(pollWaitUntil)}
+                        {userGroups.length > 0 && <span data-testid="poll-week-group-note" className="block mt-2 font-medium">{pollWeekGroupNote()}</span>}
                     </p>
                     ) : (
                     <div className="space-y-4 mb-4">
@@ -3660,7 +3664,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 )}
                 {alsoOnGlobal && newPostType !== 'event' && newPostType !== 'poll' && <TakeQuestionsTick checked={takesQuestions} onChange={setTakesQuestions} />}
 
-                {!(newPostType === 'poll' && pollWaitUntil !== null) && <button
+                {!pollWeekHolds && <button
                     onClick={handleCreatePost}
                     disabled={submitDisabled}
                     className={`w-full p-3 min-h-[48px] rounded-xl font-semibold transition-all ${

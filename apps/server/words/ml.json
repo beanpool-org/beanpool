@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-final: the last missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -963,5 +963,12 @@
   "This laptop's key ends in {key}. Compare it with the poster.": "ഈ ലാപ്ടോപ്പിന്റെ കീ {key}-ൽ അവസാനിക്കുന്നു. അത് പോസ്റ്ററുമായി താരതമ്യം ചെയ്യുക.",
   "Turn on airplane mode, then turn Wi-Fi back on.": "ഫ്ലൈറ്റ് മോഡ് ഓണാക്കുക, എന്നിട്ട് Wi-Fi വീണ്ടും ഓണാക്കുക.",
   "Open in the BeanPool app": "BeanPool ആപ്പിൽ തുറക്കുക",
-  "You can start one poll a week. Your next one can start on {date}.": "ആഴ്ചയിൽ ഒരു പോൾ മാത്രമേ നിങ്ങൾക്ക് തുടങ്ങാൻ കഴിയൂ. അടുത്തത് {date} മുതൽ തുടങ്ങാം."
+  "You can start one community poll a week. Your next one can start in {n} hour.|You can start one community poll a week. Your next one can start in {n} hours.": {
+    "one": "ആഴ്ചയിൽ ഒരു കമ്മ്യൂണിറ്റി പോൾ മാത്രമേ നിങ്ങൾക്ക് തുടങ്ങാൻ കഴിയൂ. അടുത്തത് {n} മണിക്കൂറിനു ശേഷം തുടങ്ങാം.",
+    "other": "ആഴ്ചയിൽ ഒരു കമ്മ്യൂണിറ്റി പോൾ മാത്രമേ നിങ്ങൾക്ക് തുടങ്ങാൻ കഴിയൂ. അടുത്തത് {n} മണിക്കൂറിനു ശേഷം തുടങ്ങാം."
+  },
+  "You can start one community poll a week. Your next one can start in {n} day.|You can start one community poll a week. Your next one can start in {n} days.": {
+    "one": "ആഴ്ചയിൽ ഒരു കമ്മ്യൂണിറ്റി പോൾ മാത്രമേ നിങ്ങൾക്ക് തുടങ്ങാൻ കഴിയൂ. അടുത്തത് {n} ദിവസത്തിനു ശേഷം തുടങ്ങാം.",
+    "other": "ആഴ്ചയിൽ ഒരു കമ്മ്യൂണിറ്റി പോൾ മാത്രമേ നിങ്ങൾക്ക് തുടങ്ങാൻ കഴിയൂ. അടുത്തത് {n} ദിവസത്തിനു ശേഷം തുടങ്ങാം."
+  }
 }

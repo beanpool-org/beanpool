@@ -1,7 +1,8 @@
 /**
- * A member starts one poll a week (the node's half: apps/server engine/poll-week.ts; the words and the reading of its answer:
+ * A member starts one community poll a week (the node's half: apps/server engine/poll-week.ts; the words and the reading of its answer:
  * @beanpool/core poll-week). The composer asks the node each time the Poll choice is open, so a member who cannot start one
- * yet is told the day in place of an empty form. The phone does the same in NewPollModal.
+ * yet is told the day in place of an empty form, while the poll is aimed at everyone (a poll for a group is not held to the
+ * week). The phone does the same in NewPollModal, whose poll is always the community's.
  */
 import { useEffect, useState } from 'react';
 import { getPollNextStart } from './api';

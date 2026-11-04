@@ -2213,8 +2213,10 @@ describe("the poll form's note for a placeless listing (S4)", () => {
     });
 });
 
-// A member starts one poll a week (apps/server engine/poll-week.ts; @beanpool/core poll-week): the composer asks the node when the
-// Poll choice is open, and a member who can't start one yet reads the day in place of the fields and the Create button.
+// A member starts one community poll a week (apps/server engine/poll-week.ts; @beanpool/core poll-week): the composer asks the node
+// when the Poll choice is open, and a member who can't start one yet reads the day in place of the fields and the Create button
+// while the audience is Everyone. A poll for one of their groups is not held to the week: the notice says so, and picking Group
+// gives the form back.
 describe("the poll form when the node says the next poll can't start yet", () => {
     beforeEach(() => {
         vi.restoreAllMocks();
@@ -2234,7 +2236,11 @@ describe("the poll form when the node says the next poll can't start yet", () =>
     afterEach(() => { resetCommunityInfoOnce(); setLanguage('en'); });
 
     const DAY = 86_400_000;
-    const SENTENCE = 'You can start one poll a week. Your next one can start on';
+    const SENTENCE = 'You can start one community poll a week. Your next one can start on';
+    const GROUP_NOTE = 'You can still start a poll for one of your groups. Choose Group above.';
+    const withGroups = () => vi.spyOn(api, 'getGroups').mockResolvedValue([
+        { id: 'grp-1', name: 'Garden Crew', viewerRole: 'member', viewerStatus: 'active' },
+    ] as any);
     async function openPoll(nextAt: number | null) {
         const asked = vi.spyOn(api, 'getPollNextStart').mockResolvedValue(nextAt);
         let view: ReturnType<typeof render> | undefined;
@@ -2295,7 +2301,32 @@ describe("the poll form when the node says the next poll can't start yet", () =>
         const { panel } = await openPoll(at);
         const text = within(panel).getByTestId('poll-week-notice').textContent ?? '';
         expect(text).toContain(formatDate(new Date(at), 'weekday-day-month'));
-        expect(text).not.toContain('You can start one poll a week');
+        expect(text).not.toContain('You can start one community poll a week');
+    });
+
+    it('says a group poll is still open when the member has a group, and nothing about groups when they have none', async () => {
+        const none = await openPoll(Date.now() + 5 * DAY);
+        expect(within(none.panel).getByTestId('poll-week-notice').textContent).not.toContain(GROUP_NOTE);
+        expect(within(none.panel).queryByTestId('poll-week-group-note')).toBeNull();
+        cleanup();
+        withGroups();
+        const some = await openPoll(Date.now() + 5 * DAY);
+        await waitFor(() => expect(within(some.panel).getByTestId('poll-week-group-note').textContent).toBe(GROUP_NOTE));
+        expect(within(some.panel).getByTestId('poll-week-notice').textContent).toContain(SENTENCE);
+    });
+
+    it('gives the form back for a group, and takes it away again for Everyone: the week is for the whole community', async () => {
+        withGroups();
+        const at = Date.now() + 5 * DAY;
+        const { panel } = await openPoll(at);
+        await waitFor(() => expect(within(panel).getByRole('button', { name: /Group \(1\)/ })).toBeTruthy());
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Group \(1\)/ })); });
+        expect(within(panel).queryByTestId('poll-week-notice')).toBeNull();
+        expect(within(panel).getByPlaceholderText('What should our community decide?')).toBeTruthy();
+        expect(within(panel).getByRole('button', { name: '🗳️ Create Poll' })).toBeTruthy();
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Everyone/ })); });
+        expect(within(panel).getByTestId('poll-week-notice').textContent).toContain(`${SENTENCE} ${formatDate(new Date(at), 'weekday-day-month')}.`);
+        expect(within(panel).queryByRole('button', { name: '🗳️ Create Poll' })).toBeNull();
     });
 });
 

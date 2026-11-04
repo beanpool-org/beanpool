@@ -7,8 +7,10 @@
  * - Duration selector: 3, 7 (default), or 14 days.
  * - Open vote: off by default, so the poll is anonymous (everyone sees only the totals). On, members see who chose
  *   what. Fixed once someone has voted (Marty, 2026-09-28).
- * - Rate limit awareness: 1 open poll per member, 5 per node, and one started a week per member. A member who cannot start
- *   one yet is told the day when the form opens, in place of its fields (the node's answer, @beanpool/core poll-week).
+ * - Rate limit awareness: 1 open poll per member, 5 per node, and one community poll started a week per member. A member who
+ *   cannot start one yet is told the day when the form opens, in place of its fields (the node's answer, @beanpool/core
+ *   poll-week). This form is always for the whole community, which is what the week counts; a poll for a group is not held to
+ *   it, and the phone has no group poll (the web composer does, and says so).
  * - Franchise: active members only, credit_frozen = 0.
  */
 
@@ -72,7 +74,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
     const nodeHasOther = nodeProfile?.features?.pollOther === true;
     const byArea = nearbyListingsOn(nodeProfile?.features);
     const placelessNote = placelessListingNote(byArea, useMyArea(visible && byArea, identity));
-    // A member starts one poll a week: asked each time the form opens, so a member who can't yet reads the day before typing a
+    // A member starts one community poll a week: asked each time the form opens, so a member who can't yet reads the day before typing a
     // word. Nothing is held back while it is asked, or when the node can't say (an older node, offline): the node checks at Create.
     const [waitUntil, setWaitUntil] = useState<number | null>(null);
     useEffect(() => {

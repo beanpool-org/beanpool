@@ -794,10 +794,11 @@ export function createPost(
         // An owner or admin acting (a keeper for an enterprise, by their own role) is held to the owners' "Owner and admin
         // limit" in place of a member's 1 active poll and 5 upcoming events (engine/owner-admin-limit.ts), read now.
         const ownersLimit = type === 'poll' || type === 'event' ? ownerAdminLimit(options?.createdBy ?? authorPublicKey) : null;
-        // One open at a time (assertActivePollRoom), then one started a week (assertPollStartRoom, engine/poll-week.ts): a member
-        // who closes or removes theirs has not made room for another until the week is up. This is the one door every new poll
-        // comes through, the apps' route and an owner's assistant alike; resumePost puts back the same poll, not a new one.
-        if (type === 'poll') { assertActivePollRoom(authorPublicKey, ownersLimit); assertPollStartRoom(authorPublicKey, ownersLimit, now); }
+        // One open at a time (assertActivePollRoom, any audience), then one started a week for the whole community
+        // (assertPollStartRoom, engine/poll-week.ts; a poll for a group or for one person is not held to it): a member who closes
+        // or removes theirs has not made room for another community poll until the week is up. This is the one door every new
+        // poll comes through, the apps' route and an owner's assistant alike; resumePost puts back the same poll, not a new one.
+        if (type === 'poll') { assertActivePollRoom(authorPublicKey, ownersLimit); assertPollStartRoom(authorPublicKey, ownersLimit, audienceScope, now); }
 
         if (type === 'event') {
             // Upcoming cap (§2.2). Three separate pools: a group's events count against the group, and

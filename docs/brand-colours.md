@@ -66,6 +66,9 @@ matches the file.
 | `commit.fill` | `#047857` | `#047857` |
 | `commit.hover` | `#065f46` | `#065f46` |
 | `commit.on` | `#ffffff` | `#ffffff` |
+| `event.fill` | `#6d28d9` | `#6d28d9` |
+| `event.hover` | `#5b21b6` | `#5b21b6` |
+| `event.on` | `#ffffff` | `#ffffff` |
 | `action.fill` | `#c2410c` | `#c2410c` |
 | `action.hover` | `#9a3412` | `#9a3412` |
 | `action.on` | `#ffffff` | `#ffffff` |
@@ -189,6 +192,7 @@ matches the file.
 | `ink.warning` | `#92400e` | `#fbbf24` |
 | `ink.accent` | `#5b6b5b` | `#c0ccc0` |
 | `ink.terra` | `#a3472e` | `#e5967f` |
+| `ink.event` | `#5b21b6` | `#c4b5fd` |
 | `ink.info` | `#2563eb` | `#93c5fd` |
 | `map.ring` | `#92400e` | `#d4a24e` |
 
@@ -198,6 +202,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 |---|---|---|---|
 | `cta` | Start a community, + ADD POST, Save | 4.89 / hover 6.00 | same |
 | `commit` | Accept, Send Beans, Message, Join; the phone's `brand.fill` | 5.48 / 7.68 | same |
+| `event` | an event's answer: the chosen Going / Interested, Edit event, Let in ✓ (white words; `ink.event` is the same violet as words) | 7.10 / hover 8.98 | same |
 | `action` | the phone's floating + button, the Need toggle | 5.18 / 7.31 | same |
 | `danger` | Submit report, Remove, Delete, alert badges | 6.47 / 8.31 | same |
 | `info` | the web's onboarding blue: Next, Join, Open, Install, Save my area | 5.17 / hover 6.70 | same |
@@ -219,6 +224,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `ink.warning` | gold as words: Action Required, tips, nudges | 6.17 | 6.42 |
 | `ink.accent` | the sage accent as words and icons | 4.94 | 6.45 |
 | `ink.terra` | terracotta as words: the manager's links, labels, hovered titles | 5.22 | 4.60 |
+| `ink.event` | the event violet as words and outlines: when, the answer's outline and words, "You're hosting" (the `tile.event` inks) | 7.82 | 5.81 |
 | `ink.info` | the onboarding blue as words, outlines, rings, progress (web only, judged on the web's grounds: `WEB_ONLY_INKS`) | 4.71 | 5.95 |
 | `map.ring` | a community's area on a map, a thin dashed line and never words: judged at 3:1 on the map's own grounds (`MAP_GROUNDS`), and read with the map's theme, not the app's (`areaRingColour`); the web and the manager only have OSM's light map, so they draw the light one in both themes | 4.18 | 3.65 |
 

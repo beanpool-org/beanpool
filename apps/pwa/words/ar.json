@@ -4970,7 +4970,6 @@
   "Your community’s server didn’t answer, so this payment may have gone through. Press Try again: the same payment is never paid twice. If you change it or leave this page, check your Ledger before you pay again.": "لم يردّ خادم مجتمعك، لذا ربما تمت هذه الدفعة. اضغط «إعادة المحاولة»: لا تُدفع الدفعة نفسها مرتين أبدًا. إذا غيّرتها أو غادرت هذه الصفحة، فتحقق من «السجل» قبل أن تدفع مجددًا.",
   "Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.": "رفض خادم مجتمعك هذه الدفعة دون توضيح السبب، لذا لم يتم دفع شيء. حاول مجددًا بعد دقيقة.",
   "Your credit opens with a first trade.": "يفتح حدك الائتماني مع أول معامله لك.",
-  "Your deals": "صفقاتك",
   "Your deals in progress ›": "صفقاتك الجارية ›",
   "Your enterprise": "مبادرتك",
   "Your first message goes to {name} as a request. You can write more once they accept.": "تذهب رسالتك الأولى إلى {name} كطلب. يمكنك كتابة المزيد بعد أن يقبل.",

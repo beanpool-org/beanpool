@@ -4386,7 +4386,6 @@
   "Your community’s server didn’t answer, so this payment may have gone through. Press Try again: the same payment is never paid twice. If you change it or leave this page, check your Ledger before you pay again.": "سرور جامعه‌تان پاسخ نداد، پس ممکن است این پرداخت انجام شده باشد. «تلاش دوباره» را بزنید: همان پرداخت هرگز دو بار پرداخت نمی‌شود. اگر آن را تغییر دهید یا این صفحه را ترک کنید، پیش از اینکه دوباره پرداخت کنید «دفتر کل» خود را بررسی کنید.",
   "Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.": "سرور جامعه شما این پرداخت را بدون ذکر دلیل رد کرد، بنابراین چیزی پرداخت نشد. یک دقیقه دیگر دوباره امتحان کنید.",
   "Your credit opens with a first trade.": "اعتبار شما با اولین معامله باز می‌شود.",
-  "Your deals": "معاملات شما",
   "Your deals in progress ›": "معاملات در جریان شما ›",
   "Your enterprise": "طرح تجاری شما",
   "Your first message goes to {name} as a request. You can write more once they accept.": "نخستین پیام شما به‌صورت درخواست به {name} می‌رسد. بعد از اینکه بپذیرد می‌توانید بیشتر بنویسید.",

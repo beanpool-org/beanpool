@@ -128,11 +128,14 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
     const mark = hosting ? t("You're hosting this event") : answer;
     const counts = !mark && !copy && (going > 0 || interested > 0) ? formatRsvpCounts(going, interested) : null;
 
-    // An ended event's name ends with the chip's own word, as the grid's lock and mark follow its name.
-    const stateLabel = (whenSaid: string) => badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when: whenSaid })
-        : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when: whenSaid })
-        : badge === 'ENDED' ? `${t('Event: {title}, {when}', { title: post.title, when: whenSaid })}, ${t('ENDED', undefined, 'event')}`
-        : t('Event: {title}, {when}', { title: post.title, when: whenSaid });
+    // An ended event's name is the event's, then the chip's own word, each whole, as the tile's name lists its lock and mark.
+    const endedWord = badge === 'ENDED' ? t('ENDED', undefined, 'event') : null;
+    const stateLabel = (whenSaid: string) => {
+        if (badge === 'CANCELLED') return t('Event: {title}, {when}, cancelled', { title: post.title, when: whenSaid });
+        if (badge === 'UPDATED') return t('Event: {title}, {when}, updated', { title: post.title, when: whenSaid });
+        const named = t('Event: {title}, {when}', { title: post.title, when: whenSaid });
+        return [named, endedWord].filter(Boolean).join(', ');
+    };
     const label = stateLabel(when);
     const pinned = isPostPinned(post);
 
@@ -241,6 +244,8 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
             : badge === 'ENDED' ? t('ENDED', undefined, 'event')
             : badge === 'UPDATED' ? t('UPDATED', undefined, 'event')
             : null;
+        // The chip row's words, each whole and in its chip's ink, then ' · ' (the separator every line on the card uses).
+        const pinWord = pinned ? t('📌 PINNED') : null;
         const lineThree = pinned || !!stateWord || !!rowPlace || !!lock;
         return (
             <Pressable
@@ -266,7 +271,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                     <Text testID="event-when" style={[shell.compactLine, styles.compactWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{rowWhen}</Text>
                     {lineThree && (
                         <Text style={shell.compactLine} numberOfLines={1} testID="event-row-place">
-                            {pinned && <Text testID="pinned-chip" style={shell.compactPinned}>{t('📌 PINNED')} · </Text>}
+                            {!!pinWord && <Text testID="pinned-chip" style={shell.compactPinned}>{pinWord} · </Text>}
                             {!!stateWord && <Text testID="event-state-chip" style={badge === 'UPDATED' ? shell.compactMark : styles.compactDanger}>{stateWord} · </Text>}
                             {!!lock && '🔒 '}
                             {rowPlace}

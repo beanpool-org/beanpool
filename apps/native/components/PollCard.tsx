@@ -284,6 +284,8 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
         const chosenText = chosen ? (chosen.other ? pollOtherLines.other() : chosen.text) : null;
         const rowMark = chosenText ? t('{label} ✓', { label: chosenText }) : null;
         const status = formatTimeRemaining();
+        // 📌 PINNED whole, in its chip's ink, then ' · ' (the separator every line on a card uses).
+        const pinWord = pinned ? t('📌 PINNED') : null;
         return (
             <Pressable
                 style={shell.compactRow}
@@ -298,7 +300,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                 <View style={shell.compactText}>
                     <Text style={shell.compactTitle} numberOfLines={1}>{livePost.title}</Text>
                     <Text testID="poll-row-line" style={shell.compactLine} numberOfLines={2}>
-                        {pinned && <Text testID="pinned-chip" style={shell.compactPinned}>{t('📌 PINNED')} · </Text>}
+                        {!!pinWord && <Text testID="pinned-chip" style={shell.compactPinned}>{pinWord} · </Text>}
                         <Text testID="poll-status">{status}</Text>
                         {!!rowMark && <Text testID="poll-mark" style={shell.compactMark}> · {rowMark}</Text>}
                     </Text>

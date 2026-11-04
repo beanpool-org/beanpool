@@ -26,7 +26,10 @@ import { word, type WordKey } from './words.js';
  * How a draft is priced. `hourly`, `daily` and `fixed` are the composer's own price types. `free` is a `fixed` price of
  * nothing (the Tool shed's List sheet makes a Free fee the same way: its `postPriceType` is `fixed`, its credits 0), and a
  * draft that can be lent is always `free`. `daily` is for hire by the day: the pricing guide prices every tool and trailer
- * that way, and the figure the sheet shows must be a figure per the same unit the composer will set.
+ * that way, and the figure the sheet shows must be a figure per the same unit the composer will set. It is also for what the
+ * guide prices per night and the draft sells for a stay of dates the member agrees (house sitting, pet sitting, a tent spot):
+ * the composer has no per-night type, and a Total would read as the whole stay at one night's price. A draft that sells one
+ * night itself ("Spare room for a night", "Movie night kit") is a `fixed` price, and says so in its title.
  */
 export type StarterPriceType = 'hourly' | 'daily' | 'fixed' | 'free';
 
@@ -41,8 +44,9 @@ export interface StarterOffer {
     lendable?: boolean;
     /**
      * English words that find this draft's figure in the pricing guide, never shown and never translated:
-     * `pricingHintFor(items, draft.category, draft.guide)` gives the guide's price in Beans, in the same unit as
-     * `priceType`. The draft's own title cannot do it: it is shown in the member's language, and "An hour of help" shares
+     * `pricingHintFor(items, draft.category, draft.guide)` gives the guide's price in Beans as `credits`. Take only that
+     * figure and the draft's own `priceType`: the hint's `priceType` turns a per-night price into a Total, and the draft's
+     * is `daily`. The draft's own title cannot do it: it is shown in the member's language, and "An hour of help" shares
      * no telling word with any item in the guide. Absent on a `free` draft, and on a paid one only where the guide has no
      * item in the category at all (Health & Wellness, Mindset & Wisdom): the sheet shows no figure for it and the
      * composer's own "View the Community Pricing Guide" is the member's to open.
@@ -78,7 +82,7 @@ export const STARTER_OFFERS: Readonly<Record<PricingCategory, readonly StarterOf
     labour: [
         { title: word('An hour of help'), description: word('An extra pair of hands for jobs around the house or yard. Tell me what and when.'), priceType: 'hourly', guide: 'Moving Heavy Lifting Help' },
         { title: word('Cleaning and tidying'), description: word('A thorough clean or tidy-up of your home. Tell me what needs doing and when.'), priceType: 'hourly', guide: 'General House Cleaning' },
-        { title: word('House sitting'), description: word('I can mind your home while you are away: plants, pets and the mail.'), priceType: 'fixed', guide: 'House Property Sitting' },
+        { title: word('House sitting'), description: word('I can mind your home while you are away: plants, pets and the mail.'), priceType: 'daily', guide: 'House Property Sitting' },
     ],
     tools: [
         { title: word('Lend a tool'), description: word('A tool from my shed, free to borrow. Message me to say which one and for how long.'), priceType: 'free', lendable: true },
@@ -97,7 +101,7 @@ export const STARTER_OFFERS: Readonly<Record<PricingCategory, readonly StarterOf
     ],
     housing: [
         { title: word('Spare room for a night'), description: word('A guest room with clean linen. Message me for dates and what is shared.'), priceType: 'fixed', guide: 'Guest Room Night' },
-        { title: word('A place to camp'), description: word('A quiet grassy spot for a tent, with water nearby. Message me for dates.'), priceType: 'fixed', guide: 'Tent Campsite Acreage' },
+        { title: word('A place to camp'), description: word('A quiet grassy spot for a tent, with water nearby. Message me for dates.'), priceType: 'daily', guide: 'Tent Campsite Acreage' },
         { title: word('Workshop bench time'), description: word('Use of my workbench, vice and hand tools for the day. Message me to book.'), priceType: 'daily', guide: 'Workshop Bench Access' },
     ],
     transport: [
@@ -127,7 +131,7 @@ export const STARTER_OFFERS: Readonly<Record<PricingCategory, readonly StarterOf
     ],
     animals: [
         { title: word('Dog walking'), description: word('I can walk your dog while you are out or away. Message me about your dog.'), priceType: 'fixed', guide: 'Dog Walking Pack Walk' },
-        { title: word('Pet sitting'), description: word('Feeding, walks and cuddles while you are away. Message me for dates.'), priceType: 'fixed', guide: 'House Property Sitting' },
+        { title: word('Pet sitting'), description: word('Feeding, walks and cuddles while you are away. Message me for dates.'), priceType: 'daily', guide: 'House Property Sitting' },
         { title: word('Eggs from my hens'), description: word('Fresh eggs from my hens, by the dozen. Message me to arrange pickup.'), priceType: 'fixed', guide: 'Free-range Eggs Dozen' },
     ],
     tech: [

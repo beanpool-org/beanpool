@@ -1,10 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PRICING_CATALOG, PRICING_CATEGORIES, pricingHintFor, type PricingCategory } from '../pricing-catalog.js';
+import { DEFAULT_PRICING_CATALOG, PRICING_CATEGORIES, pricingItemFor, type PricingCategory } from '../pricing-catalog.js';
 import {
     STARTER_FALLBACK_CATEGORIES, STARTER_OFFERS, STARTER_OFFER_COUNT, starterOffersFor, type StarterDraft, type StarterOffer,
 } from '../starter-offers.js';
 
 const CATEGORY_IDS = PRICING_CATEGORIES.map((c) => c.id);
+/**
+ * What a guide unit means to a member who reads the composer's price type beside the figure. The composer's types are
+ * Total, / Hr, / Dy, / Wk and / Mo. A unit that is a span of time is priced per that span; a night has no type of its
+ * own, so a draft that sells a stay of several nights opens at the day rate, and a draft that sells one night is a Total
+ * and says so in its title (checked below). Any other unit counts things
+ * (a loaf, a trip, a job, an event): one price, a Total. A unit not named here fails the test until someone says what it
+ * means, so a new "per fortnight" can't slip through as a Total.
+ */
+const PER_SPAN: Record<string, 'hourly' | 'daily' | 'weekly' | 'monthly'> = { hr: 'hourly', day: 'daily', night: 'daily', week: 'weekly', month: 'monthly' };
+const ONE_PRICE_UNITS = [
+    'loaf', 'plate', 'jar', 'service', 'set', 'each', 'slab', 'punnet', 'trailer', 'tree', 'trip', 'session', 'class', 'seat',
+    'bundle', 'walk', 'dozen', 'job', 'project', 'm³', 'bag', 'event',
+];
 const ids = (drafts: readonly StarterDraft[]) => drafts.map((d) => d.id);
 const ALL: { category: PricingCategory; position: number; offer: StarterOffer }[] = CATEGORY_IDS.flatMap((category) =>
     STARTER_OFFERS[category].map((offer, position) => ({ category, position, offer })));
@@ -49,7 +62,7 @@ describe('starter drafts: the table (design DESIGN-cold-start-trades-fable.md §
         }
     });
 
-    it("a draft is priced the way the pricing guide prices it, in the same unit the composer will set", () => {
+    it("a draft is priced the way the pricing guide prices it: the figure and the price type the composer opens with say the same thing", () => {
         const guided = CATEGORY_IDS.filter((c) => DEFAULT_PRICING_CATALOG.some((i) => i.category === c));
         for (const { category, position, offer } of ALL) {
             const at = `${category}.${position + 1} ${offer.title}`;
@@ -63,10 +76,41 @@ describe('starter drafts: the table (design DESIGN-cold-start-trades-fable.md §
                 expect(guided, `${at} has no guide words, but the guide has items in ${category}`).not.toContain(category);
                 continue;
             }
-            const hint = pricingHintFor(DEFAULT_PRICING_CATALOG, category, offer.guide);
-            expect(hint, `${at}: the guide finds nothing for "${offer.guide}"`).not.toBeNull();
-            expect(hint!.credits, at).toBeGreaterThan(0);
-            expect(hint!.priceType, `${at}: the figure is per ${hint!.priceType}, the draft ${offer.priceType}`).toBe(offer.priceType);
+            const item = pricingItemFor(DEFAULT_PRICING_CATALOG, category, offer.guide);
+            expect(item, `${at}: the guide finds nothing for "${offer.guide}"`).not.toBeNull();
+            expect(item!.priceBeans, at).toBeGreaterThan(0);
+            const unit = item!.unit ?? '';
+            // This reads the guide item's own unit, not `pricingHintFor`'s price type: that turns a unit it has no type for
+            // ("night") into one price, and a test against it would agree with the mistake it is here to catch.
+            expect(Object.keys(PER_SPAN).includes(unit) || ONE_PRICE_UNITS.includes(unit),
+                `${at}: the guide prices it per "${unit}": say here what that means to a member`).toBe(true);
+            if (unit === 'night' && offer.priceType === 'fixed') {
+                // A Total is honest for a night only where the draft sells that one night, and its own title says so.
+                expect(offer.title, `${at}: ${item!.priceBeans} is the price of one night, but the composer opens it as a Total`).toMatch(/\bnight\b/i);
+                continue;
+            }
+            const meant = PER_SPAN[unit] ?? 'fixed';
+            expect(offer.priceType, `${at}: the guide's ${item!.priceBeans} is per ${unit}, so a member reads it as ${meant}, and the draft opens as ${offer.priceType}`).toBe(meant);
+        }
+    });
+
+    it("the three drafts that sit or camp for a stay carry the guide's nightly figure as a day rate, never as a Total", () => {
+        const rate = (id: string) => {
+            const [category, position] = id.split('.');
+            const offer = STARTER_OFFERS[category as PricingCategory][Number(position) - 1];
+            const item = pricingItemFor(DEFAULT_PRICING_CATALOG, category, offer.guide!)!;
+            return { offer, item };
+        };
+        for (const id of ['labour.3', 'housing.2', 'animals.2']) {
+            const { offer, item } = rate(id);
+            expect(item.unit, id).toBe('night');
+            expect(offer.priceType, `${id} ${offer.title}: ${item.priceBeans} a night must not open as a Total`).toBe('daily');
+        }
+        // The two that really are one night (a guest room for a night, an outdoor movie night) stay a Total.
+        for (const id of ['housing.1', 'general.3']) {
+            const { offer, item } = rate(id);
+            expect(item.unit, id).toBe('night');
+            expect(offer.priceType, id).toBe('fixed');
         }
     });
 

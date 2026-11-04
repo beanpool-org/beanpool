@@ -1,13 +1,15 @@
 /**
- * "Invite and share" on a listing or an event, beside the Share buttons (Marty, 3 Nov): one button that invites a friend and
- * brings them to that listing once they have joined. It makes an ordinary invite (the node makes the code), with the Vouch for
- * them choice of the People tab for someone who can vouch (None unless they choose), and hands the share sheet the listing's
- * title and `{community}/?invite={code}&post={id}` (utils/invite-and-share.ts).
+ * "Invite and share" on a listing or an event (Marty, 3 Nov): one way in the Share sheet (components/SharePost.tsx ShareButton,
+ * DESIGN-detail-pages-fable.md §2.5) that invites a friend and brings them to that listing once they have joined. It makes an
+ * ordinary invite (the node makes the code), with the Vouch for them choice of the People tab for someone who can vouch (None
+ * unless they choose), and hands the share sheet the listing's title and `{community}/?invite={code}&post={id}`
+ * (utils/invite-and-share.ts).
  *
- * Drawn only where this member may invite: the community takes invites and its door lets them (an admin-only door asks their
- * role), and they are no guest. Where they can't, nothing: asking an admin is another slice. An invite works once, for one
- * person, and the line under the button says so. With no answer from the community no offline ticket is made, and the member
- * is told; a refusal says the community's own words, and nothing is shared: never a false success.
+ * Offered only where this member may invite: the community takes invites and its door lets them (an admin-only door asks their
+ * role), and they are no guest. Where they can't, nothing. An invite works once, for one person, and the line under the sheet's
+ * item says so. A tap on the item opens the panel in the sheet; nothing is made until Make the invite and share. With no answer
+ * from the community no offline ticket is made, and the member is told in the panel; a refusal says the community's own words,
+ * and nothing is shared: never a false success.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share } from 'react-native';
@@ -21,9 +23,24 @@ import { makeInviteForShare, offersInviteAndShare } from '../utils/invite-and-sh
 import { InviteVouchChoice } from './InviteVouchChoice';
 import type { BeanPoolIdentity } from '../utils/identity';
 
-export function InviteAndShareButton({ post }: { post: { id: string; title: string } }) {
-    const styles = useStyles(makeStyles);
-    const { colors } = useTheme();
+export interface InviteAndShare {
+    /** This member may invite here: the sheet offers the way. */
+    offered: boolean;
+    offersVouch: boolean;
+    vouchLevel: VouchLevel | null;
+    setVouchLevel: (level: VouchLevel | null) => void;
+    busy: boolean;
+    note: string | null;
+    clearNote: () => void;
+    /** Make the invite and hand it to the share sheet: true once it went to the share sheet, false when nothing was shared. */
+    make: () => Promise<boolean>;
+}
+
+/**
+ * Who is asking, and what the community says of them: read when the Share button is drawn for a post, so the sheet's item is
+ * there when it opens. Nothing is asked of a community that takes no invites, and a role only where only admins invite.
+ */
+export function useInviteAndShare(post: { id: string; title: string }): InviteAndShare {
     const profile = useNodeProfile();
     const features = profile?.features;
     const adminsOnly = onlyAdminsInvite(features);
@@ -31,13 +48,10 @@ export function InviteAndShareButton({ post }: { post: { id: string; title: stri
     const [who, setWho] = useState<{ anchor: string; identity: BeanPoolIdentity; guest: boolean } | null>(null);
     const [role, setRole] = useState<InviteRole | undefined>(undefined);
     const [canVouch, setCanVouch] = useState(false);
-    const [open, setOpen] = useState(false);
     const [vouchLevel, setVouchLevel] = useState<VouchLevel | null>(null);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
 
-    // Who is asking, and what the community says of them: each time the button is drawn for a listing. Nothing is asked of a
-    // community that takes no invites, and a role only where only admins invite.
     useEffect(() => {
         let alive = true;
         (async () => {
@@ -68,57 +82,56 @@ export function InviteAndShareButton({ post }: { post: { id: string; title: stri
         return () => { alive = false; };
     }, [post.id, adminsOnly, vouchHere]);
 
-    if (!who || !offersInviteAndShare({ features, role, guest: who.guest, postId: post.id })) return null;
+    const offered = !!who && offersInviteAndShare({ features, role, guest: who.guest, postId: post.id });
     const offersVouch = offersInviteVouch(features, canVouch);
 
-    const make = async () => {
+    const make = async (): Promise<boolean> => {
+        if (!who) return false;
         setBusy(true);
         setNote(null);
         try {
             const made = await makeInviteForShare(who.anchor, who.identity, offersVouch ? vouchLevel : null, features);
             if (!made.ok) {
                 setNote(made.message);
-                return;
+                return false;
             }
             setVouchLevel(null);
-            setOpen(false);
             await Share.share({ message: `${post.title}\n${inviteLink(who.anchor, made.code, post.id)}`, title: post.title });
+            return true;
         } catch (e: any) {
             setNote(e?.message || t(INVITE_SHARE_WORDS.notMade));
+            return false;
         } finally {
             setBusy(false);
         }
     };
 
+    return { offered, offersVouch, vouchLevel, setVouchLevel, busy, note, clearNote: () => setNote(null), make };
+}
+
+/** The panel the sheet's Invite and share item opens: what the invite does, the vouch where offered, and the one button. */
+export function InviteAndSharePanel({ invite, onMake }: { invite: InviteAndShare; onMake: () => void }) {
+    const styles = useStyles(makeStyles);
+    const { colors } = useTheme();
     return (
         <View style={styles.block} testID="invite-and-share">
-            <Pressable onPress={() => { setOpen(o => !o); setNote(null); }} style={styles.btn} accessibilityRole="button"
-                accessibilityState={{ expanded: open }} testID="invite-and-share-button">
-                <Text style={styles.btnText}>{t(INVITE_SHARE_WORDS.button)}</Text>
-            </Pressable>
-            <Text style={styles.line} maxFontSizeMultiplier={1.3} testID="invite-and-share-line">{t(INVITE_SHARE_WORDS.line)}</Text>
-            {open && (
-                <View style={styles.panel} testID="invite-and-share-panel">
-                    <Text style={styles.panelText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.panel)}</Text>
-                    {offersVouch && <InviteVouchChoice value={vouchLevel} onChange={setVouchLevel} colors={colors} />}
-                    <Pressable onPress={make} disabled={busy} style={[styles.make, busy && { opacity: 0.6 }]} accessibilityRole="button"
-                        accessibilityState={{ disabled: busy }} testID="invite-and-share-make">
-                        <Text style={styles.makeText}>{t(INVITE_SHARE_WORDS.make)}</Text>
-                    </Pressable>
-                </View>
-            )}
-            {note && (
-                <Text style={styles.warn} accessibilityRole="alert" maxFontSizeMultiplier={1.3} testID="invite-and-share-note">{note}</Text>
+            <View style={styles.panel} testID="invite-and-share-panel">
+                <Text style={styles.panelText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.panel)}</Text>
+                {invite.offersVouch && <InviteVouchChoice value={invite.vouchLevel} onChange={invite.setVouchLevel} colors={colors} />}
+                <Pressable onPress={onMake} disabled={invite.busy} style={[styles.make, invite.busy && { opacity: 0.6 }]} accessibilityRole="button"
+                    accessibilityState={{ disabled: invite.busy }} testID="invite-and-share-make">
+                    <Text style={styles.makeText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.make)}</Text>
+                </Pressable>
+            </View>
+            {invite.note && (
+                <Text style={styles.warn} accessibilityRole="alert" maxFontSizeMultiplier={1.3} testID="invite-and-share-note">{invite.note}</Text>
             )}
         </View>
     );
 }
 
 const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
-    block: { gap: 6 },
-    btn: { minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
-    btnText: { color: colors.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center' },
-    line: { color: colors.text.secondary, fontSize: 13, lineHeight: 18 },
+    block: { gap: 6, marginBottom: 8 },
     panel: { borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, backgroundColor: colors.surface.card, padding: 12 },
     panelText: { color: colors.text.body, fontSize: 14, lineHeight: 20, marginBottom: 12 },
     make: { minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center' },

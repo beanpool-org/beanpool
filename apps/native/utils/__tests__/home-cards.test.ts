@@ -334,7 +334,9 @@ describe('the layout (§4)', () => {
         const l = layout({ order: ['beans'], hidden: ['pulse'], dismissed: { safety: iso(NOW - H) } });
         const r = resetLayout(l, NOW);
         expect(r).toEqual({ v: 2, cards: starterCards(), dismissed: { safety: iso(NOW - H) }, updatedAt: iso(NOW) });
-        expect(ids(cardOrder(r))).toEqual(['needs', ...HOME_STARTER_SET, 'community']);
+        // The starter set's cards this build draws (a type the registry knows and this build does not yet, "Asked near you", is
+        // kept in the layout and left out of what is drawn, as any type newer than the build is).
+        expect(ids(cardOrder(r))).toEqual(['needs', ...HOME_STARTER_SET.filter(id => HOME_DRAWN.has(id as never)), 'community']);
         expect(defaultCards()).toEqual([{ id: 'start', type: 'start' }]);
     });
 
@@ -970,7 +972,8 @@ describe('the global node\'s Home (H4)', () => {
         expect(ids(cardOrder(STARTER, pins)).at(-1)).toBe('community');
         // A move made during the pin moves the two cards and nothing else.
         const moved = moveCard(STARTER, 'market', 'up', inst('find', 'events', 'market'), NOW, pins)!;
-        expect(ids(moved.cards)).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'notices']);
+        // "Asked near you" is in the starter set and this build does not draw it yet: it stays where it was, between the two.
+        expect(ids(moved.cards)).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'asked', 'market', 'notices']);
         // The newcomer's list doesn't hold `find`: once the pin ends, the picker brings it back (CARD-FRAME §1.2, §3).
         expect(ids(cardOrder(moved))).not.toContain('find');
         expect(ids(cardOrder(EVERY))).toContain('find');

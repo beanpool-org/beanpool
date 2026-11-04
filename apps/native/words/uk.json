@@ -7489,5 +7489,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community} зараз не може перевірити входи, тому нічого не додано. Будь ласка, спробуйте пізніше.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} не підтримує вхід через {provider}. Спробуйте інший варіант.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "Зараз немає зв’язку з {community}, тому нічого не додано. Перевірте з’єднання і спробуйте знову.",
-  "HOSTED BY": "ОРГАНІЗАТОР"
+  "HOSTED BY": "ОРГАНІЗАТОР",
+  "Open event: {title}": "Відкрити подію: {title}",
+  "Open listing: {title}": "Відкрити оголошення: {title}"
 }

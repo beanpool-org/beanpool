@@ -2129,8 +2129,8 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         await removeVia('events');
         // Each read asks the edited list, so it carries no tag (another list): a 200.
         expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 400']);
-        // The newcomer's list less Coming up (Your way back in and Notices are on it, drawn when they have something).
-        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
+        // The newcomer's list less Coming up (Your way back in, Asked near you and Notices are on it, drawn when they have something).
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'notices']);
         expect(mem.store.get(markKey())).toBe(when);
         before = node.requests.length;
         await removeVia('market');
@@ -2140,7 +2140,7 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         await act(async () => { nav.focus?.(); });
         await settle();
         expect(trace(before)).toEqual(['GET /api/home 304', 'POST /api/members/preferences 400']);
-        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'notices']);
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'asked', 'notices']);
     });
 
     it('an updated node that holds a real empty version-1 list gets the edit right after the read, and the mark is gone', async () => {
@@ -2151,9 +2151,9 @@ describe('a standby from before the frame and a phone with no copy (review of #1
         const before = node.requests.length;
         await removeVia('events');
         expect(trace(before)).toEqual(['GET /api/home 200', 'POST /api/members/preferences 200']);
-        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
+        expect(sentIds(posts().at(-1)!)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'notices']);
         expect(mem.store.has(markKey())).toBe(false);
-        expect(phoneIds()).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'notices']);
+        expect(phoneIds()).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'notices']);
     });
 });
 
@@ -2164,8 +2164,8 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
     const sentKey = () => homeLayoutPhoneOnlySentStoreKey(who.identity.publicKey, NODE);
     const stampOf = (l: unknown) => ((l as { updatedAt?: string } | null)?.updatedAt ? Date.parse((l as { updatedAt: string }).updatedAt) : -Infinity);
     // The newcomer's list less Coming up, then less the Market too (Your way back in and Notices are on it).
-    const LESS_EVENTS = ['safety', 'steps', 'tips', 'interests', 'market', 'notices'];
-    const LESS_BOTH = ['safety', 'steps', 'tips', 'interests', 'notices'];
+    const LESS_EVENTS = ['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'notices'];
+    const LESS_BOTH = ['safety', 'steps', 'tips', 'interests', 'asked', 'notices'];
 
     function emptyV1(when: string) {
         node.answer = { ...localMember(), layout: { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: when } as never };
@@ -3416,7 +3416,7 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         await settle(20);
         const posts = prefsPosts(from).map(r => JSON.parse(r.body).preferences);
         const layoutWrite = posts.find(p => 'home.layout' in p);
-        expect(layoutWrite['home.layout'].cards.map((c: { id: string }) => c.id)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices']);
+        expect(layoutWrite['home.layout'].cards.map((c: { id: string }) => c.id)).toEqual(['safety', 'steps', 'tips', 'interests', 'market', 'asked', 'events', 'notices']);
         expect(posts.find(p => 'tour' in p)?.tour).toMatchObject({ v: 1, state: 'skipped' });
         expect(cards()).not.toContain('start');
         expect(cards()).toEqual(expect.arrayContaining(['steps', 'market', 'events']));

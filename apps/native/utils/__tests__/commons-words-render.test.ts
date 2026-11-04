@@ -190,6 +190,8 @@ vi.mock('../member-area', async (importOriginal) => ({
     useMyArea: () => node.area,
 }));
 vi.mock('../db', () => ({
+    // The poll form asks when this member may start their next poll (poll-once-a-week): null = now.
+    getPollNextStart: async () => null,
     getBalance: async () => ({ earnedCredit: 0, commons: 1234.5, canOperate: true }),
     getTreasuries: async () => node.treasuries,
     getDecisions: async () => ({ decisions: node.decisions, myPoolVoting: node.voice, canPropose: node.canPropose }),

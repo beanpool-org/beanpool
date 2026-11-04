@@ -6983,5 +6983,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "Το {community} δεν μπορεί να ελέγξει τις μεθόδους σύνδεσης αυτήν τη στιγμή, οπότε δεν προστέθηκε τίποτα. Παρακαλώ δοκίμασε ξανά αργότερα.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "Το {community} δεν δέχεται σύνδεση μέσω {provider}. Μπορείς να δοκιμάσεις διαφορετική μέθοδο.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "Δεν είναι δυνατή η πρόσβαση στο {community} αυτήν τη στιγμή, οπότε δεν προστέθηκε τίποτα. Έλεγξε τη σύνδεσή σου και δοκίμασε ξανά.",
-  "HOSTED BY": "ΔΙΟΡΓΑΝΩΣΗ ΑΠΟ"
+  "HOSTED BY": "ΔΙΟΡΓΑΝΩΣΗ ΑΠΟ",
+  "Open event: {title}": "Άνοιγμα εκδήλωσης: {title}",
+  "Open listing: {title}": "Άνοιγμα καταχώρησης: {title}"
 }

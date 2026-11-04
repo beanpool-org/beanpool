@@ -49,11 +49,37 @@ const LINK_REFUSAL_WORDS: Readonly<Record<LinkRefusal, WordKey>> = {
     unreachable: word("Can't reach the global community right now, so nothing was added. Check your connection and try again."),
 };
 
-/** A refusal in the member's language when it reads exactly as join-link.ts wrote it; one with a time in it, as it came. */
-export function linkRefusalWords(answer: Extract<LinkAnswer, { kind: 'refused' }>, provider: SsoProvider): string {
+/**
+ * The refusals that name "the global community", said again for another community's open door under its own name
+ * (`{community}`, issue #2563): the card opens this sheet at a self-hoster's door too (OneWayBackCard at the door's
+ * address since P5, and Safety Backup after a join there), where "the global community" would be the wrong community.
+ * The sentences that name no community (rate limit, a sign-in that could not be used or checked, a replaced key, a
+ * failed add) are the same at every door and stay in LINK_REFUSAL_WORDS alone.
+ */
+const LINK_REFUSAL_WORDS_AT: Readonly<Partial<Record<LinkRefusal, WordKey>>> = {
+    already_joined: word("This {provider} account is already the sign-in of another BeanPool account in {community}, so it can't be added to yours. Nothing was changed. You can try a different sign-in."),
+    removed: word("The BeanPool account this {provider} account joined with was removed from {community}, so it can't be added to yours. Nothing was changed."),
+    not_words_member: word('Your account joined {community} another way, so there is no sign-in to add here. Nothing was changed.'),
+    already_linked: word('Your account in {community} already has a sign-in. Nothing was changed.'),
+    not_a_member: word("Your account isn't active in {community} right now (it may be suspended), so a sign-in can't be added. Nothing was changed."),
+    account_closed: word("This account's place in {community} was closed, so a sign-in can't be added to it. Nothing was changed."),
+    door_closed: word("{community} isn't adding sign-ins right now. Nothing was changed. Please try again later."),
+    door_key_missing: word("{community} can't check sign-ins right now, so nothing was added. Please try again later."),
+    unsupported: word("{community} doesn't take {provider} sign-in. You can try a different one."),
+    unreachable: word("Can't reach {community} right now, so nothing was added. Check your connection and try again."),
+};
+
+/**
+ * A refusal in the member's language when it reads exactly as join-link.ts wrote it; one with a time in it, as it came.
+ * `community`: another community's name (OneWayBackCard, Safety Backup after a join at its door), so a sentence that names
+ * the community says it, never "the global community".
+ */
+export function linkRefusalWords(answer: Extract<LinkAnswer, { kind: 'refused' }>, provider: SsoProvider, community?: string): string {
     const name = SSO_PROVIDER_NAMES[provider];
     const english = LINK_MESSAGES[answer.reason].replace('{provider}', name).replace('{when}', 'later');
-    return answer.message === english ? t(LINK_REFUSAL_WORDS[answer.reason], { provider: name }) : answer.message;
+    if (answer.message !== english) return answer.message;
+    if (community && LINK_REFUSAL_WORDS_AT[answer.reason]) return t(LINK_REFUSAL_WORDS_AT[answer.reason]!, { provider: name, community });
+    return t(LINK_REFUSAL_WORDS[answer.reason], { provider: name });
 }
 
 /** join-link.ts linkedNotice, in the member's language; `community` as linkedNotice takes it (another community's name). */
@@ -175,7 +201,7 @@ export function LinkSignInSheet({
                 await finishOneWayBack(identity.publicKey, 'linked');
                 onLinked(null);
             }
-            setMessage(linkRefusalWords(answer, chosen));
+            setMessage(linkRefusalWords(answer, chosen, community));
             setStep('error');
         } catch (e) {
             if (e instanceof SsoSignInError && e.reason === 'cancelled') {

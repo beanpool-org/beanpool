@@ -482,7 +482,8 @@ describe('a visitor with no key on the global node', () => {
     });
 
     it('the Join card says what the global community is, under its ways in: one among many, which your own community never needs (mothership design §2.5, pick 1)', async () => {
-        stubNode(GLOBAL);
+        // The app's global (the names its node publishes; the page's own host is jsdom's localhost).
+        stubNode({ ...GLOBAL, addresses: ['global.beanpool.org'], primaryAddress: 'global.beanpool.org' });
         await openLobby();
         const card = await screen.findByTestId('lobby-join-card');
         const about = within(card).getByTestId('lobby-one-among-many');
@@ -496,6 +497,24 @@ describe('a visitor with no key on the global node', () => {
         stubNode({ ...GLOBAL, profile: 'local' });
         await openLobby();
         expect(await screen.findByTestId('lobby-join-card')).not.toHaveTextContent(/one community among many/);
+    });
+
+    it("a self-hoster's open community (global profile, its own address) never calls itself the global community (issue #2563)", async () => {
+        // Same profile and open door as the global community, at a name that isn't the app's global (jsdom's localhost,
+        // and a node that publishes only its own names): the line is the global community's own and is not drawn here.
+        stubNode({ ...GLOBAL, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' });
+        await openLobby();
+        const card = await screen.findByTestId('lobby-join-card');
+        expect(within(card).queryByTestId('lobby-one-among-many')).toBeNull();
+        expect(card).not.toHaveTextContent(/one community among many/);
+        expect(card).not.toHaveTextContent(/global community/i);
+        cleanup();
+        resetCommunityInfoOnce();
+
+        // A node that publishes no names at all, opened at localhost: the same.
+        stubNode(GLOBAL);
+        await openLobby();
+        expect(within(await screen.findByTestId('lobby-join-card')).queryByTestId('lobby-one-among-many')).toBeNull();
     });
 
     it('Join in the header opens screen 1 over the lobby, and ← Back returns to the listings', async () => {
@@ -573,6 +592,14 @@ describe("the lobby's Join card on a phone's browser (W1)", () => {
         })) as unknown as typeof window.matchMedia;
     }
 
+    /** A computer: no query answers yes. */
+    function stubComputer() {
+        window.matchMedia = ((query: string) => ({
+            matches: false, media: query, onchange: null,
+            addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+        })) as unknown as typeof window.matchMedia;
+    }
+
     /**
      * The card's ways in, in the order they are drawn (each link's and button's words), once the browser's key check
      * has answered: the browser join enabled, or the sentence that says this browser can't hold a key.
@@ -630,6 +657,78 @@ describe("the lobby's Join card on a phone's browser (W1)", () => {
         const { card, ways } = await cardWays();
         expect(ways).toEqual(['Join', 'Already have BeanPool?']);
         expect(card.querySelector('a[href*="beanpool.org"]')).toBeNull();
+    });
+
+    describe("at a self-hoster's open community (issue #2563): the app at its own address, and a store link; nothing signed, nothing of ours", () => {
+        const HALL = { ...GLOBAL, addresses: ['hall.example.org'], primaryAddress: 'hall.example.org' };
+        const ANDROID = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
+        const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+        const PLAY = 'https://play.google.com/store/apps/details?id=org.beanpool.pillar';
+        const health = (ios: string) => ({ status: 'ok', version: '1.2.26', appVersions: { ios, android: '1.2.74' } });
+
+        it('an Android phone: Open in the BeanPool app (the door link for this page\'s own address), Get it on Google Play, then the browser join', async () => {
+            stubPhone();
+            vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(ANDROID);
+            stubNode(HALL);
+            const { card, ways } = await cardWays();
+            expect(ways).toEqual(['Open in the BeanPool app', 'Get it on Google Play', 'or join here in your browser', 'Already have BeanPool?']);
+            const href = within(card).getByTestId('lobby-open-app').getAttribute('href')!;
+            expect(href.startsWith(`intent://join-open-door?node=${encodeURIComponent(window.location.origin)}#Intent;scheme=beanpool;`)).toBe(true);
+            expect(href).toContain(`S.browser_fallback_url=${encodeURIComponent(PLAY)}`);
+            expect(within(card).getByTestId('lobby-get-app').getAttribute('href')).toBe(PLAY);
+            // Carries nothing of ours: no beanpool.org in any link of the card, and nothing but the page's own address and the store's.
+            expect(card.querySelector('a[href*="beanpool.org"]')).toBeNull();
+            expect(decodeURIComponent(href)).not.toMatch(/beanpool\.org/);
+            // And the global community's line is not said here.
+            expect(within(card).queryByTestId('lobby-one-among-many')).toBeNull();
+        });
+
+        it('an iPhone with the App Store at a build that has the account-less door: the scheme link and the App Store', async () => {
+            stubPhone();
+            vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(IPHONE);
+            stubNode(HALL, new Map(), [], [], health('1.2.84'));
+            const { card, ways } = await cardWays();
+            expect(ways).toEqual(['Open in the BeanPool app', 'Download on the App Store', 'or join here in your browser', 'Already have BeanPool?']);
+            expect(within(card).getByTestId('lobby-open-app').getAttribute('href')).toBe(`beanpool://join-open-door?node=${encodeURIComponent(window.location.origin)}`);
+            expect(within(card).getByTestId('lobby-get-app').getAttribute('href')).toBe('https://apps.apple.com/app/id6761870086');
+        });
+
+        it('an iPhone whose App Store build is older than the account-less door (the global door\'s version is not enough): the browser join only', async () => {
+            stubPhone();
+            vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(IPHONE);
+            stubNode(HALL, new Map(), [], [], health('1.2.56'));
+            const { card, ways } = await cardWays();
+            expect(ways).toEqual(['Join', 'Already have BeanPool?']);
+            expect(within(card).queryByTestId('lobby-open-app')).toBeNull();
+            expect(within(card).queryByTestId('lobby-get-app')).toBeNull();
+        });
+
+        it('a community that takes members by invite, or a computer: no app offer, as before', async () => {
+            stubPhone();
+            vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(ANDROID);
+            stubNode({ ...HALL, features: { ...HALL.features, openJoin: false } });
+            const invite = await cardWays();
+            expect(invite.ways).toEqual(['Join', 'Already have BeanPool?']);
+            expect(within(invite.card).queryByTestId('lobby-open-app')).toBeNull();
+            cleanup();
+            resetCommunityInfoOnce();
+
+            stubComputer();
+            stubNode(HALL);
+            const computer = await cardWays();
+            expect(computer.ways).toEqual(['Join', 'Already have BeanPool?']);
+            expect(within(computer.card).queryByTestId('lobby-open-app')).toBeNull();
+        });
+
+        it("at the app's global the smart link is unchanged and there is no second store link", async () => {
+            stubPhone();
+            vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(ANDROID);
+            stubNode(OURS);
+            const { card, ways } = await cardWays();
+            expect(ways).toEqual(['Open in the BeanPool app', 'or join here in your browser', 'Already have BeanPool?']);
+            expect(within(card).getByTestId('lobby-open-app').getAttribute('href')).toBe('https://beanpool.org/global');
+            expect(within(card).queryByTestId('lobby-get-app')).toBeNull();
+        });
     });
 
     it('on a phone whose browser is too old to hold a key: the app is still offered, and the browser join says why it cannot', async () => {

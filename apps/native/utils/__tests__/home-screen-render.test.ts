@@ -143,7 +143,14 @@ vi.mock('../../components/NeedsYouIcons', async (importOriginal) => {
 const manage = vi.hoisted(() => ({ start: vi.fn() }));
 vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ start: manage.start, dialog: null }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: ({ callsign }: { callsign: string }) => createElement('span', { 'data-avatar': callsign }) }));
-vi.mock('../../components/ExampleListings', () => ({ ExampleListings: () => createElement('div', { 'data-testid': 'example-listings' }, 'Examples of what people post') }));
+// Counts its own mounts: a card's inside that React unmounts and mounts again shows here (Arrange must not do that to a body).
+const examplesLife = vi.hoisted(() => ({ mounts: 0, unmounts: 0 }));
+vi.mock('../../components/ExampleListings', () => ({
+    ExampleListings: () => {
+        useEffect(() => { examplesLife.mounts += 1; return () => { examplesLife.unmounts += 1; }; }, []);
+        return createElement('div', { 'data-testid': 'example-listings' }, 'Examples of what people post');
+    },
+}));
 vi.mock('../db', () => ({ getMarketplaceTransactions: vi.fn(async () => []), getUnreadByConversation: vi.fn(async () => []) }));
 vi.mock('../pulse', () => ({ resolvePulseThumbnailUrl: (u: string | null, i: { id: string }) => (u ? `${u}/api/pulse/items/${i.id}/thumbnail` : null) }));
 // The phone's place (H4: the global node's "near you"): allowed or not, and the last one known. Home must never ask.
@@ -1277,6 +1284,51 @@ describe('Arrange', () => {
         expect(cards()).toEqual(before);
     });
 
+    it('a card\'s inside is never unmounted and mounted again when Arrange opens or closes: the same elements stand through Home → Arrange › → Done (a tool\'s read and Find your community\'s lines live in them)', async () => {
+        examplesLife.mounts = 0;
+        examplesLife.unmounts = 0;
+        // A node that asks for the Market's example listings under a few real ones (HomeAnswer cards.market.examples).
+        node.answer.cards.market!.examples = true;
+        await render();
+        // Every element a card draws below its band, as Home draws it. A body React rebuilt would come back as new elements,
+        // and these would be left out of the page.
+        const insides = () => {
+            const out: Element[] = [];
+            for (const id of cards()) {
+                const card = document.querySelector(`[data-testid="home-card-${id}"]`)!;
+                for (const e of Array.from(card.querySelectorAll('*'))) {
+                    if (e.closest('[data-testid^="card-band-"]')) continue;
+                    if ((e.getAttribute('data-testid') ?? '').startsWith('home-quiet-')) continue;
+                    out.push(e);
+                }
+            }
+            return out;
+        };
+        // The one wrapper each card's inside sits in (the card's second child, after its band): the same element in all three states.
+        const wrapperOf = (id: string) => document.querySelector(`[data-testid="home-card-${id}"]`)!.children[1];
+        const wrappers = cards().map(wrapperOf);
+        expect(wrappers.every(w => w && !w.hasAttribute('data-testid'))).toBe(true);
+        const atHome = insides();
+        expect(atHome.length).toBeGreaterThan(40);
+        expect(atHome.every(e => e.isConnected)).toBe(true);
+        // A body with a mount of its own to count (the Market's example listings, mocked above) is on Home for this to mean something.
+        expect(has('example-listings')).toBe(true);
+        expect(examplesLife).toEqual({ mounts: 1, unmounts: 0 });
+        await open();
+        expect(quiets().length).toBeGreaterThan(4);
+        expect(cards().map(wrapperOf)).toEqual(wrappers);
+        expect(cards().every(id => wrapperOf(id) === wrappers[cards().indexOf(id)] && quiets().includes(wrapperOf(id) as HTMLElement))).toBe(true);
+        expect(atHome.filter(e => !e.isConnected).map(e => e.getAttribute('data-testid') ?? e.tagName)).toEqual([]);
+        expect(examplesLife).toEqual({ mounts: 1, unmounts: 0 });
+        const inArrange = insides();
+        await done();
+        expect(quiets()).toHaveLength(0);
+        expect(cards().every(id => wrapperOf(id) === wrappers[cards().indexOf(id)])).toBe(true);
+        expect(atHome.filter(e => !e.isConnected).map(e => e.getAttribute('data-testid') ?? e.tagName)).toEqual([]);
+        expect(inArrange.filter(e => !e.isConnected).map(e => e.getAttribute('data-testid') ?? e.tagName)).toEqual([]);
+        expect(examplesLife).toEqual({ mounts: 1, unmounts: 0 });
+    });
+
     it('the bar stands above the card list, not among the cards: no card has a different place in the list when Arrange opens (cardY)', async () => {
         await render();
         const list = () => document.querySelector('[data-testid="home-card-events"]')!.parentElement!.parentElement!;
@@ -1446,13 +1498,36 @@ describe('Arrange', () => {
         mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
         await render();
         expect(cards()).toEqual(['community', 'beans-preview']);
+        // What the two cards draw, as Home draws it: the example's whole frame (its band carries a pill that stays, untouchable, in
+        // Arrange) and the community card's inside. None of it may be rebuilt when Arrange opens or closes.
+        const beansEls = Array.from(document.querySelector('[data-testid="home-card-beans-preview"]')!.querySelectorAll('*'));
+        const communityInside = Array.from(document.querySelector('[data-testid="home-card-community"]')!.querySelectorAll('*'))
+            .filter(e => !e.closest('[data-testid^="card-band-"]'));
+        const pillWrapper = document.querySelector('[data-testid="card-band-beans-preview"] [data-ifa]')!;
+        expect(beansEls).toContain(pillWrapper);
+        expect(pillWrapper.getAttribute('data-ifa')).toBe('auto');
+        expect(pillWrapper.getAttribute('data-pointer-events')).toBe('auto');
+        expect(pillWrapper.getAttribute('aria-hidden')).toBeNull();
+        const gone = (els: Element[]) => els.filter(e => !e.isConnected).map(e => e.getAttribute('data-testid') ?? e.tagName);
         await open();
         // The community card is after the strip and the tile in Arrange; the example stays under it, quiet and with no arrows.
         expect(cards()).toEqual(['community', 'beans-preview']);
         expect(has('home-quiet-beans-preview')).toBe(true);
         expect(has('home-arrange-beans-preview-up') || has('home-arrange-beans-preview-down')).toBe(false);
+        expect(gone(beansEls)).toEqual([]);
+        expect(gone(communityInside)).toEqual([]);
+        // The pill's wrapper is the same element, now quiet: only its props changed.
+        expect(document.querySelector('[data-testid="card-band-beans-preview"] [data-ifa]')).toBe(pillWrapper);
+        expect(pillWrapper.getAttribute('data-ifa')).toBe('no-hide-descendants');
+        expect(pillWrapper.getAttribute('data-pointer-events')).toBe('none');
+        expect(pillWrapper.getAttribute('aria-hidden')).toBe('true');
         await done();
         expect(cards()).toEqual(['community', 'beans-preview']);
+        expect(gone(beansEls)).toEqual([]);
+        expect(gone(communityInside)).toEqual([]);
+        expect(document.querySelector('[data-testid="card-band-beans-preview"] [data-ifa]')).toBe(pillWrapper);
+        expect(pillWrapper.getAttribute('data-ifa')).toBe('auto');
+        expect(pillWrapper.getAttribute('aria-hidden')).toBeNull();
     });
 
     it('a card with settings and nothing to show keeps Settings… here: the only way to give Sun and moon its place', async () => {

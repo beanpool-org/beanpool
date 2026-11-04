@@ -15,3 +15,18 @@ export const quietProps = {
     importantForAccessibility: 'no-hide-descendants',
     accessibilityElementsHidden: true,
 } as const;
+
+/** What the same wrapper carries on Home: everything reaches what is under it, as if it were not there. */
+export const liveProps = {
+    pointerEvents: 'auto',
+    importantForAccessibility: 'auto',
+    accessibilityElementsHidden: false,
+} as const;
+
+/**
+ * The props of the ONE wrapper a card's inside always sits in. The wrapper must stand in both states: if Home drew the inside
+ * bare and Arrange wrapped it, React would see a different element type at that spot and unmount the inside and mount it
+ * again on Arrange › and on Done, so a tool's read, Find your community's lines and the photos would start over and the
+ * cards below would move (the review of #2867). Only these props and the dimming change; the children never do.
+ */
+export const quietWrapperProps = (quiet: boolean | undefined) => (quiet ? quietProps : liveProps);

@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, type StyleProp, type ViewStyle } fro
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ARRANGE_WORDS, t, type CardHue } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
-import { QUIET_OPACITY, quietProps } from './quiet';
+import { QUIET_OPACITY, quietWrapperProps } from './quiet';
 
 /**
  * The pieces every Home card is made of (design §9 card anatomy, §10 accessibility): a caption that is a heading, an
@@ -183,7 +183,7 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
                     // The "…" sits at the card's right edge, where "+ ADD POST" floats: it steps aside for it too.
                     <FabAware id={`${id}:caption`} style={s.captionTargets}>
                         {/* A quiet card with no arrows (the Beans example) keeps what its band carries, but untouchable. */}
-                        {quiet && right ? <View {...quietProps} style={s.quietBand}>{right}</View> : right}
+                        {right ? <View {...quietWrapperProps(quiet)} style={quiet ? s.quietBand : s.band}>{right}</View> : null}
                         {onMenu && (
                             <Pressable
                                 ref={menuRef}
@@ -199,7 +199,8 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
                     </FabAware>
                 )}
             </Pressable>
-            {quiet ? <View {...quietProps} style={s.quiet} testID={`home-quiet-${id}`}>{children}</View> : children}
+            {/* One wrapper in both states (quiet.ts): Arrange dims and silences it, but never changes what the card's inside is. */}
+            <View {...quietWrapperProps(quiet)} style={quiet ? s.quiet : undefined} testID={quiet ? `home-quiet-${id}` : undefined}>{children}</View>
         </View>
     );
 }
@@ -331,6 +332,8 @@ function make(colors: AppColors) {
         menuButton: { width: HOME_TARGET_DP, height: HOME_TARGET_DP, marginRight: -12, alignItems: 'center', justifyContent: 'center', borderRadius: HOME_TARGET_DP / 2, flexShrink: 0 },
         // In Arrange a card's inside is dimmed (QUIET_OPACITY), and its taps and its words go quiet until Done.
         quiet: { opacity: QUIET_OPACITY },
+        // What the band's own extra ("+ Add", a pill) sits in, on Home and in Arrange: a row, so it lies in the band as it did bare.
+        band: { flexDirection: 'row', alignItems: 'center' },
         quietBand: { flexDirection: 'row', alignItems: 'center' },
         // Only the last arrow reaches into the card's edge, as the "…" does.
         arrowFirst: { marginRight: 0 },

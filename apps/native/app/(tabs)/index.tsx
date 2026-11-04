@@ -1240,6 +1240,30 @@ export default function HomeScreen() {
     const beansPreviewCard = !!answer && !touring && homeBeansPreview(answer);
     const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
 
+    // One listed card with what Home draws under it: the same wrapper in Home and in Arrange (`cardY` is measured on it).
+    const listed = (c: HomeCardInstance) => (
+        <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
+            {card(c)}
+            {hint && tailor && c.id === firstDrawn?.id && (
+                <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
+                    <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.hint)}</Text>
+                    <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this tip')}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
+                    </Pressable>
+                </View>
+            )}
+            {fewer && tailor && c.id === firstDrawn?.id && (
+                <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-fewer">
+                    <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.fewer)}</Text>
+                    <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this line')}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
+                    </Pressable>
+                </View>
+            )}
+            {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
+        </View>
+    );
+
     let empty: React.ReactNode = null;
     if (!answer) {
         if (status === 'members_only') {
@@ -1336,43 +1360,19 @@ export default function HomeScreen() {
                     {/* Above the cards, not among them: the cards' places inside the list (`cardY`) are the same as on Home. */}
                     {arrangeOn && <ArrangeBar colors={colors} notOnAccount={notOnAccount ? t(LINES.notOnAccount) : null} onHeight={onArrangeBar} />}
                     <Animated.View onLayout={e => { listY.current = e.nativeEvent.layout.y; }} style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
-                        {(arrangeOn ? list.filter(c => c.type !== 'community') : list).map(c => (
-                            <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
-                                {card(c)}
-                                {hint && tailor && c.id === firstDrawn?.id && (
-                                    <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
-                                        <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.hint)}</Text>
-                                        <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this tip')}>
-                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
-                                        </Pressable>
-                                    </View>
-                                )}
-                                {fewer && tailor && c.id === firstDrawn?.id && (
-                                    <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-fewer">
-                                        <Text style={[st.hintText, { color: colors.text.body }]}>{t(LINES.fewer)}</Text>
-                                        <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel={t('Got it, hide this line')}>
-                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
-                                        </Pressable>
-                                    </View>
-                                )}
-                                {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
-                            </View>
-                        ))}
+                        {/* The community card is always last (`FIXED_LAST`), so Home is these cards and then it. Each stays in its own slot of this
+                            list in both states: React must not rebuild a card that Arrange only quiets (the bodies of tool cards and of Find your
+                            community hold what they have read), so the community card is not moved to another parent when Arrange opens. */}
+                        {list.filter(c => c.type !== 'community').map(listed)}
                         {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
                         {arrangeOn && (
                             <>
                                 <ArrangeStrip rows={stripRows} colors={colors} />
                                 <ArrangeAddTile colors={colors} onPress={() => setAddOpen(true)} tileRef={addTileRef} />
-                                {list.filter(c => c.type === 'community').map(c => (
-                                    <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
-                                        {card(c)}
-                                        {/* Home draws the Beans example under the first card; when that is this one (no other card up), it stays under it. */}
-                                        {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} quiet />}
-                                    </View>
-                                ))}
-                                <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />
                             </>
                         )}
+                        {list.filter(c => c.type === 'community').map(listed)}
+                        {arrangeOn && <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />}
                     </Animated.View>
                 </ScrollView>
 

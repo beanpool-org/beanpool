@@ -4,7 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { LinkSignInSheet } from './LinkSignInSheet';
-import { QUIET_OPACITY, quietProps } from './home/quiet';
+import { QUIET_OPACITY, quietWrapperProps } from './home/quiet';
 import {
     askOneWayBackStandingShared,
     dismissOneWayBack,
@@ -302,11 +302,14 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     return (
         <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={t(ONE_WAY_BACK_LINES.title)}>
             {band}
-            {band ? <View {...quietProps} style={{ opacity: QUIET_OPACITY }}>{content}</View> : content}
+            {/* One wrapper whether or not Home's band is up (home/quiet.ts): the card's inside is never rebuilt when Arrange opens. */}
+            <View {...quietWrapperProps(!!band)} style={band ? quietInside : undefined}>{content}</View>
             {sheet}
         </View>
     );
 }
+
+const quietInside = { opacity: QUIET_OPACITY };
 
 const cache = new WeakMap<AppColors, ReturnType<typeof make>>();
 function styles(colors: AppColors) {

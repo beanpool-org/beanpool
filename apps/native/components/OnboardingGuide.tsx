@@ -13,12 +13,14 @@ const bold = { fontWeight: 'bold' } as const;
  * show identical content — edit the explanation once, in here.
  *
  * `beansOn` false (a community with Beans off, the worldwide one): cards 1-3 are about Beans, so one card that says
- * there are none takes their place, and the Ledger tip goes, as in the join wizard (utils/beans-off.ts).
+ * there are none takes their place, and the Ledger tip goes, as in the join wizard (utils/beans-off.ts). `community`:
+ * another community's name, where the phone joined that community's open door (slice S2; issue #2563): the card says it
+ * has no Beans under its own name, as the join wizard's card does, never "the global community".
  *
  * In the member's language: a bold phrase sits inside its sentence ({map}, {zero}), never glued beside it, so a
  * language can put it where its word order wants it (components/Sentence). The figures are written in the sentences.
  */
-export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
+export function OnboardingGuide({ beansOn = true, community }: { beansOn?: boolean; community?: string }) {
     return (
         <View>
             {beansOn ? (
@@ -93,7 +95,12 @@ export function OnboardingGuide({ beansOn = true }: { beansOn?: boolean }) {
             ) : (
             <View style={guideStyles.card}>
                 <Text style={guideStyles.cardTitle}>{t(NO_BEANS_GUIDE_CARD.title)}</Text>
-                <Text style={guideStyles.cardText}>{t(NO_BEANS_GUIDE_CARD.text)}</Text>
+                {community ? (
+                    // The join wizard's sentence for another community's open door (app/welcome.tsx), the same words.
+                    <Text style={guideStyles.cardText}>{t('{name} has no Beans: credit, the Commons and trading in Beans live in communities that use them, which you join with an invite from a member.', { name: community })}</Text>
+                ) : (
+                    <Text style={guideStyles.cardText}>{t(NO_BEANS_GUIDE_CARD.text)}</Text>
+                )}
             </View>
             )}
 

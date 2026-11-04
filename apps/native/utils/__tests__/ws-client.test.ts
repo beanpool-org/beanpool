@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, DeviceEventEmitter } from 'react-native';
-import { requestSync, applyLivePostChange, ownCardChanged } from '../../services/pillar-sync';
+import { requestSync, applyLivePostChange, ownCardChanged, lastPillarSyncStartedAt } from '../../services/pillar-sync';
 import { WebSocketSyncClient } from '../../services/ws-client';
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -35,6 +35,7 @@ vi.mock('../../services/pillar-sync', () => ({
     requestSync: vi.fn(),
     applyLivePostChange: vi.fn().mockResolvedValue(true),
     ownCardChanged: vi.fn(),
+    lastPillarSyncStartedAt: vi.fn(() => 0),
 }));
 
 const ME = 'e'.repeat(64);
@@ -248,16 +249,143 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
 
         socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: 'f'.repeat(64) }) });
         expect(ownCardChanged).not.toHaveBeenCalled();
-        expect(requestSync).toHaveBeenCalledTimes(1);
+        // Another member's card is a wide doorbell: its sync waits its random turn (the 'wide doorbells' block below).
+        expect(requestSync).not.toHaveBeenCalled();
 
         socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: ME }) });
         expect(ownCardChanged).toHaveBeenCalledTimes(1);
+        // The member's own card syncs at once, as before.
+        expect(requestSync).toHaveBeenCalledTimes(1);
         socket.onmessage({ data: JSON.stringify({ type: 'profile_updated' }) });
         expect(ownCardChanged).toHaveBeenCalledTimes(2);
-        expect(requestSync).toHaveBeenCalledTimes(3);
+        expect(requestSync).toHaveBeenCalledTimes(1);
 
         socket.onmessage({ data: JSON.stringify({ type: 'member_joined', publicKey: ME }) });
         expect(ownCardChanged).toHaveBeenCalledTimes(2);
+    });
+
+    // Capacity fix 2 (scratch/capacity-1104/REPORT.md, bottleneck 2): one open-group create made every open phone run its
+    // whole sync at once (6 requests on global, the area's listings ranked for each): p95 9.3 s at 100 phones, 30 s timeouts
+    // at 200. Each wide doorbell now reaches the screens that show its change (ws_activity), and any sync it still owes
+    // waits a random 0-5 minutes, one for a burst.
+    describe('wide doorbells (@beanpool/core isWideDoorbell)', () => {
+        const OTHER = 'f'.repeat(64);
+        const group = { id: 'g1', name: 'Seed swap', joinPolicy: 'open', memberCount: 1 };
+        const WIDE: Array<[string, Record<string, unknown>, boolean]> = [
+            ['group_created', { type: 'group_created', group }, false],
+            ['group_updated', { type: 'group_updated', group }, false],
+            ['profile_updated naming another member', { type: 'profile_updated', publicKey: OTHER }, true],
+            ['user_pruned naming another member', { type: 'user_pruned', publicKey: OTHER }, true],
+            ['system_announcement', { type: 'system_announcement', title: 'Hello', body: 'All', severity: 'info' }, false],
+        ];
+
+        async function signedIn(): Promise<any> {
+            const { loadIdentity } = await import('../identity');
+            vi.mocked(loadIdentity).mockResolvedValueOnce({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+            const socket = await startAndConnect();
+            // The socket's own opening sync.
+            await vi.advanceTimersByTimeAsync(10);
+            vi.mocked(requestSync).mockClear();
+            vi.mocked(DeviceEventEmitter.emit).mockClear();
+            return socket;
+        }
+
+        for (const [name, event, owesSync] of WIDE) {
+            it(`${name}: no sync now; the screens that show it hear it at once; ${owesSync ? 'one sync within 5 minutes' : 'no sync at all (the pillar sync reads none of it)'}`, async () => {
+                const socket = await signedIn();
+                socket.onmessage({ data: JSON.stringify(event) });
+                expect(requestSync).not.toHaveBeenCalled();
+                // The open screens read the one thing it changed (Talk's and the header's groups, Home, an open chat), and
+                // the root layout shows an announcement: all on ws_activity, with the event as it came.
+                expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('ws_activity', event);
+                expect(DeviceEventEmitter.emit).toHaveBeenCalledTimes(1);
+                expect(ownCardChanged).not.toHaveBeenCalled();
+                expect(client.deferredSyncPendingForTest()).toBe(owesSync);
+
+                await vi.advanceTimersByTimeAsync(300_000);
+                expect(requestSync).toHaveBeenCalledTimes(owesSync ? 1 : 0);
+                expect(client.deferredSyncPendingForTest()).toBe(false);
+            });
+        }
+
+        it('the deferred sync can wait the whole 5 minutes, and can come at once', async () => {
+            const socket = await signedIn();
+            vi.spyOn(Math, 'random').mockReturnValue(0.999);
+            socket.onmessage({ data: JSON.stringify({ type: 'user_pruned', publicKey: OTHER }) });
+            await vi.advanceTimersByTimeAsync(299_000);
+            expect(requestSync).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(1_000);
+            expect(requestSync).toHaveBeenCalledTimes(1);
+
+            vi.mocked(Math.random).mockReturnValue(0);
+            socket.onmessage({ data: JSON.stringify({ type: 'user_pruned', publicKey: OTHER }) });
+            await vi.advanceTimersByTimeAsync(1);
+            expect(requestSync).toHaveBeenCalledTimes(2);
+        });
+
+        it('a burst of wide doorbells owes one sync, not one each', async () => {
+            const socket = await signedIn();
+            for (let i = 0; i < 20; i++) {
+                const [, event] = WIDE[i % WIDE.length];
+                socket.onmessage({ data: JSON.stringify(event) });
+                await vi.advanceTimersByTimeAsync(5_000);
+            }
+            expect(requestSync).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(requestSync).toHaveBeenCalledTimes(1);
+        });
+
+        it('a sync that starts after the doorbell takes the deferred one\'s place; a doorbell after that sync started is still owed one', async () => {
+            const socket = await signedIn();
+            vi.spyOn(Math, 'random').mockReturnValue(0.5);
+            socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: OTHER }) });
+            // The 5-minute tick (or a foreground) runs a sync 10 s later: it reads the change.
+            vi.mocked(lastPillarSyncStartedAt).mockReturnValue(Date.now() + 10_000);
+            await vi.advanceTimersByTimeAsync(150_000);
+            expect(requestSync).not.toHaveBeenCalled();
+
+            // A doorbell after that sync began: owed its own.
+            vi.mocked(lastPillarSyncStartedAt).mockReturnValue(Date.now() - 1_000);
+            socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: OTHER }) });
+            await vi.advanceTimersByTimeAsync(150_000);
+            expect(requestSync).toHaveBeenCalledTimes(1);
+            vi.mocked(lastPillarSyncStartedAt).mockReturnValue(0);
+        });
+
+        it('a change to this member themself is theirs, not wide: it syncs at once as before', async () => {
+            const socket = await signedIn();
+            socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: ME }) });
+            socket.onmessage({ data: JSON.stringify({ type: 'user_pruned', publicKey: ME }) });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(requestSync).toHaveBeenCalledTimes(2);
+            expect(client.deferredSyncPendingForTest()).toBe(false);
+        });
+
+        it('every other doorbell syncs at once as before; a message still does not; a public listing is still written in place', async () => {
+            const socket = await signedIn();
+            for (const type of ['transaction_completed', 'member_joined', 'group_member_updated', 'decision_created']) {
+                socket.onmessage({ data: JSON.stringify({ type }) });
+            }
+            expect(requestSync).toHaveBeenCalledTimes(4);
+            socket.onmessage({ data: JSON.stringify({ type: 'new_message', conversationId: 'c1' }) });
+            expect(requestSync).toHaveBeenCalledTimes(4);
+            socket.onmessage({ data: JSON.stringify({ type: 'new_post', post: publicOffer() }) });
+            await vi.advanceTimersByTimeAsync(0);
+            expect(applyLivePostChange).toHaveBeenCalledTimes(1);
+            expect(requestSync).toHaveBeenCalledTimes(4);
+            expect(client.deferredSyncPendingForTest()).toBe(false);
+        });
+
+        it('a close drops the sync still owed: the next socket opens with a sync of its own', async () => {
+            const socket = await signedIn();
+            socket.onmessage({ data: JSON.stringify({ type: 'user_pruned', publicKey: OTHER }) });
+            expect(client.deferredSyncPendingForTest()).toBe(true);
+            (AppState as any).currentState = 'background';
+            mockAppStateListeners.forEach(listener => listener('background'));
+            expect(client.deferredSyncPendingForTest()).toBe(false);
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(requestSync).not.toHaveBeenCalled();
+        });
     });
 
     it('backgrounding the app disconnects and clears watchdog', async () => {

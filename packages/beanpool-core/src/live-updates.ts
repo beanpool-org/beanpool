@@ -260,8 +260,9 @@ export interface DeferredSync {
  * periodic or foreground sync in between takes its place. A doorbell after that sync started is still owed one.
  */
 export function createDeferredSync(deps: DeferredSyncDeps): DeferredSync {
-    const now = deps.now ?? Date.now;
-    const random = deps.random ?? Math.random;
+    // Read when used, not when made: a fake clock or random installed after this was made still counts.
+    const now = deps.now ?? (() => Date.now());
+    const random = deps.random ?? (() => Math.random());
     const setTimer = deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
     const clearTimer = deps.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>));
     let timer: unknown = null;

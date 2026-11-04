@@ -16,7 +16,7 @@ import { copyPriceLine, eventCopyOf, formatNumber, listingChipWords, pinLive, t,
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 import { styleUntilDrawn, useListPhotoSteps } from '../lib/use-list-photo-steps';
-import { CARD_INK, GRID_PHOTO, GRID_ROW, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, gridChip, gridTile, listCard } from './market-card-shell';
+import { CARD_INK, GRID_PHOTO, GRID_ROW, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard } from './market-card-shell';
 
 /** The grid's 4:3 frame anchors upright photos towards the top third (market-card-43). */
 const GRID_CROP: CSSProperties = { objectPosition: '50% 33%' };
@@ -73,9 +73,15 @@ interface Props {
      * people the deal belongs to, never a stranger, so a card never says who traded (DESIGN-deals-fable §3.3).
      */
     dealChip?: ListingChip | null;
+    /**
+     * The map's pop-up (DESIGN-card-style-box-fable.md §2, slice M1): the list card with the pop-up's ✕ in its top end
+     * corner, which the map draws beside the card's tap target. The first row keeps room for it, and the community a
+     * listing comes from is a chip in that row instead of a badge in the corner the ✕ takes. List view only.
+     */
+    popUp?: boolean;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', isOwnPost, distanceKm, beansMarked = false, dealChip = null }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', isOwnPost, distanceKm, beansMarked = false, dealChip = null, popUp = false }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -291,7 +297,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         chip with no room beside the price moves under it whole ("ANGEBOT" beside "25 /Std." at 320 x 1.3)
                         rather than shrinking, and only a chip wider than the whole width ends in an ellipsis (#2873). The chips
                         and the price keep 4 below them (`mb-1`), which the head's `-mb-1` takes back: rows 4 apart, as before. */}
-                    <div data-testid="listing-list-head" className="flow-root min-w-0 leading-none -mb-1">
+                    <div data-testid="listing-list-head" className={`flow-root min-w-0 leading-none -mb-1${popUp ? ` ${POP_UP_CLOSE_ROOM}` : ''}`}>
                         {showPrice && (
                             <span data-testid="listing-list-price" className={`float-right rtl:float-left ms-2 mb-1 flex flex-row items-center flex-nowrap ${LIST_TYPE.price} ${CARD_INK.title}`}>
                                 {priceAmount(post.credits)}
@@ -329,10 +335,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     {upperCase(listingChipWords(dealChip))}
                                 </span>
                             )}
+                            {popUp && nodeBadge && <span data-testid="card-node-chip" className={chip('quiet')}>🌐 {nodeBadge}</span>}
                         </span>
                     </div>
 
-                    <h3 dir="auto" className={`m-0 truncate ${LIST_TYPE.loud} ${CARD_INK.title}`}>
+                    {/* Two lines at most, as the event's when (DESIGN-card-style-box-fable.md §1.3): one line made "A dozen eg…" at 320 x 1.3. */}
+                    <h3 dir="auto" data-testid="listing-list-title" className={`m-0 break-words line-clamp-2 ${LIST_TYPE.loud} ${CARD_INK.title}`}>
                         {post.title}
                     </h3>
 
@@ -356,8 +364,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     )}
                 </div>
 
-                {/* Node Overlays - Top Right floating if remote */}
-                {nodeBadge && (
+                {/* Node Overlays - Top Right floating if remote (in the pop-up, a chip: the ✕ has this corner) */}
+                {nodeBadge && !popUp && (
                     <div className="absolute top-2 right-2 font-bold bg-indigo-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5">
                         🌐 {nodeBadge}
                     </div>

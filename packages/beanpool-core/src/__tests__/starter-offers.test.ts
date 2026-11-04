@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isLendablePriceType } from '../lending.js';
 import { DEFAULT_PRICING_CATALOG, PRICING_CATEGORIES, pricingItemFor, type PricingCategory } from '../pricing-catalog.js';
 import {
     STARTER_FALLBACK_CATEGORIES, STARTER_OFFERS, STARTER_OFFER_COUNT, starterOffersFor, type StarterDraft, type StarterOffer,
@@ -6,18 +7,28 @@ import {
 
 const CATEGORY_IDS = PRICING_CATEGORIES.map((c) => c.id);
 /**
- * What a guide unit means to a member who reads the composer's price type beside the figure. The composer's types are
- * Total, / Hr, / Dy, / Wk and / Mo. A unit that is a span of time is priced per that span; a night has no type of its
- * own, so a draft that sells a stay of several nights opens at the day rate, and a draft that sells one night is a Total
- * and says so in its title (checked below). Any other unit counts things
- * (a loaf, a trip, a job, an event): one price, a Total. A unit not named here fails the test until someone says what it
- * means, so a new "per fortnight" can't slip through as a Total.
+ * What a guide unit means to a member who reads the composer's price type beside the figure, given what a node keeps.
+ * A node keeps a price type per day, week or month only on a loan; any other Offer is stored as one fee or by the hour
+ * (apps/server/src/routes/marketplace.ts, "Any other listing is one fee or by the hour"; test-lendable-offers.ts pins it
+ * and posts every draft below). So a guide unit that is an hour is a draft by the hour, and every other unit is a Total.
+ * A figure per day, night, week or month is a Total only where the draft's own words say it is for one such span: a Total
+ * that says nothing would read as the whole stay or hire at one span's price. A unit not named here fails the test until
+ * someone says what it means, so a new "per fortnight" can't slip through as a Total.
  */
-const PER_SPAN: Record<string, 'hourly' | 'daily' | 'weekly' | 'monthly'> = { hr: 'hourly', day: 'daily', night: 'daily', week: 'weekly', month: 'monthly' };
+const SPAN_WORDS: Record<string, RegExp> = {
+    day: /\bfor (a|the) day\b/i,
+    night: /\bnight\b/i,
+    week: /\bfor (a|the) week\b/i,
+    month: /\bfor (a|the) month\b/i,
+};
 const ONE_PRICE_UNITS = [
     'loaf', 'plate', 'jar', 'service', 'set', 'each', 'slab', 'punnet', 'trailer', 'tree', 'trip', 'session', 'class', 'seat',
     'bundle', 'walk', 'dozen', 'job', 'project', 'm³', 'bag', 'event',
 ];
+/** The price types a node keeps on an Offer that is not lent: one fee (a Free draft is one fee of nothing), or by the hour. */
+const KEPT_WHEN_NOT_LENT = ['free', 'fixed', 'hourly'];
+/** The eight drafts that were `daily` before the review of 5 Nov: the node would have kept each as a Total. */
+const WERE_PER_DAY = ['labour.3', 'housing.2', 'animals.2', 'housing.3', 'tools.2', 'tools.3', 'transport.2', 'general.1'];
 const ids = (drafts: readonly StarterDraft[]) => drafts.map((d) => d.id);
 const ALL: { category: PricingCategory; position: number; offer: StarterOffer }[] = CATEGORY_IDS.flatMap((category) =>
     STARTER_OFFERS[category].map((offer, position) => ({ category, position, offer })));
@@ -62,8 +73,23 @@ describe('starter drafts: the table (design DESIGN-cold-start-trades-fable.md §
         }
     });
 
-    it("a draft is priced the way the pricing guide prices it: the figure and the price type the composer opens with say the same thing", () => {
+    it("a draft that is not lent has a price type a node keeps: one fee, Free or by the hour (per day or per week is only a loan's)", () => {
+        const wrong: string[] = [];
+        for (const { category, position, offer } of ALL) {
+            const at = `${category}.${position + 1} ${offer.title}`;
+            if (offer.lendable) {
+                const posted = offer.priceType === 'free' ? 'fixed' : offer.priceType;
+                if (!isLendablePriceType(posted)) wrong.push(`${at}: a loan can be one fee, per day or per week, not ${posted}`);
+            } else if (!KEPT_WHEN_NOT_LENT.includes(offer.priceType)) {
+                wrong.push(`${at}: opens as ${offer.priceType}, but a node stores an Offer that is not lent as one fee or by the hour`);
+            }
+        }
+        expect(wrong).toEqual([]);
+    });
+
+    it("a draft is priced the way the pricing guide prices it: the figure, the price type and the words say the same thing", () => {
         const guided = CATEGORY_IDS.filter((c) => DEFAULT_PRICING_CATALOG.some((i) => i.category === c));
+        const wrong: string[] = [];
         for (const { category, position, offer } of ALL) {
             const at = `${category}.${position + 1} ${offer.title}`;
             if (offer.priceType === 'free') {
@@ -82,33 +108,45 @@ describe('starter drafts: the table (design DESIGN-cold-start-trades-fable.md §
             const unit = item!.unit ?? '';
             // This reads the guide item's own unit, not `pricingHintFor`'s price type: that turns a unit it has no type for
             // ("night") into one price, and a test against it would agree with the mistake it is here to catch.
-            expect(Object.keys(PER_SPAN).includes(unit) || ONE_PRICE_UNITS.includes(unit),
+            expect(unit === 'hr' || unit in SPAN_WORDS || ONE_PRICE_UNITS.includes(unit),
                 `${at}: the guide prices it per "${unit}": say here what that means to a member`).toBe(true);
-            if (unit === 'night' && offer.priceType === 'fixed') {
-                // A Total is honest for a night only where the draft sells that one night, and its own title says so.
-                expect(offer.title, `${at}: ${item!.priceBeans} is the price of one night, but the composer opens it as a Total`).toMatch(/\bnight\b/i);
-                continue;
+            if (unit === 'hr') {
+                if (offer.priceType !== 'hourly') wrong.push(`${at}: the guide's ${item!.priceBeans} is per hour, and the draft opens as ${offer.priceType}`);
+            } else if (offer.priceType !== 'fixed') {
+                wrong.push(`${at}: the guide's ${item!.priceBeans} is per ${unit}, and the draft opens as ${offer.priceType}, not one fee`);
+            } else if (unit in SPAN_WORDS && !SPAN_WORDS[unit].test(`${offer.title} ${offer.description}`)) {
+                wrong.push(`${at}: ${item!.priceBeans} is the price of one ${unit}, and as a Total the draft's own words must say it is for one ${unit}: "${offer.description}"`);
             }
-            const meant = PER_SPAN[unit] ?? 'fixed';
-            expect(offer.priceType, `${at}: the guide's ${item!.priceBeans} is per ${unit}, so a member reads it as ${meant}, and the draft opens as ${offer.priceType}`).toBe(meant);
         }
+        expect(wrong).toEqual([]);
     });
 
-    it("the three drafts that sit or camp for a stay carry the guide's nightly figure as a day rate, never as a Total", () => {
-        const rate = (id: string) => {
+    it("the eight drafts that were priced per day are a Total for one day or one night, and their words say so", () => {
+        const stay = (id: string) => {
             const [category, position] = id.split('.');
             const offer = STARTER_OFFERS[category as PricingCategory][Number(position) - 1];
-            const item = pricingItemFor(DEFAULT_PRICING_CATALOG, category, offer.guide!)!;
-            return { offer, item };
+            return { offer, item: pricingItemFor(DEFAULT_PRICING_CATALOG, category, offer.guide!)! };
         };
-        for (const id of ['labour.3', 'housing.2', 'animals.2']) {
-            const { offer, item } = rate(id);
-            expect(item.unit, id).toBe('night');
-            expect(offer.priceType, `${id} ${offer.title}: ${item.priceBeans} a night must not open as a Total`).toBe('daily');
+        for (const id of WERE_PER_DAY) {
+            const { offer, item } = stay(id);
+            expect(offer.priceType as string, `${id} ${offer.title}: ${item.priceBeans} a ${item.unit} opens as ${offer.priceType}`).toBe('fixed');
+            expect(offer.guide, id).toBeTruthy();
         }
-        // The two that really are one night (a guest room for a night, an outdoor movie night) stay a Total.
+        // The stays and the camping spot name the one night the figure is for, in their own description.
+        for (const id of ['labour.3', 'housing.2', 'animals.2']) {
+            const { offer, item } = stay(id);
+            expect(item.unit, id).toBe('night');
+            expect(offer.description, id).toMatch(/\bfor a night\b/);
+        }
+        // The hires and the bench name the one day.
+        for (const id of ['housing.3', 'tools.2', 'tools.3', 'transport.2', 'general.1']) {
+            const { offer, item } = stay(id);
+            expect(item.unit, id).toBe('day');
+            expect(offer.description, id).toMatch(/\bfor the day\b/);
+        }
+        // The two that really are one night by their own title (a guest room for a night, a movie night kit) were always a Total.
         for (const id of ['housing.1', 'general.3']) {
-            const { offer, item } = rate(id);
+            const { offer, item } = stay(id);
             expect(item.unit, id).toBe('night');
             expect(offer.priceType, id).toBe('fixed');
         }
@@ -178,7 +216,7 @@ describe('starter drafts: which three a member is shown (design §3.1)', () => {
         expect(starterOffersFor(stars)).toEqual(first);
         expect(stars).toEqual(['health', 'mindset']);
         first[0].title = 'changed' as StarterDraft['title'];
-        first[0].priceType = 'daily';
+        first[0].priceType = 'free';
         expect(starterOffersFor(stars)[0].title).toBe(STARTER_OFFERS.health[0].title);
         expect(starterOffersFor(stars)[0].priceType).toBe('hourly');
         expect(starterOffersFor(stars)[0].id).toBe('health.1');

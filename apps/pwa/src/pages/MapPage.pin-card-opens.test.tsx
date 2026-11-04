@@ -4,8 +4,9 @@
  *
  * The map's pin card is one. The owner's name is shown, and a press on it, or on any bare part of the card, opens the listing.
  * The ✕ is the card's one other control and does not; the photo is part of the card, so a press on it opens the listing too (the
- * enlarge lives on the listing's own page, as on the phone). The View Details button stays the door for the keyboard and a
- * screen reader, described by the title.
+ * enlarge lives on the listing's own page, as on the phone). The card itself is the door for the keyboard and a screen reader:
+ * one button named by the listing, as the Market's tiles are, since the card is the Market's list card (slice M1: the View
+ * Details button went, DESIGN-card-style-box-fable.md §2, "a tap anywhere on a card opens the item").
  *
  * Its own file, with the leaflet stand-in MapPage.test.tsx uses: that file stubs the global fetch in its later blocks and leaves
  * it stubbed, which this card does not want to inherit.
@@ -157,10 +158,10 @@ describe("MapPage: the pin card opens its listing from anywhere on it", () => {
         vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([{ ...post, photos: ['/api/marketplace/posts/post-eggs/photos/0?v=1&k=KEY0'] }] as any);
         const onNavigate = vi.fn();
         const { card } = await openPinCard(onNavigate);
-        const img = card.querySelector('img');
+        const img = within(card).getByTestId('listing-list-photo').querySelector('img');
         expect(img).not.toBeNull();
         // One element opens the item and one closes the card: no third control for the photo.
-        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close preview', 'View Details']);
+        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Open listing: A dozen eggs', 'Close preview']);
         expect(img!.closest('button')).toBeNull();
         fireEvent.click(img!);
         expect(onNavigate).toHaveBeenCalledTimes(1);
@@ -174,30 +175,42 @@ describe("MapPage: the pin card opens its listing from anywhere on it", () => {
         vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([{ ...post, photos: [PHOTO] }] as any);
         const onNavigate = vi.fn();
         const { card } = await openPinCard(onNavigate);
-        expect(card.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO}&size=thumb2`);
+        // The photo's slot (the list card's, M1): the card's other image is the bean sign beside the price.
+        const slot = () => within(card).getByTestId('listing-list-photo');
+        const photo = () => slot().querySelector('img');
+        expect(photo()?.getAttribute('src')).toBe(`${PHOTO}&size=thumb2`);
         // card-photo-blank (#2853): the small copy is asked once more past every cache before the photo's own URL.
-        fireEvent.error(card.querySelector('img')!);
-        expect(card.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
-        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close preview', 'View Details']);
-        fireEvent.error(card.querySelector('img')!);
-        expect(card.querySelector('img')?.getAttribute('src')).toBe(PHOTO);
-        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close preview', 'View Details']);
-        fireEvent.error(card.querySelector('img')!);
-        expect(card.querySelector('img')).toBeNull();
-        expect(within(card).getByText('🥕')).toBeInTheDocument();
-        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close preview', 'View Details']);
+        fireEvent.error(photo()!);
+        expect(photo()?.getAttribute('src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
+        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Open listing: A dozen eggs', 'Close preview']);
+        fireEvent.error(photo()!);
+        expect(photo()?.getAttribute('src')).toBe(PHOTO);
+        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Open listing: A dozen eggs', 'Close preview']);
+        fireEvent.error(photo()!);
+        expect(photo()).toBeNull();
+        expect(within(slot()).getByText('🥕')).toBeInTheDocument();
+        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Open listing: A dozen eggs', 'Close preview']);
         fireEvent.click(within(card).getByTestId('map-preview-tap'));
         expect(onNavigate).toHaveBeenCalledTimes(1);
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-eggs');
     });
 
-    it('the View Details button opens it once (the press does not reach the card as well), and is described by the title', async () => {
+    it('the card is the door for the keyboard and a screen reader: one button named by the listing, Enter or Space opens it once, and no View button (M1)', async () => {
         const onNavigate = vi.fn();
         const { card } = await openPinCard(onNavigate);
-        const button = within(card).getByRole('button', { name: 'View Details' });
-        expect(button).toHaveAccessibleDescription('A dozen eggs');
-        fireEvent.click(button);
+        const door = within(card).getByRole('button', { name: 'Open listing: A dozen eggs' });
+        expect(door).toBe(within(card).getByTestId('map-preview-tap'));
+        expect(door.tabIndex).toBe(0);
+        expect(within(card).queryByRole('button', { name: /View/ })).toBeNull();
+        expect(card).not.toHaveTextContent(/View Details|View listing/);
+        fireEvent.keyDown(door, { key: 'Enter' });
         expect(onNavigate).toHaveBeenCalledTimes(1);
+        fireEvent.keyDown(door, { key: ' ' });
+        expect(onNavigate).toHaveBeenCalledTimes(2);
+        expect(onNavigate).toHaveBeenLastCalledWith('marketplace', 'post-eggs');
+        // Any other key opens nothing.
+        fireEvent.keyDown(door, { key: 'a' });
+        expect(onNavigate).toHaveBeenCalledTimes(2);
     });
 
     it('the ✕ closes the card and opens nothing', async () => {
@@ -225,5 +238,117 @@ describe("MapPage: the pin card opens its listing from anywhere on it", () => {
         fireEvent.click(within(again).getByTestId('map-preview-near'));
         expect(onNavigate).toHaveBeenCalledTimes(1);
         expect(onNavigate).toHaveBeenCalledWith('marketplace', expect.any(String));
+    });
+});
+
+/**
+ * Slice M1 (DESIGN-card-style-box-fable.md §2, §4; Marty, 4 Nov 2026: "yes restyle - look at the similar market place offer and
+ * map card offer"): the map's pop-up is the Market's list card with a ✕. The same photo slot (80 wide, the card's full height,
+ * first in the card so its corners round it), the same chips, title, who or date, place, and the price or the event's answer;
+ * no View button, since a tap anywhere opens the item; no zero counts; the web event pop-up keeps Going / Interested (decided).
+ */
+describe("MapPage: the pin card is the Market's list card with a ✕ (M1)", () => {
+    const HOUR = 60 * 60 * 1000;
+    const bee = (extra: Record<string, unknown> = {}) => ({
+        id: 'ev-bee', type: 'event', category: 'community', title: 'Working bee', description: '', credits: 0, priceType: 'fixed',
+        authorPublicKey: 'host-pk', authorCallsign: 'Hazel', createdAt: '2026-09-17T00:00:00.000Z', active: true, status: 'active',
+        repeatable: false, lat: -28.55, lng: 153.5, eventStartAt: new Date(Date.now() + 2 * HOUR).toISOString(),
+        eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null, ...extra,
+    });
+    const names = (card: HTMLElement) => within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent);
+    const slotIsTheListSlot = (slot: HTMLElement) => {
+        // 80 wide and the card's full height (at least 80), never a fixed height of its own (market-card-shell LIST_PHOTO).
+        expect(slot.className.split(/\s+/)).toEqual(expect.arrayContaining(['w-20', 'min-h-20', 'self-stretch', 'shrink-0']));
+        expect(slot.className.split(/\s+/).some(c => /^h-/.test(c))).toBe(false);
+    };
+
+    async function openEventCard(onNavigate: (...a: any[]) => void) {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} isMember={true} onNavigate={onNavigate} />); });
+        await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-event-pin'))).toBe(true));
+        act(() => { mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-event-pin'))!.listeners['click']?.(); });
+        return { view: view!, card: await view!.findByTestId('map-preview-card') };
+    }
+
+    it("an Offer: the list card's photo slot, chips, title, who and price, the floating shadow, and no button but the card and the ✕", async () => {
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([{ ...post, photos: ['/api/marketplace/posts/post-eggs/photos/0?v=1&k=KEY0'] }] as any);
+        const onNavigate = vi.fn();
+        const { card } = await openPinCard(onNavigate);
+        const listCard = within(card).getByTestId('listing-list-card');
+        const slot = within(listCard).getByTestId('listing-list-photo');
+        expect(listCard.firstElementChild).toBe(slot);
+        slotIsTheListSlot(slot);
+        const chips = within(listCard).getByTestId('listing-list-chips');
+        expect(chips).toHaveTextContent('OFFER');
+        expect(chips).toHaveTextContent('🥕 Food & Produce');
+        expect(chips).toHaveTextContent('↻ RECURRING');
+        expect(within(listCard).getByTestId('listing-list-title')).toHaveTextContent('A dozen eggs');
+        expect(within(listCard).getByTestId('listing-list-price')).toHaveTextContent('12');
+        expect(listCard).toHaveTextContent('Bob');
+        expect(names(card)).toEqual(['Open listing: A dozen eggs', 'Close preview']);
+        expect(card).not.toHaveTextContent(/View/);
+        expect(within(card).getByTestId('map-preview-tap').className).toContain('shadow-[0_10px_20px_rgba(0,0,0,0.15)]');
+        fireEvent.click(slot);
+        expect(onNavigate).toHaveBeenCalledTimes(1);
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-eggs');
+    });
+
+    it('an event nobody has answered yet: the list card with EVENT, the when and the title, no "0 going", Going and Interested, and no View button', async () => {
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([bee()] as any);
+        const onNavigate = vi.fn();
+        const { view, card } = await openEventCard(onNavigate);
+        const eventCard = within(card).getByTestId('event-card');
+        // The card's own frame is the list card's (corners 14, the card ground), not the old sheet's radius 24.
+        expect(eventCard.className.split(/\s+/)).toEqual(expect.arrayContaining(['rounded-[14px]', 'bg-[var(--bg-card)]']));
+        expect(card.innerHTML).not.toMatch(/rounded-\[24px\]/);
+        const slot = within(eventCard).getByTestId('event-list-photo');
+        slotIsTheListSlot(slot);
+        expect(slot.parentElement!.firstElementChild).toBe(slot);
+        expect(within(eventCard).getByTestId('event-type-chip')).toHaveTextContent('EVENT');
+        // The chip row stops short of the ✕.
+        expect(within(eventCard).getByTestId('event-chips').className.split(/\s+/)).toContain('pe-8');
+        expect(within(eventCard).getByTestId('event-when')).toBeInTheDocument();
+        expect(eventCard).toHaveTextContent('Working bee');
+        expect(within(eventCard).queryByTestId('event-counts')).toBeNull();
+        expect(card).not.toHaveTextContent(/0 going|0 interested/);
+        expect(names(card)).toEqual(['Open event: Working bee', 'Going', 'Interested', 'Close preview']);
+        expect(card).not.toHaveTextContent(/View/);
+        fireEvent.click(within(eventCard).getByRole('button', { name: 'Open event: Working bee' }));
+        expect(onNavigate).toHaveBeenCalledTimes(1);
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'ev-bee');
+        fireEvent.click(within(card).getByRole('button', { name: 'Close preview' }));
+        await waitFor(() => expect(view.queryByTestId('map-preview-card')).toBeNull());
+        expect(onNavigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('an event you are going to: your answer is the filled Going ✓, and the counts show once they are above zero', async () => {
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([bee({ myRsvp: 'going', goingCount: 1, interestedCount: 2 })] as any);
+        const { card } = await openEventCard(vi.fn());
+        const going = within(card).getByRole('button', { name: 'Going ✓' });
+        expect(going).toHaveAttribute('aria-pressed', 'true');
+        expect(within(card).getByTestId('event-counts')).toHaveTextContent('1 going · 2 interested');
+    });
+
+    it("a visitor's card: the list card's slot and chips, the title and \"near here\", and no price, name or View button", async () => {
+        const GLOBAL = { memberCount: 3, postCount: 1, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(GLOBAL as any);
+        const onNavigate = vi.fn();
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={null} isMember={false} visitor onNavigate={onNavigate} />); });
+        await waitFor(() => expect(mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin'))).toBe(true));
+        act(() => { pinOf().listeners['click']?.(); });
+        const card = await view!.findByTestId('map-preview-card');
+        const tap = within(card).getByTestId('map-preview-tap');
+        const listCard = tap.firstElementChild as HTMLElement;
+        expect(listCard.className.split(/\s+/)).toEqual(expect.arrayContaining(['rounded-[14px]', 'bg-[var(--bg-card)]']));
+        slotIsTheListSlot(listCard.firstElementChild as HTMLElement);
+        expect(card).toHaveTextContent('OFFER');
+        expect(card).toHaveTextContent('🥕 Food & Produce');
+        expect(within(card).getByTestId('map-preview-title')).toHaveTextContent('A dozen eggs');
+        expect(within(card).getByTestId('map-preview-near')).toHaveTextContent('near here');
+        expect(card).not.toHaveTextContent(/Bob|12|View/);
+        expect(names(card)).toEqual(['Open listing: A dozen eggs', 'Close preview']);
+        fireEvent.click(tap);
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-eggs');
     });
 });

@@ -11,10 +11,10 @@
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, pollOtherLines, pollWeekGroupNote, pollWeekNotice } from '@beanpool/core';
-import { copyPriceLine, eventCopyOf } from '@beanpool/core';
+import { upperCase } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { usePollNextStart } from '../lib/poll-week';
-import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -39,14 +39,13 @@ import { changeMyShop, readMyShop, shopTakesOffers, shopToggleState, type ShopTo
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm, readNearestInCircle } from '../lib/listings-near';
 import { standingFromRefusal } from '../lib/standing-refusal';
-import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, openListingLabel } from '../lib/marketplace';
 import { clusterIcon, elderHaloHtml } from '../lib/map-pin-style';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { TagPicker } from '../components/TagPicker';
 import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
-import { TIER_WORDS } from '../lib/trust-tier';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
@@ -58,6 +57,9 @@ import { ScrollHintRow } from '../components/ScrollHintRow';
 import { MapStackList } from '../components/MapStackList';
 import { bubblesOnMap, planBubbleTap, stackPins, stackPinFromPost, type StackPin } from '../lib/map-stack';
 import { EventCard } from '../components/EventCard';
+import { MarketplaceCard } from '../components/MarketplaceCard';
+import { CategoryTile } from '../components/CategoryTile';
+import { CARD_INK, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, listCard } from '../components/market-card-shell';
 import { Sentence } from '../components/Sentence';
 import { approximateLocation, tierForCredit, type AddressResult } from '@beanpool/core';
 import { ListPhoto } from '../components/ListPhoto';
@@ -2109,6 +2111,34 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     // MapCalendar, as the panel's classes, as this clamp and as a number, and its test pins that they agree.
     const previewWrapClass = `absolute bottom-0 left-0 right-0 ${calendarOpen ? CARD_STOPS_AT_CALENDAR_CLASS : 'md:right-0'} z-[150] flex flex-col justify-end items-center md:items-start pointer-events-none pb-[calc(var(--bottom-nav-offset)+0.5rem)] md:pb-4`;
 
+    // How far the pin card's item is: from where the member is, once they tapped the target; else the node's number from
+    // their area, or measured here from the exact place they picked (the node had it rounded). An event's place line and a
+    // listing's 📍 line both read it.
+    const previewDistanceKm = (p: MarketplacePost): number | null => userLocation && p.lat != null && p.lng != null
+        ? haversineDistance(userLocation.lat, userLocation.lng, p.lat, p.lng)
+        : listingDistanceKm(p, near?.from === 'setting'
+            ? (lat, lng) => haversineDistance(near.circle.lat, near.circle.lng, lat, lng) : null, near);
+    const previewCategory = previewPost ? MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category) : undefined;
+    // A listing's pin card is one tap target, as the Market's tiles are: the card holds blocks, so a role rather than a
+    // <button>, named as the Market names it, and Enter or Space opens it as a click does. The ✕ is its sibling.
+    const previewTap = (p: MarketplacePost) => ({
+        'data-testid': 'map-preview-tap',
+        role: 'button',
+        tabIndex: 0,
+        'aria-label': openListingLabel(p),
+        onClick: () => onNavigate && onNavigate('marketplace', p.id),
+        onKeyDown: (e: ReactKeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (onNavigate) onNavigate('marketplace', p.id); }
+        },
+        className: `${POP_UP} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500`,
+    });
+    // The card's one other control: closes the card and opens nothing (a 44 px target, its 28 px circle inside it).
+    const previewClose = (
+        <button type="button" onClick={(e) => { e.stopPropagation(); setPreviewPost(null); }} aria-label={t('Close preview')} className={POP_UP_CLOSE}>
+            <span aria-hidden="true" className={POP_UP_CLOSE_DOT}>✕</span>
+        </button>
+    );
+
     // A card beside the open calendar needs about 19.5rem of map to its left (a card's width with its 0.75rem gutters). Where
     // the map is too narrow for that, on a phone (the panel covers the map) and on a tablet whose side bar leaves little
     // map, a card opening closes the calendar: the phone does the same (map.tsx drops the stack list when a card opens), and
@@ -2577,156 +2607,88 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             />
         )}
 
-        {/* Map Preview Card — an event shows its own card (§3) */}
+        {/* The map's pop-up is the Market's list card with a ✕ (DESIGN-card-style-box-fable.md §2, slice M1; Marty, 4 Nov:
+            "look at the similar market place offer and map card offer"): the same photo slot, chips, title, who or date,
+            place and mark, lifted off the map by the floating shadow. A tap anywhere on the card opens the item (Marty,
+            4 Nov), so it has no View button; the ✕ is its one other control and sits beside the card's tap target, never
+            inside it. An event keeps Going / Interested on its card (decided 4 Nov): the web map's only way to answer. */}
         {previewPost && previewPost.type === 'event' && (
             <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
-                <div className="m-3 w-[calc(100%-1.5rem)] max-w-[28rem] pointer-events-auto relative flex flex-col gap-2 bg-white dark:bg-nature-900 rounded-[24px] p-2 shadow-[0_10px_20px_rgba(0,0,0,0.15)] border border-nature-200 dark:border-nature-800">
-                    <EventCard
-                        post={previewPost}
-                        identity={identity}
-                        visitor={visitor}
-                        // From where the member is, once they tapped the target (as before); else the node's number from
-                        // their area, or measured here from the exact place they picked (the node had it rounded).
-                        distanceKm={userLocation && previewPost.lat != null && previewPost.lng != null
-                            ? haversineDistance(userLocation.lat, userLocation.lng, previewPost.lat, previewPost.lng)
-                            : listingDistanceKm(previewPost, near?.from === 'setting'
-                                ? (lat, lng) => haversineDistance(near.circle.lat, near.circle.lng, lat, lng) : null, near)}
-                        onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
-                        onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
-                        // The map's preview is one card, not a list, and the web's only way to answer from the map.
-                        rsvpOnCard
-                    />
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
-                            className="flex-1 min-h-[48px] rounded-xl border-none font-bold text-white text-sm bg-violet-700 hover:bg-violet-800"
-                        >
-                            {t('View Details')}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setPreviewPost(null)}
-                            aria-label={t('Close preview')}
-                            className="flex-shrink-0 min-h-[48px] min-w-[48px] rounded-xl bg-black/5 dark:bg-white/10 border-none text-sm font-extrabold text-gray-600 dark:text-gray-300"
-                        >
-                            ✕
-                        </button>
+                <div className="m-4 w-[calc(100%-2rem)] max-w-[28rem] pointer-events-auto relative">
+                    <div className={POP_UP}>
+                        <EventCard
+                            post={previewPost}
+                            identity={identity}
+                            visitor={visitor}
+                            viewMode="list"
+                            popUp
+                            distanceKm={previewDistanceKm(previewPost)}
+                            onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
+                            onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
+                            // The map's pop-up is one card, not a list, and the web's only way to answer from the map.
+                            rsvpOnCard
+                        />
                     </div>
+                    {previewClose}
                 </div>
             </div>
         )}
         {previewPost && previewPost.type !== 'event' && visitor && (
-            // A visitor's pin card (G9a §7): the listing's title and "near here", since the pin is its area's centre, and
-            // the way to its detail sheet. No price, no name, no badge.
+            // A visitor's pin card (G9a §7): the list card with the listing's own words only, its title and "near here",
+            // since the pin is its area's centre. No price, no name, no badge.
             <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
-                {/* A tap anywhere on the card opens the listing (Marty, 4 Nov); the View Details button is the same door for the
-                    keyboard and a screen reader, described by the title. The ✕ is the one other control and does not open it. */}
-                <div
-                    data-testid="map-preview-tap"
-                    onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
-                    className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row gap-4 shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 cursor-pointer"
-                >
-                    {/* A 44 px target, as the event card's ✕ (48 px) is: the small circle sits where it was, inside it. */}
-                    <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setPreviewPost(null); }}
-                        aria-label={t('Close preview')}
-                        className="absolute top-1 right-1 min-w-[44px] min-h-[44px] p-0 rounded-full bg-transparent flex items-center justify-center border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                    >
-                        <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-300">✕</span>
-                    </button>
-                    <div className="relative w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
-                        <ListPhoto
-                            photo={previewPost.photos?.[0]}
-                            fallback={<span className="text-3xl" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
-                            alt="" className="w-full h-full object-cover"
-                        />
+                <div className="m-4 w-[calc(100%-2rem)] max-w-[28rem] pointer-events-auto relative">
+                    <div {...previewTap(previewPost)}>
+                        <div className={listCard()}>
+                            <div className={LIST_PHOTO}>
+                                <ListPhoto
+                                    photo={previewPost.photos?.[0]}
+                                    fallback={<span className={LIST_PHOTO_FILL}><CategoryTile category={previewPost.category} kind="listing" size="thumb" /></span>}
+                                    alt="" className={`${LIST_PHOTO_FILL} object-cover`}
+                                />
+                            </div>
+                            <div className={LIST_TEXT}>
+                                <span className={`flex flex-wrap items-center gap-1 min-w-0 ${POP_UP_CLOSE_ROOM}`}>
+                                    <span className={chip(previewPost.type === 'need' ? 'need' : 'offer')}>
+                                        {upperCase(previewPost.type === 'need' ? t('need', undefined, 'post type') : t('offer', undefined, 'post type'))}
+                                    </span>
+                                    {previewCategory && (
+                                        <span className={chip('quiet')}>{previewCategory.emoji} <span>{t(previewCategory.label)}</span></span>
+                                    )}
+                                </span>
+                                <span data-testid="map-preview-title" dir="auto" className={`block w-full min-w-0 break-words line-clamp-2 ${LIST_TYPE.loud} ${CARD_INK.title}`}>
+                                    {previewPost.title}
+                                </span>
+                                <span data-testid="map-preview-near" className={`block w-full truncate ${LIST_TYPE.place} ${CARD_INK.secondary}`}>
+                                    <span aria-hidden="true">📍 </span>{t('near here')}
+                                </span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex-1 min-w-0 flex flex-col justify-center pr-6">
-                        <span id="map-preview-title-text" data-testid="map-preview-title" className="text-base font-extrabold text-gray-900 dark:text-white leading-tight break-words">
-                            {previewPost.title}
-                        </span>
-                        <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-2">{t('near here')}</span>
-                        <button
-                            onClick={(e) => { e.stopPropagation(); if (onNavigate) onNavigate('marketplace', previewPost.id); }}
-                            aria-describedby="map-preview-title-text"
-                            className="min-h-[44px] py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer bg-indigo-600 hover:bg-indigo-700"
-                        >
-                            {t('View Details')}
-                        </button>
-                    </div>
+                    {previewClose}
                 </div>
             </div>
         )}
         {previewPost && previewPost.type !== 'event' && !visitor && (
             <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
-                {/* A tap anywhere on the card opens the listing, the owner's name included (Marty, 4 Nov): the name is shown, not
-                    pressed. The View Details button is the same door for the keyboard and a screen reader, described by the title.
-                    The ✕ is the one other control and does not open it; the photo is part of the card. */}
-                <div
-                    data-testid="map-preview-tap"
-                    onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
-                    className="bg-white dark:bg-nature-900 m-4 w-[calc(100%-2rem)] max-w-[28rem] rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors cursor-pointer"
-                >
-                    <button
-                        onClick={(e) => { e.stopPropagation(); setPreviewPost(null); }}
-                        aria-label={t('Close preview')}
-                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-200 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
-                    >
-                        ✕
-                    </button>
-                    {previewPost.photos && previewPost.photos.length > 0 ? (
-                        // The photo is part of the card: a tap on it opens the listing (Marty's standing rule); the enlarge lives
-                        // on the listing's own page. A small copy that fails is asked once more past every cache, then steps down to
-                        // the full photo, then the category tile (#2838, #2853), never an empty slot. `relative`: the photo still
-                        // loading is held inside this slot (card-photo-blank).
-                        <div className="relative w-[90px] h-[90px] rounded-2xl overflow-hidden shrink-0">
-                            <ListPhoto
-                                photo={previewPost.photos[0]}
-                                fallback={<span className="w-full h-full flex items-center justify-center text-4xl bg-gray-100 dark:bg-nature-800" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
-                                alt="" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800"
-                            />
-                        </div>
-                    ) : (
-                        <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">
-                            <span className="text-4xl">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>
-                        </div>
-                    )}
-                    <div className="flex-1 ml-4 min-w-0 flex flex-col justify-center">
-                        <div className="flex items-center mb-1 pr-7">
-                            <span className="text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider truncate flex-1">
-                                {MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.label || previewPost.category}
-                            </span>
-                        </div>
-                        <div className="flex items-baseline justify-between gap-2 mb-1">
-                            <span id="map-preview-title-text" data-testid="map-preview-title" className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors flex-1 min-w-0">
-                                {previewPost.title}
-                            </span>
-                            {/* A member's copy has no price here: `credits` is 0, and its line below says what it is at home. */}
-                            {!eventCopyOf(previewPost) && (
-                                <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 shrink-0">
-                                    {t('{amount}B', { amount: previewPost.credits })}
-                                </span>
-                            )}
-                        </div>
-                        {eventCopyOf(previewPost)
-                            ? <span data-testid="map-copy-line" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 break-words transition-colors">{copyPriceLine(eventCopyOf(previewPost)!)}</span>
-                            : (
-                                <span className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 truncate transition-colors">
-                                    {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{tierForCredit(previewPost.authorEnergyCycled ?? 0).name === 'Elder' ? <> ⛰️ <span>{t(TIER_WORDS.Elder)}</span></> : ''}
-                                </span>
-                            )}
-                        <button
-                            onClick={(e) => { e.stopPropagation(); if (onNavigate) onNavigate('marketplace', previewPost.id); }}
-                            aria-describedby="map-preview-title-text"
-                            className={`py-2 px-4 rounded-xl border-none font-bold text-sm cursor-pointer shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98] ${
-                                previewPost.type === 'offer' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
-                            }`}
-                        >
-                            {t('View Details')}
-                        </button>
+                <div className="m-4 w-[calc(100%-2rem)] max-w-[28rem] pointer-events-auto relative">
+                    {/* The owner's name is shown, not pressed: a press on it opens the listing like any part of the card. A
+                        member's copy has no price and no name: its line says what it is at home (MarketplaceCard). */}
+                    <div {...previewTap(previewPost)}>
+                        <MarketplaceCard
+                            // The API's post, as the Market passes it (lib/marketplace's type also asks for a `location`).
+                            post={previewPost as any}
+                            viewMode="list"
+                            popUp
+                            authorEnergy={previewPost.authorEnergyCycled ?? 0}
+                            authorAvatarUrl={previewPost.authorAvatarUrl}
+                            remoteNode={(previewPost as any)._remoteNode ?? (previewPost as any).originNode}
+                            isOwnPost={!!(identity?.publicKey && previewPost.authorPublicKey === identity.publicKey)}
+                            distanceKm={previewDistanceKm(previewPost)}
+                            beansMarked={priceMarked}
+                        />
                     </div>
+                    {previewClose}
                 </div>
             </div>
         )}

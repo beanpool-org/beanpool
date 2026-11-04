@@ -18,7 +18,7 @@ const LISTS: [string, string[], RegExp[]][] = [
     // The Market's three views draw their picture through MarketCardPicture (its banner that fails gives way to the tile),
     // and none draws one itself.
     ['app/(tabs)/market.tsx', ['<MarketCardPicture'], [/uri: (coverImage|picture)\s*}/, /<Image\b/]],
-    ['components/MarketCardPicture.tsx', ['source={{ uri: listPhotoUrl(picture) }}'], [/uri: (cover|picture)\s*}/]],
+    ['components/MarketCardPicture.tsx', ['listPhotoUrl(picture)', 'nextListPhotoUrl(picture, shown)'], [/uri: (cover|picture)\s*}/]],
     ['components/home/HomeCardBodies.tsx', ['<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl || p.bannerUrl))}'], [/<Thumb uri=\{onNode\(/]],
     ['components/EventCard.tsx', ['source={{ uri: listPhotoUrl(photo) }}'], [/uri: photo\s*}/]],
     ['components/MyDealsSheet.tsx', ['uri: listPhotoUrl(item.coverImage) }}', 'uri: listPhotoUrl(coverImage) }}'], [/uri: (item\.)?coverImage\s*}/]],

@@ -4,8 +4,8 @@
  * of #2565, finding 8): app/(tabs)/market.tsx rendered for real in each of its three views, and Home's Market row
  * (components/home/HomeCardBodies.tsx MarketBody). A banner fails when the connection is weak, or when the phone holds a
  * URL from before the enterprise replaced or took it down (its key is bound to the photo as it is now). A listing's own
- * photo that fails is healed as before: its listing is read again (utils/photo-refresh.ts), and the tile does not take
- * its place. React Native's host components are plain tags; expo-image's Image is an <img> that carries its URL and its
+ * photo that fails is healed as before: its listing is read again (utils/photo-refresh.ts), and it draws the photo's own
+ * URL before the tile takes its place (card-photo-retry). React Native's host components are plain tags; expo-image's Image is an <img> that carries its URL and its
  * onError, so the test makes it fail as a phone does. The node is the net-spy stand-in for utils/db (market-words-render).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -230,13 +230,17 @@ describe("the Market's cards: a banner that will not load gives way to the tile"
         expect(tileOf(cardOf('Sourdough from the bakery'))).not.toBeNull();
         expect(healed.calls).toEqual([]);
 
-        // A listing's own photo that will not load is healed by its own URL, and stays a picture, as before.
+        // A listing's own photo that will not load is healed by its own URL, then draws the photo's own URL (the small copy
+        // failed, the detail screen's photo may not), and only when that fails too does the tile take its place.
         const jam = pictureOf(cardOf('Plum jam jars'));
         expect(jam?.getAttribute('data-src')).toBe(`${JAM_PHOTO}&size=thumb2`);
         await failToLoad(jam);
         expect(healed.calls).toEqual([['p-jam', JAM_PHOTO]]);
-        expect(pictureOf(cardOf('Plum jam jars'))).not.toBeNull();
+        expect(pictureOf(cardOf('Plum jam jars'))?.getAttribute('data-src')).toBe(JAM_PHOTO);
         expect(tileOf(cardOf('Plum jam jars'))).toBeNull();
+        await failToLoad(pictureOf(cardOf('Plum jam jars')));
+        expect(pictureOf(cardOf('Plum jam jars'))).toBeNull();
+        expect(tileOf(cardOf('Plum jam jars'))).not.toBeNull();
 
         // And a listing with neither draws its tile.
         expect(pictureOf(cardOf('Borrow a long ladder'))).toBeNull();

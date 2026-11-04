@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { listPhotoUrl } from '../list-photo-url.js';
+import { listPhotoUrl, nextListPhotoUrl } from '../list-photo-url.js';
 
 describe('listPhotoUrl', () => {
     it("asks for a listing photo's small copy, its key kept", () => {
@@ -18,5 +18,25 @@ describe('listPhotoUrl', () => {
         }
         expect(listPhotoUrl(null)).toBe(null);
         expect(listPhotoUrl(undefined)).toBe(undefined);
+    });
+});
+
+describe('nextListPhotoUrl', () => {
+    const PHOTO = '/api/marketplace/posts/abc/photos/0?v=17&k=KEY';
+    it("steps a failed small copy down to the photo's own URL, then to nothing (the tile)", () => {
+        const small = listPhotoUrl(PHOTO);
+        expect(small).toBe(`${PHOTO}&size=thumb2`);
+        expect(nextListPhotoUrl(PHOTO, small)).toBe(PHOTO);
+        expect(nextListPhotoUrl(PHOTO, PHOTO)).toBeNull();
+    });
+    it('goes straight to nothing for a URL that has no small copy, so a card cannot loop', () => {
+        for (const url of ['data:image/jpeg;base64,AAAA', '/api/shops/s1/photo?v=1&k=K', '/api/marketplace/posts/abc/photos/0?v=1&size=thumb2']) {
+            expect(nextListPhotoUrl(url, listPhotoUrl(url))).toBeNull();
+        }
+    });
+    it('goes to nothing for anything it was not drawing', () => {
+        expect(nextListPhotoUrl(PHOTO, null)).toBeNull();
+        expect(nextListPhotoUrl(PHOTO, undefined)).toBeNull();
+        expect(nextListPhotoUrl(PHOTO, '/api/marketplace/posts/other/photos/0?size=thumb2')).toBeNull();
     });
 });

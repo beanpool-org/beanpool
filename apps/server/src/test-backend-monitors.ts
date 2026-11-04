@@ -189,18 +189,14 @@ async function main() {
             && timerRun.delinquent_accounts === after.delinquentCount && timerRun.cohort_anomalies === after.cohortAnomalies,
             `The timer's rows are the one-go numbers (${JSON.stringify(timerRun)} vs ${JSON.stringify(after)})`);
 
-        // --- Test 8: members with no trades are news (info), not a warning, and the flag carries the days it looked back ---
-        // (Marty, 4 Nov: an owner who trades nothing for a month is not a problem, and a flag that is not one does not warn.)
+        // --- Test 8: members with no trades are no flag (Marty, 4 Nov: "do I really care about inactive users? ... I dont think I need to scan for this") ---
         const idle = 'idleA-' + Date.now();
         seedMember(idle, 0, 200); // joined 200 days ago, no trades at all
         db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(user1, idle);
         const health8 = getCommunityHealth();
-        const inactiveFlag = health8.flags.find(f => f.type === 'inactive_member');
-        assert(!!inactiveFlag && inactiveFlag.members.includes(idle), 'The inactive-member flag names the member who has not traded');
-        assert(inactiveFlag?.severity === 'info', `The inactive-member flag is information, not a warning (severity ${inactiveFlag?.severity})`);
-        assert(inactiveFlag?.days === 30, `The flag carries the look-back in days for the owner's screen (${inactiveFlag?.days})`);
-        assert(/not traded Beans for 30\+ days/.test(inactiveFlag?.description ?? ''), `The flag says what was counted: trades of Beans (${inactiveFlag?.description})`);
-        assert(!health8.flags.some(f => f.type === 'inactive_member' && f.severity !== 'info'), 'No inactive-member flag is raised as a warning or alert');
+        assert(health8.activity.inactiveMemberCount >= 1, `The member who has not traded is still in the activity count (${health8.activity.inactiveMemberCount})`);
+        assert(!health8.flags.some(f => (f.type as string) === 'inactive_member'), `No inactive-member flag is raised (${JSON.stringify(health8.flags.map(f => f.type))})`);
+        assert(!health8.flags.some(f => f.members.includes(idle)), 'No flag names the member who has not traded');
 
         console.log(`\n${passed}/${run} checks passed.`);
         if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

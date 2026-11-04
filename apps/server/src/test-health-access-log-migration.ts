@@ -69,6 +69,13 @@ async function main(): Promise<void> {
     check(['disputes_listed', 'dispute_opened', 'alerts_read', 'stranded_escrows_read'].every((a) => sqlOf().includes(a)) && /\bdetail\b/.test(sqlOf()),
         '1. after boot the CHECK allows the looks at disputes, stranded escrows and alerts, and the table has detail');
     check(/\btoken_id\b/.test(sqlOf()) && /\btoken_name\b/.test(sqlOf()), '1b. and booting gives it token_id and token_name');
+    // The question logAlertsLook asks once per named member (capacity map, 4 Nov: it read the whole table each time).
+    const { ALERTS_SEEN_SQL } = await import('./engine/community-health.js');
+    const seenPlan = () => (db.prepare(`EXPLAIN QUERY PLAN ${ALERTS_SEEN_SQL}`).all('aa'.repeat(32), null, 'cc'.repeat(32), '2026-10-01T00:00:00.000Z') as { detail: string }[]).map((r) => r.detail).join(' | ');
+    check(!!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_health_access_log_look' AND tbl_name='health_access_log'`).get(),
+        '1c. a file with the oldest table, booted, has the index the alerts question uses (the rebuild ran first, and the schema made it after)');
+    check(/USING (COVERING )?INDEX idx_health_access_log_look/.test(seenPlan()) && !/\bSCAN\b/.test(seenPlan()),
+        `1d. the question "has this admin looked at this member in 24 hours" is answered from that index, not by scanning the table (${seenPlan()})`);
     const kept = db.prepare(`SELECT * FROM health_access_log WHERE id = 'row-1'`).get() as Record<string, unknown> | undefined;
     check(kept?.action === 'offboard_preview' && kept?.subject_pubkey === 'cc'.repeat(32) && kept?.at === '2026-10-03T21:00:00.000Z'
         && kept?.actor_pubkey === 'aa'.repeat(32) && kept?.detail === null, '2. the old row is kept as it was');

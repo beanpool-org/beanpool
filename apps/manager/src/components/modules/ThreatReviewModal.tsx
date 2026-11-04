@@ -5,7 +5,7 @@ import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { reportSubject } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
-import { FLAG_WORDS as W, flagAction, flagHeading, flagMembers, flagOffersFreeze, isInformationFlag } from '../../lib/flag-words';
+import { FLAG_WORDS as W, flagAction, flagHeading, flagMembers, flagOffersFreeze } from '../../lib/flag-words';
 
 export interface ThreatItem {
     id?: string;
@@ -13,9 +13,8 @@ export interface ThreatItem {
     severity?: 'critical' | 'alert' | 'warning' | 'info' | string;
     description?: string;
     reason?: string;
-    /** A health flag: the public keys the node names (shown as names), and for inactive_member the look-back in days. */
+    /** A health flag: the public keys the node names (shown as names). */
     members?: unknown;
-    days?: unknown;
     isReport?: boolean;
     targetPubkey?: string;
     /** A report on a post: the post, and its author as the node read it from the post (who a freeze acts on). */
@@ -90,16 +89,14 @@ export function ThreatReviewModal({
     }, [members]);
 
     const isReport = threat?.isReport || threat?.targetPubkey !== undefined;
-    // Information is not a warning: no red, and nothing to freeze (inactive_member, whatever severity an older node sent).
-    const isInformation = !isReport && isInformationFlag(threat);
-    const severity = isInformation ? 'info' : (threat?.severity || (isReport ? 'warning' : 'critical'));
+    const severity = threat?.severity || (isReport ? 'warning' : 'critical');
     const title = isReport ? t(W.reportHeading) : flagHeading(threat);
     const description = threat?.description || threat?.reason || t(W.noDetail);
     // Freeze is a report's action, or a flag that shows real harm (wash trading, a sybil ring or funnel).
     const canFreeze = isReport || flagOffersFreeze(threat);
 
-    // The members involved: a report's subject, else the flag's own list of members, else (a node that sent no list) the
-    // keys read out of its description. Resolved to full keys from the roster; shown by name, never as a key.
+    // The members involved: a report's subject, else the flag's own list of members, else (a node that sent no list at all)
+    // the keys read out of its description. Resolved to full keys from the roster; shown by name, never as a key.
     const extractPubkeys = (): string[] => {
         let rawKeys: string[] = [];
         if (isReport) {
@@ -109,7 +106,9 @@ export function ThreatReviewModal({
             rawKeys = subject ? [subject] : [];
         } else {
             rawKeys = flagMembers(threat);
-            if (rawKeys.length === 0) {
+            // Only when the node sent no list at all. An empty list is the node saying "nobody" (watchdog_recovery and the
+            // other flags that name no one): reading their description then finds the date in "(last: 2026-11-04T10:12:33Z)".
+            if (rawKeys.length === 0 && !Array.isArray(threat?.members)) {
                 const str = threat?.description || '';
                 // Match terms like wash1-17, ring0-17, etc., or standard pubkey patterns
                 const matches = str.match(/([a-zA-Z0-9_-]{4,}\-[0-9]+)|([a-fA-F0-9]{32,64})/g);
@@ -161,7 +160,7 @@ export function ThreatReviewModal({
     const parsedMetrics = parseMetrics();
 
     const handleAction = async (action: string) => {
-        // Nothing freezes for a flag that is only information, or one that does not show real harm.
+        // Nothing freezes for a flag that does not show real harm.
         if (action === 'freeze' && !canFreeze) return;
         // A report lives on the node: dismissing it only here would leave it pending for everyone else.
         if (action === 'dismiss' && isReport && threat?.id && onDismissReport) {
@@ -213,26 +212,22 @@ export function ThreatReviewModal({
         copiedLogTimer.schedule(() => setCopiedLog(false), 2000);
     };
 
-    const badgeClass = isInformation
-        ? 'bg-nature-800 text-nature-200'
-        : (severity === 'critical' ? 'bg-bp-danger-fill text-bp-danger-on' : 'bg-bp-gold-fill text-bp-gold-on');
-    const iconClass = isInformation
-        ? 'bg-nature-900 text-nature-300 border-nature-700'
-        : (severity === 'critical' ? 'bg-red-950 text-red-400 border-red-800/80' : 'bg-amber-950 text-amber-400 border-amber-800/80');
+    const badgeClass = severity === 'critical' ? 'bg-bp-danger-fill text-bp-danger-on' : 'bg-bp-gold-fill text-bp-gold-on';
+    const iconClass = severity === 'critical' ? 'bg-red-950 text-red-400 border-red-800/80' : 'bg-amber-950 text-amber-400 border-amber-800/80';
 
     return (
         <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
-            <div className={`m-auto bg-nature-950 border ${isInformation ? 'border-nature-700' : 'border-red-900/80'} rounded-3xl p-4 sm:p-6 max-w-xl w-full space-y-5 sm:space-y-6 shadow-2xl overflow-hidden relative`}>
+            <div className="m-auto bg-nature-950 border border-red-900/80 rounded-3xl p-4 sm:p-6 max-w-xl w-full space-y-5 sm:space-y-6 shadow-2xl overflow-hidden relative">
 
                 {/* Header: how serious, then what it is in words (the words get the card's whole width) */}
                 <div className="border-b border-nature-800/80 pb-4 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
                             <div className={`w-8 h-8 shrink-0 rounded-xl flex items-center justify-center text-base font-bold border ${iconClass}`}>
-                                {isReport ? '📢' : isInformation ? 'ℹ️' : '🚨'}
+                                {isReport ? '📢' : '🚨'}
                             </div>
                             <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase font-mono tracking-wide ${badgeClass}`}>
-                                {isInformation ? t(W.informationBadge) : severity}
+                                {severity}
                             </span>
                         </div>
                         <button
@@ -347,16 +342,14 @@ export function ThreatReviewModal({
                     </div>
                 )}
 
-                {/* Controls: Dismiss for everything; Freeze only where the flag shows real harm; the details to copy when it is a problem */}
+                {/* Controls: Dismiss for everything; Freeze only where the flag shows real harm; the details to copy */}
                 <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 border-t border-nature-800/80 pt-4 text-xs">
-                    {!isInformation && (
-                        <button
-                            onClick={handleCopyEvidence}
-                            className="px-3 py-2 rounded-xl bg-nature-900 hover:bg-nature-800 text-nature-300 font-bold border border-nature-800 transition-all flex items-center gap-1.5 shrink-0"
-                        >
-                            <span>{copiedLog ? t(W.copied) : t(W.exportEvidence)}</span>
-                        </button>
-                    )}
+                    <button
+                        onClick={handleCopyEvidence}
+                        className="px-3 py-2 rounded-xl bg-nature-900 hover:bg-nature-800 text-nature-300 font-bold border border-nature-800 transition-all flex items-center gap-1.5 shrink-0"
+                    >
+                        <span>{copiedLog ? t(W.copied) : t(W.exportEvidence)}</span>
+                    </button>
 
                     <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 ml-auto">
                         <button

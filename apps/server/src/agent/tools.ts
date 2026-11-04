@@ -371,9 +371,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                     // The standby's state and the alert book are an owner's (their routes are owner-only); an admin's grant sees them as null.
                     standbyIncident: owner ? standbyIncidentOpen() : null,
                     serverAlerts: owner ? active.map((a) => ({ key: a.key, title: a.title, priority: a.priority, since: iso(a.since) })) : null,
-                    // Only what needs a look: an `info` flag (members with no trades for a while) is news the owner reads
-                    // in Settings if they want it, not an alert for the assistant to bring up.
-                    communityAlerts: flags.filter((f) => f.severity !== 'info').map((f) => ({
+                    communityAlerts: flags.map((f) => ({
                         type: f.type, severity: f.severity, namesMembers: Array.isArray(f.members) && f.members.length > 0,
                     })),
                     ...(addresses ? { addresses } : {}),

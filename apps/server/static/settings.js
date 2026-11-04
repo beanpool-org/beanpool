@@ -2168,7 +2168,7 @@
                 el.innerHTML = '<div style="text-align:center;padding:0.75rem;"><div style="font-size:1rem;">✅</div><div style="color:#22c55e;font-size:0.8rem;">No health alerts</div></div>';
                 return;
             }
-            const icons = { wash_trading: '🔄', inactive_member: '💤', isolated_branch: '🏝️', invite_spam: '⚠️', sybil_funnel: '🕵️' };
+            const icons = { wash_trading: '🔄', isolated_branch: '🏝️', invite_spam: '⚠️', sybil_funnel: '🕵️' };
             el.innerHTML = flags.map(f => `
                 <div style="padding:0.5rem 0.75rem;border-bottom:1px solid #1e293b;display:flex;gap:0.5rem;align-items:flex-start;">
                     <span style="font-size:1rem;">${icons[f.type] || '⚠️'}</span>

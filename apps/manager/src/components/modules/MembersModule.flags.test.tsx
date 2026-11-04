@@ -4,8 +4,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MembersModule } from './MembersModule';
 
 /**
- * The owner's list of flags (Marty, 4 Nov): members with no trades for a while are news, listed quietly apart from the
- * alerts, never counted as one, and opened in a window with nothing to freeze. A real flag still reads as an alert.
+ * The owner's list of flags (Marty, 4 Nov): each reads in words, never as its raw type; a flag that shows real harm opens a
+ * window that offers Freeze, one that does not, does not.
  */
 
 const KEY_A = 'aa11bb22cc33dd44ee55ff6677889900aa11bb22';
@@ -27,36 +27,23 @@ function nodeData(flags: Array<Record<string, unknown>>) {
     };
 }
 
-const inactive = { type: 'inactive_member', severity: 'info', days: 30, description: '1 member has not traded Beans for 30+ days', members: [KEY_A] };
+const branch = { type: 'isolated_branch', severity: 'warning', description: 'A branch of 1 invited member who only trades with each other', members: [KEY_A] };
 const wash = { type: 'wash_trading', severity: 'alert', description: 'Wash trading detected: Alder and Birch', members: [KEY_A, KEY_B] };
 
 describe('MembersModule flags', () => {
-    it('members with no trades are not an alert: no red panel, no count, no ACTION REQUIRED', () => {
-        render(<MembersModule nodeData={nodeData([inactive])} nodeDataLoading={false} onRefresh={vi.fn()} />);
-        expect(screen.queryByText(/Active Security Alerts/)).not.toBeInTheDocument();
-        expect(screen.queryByText('ACTION REQUIRED')).not.toBeInTheDocument();
-        expect(screen.getByText('For your information')).toBeInTheDocument();
-        expect(screen.getByText('Members with no trades for 30 days')).toBeInTheDocument();
-        expect(document.body.textContent).not.toContain('inactive_member');
-    });
-
-    it('an older node that sends them as a warning gets the same quiet treatment', () => {
-        render(<MembersModule nodeData={nodeData([{ ...inactive, severity: 'warning' }])} nodeDataLoading={false} onRefresh={vi.fn()} />);
-        expect(screen.queryByText(/Active Security Alerts/)).not.toBeInTheDocument();
-        expect(screen.getByText('For your information')).toBeInTheDocument();
-    });
-
-    it('a real flag stays an alert, counts only itself, and reads in words, not as its raw type', () => {
-        render(<MembersModule nodeData={nodeData([inactive, wash])} nodeDataLoading={false} onRefresh={vi.fn()} />);
-        expect(screen.getByText(/Active Security Alerts & Abuse Radar \(1\)/)).toBeInTheDocument();
+    it('a flag is an alert, counts every flag, and reads in words, not as its raw type', () => {
+        render(<MembersModule nodeData={nodeData([branch, wash])} nodeDataLoading={false} onRefresh={vi.fn()} />);
+        expect(screen.getByText(/Active Security Alerts & Abuse Radar \(2\)/)).toBeInTheDocument();
         expect(screen.getByText('ACTION REQUIRED')).toBeInTheDocument();
         expect(screen.getByText('Two members trading Beans back and forth')).toBeInTheDocument();
+        expect(screen.getByText('A branch of invited members who only trade with each other')).toBeInTheDocument();
         expect(document.body.textContent).not.toContain('wash_trading');
+        expect(document.body.textContent).not.toContain('isolated_branch');
     });
 
-    it('the quiet row opens a window by name with Dismiss only', () => {
-        render(<MembersModule nodeData={nodeData([inactive])} nodeDataLoading={false} onRefresh={vi.fn()} />);
-        fireEvent.click(screen.getByRole('button', { name: 'Look' }));
+    it('a flag with nothing to freeze opens a window by name that offers Dismiss only', () => {
+        render(<MembersModule nodeData={nodeData([branch])} nodeDataLoading={false} onRefresh={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Review' }));
         expect(screen.getByText('Members involved (1)')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Dismiss Flag' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Freeze/ })).not.toBeInTheDocument();

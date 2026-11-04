@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { tierForCredit } from '@beanpool/core';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { t } from '../../lib/fresh-proof';
-import { FLAG_WORDS as FW, flagHeading, flagsNeedingLook, isInformationFlag } from '../../lib/flag-words';
+import { FLAG_WORDS as FW, flagHeading } from '../../lib/flag-words';
 import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { RolesViewer } from './NodeRolesPanel';
 import type { NodeProfile } from '../../lib/profiles';
@@ -545,9 +545,6 @@ export function MembersModule({
     const reports = rawReports.filter(
         (r: UserReportItem) => !dismissedFlags.has(r.id || r.targetPubkey || r.reason || '')
     );
-    // Only the flags that need a look are alerts. News (members with no trades for a while) is listed apart, quietly.
-    const lookFlags = flagsNeedingLook(flags);
-    const infoFlags = flags.filter((f: SecurityFlagItem) => isInformationFlag(f));
 
     const filteredMembers = members.filter((m: MemberItem) => {
         if (m.status === 'pruned') return false;
@@ -658,11 +655,11 @@ export function MembersModule({
             </div>
 
             {/* 🚨 Active Security & Abuse Detection Radar */}
-            {(lookFlags.length > 0 || reports.length > 0) && (
+            {(flags.length > 0 || reports.length > 0) && (
                 <div className="bg-red-950/30 border border-red-800/80 p-5 rounded-2xl space-y-4">
                     <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-red-400 font-bold text-xs uppercase tracking-wider">
-                            <span>🚨 Active Security Alerts & Abuse Radar ({lookFlags.length + reports.length})</span>
+                            <span>🚨 Active Security Alerts & Abuse Radar ({flags.length + reports.length})</span>
                         </div>
                         <span className="px-2 py-0.5 rounded bg-red-900/40 text-red-300 text-[10px] font-mono font-bold border border-red-800">
                             ACTION REQUIRED
@@ -670,7 +667,7 @@ export function MembersModule({
                     </div>
 
                     <div className="space-y-2 text-xs">
-                        {lookFlags.map((flag: SecurityFlagItem, idx: number) => (
+                        {flags.map((flag: SecurityFlagItem, idx: number) => (
                             <div key={idx} className="p-3 bg-nature-950/80 border border-red-900/60 rounded-xl flex flex-wrap items-start justify-between gap-3">
                                 <div className="space-y-1 min-w-0 break-words flex-1 basis-40">
                                     <div className="flex flex-wrap items-center gap-2">
@@ -718,29 +715,6 @@ export function MembersModule({
                             </div>
                         ))}
                     </div>
-                </div>
-            )}
-
-            {/* News, not a warning: members with no trades for a while. Quiet, not counted, nothing to freeze. */}
-            {infoFlags.length > 0 && (
-                <div className="bg-nature-950/60 border border-nature-800 p-4 rounded-2xl space-y-2">
-                    <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-nature-400 block">
-                        {t(FW.infoPanelTitle)}
-                    </span>
-                    {infoFlags.map((flag: SecurityFlagItem, idx: number) => (
-                        <div key={idx} className="flex flex-wrap items-start justify-between gap-2 text-xs">
-                            <div className="min-w-0 break-words flex-1 basis-40">
-                                <div className="font-bold text-nature-100">{flagHeading(flag)}</div>
-                                <p className="text-nature-300 m-0">{flag.description}</p>
-                            </div>
-                            <button
-                                onClick={() => setActiveThreat(flag)}
-                                className="px-3 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-white text-[11px] font-bold transition-all border border-nature-700 shrink-0"
-                            >
-                                {t(FW.lookButton)}
-                            </button>
-                        </div>
-                    ))}
                 </div>
             )}
 

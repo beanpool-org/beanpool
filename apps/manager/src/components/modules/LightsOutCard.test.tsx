@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { LightsOutCard } from './LightsOutCard';
+import { LightsOutCard, hallHref } from './LightsOutCard';
 import type { NodeProfile } from '../../lib/profiles';
 
 const node: NodeProfile = { id: 'hall-node', name: 'Hall', url: 'http://localhost:8080', adminPassword: '' };
@@ -42,7 +42,8 @@ describe('LightsOutCard', () => {
         expect(await screen.findByText('Lights-out is on.')).toBeInTheDocument();
         const post = calls.find((c) => c.init?.method === 'POST');
         expect(JSON.parse(String(post?.init?.body))).toEqual({ on: true, address: 'http://192.168.8.1:8080' });
-        expect(screen.getByRole('link', { name: 'Show the poster' })).toHaveAttribute('href', '/hall');
+        // The poster opens at the laptop's hall address, not relative to wherever Settings was opened (review 1cb42147).
+        expect(screen.getByRole('link', { name: 'Show the poster' })).toHaveAttribute('href', 'http://192.168.8.1:8080/hall');
     });
 
     it('asks the fresh proof when the server does, and re-sends with the code', async () => {
@@ -85,5 +86,16 @@ describe('LightsOutCard', () => {
         const { container } = render(<LightsOutCard activeNode={node} viewer={OWNER_KEY} />);
         await waitFor(() => expect((globalThis.fetch as any).mock.calls.length).toBeGreaterThan(0));
         expect(container.innerHTML).toBe('');
+    });
+});
+
+describe('hallHref', () => {
+    it('uses the hall address when it is http(s), and a plain /hall otherwise', () => {
+        expect(hallHref('http://192.168.8.1:8080')).toBe('http://192.168.8.1:8080/hall');
+        expect(hallHref('http://192.168.8.1:8080/')).toBe('http://192.168.8.1:8080/hall');
+        expect(hallHref(null)).toBe('/hall');
+        expect(hallHref('')).toBe('/hall');
+        expect(hallHref('javascript:alert(1)')).toBe('/hall');
+        expect(hallHref('not a url')).toBe('/hall');
     });
 });

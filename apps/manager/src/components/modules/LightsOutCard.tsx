@@ -15,6 +15,22 @@ import type { RolesViewer } from './NodeRolesPanel';
  * as it stands and is told only an owner can change it. The words name the day and the time, never "stale".
  */
 
+/**
+ * The poster's own address: the laptop's hall address when one is set, so the page opens from a direct hall-Wi-Fi
+ * source. A relative /hall would open from wherever Settings was opened, and from 127.0.0.1 on a Linux Docker laptop
+ * that arrives through Docker's gateway, which the direct-LAN rule refuses (an empty page). Only http(s) is used.
+ */
+export function hallHref(address: string | null): string {
+    if (!address) return '/hall';
+    try {
+        const u = new URL(address);
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return '/hall';
+        return `${u.origin}/hall`;
+    } catch {
+        return '/hall';
+    }
+}
+
 export interface LightsOutState {
     on: boolean;
     since: string | null;
@@ -165,7 +181,7 @@ export function LightsOutCard({ activeNode, viewer = { kind: 'password' } }: Lig
                         {busy ? t(W.working) : state.on ? t(W.turnOff) : t(W.turnOn)}
                     </button>
                     {state.on && (
-                        <a href="/hall" target="_blank" rel="noopener" className="block text-center text-sm underline text-nature-200 min-h-[48px] leading-[48px]">{t(W.poster)}</a>
+                        <a href={hallHref(state.address)} target="_blank" rel="noopener" className="block text-center text-sm underline text-nature-200 min-h-[48px] leading-[48px]">{t(W.poster)}</a>
                     )}
                 </div>
             )}

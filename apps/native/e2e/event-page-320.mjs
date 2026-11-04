@@ -20,7 +20,8 @@
  *   host-open        the host's case opened: each date with Cancel this date and Change this date only
  *
  * Each case, each scheme, fails on: the page scrolling sideways; text past the edge or cut; a button under 47.5dp; text under
- * 4.5:1 (3:1 large). It prints where the answer row's top lands (§2.9 counts it against 500dp). Shots go to --shots <dir>
+ * 4.5:1 (3:1 large); the answer row's top past 500dp, or the answer's bottom (Going's; the host's line, the copy's door) past
+ * the 569dp screen (the stop, DESIGN-detail-pages-frame-fable.md §2). It prints where both land. Shots go to --shots <dir>
  * (not committed): the page one 569dp screen at a time, the first is what a member sees on opening it.
  *
  *   node apps/native/e2e/event-page-320.mjs --shots <dir>
@@ -359,20 +360,31 @@ try {
                 await page.locator('[data-testid="event-next-date"]').first().waitFor();
             }
             await measure(tag);
-            // Where the answer (or the host's line, or the copy's door) starts, from the screen's top.
+            // Where the answer (or the host's line, or the copy's door) starts and ends, from the screen's top; the photo's top.
             const at = await page.evaluate(() => {
                 const action = document.querySelector('[data-testid="event-action"]');
                 const photo = document.querySelector('[data-testid="event-photo-frame"]') || document.querySelector('[data-testid="event-tile-banner"]');
                 const p = photo?.getBoundingClientRect();
-                const going = document.querySelector('[aria-label="Going"]')?.getBoundingClientRect();
+                // The answer itself: Going (chosen or not), else the action's first part (the host's line, the copy's door), not the counts under it.
+                const answer = (document.querySelector('[aria-label^="Going"]') || action?.firstElementChild)?.getBoundingClientRect();
                 const dates = document.querySelector('[data-testid="event-next-dates-open"]') || document.querySelector('[data-testid="event-next-dates"]');
                 return {
-                    action: action ? Math.round(action.getBoundingClientRect().top) : null, photo: p ? `${Math.round(p.width)} x ${Math.round(p.height)}` : null,
-                    going: going ? Math.round(going.bottom) : null, dates: dates ? Math.round(dates.getBoundingClientRect().height) : 0,
+                    action: action ? action.getBoundingClientRect().top : null, photo: p ? `${Math.round(p.width)} x ${Math.round(p.height)}` : null,
+                    photoTop: p ? p.top : null, answer: answer ? answer.bottom : null, going: !!document.querySelector('[aria-label^="Going"]'),
+                    dates: dates ? Math.round(dates.getBoundingClientRect().height) : 0,
                 };
             });
-            const onScreen = at.going == null ? '' : `, Going's bottom at ${at.going} dp (${at.going <= SCREEN ? 'on' : 'past'} the ${SCREEN} dp screen)`;
-            rows.push(`${tag}: the answer row's top at ${at.action} dp${onScreen}, the next dates ${at.dates} dp tall, the picture ${at.photo}`);
+            const dp = (n) => (n == null ? '—' : String(Math.round(n * 10) / 10));
+            const whose = at.going ? "Going's" : "the answer's";
+            rows.push(`${tag}: the answer row's top at ${dp(at.action)} dp, ${whose} bottom at ${dp(at.answer)} dp, the photo's top at ${dp(at.photoTop)} dp, the next dates ${at.dates} dp tall, the picture ${at.photo}`);
+            // The stop (DESIGN-detail-pages-frame-fable.md §2): fail, not print. Not on host-open: the host opened their own date
+            // manager (six dates, each with Cancel and Change, about 610dp by itself), and their line is no answer to make; it is
+            // printed above, and the stop's cases are the member's (§1.4's table), the host's compact page and the copy.
+            if (c !== 'host-open') {
+                if (at.action == null) problems.push(`${tag}: no answer row`);
+                else if (at.action > 500) problems.push(`${tag}: the answer row's top at ${dp(at.action)} dp, past 500`);
+                if (at.answer != null && at.answer > SCREEN) problems.push(`${tag}: ${whose} bottom at ${dp(at.answer)} dp, past the ${SCREEN} dp screen`);
+            }
             if (SHOTS) {
                 const name = `phone-event-${scheme}-${c}`;
                 // The page as a member scrolls it, one 569dp screen at a time, to the end (a little under the last button).
@@ -399,4 +411,4 @@ if (problems.length) {
     console.log(problems.map((p) => `  ✗ ${p}`).join('\n'));
     process.exit(1);
 }
-console.log('Every state holds: no sideways scroll, nothing past the edge or cut, every button 48dp, text at 4.5:1 or better.');
+console.log('Every state holds: no sideways scroll, nothing past the edge or cut, every button 48dp, text at 4.5:1 or better, the answer on the first screen (top ≤ 500dp, bottom ≤ 569dp).');

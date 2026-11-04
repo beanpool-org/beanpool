@@ -933,5 +933,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ Terowongan untuk nama yang dilepas berhenti. Server ini masih menjawab di {addresses}.",
   "🫘 A project you backed changed its end date": "🫘 Proyek yang kamu dukung mengubah tanggal berakhirnya",
   "🫘 Pledges went back to their backers": "🫘 Komitmen dikembalikan kepada para pendukungnya",
-  "🫘 Your pledge came back": "🫘 Komitmenmu dikembalikan"
+  "🫘 Your pledge came back": "🫘 Komitmenmu dikembalikan",
+  "Answer serve or step_aside.": "Jawab serve atau step_aside.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "Kamu sudah memberi suara, jadi kamu bertugas di juri ini. Kamu bisa mengubah suaramu sampai ditutup."
 }

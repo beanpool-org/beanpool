@@ -5353,5 +5353,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 تعذر التحقق من هذه الرسالة، لذا لم يتم عرضها.",
   "🗳️ Create Poll": "🗳️ إنشاء استطلاع",
   "🟢 List an Offer first to post Needs": "🟢 أدرج عرضًا أولًا لتتمكن من نشر الطلبات",
-  "🤝 Chosen": "🤝 محدد"
+  "🤝 Chosen": "🤝 محدد",
+  "Done. This is now your photo here.": "تم. هذه الآن صورتك هنا.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "تُنسخ الصورة فقط. يبقى اسمك وباقي ملفك الشخصي هنا كما هما.",
+  "Use the photo from {community} here?": "هل تريد استخدام الصورة من {community} هنا؟",
+  "Use the photo you chose last here?": "هل تريد استخدام آخر صورة اخترتها هنا؟",
+  "Use this photo here": "استخدم هذه الصورة هنا"
 }

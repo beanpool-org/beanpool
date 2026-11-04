@@ -2204,5 +2204,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} في مجتمع آخر · لا يمكنك شراء هذا أو أخذه من هنا.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} في {community} · لا يمكنك شراء هذا أو أخذه حتى يرحّب بك {community}.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 تجوّل في المجتمع العالمي"
+  "🌍 Look around the global community": "🌍 تجوّل في المجتمع العالمي",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "هيئة محلَّفين اختِرتَ لها تنتظر ردّك. أجب خلال يوم، وإلا انتقل مقعدك إلى العضو التالي الذي يقع عليه الاختيار.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "هيئة محلَّفين أنت فيها ستُغلق خلال نحو يوم. افتح BeanPool للتصويت.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "أجاب العضو الذي تقرر هيئتك بشأنه عن الحالة. افتح BeanPool لقراءة ذلك.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "وقع عليك الاختيار لهيئة محلَّفين في مجتمعك، وسيُغلق تصويتها خلال أقل من يومين. افتح BeanPool لتخدم أو تتنحى.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "وقع عليك الاختيار لهيئة محلَّفين في مجتمعك. افتح BeanPool خلال ثلاثة أيام لتخدم أو تتنحى."
 }

@@ -968,5 +968,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ توقف نفق الاسم المُفرَج عنه. لا يزال هذا الخادم يردّ على {addresses}.",
   "🫘 A project you backed changed its end date": "🫘 غيّر مشروع دعمته تاريخ انتهائه",
   "🫘 Pledges went back to their backers": "🫘 عادت التعهدات إلى داعميها",
-  "🫘 Your pledge came back": "🫘 عاد تعهدك"
+  "🫘 Your pledge came back": "🫘 عاد تعهدك",
+  "Answer serve or step_aside.": "أجب بـ serve أو step_aside.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "لقد صوّتَّ، لذا فأنت تخدم في هذه الهيئة. يمكنك تغيير تصويتك حتى يُغلق."
 }

@@ -85,7 +85,7 @@ test('the table holds exactly the languages and sentences that have a translatio
     });
 });
 
-test('the real catalogs, today: no language has these sentences yet, so every page carries an empty table and shows English', () => {
+test('the real catalogs, today: every page carries the catalogs\' translations of its sentences, whichever languages have them (an empty table while none does)', () => {
     const catalogs = readCoreCatalogs();
     assert.deepEqual(Object.keys(catalogs).sort(), [...GUIDE_LANGS].sort());
     const tables = authTables(WORDS, catalogs);

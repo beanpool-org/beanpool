@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "وقتی اینترنت قطع است، BeanPool از این برای رسیدن به لپ‌تاپ جامعه‌تان در Wi-Fi سالن استفاده می‌کند."
+  }
+}

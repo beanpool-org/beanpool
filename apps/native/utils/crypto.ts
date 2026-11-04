@@ -8,6 +8,7 @@ import {
 } from '@beanpool/core';
 import { requestSigningFormatFor } from './request-signing-version';
 import { assertPlainNodeAddress } from './node-url';
+import { hallAudienceFor } from './hall-state';
 
 if (typeof global.crypto !== 'object') {
     (global as any).crypto = {};
@@ -209,6 +210,9 @@ export function memberSigner(privateKeyHex: string): Signer {
  *
  * Throws, having signed nothing, for a URL whose authority isn't exactly `host[:port]` (node-url.ts
  * `assertPlainNodeAddress`): iOS would connect to a different host than the one signed for.
+ *
+ * On the hall laptop (lights-out, utils/hall-state.ts) a request to its number is signed for the community's own name,
+ * the one the phone's address had before it moved there; never a name a node sent.
  */
 export async function buildSignedHeaders(
     method: string,
@@ -221,7 +225,7 @@ export async function buildSignedHeaders(
     if (!audienceOf(url)) throw new Error(`Cannot sign a request for ${JSON.stringify(url)}: pass the full URL fetched`);
     const sign = memberSigner(privateKeyHex);
     const signed = await requestSigningFormatFor(url) === 2
-        ? await buildBoundRequestHeaders({ method, url, body: bodyString, publicKeyHex, sign, nonce: freshNonce() })
+        ? await buildBoundRequestHeaders({ method, url, body: bodyString, publicKeyHex, sign, nonce: freshNonce(), audience: await hallAudienceFor(url) })
         : await unboundRequestHeaders(method, url, bodyString, publicKeyHex, sign);
     return { 'Content-Type': 'application/json', ...signed };
 }
@@ -264,8 +268,9 @@ export async function buildSignedWsParams(
     const sign = memberSigner(privateKeyHex);
     // Read the node's info first when this phone hasn't heard from it: a socket an old server refuses (401) can't be
     // signed again the way an HTTP request is (request-signing-version.ts).
+    // On the hall laptop, signed for the community's own name, as buildSignedHeaders is.
     return await requestSigningFormatFor(wsUrl, { readInfoFirst: true }) === 2
-        ? buildBoundWsParams({ wsUrl, publicKeyHex, sign, nonce: freshNonce() })
+        ? buildBoundWsParams({ wsUrl, publicKeyHex, sign, nonce: freshNonce(), audience: await hallAudienceFor(wsUrl) })
         : unboundWsParams(wsUrl, publicKeyHex, sign);
 }
 

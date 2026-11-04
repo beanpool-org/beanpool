@@ -7,6 +7,12 @@
  * it has ended, so its "Bring it back" is there after a reload and on every device (the node moves the event back and tells
  * those going "Fri 16 Oct is back on"; the deciding review of #1993, N2, and its confirmation 2, NB2); the screen drops it at
  * its end. Each control's name starts with the words it shows (WCAG 2.5.3). The web app's EventNextDates, the same.
+ *
+ * `repeatCaption` (the event page, DESIGN-web-dates-stop-fable.md §1–2 and §4; the web's since #2891): the repeat rule is the
+ * door to the dates, in the caption's slot under the when. Compact, one 48 dp button "↻ Monthly, third Saturday · Next dates"
+ * (no date, no "and 5 more"); opened, or with one date, the rule is the list's heading and "Next dates" the box's name; with
+ * no dates from the node (an older node, the cached row before the by-id read answers), the rule alone. So the page draws the
+ * rule once, in one place, whatever the node sent.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -29,10 +35,15 @@ interface Props {
     confirm?: (title: string, message: string, onYes: () => void) => void;
     /**
      * The event page's form (DESIGN-detail-pages-fable.md: the action on the first screen): the first date and "and 5 more",
-     * one button that opens the whole list, where the host's controls are. Six dates in full sit between the title and the
-     * photo and push Going / Interested down by about 114 dp at 320 dp and 1.3× text (event-page-shell-render.test.ts).
+     * one button that opens the whole list, where the host's controls are. Six dates in full sit above the answer and push
+     * Going / Interested down (event-page-shell-render.test.ts measures both). With `repeatCaption` the rule is that button.
      */
     compact?: boolean;
+    /**
+     * The repeat rule's caption (eventRepeatCaption), from the event page, which then leaves its own caption line out: the rule
+     * opens the dates, and heads them once open. Without it the component draws as it always has.
+     */
+    repeatCaption?: string;
 }
 
 /** The longest a timer may wait (setTimeout's limit); a later end is checked again then. */
@@ -45,7 +56,7 @@ function alertConfirm(title: string, message: string, onYes: () => void) {
     ]);
 }
 
-export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, confirm = alertConfirm, compact = false }: Props) {
+export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, confirm = alertConfirm, compact = false, repeatCaption }: Props) {
     const styles = useStyles(makeStyles);
     // Compact, the rest waits for a tap; once opened it stays open, so the host's line and controls stay where they acted.
     const [open, setOpen] = useState(!compact);
@@ -63,7 +74,12 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
         return () => clearTimeout(id);
     }, [passedEnd, tick]);
     const dates = seriesDatesShown(listed, current, Date.now());
-    if (!post?.eventRepeat || dates.length === 0) return null;
+    // No dates from the node: the rule alone, where it always is, so the slot is never empty. Its name leaves the ↻ out.
+    if (!post?.eventRepeat || dates.length === 0) {
+        return repeatCaption
+            ? <Text testID="event-repeat-caption" style={styles.repeats} accessibilityLabel={repeatCaption}>↻ {repeatCaption}</Text>
+            : null;
+    }
 
     const change = async (date: string, cancel: boolean, thenMove = false) => {
         if (busy) return;
@@ -82,6 +98,22 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
             setBusy(null);
         }
     };
+
+    // Compact, with the rule: "↻ Monthly, third Saturday · Next dates", one button; the rule in its own type, the link's words
+    // after it, each part whole, wrapping as the web's does ("Next dates" on a second line at 320 dp and 1.3× text, inside the 48).
+    // No label of its own: its name is the words it shows (WCAG 2.5.3), the rule's Text naming itself without the ↻.
+    if (!open && dates.length > 1 && repeatCaption) {
+        return (
+            <Pressable testID="event-next-dates-open" style={styles.compact} onPress={() => setOpen(true)}
+                accessibilityRole="button" accessibilityState={{ expanded: false }}>
+                <View style={styles.opener}>
+                    <Text testID="event-repeat-caption" style={[styles.repeats, styles.inRow]} accessibilityLabel={repeatCaption}>↻ {repeatCaption}</Text>
+                    <Text style={styles.dot}>·</Text>
+                    <Text style={styles.linkText}>{t('Next dates')}</Text>
+                </View>
+            </Pressable>
+        );
+    }
 
     // Compact: the heading, the first date and how many more, one button that opens the list. One date has no more to open.
     if (!open && dates.length > 1) {
@@ -102,8 +134,11 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
     }
 
     return (
-        <View testID="event-next-dates" style={styles.box}>
-            <Text style={styles.heading} accessibilityRole="header">{t('Next dates')}</Text>
+        <View testID="event-next-dates" style={styles.box} accessibilityLabel={repeatCaption ? t('Next dates') : undefined}>
+            {/* With the rule, the rule heads the list (it opened it) and "Next dates" is the box's name. */}
+            {repeatCaption
+                ? <Text testID="event-repeat-caption" style={styles.repeats} accessibilityRole="header" accessibilityLabel={repeatCaption}>↻ {repeatCaption}</Text>
+                : <Text style={styles.heading} accessibilityRole="header">{t('Next dates')}</Text>}
             {!!line && <Text testID="event-date-cancelled-line" style={styles.line} accessibilityLiveRegion="polite">{line}</Text>}
             <View style={isHost ? styles.listHost : styles.listWrap}>
                 {dates.map(d => {
@@ -150,6 +185,12 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         // A loud line's 4 below, as the when and the title have: the 48 dp button carries its own room round the words.
         compact: { minHeight: 48, justifyContent: 'center', marginBottom: 4 },
         heading: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+        // The repeat rule, as the page drew it under the when: 14/700 in the accent, a loud line's 4 below.
+        repeats: { fontSize: 14, fontWeight: '700', color: colors.accent.primary, marginBottom: 4 },
+        // The opener's one row: the rule, the dot, the link's words, each whole, wrapping to a second line when they must.
+        opener: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6 },
+        inRow: { flexShrink: 1, marginBottom: 0 },
+        dot: { fontSize: 14, fontWeight: '700', color: colors.text.secondary },
         line: { flexShrink: 1, fontSize: 15, fontWeight: '700', color: colors.text.body, marginBottom: 4 },
         listWrap: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 2 },
         listHost: { flexDirection: 'column', rowGap: 2 },

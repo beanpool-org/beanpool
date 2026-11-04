@@ -17,6 +17,7 @@ import {
     NAMES_REFUSAL_REASONS, checkNamesKeyInPerson, emptyNamesPin, makeNamesGeneration, makeNamesGenerationFor, makeNamesShare,
     namesKeyCheckMatches, namesKeyCode, namesKeyQr, namesReplay, namesSharesToSend, readNamesGeneration, readNamesPin, readNamesShare,
     removeNamesKey, followNamesServer, namesSeenAfterRead, syncNames, namesRingKeys, namesShareHeader, namesStatementId, readNamesKeyCheck,
+    mergeNamesPins, checkNamesCopyAgainst,
     type NamesGeneration, type NamesPin, type NamesServerState, type NamesShare, type NamesSyncResult, type NamesSigner,
 } from '../names-list-trust.js';
 import { namesBoxDigest, newNamesListKey, sealNamesRing, openNamesEntry, sealNamesEntry, newNamesEntryId } from '../names-list-crypto.js';
@@ -101,14 +102,36 @@ class World {
     }
 }
 
+/**
+ * M7's oracle (ruling DESIGN-names-list-merge-rule-fable.md §3): while set, each in-person check and each re-admission a
+ * sync makes is logged against the admin, with the statement ids the device knew at the time (its chain and abandoned).
+ */
+let trustLog: Map<string, { key: string; known: Set<string> }[]> | null = null;
+const knownIds = (pin: NamesPin | null) => new Set([...(pin?.chain ?? []).map((l) => l.id), ...(pin?.abandoned ?? [])]);
+function logTrust(admin: string, key: string, pin: NamesPin | null): void {
+    if (!trustLog) return;
+    trustLog.set(admin, [...(trustLog.get(admin) ?? []), { key, known: knownIds(pin) }]);
+}
+
 /** A phone: its admin's keys and its pin. */
 class Phone {
     pin: NamesPin | null = null;
     constructor(readonly who: Admin) {}
     get pk() { return this.who.publicKey; }
     sync(state: NamesServerState): NamesSyncResult {
+        const was = this.pin;
         const r = syncNames({ pin: this.pin, state, me: this.who });
         if (!(r.plan.kind === 'refused' && r.plan.reason === 'other_community')) this.pin = r.pin;
+        if (trustLog) {
+            // Re-admitted (rule 2): dropped before this sync and trusted after it, or dropped by a statement this sync took
+            // and vouched again in the same sync by a trusted header at or after it.
+            for (const k of Object.keys(was?.dropped ?? {})) if (r.pin.trusted.includes(k)) logTrust(this.pk, k, r.pin);
+            const had = new Set((was?.chain ?? []).map((l) => l.id));
+            for (const l of r.pin.chain) {
+                const g = had.has(l.id) ? undefined : r.generations.get(l.id);
+                for (const d of g?.drops ?? []) if (d !== g!.maker && r.pin.trusted.includes(d)) logTrust(this.pk, d, r.pin);
+            }
+        }
         return r;
     }
     /** An open as the app runs it: sync; make what the plan says (once); auto-share on ready. */
@@ -136,6 +159,13 @@ class Phone {
     meet(other: Phone): void {
         this.pin = checkNamesKeyInPerson(this.pin ?? emptyNamesPin(CID, this.pk), other.pk);
         other.pin = checkNamesKeyInPerson(other.pin ?? emptyNamesPin(CID, other.pk), this.pk);
+        logTrust(this.pk, other.pk, this.pin);
+        logTrust(other.pk, this.pk, other.pin);
+    }
+    /** This device's admin checks `key` in person here (one side of a meeting). */
+    check(key: string): void {
+        this.pin = checkNamesKeyInPerson(this.pin ?? emptyNamesPin(CID, this.pk), key);
+        logTrust(this.pk, key, this.pin);
     }
     ringIds(): string[] { return Object.keys(this.pin?.ring ?? {}); }
     head(): string | undefined { return this.pin?.chain[this.pin.chain.length - 1]?.id; }
@@ -1294,10 +1324,46 @@ describe('I. Following the server back to a history this phone left (round 7, un
 let claimsSeen = 0;
 let claimsMade = 0;
 let claimsWithRemoval = 0;
-function propertyRun(seed: number): { readies: number; follows: number; taps: number; made: number; losses: number } {
+/** M7: how often a merge kept trusting a key one record had dropped (the oracle had something to judge). */
+let oracleLifts = 0;
+/** M7: what a merge must keep (ruling §3), checked after every merge of two records of one admin. */
+function checkMerge(a: NamesPin, b: NamesPin, m: { pin: NamesPin; recheck: string[] }, admin: string, world: World): void {
+    const pin = m.pin;
+    expect(readNamesPin(JSON.parse(JSON.stringify(pin)), pin.me)).not.toBeNull();
+    expect(pin.trusted.filter((k) => k in pin.dropped)).toEqual([]);
+    expect(pin.trusted).toContain(pin.me);
+    for (const k of m.recheck) expect(k in pin.dropped && (a.trusted.includes(k) || b.trusted.includes(k))).toBe(true);
+    // Merging a record with itself changes nothing but `copy`.
+    const parts = (q: NamesPin) => JSON.stringify([[...q.trusted].sort(), Object.entries(q.dropped).sort(), q.chain.map((l) => l.id), [...q.abandoned].sort(),
+        Object.entries(q.ring).sort(), q.pending, [...q.manualDrops].sort(), q.seen]);
+    for (const x of [a, b]) {
+        const self = mergeNamesPins(x, x);
+        expect(parts(self.pin)).toBe(parts(x));
+        expect(self.recheck).toEqual([]);
+    }
+    // No Remove is lost: a removal by hand on either record stays one.
+    for (const k of [...a.manualDrops, ...b.manualDrops]) if (k !== pin.me) expect(pin.manualDrops).toContain(k);
+    // The oracle: a key one record dropped at S is trusted after the merge only if some device of this admin checked it,
+    // or re-admitted it from a trusted header, when S was among the statements that device knew.
+    const events = trustLog?.get(admin) ?? [];
+    for (const r of [a, b]) {
+        for (const [k, S] of Object.entries(r.dropped)) {
+            if (!pin.trusted.includes(k)) continue;
+            oracleLifts++;
+            expect(events.some((e) => e.key === k && e.known.has(S)), `a key trusted after the merge, dropped at ${S.slice(0, 8)} on a record`).toBe(true);
+        }
+    }
+    // K13 on the merged pin: the read moves no trust, drop, key, pending statement or removal by hand.
+    const read = namesSeenAfterRead(pin, world.entries.map((e) => e.id), world.deleted);
+    const keyParts = (q: NamesPin) => JSON.stringify([q.trusted, q.dropped, q.ring, q.pending, q.manualDrops, q.chain, q.abandoned]);
+    expect(keyParts(read.pin)).toBe(keyParts(pin));
+}
+
+function propertyRun(seed: number, twoDevices = false): { readies: number; follows: number; taps: number; made: number; losses: number; merges: number; recheck: number } {
     let x = seed * 2654435761 >>> 0;
     const rnd = () => { x = (x + 0x6d2b79f5) >>> 0; let t = x; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
+    trustLog = twoDevices ? new Map() : null;
     const { world, phones: [owen, bea, cy, abe, mia] } = community(['Owen', 'Bea', 'Cy', 'Abe', 'Mia']);
     const honest = [owen, bea, cy];
     world.admins = [owen.who, bea.who, cy.who, mia.who];
@@ -1308,21 +1374,46 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
     settle(world, honest);
     const toAbe: NamesShare[] = [];
     const allShares: NamesShare[] = [];
+    // M7: which device made each share (both devices of one admin sign with one key).
+    let actor: Phone | null = null;
+    const toAbeBy: (Phone | null)[] = [];
+    const allBy: (Phone | null)[] = [];
     const put = world.putShare.bind(world);
-    world.putShare = (sh: NamesShare) => { allShares.push(sh); if (sh.to === abe.pk) toAbe.push(sh); put(sh); };
+    world.putShare = (sh: NamesShare) => { allShares.push(sh); allBy.push(actor); if (sh.to === abe.pk) { toAbe.push(sh); toAbeBy.push(actor); } put(sh); };
     // The node's ask_for_share, and the claim a phone then sends (round 11): a removal by hand can be in flight with it.
     world.strictAsk = true;
-    const tappedAll = new Map<string, number>(); // phone → index into allShares when it tapped
+    const tappedAll = new Map<Phone, number>(); // device → index into allShares when it tapped (M7: or merged a tap in)
     const lossAt = 3 + Math.floor(rnd() * 10);
     // Addendum 4's K1 shape: Mia makes a key whose boxes never land, then her phone is lost and her role removed. Nobody
     // trusted ever vouches her statement: the phones follow, or make a new key when nobody holds hers.
     const miaLostAt = 2 + Math.floor(rnd() * 12);
-    let made = 0; let losses = 0;
+    let made = 0; let losses = 0; let merges = 0; let recheck = 0;
     let abeKeys = new Set<string>();
-    const tappedAt = new Map<string, number>(); // phone → index into toAbe when it tapped
+    const tappedAt = new Map<Phone, number>(); // device → index into toAbe when it tapped (M7: or merged a tap in)
     const copies: Copy[] = [copyOf(world)];
     let readies = 0; let follows = 0;
+    // M7 (ruling §3): each honest admin gets a second device at a random step, signed in from the locked copy of the first.
+    const second = new Map<Phone, Phone>();
+    const sibling = new Map<Phone, Phone>();
+    const secondAt = new Map(honest.map((h) => [h, twoDevices ? Math.floor(rnd() * 16) : -1] as const));
+    const deviceOf = (h: Phone) => (second.has(h) && rnd() < 0.5 ? second.get(h)! : h);
+    const knowsTap = (p: Phone) => { if (!tappedAt.has(p)) { tappedAt.set(p, toAbe.length); tappedAll.set(p, allShares.length); } };
+    /** `into` takes `from`'s record, as an open that finds a newer copy does. */
+    const merge = (into: Phone, from: NamesPin) => {
+        const was = into.pin!;
+        const m = mergeNamesPins(was, from);
+        checkMerge(was, from, m, into.pk, world);
+        into.pin = m.pin;
+        merges++; recheck += m.recheck.length;
+    };
     for (let step = 0; step < 32; step++) {
+        for (const h of honest) {
+            if (secondAt.get(h) !== step) continue;
+            const d = new Phone(h.who);
+            d.pin = { ...JSON.parse(JSON.stringify(h.pin)), seen: [] };
+            second.set(h, d); sibling.set(h, d); sibling.set(d, h);
+            if (tappedAt.has(h)) knowsTap(d);
+        }
         if (step === miaLostAt) {
             const st = mia.sync(world.stateFor(mia.pk));
             if (st.plan.kind === 'ready' || st.plan.kind === 'make_new') {
@@ -1335,15 +1426,25 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
         if (step === lossAt) {
             // Abe's phone is lost: everything it holds, and every box sent to it from now on, is the operator's.
             abeKeys = new Set([...abe.ringIds(), ...toAbe.flatMap((sh) => sh.keyIds)]);
-            const p = pick(honest);
+            const h = pick(honest);
+            const p = twoDevices ? deviceOf(h) : h;
             p.pin = removeNamesKey(p.pin!, abe.pk);
-            tappedAt.set(p.pk, toAbe.length);
-            tappedAll.set(p.pk, allShares.length);
+            knowsTap(p);
             continue;
         }
         if (step > lossAt && rnd() < 0.08) {
-            const p = pick(honest);
-            if (!tappedAt.has(p.pk)) { p.pin = removeNamesKey(p.pin!, abe.pk); tappedAt.set(p.pk, toAbe.length); tappedAll.set(p.pk, allShares.length); }
+            const h = pick(honest);
+            const p = twoDevices ? deviceOf(h) : h;
+            if (!tappedAt.has(p)) { p.pin = removeNamesKey(p.pin!, abe.pk); knowsTap(p); }
+            continue;
+        }
+        // M7: a check in person on one device (Abe only while his phone is his own), most often of an admin this device
+        // dropped, so a merge meets a drop on one record and a later check on the other.
+        if (twoDevices && rnd() < 0.1) {
+            const p = deviceOf(pick(honest));
+            const may = (step < lossAt ? [owen, bea, cy, abe, mia] : honest).filter((w) => w.pk !== p.pk);
+            const dropped = may.filter((w) => w.pk in (p.pin?.dropped ?? {}));
+            p.check(pick(dropped.length && rnd() < 0.8 ? dropped : may).pk);
             continue;
         }
         if (rnd() < 0.15) world.loseNextRetry = true;
@@ -1356,8 +1457,10 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
             world.deleted.push(e.id);
             continue;
         }
-        const p = pick(honest);
+        const h = pick(honest);
         const view = rnd() < 0.25 ? { admins: [bea.who, cy.who, abe.who] } : {};
+        const p = twoDevices ? deviceOf(h) : h;
+        actor = p;
         let res = p.open(world, view);
         // The asked ways forward, as the screen offers them: Follow (on a different history, or a stop at a maker nobody
         // trusted vouches for) and Make a new key (nobody who is an admin holds the current one).
@@ -1373,15 +1476,16 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
             if (world.post(m.generation) === 201) made++;
             res = p.open(world, view);
         }
+        actor = null;
         if (step > lossAt) for (const sh of toAbe) for (const id of sh.keyIds) abeKeys.add(id);
         const pin = p.pin!;
         const chainIds = new Set(pin.chain.map((l) => l.id));
         for (const id of Object.keys(pin.ring)) expect(chainIds.has(id) || pin.abandoned.includes(id)).toBe(true);
-        const tap = tappedAt.get(p.pk);
-        if (tap !== undefined) expect(toAbe.slice(tap).filter((sh) => sh.from === p.pk)).toEqual([]);
+        const tap = tappedAt.get(p);
+        if (tap !== undefined) expect(toAbe.slice(tap).filter((sh, i) => sh.from === p.pk && toAbeBy[tap + i] === p)).toEqual([]);
         // Round 11: no header this phone signs after its tap vouches for the key it removed (a claim in flight included).
-        const tapAll = tappedAll.get(p.pk);
-        if (tapAll !== undefined) for (const sh of allShares.slice(tapAll)) if (sh.from === p.pk) expect(sh.trusts).not.toContain(abe.pk);
+        const tapAll = tappedAll.get(p);
+        if (tapAll !== undefined) allShares.slice(tapAll).forEach((sh, i) => { if (sh.from === p.pk && allBy[tapAll + i] === p) expect(sh.trusts).not.toContain(abe.pk); });
         if (res.plan.kind === 'ready') {
             readies++;
             expect(Object.entries(pin.dropped).filter(([, id]) => !chainIds.has(id))).toEqual([]);
@@ -1403,9 +1507,25 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
             p.pin = read.pin;
             if (rnd() < 0.3) world.entries.push({ id: newNamesEntryId(), keyId: p.head()!, ciphertext: 'sealed' }); // a name added
         }
+        // M7: the other device takes this one's record at a random rate (its next open finds the newer copy), and sometimes
+        // each takes the other's at once (two devices saving at the same time).
+        const sib = sibling.get(p);
+        if (twoDevices && sib && rnd() < 0.35) {
+            const mine = p.pin!;
+            const theirs = sib.pin!;
+            const pKnew = tappedAt.has(p);
+            const sibKnew = tappedAt.has(sib);
+            merge(sib, mine);
+            if (pKnew) knowsTap(sib);
+            if (rnd() < 0.3) {
+                merge(p, theirs);
+                if (sibKnew) knowsTap(p);
+            }
+        }
     }
     claimsSeen += allShares.length;
-    return { readies, follows, taps: tappedAt.size, made, losses };
+    trustLog = null;
+    return { readies, follows, taps: tappedAt.size, made, losses, merges, recheck };
 }
 
 describe('the property check, in parts (each well under a minute on CI)', () => {
@@ -1425,6 +1545,317 @@ describe('the property check, in parts (each well under a minute on CI)', () => 
         expect(totals.readies).toBeGreaterThan(100);
         expect(totals.follows).toBeGreaterThan(0);
         expect(totals.taps).toBeGreaterThanOrEqual(24);
+    });
+});
+
+/**
+ * Two devices, one key: the merge of two records of one admin (ruling DESIGN-names-list-merge-rule-fable.md §2, its tests
+ * §3). Each runs both orders of (local, other) unless it says which. M5 and M6 (the copy across addresses) are lane S0b's.
+ */
+describe('M. Two devices, one key (ruling DESIGN-names-list-merge-rule-fable.md §3)', () => {
+    const link = (g: NamesGeneration) => ({ statement: g.statement, signature: g.signature, id: g.id, n: g.n });
+    const keyHex = () => bytesToHex(newNamesListKey());
+    const ids = (p: NamesPin) => p.chain.map((l) => l.id);
+    /** Me, with two devices; Zed made key 1; Kai is the admin one device removes. */
+    function twoDevices(trust: 'zed' | 'zed+kai' = 'zed+kai') {
+        const me = admin('Me');
+        const z = admin('Zed');
+        const k = admin('Kai');
+        const listed = [me, z, k];
+        const G1 = makeNamesGeneration({ communityId: CID, n: 1, parentId: null, drops: [] }, z);
+        const trusted = [me, z, ...(trust === 'zed+kai' ? [k] : [])].map((a) => a.publicKey).sort();
+        // Both devices start from one record: chain [key 1], its key in the ring.
+        const s0: NamesPin = { ...emptyNamesPin(CID, me.publicKey), trusted, chain: [link(G1)], ring: { [G1.id]: keyHex() }, copy: { seq: 4 } };
+        const state = (cur: NamesGeneration | null, gens: NamesGeneration[], shares: NamesShare[] = []): NamesServerState => ({
+            communityId: CID, current: cur ? { id: cur.id, n: cur.n } : null, generations: gens.map(wire),
+            shares: shares.map((s) => wireShare(s, s.to === me.publicKey)),
+            admins: listed.map((a) => ({ pubkey: a.publicKey, callsign: a.name, keyIds: [] })),
+        });
+        const sync = (pin: NamesPin, st: NamesServerState) => syncNames({ pin, state: st, me });
+        const gen = (n: number, parent: NamesGeneration, drops: Admin[], maker: Admin = z) =>
+            makeNamesGeneration({ communityId: CID, n, parentId: parent.id, drops: drops.map((a) => a.publicKey) }, maker);
+        return { me, z, k, K: k.publicKey, G1, s0, state, sync, gen };
+    }
+    const bothOrders = (a: NamesPin, b: NamesPin) => [mergeNamesPins(a, b), mergeNamesPins(b, a)];
+
+    /** The lane's sequence 2 (the S0 probe's B2 and A2): B removed Kai and its own key 2 (Y) landed; A is on a fork at W. */
+    function sequence2() {
+        const w = twoDevices();
+        const { me, K, G1, s0, state, sync, gen } = w;
+        const made = makeNamesGenerationFor(removeNamesKey(s0, K), me, [K]);
+        const Y = made.generation;
+        const B = { ...sync(made.pin, state(Y, [G1, Y])).pin, copy: { seq: 5 } };
+        expect(B.dropped[K]).toBe(Y.id);
+        expect(B.manualDrops).toEqual([]);
+        const W = gen(2, G1, []);
+        const A = sync(s0, state(W, [G1, W])).pin;
+        expect(A.trusted).toContain(K);
+        return { ...w, Y, W, A, B };
+    }
+
+    /** The lane's sequence 1 (the S0 probe's B and A): B took X (Zed's, removing Kai) and followed to W; A took W. */
+    function sequence1() {
+        const w = twoDevices();
+        const { K, G1, s0, state, sync, gen } = w;
+        const X = gen(2, G1, [w.k]);
+        const W = gen(2, G1, []);
+        let B = sync(s0, state(X, [G1, X])).pin;
+        expect(sync(B, state(W, [G1, W])).plan).toEqual({ kind: 'refused', reason: 'different_history', canFollow: true });
+        B = { ...followNamesServer(B, state(W, [G1, W])).pin, copy: { seq: 5 } };
+        expect(B.abandoned).toContain(X.id);
+        expect(B.dropped[K]).toBe(X.id);
+        const A = { ...sync(s0, state(W, [G1, W])).pin, copy: { seq: 6 } };
+        expect(A.trusted).toContain(K);
+        return { ...w, X, W, A, B };
+    }
+
+    it('M1. A check is kept: a key checked in person on either record, dropped on neither, is trusted after the merge', () => {
+        const { K, G1, s0, state, sync, gen } = twoDevices('zed');
+        const W = gen(2, G1, []);
+        const shorter = s0;
+        const longer = sync(s0, state(W, [G1, W])).pin;
+        expect(ids(longer)).toEqual([G1.id, W.id]);
+        // The check on the record not kept (the shorter chain's), then on the kept one; each in both orders.
+        for (const [checked, other] of [[checkNamesKeyInPerson(shorter, K), longer], [checkNamesKeyInPerson(longer, K), shorter]]) {
+            for (const m of bothOrders(checked, other)) {
+                expect(ids(m.pin)).toEqual([G1.id, W.id]);
+                expect(m.pin.trusted).toContain(K);
+                expect(K in m.pin.dropped).toBe(false);
+                expect(m.recheck).toEqual([]);
+            }
+        }
+    });
+
+    it('M2 (a). A Remove tapped and not landed, on either record, is kept: the next sync drops the key, and no share names or reaches it', () => {
+        const { me, K, G1, s0, state, sync, gen } = twoDevices();
+        const W = gen(2, G1, []);
+        const st = state(W, [G1, W]);
+        const shorter = s0;
+        const longer = sync(s0, st).pin;
+        const wKey = keyHex();
+        for (const [tapped, other] of [[removeNamesKey(shorter, K), longer], [removeNamesKey(longer, K), shorter]]) {
+            for (const m of bothOrders(tapped, other)) {
+                expect(m.pin.manualDrops).toEqual([K]);
+                const r = sync({ ...m.pin, ring: { ...m.pin.ring, [W.id]: wKey } }, st);
+                expect(r.toDrop).toContain(K);
+                expect(r.plan).toEqual({ kind: 'make_new', drops: [K] });
+                const shares = namesSharesToSend(r.pin, st, me);
+                expect(shares.length).toBeGreaterThan(0);
+                for (const x of shares) {
+                    expect(x.to).not.toBe(K);
+                    expect(x.trusts).not.toContain(K);
+                }
+            }
+        }
+    });
+
+    it('M2 (b). A Remove landed on a statement both chains have: the key is dropped on both, and carried', () => {
+        const { me, K, G1, s0, state, sync, gen } = twoDevices();
+        const made = makeNamesGenerationFor(removeNamesKey(s0, K), me, [K]);
+        const Y = made.generation;
+        const tapper = sync(made.pin, state(Y, [G1, Y])).pin;
+        const other = sync(s0, state(Y, [G1, Y])).pin;
+        expect(other.dropped[K]).toBe(Y.id);
+        const W2 = gen(3, Y, []);
+        const longer = sync(tapper, state(W2, [G1, Y, W2])).pin;
+        for (const [a, b] of [[other, longer], [tapper, other]]) {
+            for (const m of bothOrders(a, b)) {
+                expect(m.pin.dropped[K]).toBe(Y.id);
+                expect(m.pin.trusted).not.toContain(K);
+                expect(m.recheck).toEqual([]);
+            }
+        }
+    });
+
+    it('M2 (c). The lane\'s sequence 2: a Remove landed on one record, the other is on a fork and trusts the key: the fork joins abandoned, the drop carries, and nothing reaches the key', () => {
+        const { me, z, K, G1, Y, W, A, B, state, sync } = sequence2();
+        // A merges B's newer copy: a fork, so A's own record is kept.
+        const m = mergeNamesPins(A, B);
+        expect(ids(m.pin)).toEqual([G1.id, W.id]);
+        expect(m.pin.abandoned).toContain(Y.id);
+        expect(m.pin.dropped[K]).toBe(Y.id);
+        expect(m.pin.trusted).not.toContain(K);
+        expect(m.recheck).toEqual([K]);
+        expect(readNamesPin(JSON.parse(JSON.stringify(m.pin)), me.publicKey)).not.toBeNull();
+        // Until this device holds W's key: wait, a new key needed.
+        const onA = state(W, [G1, W]);
+        const r1 = sync(m.pin, onA);
+        expect(r1.toDrop).toContain(K);
+        expect(r1.plan).toMatchObject({ kind: 'wait', newKeyNeeded: true, drops: [K] });
+        // With W's key: a new key without Kai.
+        const r2 = sync({ ...r1.pin, ring: { ...r1.pin.ring, [W.id]: keyHex() } }, onA);
+        expect(r2.plan).toEqual({ kind: 'make_new', drops: [K] });
+        // That key lands: shares go to Zed, none to Kai, and none vouches for him.
+        const next = makeNamesGenerationFor(r2.pin, me, [K]);
+        const landed = state(next.generation, [G1, W, next.generation]);
+        const r3 = sync(next.pin, landed);
+        expect(r3.plan.kind).toBe('ready');
+        const shares = namesSharesToSend(r3.pin, landed, me);
+        expect(shares.map((x) => x.to)).toEqual([z.publicKey]);
+        for (const x of shares) expect(x.trusts).not.toContain(K);
+        // The other order (B merges A's copy): B's record kept, A's W joins abandoned, the drop stays on B's chain.
+        const r = mergeNamesPins(B, A);
+        expect(ids(r.pin)).toEqual([G1.id, Y.id]);
+        expect(r.pin.abandoned).toContain(W.id);
+        expect(r.pin.dropped[K]).toBe(Y.id);
+        expect(r.pin.trusted).not.toContain(K);
+        expect(r.recheck).toEqual([K]);
+        expect(readNamesPin(JSON.parse(JSON.stringify(r.pin)), me.publicKey)).not.toBeNull();
+    });
+
+    it('M3 (a). Dropped on the kept chain at S, the other record trusts the key and its chain lacks S: dropped, and one recheck', () => {
+        const { K, G1, s0, state, sync, gen, k } = twoDevices();
+        const X = gen(2, G1, [k]);
+        const took = sync(s0, state(X, [G1, X])).pin;
+        for (const m of bothOrders(s0, took)) {
+            expect(ids(m.pin)).toEqual([G1.id, X.id]);
+            expect(m.pin.dropped[K]).toBe(X.id);
+            expect(m.pin.trusted).not.toContain(K);
+            expect(m.recheck).toEqual([K]);
+        }
+    });
+
+    it('M3 (b). Dropped on the kept chain at S, the other record trusts the key and took S: trusted, no recheck', () => {
+        const { K, G1, s0, state, sync, gen, k } = twoDevices();
+        const X = gen(2, G1, [k]);
+        const W2 = gen(3, X, []);
+        const took = sync(s0, state(X, [G1, X])).pin;
+        const checked = checkNamesKeyInPerson(took, K); // took X, then checked Kai: a later act
+        const kept = sync(took, state(W2, [G1, X, W2])).pin; // the longer chain, Kai dropped at X
+        expect(kept.dropped[K]).toBe(X.id);
+        for (const m of bothOrders(checked, kept)) {
+            expect(ids(m.pin)).toEqual([G1.id, X.id, W2.id]);
+            expect(m.pin.trusted).toContain(K);
+            expect(K in m.pin.dropped).toBe(false);
+            expect(m.recheck).toEqual([]);
+        }
+    });
+
+    it('M3 (c). The other record dropped the key at S on the kept chain, the kept record took S and trusts it: trusted, no recheck', () => {
+        const { K, G1, s0, state, sync, gen, k } = twoDevices();
+        const X = gen(2, G1, [k]);
+        const W2 = gen(3, X, []);
+        const dropper = sync(s0, state(X, [G1, X])).pin;
+        const kept = sync(checkNamesKeyInPerson(dropper, K), state(W2, [G1, X, W2])).pin;
+        for (const m of bothOrders(dropper, kept)) {
+            expect(ids(m.pin)).toEqual([G1.id, X.id, W2.id]);
+            expect(m.pin.trusted).toContain(K);
+            expect(m.recheck).toEqual([]);
+        }
+    });
+
+    it('M3 (d). The lane\'s sequence 1: the drop stands on an abandoned statement the trusting record never took: dropped, one recheck, a new key without the key, shares to Zed only', () => {
+        const { me, z, K, G1, X, W, A, B, state, sync } = sequence1();
+        const onB = state(W, [G1, W]);
+        for (const m of bothOrders(B, A)) {
+            expect(m.pin.dropped[K]).toBe(X.id);
+            expect(m.pin.trusted).not.toContain(K);
+            expect(m.recheck).toEqual([K]);
+            const r1 = sync(m.pin, onB);
+            expect(r1.toDrop).toContain(K);
+            expect(r1.plan).toMatchObject({ kind: 'wait', newKeyNeeded: true });
+            const r2 = sync({ ...r1.pin, ring: { ...r1.pin.ring, [W.id]: keyHex() } }, onB);
+            expect(r2.plan).toEqual({ kind: 'make_new', drops: [K] });
+            expect(namesSharesToSend(r2.pin, onB, me).map((x) => x.to)).toEqual([z.publicKey]);
+        }
+    });
+
+    it('M3 (e). Dropped on both records at different statements: dropped at the kept record\'s, no recheck', () => {
+        const { me, K, G1, s0, state, sync, gen, k } = twoDevices();
+        const X = gen(2, G1, [k]);
+        const W2 = gen(3, X, []);
+        const Q = gen(2, G1, [k], me);
+        const onX = sync(sync(s0, state(X, [G1, X])).pin, state(W2, [G1, X, W2])).pin;
+        const onQ = sync(s0, state(Q, [G1, Q])).pin;
+        expect(onQ.dropped[K]).toBe(Q.id);
+        // A fork: each order keeps this device's own record (local), and the other's statement joins abandoned.
+        for (const [local, other, at, fork] of [[onQ, onX, Q, X], [onX, onQ, X, Q]] as const) {
+            const m = mergeNamesPins(local, other);
+            expect(ids(m.pin)).toEqual(ids(local));
+            expect(m.pin.dropped[K]).toBe(at.id);
+            expect(m.pin.abandoned).toContain(fork.id);
+            expect(m.pin.trusted).not.toContain(K);
+            expect(m.recheck).toEqual([]);
+        }
+        // One chain: Kai dropped at X on both, re-checked on one, then dropped again at key 4; the longer record is kept.
+        const R = gen(4, W2, [k]);
+        const again = sync(checkNamesKeyInPerson(onX, K), state(R, [G1, X, W2, R])).pin;
+        expect(again.dropped[K]).toBe(R.id);
+        for (const m of bothOrders(onX, again)) {
+            expect(ids(m.pin)).toEqual([G1.id, X.id, W2.id, R.id]);
+            expect(m.pin.dropped[K]).toBe(R.id);
+            expect(m.recheck).toEqual([]);
+        }
+    });
+
+    it('M4. The fork joins abandoned, and the walk is unmoved: Follow puts it back; on the kept branch the drop stands; a removed maker is `standing`', () => {
+        const { k, K, G1, Y, W, A, B, state, sync, gen } = sequence2();
+        const m = mergeNamesPins(A, B).pin;
+        expect(m.abandoned).toContain(Y.id);
+        expect(ids(m)).not.toContain(Y.id);
+        expect(m.ring[Y.id]).toBe(B.ring[Y.id]);
+        // The chain a sync produces is the same with and without the merge, whatever the server shows past the fork.
+        const V = gen(3, W, []);
+        const Y2 = gen(3, Y, []);
+        for (const st of [state(W, [G1, W, Y]), state(V, [G1, W, Y, V]), state(W, [G1, W, Y, Y2])]) {
+            expect(ids(sync(m, st).pin)).toEqual(ids(sync(A, st).pin));
+        }
+        // The server's current on the fork: a different history, Follow offered; Follow puts Y back on the chain.
+        const onFork = state(Y, [G1, W, Y]);
+        expect(sync(m, onFork).plan).toEqual({ kind: 'refused', reason: 'different_history', canFollow: true });
+        const f = followNamesServer(m, onFork).pin;
+        expect(ids(f)).toEqual([G1.id, Y.id]);
+        expect(f.abandoned).not.toContain(Y.id);
+        expect(f.abandoned).toContain(W.id);
+        expect(f.dropped[K]).toBe(Y.id);
+        expect(sync(f, onFork).toDrop).not.toContain(K);
+        // On the kept branch: the drop stands.
+        expect(sync(m, state(W, [G1, W, Y])).toDrop).toContain(K);
+        // The server's next statement off the kept head is Kai's own: a stop, `standing`.
+        const KV = gen(3, W, [], k);
+        expect(sync(m, state(KV, [G1, W, Y, KV])).plan).toMatchObject({ kind: 'refused', reason: 'untrusted_maker', maker: K, standing: true });
+    });
+
+    it('M8. The notice reads the same whichever record is kept: the same recheck and the same trust in both orders', () => {
+        const one = sequence1();
+        const two = twoDevices();
+        const X = two.gen(2, two.G1, [two.k]);
+        const took = two.sync(two.s0, two.state(X, [two.G1, X])).pin;
+        for (const [a, b, K] of [[one.A, one.B, one.K], [two.s0, took, two.K]] as const) {
+            const [ab, ba] = bothOrders(a, b);
+            expect(ab.recheck).toEqual([K]);
+            expect(ba.recheck).toEqual(ab.recheck);
+            expect(ba.pin.trusted).toEqual(ab.pin.trusted);
+            expect(Object.keys(ba.pin.dropped).sort()).toEqual(Object.keys(ab.pin.dropped).sort());
+        }
+    });
+
+    it('M9. A wiped device restores the merged copy: the fork\'s statement and share header this key made pass the cross-check', () => {
+        const { me, z, G1, Y, W, A, B, state } = sequence2();
+        // On B, before the merge: a share header of this key with head Y.
+        const share = makeNamesShare({ communityId: CID, from: me, to: z.publicKey, headId: Y.id, ring: namesRingKeys(B), trusts: B.trusted });
+        const m = mergeNamesPins(A, B).pin;
+        const server = state(W, [G1, W, Y], [share]);
+        expect(checkNamesCopyAgainst(m, { seq: m.copy.seq }, server, { seq: m.copy.seq })).toEqual({ ok: true });
+    });
+
+    describe('M7. The property check gains a second device', () => {
+        const totals = { readies: 0, merges: 0, recheck: 0, taps: 0 };
+        for (let part = 0; part < 5; part++) {
+            it(`seeds ${101 + part * 2}–${102 + part * 2}: after every merge the pin reads back, trust and drops stay apart, no Remove is lost, a key one record dropped is trusted only after a check on a device that knew the drop; the per-record promises hold`, () => {
+                for (let seed = 101 + part * 2; seed <= 102 + part * 2; seed++) {
+                    const r = propertyRun(seed, true);
+                    totals.readies += r.readies; totals.merges += r.merges; totals.recheck += r.recheck; totals.taps += r.taps;
+                }
+            }, 60_000);
+        }
+        it('the parts exercised what they check: merges, rechecks, drops lifted by a later check, taps and ready opens counted', () => {
+            expect(totals.merges).toBeGreaterThan(20);
+            expect(totals.recheck).toBeGreaterThan(0);
+            expect(oracleLifts).toBeGreaterThan(0);
+            expect(totals.readies).toBeGreaterThan(20);
+            expect(totals.taps).toBeGreaterThan(5);
+        });
     });
 });
 

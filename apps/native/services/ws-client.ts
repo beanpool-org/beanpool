@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, DeviceEventEmitter, NativeEventSubscription } from 'react-native';
-import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
-import { requestSync, applyLivePostChange, ownCardChanged } from './pillar-sync';
+import { createDeferredSync, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
+import { requestSync, applyLivePostChange, ownCardChanged, lastPillarSyncStartedAt } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
 import { isPlainNodeAddress, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
@@ -30,6 +30,21 @@ class WebSocketSyncClient {
     /** Pushed listing changes are written one at a time, in the order the node sent them. */
     private liveQueue: Promise<void> = Promise.resolve();
     private dataUpdatedTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * The one sync a burst of wide doorbells still owes (@beanpool/core createDeferredSync): a random 0–5 minutes on,
+     * skipped when a sync started meanwhile (a dropped socket's reopening sync is one), and cancelled when the app closes
+     * the socket (backgrounded or stopped: coming back opens a socket, which syncs).
+     */
+    private deferredSync = createDeferredSync({
+        run: () => { void requestSync(); },
+        lastSyncStartedAt: lastPillarSyncStartedAt,
+    });
+    /**
+     * The wide doorbells whose change the pillar sync reads: a member's card (and the listings a change of their standing
+     * pauses or brings back), a removed account (its listings go). It reads no groups and no announcements, so those
+     * owe it nothing.
+     */
+    public static readonly WIDE_NEEDING_SYNC: ReadonlySet<string> = new Set(['profile_updated', 'user_pruned']);
     /** The window a burst of pushed changes shares one screen re-read in — the one requestSync coalesces in. */
     public static readonly DATA_UPDATED_COALESCE_MS = 150;
     private isStarted = false;
@@ -290,7 +305,15 @@ class WebSocketSyncClient {
         // sync and the unread-badge listener both react to ws_activity.
         // Running a full pillar sync per received message hammered the
         // node and kept applyDelta churning the sync lock.
-        if (data.type !== 'new_message') requestSync();
+        if (data.type === 'new_message') return;
+        // A wide doorbell reached every open phone at once (@beanpool/core isWideDoorbell): the screens that show what it
+        // changed have read it on ws_activity above, the root layout has shown an announcement, and the sync it still owes
+        // waits its random turn, one for a burst. Every other doorbell syncs now, as before.
+        if (isWideDoorbell(data, this.memberPubkey)) {
+            if (WebSocketSyncClient.WIDE_NEEDING_SYNC.has(data.type)) this.deferredSync.ask();
+            return;
+        }
+        requestSync();
     }
 
     /**
@@ -335,6 +358,8 @@ class WebSocketSyncClient {
         }
         this.isRetry = false;
         this.noRoomRefusals = 0;
+        // The next socket's opening syncs, which covers whatever a wide doorbell was still owed.
+        this.deferredSync.cancel();
 
         this.stopHeartbeat();
         this.watchdogArmed = false;
@@ -441,6 +466,10 @@ class WebSocketSyncClient {
 
     public getLastPongAtForTest(): number | null {
         return this.lastPongAt;
+    }
+
+    public deferredSyncPendingForTest(): boolean {
+        return this.deferredSync.isPending();
     }
 
     /** `delayMs`: the node's own wait (a "no room" close); without it, the backoff below. */

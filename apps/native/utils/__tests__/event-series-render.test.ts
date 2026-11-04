@@ -115,22 +115,37 @@ const expectLabelInName = (els: HTMLElement[]) => {
         expect((el.getAttribute('aria-label') ?? shown).startsWith(shown), `"${el.getAttribute('aria-label')}" starts with "${shown}"`).toBe(true);
     }
 };
-/** The page, then its next dates opened: the page draws them compact (the first and "and 2 more"), one tap opens the list. */
+/**
+ * The page, then its next dates opened. The rule is their door (DESIGN-web-dates-stop-fable.md §4): one button with the rule
+ * in it, no date listed; one tap opens the list, and the rule heads it. Returns the door as it read before the tap.
+ */
 const draw = async (view: any) => {
     node.view = view;
     await act(async () => { root.render(createElement(EventDetail, { post: series }) as unknown as Parameters<Root['render']>[0]); await new Promise((r) => setTimeout(r, 0)); });
     const open = byTestId('event-next-dates-open');
-    expect(open, 'the next dates, compact').toHaveLength(1);
+    expect(open, "the rule, the next dates' door").toHaveLength(1);
     expect(byTestId('event-next-date')).toHaveLength(0);
+    expect(byTestId('event-repeat-caption'), 'the rule, drawn once: in the door').toHaveLength(1);
+    expect(open[0].contains(byTestId('event-repeat-caption')[0])).toBe(true);
+    const door = { text: open[0].textContent, name: open[0].getAttribute('aria-label') };
     await click(open[0]);
+    expect(byTestId('event-next-dates-open')).toHaveLength(0);
+    expect(byTestId('event-repeat-caption'), "the rule, drawn once: the list's heading").toHaveLength(1);
+    expect(byTestId('event-next-dates')[0].contains(byTestId('event-repeat-caption')[0])).toBe(true);
+    return door;
 };
 
 describe('the detail, drawn at 320 dp and 1.3×', () => {
     it.each(['light', 'dark'] as const)('a member (%s): the ↻ caption, Next dates with the cancelled one marked, no host controls; nothing cut to one line', async (name) => {
         theme.name = name;
         me.key = 'me'.repeat(32);
-        await draw(series);
+        const door = await draw(series);
+        // The door: the rule, a dot, "Next dates"; no date and no "and 2 more". No label of its own: its name is the words it shows.
+        expect(door).toEqual({ text: '↻ Every Friday·Next dates', name: null });
+        // Opened: the rule heads the list, "Next dates" is the box's name.
         expect(byTestId('event-repeat-caption')[0].textContent).toBe('↻ Every Friday');
+        expect(byTestId('event-next-dates')[0].getAttribute('aria-label')).toBe('Next dates');
+        expect(host.textContent).not.toContain('and 2 more');
         expect(byTestId('event-next-date').map(d => d.textContent)).toEqual(['Fri 15 Oct', 'Fri 22 OctCancelled', 'Fri 29 Oct']);
         expect(byTestId('event-date-cancel')).toHaveLength(0);
         for (const id of ['event-repeat-caption', 'event-next-date']) for (const el of byTestId(id)) expect(el.getAttribute('data-lines')).toBeNull();

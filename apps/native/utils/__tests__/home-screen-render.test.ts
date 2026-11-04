@@ -9,7 +9,7 @@
  * requests it makes. The emulator check at the floor is separate (scratch/home-phone, the PR's screenshots).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement, useEffect, type ReactNode } from 'react';
+import { act, createElement, forwardRef, useEffect, useImperativeHandle, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createHash, randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -19,6 +19,11 @@ import * as path from 'node:path';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const back = vi.hoisted(() => ({ press: null as null | (() => boolean), add: vi.fn(() => ({ remove: vi.fn() })) }));
+/** The layout and scroll handlers a drawn view was given, by its testID, and the list's scrollTo calls: nothing here draws a frame. */
+const hooks = vi.hoisted(() => ({
+    handlers: new Map<string, { onLayout?: (e: unknown) => void; onScroll?: (e: unknown) => void }>(),
+    scrollTo: vi.fn(),
+}));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', summary: 'region' };
     const el = (tag: string) => (props: Record<string, any>) => {
@@ -37,7 +42,11 @@ vi.mock('react-native', () => {
         if (value !== undefined && onValueChange) attrs['aria-checked'] = String(!!value);
         if (accessible) attrs['data-accessible'] = 'true';
         if (props.accessibilityElementsHidden) attrs['aria-hidden'] = 'true';
-        if (testID === 'card-settings-sheet' || /^card-band-|^add-card-.*-dot$/.test(testID ?? '')) attrs['data-style'] = JSON.stringify(Object.assign({}, ...[props.style].flat(3).filter(Boolean)));
+        // What Arrange's quiet is made of: no touch reaches the view, and TalkBack skips what is under it (Android's flag; iOS's is aria-hidden above).
+        if (props.pointerEvents) attrs['data-pointer-events'] = props.pointerEvents;
+        if (props.importantForAccessibility) attrs['data-ifa'] = props.importantForAccessibility;
+        if (testID && (props.onLayout || props.onScroll)) hooks.handlers.set(testID, { onLayout: props.onLayout, onScroll: props.onScroll });
+        if (testID === 'card-settings-sheet' || /^card-band-|^add-card-.*-dot$|^home-quiet-/.test(testID ?? '')) attrs['data-style'] = JSON.stringify(Object.assign({}, ...[props.style].flat(3).filter(Boolean)));
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
     class Value { constructor(public v: number) {} setValue(v: number) { this.v = v; } interpolate() { return 0; } }
@@ -45,7 +54,8 @@ vi.mock('react-native', () => {
     const plainPressable = el('div');
     return {
         Platform: { OS: 'android' },
-        View: el('div'), Text: el('span'), Pressable: (p: Record<string, any>) => createElement(p.accessible === false ? plainPressable : pressable, p), ScrollView: el('div'), Switch: el('button'), TextInput: el('input'),
+        View: el('div'), Text: el('span'), Pressable: (p: Record<string, any>) => createElement(p.accessible === false ? plainPressable : pressable, p), Switch: el('button'), TextInput: el('input'),
+        ScrollView: forwardRef((props: Record<string, any>, ref) => { useImperativeHandle(ref, () => ({ scrollTo: hooks.scrollTo })); return el('div')(props); }),
         ActivityIndicator: () => createElement('span', null, '…'),
         RefreshControl: () => null,
         Modal: ({ visible, children }: { visible: boolean; children?: ReactNode }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
@@ -117,7 +127,8 @@ const safety = vi.hoisted(() => ({ props: null as any }));
 // group-history-after-rekey.test.ts and e2e/locked-history-320.mjs.
 vi.mock('../../components/KeyMovedCard', () => ({ KeyMovedCard: () => null }));
 vi.mock('../../components/OneWayBackCard', () => ({
-    OneWayBackCard: (props: any) => { safety.props = props; useEffect(() => { props.onUp?.(false); }, []); return null; },
+    // Up only when a test says so (props.onUp(true)); in Arrange it draws the band Home hands it, as the real card does.
+    OneWayBackCard: (props: any) => { safety.props = props; useEffect(() => { props.onUp?.(false); }, []); return props.band ?? null; },
 }));
 vi.mock('../../components/NewPostTypeSheet', () => ({ NewPostTypeSheet: ({ visible }: { visible: boolean }) => (visible ? createElement('div', { 'data-testid': 'post-type-sheet' }) : null) }));
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
@@ -132,7 +143,14 @@ vi.mock('../../components/NeedsYouIcons', async (importOriginal) => {
 const manage = vi.hoisted(() => ({ start: vi.fn() }));
 vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ start: manage.start, dialog: null }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: ({ callsign }: { callsign: string }) => createElement('span', { 'data-avatar': callsign }) }));
-vi.mock('../../components/ExampleListings', () => ({ ExampleListings: () => createElement('div', { 'data-testid': 'example-listings' }, 'Examples of what people post') }));
+// Counts its own mounts: a card's inside that React unmounts and mounts again shows here (Arrange must not do that to a body).
+const examplesLife = vi.hoisted(() => ({ mounts: 0, unmounts: 0 }));
+vi.mock('../../components/ExampleListings', () => ({
+    ExampleListings: () => {
+        useEffect(() => { examplesLife.mounts += 1; return () => { examplesLife.unmounts += 1; }; }, []);
+        return createElement('div', { 'data-testid': 'example-listings' }, 'Examples of what people post');
+    },
+}));
 vi.mock('../db', () => ({ getMarketplaceTransactions: vi.fn(async () => []), getUnreadByConversation: vi.fn(async () => []) }));
 vi.mock('../pulse', () => ({ resolvePulseThumbnailUrl: (u: string | null, i: { id: string }) => (u ? `${u}/api/pulse/items/${i.id}/thumbnail` : null) }));
 // The phone's place (H4: the global node's "near you"): allowed or not, and the last one known. Home must never ask.
@@ -155,6 +173,7 @@ import { resetHomeStoreForTests } from '../home-store';
 import * as tourStore from '../tour-store';
 import { START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
 import { lightColors } from '../../constants/colors';
+import { QUIET_OPACITY } from '../../components/home/quiet';
 import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
@@ -234,6 +253,8 @@ beforeEach(async () => {
     mem.store.clear();
     resetHomeStoreForTests();
     nav.params = {};
+    hooks.handlers.clear();
+    hooks.scrollTo.mockClear();
     Object.values(nav.router).forEach(f => f.mockClear());
     keyboard.height = 0;
     keyboard.isVisible = false;
@@ -1222,18 +1243,133 @@ describe('Arrange', () => {
     const has = (id: string) => !!document.querySelector(`[data-testid="${id}"]`);
     const sent = () => node.requests.filter(r => r.method === 'POST' && r.body.includes('home.layout'));
 
-    it('Arrange › folds the cards to their bands and one line: no bodies, no "…", Done in the floating button\'s place, and it is said', async () => {
+    const quiets = () => Array.from(document.querySelectorAll('[data-testid^="home-quiet-"]')) as HTMLElement[];
+    const stripIds = () => Array.from(document.querySelectorAll('[data-testid^="home-arrange-"][data-testid$="-row"]'))
+        .map(e => e.getAttribute('data-testid')!.replace(/^home-arrange-/, '').replace(/-row$/, ''));
+
+    it('Arrange › is Home itself: the same cards in the same order, bodies and all, their insides quiet, no "…", Done in the floating button\'s place, and it is said', async () => {
         await render();
+        const before = cards();
+        expect(before.length).toBeGreaterThan(4);
         expect(has('home-market-all')).toBe(true);
         expect(has('home-add-post')).toBe(true);
+        expect(quiets()).toHaveLength(0);
         await open();
-        expect(has('home-market-all')).toBe(false);
+        // The same cards in the same order, none folded away: the six you see are the six you move.
+        expect(cards()).toEqual(before);
+        expect(has('home-market-all')).toBe(true);
         expect(has('home-card-events-menu')).toBe(false);
         expect(has('home-add-post')).toBe(false);
         expect(byLabel('Done arranging Home')).not.toBeNull();
         expect(document.querySelector('[data-testid="home-arrange-bar"]')!.textContent).toBe("Arrange Home: use the arrows. Done when you're happy.");
-        expect(document.querySelector('[data-testid="home-arrange-events-line"]')!.textContent).toBe('Events coming up soon.');
         expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Arrange Home. Use the arrows on each card.');
+        // Every card's inside is quiet: no touch reaches it, TalkBack and VoiceOver skip it, and it is dimmed. The band is not inside it.
+        expect(quiets().map(q => q.getAttribute('data-testid')!.replace('home-quiet-', ''))).toEqual(before);
+        for (const q of quiets()) {
+            expect(q.getAttribute('data-pointer-events'), q.getAttribute('data-testid')!).toBe('none');
+            expect(q.getAttribute('data-ifa')).toBe('no-hide-descendants');
+            expect(q.getAttribute('aria-hidden')).toBe('true');
+            expect(JSON.parse(q.getAttribute('data-style')!).opacity).toBe(QUIET_OPACITY);
+            expect(q.querySelector('[data-testid^="card-band-"]')).toBeNull();
+        }
+        expect(quiets().find(q => q.getAttribute('data-testid') === 'home-quiet-market')!.contains(document.querySelector('[data-testid="home-market-all"]'))).toBe(true);
+        // Each band keeps a heading and offers its own arrows (or Stays here), reachable outside the quiet part.
+        for (const id of before) {
+            const band = document.querySelector(`[data-testid="card-band-${id}"]`)!;
+            expect(band.querySelector('[role="heading"]'), id).not.toBeNull();
+            expect(band.querySelector(`[data-testid="home-arrange-${id}-down"], [data-testid="home-arrange-${id}-stays"]`), id).not.toBeNull();
+        }
+        await done();
+        expect(quiets()).toHaveLength(0);
+        expect(cards()).toEqual(before);
+    });
+
+    it('a card\'s inside is never unmounted and mounted again when Arrange opens or closes: the same elements stand through Home → Arrange › → Done (a tool\'s read and Find your community\'s lines live in them)', async () => {
+        examplesLife.mounts = 0;
+        examplesLife.unmounts = 0;
+        // A node that asks for the Market's example listings under a few real ones (HomeAnswer cards.market.examples).
+        node.answer.cards.market!.examples = true;
+        await render();
+        // Every element a card draws below its band, as Home draws it. A body React rebuilt would come back as new elements,
+        // and these would be left out of the page.
+        const insides = () => {
+            const out: Element[] = [];
+            for (const id of cards()) {
+                const card = document.querySelector(`[data-testid="home-card-${id}"]`)!;
+                for (const e of Array.from(card.querySelectorAll('*'))) {
+                    if (e.closest('[data-testid^="card-band-"]')) continue;
+                    if ((e.getAttribute('data-testid') ?? '').startsWith('home-quiet-')) continue;
+                    out.push(e);
+                }
+            }
+            return out;
+        };
+        // The one wrapper each card's inside sits in (the card's second child, after its band): the same element in all three states.
+        const wrapperOf = (id: string) => document.querySelector(`[data-testid="home-card-${id}"]`)!.children[1];
+        const wrappers = cards().map(wrapperOf);
+        expect(wrappers.every(w => w && !w.hasAttribute('data-testid'))).toBe(true);
+        const atHome = insides();
+        expect(atHome.length).toBeGreaterThan(40);
+        expect(atHome.every(e => e.isConnected)).toBe(true);
+        // A body with a mount of its own to count (the Market's example listings, mocked above) is on Home for this to mean something.
+        expect(has('example-listings')).toBe(true);
+        expect(examplesLife).toEqual({ mounts: 1, unmounts: 0 });
+        await open();
+        expect(quiets().length).toBeGreaterThan(4);
+        expect(cards().map(wrapperOf)).toEqual(wrappers);
+        expect(cards().every(id => wrapperOf(id) === wrappers[cards().indexOf(id)] && quiets().includes(wrapperOf(id) as HTMLElement))).toBe(true);
+        expect(atHome.filter(e => !e.isConnected).map(e => e.getAttribute('data-testid') ?? e.tagName)).toEqual([]);
+        expect(examplesLife).toEqual({ mounts: 1, unmounts: 0 });
+        const inArrange = insides();
+        await done();
+        expect(quiets()).toHaveLength(0);
+        expect(cards().every(id => wrapperOf(id) === wrappers[cards().indexOf(id)])).toBe(true);
+        expect(atHome.filter(e => !e.isConnected).map(e => e.getAttribute('data-testid') ?? e.tagName)).toEqual([]);
+        expect(inArrange.filter(e => !e.isConnected).map(e => e.getAttribute('data-testid') ?? e.tagName)).toEqual([]);
+        expect(examplesLife).toEqual({ mounts: 1, unmounts: 0 });
+    });
+
+    it('the bar stands above the card list, not among the cards: no card has a different place in the list when Arrange opens (cardY)', async () => {
+        await render();
+        const list = () => document.querySelector('[data-testid="home-card-events"]')!.parentElement!.parentElement!;
+        // Each card's index among the list's children (a wrapper with no card in it, the "way back" card while it is away, counts as a child).
+        const place = () => {
+            const at: Record<string, number> = {};
+            Array.from(list().children).forEach((w, i) => { const id = w.querySelector('[data-testid^="home-card-"]')?.getAttribute('data-testid'); if (id) at[id] = i; });
+            return at;
+        };
+        const was = place();
+        expect(Object.keys(was).length).toBeGreaterThan(4);
+        await open();
+        const bar = document.querySelector('[data-testid="home-arrange-bar"]')!;
+        expect(list().contains(bar)).toBe(false);
+        expect(bar.parentElement).toBe(list().parentElement);
+        // Every card ahead of the community card has the same neighbours as before; the strip and the tile come after them.
+        const now = place();
+        for (const [id, at] of Object.entries(was)) if (id !== 'home-card-community') expect(now[id], id).toBe(at);
+        await done();
+        expect(place()).toEqual(was);
+    });
+
+    it('the bar pushes the cards down by its height and nothing else: a view scrolled down goes down with them, once, so the card held stays where it was', async () => {
+        await render();
+        const scrollTo = async (y: number) => { await act(async () => { hooks.handlers.get('home-scroll')!.onScroll!({ nativeEvent: { contentOffset: { y } } }); }); };
+        const barHeight = async (height: number) => { await act(async () => { hooks.handlers.get('home-arrange-bar')!.onLayout!({ nativeEvent: { layout: { height } } }); }); };
+        await scrollTo(300);
+        await open();
+        hooks.scrollTo.mockClear();
+        await barHeight(104);
+        expect(hooks.scrollTo.mock.calls).toEqual([[{ y: 404, animated: false }]]);
+        // The bar measuring again later (its line wrapping afresh) moves nothing.
+        await barHeight(120);
+        expect(hooks.scrollTo).toHaveBeenCalledTimes(1);
+        await done();
+        // At the top of the list there is nothing to keep.
+        await scrollTo(0);
+        hooks.scrollTo.mockClear();
+        await open();
+        await barHeight(104);
+        expect(hooks.scrollTo).not.toHaveBeenCalled();
     });
 
     it('↑ and ↓ swap the card with its neighbour, in one save of the whole list, and say where it stands now', async () => {
@@ -1276,19 +1412,122 @@ describe('Arrange', () => {
         }
     });
 
-    it('a card with nothing to show folds too, with Remove: it goes, is said and saved; a card that is drawn keeps Remove in its "…"', async () => {
-        const mine = { v: 2, cards: [{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide' }, { id: 'pulse', type: 'pulse' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+    const mineOf = (ids: string[]) => {
+        const mine = { v: 2, cards: ids.map(id => ({ id, type: id })), dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
         node.answer = { ...localMember(), layout: mine as never };
         mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+    };
+
+    it('a card with nothing to show is in the strip under the cards, with Remove and no arrows: it goes, is said and saved; a card that is drawn keeps Remove in its "…"', async () => {
+        mineOf(['market', 'decide', 'pulse']);
         await render();
         expect(cards()).not.toContain('decide');
         await open();
-        expect(document.querySelector('[data-testid="home-arrange-decide-line"]')!.textContent).toBe('Nothing to show now');
+        // Not a band among the others: no card, no arrows, no "Stays here"; one block after the cards, before "＋ Add a card".
+        expect(cards()).not.toContain('decide');
+        expect(has('home-arrange-decide-up') || has('home-arrange-decide-down') || has('home-arrange-decide-stays')).toBe(false);
+        expect(stripIds()).toEqual(['decide']);
+        expect(document.querySelector('[data-testid="home-arrange-strip-heading"]')!.textContent).toBe('Nothing to show now');
+        expect(document.querySelector('[data-testid="home-arrange-strip-heading"]')!.getAttribute('role')).toBe('heading');
+        expect(document.querySelector('[data-testid="home-arrange-decide-name"]')!.textContent).toBe('Decide');
+        const strip = document.querySelector('[data-testid="home-arrange-strip"]')!;
+        const add = document.querySelector('[data-testid="home-arrange-add"]')!;
+        expect(strip.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(document.querySelector('[data-testid="home-card-pulse"]')!.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(byLabel('Remove Decide from Home')).not.toBeNull();
+        // Decide has settings, so the strip offers them (a card with none, like The Pulse, would not).
+        expect(byLabel('Settings for Decide')).not.toBeNull();
         expect(has('home-arrange-market-remove')).toBe(false);
         await press('home-arrange-decide-remove');
         expect(cards()).not.toContain('decide');
         expect(sentIds(sent().at(-1)!)).toEqual(['market', 'pulse']);
         expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Decide removed. Add a card brings it back.');
+        // Nothing left to show: the strip is not drawn at all, and Arrange stands.
+        expect(has('home-arrange-strip')).toBe(false);
+        expect(has('home-arrange-bar')).toBe(true);
+    });
+
+    it('a Home where every listed card is drawn has no strip', async () => {
+        mineOf(['market', 'pulse']);
+        await render();
+        await open();
+        expect(has('home-arrange-bar')).toBe(true);
+        expect(has('home-arrange-strip')).toBe(false);
+        expect(stripIds()).toEqual([]);
+    });
+
+    it('↑ and ↓ move a card among the drawn ones only: a card with nothing to show keeps its saved place', async () => {
+        // Coming up is first, Decide (nothing to show) second, The Pulse third, the Market fourth.
+        mineOf(['events', 'decide', 'pulse', 'market']);
+        await render();
+        expect(cards().filter(id => ['events', 'pulse', 'market'].includes(id))).toEqual(['events', 'pulse', 'market']);
+        await open();
+        await press('home-arrange-events-down');
+        // Coming up swapped with The Pulse, the next card you can see; Decide is still second in the list.
+        expect(sentIds(sent().at(-1)!)).toEqual(['pulse', 'decide', 'events', 'market']);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Coming up moved to 2 of 3');
+        expect(stripIds()).toEqual(['decide']);
+    });
+
+    it('"Your way back in", when it is up, gets a band of its own in Arrange (it has none on Home) with arrows that move it; the card under it goes quiet', async () => {
+        node.answer = everyCard('global', 1);
+        await render();
+        await act(async () => { safety.props.onUp(true); });
+        await settle(2);
+        expect(safety.props.band).toBeUndefined();
+        expect(has('home-arrange-safety-down')).toBe(false);
+        await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
+        // Up, so drawn, so one of the cards that move; not a row in the strip.
+        expect(safety.props.band).toBeDefined();
+        expect(has('home-arrange-safety-down')).toBe(true);
+        expect(byLabel('Move Your way back in down')).not.toBeNull();
+        expect(stripIds()).not.toContain('safety');
+        const posts = sent().length;
+        await press('home-arrange-safety-down');
+        expect(sent().length).toBe(posts + 1);
+        const ids = sentIds(sent().at(-1)!);
+        expect(ids.indexOf('safety')).toBeGreaterThan(0);
+        await done();
+        expect(safety.props.band).toBeUndefined();
+    });
+
+    it('the Beans example, which Home draws under the first card, is not lost when that card is the community card, the only one drawn: it goes with it', async () => {
+        const base = everyCard('global', 1);
+        const mine = { v: 2, cards: [{ id: 'community', type: 'community' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...base, features: { ...base.features, showcase: true }, layout: mine as never, cards: { ...base.cards, needs: { items: [] }, find: undefined, steps: undefined } };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+        await render();
+        expect(cards()).toEqual(['community', 'beans-preview']);
+        // What the two cards draw, as Home draws it: the example's whole frame (its band carries a pill that stays, untouchable, in
+        // Arrange) and the community card's inside. None of it may be rebuilt when Arrange opens or closes.
+        const beansEls = Array.from(document.querySelector('[data-testid="home-card-beans-preview"]')!.querySelectorAll('*'));
+        const communityInside = Array.from(document.querySelector('[data-testid="home-card-community"]')!.querySelectorAll('*'))
+            .filter(e => !e.closest('[data-testid^="card-band-"]'));
+        const pillWrapper = document.querySelector('[data-testid="card-band-beans-preview"] [data-ifa]')!;
+        expect(beansEls).toContain(pillWrapper);
+        expect(pillWrapper.getAttribute('data-ifa')).toBe('auto');
+        expect(pillWrapper.getAttribute('data-pointer-events')).toBe('auto');
+        expect(pillWrapper.getAttribute('aria-hidden')).toBeNull();
+        const gone = (els: Element[]) => els.filter(e => !e.isConnected).map(e => e.getAttribute('data-testid') ?? e.tagName);
+        await open();
+        // The community card is after the strip and the tile in Arrange; the example stays under it, quiet and with no arrows.
+        expect(cards()).toEqual(['community', 'beans-preview']);
+        expect(has('home-quiet-beans-preview')).toBe(true);
+        expect(has('home-arrange-beans-preview-up') || has('home-arrange-beans-preview-down')).toBe(false);
+        expect(gone(beansEls)).toEqual([]);
+        expect(gone(communityInside)).toEqual([]);
+        // The pill's wrapper is the same element, now quiet: only its props changed.
+        expect(document.querySelector('[data-testid="card-band-beans-preview"] [data-ifa]')).toBe(pillWrapper);
+        expect(pillWrapper.getAttribute('data-ifa')).toBe('no-hide-descendants');
+        expect(pillWrapper.getAttribute('data-pointer-events')).toBe('none');
+        expect(pillWrapper.getAttribute('aria-hidden')).toBe('true');
+        await done();
+        expect(cards()).toEqual(['community', 'beans-preview']);
+        expect(gone(beansEls)).toEqual([]);
+        expect(gone(communityInside)).toEqual([]);
+        expect(document.querySelector('[data-testid="card-band-beans-preview"] [data-ifa]')).toBe(pillWrapper);
+        expect(pillWrapper.getAttribute('data-ifa')).toBe('auto');
+        expect(pillWrapper.getAttribute('aria-hidden')).toBeNull();
     });
 
     it('a card with settings and nothing to show keeps Settings… here: the only way to give Sun and moon its place', async () => {
@@ -1304,7 +1543,7 @@ describe('Arrange', () => {
         expect(has('home-arrange-bar')).toBe(true);
     });
 
-    it('+ Add a card opens the picker; the new card folds in first, and Arrange stands', async () => {
+    it('+ Add a card opens the picker; the new card comes in first, and Arrange stands', async () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-card-pulse-menu"]') as HTMLElement).click(); });
         await act(async () => { byLabel('Remove The Pulse from Home')!.click(); });
@@ -1390,9 +1629,23 @@ describe('Arrange', () => {
 
 // ── Arrange offers only what this node can show (PR #1483 review 4165384151) ─────────────────────────────────────────
 
-const editRows = () => Array.from(document.querySelectorAll('[data-testid^="home-arrange-"][data-testid$="-line"]'))
-    .map(e => e.getAttribute('data-testid')!.replace('home-arrange-', '').replace(/-line$/, ''))
-    .filter(id => !document.querySelector(`[data-testid="home-arrange-${id}-stays"]`));
+/**
+ * Every card Arrange offers to move, set up or remove, in the order of the member's list: the drawn cards that carry arrows,
+ * and the strip's rows. (Stays here is not offered. The Beans example is no card of the member's list.)
+ */
+const editRows = () => {
+    const strip = Array.from(document.querySelectorAll('[data-testid^="home-arrange-"][data-testid$="-row"]'))
+        .map(e => e.getAttribute('data-testid')!.replace(/^home-arrange-/, '').replace(/-row$/, ''));
+    const bands = Array.from(document.querySelectorAll('[data-testid^="home-card-"]'))
+        .map(e => e.getAttribute('data-testid')!.replace('home-card-', ''))
+        .filter(id => !id.endsWith('-menu') && id !== 'beans-preview' && !document.querySelector(`[data-testid="home-arrange-${id}-stays"]`))
+        .concat(Array.from(document.querySelectorAll('[data-testid^="home-arrange-"][data-testid$="-down"]')).map(e => e.getAttribute('data-testid')!.replace(/^home-arrange-/, '').replace(/-down$/, '')));
+    const order = ((node.answer.layout as { cards: { id: string }[] }).cards).map(c => c.id);
+    return [...new Set([...bands, ...strip])].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+};
+/** The words Arrange puts on screen to name its cards: every band's caption and the strip. Not the cards' insides. */
+const offeredText = () => [...Array.from(document.querySelectorAll('[data-testid^="card-band-"]')), document.querySelector('[data-testid="home-arrange-strip"]')]
+    .map(e => e?.textContent ?? '').join(' ');
 const pickerRows = () => Array.from(document.querySelectorAll('[data-testid^="add-card-"]'))
     .map(e => e.getAttribute('data-testid')!.replace('add-card-', ''))
     .filter(id => !/-(add|on-home|count|status)$/.test(id) && !/^(sheet|done|note|group-.*)$/.test(id));
@@ -1404,7 +1657,7 @@ describe('Arrange offers only the cards this node can show', () => {
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         // Core's one rule (CARD-FRAME §1.2): no Decide on the worldwide community either.
         expect(editRows()).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'market', 'groups', 'joined', 'pulse', 'notices']);
-        expect(document.body.textContent).not.toMatch(/Your deals|Your enterprise|Your Beans|Grow your community/);
+        expect(offeredText()).not.toMatch(/Your deals|Your enterprise|Your Beans|Grow your community/i);
         expect(document.querySelector('[data-testid="home-arrange-find-stays"]')?.textContent).toBe('Stays here');
         // The picker lists the same: no money cards, no Decide, no invites, and no Find your community while it is pinned.
         await act(async () => { (document.querySelector('[data-testid="home-arrange-add"]') as HTMLElement).click(); });
@@ -1430,7 +1683,7 @@ describe('Arrange offers only the cards this node can show', () => {
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(editRows()).toEqual(['steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite']);
-        expect(document.body.textContent).not.toContain('Your way back in');
+        expect(offeredText()).not.toContain('Your way back in');
     });
 
     it('a node whose 12-words door has shut still draws and offers the "Your way back in" it sends a member who came in by it', async () => {
@@ -2454,16 +2707,16 @@ describe('two saved searches: each is named by its words, never in its caption (
         await settle();
         expect(vi.mocked(AccessibilityInfo.announceForAccessibility)).toHaveBeenCalledWith('"eggs" removed. Add a card brings it back.');
         expect(cards()).not.toContain('search-k2x7');
-        // Arrange: the band shows the words, bounded, so two searches read as two cards; its arrows say them too.
+        // Arrange: the card is the one Home draws (the type's caption, the words in its quiet body), and its arrows say the words, bounded.
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         const row = document.querySelector('[data-testid="home-card-search-m4p9"]')!;
-        expect(row.textContent).toContain('second hand children\'s b…');
-        expect(row.textContent).not.toContain('A saved search');
-        expect(row.textContent).not.toContain('bicycles');
+        expect(row.querySelector('[data-testid^="card-band-"]')!.textContent).toContain('A saved search');
+        expect(row.querySelector('[data-testid="home-search-words"]')!.textContent).toContain('second hand children\'s bicycles');
+        expect(row.querySelector('[data-testid="home-quiet-search-m4p9"]')!.contains(row.querySelector('[data-testid="home-search-words"]'))).toBe(true);
         expect(byLabel(`Move ${bounded} down`)).not.toBeNull();
     });
 
-    it('two searches with the same words and another kind: Arrange\'s bands and labels say the kind (review of #1716)', async () => {
+    it('two searches with the same words and another kind: Arrange\'s arrows say the kind (review of #1716)', async () => {
         const mine = { v: 2, cards: [
             { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'offer' } },
             { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'need' } },
@@ -2475,11 +2728,11 @@ describe('two saved searches: each is named by its words, never in its caption (
         expect(byLabel('Card options for "eggs" (Offers)')).not.toBeNull();
         expect(byLabel('Card options for "eggs" (Needs)')).not.toBeNull();
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="home-card-search-k2x7"]')!.textContent).toContain('Offers · eggs');
-        expect(document.querySelector('[data-testid="home-card-search-m4p9"]')!.textContent).toContain('Needs · eggs');
-        const both = document.querySelector('[data-testid="home-card-search-r8t2"]')!.textContent!;
-        expect(both).toContain('eggs');
-        expect(both).not.toMatch(/Offers|Needs|Both/);
+        // Three cards, as Home draws them, with the words in their quiet bodies; only the arrows' labels carry the kind.
+        for (const id of ['search-k2x7', 'search-m4p9', 'search-r8t2']) {
+            expect(document.querySelector(`[data-testid="home-card-${id}"] [data-testid="home-search-words"]`)!.textContent, id).toBe('eggs');
+            expect(document.querySelector(`[data-testid="card-band-${id}"]`)!.textContent, id).toContain('A saved search');
+        }
         expect(byLabel('Move "eggs" (Offers) down')).not.toBeNull();
         expect(byLabel('Move "eggs" (Needs) up')).not.toBeNull();
         expect(byLabel('Move "eggs" up')).not.toBeNull();
@@ -2611,7 +2864,9 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await settle();
         expect(cards()).not.toContain('tips');
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="home-arrange-tips-line"]')?.textContent).toContain('All tips seen');
+        // Nothing to show, so in the strip with what it would say; not a card among the others.
+        expect(document.querySelector('[data-testid="home-arrange-tips-note"]')?.textContent).toContain('All tips seen');
+        expect(document.querySelector('[data-testid="home-arrange-tips-row"]')).not.toBeNull();
         await act(async () => { byLabel('Remove Tips from Home')!.click(); });
         await settle();
         await act(async () => { (document.querySelector('[data-testid="home-arrange-add"]') as HTMLElement).click(); });
@@ -2774,8 +3029,9 @@ describe('the Tips card: one tip at a time, and it ends', () => {
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         await act(async () => { (document.querySelector('[data-testid="home-arrange-reset"]') as HTMLElement).click(); });
         await settle();
-        expect(document.querySelector('[data-testid="home-arrange-tips-line"]')).not.toBeNull();
-        expect(document.querySelector('[data-testid="home-arrange-tips-line"]')?.textContent).not.toContain('Nothing to show now');
+        // The tips start over, so the card has something to show: it is a card among the others, not a row in the strip.
+        expect(document.querySelector('[data-testid="home-card-tips"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-arrange-tips-row"]')).toBeNull();
         await act(async () => { (document.querySelector('[data-testid="home-arrange-done"]') as HTMLElement).click(); });
         expect(cards()).toContain('tips');
         expect(tipText()).toBe(text('what-this-is'));
@@ -3206,7 +3462,8 @@ describe('sun and moon: worked out on the phone, from the place it already has (
         expect(cards()).not.toContain('sky');
         expect(skyLine()).toBeNull();
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
-        expect(document.querySelector('[data-testid="home-arrange-sky-line"]')!.textContent).toContain(SKY_NO_PLACE_LINE);
+        expect(document.querySelector('[data-testid="home-arrange-sky-note"]')!.textContent).toContain(SKY_NO_PLACE_LINE);
+        expect(document.querySelector('[data-testid="home-arrange-sky-row"]')).not.toBeNull();
         expect(SKY_NO_PLACE_LINE).toBe('Nothing to show now: no place is known.');
     });
 

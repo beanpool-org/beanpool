@@ -37,7 +37,7 @@
  */
 import * as ts from 'typescript';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, posix, relative, sep } from 'node:path';
 import { blendOver, contrastRatio } from '@beanpool/core';
 import { darkColors, lightColors, palette } from '../constants/colors';
 import { BUTTON_CONTRAST_EXCEPTIONS, type ContrastException } from './button-contrast-exceptions';
@@ -60,8 +60,11 @@ const MAX_DEPTH = 14;
 // ── Values ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 interface Rgba { r: number; g: number; b: number; a: number }
-/** A colour a screen asked for: what it resolved to in this theme, how it was written, and on which line. */
-interface Paint { rgba: Rgba; expr: string; line: number }
+/**
+ * A colour a screen asked for: what it resolved to in this theme, how it was written, and on which line; `in`, the file it was
+ * written in when that is not the screen's own (a table followed into the style box, see importedDecl).
+ */
+interface Paint { rgba: Rgba; expr: string; line: number; in?: string }
 interface Unresolved { unresolved: string }
 type Colour = Paint | Unresolved;
 /** The settings of the unknown conditions this style assumes: `active` -> true. */
@@ -114,8 +117,10 @@ interface Ctx {
     unreadTables: Set<string>;
 }
 
-const lineOf = (n: ts.Node, sf: ts.SourceFile) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
-const textOf = (n: ts.Node, sf: ts.SourceFile) => n.getText(sf).replace(/\s+/g, ' ');
+/** The file a node was parsed from: the screen's, or a module a table was followed into. */
+const fileOf = (n: ts.Node, sf: ts.SourceFile) => n.getSourceFile() ?? sf;
+const lineOf = (n: ts.Node, sf: ts.SourceFile) => { const own = fileOf(n, sf); return own.getLineAndCharacterOfPosition(n.getStart(own)).line + 1; };
+const textOf = (n: ts.Node, sf: ts.SourceFile) => n.getText(fileOf(n, sf)).replace(/\s+/g, ' ');
 
 function unwrap(e: ts.Expression): ts.Expression {
     while (
@@ -178,7 +183,7 @@ function findCreate(n: ts.Node, hops = 0, want?: string): ts.ObjectLiteralExpres
     let found: ts.ObjectLiteralExpression | undefined;
     /** The table behind a local name: its function (or what it is initialised with), one hop further. */
     const follow = (name: string, at: ts.Node, functionsOnly: boolean) => {
-        const decl = hops < 3 ? findDecl(name, at) : undefined;
+        const decl = hops < 3 ? (findDecl(name, at) ?? importedDecl(name, at)) : undefined;
         return decl && decl !== n && (!functionsOnly || ts.isFunctionLike(decl)) ? findCreate(decl, hops + 1, want) : undefined;
     };
     const visit = (x: ts.Node) => {
@@ -203,6 +208,55 @@ function findCreate(n: ts.Node, hops = 0, want?: string): ts.ObjectLiteralExpres
     };
     visit(n);
     return found;
+}
+
+/**
+ * A style table built in another file of the app: the Market's style box (components/market-card-shell.ts, `useCardShell()`)
+ * is one module every card reads, so a card's `shell.card` is followed there instead of going dark. Only a name imported from
+ * a relative path to one of FOLLOWED_MODULES is followed, to the function or const that file declares at its top level under
+ * that name; anything else is still a table nobody could find. scanTree reads the files from the tree; scanSource from the
+ * `modules` it is given.
+ *
+ * Why a list and not every import (style box P2, 5 Nov 2026): following every relative import reads 14 more files and finds
+ * two pairs under the bar in tools/ui.tsx that are not this change's to fix; that widening is its own change.
+ */
+const FOLLOWED_MODULES = new Set(['components/market-card-shell']);
+let readModule: (rel: string) => string | null = () => null;
+const parsedModules = new Map<string, ts.SourceFile | null>();
+
+function loadModule(target: string): ts.SourceFile | null {
+    if (parsedModules.has(target)) return parsedModules.get(target) ?? null;
+    let sf: ts.SourceFile | null = null;
+    for (const ext of ['.ts', '.tsx']) {
+        const text = readModule(target + ext);
+        if (text != null) { sf = ts.createSourceFile(target + ext, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX); break; }
+    }
+    parsedModules.set(target, sf);
+    return sf;
+}
+
+function importedDecl(name: string, at: ts.Node): ts.Node | undefined {
+    const sf = at.getSourceFile();
+    for (const st of sf.statements) {
+        if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier) || st.importClause?.isTypeOnly) continue;
+        const bindings = st.importClause?.namedBindings;
+        const spec = st.moduleSpecifier.text;
+        if (!spec.startsWith('.') || !bindings || !ts.isNamedImports(bindings)) continue;
+        const el = bindings.elements.find((e) => e.name.text === name && !e.isTypeOnly);
+        if (!el) continue;
+        const target = posix.normalize(posix.join(posix.dirname(sf.fileName), spec));
+        if (!FOLLOWED_MODULES.has(target)) return undefined;
+        const mod = loadModule(target);
+        const exported = (el.propertyName ?? el.name).text;
+        for (const s of mod?.statements ?? []) {
+            if (ts.isFunctionDeclaration(s) && s.name?.text === exported) return s;
+            if (ts.isVariableStatement(s)) {
+                for (const d of s.declarationList.declarations) if (ts.isIdentifier(d.name) && d.name.text === exported && d.initializer) return d.initializer;
+            }
+        }
+        return undefined;
+    }
+    return undefined;
 }
 
 function bindingNames(name: ts.BindingName, out = new Set<string>()): Set<string> {
@@ -358,9 +412,10 @@ function lookup(tree: unknown, path: string[]): unknown {
 function colourLeaf(e: ts.Expression, ctx: Ctx, depth: number): Colour | null {
     const expr = textOf(e, ctx.sf);
     const line = lineOf(e, ctx.sf);
+    const own = fileOf(e, ctx.sf);
     const make = (raw: string): Colour => {
         const rgba = parseColour(raw);
-        return rgba ? { rgba, expr, line } : { unresolved: expr };
+        return rgba ? { rgba, expr, line, ...(own !== ctx.sf ? { in: own.fileName } : {}) } : { unresolved: expr };
     };
     if (ts.isStringLiteralLike(e)) return make(e.text);
     if (ts.isIdentifier(e) && e.text === 'undefined') return null;
@@ -588,8 +643,9 @@ export interface Finding {
     theme: Theme;
     ratio: number;
     min: number;
-    words: { expr: string; line: number; hex: string };
-    background: { expr: string; line: number; hex: string };
+    /** `in`: the file the colour is written in, when it is not `file` (a table followed into the style box). */
+    words: { expr: string; line: number; hex: string; in?: string };
+    background: { expr: string; line: number; hex: string; in?: string };
     /** The switches the pair assumes, e.g. `pressed`. */
     when: string[];
     /** Other elements that draw the same pair. */
@@ -724,13 +780,13 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
             const chosen = new Set([...chain.styled, ...extraKeys]);
             const when = [...cond].filter(([k]) => chosen.has(k)).map(([k, v]) => (v ? k : `!(${k})`));
             const line = lineOf(el, sf);
-            const key = [file, theme, words.expr, words.line, bg.expr, bg.line, when.join('&')].join('|');
+            const key = [file, theme, words.in, words.expr, words.line, bg.in, bg.expr, bg.line, when.join('&')].join('|');
             const prior = found.get(key);
             if (prior) { if (!prior.alsoAt.includes(line) && prior.line !== line) prior.alsoAt.push(line); return; }
             found.set(key, {
                 file, line, theme, ratio, min,
-                words: { expr: words.expr, line: words.line, hex: inkHex },
-                background: { expr: bg.expr, line: bg.line, hex: ground },
+                words: { expr: words.expr, line: words.line, hex: inkHex, ...(words.in ? { in: words.in } : {}) },
+                background: { expr: bg.expr, line: bg.line, hex: ground, ...(bg.in ? { in: bg.in } : {}) },
                 when, alsoAt: [],
             });
         };
@@ -884,11 +940,26 @@ const newStats = (): Stats => ({
     files: 0, checked: { light: 0, dark: 0 }, noGround: 0, inactive: 0, skipped: new Map(), opaqueStyles: 0, opaqueByFile: new Map(), unreadTables: new Map(),
 });
 
-/** Scan one source text (the canaries in utils/__tests__/button-contrast.test.ts use this). `file` is only a label. */
-export function scanSource(file: string, text: string, exceptions: readonly ContrastException[] = []): ContrastReport {
+/** Reads the files a scan follows imports into (see importedDecl), for one scan, then forgets them. */
+function withModules<T>(read: (rel: string) => string | null, scan: () => T): T {
+    readModule = read;
+    parsedModules.clear();
+    try {
+        return scan();
+    } finally {
+        readModule = () => null;
+        parsedModules.clear();
+    }
+}
+
+/**
+ * Scan one source text (the canaries in utils/__tests__/button-contrast.test.ts use this). `file` is only a label, and the path
+ * `modules` are keyed by (`components/market-card-shell.ts`), relative to apps/native, for a table built in another file.
+ */
+export function scanSource(file: string, text: string, exceptions: readonly ContrastException[] = [], modules: Record<string, string> = {}): ContrastReport {
     const stats = newStats();
     const found = new Map<string, Finding>();
-    scanFile(file, text, stats, found);
+    withModules((rel) => modules[rel] ?? null, () => scanFile(file, text, stats, found));
     return report(found, stats, exceptions);
 }
 
@@ -896,12 +967,15 @@ export function scanSource(file: string, text: string, exceptions: readonly Cont
 export function scanTree(nativeRoot: string, exceptions: readonly ContrastException[] = BUTTON_CONTRAST_EXCEPTIONS): ContrastReport {
     const stats = newStats();
     const found = new Map<string, Finding>();
-    for (const dir of SCANNED_DIRS) {
-        for (const abs of walk(join(nativeRoot, dir))) {
-            const rel = relative(nativeRoot, abs).split(sep).join('/');
-            scanFile(rel, readFileSync(abs, 'utf8'), stats, found);
+    const read = (rel: string) => { try { return readFileSync(join(nativeRoot, rel), 'utf8'); } catch { return null; } };
+    withModules(read, () => {
+        for (const dir of SCANNED_DIRS) {
+            for (const abs of walk(join(nativeRoot, dir))) {
+                const rel = relative(nativeRoot, abs).split(sep).join('/');
+                scanFile(rel, readFileSync(abs, 'utf8'), stats, found);
+            }
         }
-    }
+    });
     return report(found, stats, exceptions);
 }
 
@@ -922,8 +996,8 @@ export function formatReport(r: ContrastReport): string {
         lines.push(
             '',
             `FAIL ${f.file}:${f.line}  ${f.theme}  ${f.ratio.toFixed(2)}:1 (needs ${f.min})${f.when.length ? `  while ${f.when.join(' and ')}` : ''}`,
-            `     words       ${f.words.expr} = ${f.words.hex}  (${f.file}:${f.words.line})`,
-            `     background  ${f.background.expr} = ${f.background.hex}  (${f.file}:${f.background.line})`,
+            `     words       ${f.words.expr} = ${f.words.hex}  (${f.words.in ?? f.file}:${f.words.line})`,
+            `     background  ${f.background.expr} = ${f.background.hex}  (${f.background.in ?? f.file}:${f.background.line})`,
             ...(f.alsoAt.length ? [`     also drawn at lines ${f.alsoAt.join(', ')}`] : []),
         );
     }

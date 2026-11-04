@@ -38,6 +38,9 @@ for (const row of ['1', '2', '3']) {
         await page.addStyleTag({
             content: `html { font-size: ${TEXT_SCALE * 100}% !important; } *, *::before, *::after { transition: none !important; }`,
         });
+        // One Share button (DW2); the ways, and the line under each, are in the menu it opens.
+        await page.waitForSelector('[data-testid="share-button"]');
+        await page.click('[data-testid="share-button"]');
         await page.waitForSelector('[data-testid="share-members-note"]');
         await page.evaluate(() => document.fonts.ready);
         await page.waitForTimeout(300);

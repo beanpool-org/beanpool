@@ -26,7 +26,8 @@ const LISTS: [string, string[], RegExp[]][] = [
     // Every other small card draws through ListPhoto, and none draws a listing photo's URL itself.
     ['components/ListPhoto.tsx', ['useListPhotoSteps(photo)', 'uri: steps.shown'], [/uri: photo\s*}/]],
     ['components/home/HomeCardBodies.tsx', ['<Thumb uri={onNode(nodeUrl, p.photoUrl || p.bannerUrl)}', '<ListPhoto'], [/listPhotoUrl/, /<Image\b/]],
-    ['components/EventCard.tsx', ['<ListPhoto', 'photo={photo}'], [/uri: photo\s*}/, /<Image\b/]],
+    // The Market's event card draws its picture as the listing card beside it does (style box P2), through MarketCardPicture.
+    ['components/EventCard.tsx', ['<MarketCardPicture', 'picture={photo}'], [/uri: photo\s*}/, /<Image\b/, /<ListPhoto/]],
     ['components/MyDealsSheet.tsx', ['<ListPhoto'], [/uri: (item\.)?coverImage\s*}/, /ExpoImage/, /listPhotoUrl/]],
     ['app/public-profile.tsx', ['<ListPhoto', 'accessibilityLabel={t(\'Listing photo\')}'], [/uri: coverImage\s*}/, /listPhotoUrl/]],
     ['app/(tabs)/chats.tsx', ['<ListPhoto', 'photo={item.postPhoto}'], [/uri: item\.postPhoto\s*}/, /listPhotoUrl/]],

@@ -340,6 +340,62 @@ describe('the grid and compact views keep their cards their own height too', () 
     });
 });
 
+// The style box, slice P2 (DESIGN-market-event-cards-fable.md §3 P2): an event is the Offer's list card. Laid out with Yoga at
+// 320 dp and 1.3x text: its picture is the card's own slot (80 wide, flush inside the 1 dp border, the card's full height), the
+// card is the Offer card's width at the same left edge, its own height (Marty, 4 Nov: "the big card doesnt need to conform to
+// the same size"), and no taller than 210 dp with Byron's longest title, pinned, a place and the member's mark.
+describe('an event in the list is the Offer card, and its own height', () => {
+    const DAY = 86_400_000;
+    const BYRON: any = {
+        id: 'ev-twilight', type: 'event', status: 'active', title: 'Byron Bay Twilight Market - Every Saturday', category: 'events',
+        author_pubkey: 'byron-key', author_callsign: 'Byron Markets', created_at: iso(now - 2 * 60_000),
+        event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 5 * 3_600_000), event_state: 'scheduled',
+        event_place_name: 'Railway Park, Jonson Street, Byron Bay', lat: -28.643, lng: 153.612,
+        pinnedAt: iso(now - 60_000), pinnedUntil: iso(now + 3 * DAY), myRsvp: 'going', goingCount: 4, interestedCount: 2, photos: [],
+    };
+    const OFFER = { ...LONE, id: 'p-offer', title: 'Vehicle Storage', created_at: iso(now - 60_000) };
+    /** The event's card: the Pressable is the card itself (an Offer's is the Pressable's child). */
+    const eventCard = () => host.querySelector('[data-testid="event-card-ev-twilight"]') as HTMLElement;
+
+    it("the picture is the slot: 80 wide, flush inside the border, the card's full height; the card the Offer's width at the same left edge", async () => {
+        await show([BYRON, OFFER]);
+        const card = eventCard();
+        expect(card).not.toBeNull();
+        const slot = card.firstElementChild as HTMLElement;
+        const text = card.lastElementChild as HTMLElement;
+        expect(slot.querySelector('[data-testid="category-tile"]')).not.toBeNull();
+        const offer = cardOf(OFFER.title).firstElementChild as HTMLElement;
+        for (const height of HEIGHTS) {
+            const l = lay(height);
+            expect(l.box(slot), `slot at ${height} dp`).toMatchObject({ left: 1, top: 1, width: 80 });
+            expect(l.height(slot), `slot at ${height} dp`).toBeCloseTo(l.height(card) - 2, 1);
+            // The card is its lines' height: the text column's, or the slot's 80, whichever is taller.
+            expect(l.height(card), `card at ${height} dp`).toBeCloseTo(Math.max(80, textNeeds(l, text)) + 2, 1);
+            expect(l.width(card)).toBe(l.width(offer));
+            expect(at(l, card).left).toBe(at(l, offer).left);
+        }
+        expect(new Set(heightsAcross(card)).size).toBe(1);
+        const l = lay(569);
+        console.log(`event card ${l.height(card)} dp, Offer card ${l.height(offer)} dp at 320 x 1.3`);
+        expect(l.height(card)).toBeLessThanOrEqual(210);
+        // No more than two of its loud lines (20 dp at 1x) taller than the Offer card beside it.
+        expect(l.height(card) - l.height(offer)).toBeLessThanOrEqual(2 * 20 * 1.3);
+    });
+
+    it('nothing on the card is wider than the card, and no button but the card itself', async () => {
+        await show([BYRON, OFFER]);
+        const card = eventCard();
+        const l = lay(569);
+        const cardRight = at(l, card).left + l.width(card);
+        for (const el of Array.from(card.querySelectorAll('*'))) {
+            expect(at(l, el).left + l.width(el), el.textContent ?? el.tagName).toBeLessThanOrEqual(cardRight + 0.5);
+        }
+        expect(card.querySelectorAll('button')).toHaveLength(0);
+        expect(card.textContent).toContain('Going ✓');
+        expect(card.textContent).not.toContain('Interested');
+    });
+});
+
 // Byron's phone, 4 Nov (Android): "the pinned one is smaller. and it looks bad". The Pinned block added a 16 dp margin of
 // its own inside a list that already pads 16 dp, so a pinned card sat 32 dp in from each edge and every other card 16 dp.
 // Laid out with Yoga at 320 dp and 1.3x text: a pinned card and a card under TODAY are the same width at the same left
@@ -409,8 +465,10 @@ describe('a pinned card is the same width as every other card', () => {
         const l = lay(569);
         const gap = (upper: HTMLElement, lower: HTMLElement) => at(l, lower).top - (at(l, upper).top + l.height(upper));
         const [pinRows, streamRows] = [gap(row(PIN_A.title), row(PIN_C.title)), gap(row(STREAM_A.title), row(STREAM_C.title))];
-        expect(streamRows).toBe(16);
-        expect(pinRows).toBe(streamRows);
+        // To a thousandth of a dp: since PG2 a tile's text block is 133.2 dp at 1.3x, which float32 Yoga (no pixel rounding
+        // here, setPointScaleFactor(0)) carries as 16.000015 between rows. A phone rounds to its pixels.
+        expect(streamRows).toBeCloseTo(16, 3);
+        expect(pinRows).toBeCloseTo(streamRows, 3);
     });
 });
 
@@ -506,6 +564,115 @@ describe('the grid has no Pinned block: its pins are the first cells, and the st
     });
 });
 
+// Slice PG2 (DESIGN-market-grid-sizes-fable.md §2.2, §2.5; Marty, 4 Nov 2026: "the other smaller tiles yes - the same seems
+// best"): the grid is rows on a lattice. Its FlatList draws rows, not posts: a pair of tiles in one row shares one height, each
+// tile's text block is four rows whatever it holds (24 + (4 x 18 + 3 x 4) x fontScale), and a poll is a row of its own, the
+// list's width, never a half cell. Laid out with Yoga at 320 dp and 1.3x text.
+describe('the grid is rows on a lattice: a pair is one height, the text block four rows, a poll the whole width', () => {
+    const DAY = 86_400_000;
+    const plain = (id: string, title: string, ageMs: number, extra: Record<string, unknown> = {}) => ({ ...LONE, id, title, repeatable: 0, created_at: iso(now - ageMs), ...extra });
+    // One tile with the least a tile can hold, one with the most: a one-line title and nothing else, against a two-line title,
+    // a photo, RECURRING and a group's lock (the lock is the one chip row 4 keeps).
+    const SHORT = plain('g-short', 'Eggs', 1 * 60_000);
+    const FULL = plain('g-full', 'Listing with a title long enough to need a second line and more', 2 * 60_000, {
+        repeatable: 1, photos: [PHOTO('g-full')], audience_scope: 'group', target_group_name: 'Byron Bay Permaculture Growers',
+    });
+    const C = plain('g-c', 'Hedge trimming', 3 * 60_000);
+    const D = plain('g-d', 'Piano tuning', 4 * 60_000);
+    const POLL = {
+        id: 'g-poll', type: 'poll', status: 'active', title: 'Where should the new tool shed go?', description: 'The working bee is on the 12th',
+        author_pubkey: 'dee-key', author_callsign: 'Dee', created_at: iso(now - 90_000), poll_closes_at: iso(now + 2 * DAY), pollOpenVote: true,
+        pollOptions: [{ id: 'o1', text: 'North of the hall', votes: 3 }, { id: 'o2', text: 'Behind the south barn', votes: 1 }, { id: 'o3', text: 'Beside the packing shed', votes: 0 }],
+        pollVotes: [],
+    };
+    const SCALE = 1.3;
+    const BLOCK = 24 + (4 * 18 + 3 * 4) * SCALE;
+    const blockOf = (card: Element) => card.querySelector('[data-testid="grid-text-block"]') as HTMLElement;
+    const pollCard = () => host.querySelector('[data-testid="poll-card"]') as HTMLElement;
+
+    it('a pair at 320 x 1.3: two tiles 136 wide and one height, the least a tile holds beside the most', async () => {
+        await show([SHORT, FULL, C, D], 'grid');
+        const [short, full] = [cardOf(SHORT.title), cardOf(FULL.title)];
+        const l = lay(569);
+        // One row, left to right.
+        expect(at(l, short).top).toBe(at(l, full).top);
+        expect(at(l, short).left).toBe(16);
+        expect(at(l, full).left).toBe(16 + 136 + 16);
+        expect(l.width(short)).toBe(136);
+        expect(l.width(full)).toBe(136);
+        expect(l.height(short)).toBe(l.height(full));
+        // Each block is the four rows, the same number, whatever the tile holds.
+        for (const card of [short, full]) expect(l.height(blockOf(card))).toBeCloseTo(BLOCK, 3);
+        // The tile is its picture and its block (inside a 1 dp border), and nothing else: a lattice by construction, not only
+        // by the row's stretch. The picture is 4:3 at the card's inner width.
+        for (const card of [short, full]) {
+            const picture = blockOf(card).previousElementSibling as HTMLElement;
+            expect(l.height(picture)).toBeCloseTo((136 - 2) * 3 / 4, 3);
+            expect(l.height(card)).toBeCloseTo(2 + (136 - 2) * 3 / 4 + BLOCK, 3);
+        }
+        console.log(`grid tile ${l.height(short).toFixed(1)} dp at 320 x 1.3, text block ${l.height(blockOf(short)).toFixed(1)} dp`);
+    });
+
+    it('the rows line up across the pair, and nothing in a block runs out of it', async () => {
+        await show([SHORT, FULL], 'grid');
+        const l = lay(569);
+        const rowsOf = (card: Element) => Array.from(blockOf(card).children).map(r => at(l, r).top - at(l, card).top);
+        expect(rowsOf(cardOf(SHORT.title))).toEqual(rowsOf(cardOf(FULL.title)));
+        for (const card of [cardOf(SHORT.title), cardOf(FULL.title)]) {
+            const block = blockOf(card);
+            const bottom = at(l, block).top + l.height(block) - 12;   // inside its 12 dp of padding
+            for (const r of Array.from(block.children)) expect(at(l, r).top + l.height(r), r.textContent ?? '').toBeLessThanOrEqual(bottom + 0.01);
+            // The title takes two rows at most.
+            const title = block.firstElementChild!.firstElementChild!;
+            expect(title.getAttribute('data-lines')).toBe('2');
+        }
+    });
+
+    it('row 4 is one line: the group\'s lock before RECURRING, one chip at most, cut at the tile\'s edge', async () => {
+        const REPEATS = plain('g-rep', 'Weekly veg box', 5 * 60_000, { repeatable: 1 });
+        await show([SHORT, FULL, REPEATS], 'grid');
+        const full = cardOf(FULL.title);
+        const last = full.querySelector('[data-testid="grid-last-row"]') as HTMLElement;
+        expect(last.textContent).toContain('Byron Bay Permaculture Growers');
+        expect(last.textContent).not.toContain('RECURRING');
+        expect(full.querySelectorAll('[data-testid="card-group-chip"]')).toHaveLength(1);
+        // Nothing in the tile ends past its right edge, the long lock chip least of all (it is cut inside row 4).
+        const l = lay(569);
+        const right = at(l, full).left + l.width(full);
+        for (const el of Array.from(full.querySelectorAll('*'))) expect(at(l, el).left + l.width(el), el.textContent ?? el.tagName).toBeLessThanOrEqual(right + 0.5);
+        const chip = full.querySelector('[data-testid="card-group-chip"]')!;
+        expect(at(l, chip).left + l.width(chip)).toBeLessThanOrEqual(at(l, last).left + l.width(last) + 0.5);
+        // Without the lock, RECURRING; with neither (and no distance off the worldwide community), a blank last row.
+        expect(cardOf(REPEATS.title).querySelector('[data-testid="grid-last-row"]')!.textContent).toBe('↻ RECURRING');
+        expect(cardOf(SHORT.title).querySelector('[data-testid="grid-last-row"]')!.textContent).toBe('');
+    });
+
+    it('a poll is a row of its own at the list\'s width, 288 dp, never a half cell; the tiles pack round it', async () => {
+        await show([SHORT, POLL, FULL, C], 'grid');
+        const l = lay(569);
+        const poll = pollCard();
+        expect(poll).not.toBeNull();
+        expect(l.width(poll)).toBe(WIDTH - 32);
+        expect(at(l, poll).left).toBe(16);
+        // The tile that waited for its partner keeps it: SHORT and FULL share the first row, the poll is under it, C after.
+        expect(at(l, cardOf(SHORT.title)).top).toBe(at(l, cardOf(FULL.title)).top);
+        expect(at(l, poll).top).toBeGreaterThan(at(l, cardOf(SHORT.title)).top + l.height(cardOf(SHORT.title)));
+        expect(at(l, cardOf(C.title)).top).toBeGreaterThan(at(l, poll).top + l.height(poll));
+        // C is the last, odd tile: it keeps its half of the row.
+        expect(l.width(cardOf(C.title))).toBe(136);
+        expect(at(l, cardOf(C.title)).left).toBe(16);
+    });
+
+    it('the poll in the grid is the width of the poll in the list', async () => {
+        await show([SHORT, POLL], 'list');
+        const listWidth = lay(569).width(pollCard());
+        act(() => root.unmount());
+        root = createRoot(host);
+        await show([SHORT, POLL], 'grid');
+        expect(lay(569).width(pollCard())).toBe(listWidth);
+    });
+});
+
 // The Market's fill (market-fill.ts): on a community that reads by area, a short nearby list is followed, in the list's
 // footer, by the newest from elsewhere. Those cards sit in views of their own (a plain one in the list view, a row of two
 // in the grid), so each view is laid out with Yoga here too.
@@ -560,6 +727,35 @@ describe('the layout check sees the fault it is here for', () => {
         const scroll = div({ flexGrow: 1, flexShrink: 1, overflow: 'scroll' }, content);
         return { scroll, row, slot, tile };
     }
+
+    // PG2: a grid tile's row 4 holds the distance and one chip side by side, in the box's styles (gridTextBlock). Built by hand
+    // at a tile's inner width (136 - 2 - 24 = 110 dp), 1.3x text: each piece gives way, so the long lock chip ends inside the
+    // row; laid out rigid (flexShrink 0, the fault) it runs past it. The screen test cannot reach this pair: a distance needs the
+    // worldwide community's circle.
+    it("row 4's distance and lock chip end inside the tile; laid out rigid, the chip runs past it", async () => {
+        const { gridTextBlock } = await import('../../components/market-card-shell');
+        const b = gridTextBlock(1.3);
+        const span = (style: Record<string, unknown>, text: string) => {
+            const e = document.createElement('span');
+            e.setAttribute('data-style', JSON.stringify(style));
+            e.setAttribute('data-lines', '1');
+            e.textContent = text;
+            return e;
+        };
+        const rowWith = (piece: Record<string, unknown>) => {
+            const chip = div({ flexShrink: 0, maxWidth: '100%', paddingHorizontal: 6, paddingVertical: 2 }, span({ fontSize: 10 }, '🔒 Only Byron Bay Permaculture Growers can see this'));
+            const row = div(b.lastRow as Record<string, unknown>, span({ fontSize: 14, lineHeight: 18, ...piece }, '📍 141 km'), div(piece, chip));
+            const scroll = div({ flexGrow: 1, flexShrink: 1, overflow: 'scroll' }, div({ width: 110 }, row));
+            const l = layOut(scroll, { width: WIDTH, height: 569 }, { fontScale: 1.3 });
+            // The chip's right edge in the row's coordinates: its wrapper's left plus its own.
+            return { right: l.box(chip.parentElement!).left + l.box(chip).left + l.width(chip), width: l.width(row) };
+        };
+        const kept = rowWith(b.lastRowPiece as Record<string, unknown>);
+        expect(kept.width).toBe(110);
+        expect(kept.right).toBeLessThanOrEqual(kept.width + 0.5);
+        const rigid = rowWith({ flexShrink: 0 });
+        expect(rigid.right).toBeGreaterThan(rigid.width + 10);
+    });
 
     it('a percentage-height slot makes a lone card far taller than its own 116 dp', () => {
         // 90 dp of text, 24 of padding and a 1 dp border all round; the list around it adds 90 above and 380 below.

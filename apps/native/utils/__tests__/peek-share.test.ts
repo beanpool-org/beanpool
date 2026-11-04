@@ -17,6 +17,8 @@ vi.mock('../use-node-profile', () => ({ useNodeProfile: () => null }));
 vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recognition: 'member' }) }));
 vi.mock('../node-profile', () => ({ shareOutsideOn: () => true }));
 vi.mock('../db', () => ({ signedRequestWithMethod: (...a: unknown[]) => signedRequestWithMethod(...a), signedGet: vi.fn() }));
+// SharePost draws the Share sheet (components/ShareSheet.tsx), which reads the bottom inset.
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
 import { Alert, Share } from 'react-native';
 import { confirmShareOutside, shareableOutside, type UnsentPeekLink } from '../../components/SharePost';
@@ -75,7 +77,15 @@ describe('an answer without the community\'s words', () => {
     it('a link made: the community\'s own address, the post and the ticket', async () => {
         signedRequestWithMethod.mockResolvedValueOnce({ ticket: 'AbCdEfGhIjKlMnOpQrSt_-', postId: 'p-ladder', expiresAt: SOON });
         expect(await makePeekLink('p-ladder')).toEqual({ link: 'https://castlemaine.beanpool.org/?post=p-ladder&peek=AbCdEfGhIjKlMnOpQrSt_-', expiresAt: SOON });
-        expect(signedRequestWithMethod).toHaveBeenCalledWith('POST', '/api/peek', { postId: 'p-ladder' }, { withStatus: true });
+        // With a signal: the link is waited for TIMEOUT_MS at most (share-sheet-holds.test.ts runs the limit itself).
+        expect(signedRequestWithMethod).toHaveBeenCalledWith('POST', '/api/peek', { postId: 'p-ladder' }, { withStatus: true, signal: expect.any(AbortSignal) });
+        expect((signedRequestWithMethod.mock.calls[0][3] as { signal: AbortSignal }).signal.aborted).toBe(false);
+    });
+
+    it('Stop sharing is asked as before, with no time limit of its own', async () => {
+        signedRequestWithMethod.mockResolvedValueOnce({});
+        await stopPeekShare('r1');
+        expect(signedRequestWithMethod).toHaveBeenCalledWith('POST', '/api/peek/stop', { id: 'r1' }, { withStatus: true });
     });
 });
 
@@ -88,12 +98,15 @@ describe('a link made but not handed over', () => {
     const made = () => signedRequestWithMethod.mock.calls.filter(([m, p]) => m === 'POST' && p === '/api/peek').length;
     const sharedLinks = () => share.mock.calls.map(([c]) => (c as { message: string }).message.split('\n')[1]);
 
-    /** Share outside, and the member taps Share on the question; done once the sheet has answered. */
+    /**
+     * Share outside from the Share sheet's item (DP2): the item with its sentence is the question, so no second one is asked;
+     * done once the share sheet has answered.
+     */
     async function tapShare(unsent: { current: UnsentPeekLink | null }): Promise<void> {
         alert.mockClear();
-        confirmShareOutside(POST, undefined, unsent);
-        const buttons = alert.mock.calls[0][2] as { text: string; onPress?: () => Promise<void> }[];
-        await buttons.find(b => b.text === 'Share')!.onPress!();
+        await confirmShareOutside(POST, undefined, unsent, undefined, { confirmed: true });
+        // No question: an alert here is only ever the "Not shared" one.
+        for (const call of alert.mock.calls) expect(call[0]).toBe('Not shared');
     }
 
     beforeEach(() => {
@@ -161,9 +174,22 @@ describe('a link made but not handed over', () => {
         const unsent = { current: null as UnsentPeekLink | null };
         share.mockResolvedValue({ action: Share.dismissedAction });
         await tapShare(unsent);
-        alert.mockClear();
-        confirmShareOutside({ id: 'p-other', title: 'Other' }, undefined, unsent);
+        await confirmShareOutside({ id: 'p-other', title: 'Other' }, undefined, unsent, undefined, { confirmed: true });
+        expect(signedRequestWithMethod).toHaveBeenLastCalledWith('POST', '/api/peek', { postId: 'p-other' }, { withStatus: true, signal: expect.any(AbortSignal) });
+    });
+
+    it('confirmed (the sheet\'s item) asks no question and makes the link; unconfirmed makes nothing until Share on the question', async () => {
+        const unsent = { current: null as UnsentPeekLink | null };
+        share.mockResolvedValue({ action: Share.sharedAction });
+        await confirmShareOutside(POST, undefined, unsent, undefined, { confirmed: true });
+        expect(alert).not.toHaveBeenCalled();
+        expect(made()).toBe(1);
+
+        await confirmShareOutside(POST, undefined, unsent, 'The note');
+        expect(alert.mock.calls[0][0]).toBe('Share outside the community');
+        expect(alert.mock.calls[0][1]).toBe('The note');
+        expect(made()).toBe(1);
         await (alert.mock.calls[0][2] as { text: string; onPress?: () => Promise<void> }[]).find(b => b.text === 'Share')!.onPress!();
-        expect(signedRequestWithMethod).toHaveBeenLastCalledWith('POST', '/api/peek', { postId: 'p-other' }, { withStatus: true });
+        expect(made()).toBe(2);
     });
 });

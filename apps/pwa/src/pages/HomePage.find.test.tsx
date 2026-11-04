@@ -333,6 +333,48 @@ describe('a community the member came to ask to join', () => {
         expect(screen.getAllByTestId('home-find-asked')).toHaveLength(1);
     });
 
+    // A1 review, 4 Nov: a card's body was one element on Home and another in Arrange, so Arrange and Done each unmounted and
+    // mounted it again: this box fetched again (and drew its shorter loading box, so cards packed after it could change cell),
+    // scrolled itself to the centre again, and Ask to join lost what had been typed. Measured: 1 → 2 → 3 mounts.
+    it('Find on Home: Arrange and Done leave the asked community as it was: not fetched again, not scrolled again, and what was typed stays', async () => {
+        const scrolled = vi.fn();
+        const original = Element.prototype.scrollIntoView;
+        Element.prototype.scrollIntoView = scrolled;
+        try {
+            vi.mocked(api.getHome).mockResolvedValue(fresh(longMember([{ id: 'find', type: 'find' }, { id: 'tips', type: 'tips' }])));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" />);
+            const find = await screen.findByTestId('home-card-find');
+            const asked = await within(find).findByTestId('home-find-asked');
+            fireEvent.click(await within(asked).findByTestId('home-find-asked-ask'));
+            const message = within(asked).getByTestId('home-find-asked-ask-message') as HTMLTextAreaElement;
+            fireEvent.change(message, { target: { value: 'I live down the road' } });
+            expect(api.getListedCommunityByHost).toHaveBeenCalledTimes(1);
+            // The box's own scroll to the centre (Home scrolls other things itself, at Done: this counts the box's alone).
+            const boxScrolls = () => scrolled.mock.contexts.filter(el => el === asked).length;
+            expect(boxScrolls()).toBe(1);
+
+            // Arrange from the Find card's own "…".
+            fireEvent.click(within(find).getByTestId('home-card-menu'));
+            fireEvent.click(within(find).getByTestId('home-menu-arrange'));
+            expect(screen.getByTestId('home-card-find')).toBe(find);
+            expect(within(find).getByTestId('card-body-find')).toContainElement(asked);
+            expect(within(find).getByTestId('home-find-asked')).toBe(asked);
+            expect(within(find).getByTestId('home-find-asked-ask-message')).toBe(message);
+            expect(message).toHaveValue('I live down the road');
+
+            fireEvent.click(screen.getByTestId('home-arrange-done'));
+            expect(screen.queryByTestId('card-body-find')).toBeNull();
+            expect(within(find).getByTestId('home-find-asked')).toBe(asked);
+            expect(within(find).getByTestId('home-find-asked-ask-message')).toBe(message);
+            expect(message).toHaveValue('I live down the road');
+            await act(async () => { await Promise.resolve(); });
+            expect(api.getListedCommunityByHost).toHaveBeenCalledTimes(1);
+            expect(boxScrolls()).toBe(1);
+        } finally {
+            Element.prototype.scrollIntoView = original;
+        }
+    });
+
     it('nothing asked: nothing drawn above the cards', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(longMember([])));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);

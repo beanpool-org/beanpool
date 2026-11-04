@@ -3,8 +3,9 @@
  * A cancelled event: a member who is Going says "Not going", answered with post:null
  * (the event is no longer theirs to see, PR #2078).
  *
- * Proves that both the phone's EventCard and EventDetail show not going at once
- * and update the counts (dropping the member from the count they were in).
+ * Proves that EventDetail shows not going at once and updates the counts (dropping the member from the count they
+ * were in), and that the Market's EventCard, which no longer answers (the mark on the card, the buttons on the page),
+ * follows the post it is handed: the member's mark while they are going, the honest counts once they are not.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -110,42 +111,33 @@ const cancelledEvent: any = {
 };
 
 describe('cancelled event RSVP withdrawal on native (PR #2078 gap)', () => {
-    it('a cancelled event, the member Going, "Not going" answered with post:null → the card shows not going and the right counts', async () => {
-        vi.mocked(db.rsvpEvent).mockResolvedValueOnce({ success: true, post: null } as any);
-        const onRsvpChanged = vi.fn();
+    // The card no longer answers (Marty, 4 Nov: Going / Interested on the event's page, the mark on the card): it follows the
+    // post it is handed. The page withdraws; the Market's next read hands the card the post as the node now holds it.
+    it('a cancelled event, the member Going, then "Not going" on the page → the card follows the post: the mark, then the right counts', async () => {
+        const draw = async (post: any) => {
+            await act(async () => {
+                root.render(createElement(EventCard, {
+                    post,
+                    currentPubkey: 'me'.repeat(32),
+                }) as unknown as Parameters<Root['render']>[0]);
+                await new Promise((r) => setTimeout(r, 0));
+            });
+        };
+        await draw(cancelledEvent);
 
-        await act(async () => {
-            root.render(createElement(EventCard, {
-                post: cancelledEvent,
-                currentPubkey: 'me'.repeat(32),
-                onRsvpChanged,
-            }) as unknown as Parameters<Root['render']>[0]);
-            await new Promise((r) => setTimeout(r, 0));
-        });
-
-        // Initially shows 7 going · 3 interested, with Going button selected
-        expect(host.textContent).toContain('7 going · 3 interested');
-        const goingBtn = button('Going, selected. Tap to clear');
-        expect(goingBtn).toBeTruthy();
-        expect(goingBtn?.getAttribute('aria-disabled')).toBeNull();
-
-        // Interested button is disabled because joining a cancelled event is blocked
-        const interestedBtn = button('Interested');
-        expect(interestedBtn?.getAttribute('aria-disabled')).toBe('true');
-
-        // Tap Going to withdraw ("Not going")
-        await click(goingBtn);
-        expect(db.rsvpEvent).toHaveBeenCalledWith('ev-cancelled-1', null);
-
-        // Shows not going and honest counts: 6 going · 3 interested
-        expect(host.textContent).toContain('6 going · 3 interested');
+        // Going: the card shows the member's mark, and has no button but itself
+        expect(host.textContent).toContain('Going ✓');
+        expect(buttons()).toHaveLength(1);
         expect(button('Going, selected. Tap to clear')).toBeUndefined();
-        const goingAfter = button('Going');
-        expect(goingAfter).toBeTruthy();
-        // Once not going, both buttons are disabled on the cancelled event
-        expect(goingAfter?.getAttribute('aria-disabled')).toBe('true');
-        expect(interestedBtn?.getAttribute('aria-disabled')).toBe('true');
-        expect(onRsvpChanged).toHaveBeenCalled();
+        expect(button('Interested')).toBeUndefined();
+
+        // The member said "Not going" on the page; the post comes back without them: 6 going · 3 interested, no mark
+        await draw({ ...cancelledEvent, myRsvp: null, goingCount: 6 });
+        expect(host.textContent).not.toContain('Going ✓');
+        expect(host.textContent).toContain('6 going · 3 interested');
+        expect(buttons()).toHaveLength(1);
+        // The card never sent an answer of its own
+        expect(db.rsvpEvent).not.toHaveBeenCalled();
     });
 
     it('EventDetail: a cancelled event, the member Going, "Not going" answered with post:null → shows not going and the right counts', async () => {

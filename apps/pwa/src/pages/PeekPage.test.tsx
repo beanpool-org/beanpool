@@ -187,9 +187,25 @@ describe('the address', () => {
     });
 });
 
+/**
+ * Share outside the community is an item of the Share menu (DESIGN-detail-pages-fable.md §2.5, slice DW2): the item, found
+ * with the menu opened if it is shut. What it leaves (the note, the link to copy by hand, Try again) shows under the row, so
+ * it is still there when the menu has closed; and the kept link is the part's, not the menu's.
+ */
+async function shareOutsideItem(): Promise<HTMLElement> {
+    const trigger = await screen.findByTestId('share-button');
+    if (trigger.getAttribute('aria-expanded') !== 'true') fireEvent.click(trigger);
+    return screen.findByTestId('share-outside-button');
+}
+/** The Share button is busy while the node makes a link, then it is not. */
+const shareSettled = async () => {
+    const trigger = await screen.findByTestId('share-button');
+    await waitFor(() => expect(trigger.getAttribute('aria-busy')).toBeNull());
+};
+
 describe('sharing outside, and the member\'s list', () => {
     it('Share outside the community: the node makes the link, which is copied where there is no share sheet; a refusal is said', async () => {
-        const { ShareOutsideButton } = await import('../components/SharePost');
+        const { SharePostButtons } = await import('../components/SharePost');
         const writeText = vi.fn(async () => {});
         vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText }, userAgent: DESKTOP, share: undefined });
         apiMocks.request.mockImplementation(async (method: string, path: string) => {
@@ -197,23 +213,26 @@ describe('sharing outside, and the member\'s list', () => {
             if (method === 'POST' && path === '/api/peek') return { ticket: T, postId: POST_ID, expiresAt: '2026-11-05T00:00:00Z' };
             throw new Error('unexpected');
         });
-        render(<ShareOutsideButton post={GUEST_POST as any} />);
-        fireEvent.click(await screen.findByTestId('share-outside-button'));
+        render(<SharePostButtons post={GUEST_POST as any} />);
+        fireEvent.click(await shareOutsideItem());
         await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?post=${POST_ID}&peek=${T}`));
         expect(screen.getByTestId('share-outside-note').textContent).toBe('Link copied.');
+        // The tap closed the menu; the note stands under the row.
+        expect(screen.queryByRole('menu')).toBeNull();
 
         apiMocks.request.mockImplementation(async (method: string) => {
             if (method === 'GET') return { features: { shareOutside: true } };
             throw new Error('This community has turned sharing outside off.');
         });
         writeText.mockClear();
-        fireEvent.click(screen.getByTestId('share-outside-button'));
+        await shareSettled();
+        fireEvent.click(await shareOutsideItem());
         await waitFor(() => expect(screen.getByTestId('share-outside-note').textContent).toBe('This community has turned sharing outside off.'));
         expect(writeText).not.toHaveBeenCalled();
     });
 
     it('a hand-over that fails keeps the link the node made: shown to copy by hand, and Try again copies that one, never a second', async () => {
-        const { ShareOutsideButton } = await import('../components/SharePost');
+        const { SharePostButtons } = await import('../components/SharePost');
         const writeText = vi.fn(async (): Promise<void> => { throw Object.assign(new Error('not allowed'), { name: 'NotAllowedError' }); });
         vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText }, userAgent: DESKTOP, share: undefined });
         apiMocks.request.mockImplementation(async (method: string, path: string) => {
@@ -222,8 +241,8 @@ describe('sharing outside, and the member\'s list', () => {
             throw new Error('unexpected');
         });
         const link = `${window.location.origin}/?post=${POST_ID}&peek=${T}`;
-        render(<ShareOutsideButton post={GUEST_POST as any} />);
-        fireEvent.click(await screen.findByTestId('share-outside-button'));
+        render(<SharePostButtons post={GUEST_POST as any} />);
+        fireEvent.click(await shareOutsideItem());
         await waitFor(() => expect(screen.getByTestId('share-outside-note').textContent).toBe('Could not copy the link.'));
         const field = screen.getByTestId('share-outside-link') as HTMLInputElement;
         expect(field.value).toBe(link);
@@ -238,7 +257,7 @@ describe('sharing outside, and the member\'s list', () => {
     });
 
     it('a share sheet refused once the tap has waited on the node (Safari): the next tap hands the kept link over inside itself', async () => {
-        const { ShareOutsideButton } = await import('../components/SharePost');
+        const { SharePostButtons } = await import('../components/SharePost');
         const share = vi.fn(async (): Promise<void> => { throw Object.assign(new Error('not allowed'), { name: 'NotAllowedError' }); });
         const writeText = vi.fn(async (): Promise<void> => { throw Object.assign(new Error('not allowed'), { name: 'NotAllowedError' }); });
         vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText }, userAgent: DESKTOP, share });
@@ -247,13 +266,15 @@ describe('sharing outside, and the member\'s list', () => {
             if (method === 'POST' && path === '/api/peek') return { ticket: T, postId: POST_ID, expiresAt: '2026-11-05T00:00:00Z' };
             throw new Error('unexpected');
         });
-        render(<ShareOutsideButton post={GUEST_POST as any} />);
-        fireEvent.click(await screen.findByTestId('share-outside-button'));
+        render(<SharePostButtons post={GUEST_POST as any} />);
+        fireEvent.click(await shareOutsideItem());
         await screen.findByTestId('share-outside-link');
         expect(share).toHaveBeenCalledTimes(1);
 
         share.mockImplementation(async () => {});
-        fireEvent.click(screen.getByTestId('share-outside-button'));
+        // The kept link survived the menu closing: the menu opens again, and the item is the next tap.
+        const item = await shareOutsideItem();
+        fireEvent.click(item);
         // Called during the click itself, before anything is awaited: the browser still counts it as the member's tap.
         expect(share).toHaveBeenCalledTimes(2);
         expect(share).toHaveBeenLastCalledWith({ title: GUEST_POST.title, text: GUEST_POST.title, url: `${window.location.origin}/?post=${POST_ID}&peek=${T}` });
@@ -262,7 +283,7 @@ describe('sharing outside, and the member\'s list', () => {
     });
 
     it('a share sheet the member closed keeps the link, unshown: the next tap hands that one over inside itself, never a second', async () => {
-        const { ShareOutsideButton } = await import('../components/SharePost');
+        const { SharePostButtons } = await import('../components/SharePost');
         const share = vi.fn(async (_data: ShareData): Promise<void> => { throw Object.assign(new Error('Share canceled'), { name: 'AbortError' }); });
         const writeText = vi.fn(async () => {});
         vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText }, userAgent: DESKTOP, share });
@@ -273,31 +294,31 @@ describe('sharing outside, and the member\'s list', () => {
         });
         const link = `${window.location.origin}/?post=${POST_ID}&peek=${T}`;
         const made = () => apiMocks.request.mock.calls.filter(([m, p]) => m === 'POST' && p === '/api/peek');
-        render(<ShareOutsideButton post={GUEST_POST as any} />);
-        const button = await screen.findByTestId('share-outside-button');
-        fireEvent.click(button);
+        render(<SharePostButtons post={GUEST_POST as any} />);
+        fireEvent.click(await shareOutsideItem());
         await waitFor(() => expect(share).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+        await shareSettled();
         // Closing the sheet is no failure: nothing said, no field, nothing copied behind the member's back.
         expect(screen.queryByTestId('share-outside-note')).toBeNull();
         expect(screen.queryByTestId('share-outside-link')).toBeNull();
         expect(writeText).not.toHaveBeenCalled();
 
-        // Closed again: still the one link.
-        fireEvent.click(button);
+        // Closed again: still the one link. (The menu closed with each tap; the kept link is the part's, so it was not lost.)
+        fireEvent.click(await shareOutsideItem());
         expect(share).toHaveBeenCalledTimes(2);
-        await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+        await shareSettled();
 
         share.mockImplementation(async () => {});
-        fireEvent.click(button);
+        const third = await shareOutsideItem();
+        fireEvent.click(third);
         // Called during the click itself, before anything is awaited, with the link the first tap made.
         expect(share).toHaveBeenCalledTimes(3);
         expect(share.mock.calls.map(([data]) => data.url)).toEqual([link, link, link]);
-        await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+        await shareSettled();
         expect(made()).toHaveLength(1);
 
         // Handed over: the next tap is a new share, and makes a new link.
-        fireEvent.click(button);
+        fireEvent.click(await shareOutsideItem());
         await waitFor(() => expect(made()).toHaveLength(2));
     });
 

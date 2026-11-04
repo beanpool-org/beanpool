@@ -49,7 +49,12 @@ describe('Share, Add to calendar and Remind me in the pseudo-locale', () => {
         render(<EventShareAndCalendar post={event} />);
         expect(bracketed()).toBeGreaterThan(1);
         expect(bypassing(document.body)).toEqual([]);
+        // Share is one button; the ways, and the sentence under each, are the items of the menu it opens.
         fireEvent.click(screen.getByTestId('event-share'));
+        expect(screen.getByRole('menu', { name: xx('Share') })).toBeInTheDocument();
+        expect(screen.getByTestId('share-members-button')).toHaveTextContent(xx('Share with members'));
+        expect(bypassing(document.body)).toEqual([]);
+        fireEvent.click(screen.getByTestId('share-members-button'));
         expect(await screen.findByTestId('event-share-note')).toHaveTextContent(xx('Link copied.'));
         expect(bypassing(document.body)).toEqual([]);
 

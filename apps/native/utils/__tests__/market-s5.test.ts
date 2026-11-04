@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { MARKET_CARD_SHELL } from '@beanpool/core';
 
 const APP = path.resolve(__dirname, '../..');
 const source = (rel: string): string => fs.readFileSync(path.join(APP, rel), 'utf8');
 
 describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
     const marketSrc = source('app/(tabs)/market.tsx');
+    const shellSrc = source('components/market-card-shell.ts');
 
     it('grid card title clamps to two lines (numberOfLines={2})', () => {
-        expect(marketSrc).toMatch(/<Text\s+style=\{styles\.gridCardTitle\}\s+numberOfLines=\{2\}>/);
+        // Its style is the box's since PG2 (components/market-card-shell.ts gridTitle), inside the four-row text block.
+        expect(marketSrc).toMatch(/<Text\s+style=\{shell\.gridTitle\}\s+numberOfLines=\{2\}>/);
     });
 
     it('grid card enforces badge precedence: PENDING > YOU > RECURRING (at most one status chip)', () => {
@@ -25,15 +28,24 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         // Thumbnail image and CategoryTile wrapper width & minHeight are 80. The height is the row's (alignSelf: 'stretch'),
         // not `height: '100%'`, which this assertion used to pin: Yoga read that against the whole list and a lone card
         // filled the screen (market-card-height-layout.test.ts measures it).
-        expect(marketSrc).toContain('width: 80, minHeight: 80, alignSelf: \'stretch\'');
-        expect(marketSrc).not.toContain('width: 96, minHeight: 96');
-        expect(marketSrc).not.toContain('width: 80, height: \'100%\'');
+        // The slot is the style box's (components/market-card-shell.ts, slice P2): the list row draws it, the box holds the
+        // numbers, core's photo.list.width the 80.
+        expect(marketSrc).toContain('imageStyle={shell.listPhoto}');
+        expect(marketSrc).toContain('tileBox={shell.listPhotoBox}');
+        expect(shellSrc).toMatch(/width: SLOT,\s*minHeight: SLOT,\s*alignSelf: 'stretch' as const/);
+        expect(shellSrc).toContain('const SLOT = SHELL.photo.list.width;');
+        expect(MARKET_CARD_SHELL.photo.list.width).toBe(80);
+        for (const src of [marketSrc, shellSrc]) {
+            expect(src).not.toContain('width: 96, minHeight: 96');
+            expect(src).not.toContain('width: 80, height: \'100%\'');
+        }
     });
 
-    it('EventCard list thumbnail is 80 dp (not 96 dp)', () => {
+    it('EventCard list thumbnail is the same 80 dp slot (not 96 dp), from the style box', () => {
         const eventCardSrc = source('components/EventCard.tsx');
-        expect(eventCardSrc).toMatch(/photo:\s*\{[\s\S]*?width:\s*80,[\s\S]*?height:\s*80/);
-        expect(eventCardSrc).not.toMatch(/photo:\s*\{[\s\S]*?width:\s*96,[\s\S]*?height:\s*96/);
+        expect(eventCardSrc).toContain('imageStyle={shell.listPhoto}');
+        expect(eventCardSrc).toContain('tileBox={shell.listPhotoBox}');
+        expect(eventCardSrc).not.toMatch(/width:\s*96/);
     });
 
     it('truly empty Market (feed branch) shows the words "Nothing here yet. Be the first:" and four CategoryTiles at thumb size', () => {
@@ -85,11 +97,11 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
         expect(marketSrc).toMatch(/size="grid"\s+contentPosition=\{MARKET_GRID_CROP\}/);
     });
 
-    it('grid card moves RECURRING under the picture into gridTextContent (market-card-43)', () => {
+    it('grid card moves RECURRING under the picture into the text block (market-card-43; the four-row block since PG2)', () => {
         const gridBadgeRowBlock = marketSrc.split('testID="grid-badge-row"')[1]?.split('</View>')[0] || '';
         expect(gridBadgeRowBlock).not.toContain('RECURRING');
 
-        const gridTextBlock = marketSrc.split('styles.gridTextContent')[1]?.split('</Pressable>')[0] || '';
+        const gridTextBlock = marketSrc.split('style={gridBlock.block}')[1]?.split('</Pressable>')[0] || '';
         expect(gridTextBlock).toContain('RECURRING');
     });
 });

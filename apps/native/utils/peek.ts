@@ -12,7 +12,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { peekLink, readCommunityCard, readPeekShares, t, type PeekShare } from '@beanpool/core';
 import { signedGet, signedRequestWithMethod } from './db';
 
-const TIMEOUT_MS = 15_000;
+/**
+ * How long the phone waits for the community: the visitor's two reads, and making a link to share outside. The Share sheet
+ * holds while a link is being made (components/ShareSheet.tsx), so a community that never answers must not hold it for good.
+ */
+export const TIMEOUT_MS = 15_000;
 
 /** A post as the node answers a ticket: guestPost's fields (the listing, its area, nobody). Only what the screen draws. */
 export interface PeekPost {
@@ -99,22 +103,39 @@ export async function fetchPeekCommunityName(origin: string, fetchImpl: typeof f
  * A signed write to this phone's community. An answer without the node's words (`unsaid`: a proxy's 502 page, an empty
  * 500) is "Request failed: 502", in English: said in words instead, as utils/shop.ts says it, with its status, code and
  * `unsaid` kept, so a screen can still tell it from a refusal. A refusal keeps the node's own words.
+ *
+ * With `timeoutMs`, no answer by then is the same words (`unsaid`, no status): the request is given up (its signal aborted;
+ * React Native's fetch has no time limit of its own), and an answer that still comes after it is not used.
  */
-async function signedWrite(path: string, body: unknown): Promise<any> {
+async function signedWrite(path: string, body: unknown, timeoutMs?: number): Promise<any> {
+    const unreached = (extra: Record<string, unknown> = {}) =>
+        Object.assign(new Error(t("Your community couldn't be reached. Try again.")), { unsaid: true }, extra);
+    const stop = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = timeoutMs ? new Promise<never>((_, reject) => {
+        timer = setTimeout(() => { stop.abort(); reject(unreached()); }, timeoutMs);
+    }) : null;
     try {
-        return await signedRequestWithMethod('POST', path, body, { withStatus: true });
+        const asked = signedRequestWithMethod('POST', path, body, { withStatus: true, ...(limit ? { signal: stop.signal } : {}) });
+        return await (limit ? Promise.race([asked, limit]) : asked);
     } catch (e) {
+        if (stop.signal.aborted) throw unreached();
         const err = e as { unsaid?: unknown; status?: unknown; code?: unknown } | null;
         if (err?.unsaid !== true) throw e;
-        throw Object.assign(new Error(t("Your community couldn't be reached. Try again.")), { status: err.status, unsaid: true }, typeof err.code === 'string' ? { code: err.code } : {});
+        throw unreached({ status: err.status, ...(typeof err.code === 'string' ? { code: err.code } : {}) });
+    } finally {
+        clearTimeout(timer);
     }
 }
 
-/** A new link to share `postId` outside this phone's community. Throws the node's refusal in its own words. */
+/**
+ * A new link to share `postId` outside this phone's community. Throws the node's refusal in its own words, and "couldn't be
+ * reached" when there is no answer within {@link TIMEOUT_MS}: the Share sheet holds while the link is being made.
+ */
 export async function makePeekLink(postId: string): Promise<{ link: string; expiresAt: string }> {
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchor) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
-    const made = await signedWrite('/api/peek', { postId }) as { ticket: string; postId: string; expiresAt: string };
+    const made = await signedWrite('/api/peek', { postId }, TIMEOUT_MS) as { ticket: string; postId: string; expiresAt: string };
     return { link: peekLink(anchor, made.postId || postId, made.ticket), expiresAt: made.expiresAt };
 }
 

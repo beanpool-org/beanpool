@@ -41,7 +41,8 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
-        Modal: ({ visible, children }: { visible: boolean; children: any }) => (visible ? createElement('div', { 'data-testid': 'modal-choice' }, children) : null),
+        ScrollView: el('div'),
+        Modal:({ visible, children }: { visible: boolean; children: any }) => (visible ? createElement('div', { 'data-testid': 'modal-choice' }, children) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1 },
         Alert: {
             alert: (...args: any[]) => { alertCalls.calls.push(args); },
@@ -404,40 +405,56 @@ describe('the event Share row says what the link does (share-says)', () => {
     });
     afterEach(() => { postExtra.value = {}; });
     const text = (id: string) => host.querySelector(`[data-testid="${id}"]`)?.textContent ?? null;
+    const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+    /**
+     * The event's row: ONE Share beside Add to calendar (DP2). The lines are the ways' sentences in the sheet it opens, so
+     * none shows on the page before the tap.
+     */
+    const renderShareSheet = async () => {
+        await renderComponent();
+        await settle();
+        const buttons = Array.from(host.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
+        expect(buttons).toEqual(['Share this event', 'Add this event to your calendar']);
+        expect(text('share-members-note')).toBeNull();
+        expect(text('share-outside-line')).toBeNull();
+        await act(async () => { (host.querySelector('[data-testid="share-open-button"]') as HTMLElement).click(); });
+        await settle();
+        expect(host.querySelector('[data-testid="share-sheet"]')).not.toBeNull();
+    };
 
     it('sharing outside on: the members line, the privacy note and "event" (not "listing") under Share outside', async () => {
         shareState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
-        await renderComponent();
-        expect(text('event-share-members-note')).toBe('This link opens for members only.');
+        await renderShareSheet();
+        expect(text('share-members-note')).toBe('This link opens for members only.');
         // ONE note, not two: the privacy facts and the 7 days read together.
         expect(text('share-outside-line')).toBe('Anyone with the link can read this event for 7 days, without names or faces, then ask to join. You can stop it any time.');
     });
 
     it('sharing outside on but joining paused: the line never promises to ask to join', async () => {
         shareState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: false } };
-        await renderComponent();
+        await renderShareSheet();
         expect(text('share-outside-line')).toBe('Anyone with the link can read this event for 7 days, without names or faces. You can stop it any time.');
     });
 
     it('only admins invite and the role could not be read: no line (never "only admins invite")', async () => {
         shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins' } };
         shareState.answered = false;
-        await renderComponent();
-        expect(text('event-share-members-note')).toBeNull();
+        await renderShareSheet();
+        expect(text('share-members-note')).toBeNull();
     });
 
     it('only admins invite and the member is not an admin: says so', async () => {
         shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins' } };
-        await renderComponent();
-        expect(text('event-share-members-note')).toBe('This link opens for members only, and only admins invite here.');
+        await renderShareSheet();
+        expect(text('share-members-note')).toBe('This link opens for members only, and only admins invite here.');
         // The node does not say it takes asks: the line, and no button.
         expect(text('share-ask-admin-button')).toBeNull();
     });
 
     it('only admins invite, the node takes asks, the member is no admin: the line and "Ask an admin to invite someone", no Invite and share', async () => {
         shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
-        await renderComponent();
-        expect(text('event-share-members-note')).toBe('This link opens for members only, and only admins invite here.');
+        await renderShareSheet();
+        expect(text('share-members-note')).toBe('This link opens for members only, and only admins invite here.');
         expect(text('share-ask-admin-button')).toBe('Ask an admin to invite someone');
         expect(text('invite-and-share-button')).toBeNull();
     });
@@ -445,15 +462,15 @@ describe('the event Share row says what the link does (share-says)', () => {
     it('only admins invite, the node takes asks, an owner or admin: the plain members line and no Ask (Invite and share is share-ask-admin.test.ts)', async () => {
         shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
         shareState.role = 'admin';
-        await renderComponent();
-        expect(text('event-share-members-note')).toBe('This link opens for members only.');
+        await renderShareSheet();
+        expect(text('share-members-note')).toBe('This link opens for members only.');
         expect(text('share-ask-admin-button')).toBeNull();
     });
 
     it('only admins invite, the node takes asks, the role could not be read: no line and no Ask', async () => {
         shareState.profile = { profile: 'local', features: { shareOutside: false, door: 'admins', inviteAsks: true } };
         shareState.answered = false;
-        await renderComponent();
+        await renderShareSheet();
         expect(text('share-ask-admin-button')).toBeNull();
     });
 });

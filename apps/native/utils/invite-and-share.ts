@@ -39,12 +39,38 @@ export interface MakeInviteDeps {
 }
 
 /**
- * Ask the node for an invite. `offline`: it gave no answer at all, and no ticket is made. Any refusal says the node's words
- * (in the member's language where the phone knows them), and nothing is shared.
+ * How long the phone waits for the community to make the invite: the Share sheet holds while it is made
+ * (components/ShareSheet.tsx), so a community that never answers must not hold it for good. As long as a link to share
+ * outside waits (utils/peek.ts TIMEOUT_MS, not imported: that module reads the whole of utils/db).
+ */
+export const INVITE_FOR_SHARE_WAIT_MS = 15_000;
+
+/**
+ * Ask the node for an invite. `offline`: it gave no answer at all, or none within {@link INVITE_FOR_SHARE_WAIT_MS} (the
+ * request is given up, its signal aborted: React Native's fetch has no time limit of its own, and an answer that still
+ * comes after it is not used), and no ticket is made. Any refusal says the node's words (in the member's language where the
+ * phone knows them), and nothing is shared.
  */
 export async function makeInviteForShare(
     anchorUrl: string, identity: BeanPoolIdentity, vouchLevel: VouchLevel | null, features: NodeFeatures | null | undefined,
     deps: MakeInviteDeps = {},
+): Promise<InviteForShare> {
+    const offline: InviteForShare = { ok: false, offline: true, message: t(INVITE_SHARE_WORDS.offline) };
+    const stop = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const limit = new Promise<InviteForShare>((resolve) => {
+        timer = setTimeout(() => { stop.abort(); resolve(offline); }, INVITE_FOR_SHARE_WAIT_MS);
+    });
+    try {
+        return await Promise.race([askForInvite(anchorUrl, identity, vouchLevel, features, deps, stop.signal, offline), limit]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function askForInvite(
+    anchorUrl: string, identity: BeanPoolIdentity, vouchLevel: VouchLevel | null, features: NodeFeatures | null | undefined,
+    deps: MakeInviteDeps, signal: AbortSignal, offline: InviteForShare,
 ): Promise<InviteForShare> {
     const doFetch = deps.fetchImpl ?? fetch;
     const notMade: InviteForShare = { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
@@ -55,10 +81,10 @@ export async function makeInviteForShare(
         // Loaded when a tap needs it: the key's crypto is not read by a screen that only draws the button.
         const buildHeaders = deps.signedHeaders ?? (await import('./crypto')).buildSignedHeaders;
         const headers = await buildHeaders('POST', url, body, identity.privateKey, identity.publicKey);
-        res = await doFetch(url, { method: 'POST', headers, body });
+        res = await doFetch(url, { method: 'POST', headers, body, signal });
     } catch {
         // No answer at all: no offline ticket, which can't take a friend to this listing.
-        return { ok: false, offline: true, message: t(INVITE_SHARE_WORDS.offline) };
+        return offline;
     }
     if (res.ok) {
         const data = await res.json().catch(() => null) as { success?: unknown; invite?: { code?: unknown } } | null;

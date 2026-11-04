@@ -73,6 +73,21 @@ describe('asking', () => {
         expect(screen.queryByRole('dialog')).toBeNull();
     });
 
+    it('Escape pressed in the form closes it and stops there: the page behind never sees the key', () => {
+        stub(() => json(200, none));
+        member();
+        fireEvent.click(screen.getByTestId('invite-ask-open'));
+        const seenByThePage = vi.fn();
+        window.addEventListener('keydown', seenByThePage);
+        try {
+            fireEvent.keyDown(screen.getByTestId('invite-ask-first-name'), { key: 'Escape' });
+        } finally {
+            window.removeEventListener('keydown', seenByThePage);
+        }
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(seenByThePage).not.toHaveBeenCalled();
+    });
+
     it('a refusal is said in the sheet, in the node\'s words, and the lines stay', async () => {
         stub((url, init) => (init?.method === 'POST' ? json(429, { error: 'You’ve asked 3 times today. You can ask again tomorrow.', code: 'asked_enough_today' }) : json(200, none)));
         member();

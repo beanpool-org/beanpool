@@ -539,7 +539,8 @@ export async function restoreFromTar(
 
     cleanupRestoreTemp();
     // Everyone is told at the next boot, on the database now in place (services/restore-points.ts), and the log keeps it.
-    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader?.createdAt ?? null, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner' });
+    // `epoch`: the take-over count the file's keys carried, which lights-out raises past at the hall (services/lights-out.ts).
+    leaveRestoreNotice({ kind: 'restore', at: new Date().toISOString(), madeAt: sealedHeader?.createdAt ?? null, point: point.name, by: restartAfterMs === null ? 'shell' : 'owner', epoch: bundle ? Number(bundle.identityEpoch) || 0 : 0 });
     console.log(`[Restore] A backup made ${sealedHeader?.createdAt ?? '(unlocked, date unknown)'} was restored by an owner; restore point ${point.name} was kept first.${restartAfterMs === null ? '' : ' Restarting.'}`);
 
     // Restart shortly. A restore by phone waits longer: the screen that started it polls to see it finished. The shell's

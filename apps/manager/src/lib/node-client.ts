@@ -2119,8 +2119,13 @@ export interface BackupVerificationResult {
     result?: unknown[];
 }
 
+/**
+ * The node's snapshot schedule, read from snapshots/list (which answers it as `config`), never from snapshots/config:
+ * that route both reads and saves, so the node's lights-out count (server services/lights-out.ts NOT_HALL_WRITES) can't
+ * tell a read there from a change, and an owner who only opened Settings in the hall would lose the stand-down offer.
+ */
 export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotScheduleConfig> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/list');
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),

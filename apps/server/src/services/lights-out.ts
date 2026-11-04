@@ -1,0 +1,440 @@
+/**
+ * Lights-out: the owner's switch for the hall (design scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §2.1, §2.7,
+ * §3.5, §3.6, §4; slice H1).
+ *
+ * When the internet and the phone network are down, the community's record is on a laptop in the hall and members reach it
+ * by its number on the hall Wi-Fi (http://192.168.8.1:8080). The switch is what lets them:
+ *   - the plain port answers a phone straight from the hall Wi-Fi (direct-lan.ts) as it always did, instead of a 301
+ *     to https, on a server that holds a certificate of its own (plain-http-gate.ts). A public source, and anything that came
+ *     through a tunnel or proxy, is unchanged;
+ *   - /api/community/health and /api/community/info say so (`lightsOut`, {@link publicLightsOut}), which the phone's banner
+ *     and the hall page read;
+ *   - GET /hall shows the poster (routes/lights-out.ts);
+ *   - a server whose record came from a backup raises its identity epoch, once (§2.1 item 3), so every phone that reaches it
+ *     takes the hall's record whole and the old server, seeing the higher epoch at the community's name, goes read-only;
+ *   - address changes are refused (§2.7): a change made in the hall would send every phone to a dead address on return.
+ *
+ * Who may flip it: an owner, with the fresh proof (admin-auth.ts requireFreshProof: the phone's Manage within 90 s, or the
+ * admin password with a current authenticator code; never a token, an admin, a break-glass code or an assistant), an owner's
+ * own signed request from the app (routes/lights-out.ts), or the laptop's shell (`beanpool lights-out`, lights-out-command.ts).
+ * Never a standby: a standby takes over first. Never automatic (§2.1 "Never automatic").
+ *
+ * The switch lives in local-config.json (`lightsOut`), never in the database, and is left out of every copy: a backup file's
+ * node_config.json (LEFT_OUT_OF_BACKUPS), the stager's copy, the take-over bundle (its fixed field list) and anything a
+ * standby pulls. So a hall laptop's "on" can never come back to life on the rented server.
+ *
+ * What it never changes: who may do what, the money rules, request binding (the phone signs for the community's name, not
+ * the number: §2.3), the 5-minute window and the nonces, the standby's refusal to move Beans.
+ */
+
+import path from 'node:path';
+import type Koa from 'koa';
+import { word } from '@beanpool/core';
+import { getLocalConfig, updateLocalConfig, type LightsOutRecord } from '../config/local-config.js';
+import { getNodeRole } from '../state-engine.js';
+import { primaryAddress, isLocalNetworkHost, isLoopbackHost, normalizeAddress } from '../engine/own-addresses.js';
+import { ownIdentityEpoch, forgetSyncEpochHeaderValue } from './identity-epoch.js';
+import { logger } from '../logger.js';
+import { writeFileAtomic } from '../write-file-atomic.js';
+import { LIGHTS_OUT_ANSWER_FILE, takeLightsOutRequest, type LightsOutAnswer, type LightsOutRequest } from './lights-out-files.js';
+export { LIGHTS_OUT_ANSWER_FILE, LIGHTS_OUT_REQUEST_FILE, takeLightsOutAnswer, writeLightsOutRequest } from './lights-out-files.js';
+
+/** Who flipped it, for the log and Settings. */
+export type LightsOutBy = 'owner-key' | 'password' | 'shell';
+
+/** The refusal §2.7 gives an address change while the switch is on. */
+// Marked (member-words.ts): the owner's phone shows them, in the owner's language.
+export const NOT_WHILE_LIGHTS_OUT = word('Not while the lights are out. Turn lights-out off first, once the internet is back.');
+export const NOT_ON_A_STANDBY = word('A standby cannot open the hall. Take over as the main server first, then turn lights-out on.');
+/** No address in the words: a refusal naming a number reads as a server fault (routes/member-error-text.ts). */
+export const BAD_HALL_ADDRESS = word('The hall address must be this laptop\'s own number on the hall Wi-Fi.');
+
+/**
+ * The address-change routes refused while on (§2.7): claiming or releasing a name, Take offline, changing the public
+ * address, confirming or removing an address. Reads (`/check`) and a tunnel restart are not changes.
+ */
+export const ADDRESS_CHANGE_PATHS: readonly string[] = [
+    '/api/local/admin/public-address/claim', '/api/local/admin/public-address/offline', '/api/local/admin/public-address/own',
+    '/api/local/admin/public-address/release-name', '/api/local/admin/public-address/rotate', '/api/local/admin/public-address/update',
+    '/api/local/admin/app-addresses/confirm', '/api/local/admin/app-addresses/remove',
+];
+
+function dataDir(): string {
+    return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+}
+
+function record(): LightsOutRecord | null {
+    const r = getLocalConfig().lightsOut;
+    return r && typeof r === 'object' ? r : null;
+}
+
+/** Whether the switch is on here. A standby is never on, whatever its file says (it cannot have been switched there). */
+/**
+ * The gate asks on every request from the local network, the guard after every write, and the phones' health ping
+ * every 30 seconds: each answer is kept 2 s rather than read from local-config.json every time (the health read is cached
+ * for the same reason: DoS review F4). Every write this module makes forgets them, so its own answers are never stale; a
+ * change made by hand in the file shows within 2 s.
+ */
+const MEMO_MS = 2000;
+let onMemo: { at: number; on: boolean } | null = null;
+let publicMemo: { at: number; value: PublicLightsOut } | null = null;
+function forgetMemos(): void { onMemo = null; publicMemo = null; }
+
+export function lightsOutOn(): boolean {
+    if (getNodeRole() === 'backup') return false;
+    const now = Date.now();
+    if (!onMemo || now - onMemo.at > MEMO_MS || now < onMemo.at) onMemo = { at: now, on: record()?.on === true };
+    return onMemo.on;
+}
+
+/**
+ * The hall address an owner gave: `http://<a local-network number or .local name>[:port]`, nothing else (no path, no
+ * user, no https: a hall laptop has no certificate a phone trusts). Null when it is none of those. Only a Host the hall's
+ * own rule lets in (direct-lan.ts, isLocalNetworkHost): a router's `.lan` name is not one, so the poster never sends
+ * phones to an address the hall would refuse.
+ */
+export function hallAddressOf(input: unknown): string | null {
+    if (typeof input !== 'string') return null;
+    const raw = input.trim();
+    if (!raw || raw.length > 80) return null;
+    let u: URL;
+    try { u = new URL(/^[a-z]+:\/\//i.test(raw) ? raw : `http://${raw}`); } catch { return null; }
+    if (u.protocol !== 'http:' || u.username || u.password || (u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return null;
+    const host = normalizeAddress(u.host);
+    if (!host || isLoopbackHost(host)) return null;
+    if (!isLocalNetworkHost(host)) return null;
+    return `http://${u.host.toLowerCase()}`;
+}
+
+/** Where members' phones go home to: the community's main address, https. Null when it has none (a LAN-only community). */
+export function homeAddress(): string | null {
+    const p = primaryAddress();
+    return p ? `https://${p}` : null;
+}
+
+/**
+ * How old the hall's record is (§3.5): a restored server's backup's made-at; a promoted standby's last good copy; null on a
+ * server that was always the main server (the banner then says only that the internet is down). Whichever came last of a
+ * restore and a take-over decides; the epoch this switch raised itself is not a take-over.
+ */
+export function recordAsOfNow(): string | null {
+    const c = getLocalConfig();
+    const restored = c.restoredCopy && typeof c.restoredCopy === 'object' ? c.restoredCopy : null;
+    const raisedAt = record()?.raised?.at ?? null;
+    const tookOverAt = c.identityEpochSince && c.identityEpochSince !== raisedAt ? c.identityEpochSince : null;
+    const restoredAt = restored ? Date.parse(restored.at) : NaN;
+    if (restored && (!tookOverAt || !(Date.parse(tookOverAt) > restoredAt))) return validIso(restored.madeAt);
+    if (tookOverAt) return validIso(c.lastPromotionAudit?.copy?.lastCopy?.generatedAt ?? null);
+    return null;
+}
+
+function validIso(v: unknown): string | null {
+    if (typeof v !== 'string') return null;
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+/**
+ * §2.1 item 3: a server whose record came from a backup raises its epoch when the switch goes on, as a take-over does: the
+ * file's epoch (or this server's, whichever is higher) + 1, `since` now. Not for a server that took over after its last
+ * restore (its take-over raised it already), not for one never restored, and never twice for one restore.
+ */
+function raiseEpochForRestoredCopy(now: string): { raised: boolean; epoch: number; why: string } {
+    const c = getLocalConfig();
+    const restored = c.restoredCopy && typeof c.restoredCopy === 'object' ? c.restoredCopy : null;
+    const own = ownIdentityEpoch();
+    if (!restored) return { raised: false, epoch: own.epoch, why: 'never restored from a backup' };
+    const prior = record()?.raised ?? null;
+    if (prior && prior.for === restored.at) return { raised: false, epoch: own.epoch, why: 'raised already for this restore' };
+    const tookOverAt = c.identityEpochSince && c.identityEpochSince !== prior?.at ? Date.parse(c.identityEpochSince) : NaN;
+    if (Number.isFinite(tookOverAt) && tookOverAt > Date.parse(restored.at)) {
+        return { raised: false, epoch: own.epoch, why: 'took over after the restore: its take-over raised it' };
+    }
+    const fileEpoch = Number.isSafeInteger(restored.epoch) && restored.epoch > 0 ? restored.epoch : 0;
+    const epoch = Math.max(own.epoch, fileEpoch) + 1;
+    updateLocalConfig({ identityEpoch: epoch, identityEpochSince: now, identityReplaced: null });
+    forgetMemos();
+    forgetSyncEpochHeaderValue();
+    return { raised: true, epoch, why: 'restored from a backup' };
+}
+
+/** Whether anything changed the record here while the hall was open, so OFF can tell (the stand-down offer). */
+let hallWritesNoted = false;
+
+export interface LightsOutStatus {
+    on: boolean;
+    since: string | null;
+    address: string | null;
+    recordAsOf: string | null;
+    home: string | null;
+    epoch: number;
+    epochSince: string | null;
+    /** Whether anyone (a member, an owner or an admin) changed the record here since it last went on. */
+    hallWrites: boolean;
+    /** Off, after a hall with no writes, on a server that took over or was restored: "Stand down" is offered (§3.6 case 2). */
+    standDown: StandDownOffer | null;
+    standby: boolean;
+}
+
+export interface StandDownOffer {
+    offered: true;
+    /** The steps, in the order an owner takes them (Settings shows them; H4 and the manual carry the words). */
+    steps: string[];
+}
+
+/** §3.6 case 2: nobody traded in the hall, and this server is a copy (restored or took over): go back to being the standby. */
+function standDownOffer(r: LightsOutRecord | null): StandDownOffer | null {
+    if (!r || r.on || !r.since || r.hallWrites) return null;
+    const c = getLocalConfig();
+    const isCopy = !!(c.restoredCopy || c.identityEpochSince);
+    if (!isCopy) return null;
+    return {
+        offered: true,
+        steps: [
+            'Nobody wrote anything on this laptop while the hall was open, so the rented server can stay the community.',
+            'Stop this laptop\'s node, set NODE_ROLE=backup in its .env and start it again.',
+            'On the rented server: Settings, Replication Access, make a pairing code. On this laptop\'s shell: beanpool pair.',
+            'Members\' phones go home by themselves.',
+        ],
+    };
+}
+
+export function lightsOutStatus(): LightsOutStatus {
+    const r = record();
+    const epoch = ownIdentityEpoch();
+    const on = lightsOutOn();
+    return {
+        on,
+        since: r?.since ?? null,
+        address: r?.address ?? null,
+        recordAsOf: on ? (r?.recordAsOf ?? null) : recordAsOfNow(),
+        home: homeAddress(),
+        epoch: epoch.epoch,
+        epochSince: epoch.since,
+        hallWrites: !!r?.hallWrites,
+        standDown: standDownOffer(r),
+        standby: getNodeRole() === 'backup',
+    };
+}
+
+/**
+ * What /api/community/health and /api/community/info carry (the fields H2 reads), the design's shape (§2.1 item 2):
+ * `{ on, since, address, recordAsOf, home }` while on, and `{ on: false, home }` while off: off, the other three are
+ * nothing by definition, and the health ping every phone sends every 30 s keeps its byte budget (test-app-floors: the
+ * public payload stays under 800 bytes). The phone (H2 lightsOutOf) reads `on`, `recordAsOf` and `home`, a missing one as
+ * none. Always present, so a phone tells a node that knows lights-out from one that doesn't (absent). Public: nothing in
+ * it is a secret, and a stranger on the hall Wi-Fi can read the poster anyway. No epoch here: a phone reads that from the
+ * node's signed statement (GET /api/node/identity-epoch) and the sync reads' epoch header, never from an unsigned field
+ * (and a take-over changes it by design: test-takeover-parity).
+ */
+export type PublicLightsOut =
+    | { on: true; since: string | null; address: string | null; recordAsOf: string | null; home: string | null }
+    | { on: false; home: string | null };
+export function publicLightsOut(): PublicLightsOut {
+    const now = Date.now();
+    if (publicMemo && now - publicMemo.at <= MEMO_MS && now >= publicMemo.at) return { ...publicMemo.value };
+    const s = lightsOutStatus();
+    const value: PublicLightsOut = s.on
+        ? { on: true, since: s.since, address: s.address, recordAsOf: s.recordAsOf, home: s.home }
+        : { on: false, home: s.home };
+    publicMemo = { at: now, value };
+    return { ...value };
+}
+
+export type SwitchOutcome =
+    | { ok: true; status: LightsOutStatus; changed: boolean; epochRaised: boolean }
+    | { ok: false; status: 400 | 403; error: string };
+
+/**
+ * Turn the switch on or off. `address` is the hall address the owner confirmed (hallAddressOf), or null. "On" twice is "on"
+ * (the first `since` is kept; a new address replaces the old). Logged as a SECURITY line.
+ */
+export function setLightsOut(on: boolean, opts: { address?: unknown; by: LightsOutBy; actor?: string | null }): SwitchOutcome {
+    if (getNodeRole() === 'backup') return { ok: false, status: 403, error: NOT_ON_A_STANDBY };
+    forgetMemos();
+    let address: string | null = null;
+    if (opts.address !== undefined && opts.address !== null && opts.address !== '') {
+        address = hallAddressOf(opts.address);
+        if (!address) {
+            return { ok: false, status: 400, error: BAD_HALL_ADDRESS };
+        }
+    }
+    const now = new Date().toISOString();
+    const before = record();
+    const who = opts.by === 'shell' ? 'the server\'s shell' : opts.by === 'password' ? 'the admin password' : `an owner's key${opts.actor ? ` (${opts.actor.slice(0, 12)}…)` : ''}`;
+    if (on) {
+        const wasOn = lightsOutOn();
+        const raise = raiseEpochForRestoredCopy(now);
+        const next: LightsOutRecord = {
+            on: true,
+            since: wasOn && before?.since ? before.since : now,
+            address: address ?? (wasOn ? before?.address ?? null : null),
+            recordAsOf: null,
+            home: homeAddress(),
+            by: opts.by,
+            offAt: null,
+            hallWrites: wasOn ? !!before?.hallWrites : false,
+            raised: raise.raised ? { for: getLocalConfig().restoredCopy!.at, at: now, epoch: raise.epoch } : (before?.raised ?? null),
+        };
+        // After the raise: the raise's own `since` is never read as a take-over.
+        updateLocalConfig({ lightsOut: next });
+        next.recordAsOf = recordAsOfNow();
+        updateLocalConfig({ lightsOut: next });
+        forgetMemos();
+        if (!wasOn) hallWritesNoted = false;
+        logger.security('ADMIN', `[LightsOut] Lights-out ON by ${who}${next.address ? ` at ${next.address}` : ''}: the plain port answers the hall Wi-Fi; `
+            + (raise.raised ? `identity epoch raised to ${raise.epoch} (${raise.why}).` : `identity epoch unchanged at ${raise.epoch} (${raise.why}).`));
+        return { ok: true, status: lightsOutStatus(), changed: !wasOn, epochRaised: raise.raised };
+    }
+    const wasOn = before?.on === true;
+    if (before) updateLocalConfig({ lightsOut: { ...before, on: false, offAt: wasOn ? now : before.offAt ?? null } });
+    forgetMemos();
+    if (wasOn) {
+        logger.security('ADMIN', `[LightsOut] Lights-out OFF by ${who}: the plain port is back to its usual rule`
+            + `${before?.hallWrites ? '; the record changed in the hall, so this copy is the community now' : '; nobody wrote in the hall'}.`);
+    }
+    return { ok: true, status: lightsOutStatus(), changed: wasOn, epochRaised: false };
+}
+
+/** A write answered 2xx while the switch is on: noted once, so OFF knows the hall copy holds something new. */
+export function noteHallWrite(): void {
+    if (hallWritesNoted) return;
+    const r = record();
+    if (!r?.on) return;
+    hallWritesNoted = true;
+    if (!r.hallWrites) updateLocalConfig({ lightsOut: { ...r, hallWrites: true } });
+    forgetMemos();
+}
+
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * The writes that change nothing in the community's record, as the routers declare them (`METHOD /path/:param`). Every
+ * other write answered 2xx while the switch is on is a hall write, an owner's or an admin's in Settings as much as a
+ * member's (resolving a dispute, a re-key, the treasury, an offboarding): standing down would lose it, so OFF offers no
+ * "Stand down" after one. Named here, one by one:
+ *   - the switch itself (Settings' and the phone's);
+ *   - signing in or out of Settings on this server: a session, a challenge, a CSRF token, the sign-in pairing, the live
+ *     updates' ticket (each held by this server alone, none in the record). Signing a member out everywhere (revoke-all)
+ *     raises their session epoch, so it counts;
+ *   - the reads Settings sends as POST (the body carries the password or a filter): what opening Settings asks for, so an
+ *     owner who opens it in the hall to turn the switch off still gets the offer. Each was read for a write (#2822);
+ *     POST /api/local/admin/community-health is not one (it saves the health settings) and counts. What the Network tab
+ *     (where the switch is) and the Backups tab send as they open is pinned in apps/manager/src/lib/hall-reads.json:
+ *     the manager's hall-reads.test.tsx records it from the real tabs, and test-lights-out section 5 sends it here.
+ *     POST /api/local/admin/snapshots/config reads and saves on one route, so it counts; Settings reads the schedule
+ *     from snapshots/list instead (takeover/status runs the same re-seal check the node's own timer runs).
+ *
+ * Kept complete by its shape: a route is a hall write unless it is named here, so a new route counts until someone shows
+ * it changes nothing, and a read left off this list only withholds the offer (§3.6 case 1 then: the hall's copy is the
+ * community), never loses a change. test-lights-out section 5 walks every write route the node serves, holds each one to
+ * this rule, and refuses an entry here that names no route.
+ */
+export const NOT_HALL_WRITES: readonly string[] = [
+    'POST /api/local/admin/lights-out', 'POST /api/node/owner/lights-out',
+    'POST /api/local/admin/csrf-token', 'POST /api/local/admin/ws-ticket',
+    'POST /api/local/admin/auth/challenge', 'POST /api/local/admin/auth/verify-challenge', 'POST /api/local/admin/auth/exchange',
+    'POST /api/local/admin/auth/password', 'POST /api/local/admin/auth/logout',
+    'POST /api/local/admin/auth/pairing', 'POST /api/local/admin/auth/pairing/:id/wait',
+    'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/approve',
+    'POST /api/local/admin/auth/pairing/:id/decline',
+    'POST /api/local/admin/data', 'POST /api/local/admin/health', 'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/logs',
+    'POST /api/local/admin/diagnostics', 'POST /api/local/admin/shutdown-status', 'POST /api/local/admin/ws-connections',
+    'POST /api/local/admin/onboarding-funnel', 'POST /api/local/admin/inbox', 'POST /api/local/admin/alerts/status',
+    'POST /api/local/admin/backup-status', 'POST /api/local/admin/standby-health',
+    'POST /api/local/admin/offbox-backups/status', 'POST /api/local/admin/offbox-backups/list',
+    'POST /api/local/admin/app-addresses/check',
+    'POST /api/local/admin/snapshots/list', 'POST /api/local/admin/takeover/status', 'POST /api/local/admin/takeover/words-checks',
+    'POST /api/local/admin/takeover/progress', 'POST /api/local/admin/replication-access', 'POST /api/local/admin/replication-token/status',
+    'POST /api/local/admin/replication-config/get',
+];
+const NOT_HALL_WRITE_SET = new Set(NOT_HALL_WRITES);
+
+/**
+ * Whether a write answered 2xx changes the hall copy's record: `route` is the route the router matched (Koa's
+ * `ctx._matchedRoute`, the pattern as declared), or nothing when no route answered it (then it counts: an unknown write is
+ * never assumed harmless). Never the request's own path, so no casing or spelling of it gets around the count.
+ */
+export function countsAsHallWrite(method: string, route: unknown): boolean {
+    const m = method.toUpperCase();
+    if (!MUTATING.has(m)) return false;
+    if (typeof route !== 'string' || !route) return true;
+    return !NOT_HALL_WRITE_SET.has(`${m} ${route}`);
+}
+
+/**
+ * Koa middleware on the app (after the split-brain guard): while the switch is on, the address changes of §2.7 are refused
+ * (409), and the first write answered 2xx that changes the record (countsAsHallWrite) is noted, whoever made it: the
+ * stand-down offer is only for a hall where nothing changed.
+ */
+export async function lightsOutGuard(ctx: Koa.Context, next: Koa.Next): Promise<void> {
+    if (!MUTATING.has(ctx.method)) return next();
+    const p = ctx.path.toLowerCase().replace(/\/+$/, '');
+    if (ADDRESS_CHANGE_PATHS.includes(p) && lightsOutOn()) {
+        ctx.status = 409;
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = { error: NOT_WHILE_LIGHTS_OUT, code: 'lights_out' };
+        return;
+    }
+    await next();
+    if (!hallWritesNoted && ctx.status >= 200 && ctx.status < 300 && countsAsHallWrite(ctx.method, (ctx as any)._matchedRoute)
+        && lightsOutOn()) {
+        try { noteHallWrite(); } catch { /* a note never fails the write */ }
+    }
+}
+
+/**
+ * A restore's notice, delivered at the first start on the restored record (services/restore-points.ts
+ * deliverRestoreNotices): this server's record came from a backup made `madeAt`, whose keys carried that take-over count.
+ * What lights-out reads later. Written at the boot, never by the restore itself, so a database-only restore leaves
+ * local-config.json exactly as it was.
+ */
+export function noteRestoredCopy(notice: { at: string; madeAt: string | null; epoch?: unknown }): void {
+    const n = Number(notice.epoch);
+    updateLocalConfig({ restoredCopy: { at: validIso(notice.at) ?? new Date().toISOString(), madeAt: validIso(notice.madeAt), epoch: Number.isSafeInteger(n) && n > 0 ? n : 0 } });
+    forgetMemos();
+}
+
+// ── The shell: `beanpool lights-out on|off|status` (lights-out-command.ts) ─────────────────────────────────────────
+//
+// The pattern of `beanpool pair`: the command leaves data/lights-out-request.json, the running node takes it within ~2 s
+// and answers in data/lights-out-answer.json. Whoever runs it holds the data folder already, more than any session.
+
+/** The lines `beanpool lights-out status` prints. */
+export function statusLines(s: LightsOutStatus): string[] {
+    const lines = [s.on ? `Lights-out is ON${s.since ? ` since ${s.since}` : ''}.` : 'Lights-out is off.'];
+    if (s.on) lines.push(s.address ? `The hall address: ${s.address}` : 'No hall address was given: phones type the laptop\'s number.');
+    if (s.recordAsOf) lines.push(`The record is as of ${s.recordAsOf}.`);
+    if (s.home) lines.push(`Home, when the internet is back: ${s.home}`);
+    lines.push(`Identity epoch: ${s.epoch}.`);
+    if (s.standDown) lines.push(...s.standDown.steps);
+    if (s.standby) lines.push('This server is a standby: take over as the main server before turning lights-out on.');
+    return lines;
+}
+
+export function answerLightsOutRequest(req: LightsOutRequest): LightsOutAnswer {
+    if (req.action === 'status') return { v: 1, id: req.id, ok: true, lines: statusLines(lightsOutStatus()) };
+    const out = setLightsOut(req.action === 'on', { address: req.address, by: 'shell' });
+    if (!out.ok) return { v: 1, id: req.id, ok: false, lines: [`Nothing was changed. ${out.error}`] };
+    return { v: 1, id: req.id, ok: true, lines: statusLines(out.status) };
+}
+
+let watchTimer: ReturnType<typeof setInterval> | null = null;
+
+/** The node's 2 s look for data/lights-out-request.json, on every role (a standby answers with its refusal). */
+export function startLightsOutRequestWatch(dir = dataDir(), everyMs = 2000): void {
+    if (watchTimer) return;
+    watchTimer = setInterval(() => {
+        const req = takeLightsOutRequest(dir);
+        if (!req) return;
+        let answer: LightsOutAnswer;
+        try { answer = answerLightsOutRequest(req); } catch (e: any) { answer = { v: 1, id: req.id, ok: false, lines: [`The node could not do it (${e?.message || e}).`] }; }
+        try { writeFileAtomic(path.join(dir, LIGHTS_OUT_ANSWER_FILE), JSON.stringify(answer), { mode: 0o600 }); } catch (e: any) { console.warn(`[LightsOut] ${e?.message || e}`); }
+    }, everyMs);
+    watchTimer.unref?.();
+}
+
+export function stopLightsOutRequestWatch(): void {
+    if (watchTimer) clearInterval(watchTimer);
+    watchTimer = null;
+}

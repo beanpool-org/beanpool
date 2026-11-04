@@ -409,6 +409,18 @@ async function main(): Promise<void> {
         const ownersPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/operators/server/ai-assistant.md', import.meta.url), 'utf8');
         assert(/An admin's assistant takes one post a call/.test(ownersPage) && /“May take down posts for me”/.test(ownersPage) && /take_down_many/.test(ownersPage),
             "the owners' page says an admin's assistant takes one post a call, and that the consent page has the tick");
+        // The members' page and the moderators' page say what an admin's assistant now does (Opus review of d2aa7559).
+        const membersPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/content/settings/admins-ai-assistants.md', import.meta.url), 'utf8');
+        assert(!/take down your post or answer your join request/.test(membersPage)
+            && /An owner's or an admin's assistant can take your post down only if they ticked "May take down posts for me"/.test(membersPage)
+            && /An admin's takes down one post at a time/.test(membersPage)
+            && /no person approving it: it is hidden from everyone else, and you get a notice with the reason\./.test(membersPage)
+            && /An owner or an admin can put it back for 7 days/.test(membersPage)
+            && /It can't remove you, suspend you or mute you itself, or answer your join request\./.test(membersPage),
+            "the members' page says an owner's or an admin's ticked assistant takes a post down with no person approving, and what it still can't do");
+        const moderatorsPage = fs.readFileSync(new URL('../../../packages/beanpool-guide/operators/safety/reports-and-takedowns.md', import.meta.url), 'utf8');
+        assert(/marked \*\*on hold\*\*: an owner's or an admin's assistant took it down/.test(moderatorsPage),
+            "the moderators' page says an owner's or an admin's assistant put a post on hold");
         const logs = db.prepare("SELECT metadata FROM system_logs").all() as { metadata: string | null }[];
         assert(!logs.some(l => (l.metadata ?? '').includes('SECRET-WHY')), '`why` is in no log line');
         const auditAfter = runLedgerAudit();

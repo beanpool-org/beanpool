@@ -66,8 +66,20 @@ const mullum: any = {
     eventRepeat: { freq: 'weekly', interval: 3, byDay: 'SA', time: '08:00', minutes: 360 },
     goingCount: 0, interestedCount: 0, myRsvp: null, photos: [photo()], tags: [],
 };
+/**
+ * The six dates the node sends with the market on a by-id read (`eventNextDates`), every third Saturday: the page draws them
+ * behind the rule, "↻ Every 3 weeks on Saturday · Next dates" (`?detail=dates`), and `?detail=dates-open` is the same page
+ * after a tap opens the list. The other cases send no dates, as a list read does: the rule alone, in the same slot.
+ */
+const NEXT_DATES = [0, 21, 42, 63, 84, 105].map((days) => {
+    const at = new Date(START + days * 24 * HOUR);
+    const date = `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+    return { date, startLocal: `${date}T08:00`, startAt: at.toISOString(), cancelled: false };
+});
 const DETAIL: Record<string, any> = {
     member: mullum,
+    dates: { ...mullum, eventNextDates: NEXT_DATES },
+    'dates-open': { ...mullum, eventNextDates: NEXT_DATES },
     going: { ...mullum, myRsvp: 'going', goingCount: 3, interestedCount: 1, eventPrivateNote: 'Stall holders park behind the hall; the gate code is 4471.' },
     host: {
         ...mullum, authorPublicKey: 'me-pk', authorCallsign: 'Me', goingCount: 3, interestedCount: 1,

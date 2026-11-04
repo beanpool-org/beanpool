@@ -673,6 +673,133 @@ describe('the grid is rows on a lattice: a pair is one height, the text block fo
     });
 });
 
+// Slice P3' (DESIGN-market-grid-sizes-fable.md §2.2, §3 P3'; DESIGN-card-style-box-fable.md §2): an event and the Daily Pulse
+// in the grid are tiles like the listing beside them, from the same box: the 4:3 photo, the type chip at its top-left, the foot
+// row of pills, then the listing tiles' own four-row text block (an event's date, time, title and place; the Pulse's title, its
+// pill and one line of its news). So a pair is one height by construction and an event's text block is a listing's, row for
+// row. Laid out with Yoga at 320 dp and 1.3x text.
+describe("an event and the Daily Pulse in the grid are tiles: the listing's shell and its text block, row for row", () => {
+    const DAY = 86_400_000;
+    const SCALE = 1.3;
+    const BLOCK = 24 + (4 * 18 + 3 * 4) * SCALE;
+    const ROW = 18 * SCALE;
+    const GAP = 4 * SCALE;
+    const LISTING = { ...LONE, id: 'l-eggs', title: 'Eggs', repeatable: 0, created_at: iso(now - 60_000) };
+    /** Byron's longest title, pinned, a place, a photo and the member's own answer; counts above zero. */
+    const BYRON: any = {
+        id: 'ev-twilight', type: 'event', status: 'active', title: 'Byron Bay Twilight Market - Every Saturday', category: 'events',
+        author_pubkey: 'byron-key', author_callsign: 'Byron Markets', created_at: iso(now - 2 * 60_000),
+        event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 5 * 3_600_000), event_state: 'scheduled',
+        event_place_name: 'Railway Park, Jonson Street, Byron Bay', lat: -28.643, lng: 153.612,
+        pinnedAt: iso(now - 60_000), pinnedUntil: iso(now + 3 * DAY), myRsvp: 'going', goingCount: 12, interestedCount: 5,
+        photos: [PHOTO('ev-twilight')],
+    };
+    /** The least an event holds: no place, no photo, nobody's answer. */
+    const REPAIR: any = {
+        id: 'ev-repair', type: 'event', status: 'active', title: 'Repair Café', category: 'events', author_pubkey: 'hall-key',
+        author_callsign: 'Civic Hall', created_at: iso(now - 3 * 60_000), event_start_at: iso(now + DAY), event_end_at: iso(now + DAY + 2 * 3_600_000),
+        event_state: 'scheduled', photos: [],
+    };
+    const PULSE = {
+        ...LONE, id: 'pulse-1', title: 'Byron Shire: water limits end on Monday after the weekend rain', author_callsign: 'Daily Pulse',
+        author_pubkey: 'pulse-key', repeatable: 0, credits: 0, created_at: iso(now - 90_000),
+        description: 'Council says the dam is at 92% after the weekend rain, and the level-2 limits end on Monday.',
+    };
+    const byId = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement;
+    const blockOf = (card: Element) => card.querySelector('[data-testid="grid-text-block"]') as HTMLElement;
+    /** Each row of a block, as its top inside the tile and its height. */
+    const rowsOf = (l: ReturnType<typeof lay>, card: Element) => Array.from(blockOf(card).children).map(r => ({ top: at(l, r).top - at(l, card).top, height: l.height(r) }));
+
+    it('an event beside a listing at 320 x 1.3: one row, 136 wide each, one height; the same picture and the same text block', async () => {
+        await show([BYRON, LISTING], 'grid');
+        const ev = byId('event-card-ev-twilight');
+        const li = byId('market-card-l-eggs');
+        expect(ev).not.toBeNull();
+        expect(li).not.toBeNull();
+        const l = lay(569);
+        expect(at(l, ev).top).toBe(at(l, li).top);
+        expect([l.width(ev), l.width(li)]).toEqual([136, 136]);
+        expect(l.height(ev)).toBe(l.height(li));
+        for (const card of [ev, li]) {
+            expect(l.height(blockOf(card))).toBeCloseTo(BLOCK, 3);
+            const picture = blockOf(card).previousElementSibling as HTMLElement;
+            expect(l.height(picture)).toBeCloseTo((136 - 2) * 3 / 4, 3);
+            // The tile is its picture and its block inside the 1 dp border, and nothing else: the lattice by construction.
+            expect(l.height(card)).toBeCloseTo(2 + (136 - 2) * 3 / 4 + BLOCK, 3);
+        }
+        // Row for row: the event's date and time sit in the listing's title box, its title on the author's row, its place on
+        // the listing's last row; each one row tall, 4 dp (scaled) apart.
+        const e = rowsOf(l, ev);
+        const s = rowsOf(l, li);
+        expect(e).toHaveLength(4);
+        expect(s).toHaveLength(3);
+        for (const r of e) expect(r.height).toBeCloseTo(ROW, 3);
+        expect(e[0].top).toBeCloseTo(s[0].top, 3);
+        expect(e[1].top).toBeCloseTo(e[0].top + ROW + GAP, 3);
+        expect(e[1].top + ROW).toBeCloseTo(s[0].top + s[0].height, 3);
+        expect(e[2].top).toBeCloseTo(s[1].top, 3);
+        expect(e[3].top).toBeCloseTo(s[2].top, 3);
+        console.log(`event tile ${l.height(ev).toFixed(1)} dp, listing tile ${l.height(li).toFixed(1)} dp at 320 x 1.3`);
+    });
+
+    it("the event tile's four rows are one line each and stay in its block; nothing runs past its edge; no button inside it", async () => {
+        await show([BYRON, LISTING], 'grid');
+        const ev = byId('event-card-ev-twilight');
+        const block = blockOf(ev);
+        const l = lay(569);
+        const bottom = at(l, block).top + l.height(block) - 12;   // inside its 12 dp of padding
+        for (const r of Array.from(block.children)) expect(at(l, r).top + l.height(r), r.textContent ?? '').toBeLessThanOrEqual(bottom + 0.01);
+        // One line each: the date, the time's pieces (the start, and the end with its dash on a same-day span), the title, the
+        // place. Whether the span is one day depends on the hour the test runs at (now + 2 days + 5 hours), so count its pieces.
+        const pieces = block.querySelector('[data-testid="event-time-row"]')!.children.length;
+        expect([1, 2]).toContain(pieces);
+        const lines = Array.from(block.querySelectorAll('span[data-lines]'));
+        expect(lines.map(x => x.getAttribute('data-lines'))).toEqual(Array(3 + pieces).fill('1'));
+        const right = at(l, ev).left + l.width(ev);
+        for (const el of Array.from(ev.querySelectorAll('*'))) expect(at(l, el).left + l.width(el), el.textContent ?? el.tagName).toBeLessThanOrEqual(right + 0.5);
+        expect(ev.querySelectorAll('button')).toHaveLength(0);
+        // On the photo: EVENT, 📌 PINNED and the member's mark; the counts are the page's in the grid.
+        const picture = block.previousElementSibling as HTMLElement;
+        expect(picture.querySelector('[data-testid="event-type-chip"]')?.textContent).toBe('EVENT');
+        expect(picture.querySelector('[data-testid="grid-badge-row"]')?.textContent).toBe('📌 PINNED' + 'Going ✓');
+        expect(ev.textContent).not.toContain('going ·');
+    });
+
+    it('two events in a row: two tiles 136 wide and one height, the most an event holds beside the least', async () => {
+        await show([BYRON, REPAIR], 'grid');
+        const [a, b] = [byId('event-card-ev-twilight'), byId('event-card-ev-repair')];
+        const l = lay(569);
+        expect(at(l, a).top).toBe(at(l, b).top);
+        expect([l.width(a), l.width(b)]).toEqual([136, 136]);
+        expect(l.height(a)).toBe(l.height(b));
+        for (const card of [a, b]) expect(l.height(blockOf(card))).toBeCloseTo(BLOCK, 3);
+        expect(rowsOf(l, a)).toEqual(rowsOf(l, b));
+    });
+
+    it('the Daily Pulse beside a listing: one height, the same block; its pill in row 3, one line of its news in row 4, and no second pill on the photo', async () => {
+        await show([PULSE, LISTING], 'grid');
+        const pulse = byId('market-card-pulse-1');
+        const li = byId('market-card-l-eggs');
+        expect(pulse).not.toBeNull();
+        const l = lay(569);
+        expect(at(l, pulse).top).toBe(at(l, li).top);
+        expect(l.width(pulse)).toBe(136);
+        expect(l.height(pulse)).toBe(l.height(li));
+        expect(l.height(blockOf(pulse))).toBeCloseTo(BLOCK, 3);
+        const rows = Array.from(blockOf(pulse).children);
+        expect(rows).toHaveLength(3);
+        expect(rows[1].querySelector('[data-testid="pulse-chip"]')?.textContent).toBe('🗞️ PULSE');
+        const news = rows[2].querySelector('[data-testid="pulse-line"]')!;
+        expect(news.textContent).toBe(PULSE.description);
+        expect(news.getAttribute('data-lines')).toBe('1');
+        expect(byId('grid-badge-row') && pulse.querySelector('[data-testid="grid-badge-row"]')!.textContent).toBe('');
+        const bottom = at(l, blockOf(pulse)).top + l.height(blockOf(pulse)) - 12;
+        for (const r of rows) expect(at(l, r).top + l.height(r), r.textContent ?? '').toBeLessThanOrEqual(bottom + 0.01);
+        const right = at(l, pulse).left + l.width(pulse);
+        for (const el of Array.from(pulse.querySelectorAll('*'))) expect(at(l, el).left + l.width(el), el.textContent ?? el.tagName).toBeLessThanOrEqual(right + 0.5);
+    });
+});
+
 // The Market's fill (market-fill.ts): on a community that reads by area, a short nearby list is followed, in the list's
 // footer, by the newest from elsewhere. Those cards sit in views of their own (a plain one in the list view, a row of two
 // in the grid), so each view is laid out with Yoga here too.
@@ -755,6 +882,54 @@ describe('the layout check sees the fault it is here for', () => {
         expect(kept.right).toBeLessThanOrEqual(kept.width + 0.5);
         const rigid = rowWith({ flexShrink: 0 });
         expect(rigid.right).toBeGreaterThan(rigid.width + 10);
+    });
+
+    // DESIGN-grid-event-rows-fable.md call 4: an event tile's row 2 is core's two whole pieces ("10:26", "–14:26") in
+    // gridBlock.timeRow, a row one line high that wraps and clips. Built by hand at a tile's inner width at 320 x 1.3 (110 dp)
+    // with pieces wider than it together (the measure's 0.56 em a character: 112 dp): the end piece is laid out whole on the
+    // line under the row's clip, and the row shows the start alone. At 200 dp they share the line. Laid out without the wrap
+    // (the fault), the end piece runs past the row's edge, where it would be cut.
+    it("an event tile's time row: pieces wider than the row put the end piece whole under its clip; at 200 dp one line", async () => {
+        const { gridTextBlock } = await import('../../components/market-card-shell');
+        const b = gridTextBlock(1.3);
+        const span = (text: string) => {
+            const e = document.createElement('span');
+            e.setAttribute('data-style', JSON.stringify({ fontSize: 14, fontWeight: '800', lineHeight: 18, ...b.timePiece }));
+            e.setAttribute('data-lines', '1');
+            e.textContent = text;
+            return e;
+        };
+        const laid = (width: number, rowStyle: Record<string, unknown> = b.timeRow as Record<string, unknown>) => {
+            const start = span('10:26');
+            const end = span('–14:26');
+            const row = div(rowStyle, start, end);
+            const scroll = div({ flexGrow: 1, flexShrink: 1, overflow: 'scroll' }, div({ width }, row));
+            const l = layOut(scroll, { width: WIDTH, height: 569 }, { fontScale: 1.3 });
+            return { row: l.box(row), start: l.box(start), end: l.box(end) };
+        };
+        const ROW = 18 * 1.3;
+        const whole = (text: string) => text.length * 14 * 1.3 * 0.56;
+        const narrow = laid(110);
+        expect(narrow.row.width).toBe(110);
+        expect(narrow.row.height).toBeCloseTo(ROW, 3);
+        expect(narrow.start.width + narrow.end.width).toBeGreaterThan(110);
+        // The start on the row, whole; the end whole too, on the next line, at or below the row's bottom: clipped away.
+        expect(narrow.start).toMatchObject({ left: 0, top: 0 });
+        expect(narrow.start.width).toBeCloseTo(whole('10:26'), 3);
+        expect(narrow.end.left).toBe(0);
+        expect(narrow.end.top).toBeGreaterThanOrEqual(narrow.row.height - 0.01);
+        expect(narrow.end.width).toBeCloseTo(whole('–14:26'), 3);
+        // Room for both: one line, the end straight after the start.
+        const wide = laid(200);
+        expect(wide.row.height).toBeCloseTo(ROW, 3);
+        expect(wide.start.top).toBe(0);
+        expect(wide.end.top).toBe(0);
+        expect(wide.end.left).toBeCloseTo(wide.start.width, 3);
+        expect(wide.end.left + wide.end.width).toBeLessThanOrEqual(200);
+        // The fault the wrap is there for: one line that never wraps puts the end past the row's edge, to be cut there.
+        const rigid = laid(110, { ...(b.timeRow as Record<string, unknown>), flexWrap: 'nowrap' });
+        expect(rigid.end.top).toBe(0);
+        expect(rigid.end.left + rigid.end.width).toBeGreaterThan(110);
     });
 
     it('a percentage-height slot makes a lone card far taller than its own 116 dp', () => {

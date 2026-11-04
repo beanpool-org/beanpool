@@ -61,7 +61,8 @@ vi.mock('../haptics', () => ({ hapticTick: () => {} }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
-vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
+// The quiet row's Share, as a button where the page draws it (the real one is EventExtras', with its sheet): the page's order is what is read.
+vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => createElement('div', { role: 'button', 'aria-label': 'Share this event' }, '🔗 Share') }));
 
 import { EventCard } from '../../components/EventCard';
 import { EventDetail } from '../../components/EventDetail';
@@ -167,5 +168,36 @@ describe('cancelled event RSVP withdrawal on native (PR #2078 gap)', () => {
         expect(goingAfter?.getAttribute('aria-disabled')).toBe('true');
         // The note for people who are going goes with the member's place.
         expect(host.textContent).not.toContain('Meet at the back gate');
+    });
+});
+
+// The page half of DP1 (DESIGN-detail-pages-fable.md §3): the answer comes before Share, and the counts show only once someone has answered.
+describe("the event's page: the answer first, the counts only above zero (DP1)", () => {
+    const drawPage = async (post: any) => {
+        await act(async () => {
+            root.render(createElement(EventDetail, { post }) as unknown as Parameters<Root['render']>[0]);
+            await new Promise((r) => setTimeout(r, 0));
+        });
+    };
+    const open = { ...cancelledEvent, id: 'ev-open-1', eventState: undefined, myRsvp: null };
+
+    it('Going comes before Share in the page\'s order', async () => {
+        await drawPage({ ...open, goingCount: 0, interestedCount: 0 });
+        const going = button('Going');
+        const share = button('Share this event');
+        expect(going).toBeTruthy();
+        expect(share).toBeTruthy();
+        expect(going!.compareDocumentPosition(share!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('nobody has answered: no counts at all (never "0 going · 0 interested")', async () => {
+        await drawPage({ ...open, goingCount: 0, interestedCount: 0 });
+        expect(host.textContent).not.toContain('going ·');
+        expect(host.textContent).not.toContain('0 going');
+    });
+
+    it('three going and one interested: "3 going · 1 interested"', async () => {
+        await drawPage({ ...open, goingCount: 3, interestedCount: 1 });
+        expect(host.textContent).toContain('3 going · 1 interested');
     });
 });

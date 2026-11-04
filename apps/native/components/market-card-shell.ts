@@ -11,7 +11,7 @@
  */
 import { createElement } from 'react';
 import { StyleSheet, Text, View, type TextStyle } from 'react-native';
-import { MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, gridTextBlockHeight, type CardType } from '@beanpool/core';
+import { MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_SCRIM_PILL as PILL, gridTextBlockHeight, type CardType } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 
 type Colors = ThemeContextType['colors'];
@@ -45,9 +45,14 @@ export function chipTones(colors: Colors): Record<CardChipRole, { bg: string; fg
     };
 }
 
+/** A piece of type's weight as a Text style's. */
+const weightOf = ({ weight }: CardType) => String(weight) as TextStyle['fontWeight'];
+
 const LIST = MARKET_CARD_TYPE.list;
+const PAGE = MARKET_CARD_TYPE.page;
 const GRID = MARKET_CARD_TYPE.grid;
 const SLOT = SHELL.photo.list.width;
+const GRID_PHOTO = SHELL.photo.grid;
 const POP_UP = SHELL.popUp;
 const CLOSE = POP_UP.close;
 
@@ -60,6 +65,14 @@ export function makeCardShell(colors: Colors) {
         borderTopLeftRadius: SHELL.radius,
         borderBottomLeftRadius: SHELL.radius,
     };
+    /** The one card shadow, the card's and a page box's. */
+    const shadow = {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: SHELL.shadow.offsetY },
+        shadowOpacity: SHELL.shadow.opacity,
+        shadowRadius: SHELL.shadow.blur,
+        elevation: SHELL.shadow.elevation,
+    };
     const styles = StyleSheet.create({
         /** The card: corners, the 1 dp border, the card ground, the one shadow, the gap under it. */
         card: {
@@ -69,11 +82,7 @@ export function makeCardShell(colors: Colors) {
             borderColor: colors.border.default,
             overflow: 'hidden',
             marginBottom: SHELL.gap.list,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: SHELL.shadow.offsetY },
-            shadowOpacity: SHELL.shadow.opacity,
-            shadowRadius: SHELL.shadow.blur,
-            elevation: SHELL.shadow.elevation,
+            ...shadow,
         },
         /** The list card: the picture slot on the left, the text column beside it, no padding round the picture. */
         list: { flexDirection: 'row', padding: 0 },
@@ -156,6 +165,24 @@ export function makeCardShell(colors: Colors) {
          */
         clearOfClose: { marginRight: CLOSE.size + 2 * CLOSE.inset - SHELL.textPadding },
         /**
+         * A page's box (DESIGN-detail-pages-fable.md §2.2, with the style box's one text padding, §3 row 3): the card's corners,
+         * border, ground and shadow round an object on an item's own page (the person, the note, the reminder, the guest list).
+         * The page places it: its margins are the page's rhythm, not the box's.
+         */
+        pageBox: {
+            backgroundColor: colors.surface.card,
+            borderRadius: SHELL.radius,
+            borderWidth: SHELL.borderWidth,
+            borderColor: colors.border.default,
+            padding: SHELL.textPadding,
+            ...shadow,
+        },
+        /** A box's label in small capitals (the capitals are the words'): 10/800, spaced 1.5, muted. */
+        boxLabel: { ...cardType(PAGE.boxLabel), letterSpacing: PAGE.boxLabelSpacing, color: colors.text.muted },
+        /** A page's button, filled or outlined: 48 tall, corners 12; its words 15/700. The caller gives the role's colours. */
+        pageButton: { minHeight: PAGE.buttonHeight, borderRadius: PAGE.buttonRadius, alignItems: 'center', justifyContent: 'center' },
+        pageButtonText: cardType(PAGE.button),
+        /**
          * The grid (DESIGN-market-grid-sizes-fable.md §2.2, §2.5, slice PG2) is a list of rows: two tiles side by side with the
          * gutter between them and under the row, or a poll on its own, the list's width. A cell is half the row less the gutter
          * and is stretched to the row's height; the tile fills its cell, so the two tiles of a row are one height.
@@ -164,9 +191,47 @@ export function makeCardShell(colors: Colors) {
         gridCell: { flex: 1, minWidth: 0 },
         gridTile: { flex: 1, marginBottom: 0 },
         /** Rows 1 and 2 of the four: the title, two lines at most. */
-        gridTitle: { ...cardType(GRID.loud), color: colors.text.body },
+        //   The grid tile's words are written out from core's type (not spread from cardType) so the phone's contrast scan
+        //   (utils/button-contrast.ts) reads each style whole: a spread of a call is a style it cannot read. Same numbers.
+        gridTitle: { fontSize: GRID.loud.size, fontWeight: weightOf(GRID.loud), lineHeight: GRID.loud.line, color: colors.text.body },
         /** Row 3 on a copy (its price there, in words) and row 4's distance: one line each. */
-        gridLine: { ...cardType(GRID.place), color: colors.text.secondary },
+        gridLine: { fontSize: GRID.place.size, fontWeight: weightOf(GRID.place), lineHeight: GRID.place.line, color: colors.text.secondary },
+        /** An event tile's rows 1 and 2: the date, then the time, the loud line in the event's ink, one row each. */
+        gridWhen: { fontSize: GRID.loud.size, fontWeight: weightOf(GRID.loud), lineHeight: GRID.loud.line, color: colors.tile.event.ink },
+        /** An event tile's row 3: its title, one line. */
+        gridSecond: { fontSize: GRID.second.size, fontWeight: weightOf(GRID.second), lineHeight: GRID.second.line, color: colors.text.body },
+        /**
+         * The tile's photo and what sits on it, the same for every kind (slice P3': an event and the Daily Pulse are listing
+         * tiles too). The picture is 4:3 at the tile's width, flush under its top corners (the card's own overflow rounds
+         * them); the photo fills that frame (no percentage height: it is laid over the frame, edge to edge).
+         */
+        gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: GRID_PHOTO.aspectWidth / GRID_PHOTO.aspectHeight },
+        gridImage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+        /** The type chip's place, the photo's top-left corner: OFFER / NEED, EVENT, as the one chip (CardChip). */
+        gridTypeSlot: { position: 'absolute', top: PILL.inset, left: PILL.inset },
+        /**
+         * The photo's foot: the pills at its start (a status, 📌 PINNED, a deal, an event's CANCELLED / UPDATED) and the loud
+         * thing at its end (a listing's price, your mark on an event). It wraps upwards when a language needs the room.
+         */
+        gridBadgeRow: { position: 'absolute', left: PILL.inset, right: PILL.inset, bottom: PILL.inset, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: PILL.gap },
+        /** A pill on the photo: the scrim, its light edge, white words. */
+        gridBadge: {
+            backgroundColor: colors.overlay.scrim,
+            paddingHorizontal: PILL.paddingHorizontal,
+            paddingVertical: PILL.paddingVertical,
+            borderRadius: PILL.radius,
+            borderWidth: PILL.borderWidth,
+            borderColor: colors.overlay.scrimEdge,
+            maxWidth: '100%',
+        },
+        gridPriceEnd: { marginLeft: 'auto' },
+        /**
+         * The loud pill's words: a price, or your mark ("Going ✓"). White on the scrim: the event's violet ink would read
+         * 1.0 to 1.8 : 1 on the light theme's scrim (slice P3' measured it), white reads 9.1 : 1 at the least.
+         */
+        gridPriceText: { fontSize: GRID.price.size, fontWeight: weightOf(GRID.price), color: colors.text.inverse },
+        /** A quiet pill's words: 📌 PINNED, an event's CANCELLED / UPDATED. */
+        gridPinText: { fontSize: PILL.quiet.size, fontWeight: weightOf(PILL.quiet), color: colors.text.inverse },
     });
     return { ...styles, tones: chipTones(colors) };
 }
@@ -188,6 +253,14 @@ export function gridTextBlock(fontScale: number) {
         titleBox: { height: 2 * row + rowGap * scale },
         /** Row 3: the author (an 18 dp avatar and a name) or a copy's line, centred in the row. */
         row: { height: row, justifyContent: 'center' },
+        /**
+         * An event tile's row 2, its time (DESIGN-grid-event-rows-fable.md call 4): core's whole pieces ("10:26", "–14:26") in a
+         * row one line high that wraps and clips. Both fit: the span. They do not: the end piece wraps under the clip and the
+         * row reads the start alone, never a cut and never a dangling dash. The layout decides, so no code measures a word.
+         */
+        timeRow: { height: row, flexDirection: 'row', flexWrap: 'wrap', alignContent: 'flex-start', overflow: 'hidden' },
+        /** A piece of the time row: never shrunk, so it is whole on the row or whole on the line under the clip. */
+        timePiece: { flexShrink: 0 },
         /** Row 4: one line that is cut, never wrapped: the distance first, then one chip at most, spaced as a chip row. */
         lastRow: { height: row, flexDirection: 'row', alignItems: 'center', gap: 6, overflow: 'hidden' },
         /** Row 4's distance and its chip: each gives way and is cut at the row's end rather than pushed past it. */

@@ -16,6 +16,7 @@ import { View, Text, Pressable, StyleSheet, type StyleProp, type ViewStyle } fro
 import { t, tn, formatNumber } from '@beanpool/core';
 import { MemberAvatar } from './MemberAvatar';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
+import { useCardShell } from './market-card-shell';
 import { getMemberRatings } from '../utils/db';
 import { isHiddenAuthor } from '../utils/posts-view';
 
@@ -37,7 +38,7 @@ interface AuthorCardProps {
     disabled?: boolean;
     testID?: string;
     accessibilityLabel?: string;
-    /** The screen's own margins: the listing's page has none of its own, the event's has 16 dp of padding. */
+    /** The screen's own margins: the listing's page has none of its own (20 here until it pads its column), the event's pads 16. */
     style?: StyleProp<ViewStyle>;
 }
 
@@ -74,16 +75,18 @@ export function useMemberRating(pubkey: string | null | undefined): AuthorRating
 
 export function AuthorCard({ label, pubkey, callsign, avatarUrl, rating, onPress, disabled, testID, accessibilityLabel, style }: AuthorCardProps) {
     const styles = useStyles(makeStyles);
+    // The page box of the style box (components/market-card-shell.ts): the card's corners, border, ground, shadow and padding.
+    const shell = useCardShell();
     return (
         <Pressable
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
             testID={testID}
-            style={[styles.card, style]}
+            style={[shell.pageBox, styles.card, style]}
             disabled={disabled || !onPress}
             onPress={onPress}
         >
-            <Text style={styles.label}>{label}</Text>
+            <Text style={[shell.boxLabel, styles.label]}>{label}</Text>
             <View style={styles.row}>
                 <View style={styles.avatar}>
                     <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={48} borderRadius={24} />
@@ -107,8 +110,9 @@ export function AuthorCard({ label, pubkey, callsign, avatarUrl, rating, onPress
 }
 
 const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
-    card: { marginHorizontal: 20, backgroundColor: colors.surface.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-    label: { color: colors.text.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 12 },
+    // The listing's page has no column padding of its own yet (DP3 gives it 16): it keeps its 20 dp until then.
+    card: { marginHorizontal: 20, marginBottom: 20 },
+    label: { marginBottom: 8 },
     row: { flexDirection: 'row', alignItems: 'center' },
     avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: theme === 'dark' ? 'rgba(217,119,87,0.2)' : 'rgba(217,119,87,0.1)', justifyContent: 'center', alignItems: 'center' },
     // Shrinks so a long name wraps beside the face at 320 dp and 1.3× text, never past the card.

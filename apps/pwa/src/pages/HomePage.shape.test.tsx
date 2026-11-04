@@ -124,6 +124,17 @@ describe('HomePage community shape line and modal (S5)', () => {
             .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.");
     });
 
+    it('says who decides a removal, from beside the features a member\'s Home says (removal jury J3)', async () => {
+        vi.mocked(api.getHome).mockResolvedValueOnce({
+            notModified: false,
+            etag: 'tag-removals',
+            answer: { ...HOME_ANSWER_WITH_SHAPE, removalDecider: 'jury' } as unknown as HomeAnswer,
+        });
+        render(<HomePage identity={ME} onNavigate={() => {}} onSeeWords={() => {}} />);
+        fireEvent.click(await screen.findByTestId('home-community-shape-summary'));
+        expect(screen.getByTestId('community-shape-modal').textContent).toContain('decided by a jury drawn at random; while fewer than 36 members could serve on one, by everyone who can vote');
+    });
+
     it('does NOT render the shape summary line on an old node without shape features', async () => {
         vi.mocked(api.getHome).mockResolvedValueOnce({
             notModified: false,

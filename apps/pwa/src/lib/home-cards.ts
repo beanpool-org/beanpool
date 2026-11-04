@@ -271,6 +271,8 @@ export interface HomeAnswer {
     generatedAt: string;
     profile: 'local' | 'global' | string;
     features: HomeFeatures;
+    /** Who decides a removal, to a member only, beside `features` (server config/features-for.ts): read through core shapeFeaturesOf. */
+    removalDecider?: 'automatic' | 'everyone' | 'jury';
     welcome?: true;
     me: HomeMe | null;
     /** The account's layout as the node keeps it: version 2, or version 1 from a node before the card frame (lib/home-layout.ts). */

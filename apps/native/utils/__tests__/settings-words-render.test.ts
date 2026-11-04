@@ -189,6 +189,8 @@ const node = vi.hoisted(() => ({
     rule: undefined as undefined | 'vault' | 'server' | 'none',
     /** `features` on GET /api/community/me; null: the reader's own read goes unanswered. */
     me: null as null | Record<string, unknown>,
+    /** What GET /api/community/me says beside `features` (removal jury J3: who decides a removal, to a member). */
+    meBeside: {} as Record<string, unknown>,
     /** GET /api/community/known-rule's answer; null: a 404, as an older node. */
     knownRule: null as null | Record<string, unknown>,
 }));
@@ -214,7 +216,7 @@ vi.mock('../node-post', async (importOriginal) => {
     return {
         signedPost: async () => new Response(JSON.stringify({ keepers: [], enrolledSso: [], threshold: 1, recoverable: false, total: 0 }), { status: 200 }),
         signedGet: async (_url: string, route: string) => (route === '/api/community/me' && node.me
-            ? new Response(JSON.stringify({ features: node.me }), { status: 200 })
+            ? new Response(JSON.stringify({ features: node.me, ...node.meBeside }), { status: 200 })
             : new Response('{}', { status: 404 })),
         anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
         // The node doesn't answer the delete in time: what purgeAccountOnNode throws then.
@@ -335,6 +337,7 @@ beforeEach(() => {
     node.lastPlan = false;
     node.rule = undefined;
     node.me = null;
+    node.meBeside = {};
     node.knownRule = null;
     readerFeaturesHeld.clear();
     sheet.props = null;
@@ -856,6 +859,14 @@ describe('Settings → "How this community works": the floor and the rule throug
         expect(shapeSheet()).toContain('How this community works');
         expect(shapeSheet()).not.toContain('(the known floor)');
         expect(shapeSheet()).not.toContain('admins can see');
+    });
+
+    it('who decides a removal, from beside the features a member\'s answer says (removal jury J3)', async () => {
+        node.me = WIRE;
+        node.meBeside = { removalDecider: 'jury' };
+        await renderIn('en');
+        await open();
+        expect(shapeSheet()).toContain('decided by a jury drawn at random; while fewer than 36 members could serve on one, by everyone who can vote');
     });
 });
 

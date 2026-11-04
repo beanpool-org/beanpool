@@ -100,6 +100,15 @@ describe('CommunityShapeModal', () => {
         });
     });
 
+    it('says who decides a removal when a member\'s read carries the rule (removal jury J3), as the phone does', () => {
+        const { unmount } = render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={{ ...FULL_FEATURES, removalDecider: 'jury' }} />);
+        expect(screen.getByText('Removals:')).toBeInTheDocument();
+        expect(screen.getByRole('dialog').textContent).toContain('decided by a jury drawn at random; while fewer than 36 members could serve on one, by everyone who can vote');
+        unmount();
+        render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={FULL_FEATURES} />);
+        expect(screen.queryByText('Removals:')).not.toBeInTheDocument();
+    });
+
     it('handles old node that says nothing gracefully', () => {
         render(<CommunityShapeModal isOpen={true} onClose={vi.fn()} features={{}} />);
         const dialog = screen.getByRole('dialog');

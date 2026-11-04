@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ShapeLock, JoinState, ShapeLogLine } from '../../lib/community-shape';
-import { recoveryCopiesName } from '../../lib/community-shape';
+import { recoveryCopiesName, removalDeciderName } from '../../lib/community-shape';
 import { t } from '../../lib/fresh-proof';
 
 /**
@@ -79,6 +79,7 @@ export function logSettingName(setting: string): string {
         autoHideReports: t('Reported posts hidden and message requests cleared automatically'),
         autoMute: t('Repeat offenders muted automatically'),
         recoveryCopies: t("Where members' copies go"),
+        removalDecider: t('Who decides a removal'),
         'core.lock': t('Core settings'),
         'core.unlock': t('Core settings'),
     };
@@ -108,6 +109,7 @@ export function logValueDisplay(setting: string, val: string | null): string {
         return joinDisplay(val as JoinState);
     }
     if (setting === 'recoveryCopies') return recoveryCopiesName(val);
+    if (setting === 'removalDecider') return removalDeciderName(val);
     if (val === 'on' || val === 'true') return t('On');
     if (val === 'off' || val === 'false') return t('Off');
     return val;

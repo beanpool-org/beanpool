@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { formatDate, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
+import { formatDate, isJuryVote, juryTurnoutLine, juryTurnoutOf, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
 import {
     castDecisionVote,
     replyToRemovalCase,
@@ -17,6 +17,7 @@ import {
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
 import { Sentence } from './Sentence';
+import { JuryPanel, JuryTurnoutBox } from './JuryPanel';
 
 /**
  * What a Decision does, what it touches, where it ended and the history's filters, as the node names them: word() keys
@@ -404,6 +405,34 @@ export function DecideSection({
                                 const buttons = voteButtonStates(item.myVote, isQuadratic, currentCount);
                                 const blocker = isQuadratic ? poolVoteBlocker(myPoolVoting) : null;
                                 const creditsLine = isQuadratic ? voiceCreditsLine(myPoolVoting) : null;
+                                // A vote a drawn jury decides (removal jury J3): the node sends no split while it is open, and
+                                // only a seated juror votes (JuryPanel asks the node for the reader's seat).
+                                const jury = isJuryVote(item);
+                                const voteButtons = (
+                                    <div className="flex flex-wrap gap-3">
+                                        {/* Not min-w-0: a button keeps its longest word whole (max-w-full lets a word wider than the card
+                                            still break), and flex-wrap puts No under Yes when both cannot fit side by side. */}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleVote(item, true)}
+                                            disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
+                                            className="flex-1 max-w-full py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                                        >
+                                            <span aria-hidden="true">👍</span>
+                                            <span className="min-w-0 break-words">{votingId === item.id ? t('Recording...') : buttons.yes.label}</span>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => handleVote(item, false)}
+                                            disabled={votingId === item.id || buttons.no.disabled || !!blocker}
+                                            className="flex-1 max-w-full py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                                        >
+                                            <span aria-hidden="true">👎</span>
+                                            <span className="min-w-0 break-words">{votingId === item.id ? t('Recording...') : buttons.no.label}</span>
+                                        </button>
+                                    </div>
+                                );
 
                                 // §3.8 Removal ballot debt line
                                 const targetName = item.params?.memberName || item.subject?.slice(0, 8) || t('Member');
@@ -517,7 +546,12 @@ export function DecideSection({
                                             </div>
                                         )}
 
-                                        {/* Metrics: Quorum Progress and Tally */}
+                                        {/* Metrics: Quorum Progress and Tally; a jury's count of jurors, never a split */}
+                                        {jury ? (
+                                            <div className="bg-nature-800/40 border border-nature-700/50 rounded-xl p-3.5 space-y-3">
+                                                <JuryTurnoutBox decision={item} name={targetName} />
+                                            </div>
+                                        ) : (
                                         <div className="bg-nature-800/40 border border-nature-700/50 rounded-xl p-3.5 space-y-3">
                                             {/* Quorum */}
                                             <div>
@@ -571,6 +605,7 @@ export function DecideSection({
                                                 {minYesLine(tally) && <div className="text-xs text-nature-300 mt-1" data-testid="min-yes-line">{minYesLine(tally)}</div>}
                                             </div>
                                         </div>
+                                        )}
 
                                         {/* Voting Action Section */}
                                         <div className="pt-2 border-t border-nature-800 flex flex-col gap-2.5">
@@ -633,33 +668,16 @@ export function DecideSection({
                                                     <LocalCommunityAction feature="decisions" label={t('👎 Vote NO')} className="flex-1" {...ways} />
                                                 </div>
                                             ) : isOwnRemoval(item, identity?.publicKey) ? (
-                                                <p className="text-sm font-semibold text-amber-300" data-testid="own-removal-note">
-                                                    {t("This vote is about you, so you can't vote on it.")}
-                                                </p>
+                                                <>
+                                                    <p className="text-sm font-semibold text-amber-300" data-testid="own-removal-note">
+                                                        {t("This vote is about you, so you can't vote on it.")}
+                                                    </p>
+                                                    {jury && <JuryPanel decision={item} open me={identity?.publicKey} name={targetName} onRefresh={onRefresh} />}
+                                                </>
+                                            ) : jury ? (
+                                                <JuryPanel decision={item} open me={identity?.publicKey} name={targetName} voteButtons={voteButtons} onRefresh={onRefresh} />
                                             ) : (
-                                                <div className="flex flex-wrap gap-3">
-                                                    {/* Not min-w-0: a button keeps its longest word whole (max-w-full lets a word wider than the card
-                                                        still break), and flex-wrap puts No under Yes when both cannot fit side by side. */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleVote(item, true)}
-                                                        disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
-                                                        className="flex-1 max-w-full py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                                                    >
-                                                        <span aria-hidden="true">👍</span>
-                                                        <span className="min-w-0 break-words">{votingId === item.id ? t('Recording...') : buttons.yes.label}</span>
-                                                    </button>
-
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleVote(item, false)}
-                                                        disabled={votingId === item.id || buttons.no.disabled || !!blocker}
-                                                        className="flex-1 max-w-full py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                                                    >
-                                                        <span aria-hidden="true">👎</span>
-                                                        <span className="min-w-0 break-words">{votingId === item.id ? t('Recording...') : buttons.no.label}</span>
-                                                    </button>
-                                                </div>
+                                                voteButtons
                                             )}
                                             <p className="text-[11px] text-nature-500" data-testid="secret-ballot-note">
                                                 {preview ? t('Secret ballot: members see the totals, never who voted how.') : t('🔒 Secret ballot: members see the totals, never who voted how.')}
@@ -707,6 +725,9 @@ export function DecideSection({
                             {filteredPastDecisions.map(item => {
                                 const { tally } = item;
                                 const supportPct = Math.round(tally.supportRatio * 100);
+                                // A closed jury vote counts its jurors (removal jury J3), and its panel says how it ended.
+                                const juryTurnout = isJuryVote(item) ? juryTurnoutOf(tally) : null;
+                                const turnoutWords = juryTurnout ? juryTurnoutLine(juryTurnout) : turnoutLine(tally);
 
                                 let badgeColor = 'bg-red-500/20 text-red-300 border-red-500/40';
                                 if (item.status === 'executed' || item.status === 'passed') {
@@ -756,12 +777,22 @@ export function DecideSection({
                                         {/* Final Tally */}
                                         <div className="bg-nature-800/40 border border-nature-700/50 rounded-xl p-3 text-xs text-nature-300 flex justify-between items-center">
                                             <span>
-                                                {tally.quorumMet ? t('Turnout: {line} (Met ✅)', { line: turnoutLine(tally) }) : t('Turnout: {line} (Unmet ❌)', { line: turnoutLine(tally) })}
+                                                {tally.quorumMet ? t('Turnout: {line} (Met ✅)', { line: turnoutWords }) : t('Turnout: {line} (Unmet ❌)', { line: turnoutWords })}
                                             </span>
                                             <span className="font-semibold">
                                                 {t('Yes: {yes} ({pct}%) · No: {no}', { yes: tally.yesWeight, pct: supportPct, no: tally.noWeight })}
                                             </span>
                                         </div>
+
+                                        {isJuryVote(item) && (
+                                            <JuryPanel
+                                                decision={item}
+                                                open={false}
+                                                me={identity?.publicKey}
+                                                name={item.params?.memberName || item.subject?.slice(0, 8) || t('Member')}
+                                                onRefresh={onRefresh}
+                                            />
+                                        )}
 
                                         {/* Who Authorised Each Executed Effect (§3.7, §3.8) */}
                                         <div className="bg-nature-800/60 border border-nature-700/60 rounded-xl p-3 text-xs space-y-1">

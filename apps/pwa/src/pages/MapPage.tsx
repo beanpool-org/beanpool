@@ -2629,7 +2629,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     >
                         <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-300">✕</span>
                     </button>
-                    <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
+                    <div className="relative w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                         <ListPhoto
                             photo={previewPost.photos?.[0]}
                             fallback={<span className="text-3xl" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
@@ -2674,7 +2674,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 })
                             }
                             aria-label={t('View enlarged photo: {title}', { title: previewPost.title })}
-                            className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
+                            className="relative w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
                         >
                             <ListPhoto
                                 photo={previewPost.photos[0]}

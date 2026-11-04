@@ -174,7 +174,7 @@ export function ShopfrontText({ title, text, boxed, lines = 4, testID }: { title
 /** A listing's picture: its own photo (the node's small copy), or its category tile. */
 function ListingPicture({ l, className, size = 'thumb' }: { l: ShopfrontListing; className: string; emojiClass?: string; size?: 'grid' | 'thumb' }) {
     return (
-        <span className={`${className} bg-nature-100 dark:bg-nature-800 flex items-center justify-center overflow-hidden`} aria-hidden="true">
+        <span className={`relative ${className} bg-nature-100 dark:bg-nature-800 flex items-center justify-center overflow-hidden`} aria-hidden="true">
             <ListPhoto
                 photo={l.photo}
                 resolve={(url) => resolveAvatarUrl(url)}

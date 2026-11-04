@@ -11,12 +11,17 @@ import { LIST_PHOTO_WAIT_MS, listPhotoUrl, nextListPhotoUrl } from '@beanpool/co
  * wait for onError alone: `drawn` is true only once the photo it shows has fired load, and the card draws its tile or
  * fallback until then; a photo that has neither loaded nor failed within LIST_PHOTO_WAIT_MS counts as failed and takes
  * the same step down (@beanpool/core nextListPhotoUrl: the small copy once more past every cache, the photo's own URL,
- * then nothing). An <img> has no progress event, so the web counts from the start.
+ * then nothing). An <img> has no progress event, so the web counts from when the browser asks for the picture.
+ *
+ * That is at once for an eager <img>. A `lazy` one off screen is not asked for at all (review of #2853, finding 1: a
+ * wait that started at mount stepped MapStackList's and Home's lazy photos down to their fallback before they were ever
+ * fetched, and they never loaded): its wait starts once it has been in view with the URL it shows (`ref` takes the <img>
+ * and an IntersectionObserver watches it). A step down to a new URL while it is out of view waits for it to come back.
  *
  * The URL that failed is kept beside its step, not a flag, so a new URL a later read brings starts again from its small
  * copy.
  */
-export function useListPhotoSteps(photo: string | null | undefined, resolve?: (url: string) => string | null) {
+export function useListPhotoSteps(photo: string | null | undefined, resolve?: (url: string) => string | null, lazy = false) {
     const [steppedDown, setSteppedDown] = useState<{ photo: string; shown: string | null } | null>(null);
     const [drawnUrl, setDrawnUrl] = useState<string | null>(null);
     const shown = !photo ? null : steppedDown?.photo === photo ? steppedDown.shown : listPhotoUrl(photo);
@@ -24,6 +29,24 @@ export function useListPhotoSteps(photo: string | null | undefined, resolve?: (u
     // and nothing waits: a refused URL is never stepped past).
     const src = shown && (resolve ? resolve(shown) : shown);
     const drawn = !!shown && drawnUrl === shown;
+
+    // A lazy <img>: whether it is in view now, and the address it was in view with (the one the browser has asked for).
+    // Without IntersectionObserver the browser has no lazy loading either, and asks for every <img> at once.
+    const watch = lazy && typeof IntersectionObserver !== 'undefined';
+    const [node, setNode] = useState<HTMLImageElement | null>(null);
+    const [inView, setInView] = useState(false);
+    const [seenSrc, setSeenSrc] = useState<string | null>(null);
+    useEffect(() => {
+        if (!watch || !node) return;
+        const io = new IntersectionObserver((entries) => {
+            const last = entries[entries.length - 1];
+            if (last) setInView(last.isIntersecting);
+        });
+        io.observe(node);
+        return () => io.disconnect();
+    }, [watch, node]);
+    useEffect(() => { if (watch && inView && src) setSeenSrc(src); }, [watch, inView, src]);
+    const asked = !!src && (!watch || seenSrc === src);
 
     const fail = useCallback((p: string, failed: string) => {
         setSteppedDown({ photo: p, shown: nextListPhotoUrl(p, failed) });
@@ -36,24 +59,34 @@ export function useListPhotoSteps(photo: string | null | undefined, resolve?: (u
     }, []);
     useEffect(() => {
         stop();
-        if (!photo || !shown || !src || drawn) return stop;
+        if (!photo || !shown || !src || drawn || !asked) return stop;
         const p = photo;
         const failed = shown;
         timer.current = setTimeout(() => { timer.current = null; fail(p, failed); }, LIST_PHOTO_WAIT_MS);
         return stop;
-    }, [photo, shown, src, drawn, fail, stop]);
+    }, [photo, shown, src, drawn, asked, fail, stop]);
 
     return {
         shown,
         src,
         drawn,
+        /** The <img> (`ref={steps.ref}`): a lazy one is watched for when it comes into view. */
+        ref: setNode,
         onLoad: useCallback(() => { stop(); if (shown) setDrawnUrl(shown); }, [shown, stop]),
         onError: useCallback(() => { stop(); if (photo && shown) fail(photo, shown); }, [photo, shown, fail, stop]),
     };
 }
 
-/** While its photo has not drawn, the <img> is out of the card's layout, unseen and takes no tap; the tile holds the slot. */
-export const HIDDEN_UNTIL_DRAWN: CSSProperties = { position: 'absolute', opacity: 0, pointerEvents: 'none' };
+/**
+ * While its photo has not drawn, the <img> is out of the card's layout, unseen and takes no tap; the tile holds the slot.
+ * It covers its containing block exactly (top-left, 100% by 100%, no margin), so it never reaches past it, and the slot
+ * that holds a card's picture is `relative`, so that block is the slot (review of #2853, finding 2: on Home's wide tiles
+ * a hidden image sized itself against the whole card and `main` scrolled sideways, 1215 px for 800, while photos loaded).
+ * It keeps the slot's box, so a lazy <img> is still asked for when the slot nears the screen.
+ */
+export const HIDDEN_UNTIL_DRAWN: CSSProperties = {
+    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', margin: 0, opacity: 0, pointerEvents: 'none',
+};
 
 /** The <img>'s style: its own once drawn, and until then the same with HIDDEN_UNTIL_DRAWN on top. */
 export function styleUntilDrawn(style: CSSProperties | undefined, drawn: boolean): CSSProperties | undefined {

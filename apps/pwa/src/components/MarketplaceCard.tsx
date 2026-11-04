@@ -204,7 +204,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Compact Category Picture / Tile */}
-                    <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                    <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0">
                         {displayImage ? (
                             cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />)
                         ) : (

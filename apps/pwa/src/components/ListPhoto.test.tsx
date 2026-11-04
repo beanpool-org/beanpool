@@ -4,7 +4,7 @@
  * map's stacked list, the visitor card, the deals list, profile, chats) draw their picture through it.
  */
 import { act, fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LIST_PHOTO_WAIT_MS } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 
@@ -95,6 +95,13 @@ describe('ListPhoto: never an empty slot while the photo loads', () => {
         expect(img()!.style.position).toBe('absolute');
         expect(img()!.style.pointerEvents).toBe('none');
         expect(img()!.getAttribute('aria-hidden')).toBe('true');
+        // It covers its containing block exactly, never more (review of #2853, finding 2): with the slot `relative`, that
+        // block is the slot (ListPhoto.slots.test.ts).
+        expect(img()!.style.top).toBe('0px');
+        expect(img()!.style.left).toBe('0px');
+        expect(img()!.style.width).toBe('100%');
+        expect(img()!.style.height).toBe('100%');
+        expect(img()!.style.margin).toBe('0px');
         fireEvent.load(img()!);
         expect(queryByTestId('the-tile')).toBeNull();
         expect(img()!.style.opacity).toBe('');
@@ -133,5 +140,80 @@ describe('ListPhoto: never an empty slot while the photo loads', () => {
         act(() => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS * 3); });
         expect(container.querySelector('img')).toBeNull();
         expect(queryByTestId('the-tile')).toBeInTheDocument();
+    });
+});
+
+// Review of #2853, finding 1: the browser does not ask for a `loading="lazy"` <img> that is off screen, so neither load nor
+// error comes; a wait that started at mount stepped MapStackList's and Home's later photos down to their fallback before
+// they were ever fetched, and they never loaded. jsdom has no IntersectionObserver; this one is driven by the test.
+describe('ListPhoto: a lazy photo off screen is never stepped down until it is in view', () => {
+    let observers: Array<{ cb: IntersectionObserverCallback; el: Element | null }> = [];
+    beforeEach(() => {
+        observers = [];
+        vi.stubGlobal('IntersectionObserver', class {
+            cb: IntersectionObserverCallback;
+            el: Element | null = null;
+            constructor(cb: IntersectionObserverCallback) { this.cb = cb; observers.push(this); }
+            observe(el: Element) { this.el = el; }
+            unobserve() { this.el = null; }
+            disconnect() { this.el = null; }
+            takeRecords() { return []; }
+        });
+    });
+    afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+    const inView = (on: boolean) => act(() => {
+        for (const o of observers) if (o.el) o.cb([{ isIntersecting: on, target: o.el } as IntersectionObserverEntry], o as unknown as IntersectionObserver);
+    });
+    const after = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+    it('waits nothing while it is out of view, then LIST_PHOTO_WAIT_MS once it is in view', () => {
+        vi.useFakeTimers();
+        const { container, queryByTestId } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" loading="lazy" />);
+        const src = () => container.querySelector('img')?.getAttribute('src');
+        inView(false);
+        after(LIST_PHOTO_WAIT_MS * 10);
+        expect(src()).toBe(`${PHOTO}&size=thumb2`);
+        expect(queryByTestId('the-tile')).toBeInTheDocument();
+        inView(true);
+        after(LIST_PHOTO_WAIT_MS - 1);
+        expect(src()).toBe(`${PHOTO}&size=thumb2`);
+        after(1);
+        expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
+        expect(queryByTestId('the-tile')).toBeInTheDocument();
+    });
+
+    it('a photo asked for keeps its wait when it leaves the view; a step down out of view waits for it to come back', () => {
+        vi.useFakeTimers();
+        const { container } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" loading="lazy" />);
+        const src = () => container.querySelector('img')?.getAttribute('src');
+        inView(true);
+        after(1000);
+        inView(false);
+        after(LIST_PHOTO_WAIT_MS - 1000);
+        expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
+        after(LIST_PHOTO_WAIT_MS * 5);
+        expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
+        inView(true);
+        after(LIST_PHOTO_WAIT_MS);
+        expect(src()).toBe(PHOTO);
+    });
+
+    it('a step down while it is in view is waited on at once', () => {
+        vi.useFakeTimers();
+        const { container } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" loading="lazy" />);
+        const src = () => container.querySelector('img')?.getAttribute('src');
+        inView(true);
+        fireEvent.error(container.querySelector('img')!);
+        expect(src()).toBe(`${PHOTO}&size=thumb2&retry=1`);
+        after(LIST_PHOTO_WAIT_MS);
+        expect(src()).toBe(PHOTO);
+    });
+
+    it('an eager photo is not watched: the browser asks for it at once, so its wait starts at once', () => {
+        vi.useFakeTimers();
+        const { container } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" />);
+        expect(observers).toHaveLength(0);
+        after(LIST_PHOTO_WAIT_MS);
+        expect(container.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
     });
 });

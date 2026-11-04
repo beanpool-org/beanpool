@@ -1361,7 +1361,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/backup-config', 'GET /api/local/admin/backup-enroll', 'POST /api/local/admin/backup-status',
             'POST /api/local/admin/backup/verify', 'GET /api/local/admin/branches/:pubkey/pause', 'POST /api/local/admin/branches/:pubkey/pause', 'POST /api/local/admin/branches/:pubkey/prune', 'GET /api/local/admin/bursts',
             'POST /api/local/admin/bursts/:id/undo', 'POST /api/local/admin/commons/projects',
-            'POST /api/local/admin/commons/reject', 'POST /api/local/admin/csrf-token', 'POST /api/local/admin/data', 'POST /api/local/admin/decisions',
+            'POST /api/local/admin/commons/reject', 'POST /api/local/admin/csrf-token', 'POST /api/local/admin/data', 'POST /api/local/admin/data/members', 'POST /api/local/admin/data/posts', 'POST /api/local/admin/decisions',
             'POST /api/local/admin/decisions/:id/accelerate', 'POST /api/local/admin/decisions/:id/halt', 'POST /api/local/admin/decisions/:id/hide-case',
             'POST /api/local/admin/decisions/:id/hide-reply', 'POST /api/local/admin/decisions/:id/owner-decision', 'GET /api/local/admin/diagnostics',
             'POST /api/local/admin/diagnostics', 'POST /api/local/admin/directory/push', 'GET /api/local/admin/directory/promise',

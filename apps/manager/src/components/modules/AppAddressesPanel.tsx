@@ -23,7 +23,7 @@
  * many apps were refused there today and what to do.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { audienceOf } from '@beanpool/core';
+import { addressStandingText, audienceOf } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import {
     confirmAppAddress, getAppAddresses, getTfaSessionToken,
@@ -98,43 +98,12 @@ function formatDay(iso: string | null | undefined): string {
     return Number.isFinite(t) ? new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '';
 }
 
-/** What a BeanPool name's standing means here, in words (design §4.4), or null when there is nothing to say. */
+/**
+ * What a BeanPool name's standing means here, in words (design §4.4), or null when there is nothing to say. The rule is
+ * core's (addressStandingText), which an owner's assistant reads too (apps/server agent/server-addresses.ts).
+ */
 export function standingText(a: AppAddress): { text: string; lost: boolean } | null {
-    const s = a.standing;
-    const n = a.address;
-    if (a.lost || s?.state === 'lost') {
-        const tried = a.tried ? ` ${apps(a.tried.today)} tried it today.` : '';
-        if (s?.why === 'released') {
-            return {
-                lost: true,
-                text: `This community released ${n}${s.releasedOn ? ` on ${formatDay(s.releasedOn)}` : ''} and its hold is over, so it no longer accepts what apps sign for ${n}.${tried} Ask members who still use it to add this community again at its current address, or claim ${n} again.`,
-            };
-        }
-        return {
-            lost: true,
-            text: `${s?.lostSince ? `Since ${formatDay(s.lostSince)} a` : 'A'}nother community holds ${n} and answers there. Members' apps that still use ${n} are talking to that community, so this one refuses what they sign for ${n}.${tried} Ask them to add this community again at its current address, or choose a new name for it.`,
-        };
-    }
-    if (!s) return null;
-    if (s.state === 'contradiction') {
-        return { lost: false, text: `The address service says another community holds ${n}, but ${n} still leads to this server. It stays accepted.` };
-    }
-    const accepted = s.leadsHere ? `${n} still leads to this server, so members' apps that use it are still accepted.` : "Members' apps that use it are still accepted.";
-    switch (s.registrarSays) {
-        case 'released':
-            return {
-                lost: false,
-                text: `This community released ${n}${s.releasedOn ? ` on ${formatDay(s.releasedOn)}` : ''}, and it is held for this community${s.acceptedUntil ? ` until ${formatDay(s.acceptedUntil)}` : ''}. ${s.leadsHere ? `${n} still leads to this server, and m` : 'M'}embers' apps that use it are accepted until then.`,
-            };
-        case 'other':
-            return { lost: false, text: `The address service says another community holds ${n}. ${accepted} This server checks what answers there before it stops accepting it.` };
-        case 'free':
-            return { lost: false, text: `The address service says no community holds ${n}. ${accepted}` };
-        case 'none':
-            return { lost: false, text: `The address service has no record of ${n}. ${accepted}` };
-        default:
-            return { lost: false, text: `The address service says ${n} is ${s.registrarSays ?? 'not this community’s'}. ${accepted}` };
-    }
+    return addressStandingText(a, formatDay);
 }
 
 export function formatSwitchDay(day: string | null): string {

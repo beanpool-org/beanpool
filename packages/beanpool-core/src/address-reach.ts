@@ -157,3 +157,88 @@ export function addressNextStep(step: AddressStep, minutes: number | null, w: { 
         case 'paused': return w.t(W.paused);
     }
 }
+
+/**
+ * The next step's sentence beside a BeanPool name's standing, as the Addresses screen draws it (apps/manager AddressesPanel
+ * reachSentence) and the assistant reads it after (apps/server agent/server-addresses.ts). The standing says what to do, so
+ * beside one it never adds "Nothing to do": a name the address service gives to nobody or to another community, or a lost
+ * name with members still on it, is not a closed matter. Without a standing it is addressNextStep's sentence, and a step
+ * this code doesn't know gives undefined, so a caller falls back to the sentence the node sent.
+ */
+export function addressReachSentence(step: AddressStep, minutes: number | null, besideStanding: boolean, w: { t: TFunction; tn: TnFunction }): string {
+    const S = ADDRESS_SCREEN_WORDS;
+    if (besideStanding && step === 'fine') return w.t(S.reachFine);
+    if (besideStanding && step === 'no-longer-ours') return w.t(S.reachNoLonger);
+    return addressNextStep(step, minutes, w);
+}
+
+/**
+ * What the address service says of a BeanPool name this community recorded, when that isn't simply "this community's"
+ * (apps/server services/registrar-name-watch.ts NameStanding, which Settings' report and the assistant's read both carry).
+ */
+export interface AddressNameStanding {
+    /**
+     * `at-risk`: the address service says it isn't this community's (released, free, none, another's…), and it is still
+     * accepted; `contradiction`: it says another community holds it, but it still leads to this server; `lost`.
+     */
+    state: 'at-risk' | 'contradiction' | 'lost';
+    /** `other`, `free`, `released` (by this community), or the address service's latest status word (none, revoked…). */
+    registrarSays: string | null;
+    /** This community released it (ISO), and until when it is still accepted. */
+    releasedOn: string | null;
+    acceptedUntil: string | null;
+    /** This server's key answered at the name the last time it was asked. */
+    leadsHere: boolean;
+    /** Lost since, and why (`another-key`, `released`). */
+    lostSince: string | null;
+    why: string | null;
+}
+
+/**
+ * A BeanPool name's standing in words, and whether it is lost, or null when there is nothing to say (design
+ * scratch/registrar/DESIGN-lost-name-audience-opus.md §4.4). One rule for the Addresses screen (apps/manager
+ * AppAddressesPanel standingText) and the assistant's read (apps/server agent/server-addresses.ts). English: operators'
+ * Settings stays English for launch (words design M8), and an assistant says it in its reader's language. `day` writes a
+ * moment (ISO) as a day; `tried` is a lost name's members' apps refused there today.
+ */
+export function addressStandingText(
+    a: { address: string; lost?: boolean; tried?: { today: number }; standing?: AddressNameStanding | null },
+    day: (iso: string) => string,
+): { text: string; lost: boolean } | null {
+    const s = a.standing;
+    const n = a.address;
+    const apps = (count: number) => `${count} app${count === 1 ? '' : 's'}`;
+    if (a.lost || s?.state === 'lost') {
+        const tried = a.tried ? ` ${apps(a.tried.today)} tried it today.` : '';
+        if (s?.why === 'released') {
+            return {
+                lost: true,
+                text: `This community released ${n}${s.releasedOn ? ` on ${day(s.releasedOn)}` : ''} and its hold is over, so it no longer accepts what apps sign for ${n}.${tried} Ask members who still use it to add this community again at its current address, or claim ${n} again.`,
+            };
+        }
+        return {
+            lost: true,
+            text: `${s?.lostSince ? `Since ${day(s.lostSince)} a` : 'A'}nother community holds ${n} and answers there. Members' apps that still use ${n} are talking to that community, so this one refuses what they sign for ${n}.${tried} Ask them to add this community again at its current address, or choose a new name for it.`,
+        };
+    }
+    if (!s) return null;
+    if (s.state === 'contradiction') {
+        return { lost: false, text: `The address service says another community holds ${n}, but ${n} still leads to this server. It stays accepted.` };
+    }
+    const accepted = s.leadsHere ? `${n} still leads to this server, so members' apps that use it are still accepted.` : "Members' apps that use it are still accepted.";
+    switch (s.registrarSays) {
+        case 'released':
+            return {
+                lost: false,
+                text: `This community released ${n}${s.releasedOn ? ` on ${day(s.releasedOn)}` : ''}, and it is held for this community${s.acceptedUntil ? ` until ${day(s.acceptedUntil)}` : ''}. ${s.leadsHere ? `${n} still leads to this server, and m` : 'M'}embers' apps that use it are accepted until then.`,
+            };
+        case 'other':
+            return { lost: false, text: `The address service says another community holds ${n}. ${accepted} This server checks what answers there before it stops accepting it.` };
+        case 'free':
+            return { lost: false, text: `The address service says no community holds ${n}. ${accepted}` };
+        case 'none':
+            return { lost: false, text: `The address service has no record of ${n}. ${accepted}` };
+        default:
+            return { lost: false, text: `The address service says ${n} is ${s.registrarSays ?? 'not this community’s'}. ${accepted}` };
+    }
+}

@@ -199,8 +199,8 @@ interface Props {
     identity: BeanPoolIdentity | null;
     openNewPost?: boolean;
     initialGroupId?: string;
-    /** The kind the composer opens on when `openNewPost` comes from Commons' Start something (Poll, Event); else Need. */
-    initialPostType?: 'poll' | 'event';
+    /** The kind the composer opens on when `openNewPost` comes from Commons' Start something (Poll, Event) or First steps (Need); else Need. */
+    initialPostType?: 'poll' | 'event' | 'need';
     onOpenNewPostHandled?: () => void;
     /**
      * A tool's offer or need door (scratch/tools/DESIGN-tool-template-fable.md §1.4, T0.3): the composer opens with the

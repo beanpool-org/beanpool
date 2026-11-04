@@ -34,12 +34,12 @@ export const MARKET_TYPE_PILLS: ReadonlyArray<{ id: MarketTypeFilter; label: Wor
 ];
 
 /**
- * The pill a link opens the Market on (`/(tabs)/market?filter=…`): Home's "All events" and its Decide card's polls line
- * (utils/home-cards.ts `POLLS_HREF`). Null for anything else, and the Market stays as it was.
+ * The pill a link opens the Market on (`/(tabs)/market?filter=…`): Home's "All events", its Decide card's polls line
+ * (utils/home-cards.ts `POLLS_HREF`) and "Asked near you"'s "See all Needs". Null for anything else, and the Market stays as it was.
  */
-export function marketFilterFromLink(value: string | string[] | undefined): Extract<MarketTypeFilter, 'events' | 'polls'> | null {
+export function marketFilterFromLink(value: string | string[] | undefined): Extract<MarketTypeFilter, 'events' | 'polls' | 'needs'> | null {
     const v = Array.isArray(value) ? value[0] : value;
-    return v === 'events' || v === 'polls' ? v : null;
+    return v === 'events' || v === 'polls' || v === 'needs' ? v : null;
 }
 
 /**

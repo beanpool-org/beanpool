@@ -18,7 +18,7 @@ import {
     invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
-    addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
+    askedFacts, addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
     MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor, skyOf,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
@@ -26,6 +26,7 @@ import { arrangeCards, cardLine } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
 import { NEAR_COMMUNITY_KM, HOME_STARTER_SET, TIPS_ALL_SEEN, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
+import { marketFilterFromLink } from '../market-filters';
 
 const ME = 'a'.repeat(64);
 // A fixed local afternoon, so "tonight" and "tomorrow" are stable wherever the suite runs.
@@ -77,7 +78,9 @@ describe('the catalogue and the newcomer\'s Home (CARD-FRAME §2.2, §3)', () =>
     it('one catalogue, core\'s: every type this build draws is in the registry; a newcomer starts with Getting started alone, and the starter set is the five and the two riders', () => {
         for (const t of HOME_DRAWN) expect(homeCardType(t)).toBeDefined();
         expect(ids(cardOrder(null))).toEqual(['needs', 'start', 'community']);
-        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'steps', 'tips', 'interests', 'market', 'events', 'notices', 'community']);
+        // "Asked near you" rides along after the Market (cold-start N1); this build draws it since N2.
+        expect(ids(cardOrder(STARTER))).toEqual(['needs', 'safety', 'steps', 'tips', 'interests', 'market', 'asked', 'events', 'notices', 'community']);
+        expect(HOME_DRAWN.has('asked')).toBe(true);
     });
 
     it('this build draws every type of version 1 and the saved search; Find your community came to Home in H4', () => {
@@ -247,7 +250,7 @@ describe('the layout (§4)', () => {
     });
 
     it('cards= is catalogue order then id, the same each time; no data-less cards; a move doesn\'t change it', () => {
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'events', 'market', 'notices', 'community']);
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'events', 'market', 'asked', 'notices', 'community']);
         expect(cardsToAsk(EVERY)).toEqual(['needs', 'safety', 'find', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
         expect(cardsToAsk(layout({ order: ['beans', 'market'] }))).toEqual(cardsToAsk(EVERY));
     });
@@ -334,9 +337,10 @@ describe('the layout (§4)', () => {
         const l = layout({ order: ['beans'], hidden: ['pulse'], dismissed: { safety: iso(NOW - H) } });
         const r = resetLayout(l, NOW);
         expect(r).toEqual({ v: 2, cards: starterCards(), dismissed: { safety: iso(NOW - H) }, updatedAt: iso(NOW) });
-        // The starter set's cards this build draws (a type the registry knows and this build does not yet, "Asked near you", is
-        // kept in the layout and left out of what is drawn, as any type newer than the build is).
-        expect(ids(cardOrder(r))).toEqual(['needs', ...HOME_STARTER_SET.filter(id => HOME_DRAWN.has(id as never)), 'community']);
+        // The whole starter set, "Asked near you" too: this build draws every card in it (a type it did not draw would be kept in the
+        // layout and left out of what is drawn, as any type newer than the build is).
+        expect(HOME_STARTER_SET.every(id => HOME_DRAWN.has(id as never))).toBe(true);
+        expect(ids(cardOrder(r))).toEqual(['needs', ...HOME_STARTER_SET, 'community']);
         expect(defaultCards()).toEqual([{ id: 'start', type: 'start' }]);
     });
 
@@ -972,7 +976,7 @@ describe('the global node\'s Home (H4)', () => {
         expect(ids(cardOrder(STARTER, pins)).at(-1)).toBe('community');
         // A move made during the pin moves the two cards and nothing else.
         const moved = moveCard(STARTER, 'market', 'up', inst('find', 'events', 'market'), NOW, pins)!;
-        // "Asked near you" is in the starter set and this build does not draw it yet: it stays where it was, between the two.
+        // "Asked near you" is in the starter set but not among the cards this test draws (inst(...) above): it stays where it was, between the two.
         expect(ids(moved.cards)).toEqual(['safety', 'steps', 'tips', 'interests', 'events', 'asked', 'market', 'notices']);
         // The newcomer's list doesn't hold `find`: once the pin ends, the picker brings it back (CARD-FRAME §1.2, §3).
         expect(ids(cardOrder(moved))).not.toContain('find');
@@ -1263,5 +1267,90 @@ describe('the cards Arrange folds (DESIGN-home-layout-fable.md §3.2)', () => {
     it("a folded card's line is the catalogue's; a type nobody knows has none", () => {
         expect(cardLine('events')).toBe('Events coming up soon.');
         expect(cardLine('future-card')).toBe('');
+    });
+});
+
+// ── Asked near you, and the First steps line for a Need (cold-start N2) ────────────────────────────────────────────
+
+describe('Asked near you and "Ask for one thing you\'d pay a neighbour for" (cold-start N2)', () => {
+    const need = (id: string, over: Partial<NonNullable<HomeCards['asked']>['items'][number]> = {}) =>
+        ({ id, title: `Need ${id}`, category: 'labour', credits: 20, createdAt: iso(NOW - 2 * H), photoUrl: null, ...over });
+    const asked = (items = [need('n1')]): HomeCards => ({ asked: { items }, community: { name: 'M', members: 9 } });
+    const withAsked = layout({ order: [], hidden: [] });
+    const onList = { ...withAsked, cards: [...withAsked.cards, { id: 'asked', type: 'asked' }] } as HomeLayout;
+
+    it('the card is drawn while the node sent a row, never empty, and a type this build draws', () => {
+        expect(HOME_DRAWN.has('asked')).toBe(true);
+        expect(cardOnNode('asked', answer({ cards: asked() }))).toBe(true);
+        expect(draw(answer({ cards: asked() }), onList, ctx())).toContain('asked');
+        // No Need to show: no card (the node leaves the body out), and an empty list is no card either.
+        expect(draw(answer({ cards: { community: { name: 'M', members: 9 } } }), onList, ctx())).not.toContain('asked');
+        expect(draw(answer({ cards: asked([]) }), onList, ctx())).not.toContain('asked');
+        // It is on the global node too (the lounge gets the card, not the buzz).
+        expect(cardOnNode('asked', answer({ profile: 'global', cards: asked() }))).toBe(true);
+    });
+
+    it('the starter set holds it after the Market, so a newcomer\'s address asks for it', () => {
+        expect(cardsToAsk(null)).toContain('asked');
+        expect(cardsToAsk(null).indexOf('asked')).toBe(cardsToAsk(null).indexOf('market') + 1);
+        // A list that does not name it never asks for it.
+        expect(cardsToAsk(EVERY)).not.toContain('asked');
+    });
+
+    it('the second line: what the Need pays, then how long ago; Free asks nothing; no Beans, no price; no figure sent, none made up', () => {
+        expect(askedFacts(need('a', { credits: 20 }), true, NOW)).toBe('20 Beans · 2h ago');
+        expect(askedFacts(need('a', { credits: 0, createdAt: iso(NOW - 3 * 24 * H) }), true, NOW)).toBe('Free · 3d ago');
+        expect(askedFacts(need('a', { credits: 40, createdAt: iso(NOW - 30 * 1000) }), true, NOW)).toBe('40 Beans · Just now');
+        // Beans are off (the global node): the node sends none and the line says only when.
+        expect(askedFacts(need('a', { credits: undefined }), false, NOW)).toBe('2h ago');
+        expect(askedFacts(need('a', { credits: 20 }), false, NOW)).toBe('2h ago');
+        // A node that sent no figure where Beans are on says no price, never "Free".
+        expect(askedFacts(need('a', { credits: undefined }), true, NOW)).toBe('2h ago');
+    });
+
+    it('a Need priced by the hour, day, week or month keeps its unit (the Market card\'s own words); a fixed price, Free and no price carry none', () => {
+        expect(askedFacts(need('a', { credits: 20, priceType: 'hourly' }), true, NOW)).toBe('20 Beans /Hr · 2h ago');
+        expect(askedFacts(need('a', { credits: 15, priceType: 'daily' }), true, NOW)).toBe('15 Beans /Dy · 2h ago');
+        expect(askedFacts(need('a', { credits: 90, priceType: 'weekly' }), true, NOW)).toBe('90 Beans /Wk · 2h ago');
+        expect(askedFacts(need('a', { credits: 300, priceType: 'monthly' }), true, NOW)).toBe('300 Beans /Mo · 2h ago');
+        // A fixed price is a total: the line is as it was.
+        expect(askedFacts(need('a', { credits: 20, priceType: 'fixed' }), true, NOW)).toBe('20 Beans · 2h ago');
+        expect(askedFacts(need('a', { credits: 20 }), true, NOW)).toBe('20 Beans · 2h ago');
+        // Free says Free, never "Free /Hr"; no Beans and no figure draw no unit either.
+        expect(askedFacts(need('a', { credits: 0, priceType: 'hourly' }), true, NOW)).toBe('Free · 2h ago');
+        expect(askedFacts(need('a', { credits: 20, priceType: 'hourly' }), false, NOW)).toBe('2h ago');
+        expect(askedFacts(need('a', { credits: undefined, priceType: 'hourly' }), true, NOW)).toBe('2h ago');
+        // A kind this build does not know says no unit rather than a made-up one.
+        expect(askedFacts(need('a', { credits: 20, priceType: 'yearly' }), true, NOW)).toBe('20 Beans · 2h ago');
+    });
+
+    it('First steps: the Need line comes after the interests line, once there is an Offer, with the invite line after it', () => {
+        const ids = (s: NonNullable<HomeCards['steps']>) => stepLines(s, false).map(l => l.id);
+        expect(ids(steps({ firstOffer: true, firstNeed: false }))).toEqual(['offer', 'photo', 'interests', 'need', 'invite']);
+        expect(ids(steps({ firstOffer: true, firstNeed: false, invited: null }))).toEqual(['offer', 'photo', 'interests', 'need']);
+        const line = stepLines(steps({ firstOffer: true, firstNeed: false }), false).find(l => l.id === 'need')!;
+        expect(line.text).toBe("Ask for one thing you'd pay a neighbour for");
+        expect(line.done).toBe(false);
+        // Ticked once a Need is posted; not before the first Offer; not for a node from before the fact (it has no such line).
+        expect(stepLines(steps({ firstOffer: true, firstNeed: true }), false).find(l => l.id === 'need')!.done).toBe(true);
+        expect(ids(steps({ firstOffer: false, firstNeed: false }))).toEqual(['offer', 'photo', 'interests']);
+        expect(ids(steps({ firstOffer: true }))).toEqual(['offer', 'photo', 'interests', 'invite']);
+    });
+
+    it('First steps stays up for the Need line alone, only for a node that sent the fact', () => {
+        const a = (s: HomeCards['steps']) => answer({ me: { ...answer().me!, interests: ['food'] }, cards: { steps: s, community: { name: 'M', members: 9 } } });
+        const rest = { firstOffer: true, photo: true, interests: true, invited: true, joinedAt: iso(NOW - 40 * 24 * H) };
+        expect(firstSteps(a(steps({ ...rest, firstNeed: false })), { interests: ['food'], now: NOW }).show).toBe(true);
+        expect(firstSteps(a(steps({ ...rest, firstNeed: true })), { interests: ['food'], now: NOW }).show).toBe(false);
+        expect(firstSteps(a(steps({ ...rest })), { interests: ['food'], now: NOW }).show).toBe(false);
+    });
+
+    it('"See all Needs" opens the Market on its Needs pill; the other pills\' links are as they were', () => {
+        expect(marketFilterFromLink('needs')).toBe('needs');
+        expect(marketFilterFromLink(['needs'])).toBe('needs');
+        expect(marketFilterFromLink('events')).toBe('events');
+        expect(marketFilterFromLink('polls')).toBe('polls');
+        expect(marketFilterFromLink('offers')).toBeNull();
+        expect(marketFilterFromLink(undefined)).toBeNull();
     });
 });

@@ -605,9 +605,12 @@ async function main(): Promise<void> {
         const features = after.me?.features ?? {};
         const nodeBase = { ...np.getNodeFeatures(), door: getDoor() };
         const expectsFloor = Boolean(np.getNodeFeatures().beans && confirmationDialOn(db));
-        const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: 1000, debtLinePct: 50, quietDays: 60 } : nodeBase).sort();
+        // A member's read also says who decides a removal (removal jury J3, config/features-for.ts), whatever the floor.
+        const memberBase = { ...nodeBase, removalDecider: 'automatic' };
+        const want = Object.keys(expectsFloor ? { ...memberBase, knownFloor: 1000, debtLinePct: 50, quietDays: 60 } : memberBase).sort();
         assert(isDeepStrictEqual(Object.keys(features).sort(), want),
             `${label}: a member's features carry expected fields (${Object.keys(features).length} fields)`);
+        assert(features.removalDecider === 'automatic', `${label}: a member's features say who decides a removal: automatic, the default (${features.removalDecider})`);
         if (expectsFloor) {
             assert(features.knownFloor === 1000 && features.debtLinePct === 50 && features.quietDays === 60, `${label}: knownFloor is 1000 for member, with the rule's two lines beside it`);
         } else {
@@ -643,7 +646,7 @@ async function main(): Promise<void> {
         for (const path of ['/api/community/me', '/api/home']) {
             const r = await call('GET', sam, path);
             assert(r.status === 200 && r.body?.features?.knownFloor === 1000
-                && isDeepStrictEqual(Object.keys(r.body.features).sort(), [...nodeKeys, 'knownFloor', 'debtLinePct', 'quietDays'].sort()),
+                && isDeepStrictEqual(Object.keys(r.body.features).sort(), [...nodeKeys, 'knownFloor', 'debtLinePct', 'quietDays', 'removalDecider'].sort()),
                 `${view}: an active member's ${path} carries knownFloor 1000 beside the node's features (${show(r)})`);
         }
 

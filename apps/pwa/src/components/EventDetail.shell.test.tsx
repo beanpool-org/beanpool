@@ -1,8 +1,9 @@
 /**
  * The web's event page on the style box (DESIGN-detail-pages-fable.md §2, slice DW1; Marty, 4 Nov 2026: "All Fable's picks"):
- * one column at 320 px with 130% text, the parts in §2.1's order (the chips, the when, the title, the place, the photo, the
- * answer, the quiet row, the boxes, the description, the host, Report), the photo 4:3 and opening whole, the counts only above
- * zero, the event violet from core's roles, and Report, which the web's event page never had.
+ * one column at 320 px with 130% text, the parts in §2.1's order as DESIGN-detail-pages-frame-fable.md §1.6 amends it (the
+ * chips, the when, the title, the next dates compact, the place, the answer, the photo, the quiet row, the boxes, the
+ * description, the host, Report), the photo 4:3 and opening whole, the counts only above zero, the event violet from core's
+ * roles, and Report, which the web's event page never had.
  *
  * jsdom does no layout, so the 320 px contract is held as EventCard.test.tsx holds it: by the classes, and by the order of the
  * page's parts in the document (what a reader meets from the top). The real layout is photographed and measured by
@@ -11,6 +12,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { seriesDateLabel } from '@beanpool/core';
 import { EventDetail } from './EventCard';
 import { BOX_LABEL, EVENT_ANSWER, PAGE_BOX, PAGE_BUTTON, chip } from './market-card-shell';
 import * as api from '../lib/api';
@@ -62,7 +64,7 @@ beforeEach(() => { vi.mocked(api.reportAbuse).mockClear(); });
 afterEach(() => { document.documentElement.style.fontSize = ''; });
 
 describe('the event page at 320 px, 130% text: the parts in the design\'s order', () => {
-    it('the chips, the when, the title, the place, the photo, Going, Share, the description, Hosted by, Report', () => {
+    it('the chips, the when, the title, the place, Going, the photo, Share, the description, Hosted by, Report', () => {
         renderAt320(<EventDetail post={market} identity={identity} onShowOnMap={() => {}} onOpenProfile={() => {}} />);
         const chips = screen.getByTestId('event-chips');
         const when = screen.getByRole('heading', { level: 2 });
@@ -74,18 +76,19 @@ describe('the event page at 320 px, 130% text: the parts in the design\'s order'
         const description = screen.getByTestId('event-description');
         const host = screen.getByTestId('event-host-open');
         const report = screen.getByTestId('event-report');
-        const order = [chips, when, title, place, photo, going, share, description, host, report];
+        // The answer before the photo (DESIGN-detail-pages-frame-fable.md §1.6): the words, the answer, then the picture and the story.
+        const order = [chips, when, title, place, going, photo, share, description, host, report];
         for (let i = 1; i < order.length; i++) expect(before(order[i - 1], order[i]), `part ${i} after part ${i - 1}`).toBe(true);
         // The place moved up to the loud lines, with Show on map as a link-like button on its row.
         expect(within(place).getByRole('button', { name: 'Show on map' })).toBeInTheDocument();
         expect(title.textContent).toBe(market.title);
     });
 
-    it('Going is the first button after the title block: nothing to press between the title and the answer but the place\'s link and the photo', () => {
+    it('Going is the first button after the title block: nothing to press between the title and the answer but the place\'s link', () => {
         renderAt320(<EventDetail post={market} identity={identity} onShowOnMap={() => {}} />);
         const head = screen.getByTestId('event-head');
         const buttons = screen.getAllByRole('button').filter(b => !head.contains(b));
-        expect(buttons.map(b => b.getAttribute('data-testid') ?? b.textContent).slice(0, 3)).toEqual(['event-photo-open', 'Going', 'Interested']);
+        expect(buttons.map(b => b.getAttribute('data-testid') ?? b.textContent).slice(0, 3)).toEqual(['Going', 'Interested', 'event-photo-open']);
     });
 
     it('the loud lines are the page\'s type, in core\'s event ink: when 18/900, title 20/800; no outer card', () => {
@@ -104,6 +107,44 @@ describe('the event page at 320 px, 130% text: the parts in the design\'s order'
         expect(screen.getByTestId('event-state-badge').textContent).toBe('CANCELLED');
         const whenPiece = screen.getByRole('heading', { level: 2 }).querySelector('.whitespace-nowrap') as HTMLElement;
         expect(whenPiece.className.split(/\s+/)).toContain('line-through');
+    });
+});
+
+describe('the next dates, compact: the first date and how many more, one button that opens the list (as the phone\'s page, #2880)', () => {
+    /** The Mullum market repeating every third Saturday: six dates from the node, none cancelled. */
+    const NEXT = ['2030-11-21', '2030-12-12', '2031-01-02', '2031-01-23', '2031-02-13', '2031-03-06'];
+    const repeating = (extra: any = {}) => ({
+        ...market, eventStartLocal: '2030-11-21T08:00', eventEndLocal: '2030-11-21T14:00', eventTz: 'Australia/Sydney',
+        eventRepeat: { freq: 'weekly', interval: 3, byDay: 'SA', time: '08:00', minutes: 360 },
+        eventNextDates: NEXT.map(date => ({ date, startLocal: `${date}T08:00`, startAt: new Date(`${date}T08:00`).toISOString(), cancelled: false })),
+        ...extra,
+    });
+
+    it('one 48 px button in the loud lines, before Going: "Next dates", the first date and "and 5 more"; a tap opens all six', async () => {
+        renderAt320(<EventDetail post={repeating()} identity={identity} onShowOnMap={() => {}} />);
+        const head = screen.getByTestId('event-head');
+        const open = within(head).getAllByTestId('event-next-dates-open');
+        expect(open).toHaveLength(1);
+        expect(open[0].tagName).toBe('BUTTON');
+        expect(open[0]).toHaveAttribute('aria-expanded', 'false');
+        expect(open[0].className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', 'min-h-[48px]']));
+        expect(open[0].textContent).toBe(`Next dates${seriesDateLabel(NEXT[0])}and 5 more`);
+        expect(screen.queryAllByTestId('event-next-date')).toHaveLength(0);
+        expect(before(open[0], screen.getByRole('button', { name: 'Going' }))).toBe(true);
+
+        await userEvent.click(open[0]);
+        const list = within(head).getByTestId('event-next-dates');
+        expect(within(list).getAllByTestId('event-next-date').map(d => d.textContent)).toEqual(NEXT.map(seriesDateLabel));
+        expect(screen.queryByTestId('event-next-dates-open')).toBeNull();
+    });
+
+    it('the host\'s controls are inside it: none until the list is open, then one Cancel this date per date', async () => {
+        renderAt320(<EventDetail post={repeating({ authorPublicKey: 'me-pk', eventRsvps: [] })} identity={identity} onChangeThisDateOnly={() => {}} />);
+        expect(screen.queryAllByTestId('event-date-cancel')).toHaveLength(0);
+        expect(screen.queryAllByTestId('event-date-move')).toHaveLength(0);
+        await userEvent.click(screen.getByTestId('event-next-dates-open'));
+        expect(screen.getAllByTestId('event-date-cancel')).toHaveLength(6);
+        expect(screen.getAllByTestId('event-date-move')).toHaveLength(6);
     });
 });
 

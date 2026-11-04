@@ -8,10 +8,13 @@
  * node then moves the event back to it and tells those going "Fri 16 Oct is back on"; the deciding review of #1993, N2, and
  * its confirmation 2, NB2); the page drops it at its end. Each control's name starts with the words it shows, so a
  * voice-control user who says "tap Cancel this date" reaches it (WCAG 2.5.3).
+ *
+ * `compact` (the event page, DESIGN-detail-pages-frame-fable.md §1.6, as the phone's page has it since #2880): the heading, the
+ * first date and "and 5 more" as one 48 px button that opens the list, where the host's controls are.
  */
 
-import { useEffect, useState } from 'react';
-import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, seriesDatesShown, seriesPassedDateEndMs, t } from '@beanpool/core';
+import { useEffect, useRef, useState } from 'react';
+import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, seriesDatesShown, seriesPassedDateEndMs, t, tn } from '@beanpool/core';
 import { setEventDateCancelled, type MarketplacePost } from '../lib/api';
 
 interface Props {
@@ -21,6 +24,11 @@ interface Props {
     onChanged?: (post: MarketplacePost) => void;
     /** "Change this date only": after the date is cancelled, open the copy form with the moved-from line. */
     onChangeThisDateOnly?: (post: MarketplacePost, date: string) => void;
+    /**
+     * The event page's form: the first date and "and 5 more", one button that opens the whole list. Six dates in full sit
+     * between the title and Going and push the answer down by about 60 px at 320 px and 130% text.
+     */
+    compact?: boolean;
 }
 
 /** The longest a timer may wait (setTimeout's limit); a later end is checked again then. */
@@ -28,7 +36,13 @@ const MAX_WAIT_MS = 2_147_483_647;
 
 const LINK = 'inline-flex items-center min-h-[44px] bg-transparent border-0 p-0 text-sm font-bold underline cursor-pointer disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-sm';
 
-export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly }: Props) {
+export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, compact = false }: Props) {
+    // Compact, the rest waits for a tap; once opened it stays open, so the host's line and controls stay where they acted.
+    const [open, setOpen] = useState(!compact);
+    // Opened by a tap: the button it replaces is gone, so the reader is taken to the list it opened rather than the page's top.
+    const listRef = useRef<HTMLElement>(null);
+    const [tapped, setTapped] = useState(false);
+    useEffect(() => { if (tapped) listRef.current?.focus(); }, [tapped]);
     const [busy, setBusy] = useState<string | null>(null);
     const [line, setLine] = useState<string | null>(null);
     const [problem, setProblem] = useState<string | null>(null);
@@ -62,9 +76,30 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly }
         }
     };
 
+    // Compact: the heading, the first date and how many more, one button that opens the list. One date has no more to open.
+    if (!open && dates.length > 1) {
+        const first = dates[0];
+        return (
+            <button
+                type="button"
+                data-testid="event-next-dates-open"
+                aria-expanded={false}
+                onClick={() => { setOpen(true); setTapped(true); }}
+                className="w-full min-w-0 min-h-[48px] flex flex-col justify-center gap-0.5 text-left bg-transparent border-0 p-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-event rounded"
+            >
+                <span className="text-xs font-bold text-nature-700 dark:text-nature-300 uppercase tracking-wider">{t('Next dates')}</span>
+                <span className="min-w-0 flex flex-wrap items-center gap-x-3 gap-y-0">
+                    <span className={`whitespace-nowrap text-sm font-bold ${first.cancelled ? 'line-through text-nature-700 dark:text-nature-300' : 'text-nature-900 dark:text-nature-100'}`}>{seriesDateLabel(first.date)}</span>
+                    {first.cancelled && <span className="whitespace-nowrap text-xs font-bold uppercase text-bp-ink-danger">{t('Cancelled')}</span>}
+                    <span className="whitespace-nowrap text-sm font-bold underline underline-offset-2 text-bp-ink-event">{tn(dates.length - 1, 'and {n} more', 'and {n} more')}</span>
+                </span>
+            </button>
+        );
+    }
+
     return (
-        <section data-testid="event-next-dates" className="min-w-0 flex flex-col gap-1">
-            <h4 className="m-0 text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider">{t('Next dates')}</h4>
+        <section ref={listRef} tabIndex={-1} data-testid="event-next-dates" className="min-w-0 flex flex-col gap-1 focus:outline-none">
+            <h4 className="m-0 text-xs font-bold text-nature-700 dark:text-nature-300 uppercase tracking-wider">{t('Next dates')}</h4>
             {line && <p data-testid="event-date-cancelled-line" role="status" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{line}</p>}
             <ul className={`m-0 p-0 list-none ${isHost ? 'flex flex-col gap-1' : 'flex flex-wrap gap-x-3 gap-y-1'}`}>
                 {dates.map(d => {

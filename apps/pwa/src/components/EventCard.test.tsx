@@ -581,18 +581,22 @@ describe('EventDetail', () => {
         render(<EventDetail post={withPhoto} identity={identity} />);
         const detail = screen.getByTestId('event-detail');
         const cls = (el: Element) => el.className.split(/\s+/);
-        expect(cls(detail)).toEqual(expect.arrayContaining(['flex', 'flex-col', 'md:grid', 'md:grid-cols-2']));
+        expect(cls(detail)).toEqual(expect.arrayContaining(['flex', 'flex-col', 'md:grid', 'md:grid-cols-2', 'md:grid-rows-[auto_auto_1fr]']));
         expect(cls(detail).some(c => /order-/.test(c))).toBe(false);
 
-        // The event's photo, by its alt (the host's box now carries a face of its own).
+        // The event's photo, by its alt (the host's box now carries a face of its own): column 1, spanning the three rows.
         const img = within(detail).getByRole('img', { name: withPhoto.title });
         const photo = screen.getByTestId('event-photo');
         expect(photo.contains(img)).toBe(true);
-        expect(cls(photo)).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-start-1', 'md:row-span-2']));
+        expect(cls(photo)).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-start-1', 'md:row-span-3']));
+        // Column 2: the head, the answer, the rest, one row each.
         expect(cls(screen.getByTestId('event-head'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1']));
-        expect(cls(screen.getByTestId('event-body'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-2']));
-        // The phone's order in the DOM: the head, the photo, the rest.
-        expect(Array.from(detail.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-head', 'event-photo', 'event-body']);
+        expect(cls(screen.getByTestId('event-action'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-2']));
+        expect(cls(screen.getByTestId('event-body'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-3']));
+        // The phone's order in the DOM: the head, the answer, the photo, the rest (DESIGN-detail-pages-frame-fable.md §1.6),
+        // placed by the grid, never by order-*, so Tab reads it as it is drawn on the phone.
+        expect(Array.from(detail.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-head', 'event-action', 'event-photo', 'event-body']);
+        for (const el of Array.from(detail.children)) expect(cls(el).some(c => /(^|:)order-/.test(c)), el.getAttribute('data-testid') ?? '').toBe(false);
     });
 
     it("gives the host who's going and Cancel event", async () => {

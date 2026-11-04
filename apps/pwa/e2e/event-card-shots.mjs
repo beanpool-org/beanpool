@@ -105,15 +105,20 @@ const MEASURE = () => {
  *
  * It prints where Going starts from the top of the screen at 320 px and 130% text, the number the phone's DP1 stops at
  * (500 dp on its 569 dp screen, with its header and status bar), and saves a first-screen shot (320 × 569) beside the
- * full page. Every /api and /ws request is aborted and counted: the page asks the node for the host's ratings, the community's
+ * full page. At 320 px the run FAILS when the answer's top is past ANSWER_STOP_PX in any case (DESIGN-detail-pages-frame-fable.md
+ * §2): Going where there is one, else the answer block (the host's line, a copy's door), from the top of the page as drawn
+ * here (the wrapper's padding and the Back line included). Every /api and /ws request is aborted and counted: the page asks the node for the host's ratings, the community's
  * features and the member's reminders, and each answers as an older or unreachable node would, which the page handles.
  */
 const DETAIL_CASES = [
-    { name: 'phone-320-130pc', width: 320, height: 569, fontScale: 1.3, cases: ['member', 'going', 'host', 'copy', 'no-photo', 'posted-by'] },
+    { name: 'phone-320-130pc', width: 320, height: 569, fontScale: 1.3, cases: ['member', 'going', 'host', 'copy', 'no-photo', 'dates', 'dates-open', 'posted-by'] },
     { name: 'tablet-800', width: 800, height: 1000, fontScale: 1, cases: ['member', 'host'] },
     { name: 'desktop-1280', width: 1280, height: 900, fontScale: 1, cases: ['member', 'host'] },
     { name: 'desktop-1440', width: 1440, height: 900, fontScale: 1, cases: ['member', 'going'] },
 ];
+
+/** The answer's top at 320 px and 130% text may be no lower than this (DESIGN-detail-pages-frame-fable.md §2.1). */
+const ANSWER_STOP_PX = 500;
 
 /** Runs in the page: the page's geometry and its words' contrast. */
 const MEASURE_DETAIL = () => {
@@ -175,10 +180,14 @@ const MEASURE_DETAIL = () => {
         if (got < need) lowContrast.push(`"${text.slice(0, 40)}" ${got.toFixed(2)}:1 (needs ${need})`);
     }
     const going = Array.from(detail.querySelectorAll('button')).find((b) => /^Going/.test((b.textContent || '').trim()));
+    const action = detail.querySelector('[data-testid="event-action"]');
+    const actionRect = action ? action.getBoundingClientRect() : null;
     return {
         sideways: document.documentElement.scrollWidth > vw,
         pastEdge, cut, small, lowContrast,
         goingTop: going ? Math.round(going.getBoundingClientRect().top + window.scrollY) : null,
+        // The answer block's top, for the cases with no Going (the host's line, a copy's door); null when it draws nothing.
+        answerTop: actionRect && actionRect.height > 0 ? Math.round(actionRect.top + window.scrollY) : null,
         pageHeight: Math.round(document.documentElement.scrollHeight),
     };
 };
@@ -204,6 +213,11 @@ async function detailShots(browser, failures, countBlocked) {
                     document.documentElement.style.fontSize = `${scale * 100}%`;
                 }, [theme, c.fontScale]);
                 await page.waitForSelector('[data-testid="event-detail"]');
+                // The next dates opened, as a member's tap leaves them: the stop holds with the list open too (§2).
+                if (which === 'dates-open') {
+                    await page.click('[data-testid="event-next-dates-open"]');
+                    await page.waitForSelector('[data-testid="event-next-dates"]');
+                }
                 await page.evaluate(() => document.fonts.ready);
                 await page.waitForTimeout(150);
 
@@ -225,7 +239,11 @@ async function detailShots(browser, failures, countBlocked) {
                     }
                 }
                 if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
-                lines.push(`${shot.padEnd(44)} Going at ${m.goingTop ?? '—'} px, page ${m.pageHeight} px tall`);
+                const answer = m.goingTop ?? m.answerTop;
+                if (c.width === 320 && answer != null && answer > ANSWER_STOP_PX) {
+                    failures.push(`${shot}: the answer starts at ${answer} px, past the ${ANSWER_STOP_PX} px stop`);
+                }
+                lines.push(`${shot.padEnd(44)} Going at ${m.goingTop ?? '—'} px, the answer at ${m.answerTop ?? '—'} px, page ${m.pageHeight} px tall`);
                 await context.close();
             }
         }

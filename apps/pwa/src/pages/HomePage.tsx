@@ -78,7 +78,7 @@ import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide, loadBundledGuide } from '../lib/guide';
 import type { Guide } from '@beanpool/core';
-import { copyPriceLine, eventCopyOf } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, shapeFeaturesOf } from '@beanpool/core';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -3100,7 +3100,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 <CommunityShapeModal
                     isOpen={shapeModalOpen}
                     onClose={() => setShapeModalOpen(false)}
-                    features={answer?.features}
+                    // The features, and who decides a removal, which a member's Home says beside them (removal jury J3).
+                    features={shapeFeaturesOf(answer)}
                     onOpenGuide={() => onNavigate('guide', 'how-your-community-works')}
                 />
             </div>

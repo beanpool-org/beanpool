@@ -30,7 +30,8 @@ export function featuresFor(actor: string | null | undefined): ReaderFeatures {
  * Who decides a removal here (config/removal-decider.ts), for a reader who reads as a member, else undefined: "How this
  * community works" says it on the phone and the web (core removalDeciderLine, slice J3). GET /api/community/me and
  * GET /api/home say it as `removalDecider` BESIDE `features`, never in them: `features` is the node's own set, key for key,
- * for every reader (W1, test-node-profile), and a visitor gets nothing new from the community's settings
+ * for every reader, but for a member's known floor and its two lines (W1, S5; test-node-profile holds it to exactly that),
+ * and a visitor gets nothing new from the community's settings
  * (DESIGN-community-shape-settings-fable.md §4.3), so the rule is a member's fact, as `probation` and `area` are. The rule,
  * never how many could serve today: that number would tell roughly how big the community is.
  */

@@ -31,6 +31,7 @@ import {
     pollsInformal,
     INFORMAL_POLL_NOTE,
     effectiveFeatures,
+    readReaderFeatures,
 } from '../node-profile';
 import { communityShapeLines } from '@beanpool/core';
 
@@ -192,21 +193,27 @@ describe('the floor and the rule\'s two lines, from a member\'s read to "How thi
 });
 
 describe('who decides a removal, from a member\'s read to "How this community works" (removal jury J3)', () => {
-    // What GET /api/community/me says to a member (apps/server config/features-for.ts), beside the switches.
-    const WIRE = { beans: true, decisions: true, door: 'members', removalDecider: 'automatic' };
+    // What GET /api/community/me says to a member (apps/server config/features-for.ts): the node's features, and the rule
+    // beside them, never in them.
+    const WIRE = { features: { beans: true, decisions: true, door: 'members' }, removalDecider: 'automatic' };
 
-    it('the reader\'s answer keeps one of the three rules and nothing else', () => {
-        expect(readNodeProfile({ features: WIRE })?.features.removalDecider).toBe('automatic');
+    it('the reader\'s answer keeps one of the three rules, from beside its features, and nothing else', () => {
+        expect(readReaderFeatures(WIRE)?.removalDecider).toBe('automatic');
+        expect(readReaderFeatures(WIRE)).toMatchObject({ beans: true, decisions: true, door: 'members' });
         for (const rule of ['everyone', 'jury'] as const) {
-            expect(readNodeProfile({ features: { ...WIRE, removalDecider: rule } })?.features.removalDecider).toBe(rule);
+            expect(readReaderFeatures({ ...WIRE, removalDecider: rule })?.removalDecider).toBe(rule);
         }
-        expect(readNodeProfile({ features: { ...WIRE, removalDecider: 'sometimes' } })?.features).not.toHaveProperty('removalDecider');
-        expect(readNodeProfile({ features: { ...WIRE, removalDecider: true } })?.features).not.toHaveProperty('removalDecider');
+        expect(readReaderFeatures({ ...WIRE, removalDecider: 'sometimes' })).not.toHaveProperty('removalDecider');
+        expect(readReaderFeatures({ ...WIRE, removalDecider: true })).not.toHaveProperty('removalDecider');
+        // A read with no rule (a node from before J3), and one with no features at all.
+        expect(readReaderFeatures({ features: WIRE.features })).not.toHaveProperty('removalDecider');
+        expect(readReaderFeatures({ removalDecider: 'jury' })).toBeNull();
+        expect(readReaderFeatures(null)).toBeNull();
     });
 
     it('the reader\'s set carries it over the node\'s, and the page says it under Decisions', () => {
         const node = readNodeProfile({ features: { beans: true, decisions: true, door: 'members' } })!.features;
-        const lines = communityShapeLines(effectiveFeatures(node, readNodeProfile({ features: WIRE })!.features));
+        const lines = communityShapeLines(effectiveFeatures(node, readReaderFeatures(WIRE)));
         const decisions = lines.findIndex(l => l.startsWith('**Decisions:**'));
         expect(lines[decisions + 1]).toBe('**Removals:** decided by everyone who can vote until 100 members could serve on a jury, then by a jury drawn at random');
         // A read with no rule (a visitor's, a node from before J3) draws no line.

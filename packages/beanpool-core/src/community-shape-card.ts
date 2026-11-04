@@ -24,8 +24,28 @@ export interface CommunityShapeFeatures {
     debtLinePct?: number;
     quietDays?: number;
     showcase?: boolean;
-    /** Who decides a removal (server config/removal-decider.ts): to members, from a node that has the rule (slice J3). */
+    /**
+     * Who decides a removal (server config/removal-decider.ts): to members, from a node that has the rule (slice J3). A
+     * member's answer says it beside its `features`, never in them: shapeFeaturesOf puts it here for the sheet.
+     */
     removalDecider?: 'automatic' | 'everyone' | 'jury';
+}
+
+/**
+ * The features "How this community works" reads from a member's own answer (GET /api/community/me or GET /api/home): its
+ * `features`, with who decides a removal, which the answer says BESIDE them (server config/features-for.ts
+ * removalDeciderFor, slice J3): `features` stays the node's own set for every reader, and the rule is told to members
+ * only. One of the three rules, or none. Undefined when the answer has no features (an older node, or none yet).
+ */
+export function shapeFeaturesOf<F extends object>(
+    answer: { features?: F | null; removalDecider?: unknown } | null | undefined,
+): (F & Pick<CommunityShapeFeatures, 'removalDecider'>) | undefined {
+    const features = answer?.features;
+    if (!features || typeof features !== 'object') return undefined;
+    const rule = answer.removalDecider;
+    return rule === 'automatic' || rule === 'everyone' || rule === 'jury'
+        ? { ...features, removalDecider: rule }
+        : (features as F & Pick<CommunityShapeFeatures, 'removalDecider'>);
 }
 
 /** A known community's two lines, as the owner set them. */

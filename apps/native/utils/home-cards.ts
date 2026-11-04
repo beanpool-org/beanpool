@@ -241,6 +241,8 @@ export interface HomeAnswer {
     generatedAt: string;
     profile: string;
     features: { beans?: boolean; escrow?: boolean; enterprises?: boolean; invites?: boolean; exampleListings?: boolean; decisions?: boolean; wordsDoor?: boolean; [k: string]: unknown };
+    /** Who decides a removal, to a member only, beside `features` (apps/server config/features-for.ts): read through core shapeFeaturesOf. */
+    removalDecider?: 'automatic' | 'everyone' | 'jury';
     welcome?: true;
     me: HomeMe | null;
     layout: HomeLayout | null;
@@ -282,6 +284,8 @@ export function readHomeAnswer(raw: unknown): HomeAnswer | null {
         generatedAt: typeof raw.generatedAt === 'string' ? raw.generatedAt : '',
         profile: raw.profile,
         features: isObj(raw.features) ? raw.features as HomeAnswer['features'] : {},
+        // Who decides a removal, which a member's Home says beside its features (removal jury J3): one of the three rules, or none.
+        ...(raw.removalDecider === 'automatic' || raw.removalDecider === 'everyone' || raw.removalDecider === 'jury' ? { removalDecider: raw.removalDecider } : {}),
         ...(raw.welcome === true ? { welcome: true as const } : {}),
         me: me ? {
             ...me,

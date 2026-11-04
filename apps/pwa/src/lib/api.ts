@@ -491,6 +491,8 @@ export interface CommunityStanding {
     area?: { lat: number; lng: number; updatedAt?: string | null } | null;
     /** The reader's own effective features (lib/features.ts): today the node's. Absent on a node from before it. */
     features?: Record<string, unknown>;
+    /** Who decides a removal, to a member only, beside `features` (server config/features-for.ts): read through core shapeFeaturesOf. */
+    removalDecider?: 'automatic' | 'everyone' | 'jury';
 }
 
 /** The signer's own standing: members only, and only ever their own (the node reads the signature, not a parameter). */

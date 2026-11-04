@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ Huminto ang tunnel ng pangalang inilabas. Sumasagot pa rin ang server na ito sa {addresses}.",
   "🫘 A project you backed changed its end date": "🫘 Binago ng isang proyektong sinuportahan mo ang petsa ng pagtatapos nito",
   "🫘 Pledges went back to their backers": "🫘 Ibinalik sa mga tagasuporta ang mga pangako",
-  "🫘 Your pledge came back": "🫘 Bumalik ang iyong pangako"
+  "🫘 Your pledge came back": "🫘 Bumalik ang iyong pangako",
+  "Answer serve or step_aside.": "Sagutin ng serve o step_aside.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "Bumoto ka na, kaya naglilingkod ka sa hurado na ito. Maaari mong baguhin ang iyong boto hanggang sa magsara ito."
 }

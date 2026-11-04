@@ -4642,5 +4642,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Impossibile verificare questo messaggio, quindi non viene mostrato.",
   "🗳️ Create Poll": "🗳️ Crea sondaggio",
   "🟢 List an Offer first to post Needs": "🟢 Pubblica prima un'Offerta per inserire Richieste",
-  "🤝 Chosen": "🤝 Selezionate"
+  "🤝 Chosen": "🤝 Selezionate",
+  "Done. This is now your photo here.": "Fatto. Ora questa è la tua foto qui.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "Viene copiata solo la foto. Il tuo nome e il resto del tuo profilo qui restano come sono.",
+  "Use the photo from {community} here?": "Usare qui la foto di {community}?",
+  "Use the photo you chose last here?": "Usare qui l'ultima foto che hai scelto?",
+  "Use this photo here": "Usa questa foto qui"
 }

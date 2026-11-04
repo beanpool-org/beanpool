@@ -121,13 +121,26 @@ export function makeCardShell(colors: Colors) {
             shadowRadius: SHELL.floatingShadow.blur,
             elevation: SHELL.floatingShadow.elevation,
         },
-        /** Its ✕: 28 round, 8 in from the card's top-right corner (the card sits 16 in), on the subtle ground. */
+        /**
+         * Its ✕: 28 round, 8 in from the card's top-right corner (the card sits 16 in), on the subtle ground. The ✕ is the
+         * card's sibling, after it in the tree, but Android draws siblings in order of elevation, not tree order: a ✕ below the
+         * floating card's 20 is drawn under the card (#2879 review). So its box sits one above the card, with a zIndex for iOS
+         * and for which of the two a touch meets first. The lifted box has no ground and no corners, so Android gives it no
+         * outline and no shadow of its own (a 21 dp shadow round a 28 dp dot, black on API 26 whatever shadowColor says); the
+         * dot is `closeDot`, inside it, with no elevation.
+         */
         close: {
             position: 'absolute',
             top: POP_UP.margin + CLOSE.inset,
             right: POP_UP.margin + CLOSE.inset,
             width: CLOSE.size,
             height: CLOSE.size,
+            elevation: SHELL.floatingShadow.elevation + 1,
+            zIndex: 1,
+        },
+        /** The ✕'s dot: the box's full 28, round, on the subtle ground, the glyph in its middle. */
+        closeDot: {
+            flex: 1,
             borderRadius: CLOSE.size / 2,
             backgroundColor: colors.surface.subtle,
             justifyContent: 'center',

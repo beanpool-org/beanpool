@@ -182,8 +182,13 @@ describe.each([['light', false], ['dark', true]] as const)("the map's pin card a
             expect(Array.from(q('map-preview-card').querySelectorAll('button'))).toEqual([card, close]);
             expect(host.textContent).not.toMatch(/View (event|Details|listing)/);
             expect(close.getAttribute('aria-label')).toBe('Close');
-            expect(styleOf(close)).toMatchObject({ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surface.subtle, position: 'absolute' });
+            expect(styleOf(close)).toMatchObject({ width: 28, height: 28, position: 'absolute' });
+            // The dot is the box's one child, filling it: 28 round on the subtle ground (shell.closeDot).
+            const dot = q('map-preview-close-dot');
+            expect(close.firstElementChild).toBe(dot);
+            expect(styleOf(dot)).toMatchObject({ borderRadius: 14, backgroundColor: colors.surface.subtle });
             const l = lay();
+            expect([l.width(dot), l.height(dot)]).toEqual([28, 28]);
             const x = at(l, close);
             const cardBox = at(l, card);
             // 8 in from the card's top-right corner.
@@ -192,6 +197,24 @@ describe.each([['light', false], ['dark', true]] as const)("the map's pin card a
             // The first row (chips, and a listing's price) ends before the ✕ begins.
             const head = (card.lastElementChild as HTMLElement).firstElementChild as HTMLElement;
             expect(at(l, head).left + l.width(head)).toBeLessThanOrEqual(x.left);
+        });
+
+        it(`${post.type === 'event' ? 'an event' : 'a listing'}: the ✕ sits above the card on Android too (elevation and zIndex), with no shadow of its own`, async () => {
+            // Android draws siblings in order of elevation, not tree order, so a later sibling below the card's elevation is
+            // drawn under it (#2879 review). Yoga and Chromium both draw in tree order and cannot see that; the styles can.
+            await show(post);
+            const card = q('map-preview-open');
+            const close = q('map-preview-close');
+            expect(card.parentElement, 'the card and the ✕ are siblings').toBe(q('map-preview-card'));
+            expect(close.parentElement).toBe(q('map-preview-card'));
+            const c = styleOf(card), x = styleOf(close);
+            expect(c.elevation).toBe(MARKET_CARD_SHELL.floatingShadow.elevation);
+            expect(x.elevation, "the ✕'s elevation").toBeGreaterThan(c.elevation);
+            expect(x.zIndex ?? 0, "the ✕'s zIndex").toBeGreaterThan(c.zIndex ?? 0);
+            // A lifted box with no ground, no corners and no border has no outline on Android, so it casts no shadow.
+            for (const prop of ['backgroundColor', 'borderRadius', 'borderWidth']) expect(x, `the lifted box's ${prop}`).not.toHaveProperty(prop);
+            // Nothing inside it lifts itself again.
+            for (const el of Array.from(close.querySelectorAll('*'))) expect(styleOf(el).elevation ?? 0, el.tagName).toBe(0);
         });
 
         it(`${post.type === 'event' ? 'an event' : 'a listing'}: a press anywhere on the card opens it once; the ✕ only closes`, async () => {

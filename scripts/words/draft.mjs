@@ -10,21 +10,37 @@
 //     For each language with work, writes a self-contained brief file for an AGY Flash run
 //     embedding the shared style rules (STYLE.md), listing exact keys/pages with English and
 //     source hashes, and commit/push steps per catalog/page. Deterministic output.
+//
+// What counts as "missing" follows the tests, not only the sources (4 Nov, #2841 and #2842):
+//   - A phone or web sentence that core's own sources also use is core's: both apps load [their catalog, core's] with core
+//     winning, so the app's copy would never show (your-deals-words.test.ts forbids it for "Your deals"). It is not missing there.
+//   - A sentence in an all-or-none group (all-or-none.mjs; the welcome screens, language-switch-render.test.ts) must be in
+//     every catalog or none. One that no catalog has yet is "all-at-once": a brief asks for it only when the brief covers
+//     every language, and otherwise says it waits for such a round. One that some catalogs have is asked everywhere.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT, catalogLangs, extractRepo, loadCoreChecks } from './words.mjs';
+import { ALL_OR_NONE_GROUPS, groupSentences } from './all-or-none.mjs';
 import { glossaryForBrief, readGlossary } from './glossary.mjs';
 import { GUIDE_LANGS, guideBodyHash, loadGuide, parseGuideMarkdown } from '../../packages/beanpool-guide/src/guide.mjs';
 import { checkGuideTitles, draftGuideTitles, guideSourceHash, readGuideTitles } from '../../packages/beanpool-guide/src/titles.mjs';
 
+/**
+ * `throughCore`: the package's words are read as [its catalog, core's catalog], core's last, so a sentence core's own sources
+ * use is core's to translate and the package's copy would never show (apps/native/utils/words-catalogs.ts, apps/pwa/src/lib/
+ * language.ts). The server is not one: its refusals are translated with the server's catalog alone (member-words.ts).
+ */
 export const APP_CATALOG_DEFS = Object.freeze([
     { name: 'core', folder: 'packages/beanpool-core/words' },
-    { name: 'native', folder: 'apps/native/words' },
-    { name: 'pwa', folder: 'apps/pwa/words' },
+    { name: 'native', folder: 'apps/native/words', throughCore: true },
+    { name: 'pwa', folder: 'apps/pwa/words', throughCore: true },
     { name: 'server', folder: 'apps/server/words' },
 ]);
+
+/** "1 sentence", "3 sentences". */
+const sentences = (n) => `${n} sentence${n === 1 ? '' : 's'}`;
 
 export const SAFETY_MONEY_PATTERNS = Object.freeze([
     { name: 'recovery', pattern: /\brecover(y|ing)?\b/i },
@@ -64,11 +80,22 @@ export async function scanWebsitePages(root = ROOT, _langs = null) {
     };
 }
 
-/** Scan app words for missing and orphaned keys per catalog. */
-export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS, langs = null, extracted = null } = {}) {
+/**
+ * Scan app words for missing and orphaned keys per catalog.
+ *
+ * A key is missing in a catalog when the package's sources use it and the language's file lacks it, except:
+ *   - `throughCore` packages (the phone, the web app): a key core's sources also use is core's to translate, so it is not
+ *     missing here. It still counts as USED here, so a copy an older round put in the catalog is not orphaned.
+ *   - a key in an all-or-none group (`groups`, all-or-none.mjs) is held to the group's rule instead. If some language's
+ *     catalog already has it, every other catalog is missing it (the test needs it everywhere), core's copy or not. If none
+ *     has it, it is missing only where core does not translate it, and the item says `group.allAtOnce`: it can only be
+ *     drafted in a round that covers every language.
+ */
+export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS, langs = null, extracted = null, groups = ALL_OR_NONE_GROUPS } = {}) {
     const { callKey } = await loadCoreChecks(root);
     extracted ??= extractRepo(root);
-    const targetLangs = langs ?? (await catalogLangs(root));
+    const everyLang = await catalogLangs(root);
+    const targetLangs = langs ?? everyLang;
 
     // Map catalog folder -> { keys: Set, sources: Map(key -> [file:line]) }
     const byFolder = new Map();
@@ -88,15 +115,24 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
         }
     }
 
-    const result = {};
-    for (const lang of targetLangs) {
-        result[lang] = { missing: 0, stale: 0, orphaned: 0, byCatalog: {}, items: [] };
-        for (const def of catalogDefs) {
-            const folderData = byFolder.get(def.folder);
-            const sourceKeys = folderData?.keys ?? new Set();
-            const sourceLocations = folderData?.sources ?? new Map();
+    // The sentences core's own sources use: core's catalog translates them for every package that loads it.
+    const coreDef = catalogDefs.find((d) => d.name === 'core');
+    const coreKeys = (coreDef && byFolder.get(coreDef.folder)?.keys) || new Set();
 
-            const file = path.join(root, def.folder, `${lang}.json`);
+    // The all-or-none groups, per catalog folder: [{ group, keys }].
+    const groupsByFolder = new Map();
+    for (const group of groups) {
+        const keys = groupSentences(group, root);
+        if (keys.size === 0) continue;
+        if (!groupsByFolder.has(group.folder)) groupsByFolder.set(group.folder, []);
+        groupsByFolder.get(group.folder).push({ group, keys });
+    }
+
+    // Each catalog file is read once, whichever question asks for it (null: no file, or not JSON).
+    const catalogCache = new Map();
+    const readCatalog = (folder, lang) => {
+        const file = path.join(root, folder, `${lang}.json`);
+        if (!catalogCache.has(file)) {
             let catalog = null;
             if (fs.existsSync(file)) {
                 try {
@@ -105,39 +141,62 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
                     catalog = null;
                 }
             }
+            catalogCache.set(file, catalog);
+        }
+        return catalogCache.get(file);
+    };
+    // "Some language's catalog already has it": the test's `drafted`, over every catalog language, not only the ones scanned.
+    const reachedCache = new Map();
+    const reached = (folder, key) => {
+        const id = `${folder}\u0000${key}`;
+        if (!reachedCache.has(id)) {
+            reachedCache.set(id, everyLang.some((l) => {
+                const catalog = readCatalog(folder, l);
+                return catalog !== null && Object.hasOwn(catalog, key);
+            }));
+        }
+        return reachedCache.get(id);
+    };
+
+    /** The missing-item for `key` in `def`'s catalog, or null when the key is not this catalog's to draft. */
+    const missingItem = (def, key, sourceLocations) => {
+        const hit = groupsByFolder.get(def.folder)?.find((g) => g.keys.has(key));
+        const drafted = hit ? reached(def.folder, key) : false;
+        if (def.throughCore && coreKeys.has(key) && !drafted) return null;
+        const item = {
+            catalog: def.name,
+            folder: def.folder,
+            key,
+            sources: sourceLocations.get(key) ?? [],
+            sourceHash: guideSourceHash(key),
+            safety: isSafetyOrMoney(key),
+        };
+        if (hit) item.group = { name: hit.group.name, test: hit.group.test, allAtOnce: !drafted };
+        return item;
+    };
+
+    const result = {};
+    for (const lang of targetLangs) {
+        result[lang] = { missing: 0, stale: 0, orphaned: 0, allAtOnce: 0, byCatalog: {}, items: [] };
+        for (const def of catalogDefs) {
+            const folderData = byFolder.get(def.folder);
+            const sourceKeys = folderData?.keys ?? new Set();
+            const sourceLocations = folderData?.sources ?? new Map();
+
+            // null: the whole file is missing, so every key is.
+            const catalog = readCatalog(def.folder, lang);
 
             const catMissing = [];
             const catOrphaned = [];
 
-            if (catalog === null) {
-                // Whole file missing
-                for (const key of [...sourceKeys].sort()) {
-                    const item = {
-                        catalog: def.name,
-                        folder: def.folder,
-                        key,
-                        sources: sourceLocations.get(key) ?? [],
-                        sourceHash: guideSourceHash(key),
-                        safety: isSafetyOrMoney(key),
-                    };
-                    catMissing.push(item);
-                    result[lang].items.push(item);
-                }
-            } else {
-                for (const key of [...sourceKeys].sort()) {
-                    if (!Object.hasOwn(catalog, key)) {
-                        const item = {
-                            catalog: def.name,
-                            folder: def.folder,
-                            key,
-                            sources: sourceLocations.get(key) ?? [],
-                            sourceHash: guideSourceHash(key),
-                            safety: isSafetyOrMoney(key),
-                        };
-                        catMissing.push(item);
-                        result[lang].items.push(item);
-                    }
-                }
+            for (const key of [...sourceKeys].sort()) {
+                if (catalog !== null && Object.hasOwn(catalog, key)) continue;
+                const item = missingItem(def, key, sourceLocations);
+                if (!item) continue;
+                catMissing.push(item);
+                result[lang].items.push(item);
+            }
+            if (catalog !== null) {
                 for (const key of Object.keys(catalog).sort()) {
                     if (key === '_meta') continue;
                     if (!sourceKeys.has(key)) {
@@ -151,15 +210,18 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
                 }
             }
 
+            const allAtOnce = catMissing.filter((item) => item.group?.allAtOnce).length;
             result[lang].byCatalog[def.name] = {
                 missing: catMissing.length,
                 stale: 0,
                 orphaned: catOrphaned.length,
+                allAtOnce,
                 missingKeys: catMissing,
                 orphanedKeys: catOrphaned,
             };
             result[lang].missing += catMissing.length;
             result[lang].orphaned += catOrphaned.length;
+            result[lang].allAtOnce += allAtOnce;
         }
     }
 
@@ -287,10 +349,13 @@ export function scanGuidePages({ root = ROOT, langs = null, guide = null } = {})
 }
 
 /** Complete drafting status across all sources. */
-export async function draftStatus({ root = ROOT, langs = null, catalogDefs = APP_CATALOG_DEFS, extracted = null } = {}) {
-    const allLangs = langs ?? (await catalogLangs(root));
+export async function draftStatus({ root = ROOT, langs = null, catalogDefs = APP_CATALOG_DEFS, extracted = null, groups = ALL_OR_NONE_GROUPS } = {}) {
+    const everyLang = await catalogLangs(root);
+    const allLangs = langs ?? everyLang;
+    // An all-at-once group can only be drafted by a round in which every language is covered.
+    const coversEveryLanguage = everyLang.every((l) => allLangs.includes(l));
     const [appWords, guideTitlesResult, website] = await Promise.all([
-        scanAppWords({ root, langs: allLangs, catalogDefs, extracted }),
+        scanAppWords({ root, langs: allLangs, catalogDefs, extracted, groups }),
         scanGuideTitles({ root, langs: allLangs }),
         scanWebsitePages(root, allLangs),
     ]);
@@ -301,7 +366,7 @@ export async function draftStatus({ root = ROOT, langs = null, catalogDefs = APP
     let totalStale = 0;
 
     for (const lang of allLangs) {
-        const aw = appWords[lang] ?? { missing: 0, stale: 0, orphaned: 0, byCatalog: {}, items: [] };
+        const aw = appWords[lang] ?? { missing: 0, stale: 0, orphaned: 0, allAtOnce: 0, byCatalog: {}, items: [] };
         const gt = guideTitlesResult.byLang[lang] ?? { missing: 0, stale: 0, missingItems: [], staleItems: [] };
         const gp = guidePages[lang] ?? { missing: 0, stale: 0, missingPages: [], stalePages: [] };
         const ws = website.byLang?.[lang] ?? { missing: 0, stale: 0 };
@@ -327,6 +392,7 @@ export async function draftStatus({ root = ROOT, langs = null, catalogDefs = APP
             missing: langMissing,
             stale: langStale,
             orphaned: aw.orphaned,
+            allAtOnce: aw.allAtOnce ?? 0,
             safetyMoney: safetyCount,
             hasWork: langMissing > 0 || langStale > 0,
         };
@@ -338,6 +404,7 @@ export async function draftStatus({ root = ROOT, langs = null, catalogDefs = APP
     return {
         root,
         langs: allLangs,
+        coversEveryLanguage,
         perLang,
         website,
         totalMissing,
@@ -362,12 +429,32 @@ export async function reportDraft({ root = ROOT, langs = null } = {}) {
             console.log(`${lang}:`);
             console.log('  app words:');
             for (const def of APP_CATALOG_DEFS) {
-                const cat = l.appWords.byCatalog[def.name] ?? { missing: 0, stale: 0, orphaned: 0 };
-                console.log(`    ${def.name}: ${cat.missing} missing, ${cat.stale} stale, ${cat.orphaned} orphaned`);
+                const cat = l.appWords.byCatalog[def.name] ?? { missing: 0, stale: 0, orphaned: 0, allAtOnce: 0 };
+                // "all-at-once": missing, but only a round that covers every language can draft it (a test needs it in all or none).
+                const wait = cat.allAtOnce > 0 ? ` (${cat.allAtOnce} all-at-once)` : '';
+                console.log(`    ${def.name}: ${cat.missing} missing${wait}, ${cat.stale} stale, ${cat.orphaned} orphaned`);
             }
             console.log(`  guide titles: ${l.guideTitles.missing} missing, ${l.guideTitles.stale} stale`);
             console.log(`  guide pages: ${l.guidePages.missing} missing, ${l.guidePages.stale} stale`);
             console.log(`  safety/money: ${l.safetyMoney} missing/stale needing meaning-check`);
+        }
+
+        // The all-at-once groups, once: the same sentences wait in every language (none has them yet).
+        const waiting = new Map();
+        for (const lang of status.langs) {
+            for (const item of status.perLang[lang].appWords.items) {
+                if (!item.group?.allAtOnce) continue;
+                const id = `${item.group.name}\u0000${item.folder}`;
+                if (!waiting.has(id)) waiting.set(id, { group: item.group, folder: item.folder, keys: new Set() });
+                waiting.get(id).keys.add(item.key);
+            }
+        }
+        if (waiting.size > 0) {
+            console.log('');
+            console.log('All-at-once (a test needs each sentence in every language or in none; draft them in one round that covers every language):');
+            for (const { group, folder, keys } of waiting.values()) {
+                console.log(`  ${group.name}: ${sentences(keys.size)} in ${folder} (${group.test})`);
+            }
         }
 
         console.log('');
@@ -420,9 +507,30 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
     const glossaryTerms = readGlossary(await catalogLangs(root), root).terms;
 
     const written = [];
+    const leftOut = new Map(); // all-at-once group name -> the sentences no brief of this run asks for
     for (const lang of status.langs) {
         const l = status.perLang[lang];
         if (!l.hasWork) continue;
+
+        // What this run can ask for. A sentence of an all-or-none group that no language has yet is drafted in every language or
+        // not at all (a test needs it everywhere or nowhere): a run that does not cover every language leaves it out and says so.
+        const asked = {};
+        const waiting = {};
+        let waitingCount = 0;
+        let waitingSafety = 0;
+        for (const def of catalogDefs) {
+            const missing = l.appWords.byCatalog[def.name]?.missingKeys ?? [];
+            waiting[def.name] = status.coversEveryLanguage ? [] : missing.filter((item) => item.group?.allAtOnce);
+            asked[def.name] = missing.filter((item) => !waiting[def.name].includes(item));
+            waitingCount += waiting[def.name].length;
+            waitingSafety += waiting[def.name].filter((item) => item.safety).length;
+            for (const item of waiting[def.name]) {
+                if (!leftOut.has(item.group.name)) leftOut.set(item.group.name, new Set());
+                leftOut.get(item.group.name).add(item.key);
+            }
+        }
+        // Nothing left to ask for in this language (only sentences that wait for an all-languages round): no brief.
+        if (l.missing - waitingCount <= 0 && l.stale <= 0) continue;
 
         const briefLines = [];
         briefLines.push(`# Translation Drafting Brief: ${lang.toUpperCase()}`);
@@ -434,12 +542,15 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         briefLines.push('');
         briefLines.push(`## Work Summary for ${lang}`);
         const catalogSummary = catalogDefs
-            .map((def) => `${def.name} (${l.appWords.byCatalog[def.name]?.missing ?? 0})`)
+            .map((def) => `${def.name} (${asked[def.name].length})`)
             .join(', ');
         briefLines.push(`- App words missing: ${catalogSummary}`);
+        if (waitingCount > 0) {
+            briefLines.push(`- Not in this brief: ${sentences(waitingCount)} that ${waitingCount === 1 ? 'is' : 'are'} drafted in all languages at once (see the catalogs below)`);
+        }
         briefLines.push(`- Guide titles: ${l.guideTitles.missing} missing, ${l.guideTitles.stale} stale`);
         briefLines.push(`- Guide pages: ${l.guidePages.missing} missing, ${l.guidePages.stale} stale`);
-        briefLines.push(`- Safety/Money items requiring strict fidelity: ${l.safetyMoney}`);
+        briefLines.push(`- Safety/Money items requiring strict fidelity: ${l.safetyMoney - waitingSafety}`);
         briefLines.push('');
         briefLines.push('---');
         briefLines.push('');
@@ -469,26 +580,52 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
         let keysRemaining = maxKeys !== null && maxKeys > 0 ? maxKeys : Infinity;
         briefLines.push('### 1. App Words');
         for (const def of catalogDefs) {
-            const cat = l.appWords.byCatalog[def.name];
-            const missing = cat?.missingKeys ?? [];
+            const missing = asked[def.name];
+            const leftOutHere = waiting[def.name];
             briefLines.push(`\n#### Catalog: ${def.folder}/${lang}.json (${missing.length} missing)\n`);
-            if (missing.length === 0) {
+            if (missing.length === 0 && leftOutHere.length === 0) {
                 briefLines.push('_All keys up to date._\n');
                 continue;
             }
 
-            const toList = missing.slice(0, keysRemaining);
-            keysRemaining -= toList.length;
+            // --max-keys caps the ordinary keys. A sentence of an all-or-none group is never cut: a group drafted in part
+            // is the red test this tool exists to avoid.
+            const toList = [];
+            let omitted = 0;
+            for (const item of missing) {
+                if (item.group || keysRemaining > 0) {
+                    toList.push(item);
+                    if (!item.group) keysRemaining--;
+                } else {
+                    omitted++;
+                }
+            }
 
             for (const item of toList) {
                 const src = item.sources.slice(0, 2).join(', ');
                 const tag = item.safety ? ' [SAFETY/MONEY]' : '';
-                briefLines.push(`- **Key**: ${JSON.stringify(item.key)}${tag}`);
+                const grouped = !item.group ? '' : item.group.allAtOnce
+                    ? ` [ALL-AT-ONCE: ${item.group.name}]`
+                    : ` [COMPLETE THE SET: ${item.group.name}]`;
+                briefLines.push(`- **Key**: ${JSON.stringify(item.key)}${tag}${grouped}`);
                 briefLines.push(`  - Source Hash: \`${item.sourceHash}\``);
                 if (src) briefLines.push(`  - Context: \`${src}\``);
             }
-            if (missing.length > toList.length) {
-                briefLines.push(`\n_...and ${missing.length - toList.length} more keys (capped by --max-keys)._\n`);
+            if (omitted > 0) {
+                briefLines.push(`\n_...and ${omitted} more keys (capped by --max-keys)._\n`);
+            }
+
+            // Why a tagged key is not optional.
+            const tests = [...new Set(toList.filter((item) => item.group).map((item) => item.group.test))].sort();
+            if (tests.length > 0) {
+                briefLines.push(`\n_Tagged keys: ${tests.join(', ')} needs each of these sentences in every language's ${def.folder} catalog or in none. Draft every tagged key in this language, none left out (the director merges the round for all languages together)._\n`);
+            }
+
+            // What is left out, and why: the sentences only a round that covers every language can draft.
+            const names = [...new Set(leftOutHere.map((item) => item.group.name))].sort();
+            for (const name of names) {
+                const here = leftOutHere.filter((item) => item.group.name === name);
+                briefLines.push(`\n_Not in this brief (draft in all languages at once): ${sentences(here.length)} of the ${name} (${here[0].group.test}). That test needs each one in every language's ${def.folder} catalog or in none, so drafting them for some languages only would turn it red. They are asked for by a round that covers every language: run \`node scripts/words/draft.mjs --briefs <dir>\` without --langs._\n`);
             }
         }
 
@@ -578,6 +715,9 @@ export async function writeBriefs({ root = ROOT, dir, langs = null, maxKeys = nu
     }
 
     console.log(`words:draft — wrote ${written.length} brief(s) in ${outDir}`);
+    for (const [name, keys] of leftOut) {
+        console.log(`words:draft — left out ${keys.size} all-at-once sentence(s) of the ${name}: they are drafted in a round that covers every language (no --langs)`);
+    }
     return 0;
 }
 

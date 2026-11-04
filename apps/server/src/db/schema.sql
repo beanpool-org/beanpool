@@ -1176,7 +1176,8 @@ CREATE TABLE IF NOT EXISTS agent_takedowns (
     reason TEXT NOT NULL CHECK (reason IN ('spam', 'offensive', 'misleading', 'unsafe', 'rules')),
     why TEXT NOT NULL DEFAULT '',
     via TEXT NOT NULL CHECK (via IN ('ids', 'reports')),
-    posts INTEGER NOT NULL DEFAULT 0 CHECK (posts >= 0)
+    posts INTEGER NOT NULL DEFAULT 0 CHECK (posts >= 0),
+    by_author INTEGER NOT NULL DEFAULT 0 CHECK (by_author IN (0, 1))
 );
 CREATE INDEX IF NOT EXISTS idx_agent_takedowns_at ON agent_takedowns(at);
 CREATE INDEX IF NOT EXISTS idx_agent_takedowns_grant_at ON agent_takedowns(grant_id, at);
@@ -2546,6 +2547,12 @@ CREATE TABLE IF NOT EXISTS decision_electors (
     status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left', 'stood_aside', 'silent')),
     created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- A removal juror's seat (slice J2b, decisions-engine.ts settleOpenJuries): it dates from created_at, when the walk
+    -- reached them. answered_at: when they answered Serve (NULL: not yet; a vote is an answer too, and Step aside is
+    -- 'stood_aside'). reminded_at: when the tick last reminded them, so a reminder goes once. Added by db.ts on a node
+    -- from before.
+    answered_at   DATETIME,
+    reminded_at   DATETIME,
     PRIMARY KEY (decision_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_decision_electors_member ON decision_electors(member_pubkey);

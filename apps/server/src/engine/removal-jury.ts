@@ -7,10 +7,14 @@
  *    re-key and tied to no member row, so what the node serves for Check the draw is what it drew from, whoever has left
  *    since. Written once, when the pause opens the vote.
  *  - The roll (decision_electors, as an enterprise's or a group's vote keeps one): every member the walk reached, in draw
- *    order, seated (`on`) or passed over (`stood_aside`). `silent` (no vote 72 hours after seating) and `left` are slice
- *    J2's, with the alternates it seats. A juror's vote counts while they are `on` (decisions-engine.ts tallyDecision).
+ *    order, seated (`on`) or passed over (`stood_aside`). Slice J2b (decisions-engine.ts answerJurySeat, settleOpenJuries):
+ *    a juror who steps aside is `stood_aside` too; one with no answer 72 hours after being seated is `silent`; one who
+ *    leaves, is paused or is removed is `left`; and for each the walk goes on and seats the next member of the draw. A
+ *    seat dates from its row's created_at, a Serve is its answered_at, and the last reminder sent its reminded_at. A
+ *    juror's vote counts while they are `on` (decisions-engine.ts tallyDecision).
  *
- * Both replicate with the decision (engine/replication-manifest.ts), so a restored node never redraws.
+ * Both replicate with the decision (engine/replication-manifest.ts), so a restored node never redraws. Beside them, this
+ * server's own note of when formal Decisions were off while a jury sat (JURY_HOLDS_KEY), which a seat's hours leave out.
  */
 import { db } from '../db/db.js';
 
@@ -41,10 +45,15 @@ export const JURY_CONFLICT_DAYS = 90;
  * one under the subject's name: the member's kept lines are older than it). None of it is ever said: a member passed over
  * for any of these is listed after close exactly as one who stepped aside themselves, with no reason, and while the vote
  * is open is refused in the words a member not drawn is.
+ *
+ * A branch's vote is on every account on its list (DESIGN-removal-jury-j2-calls-fable.md call 4, J2c): a member with any
+ * of these links to any one of them stands aside, so `subjects` may be that whole list. No account on it is ever one of
+ * the conflicts returned: each is out of the vote's pool already.
  */
-export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set<string> {
+export function juryConflictsOf(subjects: string | readonly string[], atMs: number = Date.now()): Set<string> {
+    const judged = new Set(typeof subjects === 'string' ? [subjects] : subjects);
     const since = new Date(atMs - JURY_CONFLICT_DAYS * DAY_MS).toISOString();
-    const rows = db.prepare(`
+    const conflictsOf = db.prepare(`
         SELECT reporter_pubkey AS k FROM abuse_reports
          WHERE julianday(created_at) >= julianday(@since)
            AND (target_pubkey = @s OR target_post_id IN (SELECT id FROM posts WHERE author_pubkey = @s))
@@ -69,9 +78,11 @@ export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set
           JOIN conversation_participants them ON them.conversation_id = c.id AND them.public_key = @s
           JOIN conversation_participants opener ON opener.conversation_id = c.id AND opener.public_key = w.author_pubkey
          WHERE julianday(w.timestamp) < julianday(c.created_at)
-    `).all({ s: subject, since }) as Array<{ k: string | null }>;
+    `);
     const out = new Set<string>();
-    for (const r of rows) if (r.k && r.k !== subject) out.add(r.k);
+    for (const subject of judged) {
+        for (const r of conflictsOf.all({ s: subject, since }) as Array<{ k: string | null }>) if (r.k && !judged.has(r.k)) out.add(r.k);
+    }
     return out;
 }
 
@@ -106,6 +117,149 @@ export function juryRollOf(decisionId: string): Array<{ key: string; status: Jur
 export function seatedJuror(decisionId: string, key: string): boolean {
     return !!db.prepare("SELECT 1 FROM decision_electors WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'")
         .get(decisionId, key);
+}
+
+/** A seated juror's seat (slice J2b): since when, whether they have answered (Serve, or a vote), and the last reminder. */
+export interface JurorSeat {
+    key: string;
+    seatedAt: string;
+    /** When they answered Serve; null when they haven't (they may still have voted: `voted`). */
+    answeredAt: string | null;
+    remindedAt: string | null;
+    /** A vote of theirs is on this decision. */
+    voted: boolean;
+}
+
+/** Everyone seated (`on`) on this jury now, with their seats. */
+export function jurySeatsOf(decisionId: string): JurorSeat[] {
+    return (db.prepare(`
+        SELECT e.member_pubkey AS key, e.created_at AS seatedAt, e.answered_at AS answeredAt, e.reminded_at AS remindedAt,
+               EXISTS (SELECT 1 FROM decision_votes v WHERE v.decision_id = e.decision_id AND v.voter_pubkey = e.member_pubkey) AS voted
+          FROM decision_electors e
+         WHERE e.decision_id = ? AND e.role_at_open = 'juror' AND e.status = 'on'
+    `).all(decisionId) as Array<Omit<JurorSeat, 'voted'> & { voted: number }>).map(r => ({ ...r, voted: r.voted === 1 }));
+}
+
+/**
+ * A seated juror's seat ends: `stood_aside` (they stepped aside), `silent` (no answer in time) or `left` (gone, paused or
+ * removed). Only a seat still `on` changes, so a seat ends once, whoever asks twice. Returns whether it changed. Inside the
+ * caller's transaction.
+ */
+export function unseatJuror(decisionId: string, key: string, status: Exclude<JurorStatus, 'on'>, at: string): boolean {
+    return db.prepare(`
+        UPDATE decision_electors SET status = ?, updated_at = ?
+         WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'
+    `).run(status, at, decisionId, key).changes > 0;
+}
+
+/** The walk goes on (decisions-engine.ts topUpJury): one more member it reached, seated now or passed over. */
+export function addToJuryRoll(decisionId: string, key: string, status: 'on' | 'stood_aside', at: string): void {
+    db.prepare(`
+        INSERT INTO decision_electors (decision_id, member_pubkey, role_at_open, status, created_at, updated_at)
+        VALUES (?, ?, 'juror', ?, ?, ?)
+    `).run(decisionId, key, status, at, at);
+}
+
+/** A seated juror answered Serve. The first answer stands; returns whether they are seated. */
+export function noteJurorServes(decisionId: string, key: string, at: string): boolean {
+    return db.prepare(`
+        UPDATE decision_electors SET answered_at = COALESCE(answered_at, ?), updated_at = ?
+         WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'
+    `).run(at, at, decisionId, key).changes > 0;
+}
+
+/** A seated juror was reminded at `at` (settleOpenJuries). */
+export function noteJurorReminded(decisionId: string, key: string, at: string): void {
+    db.prepare(`
+        UPDATE decision_electors SET reminded_at = ?, updated_at = ?
+         WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'
+    `).run(at, at, decisionId, key);
+}
+
+/**
+ * node_config: when this server's tick found formal Decisions off while a jury sat (decisions-engine.ts settleOpenJuries),
+ * as a JSON list of holds, `{ from, to }` (ISO; `to` null while they are still off). Nobody can answer a seat then, so a
+ * seat's 48 and 72 hours leave every hold out (juryHeldMs). Per server, as the tick is: a standby that takes over starts
+ * with none.
+ */
+export const JURY_HOLDS_KEY = 'juryHolds';
+
+/** One time formal Decisions were off while a jury sat: from, and to (null while still off), in ms. */
+export interface JuryHold { from: number; to: number | null }
+
+/** The holds this server keeps (JURY_HOLDS_KEY), oldest first; none for no row, or one that doesn't read. */
+export function juryHolds(): JuryHold[] {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(JURY_HOLDS_KEY) as { value: string } | undefined;
+    if (!row) return [];
+    try {
+        const list: unknown = JSON.parse(row.value);
+        if (!Array.isArray(list)) return [];
+        return (list as Array<{ from?: unknown; to?: unknown } | null>)
+            .map(h => ({ from: Date.parse(String(h?.from)), to: h?.to == null ? null : Date.parse(String(h.to)) }))
+            .filter((h): h is JuryHold => Number.isFinite(h.from) && (h.to === null || Number.isFinite(h.to)));
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * The tick's note of the Decisions switch, for a seat's hours (settleOpenJuries, each tick, at `nowMs`). `oldestOpenMs`:
+ * when the oldest vote a jury decides that is still open opened, or null when none is. Off, with a jury sitting: a hold
+ * starts, unless one has. On: a hold still open ends now; one that ended before the oldest open jury's vote opened is
+ * dropped, since no seat on it is older; and the row goes once no jury sits. Writes only when that changes something.
+ */
+export function noteJuryHold(decisionsOn: boolean, nowMs: number, oldestOpenMs: number | null): void {
+    const holds = juryHolds();
+    const last = holds[holds.length - 1];
+    const open = last && last.to === null ? last : null;
+    if (!decisionsOn) {
+        if (!open && oldestOpenMs !== null) writeJuryHolds([...holds, { from: nowMs, to: null }]);
+        return;
+    }
+    if (!holds.length) return;
+    if (open) open.to = nowMs;
+    const kept = oldestOpenMs === null ? [] : holds.filter(h => h.to !== null && h.to > h.from && h.to > oldestOpenMs);
+    if (open || kept.length !== holds.length) writeJuryHolds(kept);
+}
+
+function writeJuryHolds(holds: readonly JuryHold[]): void {
+    if (!holds.length) {
+        db.prepare('DELETE FROM node_config WHERE key = ?').run(JURY_HOLDS_KEY);
+        return;
+    }
+    const iso = (ms: number) => new Date(ms).toISOString();
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+        .run(JURY_HOLDS_KEY, JSON.stringify(holds.map(h => ({ from: iso(h.from), to: h.to === null ? null : iso(h.to) }))));
+}
+
+/**
+ * How much of the time since a seat taken at `seatedMs` formal Decisions were off (the holds): the part of each hold after
+ * the seat, a hold still open up to `nowMs`. A hold ends where the tick found them on again, so one that has ended is past.
+ */
+export function juryHeldMs(seatedMs: number, nowMs: number, holds: readonly JuryHold[] = juryHolds()): number {
+    let held = 0;
+    for (const h of holds) {
+        const from = Math.max(h.from, seatedMs);
+        const to = h.to ?? nowMs;
+        if (to > from) held += to - from;
+    }
+    return held;
+}
+
+/**
+ * The key a pool member holds now (slice J2b): their key in the pool, followed forward through the re-keys that replaced
+ * it (`invalidated_keys.rekeyed_to`, as juryDrawnAs follows them back), so a member of the draw who moved to a new phone
+ * since is seated under the key they sign with. A key no re-key replaced is its own answer.
+ */
+export function juryCurrentKey(poolKey: string): string {
+    const next = db.prepare('SELECT rekeyed_to FROM invalidated_keys WHERE public_key = ? AND rekeyed_to IS NOT NULL');
+    let at = poolKey;
+    for (let hop = 0; hop < DRAWN_AS_HOPS; hop++) {
+        const to = (next.get(at) as { rekeyed_to: string } | undefined)?.rekeyed_to;
+        if (!to || to === at) break;
+        at = to;
+    }
+    return at;
 }
 
 /** How many re-keys back a roll key is followed to find the key it was drawn as: far more than any member makes. */

@@ -11,6 +11,9 @@
  * the key it was drawn for and the closed lists each entry's `drawnAs`, so a re-key still checks out (§5.1); a jury's
  * tally carries `turnout` (§5.5).
  *
+ * And slice J2c, branch juries (call 4): under a jury rule an owner's branch pause is decided by one jury for the whole
+ * branch, drawn for its root's key, in section 10.
+ *
  * Boots the real server. The setting goes through the owners' real route; the vote's card and the jury are read through
  * the real signature middleware. Expo is answered here; nothing leaves this machine.
  *
@@ -38,9 +41,17 @@
  *  7. The line: 99 in the pool is decided by everyone, 100 by a jury; Everyone set is everyone at 150.
  *  8. Votes off: a pause opens no vote and draws nobody.
  *  9. A node from before: decision_electors' CHECK gains the jury's statuses at boot, its rows kept.
- * 10. A branch vote with a jury rule (director's call for J1, 3 Nov): the whole community decides an owner's branch pause
- *     (removal by vote S5) as S5 built it, with no draw, roll or stand-asides; one member's pause in the same community is
- *     still the jury's.
+ * 10. J2c, branch juries (DESIGN-removal-jury-j2-calls-fable.md call 4): under Automatic at 150 an owner's branch pause
+ *     (removal by vote S5) of three draws one jury of 12 for the root's key, from the day's pool without the accounts its
+ *     card names (the listed and the established left off); the root's inviter, the subtree's other accounts (an admin, an
+ *     account already paused: in the pool, passed over), a member who reported a fake on the list other than the root, and
+ *     the owner pausing stand aside, while one who reported only the established account left off is seated; only jurors
+ *     vote (an account on the list in S5's words), are pushed and asked on Home, and read the balances; /jury serves no
+ *     subject, the root and the list, and checks out with the root's key, open and closed; paused again the same day naming
+ *     the established account, the same pool, hash and order, and its reporter stands aside now; the tally leaves out
+ *     every account on the list; 6 of 9 removes the branch.
+ *     Under Everyone, S5's vote as it was (every voter pushed, 15 votes count, no jury); under Automatic with 99 in the
+ *     branch's pool, everyone too.
  * 11. J2a, who serves: a freeze moves no roster (freeze two members, pause, unfreeze one: the hash worked out before the
  *     freeze); a frozen juror's signed vote counts; the admin who paused is in the served pool and, closed, among those who
  *     didn't serve; an owner pausing the same member the same day draws from the same roster; a juror and the member
@@ -64,6 +75,8 @@ import { checkJuryDraw, juryOrder, juryRosterHash, jurySnapshotAt, jurySnapshotD
 // Expo is answered here; nothing else off this machine is reached.
 const realFetch = globalThis.fetch;
 const pushes: Array<{ to: string[]; k: string }> = [];
+/** Every message sent to Expo, one per phone: what leaves this machine, word for word (section 12). */
+const sent: Array<{ to: string; k: string; title: string; body: string; data: unknown }> = [];
 const offMachine: string[] = [];
 globalThis.fetch = (async (input: any, init?: any) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
@@ -71,6 +84,7 @@ globalThis.fetch = (async (input: any, init?: any) => {
     if (url.hostname === 'exp.host') {
         const batch = JSON.parse(String(init?.body ?? '[]')) as any[];
         pushes.push({ to: batch.map((m) => m.to), k: batch[0]?.data?.k });
+        for (const m of batch) sent.push({ to: m.to, k: m.data?.k, title: m.title, body: m.body, data: m.data });
         return new Response(JSON.stringify({ data: batch.map(() => ({ status: 'ok', id: crypto.randomUUID() })) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     offMachine.push(url.hostname);
@@ -475,7 +489,8 @@ async function main() {
     assert(listed && listed.params?.debt !== undefined && !('debt' in ((card.body?.decision?.params) ?? {})),
         "the member's balance goes to the jury, as it went to a vote's voters, and not to a member not drawn");
     await settle(500);
-    const pushedTo = new Set(pushes.filter(p => p.k === 'decision.removal' || p.k === 'account.removal-vote').flatMap(p => p.to));
+    // Since J2b the jurors' "a vote opened" is the jury's own push, decision.jury: they were drawn, and are asked to answer.
+    const pushedTo = new Set(pushes.filter(p => p.k === 'decision.jury' || p.k === 'decision.removal' || p.k === 'account.removal-vote').flatMap(p => p.to));
     const expectedTokens = new Set([...jurors.map(j => j.token), sam.token]);
     assert(pushedTo.size === expectedTokens.size && [...expectedTokens].every(tk => pushedTo.has(tk)),
         `"a vote opened" goes to the 12 jurors and the member, nobody else (${pushedTo.size} phones)`);
@@ -641,7 +656,8 @@ async function main() {
             updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             PRIMARY KEY (decision_id, member_pubkey)
         );
-        INSERT INTO decision_electors_old SELECT * FROM decision_electors WHERE status IN ('on', 'left');
+        INSERT INTO decision_electors_old SELECT decision_id, member_pubkey, role_at_open, status, created_at, updated_at
+            FROM decision_electors WHERE status IN ('on', 'left');
         DROP TABLE decision_electors;
         ALTER TABLE decision_electors_old RENAME TO decision_electors;
     `);
@@ -656,67 +672,280 @@ async function main() {
     db.prepare("UPDATE decision_electors SET status = 'stood_aside' WHERE decision_id = ? AND member_pubkey = ?").run(wilVote, rollOf(wilVote)[0]?.k ?? '');
     assert(rollOf(wilVote)[0]?.status === 'stood_aside', 'and a juror can be stood aside in it');
 
-    // ── 10. A branch vote with a jury rule ──────────────────────────────────────────────────────────────────────────
-    // The director's call for J1 (3 Nov, reversible): a branch's vote (removal by vote S5) is decided by the whole community
-    // as S5 built it, whatever Who decides a removal says; one member's removal in the same community goes to the jury.
-    console.log('\n10. A branch vote with a jury rule: the whole community decides it; one member\'s removal still the jury\'s');
+    // ── 10. Branch juries (J2c) ─────────────────────────────────────────────────────────────────────────────────────
+    // DESIGN-removal-jury-j2-calls-fable.md call 4 (Marty, 4 Nov "All Fable's picks"): under a jury rule an owner's branch
+    // pause (removal by vote S5) is decided by one jury for the whole branch, drawn for the root's key from the day's pool
+    // without every account its card names; whoever has a link to an account on its list, the rest of the root's invite
+    // subtree and the owner pausing stand aside. Under Everyone, or below the line, the whole community decides it, as S5 built.
+    console.log('\n10. Branch juries: under a jury rule one jury decides a whole branch; under Everyone or below the line, everyone');
     assert(readShape().settings.removalDecider.value === 'automatic', 'the rule is still Automatic, at 150');
-    const root = nextSubject();
-    const twigs = [nextSubject(), nextSubject()];
-    for (const tw of twigs) db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(root.pk, tw.pk);
-    const branchKeys = [root, ...twigs].map(m => m.pk);
+    const { juryConflictsOf } = await import('./engine/removal-jury.js');
+    const { revokeNodeRole } = await import('./engine/node-roles.js');
+    const invitedBy = db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?');
+    // Members with nothing to do with Sam's case, who invited nobody (Gwen invited everyone else here; at(1) and Sam one each).
+    const samsCase = new Set([sam.pk, ...heads.slice(0, 22)]);
+    const freshOk = (c: Id) => !samsCase.has(c.pk) && statusOf(c) === 'active';
+    const twigA = subjectWhere(freshOk);
+    const twigB = subjectWhere(freshOk);
+    // Joined 60 days ago, as everyone here: established (engine/burst-cleanup.ts), so left off the list unless the owner names it.
+    const settled = subjectWhere(freshOk);
+    /** The draw for a branch under `r`, worked out here: the day's pool without every account its card names, for r's key. */
+    const branchPoolOf = (r: Id) => expectedPool([r, twigA, twigB, settled]);
+    const unused = () => new Set(members.slice(2 + subjects).map(m => m.pk));
+    /** The first `n` of a draw free to be set up: not yet used here, active, not in Sam's case, not Gwen or Ada. */
+    const headPicks = (order: string[], n: number) => order.filter(k => unused().has(k) && !samsCase.has(k) && byKey.has(k)
+        && statusOf(byKey.get(k)!) === 'active' && k !== gen.pk && k !== ada.pk).slice(0, n);
+    // The root: one for whom Gwen, the owner who pauses, and five members free to be set up all fall in the first 12 of the
+    // draw, so the walk reaches all six whatever else it passes over.
+    const root = subjectWhere(c => {
+        if (!freshOk(c)) return false;
+        const o = juryOrder(branchPoolOf(c), c.pk, today).order;
+        const picks = headPicks(o, 5);
+        return o.indexOf(gen.pk) >= 0 && o.indexOf(gen.pk) < 12 && picks.length === 5 && picks.every(k => o.indexOf(k) < 12);
+    });
+    const [inviterKey, roleKey, pausedKey, twigReporterKey, settledReporterKey] = headPicks(juryOrder(branchPoolOf(root), root.pk, today).order, 5);
+    const inviter = subjectWhere(c => c.pk === inviterKey);
+    const roleHolder = subjectWhere(c => c.pk === roleKey);
+    const pausedOne = subjectWhere(c => c.pk === pausedKey);
+    const twigReporter = subjectWhere(c => c.pk === twigReporterKey);
+    const settledReporter = subjectWhere(c => c.pk === settledReporterKey);
+    // The branch: the root, whom `inviter` invited; the root invited the two twigs, the established account and an admin; the
+    // admin invited `pausedOne`, paused on their own already. Left off the list: the admin (a role) and pausedOne (paused);
+    // both still in the pool (nothing on the card names them), so only the walk passes them over.
+    invitedBy.run(inviter.pk, root.pk);
+    for (const m of [twigA, twigB, settled, roleHolder]) invitedBy.run(root.pk, m.pk);
+    invitedBy.run(roleHolder.pk, pausedOne.pk);
+    grantNodeRole(roleHolder.pk, 'admin', gen.pk);
+    pauseOf(pausedOne);
+    // And two with a link to one account the card names, not the root: everyone linked to any account on the list stands
+    // aside (call 4: the union of juryConflictsOf over all of them), and nobody for a link to an account the vote isn't on.
+    // twigReporter reported twigA, a fake on the list; settledReporter reported the established account left off it.
+    const reportOf = db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)");
+    reportOf.run(crypto.randomUUID(), twigReporter.pk, twigA.pk, 'A fake account', ago(DAY));
+    reportOf.run(crypto.randomUUID(), settledReporter.pk, settled.pk, 'A report of a member of long standing', ago(DAY));
+    const branchPool = branchPoolOf(root);
+    const bOrder = juryOrder(branchPool, root.pk, today).order;
+    const listedKeys = [root, twigA, twigB].map(m => m.pk);
+    const linked = new Set(listedKeys.flatMap(k => [...juryConflictsOf(k)]));
+    assert(linked.has(inviter.pk) && linked.has(roleHolder.pk) && !linked.has(pausedOne.pk) && !linked.has(gen.pk),
+        "set up: the root's inviter and the admin the root invited have a link to an account on the list; pausedOne and Gwen have none");
+    assert(linked.has(twigReporter.pk) && !juryConflictsOf(root.pk).has(twigReporter.pk)
+        && !linked.has(settledReporter.pk) && juryConflictsOf(settled.pk).has(settledReporter.pk),
+        "set up: twigReporter's one link is to twigA, not the root; settledReporter's is to the established account left off, and to nobody on the list");
     pushes.length = 0;
-    const branched = de.pauseBranch(root.pk, gen.pk, `A crowd of fakes brought in by ${root.callsign}`, { freshProof: true, include: branchKeys });
-    if (!branched.success) throw new Error(`setup: could not pause the branch of ${root.callsign}: ${branched.error}`);
-    const branchVote = branched.decision.id;
+    const b1 = de.pauseBranch(root.pk, gen.pk, `A crowd of fakes brought in by ${root.callsign}`, { freshProof: true, include: [twigA.pk, twigB.pk] });
+    if (!b1.success) throw new Error(`setup: could not pause the branch of ${root.callsign}: ${b1.error}`);
+    const branchVote = b1.decision.id;
     await settle(500);
-    const branchPushed = new Set(pushes.filter(p => p.k === 'decision.removal').flatMap(p => p.to));
     const bp = paramsOf(branchVote);
-    assert(JSON.stringify((bp.branch ?? []).map((e: any) => e.pubkey).sort()) === JSON.stringify([...branchKeys].sort()),
-        `the branch vote lists the three accounts (${(bp.branch ?? []).length})`);
-    assert(bp.decider === 'everyone' && !('jury' in bp) && de.juryOf(de.getDecision(branchVote)!) === null,
-        `it records that everyone decides it, and no jury (${JSON.stringify(bp.decider)})`);
-    assert(rollOf(branchVote).length === 0 && poolRowOf(branchVote) === undefined, 'no roll and no pool are kept for it');
-    // One member's pause in the same community, a moment later: still the jury's.
-    const zed = nextSubject();
-    const zedVote = pauseOf(zed);
-    const zedRoll = rollOf(zedVote).filter(r => r.status === 'on').map(r => r.k);
-    assert(paramsOf(zedVote).decider === 'jury' && zedRoll.length === 12 && de.tallyDecision(zedVote).decider === 'jury',
-        `one member's pause in the same community is the jury's: 12 seated (${paramsOf(zedVote).decider}, ${zedRoll.length})`);
-    // Members on neither roll nor list: the jury refuses them, the branch vote takes their votes.
-    const eligible = members.filter(m => m !== gen && m !== ada && statusOf(m) === 'active' && !zedRoll.includes(m.pk) && !branchKeys.includes(m.pk));
+    const leftOffAs = new Map(b1.leftOff.map(a => [a.pubkey, a.leftOff]));
+    assert(JSON.stringify((bp.branch ?? []).map((e: any) => e.pubkey).sort()) === JSON.stringify([...listedKeys].sort())
+        && JSON.stringify((bp.established ?? []).map((e: any) => e.pubkey)) === JSON.stringify([settled.pk])
+        && leftOffAs.get(roleHolder.pk) === 'role' && leftOffAs.get(pausedOne.pk) === 'paused',
+        `the branch vote lists the root and the two named; the established account left off is on the card; the admin and the paused account are left off (${JSON.stringify([...leftOffAs.values()])})`);
+    assert(bp.decider === 'jury' && bp.jury?.snapshotDate === today && bp.jury?.size === 12 && bp.jury?.mustVote === 9 && bp.jury?.minYes === 6
+        && bp.jury?.poolSize === branchPool.length && bp.jury?.subject === root.pk && de.juryOf(de.getDecision(branchVote)!) !== null,
+        `under Automatic at 150 an owner's branch pause is a jury's: today's snapshot, 12 seated, 9 must vote, at least 6 Yes, drawn for the root's key (${JSON.stringify(bp.decider)}, ${JSON.stringify(bp.jury)})`);
+    assert(bp.jury?.rosterHash === juryRosterHash(branchPool),
+        "its roster hash is the hash of the day's pool without the accounts on the card, worked out here");
+    const bStored = poolRowOf(branchVote)?.split('\n') ?? [];
+    assert(bStored.length === branchPool.length && JSON.stringify(bStored) === JSON.stringify([...branchPool].sort())
+        && ![...listedKeys, settled.pk].some(k => bStored.includes(k)),
+        `the node keeps that pool: no account on the list and no established account left off is in it (${bStored.length} keys)`);
+    assert([roleHolder, pausedOne, inviter, gen].every(m => bStored.includes(m.pk)),
+        "the admin and the paused account in the subtree, the root's inviter and the owner pausing are in it, as the public facts put them");
+    const bRoll = rollOf(branchVote);
+    const bAside = bRoll.filter(r => r.status === 'stood_aside').map(r => r.k);
+    const bSeated = bRoll.filter(r => r.status === 'on').map(r => r.k);
+    const expectAside = [inviter, roleHolder, pausedOne, twigReporter, gen].map(m => m.pk);
+    assert(JSON.stringify([...bAside].sort()) === JSON.stringify([...expectAside].sort()),
+        `passed over at the walk: the root's inviter, the admin the root invited, pausedOne (in the subtree, linked to nobody on the list), the member who reported twigA and the owner pausing (${bAside.length})`);
+    assert(bSeated.length === 12 && JSON.stringify([...bSeated].sort()) === JSON.stringify(bOrder.filter(k => !expectAside.includes(k)).slice(0, 12).sort()),
+        `the next 12 of the draw for the root's key are seated (${bSeated.length})`);
+    assert(bAside.includes(twigReporter.pk) && bSeated.includes(settledReporter.pk),
+        "a member who reported a fake on the list other than the root stands aside; one who reported only the established account left off, which the vote isn't on, is seated");
+    assert(checkJuryDraw({ pool: bStored, subject: root.pk, snapshotDate: today, rosterHash: bp.jury?.rosterHash, roll: bRoll.map(r => r.k) }).ok,
+        "core's checkJuryDraw with the root's key: the node's pool and roll check out");
+    // A jury's "vote opened" is the jury's own push (slice J2b, pushJurySeated): drawn, and asked to answer within three days.
+    const opened = new Set(pushes.filter(p => p.k === 'decision.jury').flatMap(p => p.to));
+    const toldListed = new Set(pushes.filter(p => p.k === 'account.removal-vote').flatMap(p => p.to));
+    assert(opened.size === 12 && bSeated.every(k => opened.has(byKey.get(k)!.token)) && !pushes.some(p => p.k === 'decision.removal'),
+        `"a vote opened" goes to the 12 jurors, as the jury's own push, nobody else (${opened.size} phones)`);
+    assert(toldListed.size === 3 && [root, twigA, twigB].every(m => toldListed.has(m.token)), `and each account on the list is told (${toldListed.size})`);
+    // Only the jury votes: a member not drawn and one passed over in the jury's words; an account on the list in S5's.
+    const notSeated = byKey.get(bOrder.slice(bRoll.length + 5).find(k => k !== gen.pk && k !== ada.pk && statusOf(byKey.get(k)!) === 'active')!)!;
+    const offRoll = de.castDecisionVote(branchVote, notSeated.pk, true);
+    const asideVote = de.castDecisionVote(branchVote, inviter.pk, true);
+    const listedVote = de.castDecisionVote(branchVote, twigA.pk, true);
+    assert(!offRoll.success && offRoll.error === de.JURY_ONLY_VOTE_ERROR && !asideVote.success && asideVote.error === de.JURY_ONLY_VOTE_ERROR,
+        `a member not seated is refused in the jury's words, and so is the root's inviter, passed over (${offRoll.error ?? 'taken'}; ${asideVote.error ?? 'taken'})`);
+    assert(!listedVote.success && listedVote.error === de.OWN_REMOVAL_VOTE_ERROR, `an account on the list is refused in S5's words (${listedVote.error})`);
+    fresh();
+    const offRollHttp = await signed('POST', `/api/commons/decisions/${branchVote}/vote`, notSeated, { support: true });
+    assert(offRollHttp.status === 400 && offRollHttp.body?.error === de.JURY_ONLY_VOTE_ERROR, `over the route too, 400 (${offRollHttp.status} ${offRollHttp.body?.error ?? ''})`);
+    // Home's Needs you asks a juror and nobody else: what an app that opens a branch's vote is shown, less what an older app is.
+    const needsCount = async (who: Id, q: string) => {
+        fresh();
+        return ((await signed('GET', `/api/home?cards=needs${q}`, who)).body?.cards?.needs?.items ?? [])
+            .filter((i: any) => i.kind === 'vote').reduce((n: number, i: any) => n + (i.count ?? 0), 0);
+    };
+    const branchLine = async (who: Id) => (await needsCount(who, '&lands=branch-vote')) - (await needsCount(who, ''));
+    const jurorsB = bSeated.map(k => byKey.get(k)!);
+    const lines = [jurorsB[0] ? await branchLine(jurorsB[0]) : -1, await branchLine(notSeated), await branchLine(inviter)];
+    assert(JSON.stringify(lines) === '[1,0,0]', `Home asks a juror to vote on the branch, never a member not seated nor one passed over (${JSON.stringify(lines)})`);
+    // The accounts' balances and debts go to those who may vote on it: the jury, and nobody else (decisionForReader).
+    const branchCardOf = async (who: Id) => { fresh(); return signed('GET', `/api/commons/decisions/${branchVote}?draws=branch`, who); };
+    const jurorCard = jurorsB[0] ? await branchCardOf(jurorsB[0]) : null;
+    const offCard = await branchCardOf(notSeated);
+    const owing = (a: Answer | null) => (a?.body?.decision?.params?.branch ?? []).filter((e: any) => 'debt' in e && 'balance' in e).length;
+    assert(jurorCard?.status === 200 && owing(jurorCard) === 3 && 'branchDebt' in (jurorCard.body.decision.params ?? {})
+        && offCard.status === 200 && owing(offCard) === 0 && !('branchDebt' in (offCard.body?.decision?.params ?? {})),
+        `each account's balance and debt, and their total, go to the jury, not to a member not seated (${owing(jurorCard)}, ${owing(offCard)})`);
+    assert(offCard.body?.tally?.decider === 'jury' && !('yesWeight' in (offCard.body?.tally ?? {}))
+        && JSON.stringify(offCard.body?.tally?.turnout) === JSON.stringify({ voted: 0, size: 12, mustVote: 9 }),
+        `while open a member reads the jury's turnout, never the split (${JSON.stringify(offCard.body?.tally?.turnout)})`);
+    // GET /jury: no one subject; the root's key it was drawn for; the accounts it is on. Check the draw with the root's key.
+    fresh();
+    const bJuryOpen = await signed('GET', `/api/commons/decisions/${branchVote}/jury`, notSeated);
+    const bj = bJuryOpen.body?.jury ?? {};
+    const bServed = (bj.pool ?? []).map((p: any) => p.publicKey);
+    assert(bJuryOpen.status === 200 && bj.subject === null && bj.root === root.pk
+        && JSON.stringify((bj.branch ?? []).map((e: any) => e.publicKey).sort()) === JSON.stringify([...listedKeys].sort())
+        && (bj.branch ?? []).every((e: any) => Object.keys(e).sort().join(',') === 'callsign,publicKey' && e.callsign === byKey.get(e.publicKey)?.callsign),
+        `GET /jury: subject null, root the root's key, branch the three accounts on the list by name (${bJuryOpen.status} ${JSON.stringify({ subject: bj.subject, root: bj.root === root.pk })})`);
+    assert(JSON.stringify(bServed) === JSON.stringify(bStored)
+        && checkJuryDraw({ pool: bServed, subject: bj.root, snapshotDate: bj.snapshotDate, rosterHash: bj.rosterHash }).ok,
+        "the pool served is the one kept, and checkJuryDraw with the root's key passes on what was served");
+    fresh();
+    const inviterReads = await signed('GET', `/api/commons/decisions/${branchVote}/jury`, inviter);
+    fresh();
+    const jurorReads = jurorsB[0] ? await signed('GET', `/api/commons/decisions/${branchVote}/jury`, jurorsB[0]) : null;
+    assert(bj.you === null && !('voted' in bj) && !('didNotServe' in bj) && inviterReads.text === bJuryOpen.text && jurorReads?.body?.jury?.you === 'seated',
+        "while open nobody is named; the root's inviter, passed over, reads byte for byte what a member not drawn reads; a juror reads seated");
+    // Two jurors vote, then an admin halts it: every pause lifts, and the record is closed.
+    const early = jurorsB.slice(0, 2).map(j => de.castDecisionVote(branchVote, j.pk, true));
+    const halted = de.adminHaltDecision(branchVote, ada.pk, 'Halted for this check: an owner pauses the branch again');
+    assert(early.length === 2 && early.every(v => v.success) && halted.success && row(branchVote).status === 'admin_halted'
+        && listedKeys.every(k => statusOf(byKey.get(k)!) === 'active'),
+        `two jurors vote; an admin halts it, and every account on the list is back (${row(branchVote).status})`);
+    fresh();
+    const bClosed = (await signed('GET', `/api/commons/decisions/${branchVote}/jury`, notSeated)).body?.jury ?? {};
+    const bVoted: string[] = (bClosed.voted ?? []).map((x: any) => x.publicKey);
+    const bNotServed: string[] = (bClosed.didNotServe ?? []).map((x: any) => x.publicKey);
+    assert(JSON.stringify([...bVoted].sort()) === JSON.stringify(jurorsB.slice(0, 2).map(j => j.pk).sort())
+        && expectAside.every(k => bNotServed.includes(k)) && bNotServed.length === bRoll.length - 2,
+        `closed: the two who voted; and among those who didn't serve, the root's inviter, the subtree's admin and paused account, twigA's reporter and the owner who paused (${bVoted.length}, ${bNotServed.length})`);
+    const bDrawnAs = [...(bClosed.voted ?? []), ...(bClosed.didNotServe ?? [])].map((x: any) => x.drawnAs as string);
+    assert(bClosed.subject === null && bClosed.root === root.pk && checkJuryDraw({
+        pool: (bClosed.pool ?? []).map((p: any) => p.publicKey), subject: bClosed.root, snapshotDate: bClosed.snapshotDate, rosterHash: bClosed.rosterHash, roll: bDrawnAs,
+    }).ok, "and the two lists together check out with the root's key");
+    // The same root again the same day, by an owner with a new reason (after a vote was stopped, only an owner may: S4), with
+    // the server's password this time, and naming the established account: `include` only moves it from the card's
+    // established list to its branch list, so the roster, its hash and the order are the ones the first pause drew from.
+    const b2 = de.pauseBranch(root.pk, 'owner:password', `A crowd of fakes brought in by ${root.callsign}, with new facts`,
+        { freshProof: true, include: [twigA.pk, twigB.pk, settled.pk] });
+    if (!b2.success) throw new Error(`setup: could not pause the branch of ${root.callsign} again: ${b2.error}`);
+    const branchVote2 = b2.decision.id;
+    const bp2 = paramsOf(branchVote2);
+    const listed2 = [...listedKeys, settled.pk];
+    const stored2 = poolRowOf(branchVote2)?.split('\n') ?? [];
+    assert(JSON.stringify((bp2.branch ?? []).map((e: any) => e.pubkey).sort()) === JSON.stringify([...listed2].sort()) && (bp2.established ?? []).length === 0,
+        'paused again, the owner naming it, the established account is on the list too');
+    assert(bp2.decider === 'jury' && bp2.jury?.rosterHash === bp.jury?.rosterHash && bp2.jury?.snapshotDate === today && bp2.jury?.subject === root.pk
+        && stored2.length > 0 && JSON.stringify(stored2) === JSON.stringify(bStored),
+        `naming an established account moves neither the pool nor its roster hash (${bp2.decider}, ${bp2.jury?.rosterHash === bp.jury?.rosterHash})`);
+    assert(stored2.length > 0 && JSON.stringify(juryOrder(stored2, root.pk, today).order) === JSON.stringify(bOrder), 'nor the order the jury is seated in');
+    const roll2 = rollOf(branchVote2);
+    const aside2 = roll2.filter(r => r.status === 'stood_aside').map(r => r.k);
+    const seated2 = roll2.filter(r => r.status === 'on').map(r => r.k);
+    const expectAside2 = [inviter, roleHolder, pausedOne, twigReporter, settledReporter].map(m => m.pk);
+    assert(JSON.stringify([...aside2].sort()) === JSON.stringify([...expectAside2].sort()) && seated2.includes(gen.pk) && seated2.length === 12,
+        `paused with the password, which has no key, nobody stands aside as the one pausing: Gwen is seated this time (${aside2.length} passed over)`);
+    assert(aside2.includes(settledReporter.pk),
+        "with the established account on the list now, the member who reported it stands aside: who stands aside follows the accounts the vote is on, while the roster and the order stay put");
+    // The tally over the roll (§5) leaves out every account on the list, whatever a row says: here one seated by a row written
+    // straight into the roll, with a No, and a member not drawn with a No too. 6 Yes to 3 No from the jury removes the branch.
+    const jurors2 = seated2.map(k => byKey.get(k)!);
+    for (const j of jurors2.slice(0, 6)) de.castDecisionVote(branchVote2, j.pk, true);
+    for (const j of jurors2.slice(6, 9)) de.castDecisionVote(branchVote2, j.pk, false);
+    db.prepare("INSERT INTO decision_electors (decision_id, member_pubkey, role_at_open, status) VALUES (?, ?, 'juror', 'on')").run(branchVote2, twigB.pk);
+    raw.run(branchVote2, twigB.pk, new Date().toISOString(), new Date().toISOString());
+    raw.run(branchVote2, notSeated.pk, new Date().toISOString(), new Date().toISOString());
+    const bt2 = de.tallyDecision(branchVote2);
+    assert(bt2.decider === 'jury' && bt2.totalVoters === 9 && bt2.yesWeight === 6 && bt2.noWeight === 3 && bt2.electorate === 12 && bt2.quorumRequired === 9,
+        `the tally counts the 9 jurors' votes only: not an account on the list a row seats, nor a member not drawn (${bt2.totalVoters} voted, ${bt2.yesWeight} Yes, ${bt2.noWeight} No)`);
+    db.prepare('DELETE FROM decision_electors WHERE decision_id = ? AND member_pubkey = ?').run(branchVote2, twigB.pk);
+    closeNow(branchVote2);
+    assert(row(branchVote2).status === 'execution_pending_grace' && listed2.every(k => statusOf(byKey.get(k)!) === 'disabled'),
+        `6 Yes to 3 No: the jury removes the branch, one grace window for every account on it, each still paused (${row(branchVote2).status})`);
+    fresh();
+    const c2 = (await signed('GET', `/api/commons/decisions/${branchVote2}/jury`, notSeated)).body?.jury ?? {};
+    const voted2: string[] = (c2.voted ?? []).map((x: any) => x.publicKey);
+    const notServed2: string[] = (c2.didNotServe ?? []).map((x: any) => x.publicKey);
+    assert(JSON.stringify([...voted2].sort()) === JSON.stringify(jurors2.slice(0, 9).map(j => j.pk).sort())
+        && expectAside2.every(k => notServed2.includes(k)) && notServed2.length === roll2.length - 9 && !notServed2.includes(twigB.pk),
+        `closed: the 9 who voted; and among those who didn't serve the root's inviter, the subtree's other accounts and the two reporters, with the 3 jurors who didn't vote (${voted2.length}, ${notServed2.length})`);
+    const pool2 = (c2.pool ?? []).map((p: any) => p.publicKey);
+    const roll2Served = [...(c2.voted ?? []), ...(c2.didNotServe ?? [])].map((x: any) => x.drawnAs as string);
+    const check2 = (seedKey: string) => checkJuryDraw({ pool: pool2, subject: seedKey, snapshotDate: c2.snapshotDate, rosterHash: c2.rosterHash, roll: roll2Served });
+    assert(c2.subject === null && c2.root === root.pk && check2(c2.root).ok && !check2(twigA.pk).ok,
+        "and it checks out with the root's key, and with no other key on the list");
+    revokeNodeRole(roleHolder.pk, 'admin', gen.pk);
+
+    // Everyone set: the whole community decides a branch, as S5 built it.
+    const toEveryone10 = await setDecider('everyone');
+    assert(toEveryone10.status === 200, `an owner sets Everyone (${toEveryone10.status})`);
+    const root3 = subjectWhere(freshOk);
+    const twigs3 = [subjectWhere(freshOk), subjectWhere(freshOk)];
+    for (const tw of twigs3) invitedBy.run(root3.pk, tw.pk);
+    const branchKeys3 = [root3, ...twigs3].map(m => m.pk);
+    pushes.length = 0;
+    const b3 = de.pauseBranch(root3.pk, gen.pk, `A crowd of fakes brought in by ${root3.callsign}`, { freshProof: true, include: branchKeys3 });
+    if (!b3.success) throw new Error(`setup: could not pause the branch of ${root3.callsign}: ${b3.error}`);
+    const branchVote3 = b3.decision.id;
+    await settle(500);
+    const everyonePushed = new Set(pushes.filter(p => p.k === 'decision.removal').flatMap(p => p.to));
+    const bp3 = paramsOf(branchVote3);
+    assert(bp3.decider === 'everyone' && !('jury' in bp3) && de.juryOf(de.getDecision(branchVote3)!) === null
+        && rollOf(branchVote3).length === 0 && poolRowOf(branchVote3) === undefined,
+        `with Everyone set, the branch vote records that everyone decides it: no jury, roll or pool (${JSON.stringify(bp3.decider)})`);
+    const eligible = members.filter(m => m !== gen && m !== ada && statusOf(m) === 'active' && !branchKeys3.includes(m.pk));
     const outsider = eligible[0];
-    const refusedOnZed = de.castDecisionVote(zedVote, outsider.pk, true);
-    assert(!refusedOnZed.success && refusedOnZed.error === de.JURY_ONLY_VOTE_ERROR,
-        `a member not drawn for it is refused on the one member's vote, in the jury's words (${refusedOnZed.error})`);
-    assert(branchPushed.has(outsider.token) && branchPushed.size > 15,
-        `"a vote opened" on the branch went to every voter, that member among them, not to a jury (${branchPushed.size} phones)`);
-    fresh();
-    const needsCount = async (q: string) => ((await signed('GET', `/api/home?cards=needs${q}`, outsider)).body?.cards?.needs?.items ?? [])
-        .filter((i: any) => i.kind === 'vote').reduce((n: number, i: any) => n + (i.count ?? 0), 0);
-    const withBranch = await needsCount('&lands=branch-vote');
-    fresh();
-    const withoutBranch = await needsCount('');
-    assert(withBranch === withoutBranch + 1,
-        `Home asks that member to vote on the branch (an app that opens it: ${withBranch} votes, an older app: ${withoutBranch})`);
-    const voters15 = eligible.slice(0, 15);
-    const cast = voters15.map(m => de.castDecisionVote(branchVote, m.pk, true));
-    assert(cast.every(c => c.success), `15 members on no jury vote on the branch (${cast.filter(c => c.success).length} of 15)`);
-    const listedVoter = de.castDecisionVote(branchVote, twigs[0].pk, true);
-    assert(!listedVoter.success && listedVoter.error !== de.JURY_ONLY_VOTE_ERROR, `an account on its list may not vote on it, by S5's rule (${listedVoter.error})`);
-    raw.run(branchVote, twigs[1].pk, new Date().toISOString(), new Date().toISOString());
-    const bt = de.tallyDecision(branchVote);
+    assert(everyonePushed.has(outsider.token) && everyonePushed.size > 15, `"a vote opened" goes to every voter, not to a jury (${everyonePushed.size} phones)`);
+    const outsiderLine = await branchLine(outsider);
+    assert(outsiderLine === 1, `Home asks a member on no jury to vote on it (${outsiderLine})`);
+    const cast = eligible.slice(0, 15).map(m => de.castDecisionVote(branchVote3, m.pk, true));
+    assert(cast.every(c => c.success), `15 members on no jury vote on it (${cast.filter(c => c.success).length} of 15)`);
+    const listedVoter = de.castDecisionVote(branchVote3, twigs3[0].pk, true);
+    assert(!listedVoter.success && listedVoter.error === de.OWN_REMOVAL_VOTE_ERROR, `an account on its list may not vote on it, by S5's rule (${listedVoter.error})`);
+    raw.run(branchVote3, twigs3[1].pk, new Date().toISOString(), new Date().toISOString());
+    const bt = de.tallyDecision(branchVote3);
     assert(bt.decider === undefined && bt.totalVoters === 15 && bt.yesWeight === 15 && bt.noWeight === 0,
         `its tally is S5's: all 15 count, more than a jury seats, and the listed account's row does not (${bt.totalVoters} voted, ${bt.yesWeight} Yes, decider ${bt.decider})`);
     assert(bt.electorate > 12 && bt.minYes === 3 && bt.thresholdRequired !== 2 / 3 && bt.quorumRequired >= 3,
         `over the community, not a roll: electorate ${bt.electorate}, at least ${bt.minYes} Yes, threshold ${bt.thresholdRequired}`);
     fresh();
-    const branchCard = await signed('GET', `/api/commons/decisions/${branchVote}?draws=branch`, eligible[20]);
+    const branchCard = await signed('GET', `/api/commons/decisions/${branchVote3}?draws=branch`, eligible[20]);
     assert(branchCard.status === 200 && branchCard.body?.tally?.yesWeight === 15 && branchCard.body?.tally?.passed !== undefined,
         `a member reads its split while it is open, as any community vote's (${JSON.stringify(branchCard.body?.tally?.yesWeight)})`);
     fresh();
-    const branchJury = await signed('GET', `/api/commons/decisions/${branchVote}/jury`, outsider);
+    const branchJury = await signed('GET', `/api/commons/decisions/${branchVote3}/jury`, outsider);
     assert(branchJury.status === 404, `it has no jury: 404 (${branchJury.status})`);
+
+    // Automatic below the line: a branch whose pool, without the accounts its card names, is 99 is decided by everyone.
+    const backToAuto = await setDecider('automatic');
+    assert(backToAuto.status === 200, `an owner sets Automatic again (${backToAuto.status})`);
+    const root4 = subjectWhere(freshOk);
+    const twigs4 = [subjectWhere(freshOk), subjectWhere(freshOk)];
+    for (const tw of twigs4) invitedBy.run(root4.pk, tw.pk);
+    const pool4 = expectedPool([root4, ...twigs4]);
+    const hid4 = pool4.filter(k => k !== gen.pk).slice(0, pool4.length - 99);
+    hide(hid4);
+    const b4 = de.pauseBranch(root4.pk, gen.pk, `A crowd of fakes brought in by ${root4.callsign}`, { freshProof: true, include: [root4, ...twigs4].map(m => m.pk) });
+    unhide(hid4);
+    if (!b4.success) throw new Error(`setup: could not pause the branch of ${root4.callsign}: ${b4.error}`);
+    assert(paramsOf(b4.decision.id).decider === 'everyone' && rollOf(b4.decision.id).length === 0 && poolRowOf(b4.decision.id) === undefined,
+        `under Automatic, 99 who could serve once the card's three accounts are out: everyone decides the branch (${paramsOf(b4.decision.id).decider})`);
 
     // ── 11. J2a: who serves ─────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n11. J2a: a freeze moves no roster and no seat; the admin who paused stands aside; a re-key still checks out');
@@ -804,6 +1033,382 @@ async function main() {
     const byNewKeys = rkCheck(rk.subject, rkEntries.map(x => x.publicKey));
     const byNewSubject = rkCheck(row(sueAgain).subject, rkEntries.map(x => x.drawnAs));
     assert(!byNewKeys.ok && !byNewSubject.ok, "by the new keys it wouldn't, which is why the record keeps what each was drawn as");
+
+    // ── 12. J2b: seating, silence, alternates, pushes ───────────────────────────────────────────────────────────────
+    console.log('\n12. J2b: Serve or Step aside, silent at 72 hours, a juror paused is gone, the next of the draw seated once, the pushes; '
+        + "a branch's walk passes over its subtree; with votes off nothing happens to a jury, and the hours off don't count");
+    const { useCatalogsForTests } = await import('./member-words.js');
+    const HOUR = 60 * 60_000;
+    // The open juries before this section close, so every jury push from here on is one of this section's cases.
+    const openJuries = () => (db.prepare("SELECT id FROM decisions WHERE status = 'open' AND json_valid(params) AND json_extract(params, '$.decider') = 'jury'")
+        .all() as Array<{ id: string }>).map(r => r.id);
+    for (const id of openJuries()) closeNow(id);
+    const memberStatus = (k: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(k) as { status: string } | undefined)?.status;
+    const tokenOf = (k: string) => byKey.get(k)?.token ?? `no token for ${k.slice(0, 8)}`;
+    /** A member's phones besides the one seedMember gave them (a juror's French phone, below). */
+    const morePhones = new Map<string, string[]>();
+    const phonesOf = (keys: string[]) => new Set(keys.flatMap(k => [tokenOf(k), ...(morePhones.get(k) ?? [])]));
+    const sentTo = (kind: string, from = 0) => new Set(sent.slice(from).filter(m => m.k === kind).map(m => m.to));
+    const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every(x => b.has(x));
+    const seatedOf = (id: string) => rollOf(id).filter(r => r.status === 'on').map(r => r.k);
+    /**
+     * A case whose first 30 of the draw are active members seeded here, with phones this suite knows (none re-keyed since,
+     * none paused: `age` moves one case's times and not the rest of the world's, so a pause made a minute ago would read as
+     * made after a seat it moved two days back).
+     */
+    const plainCase = () => subjectWhere(c => {
+        if (memberStatus(c.pk) !== 'active') return false;
+        const o = juryOrder(de.removalJuryPool(today, [c.pk]), c.pk, today).order;
+        return o.slice(0, 30).every(k => byKey.has(k) && memberStatus(k) === 'active');
+    });
+    /** A case `who` is among the first 10 of the draw of, so they are seated (nothing links them to its member). Not aged. */
+    const caseSeating = (who: Id) => subjectWhere(c => memberStatus(c.pk) === 'active'
+        && juryOrder(de.removalJuryPool(today, [c.pk]), c.pk, today).order.slice(0, 10).includes(who.pk));
+    /** Time travel: the whole case, its seats with it, as if it had all happened `ms` earlier. */
+    const rollColumns = new Set((db.prepare("SELECT name FROM pragma_table_info('decision_electors')").all() as Array<{ name: string }>).map(c => c.name));
+    const back = (iso: string | null, ms: number) => (iso ? new Date(Date.parse(iso) - ms).toISOString() : iso);
+    const age = (id: string, ms: number) => {
+        const d = row(id);
+        db.prepare('UPDATE decisions SET opens_at = ?, closes_at = ?, created_at = ? WHERE id = ?').run(back(d.opens_at, ms), back(d.closes_at, ms), back(d.created_at, ms), id);
+        const cols = ['created_at', 'answered_at', 'reminded_at'].filter(c => rollColumns.has(c));
+        for (const e of db.prepare(`SELECT member_pubkey, ${cols.join(', ')} FROM decision_electors WHERE decision_id = ?`).all(id) as any[]) {
+            db.prepare(`UPDATE decision_electors SET ${cols.map(c => `${c} = ?`).join(', ')} WHERE decision_id = ? AND member_pubkey = ?`)
+                .run(...cols.map(c => back(e[c], ms)), id, e.member_pubkey);
+        }
+    };
+    const answerAs = async (id: string, who: Id, answer: unknown) => { fresh(); return signed('POST', `/api/commons/decisions/${id}/jury/answer`, who, { answer }); };
+    const juryRead = async (id: string, who: Id) => { fresh(); return signed('GET', `/api/commons/decisions/${id}/jury`, who); };
+    /** Nobody's name or key in anything sent to a phone since `from`: not the member, the admin, a juror, anyone. */
+    const namesNobody = (from: number) => {
+        const wire = JSON.stringify(sent.slice(from));
+        return [...byKey.values()].every(m => !wire.includes(m.pk) && !new RegExp(`\\b${m.callsign}\\b`).test(wire));
+    };
+
+    // ── Cal's case: the seating push, Serve, Step aside, the reply, the reminder and silence ──
+    const cal = plainCase();
+    let mark = sent.length;
+    pushes.length = 0;
+    const calVote = pauseOf(cal);
+    await settle(500);
+    const calJury = seatedOf(calVote);
+    const notOnCal = byKey.get(juryOrder(de.removalJuryPool(today, [cal.pk]), cal.pk, today).order.slice(60).find(k => byKey.has(k) && memberStatus(k) === 'active')!)!;
+    assert(calJury.length === 12 && sameSet(sentTo('decision.jury', mark), phonesOf(calJury)) && sameSet(sentTo('account.removal-vote', mark), phonesOf([cal.pk])),
+        `"a vote opened" to the jury is the jury's own push, to the 12 seated and nobody else, and the member is told as before (${sentTo('decision.jury', mark).size} phones)`);
+    assert(sentTo('decision.removal', mark).size === 0, 'and nobody else in the community is pushed: the card has no vote button for them');
+    const seatWords = sent.slice(mark).filter(m => m.k === 'decision.jury');
+    assert(seatWords.length > 0 && seatWords.every(m => m.title === 'BeanPool'
+        && m.body === 'You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.'),
+        `each juror's lock screen: drawn, and asked to answer within three days (${JSON.stringify(seatWords[0]?.body)})`);
+    assert(namesNobody(mark), 'no push names anyone: not the member, the admin who paused, nor any juror');
+    const calJurors = calJury.map(k => byKey.get(k)!);
+    const seatRead = await juryRead(calVote, calJurors[0]);
+    const offRead = await juryRead(calVote, notOnCal);
+    const seatDue = Date.parse(row(calVote).opens_at) + 72 * HOUR;
+    assert(seatRead.body?.jury?.you === 'seated' && Date.parse(seatRead.body?.jury?.answerBy) === seatDue && !('answerBy' in (offRead.body?.jury ?? { answerBy: 1 })),
+        `a juror reads seated, their answer due 72 hours after the seat; a member not drawn reads no such line (${seatRead.body?.jury?.answerBy})`);
+    // Serve: then vote.
+    const servesAnswer = await answerAs(calVote, calJurors[0], 'serve');
+    const servedToo = await answerAs(calVote, calJurors[1], 'serve');
+    assert(servesAnswer.status === 200 && servesAnswer.body?.jury?.you === 'seated' && servesAnswer.body?.jury?.answerBy === null && servedToo.status === 200,
+        `a juror answers Serve over the route: still seated, nothing more due (${servesAnswer.status} ${servesAnswer.body?.error ?? ''})`);
+    for (const j of calJurors.slice(2, 6)) de.castDecisionVote(calVote, j.pk, true);
+    const lateAside = await answerAs(calVote, calJurors[5], 'step_aside');
+    assert(lateAside.status === 409 && seatedOf(calVote).includes(calJurors[5].pk),
+        `one who has voted can't step aside: they serve, and can still change their vote (${lateAside.status} ${lateAside.body?.error})`);
+    // Step aside: no reason asked, and the next member of the draw is seated at once, and told.
+    mark = sent.length;
+    const stepper = calJurors[6];
+    const stepped = await answerAs(calVote, stepper, 'step_aside');
+    await settle(300);
+    const afterStep = seatedOf(calVote);
+    const firstAlternate = afterStep.filter(k => !calJury.includes(k));
+    assert(stepped.status === 200 && stepped.body?.jury?.you === null && rollOf(calVote).find(r => r.k === stepper.pk)?.status === 'stood_aside'
+        && afterStep.length === 12 && firstAlternate.length === 1,
+        `a juror steps aside over the route: off the jury, reading what a member not drawn reads, and the next of the draw seated (${stepped.status} ${stepped.body?.error ?? ''}; ${afterStep.length} seated)`);
+    assert(sameSet(sentTo('decision.jury', mark), phonesOf(firstAlternate)) && namesNobody(mark),
+        `the member seated in their place is told, they alone (${sentTo('decision.jury', mark).size} phone)`);
+    const steppedRead = await juryRead(calVote, stepper);
+    const strangerRead = await juryRead(calVote, notOnCal);
+    assert(steppedRead.text === strangerRead.text, 'the one who stepped aside reads, byte for byte, what a member not drawn reads');
+    const steppedVote = de.castDecisionVote(calVote, stepper.pk, true);
+    const offAnswer = await answerAs(calVote, notOnCal, 'serve');
+    const badAnswer = await answerAs(calVote, calJurors[7], 'maybe');
+    fresh();
+    const unsignedAnswer = await signed('POST', `/api/commons/decisions/${calVote}/jury/answer`, null, { answer: 'serve' });
+    assert(!steppedVote.success && steppedVote.error === de.JURY_ONLY_VOTE_ERROR && offAnswer.status === 403 && offAnswer.body?.error === de.JURY_ONLY_VOTE_ERROR
+        && badAnswer.status === 400 && unsignedAnswer.status === 401,
+        `their vote is refused, as a member not drawn is refused an answer (403, in the jury's words); a wrong answer 400; unsigned 401 (${offAnswer.status}, ${badAnswer.status}, ${unsignedAnswer.status})`);
+    fresh();
+    const noJuryAnswer = await signed('POST', `/api/commons/decisions/${plainVote}/jury/answer`, notOnCal, { answer: 'serve' });
+    assert(noJuryAnswer.status === 404, `a vote no jury decides takes no answer: 404 (${noJuryAnswer.status})`);
+    // The member answers the case: every seated juror is told, once, in their phone's language, naming nobody.
+    const french = 'Le membre sur lequel votre jury décide a répondu. Ouvrez BeanPool pour lire sa réponse.';
+    useCatalogsForTests('fr', { core: { 'The member your jury is deciding about has answered the case. Open BeanPool to read it.': french } });
+    const frenchJuror = calJurors[8];
+    const frenchPhone = `ExponentPushToken[rj-fr-${crypto.randomBytes(4).toString('hex')}]`;
+    se.registerPushToken(frenchJuror.pk, frenchPhone, 'android', null, null, 'fr');
+    morePhones.set(frenchJuror.pk, [frenchPhone]);
+    mark = sent.length;
+    fresh();
+    const replied = await signed('POST', `/api/commons/decisions/${calVote}/reply`, cal, { reply: 'I did nothing of the kind, and here is what happened.' });
+    await settle(300);
+    const replyPhones = sentTo('decision.jury-reply', mark);
+    assert(replied.status === 200 && sameSet(replyPhones, phonesOf(seatedOf(calVote))) && replyPhones.has(frenchPhone),
+        `the member answers: every seated juror is pushed, nobody else (${replied.status}; ${replyPhones.size} phones)`);
+    const frenchSent = sent.slice(mark).find(m => m.to === frenchPhone);
+    const englishSent = sent.slice(mark).find(m => m.to === frenchJuror.token);
+    assert(frenchSent?.body === french && englishSent?.body === 'The member your jury is deciding about has answered the case. Open BeanPool to read it.'
+        && namesNobody(mark),
+        `in each phone's language, through the push words (fr: ${JSON.stringify(frenchSent?.body)}), and naming nobody`);
+    mark = sent.length;
+    fresh();
+    await signed('POST', `/api/commons/decisions/${calVote}/reply`, cal, { reply: 'And one thing more about what happened that day.' });
+    await settle(300);
+    assert(sentTo('decision.jury-reply', mark).size === 0, 'a rewrite of the answer pushes nobody again');
+    useCatalogsForTests('fr', null);
+    // 49 hours on: one reminder, to each juror with no answer, once.
+    const noAnswer = seatedOf(calVote).filter(k => k !== calJurors[0].pk && k !== calJurors[1].pk && !calJurors.slice(2, 6).some(j => j.pk === k));
+    age(calVote, 49 * HOUR);
+    mark = sent.length;
+    de.tickDecisions();
+    await settle(300);
+    const reminded = sentTo('decision.jury-reminder', mark);
+    assert(noAnswer.length === 6 && noAnswer.includes(frenchJuror.pk) && sameSet(reminded, phonesOf(noAnswer)) && namesNobody(mark),
+        `48 hours after their seat, each of the 6 jurors with no answer is reminded, nobody who answered Serve or voted (${reminded.size} phones)`);
+    assert(sent.slice(mark).filter(m => m.k === 'decision.jury-reminder').every(m => m.body === 'A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.'),
+        'the reminder says a day is left, and what happens then');
+    mark = sent.length;
+    de.tickDecisions();
+    await settle(300);
+    assert(sentTo('decision.jury-reminder', mark).size === 0, 'the next tick reminds nobody again');
+    // 73 hours on: the six are silent, and six of the draw are seated in their places, each told; once, never twice.
+    age(calVote, 24 * HOUR);
+    mark = sent.length;
+    const rollBefore = rollOf(calVote).length;
+    de.tickDecisions();
+    await settle(300);
+    const afterSilence = seatedOf(calVote);
+    const silentNow = rollOf(calVote).filter(r => r.status === 'silent').map(r => r.k);
+    const replacements = afterSilence.filter(k => !calJury.includes(k) && !firstAlternate.includes(k));
+    assert(JSON.stringify([...silentNow].sort()) === JSON.stringify([...noAnswer].sort()) && afterSilence.length === 12 && replacements.length === 6,
+        `72 hours with no answer: the 6 are silent and 6 of the draw seated in their places (${silentNow.length} silent, ${afterSilence.length} seated)`);
+    assert([calJurors[0], calJurors[1], ...calJurors.slice(2, 6)].every(j => afterSilence.includes(j.pk)),
+        'the two who answered Serve and the four who voted keep their seats');
+    assert(sameSet(sentTo('decision.jury', mark), phonesOf(replacements)) && sentTo('decision.jury-late', mark).size === 0 && namesNobody(mark),
+        `each member seated is told, with four days left the ordinary words (${sentTo('decision.jury', mark).size} phones)`);
+    const rollAfter = rollOf(calVote).length;
+    mark = sent.length;
+    de.tickDecisions();
+    de.tickDecisions();
+    await settle(300);
+    assert(rollOf(calVote).length === rollAfter && seatedOf(calVote).length === 12 && JSON.stringify(seatedOf(calVote).sort()) === JSON.stringify([...afterSilence].sort())
+        && sentTo('decision.jury', mark).size === 0 && rollAfter > rollBefore,
+        `the next ticks seat nobody more: each silent juror replaced once, never twice (${rollAfter} on the roll)`);
+    // (With none silent, as on a node before J2b, a member not drawn stands in, so the checks below fail rather than throw.)
+    const silentOne = byKey.get(silentNow[0] ?? '') ?? notOnCal;
+    const silentRead = await juryRead(calVote, silentOne);
+    const silentVote = de.castDecisionVote(calVote, silentOne.pk, true);
+    assert(silentRead.body?.jury?.you === 'not_seated' && !('answerBy' in (silentRead.body?.jury ?? {})) && !silentVote.success && silentVote.error === de.JURY_ONLY_VOTE_ERROR,
+        `a silent juror reads not_seated, and their vote is refused (${silentRead.body?.jury?.you})`);
+    closeNow(calVote);
+    const calClosed = (await juryRead(calVote, notOnCal)).body?.jury ?? {};
+    const calNot = (calClosed.didNotServe ?? []) as any[];
+    const entryOf = (k: string) => calNot.find(x => x.publicKey === k);
+    assert(!!entryOf(stepper.pk) && !!entryOf(silentOne.pk) && JSON.stringify(Object.keys(entryOf(stepper.pk)).sort()) === JSON.stringify(Object.keys(entryOf(silentOne.pk)).sort())
+        && !(calClosed.voted ?? []).some((x: any) => x.publicKey === stepper.pk || x.publicKey === silentOne.pk),
+        'closed: one who stepped aside and one gone silent are both among those who did not serve, their entries alike');
+    const calAll = [...(calClosed.voted ?? []), ...calNot].map((x: any) => x.drawnAs);
+    assert(calAll.length === rollOf(calVote).length && checkJuryDraw({ pool: (calClosed.pool ?? []).map((p: any) => p.publicKey), subject: calClosed.subject,
+        snapshotDate: calClosed.snapshotDate, rosterHash: calClosed.rosterHash, roll: calAll }).ok,
+        `and the draw still checks out with everyone seated since: the roll is the head of the draw (${calAll.length})`);
+
+    // ── Dee's case: a juror paused is gone and their vote with them; under 48 hours the one seated is told; the last day ──
+    const dee = plainCase();
+    const deeVote = pauseOf(dee);
+    const deeJury = seatedOf(deeVote);
+    const deeJurors = deeJury.map(k => byKey.get(k)!);
+    // One no case was ever brought against, so the cool-down after a vote that kept them doesn't refuse their pause.
+    const wasSubject = new Set(members.slice(2, 2 + subjects).map(m => m.pk));
+    const paused = deeJurors.find(j => memberStatus(j.pk) === 'active' && !wasSubject.has(j.pk))!;
+    const others = deeJurors.filter(j => j !== paused);
+    for (const j of others) await answerAs(deeVote, j, 'serve');
+    const pausedVote = de.castDecisionVote(deeVote, paused.pk, true);
+    assert(pausedVote.success && de.tallyDecision(deeVote).turnout?.voted === 1, `a juror votes, and it counts (${de.tallyDecision(deeVote).turnout?.voted})`);
+    const pausedOwn = pauseOf(paused, `A case against ${paused.callsign}, a juror, for this check`);
+    // Five and a half days in: a day and a half left.
+    age(deeVote, 132 * HOUR);
+    const deeCloses = row(deeVote).closes_at;
+    mark = sent.length;
+    de.tickDecisions();
+    await settle(300);
+    const deeAfter = seatedOf(deeVote);
+    const deeAlternate = deeAfter.filter(k => !deeJury.includes(k));
+    assert(rollOf(deeVote).find(r => r.k === paused.pk)?.status === 'left' && de.tallyDecision(deeVote).turnout?.voted === 0 && de.tallyDecision(deeVote).totalVoters === 0,
+        `a juror paused since they were seated is gone from the jury, and their vote with them (${rollOf(deeVote).find(r => r.k === paused.pk)?.status}, ${de.tallyDecision(deeVote).turnout?.voted} counted)`);
+    assert(deeAfter.length === 12 && deeAlternate.length === 1 && others.every(j => deeAfter.includes(j.pk)),
+        `the next of the draw takes the seat, and the eleven who answered Serve keep theirs, five days on (${deeAfter.length} seated)`);
+    assert(sameSet(sentTo('decision.jury-late', mark), phonesOf(deeAlternate)) && sentTo('decision.jury-reminder', mark).size === 0 && namesNobody(mark),
+        `with less than 48 hours left, the member seated is told so, they alone (${sentTo('decision.jury-late', mark).size} phone)`);
+    const lateWords = sent.slice(mark).find(m => m.k === 'decision.jury-late')?.body;
+    assert(lateWords === 'You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.',
+        `in words that say the vote closes in less than two days (${JSON.stringify(lateWords)})`);
+    const pausedRead = await juryRead(deeVote, paused);
+    const pausedAgain = de.castDecisionVote(deeVote, paused.pk, false);
+    assert(pausedRead.body?.jury?.you === 'not_seated' && !pausedAgain.success && pausedAgain.error === de.JURY_ONLY_VOTE_ERROR,
+        `they read not_seated and can't vote again (${pausedRead.body?.jury?.you}; ${pausedAgain.error})`);
+    mark = sent.length;
+    de.tickDecisions();
+    await settle(300);
+    assert(seatedOf(deeVote).length === 12 && sentTo('decision.jury-late', mark).size === 0 && row(deeVote).closes_at === deeCloses,
+        'the next tick changes nothing, and nothing moved the close: the seat filled once, the vote still ends on its seventh day');
+    // The sixth day: every seated juror who hasn't voted is reminded, once.
+    age(deeVote, 15 * HOUR);
+    mark = sent.length;
+    de.tickDecisions();
+    await settle(300);
+    const lastDay = sentTo('decision.jury-last-day', mark);
+    assert(sameSet(lastDay, phonesOf(seatedOf(deeVote))) && namesNobody(mark)
+        && sent.slice(mark).filter(m => m.k === 'decision.jury-last-day').every(m => m.body === "A jury you're on closes in about a day. Open BeanPool to vote."),
+        `on the sixth day every seated juror who hasn't voted is reminded, the one seated late among them (${lastDay.size} phones)`);
+    mark = sent.length;
+    de.tickDecisions();
+    await settle(300);
+    assert(sentTo('decision.jury-last-day', mark).size === 0, 'and once');
+
+    // ── Fay's case: one paused before they were seated keeps the seat (the pool keeps paused members), and votes ──
+    const fay = caseSeating(paused);
+    const fayVote = pauseOf(fay);
+    const pausedSeated = seatedOf(fayVote).includes(paused.pk);
+    de.tickDecisions();
+    const fayCast = de.castDecisionVote(fayVote, paused.pk, true);
+    assert(memberStatus(paused.pk) === 'disabled' && row(pausedOwn).status === 'open' && pausedSeated && seatedOf(fayVote).includes(paused.pk)
+        && fayCast.success && de.tallyDecision(fayVote).turnout?.voted === 1,
+        `a member paused before the draw seated them keeps the seat across the tick, and their vote counts (${pausedSeated}, ${fayCast.error ?? 'voted'})`);
+
+    // ── Gus's case: a member of the draw who moved to a new phone since is seated under the key they sign with ──
+    const gus = plainCase();
+    const gusVote = pauseOf(gus);
+    const gusOrder = juryOrder((poolRowOf(gusVote) ?? '').split('\n'), gus.pk, today).order;
+    const onGus = new Set(rollOf(gusVote).map(r => r.k));
+    const nextUp = byKey.get(gusOrder.find(k => !onGus.has(k) && k !== gen.pk && k !== ada.pk)!)!;
+    const nextUpMoved = rekey(nextUp);
+    const gusStep = await answerAs(gusVote, byKey.get(seatedOf(gusVote)[0])!, 'step_aside');
+    const gusRoll = rollOf(gusVote);
+    assert(gusStep.status === 200 && gusRoll.some(r => r.k === nextUpMoved.pk && r.status === 'on') && !gusRoll.some(r => r.k === nextUp.pk),
+        `a member of the draw re-keyed since the draw is seated in the seat that came free, under their new key (${gusStep.status})`);
+    closeNow(gusVote);
+    // Read as Gwen: the cases since Cal's can pause or re-key the member Cal's case read as (Dee's juror, Dee, Fay, Gus, or
+    // Gus's member of the draw), whose signed read is then refused; closed, every member reads the same two lists.
+    const gusRead = await juryRead(gusVote, gen);
+    const gusClosed = gusRead.body?.jury ?? {};
+    const gusEntries: any[] = [...(gusClosed.voted ?? []), ...(gusClosed.didNotServe ?? [])];
+    const gusCheck = checkJuryDraw({ pool: (gusClosed.pool ?? []).map((p: any) => p.publicKey), subject: gusClosed.subject, snapshotDate: gusClosed.snapshotDate,
+        rosterHash: gusClosed.rosterHash, roll: gusEntries.map(x => x.drawnAs) });
+    const gusMoved = gusEntries.find(x => x.publicKey === nextUpMoved.pk);
+    assert(gusMoved?.drawnAs === nextUp.pk && gusCheck.ok,
+        `closed, they are listed as drawn under their old key, and the draw checks out (${gusRead.status}; ${gusMoved ? (gusMoved.drawnAs === nextUp.pk ? 'drawn as old key' : 'drawn as another') : 'not listed'}; ${gusCheck.ok ? 'checks out' : gusCheck.problem}; ${gusEntries.length} listed)`);
+
+    // ── A branch's walk (J2c with J2b): a seat filled on a branch's jury passes over the rest of the root's subtree ──
+    // As section 10's pausedOne: an account the subtree's admin invited, paused on their own already, so in the pool, off the
+    // card and linked to nobody on the list. Here they are far enough down the draw that it doesn't reach them, so only a
+    // seat filled later does, and they stand aside there as at the draw (J2c's deciding review, note 1).
+    // No role either: section 11's abe is still an admin, and a root with a role is refused, a twig with one left off.
+    const holdsRole = (k: string) => !!db.prepare('SELECT 1 FROM node_roles WHERE member_pubkey = ?').get(k);
+    const brFresh = (c: Id) => !samsCase.has(c.pk) && memberStatus(c.pk) === 'active' && !holdsRole(c.pk);
+    const brTwig = subjectWhere(brFresh);
+    const brAdmin = subjectWhere(brFresh);
+    const brRoot = subjectWhere(brFresh);
+    invitedBy.run(brRoot.pk, brTwig.pk);
+    invitedBy.run(brRoot.pk, brAdmin.pk);
+    grantNodeRole(brAdmin.pk, 'admin', gen.pk);
+    // The draw for the root's key, from the day's pool without the two accounts the card will name. 25 places down it, a
+    // dozen seated and a dozen passed over still don't reach them: one with no role, no case brought against them (so they
+    // can be paused here) and no link to the card's accounts.
+    const brOrder = juryOrder(de.removalJuryPool(today, [brRoot.pk, brTwig.pk]), brRoot.pk, today).order;
+    const everCased = new Set(members.slice(2, 2 + subjects).map(m => m.pk));
+    const brLinked = juryConflictsOf([brRoot.pk, brTwig.pk]);
+    const brDeep = byKey.get(brOrder.slice(25).find(k => byKey.has(k) && memberStatus(k) === 'active' && !holdsRole(k) && !everCased.has(k)
+        && !brLinked.has(k) && !samsCase.has(k))!)!;
+    invitedBy.run(brAdmin.pk, brDeep.pk);
+    pauseOf(brDeep, `A case against ${brDeep.callsign}, in a branch, for this check`);
+    const brPaused = de.pauseBranch(brRoot.pk, gen.pk, `A crowd of fakes brought in by ${brRoot.callsign}`, { freshProof: true, include: [brTwig.pk] });
+    if (!brPaused.success) throw new Error(`setup: could not pause the branch of ${brRoot.callsign}: ${brPaused.error}`);
+    const brVote = brPaused.decision.id;
+    const brPool = (poolRowOf(brVote) ?? '').split('\n');
+    const brLeftOff = new Map(brPaused.leftOff.map(a => [a.pubkey, a.leftOff]));
+    assert(paramsOf(brVote).decider === 'jury' && seatedOf(brVote).length === 12 && !rollOf(brVote).some(r => r.k === brDeep.pk)
+        && brLeftOff.get(brDeep.pk) === 'paused' && brLeftOff.get(brAdmin.pk) === 'role' && brPool.includes(brDeep.pk)
+        && !juryConflictsOf([brRoot.pk, brTwig.pk]).has(brDeep.pk),
+        `set up: a branch's jury of 12, and the draw didn't reach the account the subtree's admin invited, paused on their own: off the card, in the pool and linked to nobody on it (${rollOf(brVote).length} on the roll)`);
+    // Jurors step aside, one at a time, until the walk reaches them; never they, so a seat they took would still read `on`.
+    let brSteps = 0;
+    while (!rollOf(brVote).some(r => r.k === brDeep.pk) && brSteps < 30) {
+        const stepper = seatedOf(brVote).find(k => byKey.has(k));
+        if (!stepper || (await answerAs(brVote, byKey.get(stepper)!, 'step_aside')).status !== 200) break;
+        brSteps++;
+    }
+    const brAfter = rollOf(brVote);
+    assert(brSteps > 0 && brAfter.find(r => r.k === brDeep.pk)?.status === 'stood_aside' && seatedOf(brVote).length === 12,
+        `jurors step aside (${brSteps}): the walk reaches the account in the root's subtree and passes over them, as the draw does, and seats the next (${brAfter.find(r => r.k === brDeep.pk)?.status ?? 'not reached'})`);
+    assert(checkJuryDraw({ pool: brPool, subject: brRoot.pk, snapshotDate: today, rosterHash: paramsOf(brVote).jury?.rosterHash, roll: brAfter.map(r => r.k) }).ok,
+        "and the roll is still the head of the draw for the root's key: it checks out");
+    closeNow(brVote);
+    revokeNodeRole(brAdmin.pk, 'admin', gen.pk);
+
+    // ── Ivy's case: votes switched off mid-vote. The tick does nothing to a jury while they are off, and the hours off don't
+    // count toward a juror's 48 or 72 hours once they are back on (J2b's deciding review, decisions-engine.ts:4135) ──
+    // Every open jury closes first, so each push the spy sees is this case's. The pushes go to the spy, by member key, and
+    // the tick runs at the hours given. Each switch and the tick's first look after it come with no wait between, so the
+    // server's own tick, every minute, can't come first.
+    for (const id of openJuries()) closeNow(id);
+    const ivy = plainCase();
+    const ivyVote = pauseOf(ivy);
+    await settle(300);
+    const ivyOpens = Date.parse(row(ivyVote).opens_at);
+    const ivyJury = seatedOf(ivyVote);
+    const ivyRoll = JSON.stringify(rollOf(ivyVote));
+    const spied: Array<{ kind: string; to: string[] }> = [];
+    const spy: Parameters<typeof de.settleOpenJuries>[1] = (to, _actor, _title, _body, _data, _category, kind) => { spied.push({ kind, to: [...to] }); };
+    const spiedSince = (from: number) => spied.slice(from).map(s => `${s.kind} to ${s.to.length}`).join(', ') || 'no push';
+    const spiedTo = (kind: string, from: number) => new Set(spied.slice(from).filter(s => s.kind === kind).flatMap(s => s.to));
+    assert(ivyJury.length === 12 && JSON.stringify(openJuries()) === JSON.stringify([ivyVote]), `set up: Ivy's jury of 12 is the one open (${openJuries().length})`);
+    setSwitchOverride('decisions', false);
+    de.settleOpenJuries(ivyOpens + 60_000, spy);
+    const offVote = de.castDecisionVote(ivyVote, ivyJury[0], true);
+    const offServe = de.answerJurySeat(ivyVote, ivyJury[1], 'serve', spy);
+    assert(!offVote.success && offVote.code === 'feature_off' && !offServe.success && offServe.code === 'feature_off',
+        `votes off: a juror can neither vote nor answer Serve (${offVote.code ?? 'voted'}, ${offServe.success ? 'answered' : offServe.code})`);
+    for (const h of [49, 73, 145]) de.settleOpenJuries(ivyOpens + h * HOUR, spy);
+    assert(spied.length === 0 && JSON.stringify(rollOf(ivyVote)) === ivyRoll,
+        `so at 49, 73 and 145 hours the tick reminds nobody, silences nobody, seats nobody and pushes nobody: the roll is as it was (${spiedSince(0)})`);
+    setSwitchOverride('decisions', true);
+    de.settleOpenJuries(ivyOpens + 80 * HOUR, spy);
+    assert(spied.length === 0 && JSON.stringify(rollOf(ivyVote)) === ivyRoll,
+        `back on 80 hours in: nobody silent and nobody reminded at once, since the hours off don't count (${spiedSince(0)})`);
+    // Off from the tick's first look, a minute in, to 80 hours: a seat's 72 hours end 72 hours of seat later.
+    const ivyHeld = 80 * HOUR - 60_000;
+    const ivyRead = await juryRead(ivyVote, byKey.get(ivyJury[0])!);
+    assert(ivyRead.body?.jury?.you === 'seated' && Date.parse(ivyRead.body?.jury?.answerBy) === ivyOpens + 72 * HOUR + ivyHeld,
+        `a juror reads their answer due 72 hours after the seat with the hours off added (${ivyRead.body?.jury?.answerBy})`);
+    let ivyMark = spied.length;
+    de.settleOpenJuries(ivyOpens + 127 * HOUR, spy);
+    assert(spied.length === ivyMark, `127 hours in, 47 of them seated with votes on: no reminder yet (${spiedSince(ivyMark)})`);
+    de.settleOpenJuries(ivyOpens + 129 * HOUR, spy);
+    assert(sameSet(spiedTo('decision.jury-reminder', ivyMark), new Set(ivyJury)) && spied.slice(ivyMark).every(s => s.kind === 'decision.jury-reminder'),
+        `129 hours in, 49 seated: each of the 12 is reminded that a day is left (${spiedSince(ivyMark)})`);
+    ivyMark = spied.length;
+    de.settleOpenJuries(ivyOpens + 151 * HOUR, spy);
+    assert(seatedOf(ivyVote).length === 12 && !rollOf(ivyVote).some(r => r.status === 'silent')
+        && sameSet(spiedTo('decision.jury-last-day', ivyMark), new Set(ivyJury)) && spied.slice(ivyMark).every(s => s.kind === 'decision.jury-last-day'),
+        `151 hours in, 71 seated: nobody is silent, and the vote's own sixth day comes when it would (${spiedSince(ivyMark)})`);
+    ivyMark = spied.length;
+    de.settleOpenJuries(ivyOpens + 153 * HOUR, spy);
+    const ivySilent = new Set(rollOf(ivyVote).filter(r => r.status === 'silent').map(r => r.k));
+    const ivyNew = seatedOf(ivyVote).filter(k => !ivyJury.includes(k));
+    assert(sameSet(ivySilent, new Set(ivyJury)) && ivyNew.length === 12 && sameSet(spiedTo('decision.jury-late', ivyMark), new Set(ivyNew))
+        && spied.slice(ivyMark).every(s => s.kind === 'decision.jury-late'),
+        `153 hours in, 73 seated: the 12 are silent, and 12 of the draw are seated, told the vote closes in less than two days (${spiedSince(ivyMark)})`);
+    closeNow(ivyVote);
 
     assert(offMachine.length === 0, `nothing left this machine (${offMachine.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} passed`);

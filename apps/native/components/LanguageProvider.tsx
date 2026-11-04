@@ -34,12 +34,12 @@ import { LANGUAGE_PREFERENCE_KEY, chooseLanguage, defaultLanguage, storedChoice 
 import { getCachedNodeProfile } from '../utils/node-profile';
 
 export interface LanguageContextType extends Words {
-    /** What the member chose on this phone, or null: follow the phone. */
-    choice: Lang | null;
+    /** What the member chose on this phone, or null: follow the phone. `xx` only in a development build (the pseudo-locale). */
+    choice: UiLang | null;
     /** The language with no choice made (the phone's, the community's, or English): what "Same as phone" gives. */
     phoneLanguage: Lang;
     /** Pick a language (null: follow the phone again). Live: every screen using `useWords()` re-renders in it. */
-    chooseLanguage(lang: Lang | null): void;
+    chooseLanguage(lang: UiLang | null): void;
     /**
      * The stored choice and the community's default have been read (or SETTLE_MS passed, or the member picked): the
      * language no longer changes by itself, only by a pick.
@@ -104,7 +104,7 @@ export function LanguageProvider({ children, deviceTags, initial }: {
     initial?: UiLang;
 }) {
     const tags = useMemo(() => deviceTags ?? deviceLanguageTags(), [deviceTags]);
-    const [choice, setChoice] = useState<Lang | null>(null);
+    const [choice, setChoice] = useState<UiLang | null>(null);
     const [nodeDefault, setNodeDefault] = useState<string | null>(null);
     const [override, setOverride] = useState<UiLang | null>(initial ?? null);
     const [settled, setSettled] = useState(false);
@@ -137,7 +137,7 @@ export function LanguageProvider({ children, deviceTags, initial }: {
         return () => { live = false; clearTimeout(late); };
     }, []);
 
-    const choose = useCallback((next: Lang | null) => {
+    const choose = useCallback((next: UiLang | null) => {
         picked.current = true;
         setSettled(true);
         setOverride(null);

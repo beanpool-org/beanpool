@@ -75,6 +75,8 @@ export const TAKEDOWN = {
     keepDays: 30,
     /** One sweep makes at most this many final: the next tick goes on. */
     sweepBatch: 200,
+    /** takedowns_list answers at most this many posts (a day's cap is up to 1,000, and the list reads a week). */
+    listMax: 500,
 } as const;
 
 /** Why a post stays up, in words the assistant reads and passes on. */
@@ -88,7 +90,10 @@ export const KEPT_WORDS = {
     overLimit: "Over today's limit: the rest wait for tomorrow (UTC), or an owner raises the Owner and admin limit.",
 } as const;
 
-export interface TakedownGrant { id: string; name: string; member: string }
+/** The grant a call is for; `role` is its member's now (an admin's takes one post a call: agent/owner-takedowns.ts), for the alert's words. */
+export interface TakedownGrant { id: string; name: string; member: string; role?: 'owner' | 'admin' }
+
+export type TakedownVia = 'ids' | 'reports' | 'author';
 
 export interface TakeDownInput {
     grant: TakedownGrant;
@@ -96,7 +101,8 @@ export interface TakeDownInput {
     reason: string;
     /** The assistant's own words, cleaned: Settings only. */
     why: string;
-    via: 'ids' | 'reports';
+    /** How the call named its posts: by ids, by reports, or `author_of` (one post, and its author's others: {@link postsByAuthorOf}). */
+    via: TakedownVia;
     postIds: string[];
     /** The owners' "Owner and admin limit" now. */
     perDay: number;
@@ -196,8 +202,9 @@ export function takeDownPosts(cb: ModerationNoticeCallbacks, input: TakeDownInpu
             removed.push(p);
         }
         if (removed.length === 0) return;
-        db.prepare('INSERT INTO agent_takedowns (id, grant_id, grant_name, member_pubkey, at, reason, why, via, posts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-            .run(id, grant.id, grant.name, grant.member, at, reason, why, via, removed.length);
+        // `via`'s CHECK came before author_of, and a table rebuild is not worth one word: a by-author call is 'ids' and by_author (db.ts).
+        db.prepare('INSERT INTO agent_takedowns (id, grant_id, grant_name, member_pubkey, at, reason, why, via, by_author, posts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(id, grant.id, grant.name, grant.member, at, reason, why, via === 'reports' ? 'reports' : 'ids', via === 'author' ? 1 : 0, removed.length);
     })();
     const out = { removed: removed.map(p => p.id), kept, todayCount: before + removed.length, perDay, finalAfter: iso(now + TAKEDOWN.holdDays * DAY_MS) };
     if (removed.length === 0) return { takedownId: null, ...out };
@@ -219,9 +226,58 @@ export function takeDownPosts(cb: ModerationNoticeCallbacks, input: TakeDownInpu
     // count keeps its one line after that.
     noteSecurityEvent({
         key: 'sec.agent', detail: '', perDay: OWNER_ALERT_WORDS.assistantTakedowns, perDayAdds: removed.length,
-        actor: grant.member, actorRole: 'owner', ...(before === 0 ? { high: true } : { quiet: true }),
+        actor: grant.member, actorRole: grant.role ?? 'owner', ...(before === 0 ? { high: true } : { quiet: true }),
     });
     return { takedownId: id, ...out };
+}
+
+/**
+ * `take_down_many { author_of }` (design §3.10, slice S2): the live posts here of whoever wrote one post, named by that post's id and
+ * nothing else. The id is matched exactly, as `take_down` matches one: never a name, a key, a callsign or words, so a text planted
+ * in a post or a report can point at one post, and no further than its author's own. The reach is that author's posts on this
+ * server (`origin_node IS NULL`, as a burst's), up and not already down, newest first, at most `TAKEDOWN.maxPerCall`; `left` says
+ * how many more there are, for the next call. The day's cap is takeDownPosts', post by post.
+ *
+ * Refused whole, before anything is weighed, and in the same words `kept` uses: no such post, another community's listing (that
+ * server takes it down), and a role-holder's or an enterprise one keeps (a person does that in Settings). The member stays a
+ * member: nothing here removes, suspends or mutes anyone; on the global profile the existing rule mutes at the third removal.
+ * A copy this author showed on global is a row on global, which this server never calls (engine/event-copy.ts): it stays up.
+ */
+export function postsByAuthorOf(anchorId: string): { postIds: string[]; left: number } | { refused: string } {
+    const anchor = db.prepare('SELECT author_pubkey, origin_node FROM posts WHERE id = ?').get(anchorId) as
+        { author_pubkey: string | null; origin_node: string | null } | undefined;
+    if (!anchor || !anchor.author_pubkey) return { refused: KEPT_WORDS.notHere };
+    if (anchor.origin_node) return { refused: KEPT_WORDS.otherCommunity };
+    if (roleHolderPost(anchor.author_pubkey)) return { refused: KEPT_WORDS.roleHolder };
+    const up = "author_pubkey = ? AND origin_node IS NULL AND active = 1 AND status != 'cancelled' AND removed_by_moderator_at IS NULL";
+    const postIds = (db.prepare(`SELECT id FROM posts WHERE ${up} ORDER BY created_at DESC, rowid DESC LIMIT ?`)
+        .all(anchor.author_pubkey, TAKEDOWN.maxPerCall) as { id: string }[]).map(r => r.id);
+    const all = (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE ${up}`).get(anchor.author_pubkey) as { c: number }).c;
+    return { postIds, left: Math.max(0, all - postIds.length) };
+}
+
+/** What one assistant took down in the last `days` (≤ the hold), newest first, for `takedowns_list`: ids, kinds and states, no words. */
+export function takedownsBy(grantId: string, days: number, now: number = Date.now()): {
+    at: string; reason: string; via: TakedownVia; postId: string; kind: string | null; state: 'hidden' | 'put_back' | 'final'; finalAfter: string;
+}[] {
+    const since = iso(now - days * DAY_MS);
+    const rows = db.prepare(`SELECT t.at, t.reason, t.via, t.by_author, tp.post_id, tp.put_back_at, tp.final_at, p.type
+                               FROM agent_takedowns t JOIN agent_takedown_posts tp ON tp.takedown_id = t.id LEFT JOIN posts p ON p.id = tp.post_id
+                              WHERE t.grant_id = ? AND t.at >= ? ORDER BY t.at DESC, t.rowid DESC, tp.rowid LIMIT ?`)
+        .all(grantId, since, TAKEDOWN.listMax) as
+        { at: string; reason: string; via: 'ids' | 'reports'; by_author: number; post_id: string; put_back_at: string | null; final_at: string | null; type: string | null }[];
+    return rows.map((r) => {
+        const finalAfter = iso(Date.parse(r.at) + TAKEDOWN.holdDays * DAY_MS);
+        // Held is hidden, past the 7 days or not: why one waits (a deal, a Child safety report) is Settings', where a person acts on it.
+        const state = r.put_back_at ? 'put_back' as const : r.final_at ? 'final' as const : 'hidden' as const;
+        return { at: r.at, reason: r.reason, via: r.by_author ? 'author' as const : r.via, postId: r.post_id, kind: r.type, state, finalAfter };
+    });
+}
+
+/** Posts this assistant took down that wait still, put back by no one and not yet final: what "Disconnect and put back" undoes. */
+export function takedownsHeldBy(grantId: string): number {
+    return (db.prepare(`SELECT COUNT(*) AS c FROM agent_takedown_posts tp JOIN agent_takedowns t ON t.id = tp.takedown_id
+                         WHERE t.grant_id = ? AND tp.put_back_at IS NULL AND tp.final_at IS NULL`).get(grantId) as { c: number }).c;
 }
 
 export type PutBackScope = { postId: string } | { takedownId: string } | { grantId: string; since: string };
@@ -395,7 +451,7 @@ export interface TakedownLine {
     reason: string;
     reasonLabel: string;
     why: string;
-    via: 'ids' | 'reports';
+    via: TakedownVia;
     finalAfter: string;
     posts: TakedownPostLine[];
 }
@@ -410,7 +466,7 @@ export function listTakedowns(now: number = Date.now(), limit = 100): TakedownLi
                                WHERE t.id IN (SELECT id FROM agent_takedowns ORDER BY at DESC, rowid DESC LIMIT ?)
                                   OR t.id IN (SELECT takedown_id FROM agent_takedown_posts WHERE put_back_at IS NULL AND final_at IS NULL)
                                ORDER BY t.at DESC, t.rowid DESC`).all(limit) as
-        { id: string; grant_id: string; grant_name: string; callsign: string | null; at: string; reason: string; why: string; via: 'ids' | 'reports' }[];
+        { id: string; grant_id: string; grant_name: string; callsign: string | null; at: string; reason: string; why: string; via: 'ids' | 'reports'; by_author: number }[];
     const posts = db.prepare(`SELECT tp.post_id, tp.put_back_at, tp.final_at, p.title, p.type, m.callsign,
                                      ${moneyHeldOn('tp.post_id')} AS deal, ${childSafetyOpenOn('tp.post_id')} AS child_safety
                                 FROM agent_takedown_posts tp LEFT JOIN posts p ON p.id = tp.post_id LEFT JOIN members m ON m.public_key = p.author_pubkey
@@ -419,7 +475,7 @@ export function listTakedowns(now: number = Date.now(), limit = 100): TakedownLi
         const finalAfter = iso(Date.parse(c.at) + TAKEDOWN.holdDays * DAY_MS);
         return {
             id: c.id, grantId: c.grant_id, grantName: c.grant_name, member: c.callsign, at: c.at, reason: c.reason,
-            reasonLabel: REMOVAL_REASON_LABELS[c.reason] ?? c.reason, why: c.why, via: c.via, finalAfter,
+            reasonLabel: REMOVAL_REASON_LABELS[c.reason] ?? c.reason, why: c.why, via: c.by_author ? 'author' : c.via, finalAfter,
             posts: (posts.all(c.id) as { post_id: string; put_back_at: string | null; final_at: string | null; title: string | null; type: string | null; callsign: string | null; deal: number; child_safety: number }[]).map((p) => {
                 const held = !p.put_back_at && !p.final_at;
                 const waiting = held && Date.parse(finalAfter) <= now;

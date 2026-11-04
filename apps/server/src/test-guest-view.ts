@@ -1245,6 +1245,8 @@ async function main(): Promise<void> {
             // community works (the exception an owner's or an admin's, the dial an owner's).
             'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount: 5000 },
             'POST /api/local/admin/community-shape': { changes: { knownFloor: { on: true, floor: 5000, cap: 5000 }, join: 'members' } },
+            // Advice to the owners about a Core setting (an owner's or an admin's): past the shape checks, it would leave a log line.
+            'POST /api/local/admin/community-shape/advice': { setting: 'beans', advice: 'Sentinel advice' },
             // Debts and a second chance: paying the Commons Beans it holds, and an admin's settle and work-off (admins only).
             'POST /api/commons/pay': { amount: 1 },
             'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
@@ -1259,6 +1261,8 @@ async function main(): Promise<void> {
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
                 params: { to: alice.pk, amount: 1 } },
             'POST /api/enterprise/:treasury/decisions/:id/vote': { support: true },
+            // A removal juror's answer to their seat (slice J2b): past the body check to who may answer.
+            'POST /api/commons/decisions/:id/jury/answer': { answer: 'step_aside' },
             // A chat group's vote: removing Alice from the group, and a yes on a vote.
             'POST /api/groups/:id/decisions': { title: 'Sentinel removal', description: 'A sentinel removal of Alice.', effect: 'remove_group_member',
                 subject: alice.pk },
@@ -1281,7 +1285,7 @@ async function main(): Promise<void> {
             'GET /api/blocks', 'POST /api/blocks', 'POST /api/blocks/clear', 'POST /api/blocks/remove',
             'POST /api/channels/mine', 'GET /api/channels/options',
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
-            'GET /api/commons/decisions/:id/jury',
+            'GET /api/commons/decisions/:id/jury', 'POST /api/commons/decisions/:id/jury/answer',
             'POST /api/commons/decisions/:id/vote', 'POST /api/commons/decisions/:id/reply', 'POST /api/commons/decisions/:id/report',
             'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
             'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',
@@ -1366,7 +1370,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
             'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
             'GET /api/local/admin/known-floor/member/:pubkey',
-            'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health', 'GET /api/local/admin/community-shape', 'POST /api/local/admin/community-shape',
+            'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health', 'GET /api/local/admin/community-shape', 'POST /api/local/admin/community-shape', 'POST /api/local/admin/community-shape/advice',
             'POST /api/local/admin/start-community-url',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
@@ -1452,6 +1456,7 @@ async function main(): Promise<void> {
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
+            'POST /api/node/owner/lights-out', 'GET /api/local/admin/lights-out', 'POST /api/local/admin/lights-out',
             'GET /api/me/unread', 'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
             'POST /api/pair/cancel', 'POST /api/pair/collect', 'POST /api/pair/confirm', 'POST /api/pair/init', 'POST /api/pair/offer', 'GET /api/pair/poll',
             'POST /api/pair/saved', 'POST /api/pair/send', 'POST /api/pair/transfer',

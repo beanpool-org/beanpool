@@ -175,6 +175,8 @@ describe('the screens that show them pass the message through the table (read fr
         expect(mismatch).toContain("e?.message ? settingsLineWords(e.message) : t(\"That invite doesn't look right.\")");
         expect(mismatch).toContain("e?.message ? welcomeLineWords(e.message) : t('Your join could not be completed. Please try again.')");
         expect(source('components/AddressFollowCard.tsx')).toContain('(e instanceof Error && e.message) ? settingsLineWords(e.message)');
+        // The fallback card's move is the follow card's (DNS robustness S3): its failure is worded the same way.
+        expect(source('components/AddressFallbackCard.tsx')).toContain('(e instanceof Error && e.message) ? settingsLineWords(e.message)');
         expect(source('components/EventCard.tsx')).toContain('err?.message ? eventLineWords(err.message)');
         expect(source('components/EventNextDates.tsx')).toContain('setProblem(eventLineWords(repeatRefusalText(e?.message))');
         expect(source('components/GroupChatView.tsx')).toContain("e?.message ? signedRequestWords(e.message) : t('Could not reach the node.')");

@@ -4,8 +4,13 @@
  * stays the only step, and nothing here blocks joining (no hard gates).
  *
  * The page never says whose account it is (no callsign, name, photo or key). Every value on it is escaped for HTML.
+ *
+ * The page's own sentences are in the member's language (core's printedKitLines(), asked for when the page is made); the
+ * 12 words on it are English words in every language. This file is on the words' key path and reaches the words layer in no
+ * way (core __tests__/recovery-path-files.test.ts): the lines come from core's own module, which is handed no word. The
+ * constants below stay English; components/welcome/welcome-lines.ts says the buttons' sentences in the member's language.
  */
-import { KIT_TITLE, recoveryKitHtml, type RecoveryKit } from '@beanpool/core';
+import { printedKitLines, recoveryKitHtml, type RecoveryKit } from '@beanpool/core';
 
 export { KIT_RESTORE_STEPS, KIT_TITLE, KIT_WARNING, KIT_WEB_RESTORE_STEPS, recoveryKitHtml, type RecoveryKit } from '@beanpool/core';
 export const KIT_SAVE_WARNING = 'Keep this file off cloud backups and chats. Anyone who has it can sign in as you.';
@@ -94,7 +99,7 @@ export type KitResult = 'done' | 'cancelled' | 'failed';
 /** Print: the system print dialog renders the page; the app writes no file of its own. */
 export async function printRecoveryKit(kit: RecoveryKit, modules?: ModulesOrLoader): Promise<KitResult> {
     try {
-        const html = recoveryKitHtml(kit);
+        const html = recoveryKitHtml(kit, printedKitLines());
         const { Print } = modulesFrom(modules);
         await Print.printAsync({ html });
         return 'done';
@@ -110,12 +115,13 @@ export async function printRecoveryKit(kit: RecoveryKit, modules?: ModulesOrLoad
 export async function saveRecoveryKitPdf(kit: RecoveryKit, askFirst: () => Promise<boolean>, modules?: ModulesOrLoader): Promise<KitResult> {
     if (!(await askFirst())) return 'cancelled';
     try {
-        const html = recoveryKitHtml(kit);
+        const lines = printedKitLines();
+        const html = recoveryKitHtml(kit, lines);
         const { Print, Sharing, FileSystem } = modulesFrom(modules);
         await sweepPrintedPdfs(FileSystem);
         const { uri } = await Print.printToFileAsync({ html });
         try {
-            await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: KIT_TITLE });
+            await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: lines.title });
         } finally {
             await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
         }

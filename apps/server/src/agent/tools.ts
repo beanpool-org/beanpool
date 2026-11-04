@@ -7,6 +7,8 @@
  * answer carries a key, a balance of any member, a reporter, a DM, a photo, an address or URL (the node's own included:
  * links are Settings paths the assistant joins to the address in its welcome), a host, a log line, or a destination's name.
  * The one exception is what a tool is for: photo_upload_link answers an address on this node, which the assistant sends photos to.
+ * The other is this community's own hosts, which it publishes anyway: node_overview's addressHost, and server_health's
+ * `addresses` (DNS robustness S6, agent/server-addresses.ts), each with what this server's check found there, never what it points at.
  * (my_posts reads back an online event's join link, as the fenced text it is.)
  * Member-written text comes back only fenced (agent/fence.ts) and, in lists, only when `include_text` is asked for.
  *
@@ -16,6 +18,8 @@
  * library tags and free tags, and tags_search finds the library's (agent/owner-reads.ts). MCP-MODERATION S1: an owner's grant ticked
  * "May take down posts for me" takes posts down directly (agent/owner-takedowns.ts): the one way an assistant changes moderation,
  * and it moves no Bean. It still can't dismiss a report, put a post back, lift a mute, or remove or suspend a member.
+ * MCP-MODERATION S3: an admin's grant ticked the same way (on the OAuth consent page) has `take_down`, one post a call, and never
+ * `take_down_many` or `takedowns_list`, the line Settings draws (only an owner deletes many). The role is the member's at each call.
  */
 import os from 'node:os';
 import { db } from '../db/db.js';
@@ -51,6 +55,7 @@ import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
 import { OWNER_READ_TOOLS } from './owner-reads.js';
 import { OWNER_TAKEDOWN_TOOLS, takedownsSummary } from './owner-takedowns.js';
 import { OWNER_SEED_TOOLS } from './owner-seeds.js';
+import { serverAddresses, NOT_CHECKED_STEP, SERVER_ADDRESS_KINDS, SERVER_ADDRESS_STANDINGS } from './server-addresses.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, suggestionAsks, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
@@ -69,7 +74,10 @@ export interface AgentGrant {
     expiresAt: number | null;
     /** "May post for me", ticked when it was connected (token form or consent page): only then are the posting tools listed. */
     canPost: boolean;
-    /** "May take down posts for me", ticked when it was connected: only then are the takedown tools listed. Left out, it may not. */
+    /**
+     * "May take down posts for me", ticked when it was connected: only then are the takedown tools listed. Left out, it may not. An
+     * owner's grant has all three; an admin's `take_down` alone, one post a call (MCP-MODERATION S3), by `role` above, read per call.
+     */
     canModerate?: boolean;
 }
 
@@ -92,9 +100,16 @@ export interface AgentTool {
     posts?: boolean;
     /** Only a grant ticked "May take down posts for me" (agent/owner-takedowns.ts): listed and callable. */
     moderates?: boolean;
+    /** A `posts` read a grant ticked "May take down posts for me" has too (listings_search, categories: MCP-MODERATION S2). */
+    alsoModerates?: boolean;
     write?: boolean;
     /** Takes something down (remove_post, remove_all_i_made, take_down, take_down_many): the MCP annotation says so. */
     destructive?: boolean;
+    /**
+     * A grant that does not have this tool but calls it by name (a tools list read before its member's role changed): why, in words.
+     * Null, or left out: "There is no tool …".
+     */
+    refusedTo?: (grant: AgentGrant) => string | null;
     inputSchema: JsonSchema;
     outputSchema: JsonSchema;
     /**
@@ -126,6 +141,26 @@ const FENCED_OR_NULL = {
 };
 const ARR = { type: 'array' };
 const FIRST_TRADE_WINDOW = OBJ({ joined: NUM, firstListing: NUM, firstTrade: NUM_OR_NULL, daysToFirstListing: NUM_OR_NULL, daysFromListingToTrade: NUM_OR_NULL });
+const HEALTH_PROPS: Record<string, JsonSchema> = {
+    diskUsedPercent: NUM_OR_NULL, memory: OBJ({ systemUsedPercent: NUM, processMb: NUM }), uncleanStop: BOOL, crashLoop: BOOL,
+    watchdog: OBJ({ present: BOOL, healthy: BOOL }), tlsFallback: BOOL, standbyIncident: { type: ['boolean', 'null'] },
+    serverAlerts: { type: ['array', 'null'] }, communityAlerts: ARR,
+};
+/** One of server_health's `addresses` (agent/server-addresses.ts). */
+const SERVER_ADDRESS_ROW = OBJ({
+    host: STR,
+    kind: { type: 'string', enum: [...SERVER_ADDRESS_KINDS] },
+    main: BOOL,
+    answers: { type: ['string', 'null'], enum: ['own', 'other', 'other-origin', 'silence', 'tls', null] },
+    checkedAt: STR_OR_NULL,
+    step: STR,
+    nextStep: STR,
+    standing: {
+        type: ['object', 'null'],
+        properties: { state: { type: 'string', enum: [...SERVER_ADDRESS_STANDINGS] }, registrarSays: STR_OR_NULL, words: STR },
+        required: ['state', 'registrarSays', 'words'],
+    },
+});
 
 function clampLimit(v: unknown, def = 20): number {
     const n = Math.floor(Number(v));
@@ -251,10 +286,13 @@ export const AGENT_CANNOT = [
     'reach another server',
 ];
 
-/** What this grant can't do: `connection_info`, said by what it was ticked for. */
-export function agentCannot(canModerate: boolean): string[] {
-    return !canModerate ? AGENT_CANNOT : AGENT_CANNOT.map((line) => (line === AGENT_CANNOT[3]
+/** What this grant can't do: `connection_info`, said by what it was ticked for, and by its member's role now. */
+export function agentCannot(canModerate: boolean, role: 'owner' | 'admin' = 'owner'): string[] {
+    if (!canModerate) return AGENT_CANNOT;
+    const lines = AGENT_CANNOT.map((line) => (line === AGENT_CANNOT[3]
         ? 'approve a suggestion, dismiss a report, put a post back or lift a mute (the admin does, on their phone or in Settings)' : line));
+    // An admin's assistant takes one post a call (MCP-MODERATION S3), as an admin deletes one at a time in Settings.
+    return role === 'owner' ? lines : [...lines, "take more than one post down in a call (an owner's assistant can)"];
 }
 
 export const AGENT_TOOLS: AgentTool[] = [
@@ -294,14 +332,20 @@ export const AGENT_TOOLS: AgentTool[] = [
         name: 'server_health',
         title: 'Server health',
         reads: 'disk use, memory, an unclean stop, a crash loop, the watchdog, a certificate fallback, a standby incident, the '
-            + "server's active alerts by name (owner grants), and the community alerts' types without names",
-        never: "a flag's members or description, an alert's detail, the alerts channel's address, or log lines",
+            + "server's active alerts by name (owner grants), the community alerts' types without names, and, on the main server, "
+            + "`addresses`: each published address of this community, main first, with its host, its kind, whether it is the main one, "
+            + 'what answered there when this server last checked it (own: this server; other: a server with another key; other-origin: '
+            + "something that isn't a BeanPool server; silence: nothing; tls: a certificate phones refuse; null: not asked, or "
+            + `step ${NOT_CHECKED_STEP}), when, and the one next step in words to pass on. A BeanPool name the address service doesn't `
+            + "simply give this community has a `standing` (at-risk or contradiction: what the address service says, and Settings' "
+            + 'words for it, which say what to do; pass those on with the next step, which then never says there is nothing to do), '
+            + 'otherwise null. The check looks from this server every '
+            + '15 minutes and can be wrong where phones are right: the check link it may name is https://<that host>/check, opened '
+            + 'on a phone on mobile data',
+        never: "a flag's members or description, an alert's detail, the alerts channel's address, what a name points at, a "
+            + "server's key, or log lines",
         inputSchema: NO_ARGS,
-        outputSchema: OBJ({
-            diskUsedPercent: NUM_OR_NULL, memory: OBJ({ systemUsedPercent: NUM, processMb: NUM }), uncleanStop: BOOL, crashLoop: BOOL,
-            watchdog: OBJ({ present: BOOL, healthy: BOOL }), tlsFallback: BOOL, standbyIncident: { type: ['boolean', 'null'] },
-            serverAlerts: { type: ['array', 'null'] }, communityAlerts: ARR,
-        }),
+        outputSchema: OBJ({ ...HEALTH_PROPS, addresses: { type: 'array', items: SERVER_ADDRESS_ROW } }, Object.keys(HEALTH_PROPS)),
         run: (grant) => {
             let diskUsedPercent: number | null = null;
             try { diskUsedPercent = Math.round(getDiskHealth().usedPercent * 10) / 10; } catch { /* a disk that cannot be read is unknown */ }
@@ -310,6 +354,8 @@ export const AGENT_TOOLS: AgentTool[] = [
             const watchdog = readWatchdogStatus();
             const flags = getCommunityHealth().flags ?? [];
             const total = os.totalmem();
+            // On the main server only, for owners and admins alike (Settings shows both the report): a standby's answer is today's.
+            const addresses = serverAddresses();
             return {
                 ok: true, rows: 1,
                 result: {
@@ -328,6 +374,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                     communityAlerts: flags.map((f) => ({
                         type: f.type, severity: f.severity, namesMembers: Array.isArray(f.members) && f.members.length > 0,
                     })),
+                    ...(addresses ? { addresses } : {}),
                 },
             };
         },
@@ -546,7 +593,7 @@ export const AGENT_TOOLS: AgentTool[] = [
             name: STR, member: STR, role: STR, via: STR, createdAt: STR_OR_NULL, expiresAt: STR_OR_NULL,
             calls: OBJ({ today: NUM, perMinute: NUM, perDay: NUM }), backups: OBJ({ today: NUM, perDay: NUM }), tools: ARR, cannot: ARR,
             posts: OBJ({ today: NUM, perDay: NUM, photoRoom: STR }), canPost: { type: 'boolean' }, canModerate: { type: 'boolean' },
-            takedowns: OBJ({ today: NUM, perDay: NUM }),
+            takedowns: OBJ({ today: NUM, perDay: NUM, perCall: NUM }),
             photos: OBJ({ today: NUM, perDay: NUM, uploadPath: STR, ways: STR }),
         }, ['name', 'member', 'role', 'via', 'createdAt', 'expiresAt', 'calls', 'backups', 'tools', 'cannot', 'canPost']),
         run: (grant) => ({
@@ -571,7 +618,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                 canModerate: grantModerates(grant),
                 ...(grantModerates(grant) ? { takedowns: takedownsSummary(grant) } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
-                cannot: agentCannot(grantModerates(grant)),
+                cannot: agentCannot(grantModerates(grant), grant.role),
             },
         }),
     },
@@ -681,7 +728,9 @@ AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_SEED_TOOLS, ...OWNER_READ_TOOLS, 
 
 /** The tools this grant has: an admin's grant has no owner-only tool. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {
-    return AGENT_TOOLS.filter((t) => (!t.ownerOnly || grant.role === 'owner') && (!t.posts || grant.canPost) && (!t.moderates || grant.canModerate));
+    return AGENT_TOOLS.filter((t) => (!t.ownerOnly || grant.role === 'owner')
+        && (!t.posts || grant.canPost || (t.alsoModerates === true && grant.canModerate === true))
+        && (!t.moderates || grant.canModerate));
 }
 
 /** Whether this grant posts: an owner's, ticked "May post for me" (agent/owner-posts.ts). */
@@ -689,9 +738,18 @@ export function grantPosts(grant: AgentGrant): boolean {
     return grant.role === 'owner' && grant.canPost && AGENT_TOOLS.some((t) => t.posts);
 }
 
-/** Whether this grant takes posts down: an owner's, ticked "May take down posts for me" (agent/owner-takedowns.ts). */
+/**
+ * Whether this grant takes posts down: ticked "May take down posts for me" (agent/owner-takedowns.ts), its member an owner or, one post
+ * a call, an admin (MCP-MODERATION S3). `role` is read on every call (agent/mcp-route.ts agentGrantFrom), never kept on the grant.
+ */
 export function grantModerates(grant: AgentGrant): boolean {
-    return grant.role === 'owner' && grant.canModerate === true;
+    return (grant.role === 'owner' || grant.role === 'admin') && grant.canModerate === true;
+}
+
+/** Words for a tool called by name that this grant does not have (agent/mcp-route.ts): the tool's own, else "There is no tool …". */
+export function unlistedToolWords(name: string, grant: AgentGrant): string {
+    const words = AGENT_TOOLS.find((t) => t.name === name)?.refusedTo?.(grant);
+    return words || `There is no tool "${name.slice(0, 60)}" for this assistant.`;
 }
 
 /** Whether the table offers suggestions (slice S4); the welcome and prompts say so only then. */

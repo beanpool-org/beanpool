@@ -88,6 +88,18 @@ export const PUSH_NOTICE_KINDS = {
     // To that member when an admin takes down their reply (server decisions-engine.ts adminHideReply): its details open the
     // vote, where the admin's reason stands in the reply's place.
     'account.reply-taken-down': { body: word('An admin took down your reply on a vote about your account. Open BeanPool to read why.'), tab: 'home' },
+    // A removal jury (server decisions-engine.ts, DESIGN-removal-jury-fable.md §4, §7; slice J2b). Each names nobody, not
+    // even the community, and its details open Commons, Decide. To each member seated on one, at the draw or in a seat
+    // that came free: they answer within three days (JURY_ANSWER_HOURS), Serve or Step aside, or the seat goes on.
+    'decision.jury': { body: word('You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.'), tab: 'home' },
+    // The same to one seated with less than two days of the vote left (JURY_LATE_SEAT_HOURS): told so.
+    'decision.jury-late': { body: word('You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.'), tab: 'home' },
+    // To a seated juror with no answer two days after being seated (JURY_REMINDER_HOURS).
+    'decision.jury-reminder': { body: word('A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.'), tab: 'home' },
+    // To every seated juror who hasn't voted, on the vote's sixth day (JURY_LAST_DAY_AFTER_DAYS).
+    'decision.jury-last-day': { body: word("A jury you're on closes in about a day. Open BeanPool to vote."), tab: 'home' },
+    // To every seated juror when the member the jury is deciding about answers the case (design §7).
+    'decision.jury-reply': { body: word('The member your jury is deciding about has answered the case. Open BeanPool to read it.'), tab: 'home' },
     'market.request': { body: word('Someone answered one of your listings.'), tab: 'market' },
     'market.answer': { body: word('There is news on one of your requests.'), tab: 'market' },
     'market.listing': { body: word('There is news on one of your listings.'), tab: 'market' },

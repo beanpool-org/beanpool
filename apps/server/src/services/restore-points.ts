@@ -236,6 +236,8 @@ export interface RestoreNotice {
     point: string;
     /** Who: an owner in Settings, or the server's shell (`beanpool restore`, `beanpool restore-point`). Older notices: an owner. */
     by?: 'owner' | 'shell';
+    /** A restore: the take-over count the file's keys carried (0 for none), for lights-out (services/lights-out.ts). */
+    epoch?: number;
 }
 
 /**
@@ -260,6 +262,8 @@ function day(iso: string | null): string {
 export interface RestoreNoticeDeps {
     announce: (title: string, body: string, severity: 'critical') => void;
     log: (message: string) => void;
+    /** A restore's notice, kept by this server for lights-out (services/lights-out.ts noteRestoredCopy). Never a roll-back's. */
+    remember?: (notice: RestoreNotice) => void;
 }
 
 /** Each notice a restore or roll-back left: the announcement and the log line, once. Returns how many. Never throws. */
@@ -300,6 +304,9 @@ export function deliverRestoreNotices(deps: RestoreNoticeDeps, dir = dataDir()):
             noteSecurityEvent({ key: 'sec.restore', detail, high: true, priority: 4 });
         } catch { /* an alert never blocks the boot */ }
         deps.log(`[RESTORE] ${body} Restore point kept before it: ${notice.point} (at ${notice.at}).`);
+        if (notice.kind === 'restore' && deps.remember) {
+            try { deps.remember(notice); } catch { /* never blocks the boot */ }
+        }
         delivered++;
     }
     return delivered;

@@ -3,7 +3,8 @@
  * scratch/global-node/DESIGN-https-anywhere-fable.md §3, D4): shown only when the phone's community says it lives
  * somewhere else now and the phone has checked, with the community's node key, that it is the same community. Never a
  * move on its own: "Use the new address" moves the phone (the BeanPool sheet's switch, then Welcome for the community
- * as it does), "Not now" asks again in 7 days. Asked each time Home comes into view, and again after any switch.
+ * as it does), "Not now" asks again in 7 days. Asked each time Home comes into view, again after any switch, and when
+ * another check finds the move changed (the fallback card's, utils/address-fallback.ts, which stands aside for this one).
  *
  * One column at 320 dp and 1.3× text: the sentence wraps (the address is never cut), the two 48 dp buttons stack.
  */
@@ -13,7 +14,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { t } from '@beanpool/core';
 import { settingsLineWords } from './settings/settings-lines';
 import { type AppColors } from '../constants/colors';
-import { acceptAddressFollow, addressFollowOffer, snoozeAddressFollow, type AddressFollowOffer, type FollowResult } from '../utils/address-follow';
+import { acceptAddressFollow, addressFollowOffer, onFollowOfferChanged, snoozeAddressFollow, type AddressFollowOffer, type FollowResult } from '../utils/address-follow';
 import { onCommunitySwitched } from '../utils/community-switch';
 
 export function AddressFollowCard({ colors }: { colors: AppColors }) {
@@ -24,12 +25,17 @@ export function AddressFollowCard({ colors }: { colors: AppColors }) {
     useFocusEffect(
         useCallback(() => {
             let live = true;
+            // Only the latest ask's answer is shown: an earlier one still on its way never puts back what a later one found.
+            let latest = 0;
             const check = () => {
-                addressFollowOffer().then(o => { if (live) setOffer(o); }).catch(() => {});
+                const mine = ++latest;
+                addressFollowOffer().then(o => { if (live && mine === latest) setOffer(o); }).catch(() => {});
             };
             check();
             const off = onCommunitySwitched(() => { if (live) setOffer(null); check(); });
-            return () => { live = false; off(); };
+            // Another check found the move changed (the fallback card's, which stands aside for this card): show what it found.
+            const offChanged = onFollowOfferChanged(check);
+            return () => { live = false; off(); offChanged(); };
         }, []),
     );
 

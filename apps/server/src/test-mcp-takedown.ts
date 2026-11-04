@@ -279,11 +279,16 @@ async function main(): Promise<void> {
         const both = await a.callTool({ name: 'take_down', arguments: { post_id: closedPost, report_id: closed, reason: 'spam', why: WHY } });
         assert(noReason.isError === true && /reason must be one of spam, offensive, misleading, unsafe, rules/.test(errorText(noReason)) && noWhy.isError === true && both.isError === true && !row(closedPost).hidden_by_reports_at,
             `a reason off the list, no why, or both ids is refused in words (${errorText(noReason)})`);
-        // The list keeps an unticked grant off the tools; the tool says no by itself too, and to an admin's grant ticked by any means.
+        // The list keeps an unticked grant off the tools; the tool says no by itself too. Since MCP-MODERATION S3 an admin's grant ticked
+        // has take_down, one post a call (test-mcp-takedown-admin.ts proves it): here the tool refuses an admin's not ticked, and
+        // take_down_many refuses an admin's ticked by any means.
         const toolRow = OWNER_TAKEDOWN_TOOLS.find(t => t.name === 'take_down')!;
+        const manyRow = OWNER_TAKEDOWN_TOOLS.find(t => t.name === 'take_down_many')!;
         const asGrant = (over: Partial<AgentGrant>): AgentGrant => ({ id: 'x', name: 'x', member: owner.pub, role: 'owner', via: 'token', createdAt: 0, expiresAt: null, canPost: false, ...over });
         const direct = (over: Partial<AgentGrant>) => toolRow.run(asGrant(over), { post_id: closedPost, reason: 'spam', why: WHY }, 'b0b0b0b0') as ToolResult;
-        assert(!direct({ canModerate: false }).ok && !direct({}).ok && !direct({ role: 'admin', canModerate: true }).ok && !row(closedPost).hidden_by_reports_at, 'the tool itself refuses a grant not ticked, and an admin\'s');
+        const directMany = (over: Partial<AgentGrant>) => manyRow.run(asGrant(over), { post_ids: [closedPost], reason: 'spam', why: WHY }, 'b0b0b0b0') as ToolResult;
+        assert(!direct({ canModerate: false }).ok && !direct({}).ok && !direct({ role: 'admin', canModerate: false }).ok && !directMany({ role: 'admin', canModerate: true }).ok
+            && !row(closedPost).hidden_by_reports_at, 'the tool itself refuses a grant not ticked, owner\'s or admin\'s, and take_down_many an admin\'s');
 
         // ── 4. By report ─────────────────────────────────────────────────────────────────────────────
         const reported = post('Fake tickets', sam.pub);

@@ -116,6 +116,8 @@ import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
+import { createLightsOutRoutes } from './routes/lights-out.js';
+import { lightsOutGuard } from './services/lights-out.js';
 import { createAppAddressesRoutes } from './routes/app-addresses.js';
 import { createCommunityCardRoutes } from './routes/community-card.js';
 import { createOwnerUnlockRoutes } from './routes/owner-unlock.js';
@@ -137,6 +139,7 @@ import { LISTINGS_MEMBERS_ONLY } from './listings-members-only.js';
 import { peekTicketOpens } from './engine/peek-tickets.js';
 import { createPeekRoutes } from './routes/peek.js';
 import { createCheckPageRoutes } from './routes/check-page.js';
+import { androidOnTheLocalNetwork } from './routes/android.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
@@ -1574,6 +1577,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // The split-brain guard (services/identity-epoch.ts): once this server has seen that another took over its
     // identity, members' writes are refused here, before a body is read. The admin control plane stays open.
     app.use(identityReadOnlyGuard);
+    // Lights-out (services/lights-out.ts, design §2.7): while the hall is open, address changes are refused, and the first
+    // write that changes the record (a member's, an owner's or an admin's) is noted for the stand-down offer.
+    app.use(lightsOutGuard);
 
     // JSON body parser middleware
     app.use(async (ctx, next) => {
@@ -1985,6 +1991,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAgentSuggestionRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
+        createLightsOutRoutes(deps),
         createOwnerUnlockRoutes(deps),
         createMarketplaceRoutes(deps),
         createEventsRoutes(deps),
@@ -2058,6 +2065,10 @@ export async function startHttpsServer(port: number): Promise<number> {
             ctx.set('X-Admin-2FA-Session', ctx.state.tfaSessionToken);
         }
     });
+
+    // The Android APK, its page and the web app's link to it, only to a request straight off the local network; anyone else
+    // goes on as for a path that isn't there (routes/android.ts says why this is not a route of the router).
+    app.use(androidOnTheLocalNetwork());
 
     app.use(router.routes());
     app.use(router.allowedMethods());

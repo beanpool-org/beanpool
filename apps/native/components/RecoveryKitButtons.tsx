@@ -25,8 +25,8 @@ const kitAlert: Parameters<typeof askBeforeSavingKit>[0] = (title, message, butt
 /**
  * Print your recovery kit / Save as PDF, under the 12 words wherever the app shows them to the member
  * (utils/recovery-kit.ts). Optional: nothing waits on them. Stacked full width, so at 320dp with 1.3x text each
- * label wraps rather than clips; 48dp targets. The labels are in the member's language; the printed kit itself is
- * English for now (recovery-kit.ts and core's recoveryKitHtml are on the 12 words' key path).
+ * label wraps rather than clips; 48dp targets. The labels are in the member's language, and so is the printed kit (core's
+ * printedKitLines(), asked for by utils/recovery-kit.ts when the page is made); its 12 words stay English in every language.
  */
 export function RecoveryKitButtons({ words, colors = lightColors }: { words: readonly string[] | null; colors?: AppColors }): React.JSX.Element | null {
     const s = styles(colors);

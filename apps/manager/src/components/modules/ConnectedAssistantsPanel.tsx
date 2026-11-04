@@ -29,7 +29,8 @@ import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
  *
  * "May take down posts for me" (server agent/owner-takedowns.ts) is its own tick on the token form, off by default, with the same fresh
  * proof; each row says whether it was ticked and how many posts it took down today. What they took down is on Moderation
- * (AssistantTakedownsPanel).
+ * (AssistantTakedownsPanel). An owner's row for an assistant with takedowns still waiting also offers "Disconnect and put back"
+ * (MCP-MODERATION S2): one tap stops it and puts back everything it took down that waits, the undo of a stolen token's day.
  */
 
 interface AgentGrantRow {
@@ -53,6 +54,8 @@ interface AgentGrantRow {
     /** "May take down posts for me", ticked when it was connected (a server older than it sends none). */
     canModerate?: boolean;
     takedownsToday?: number;
+    /** Its takedowns still waiting, not put back and not final (MCP-MODERATION S2): what "Disconnect and put back" puts back. */
+    takedownsHeld?: number;
     /** Its posts still up (slice S2), which "Remove its posts" takes down (a server older than it sends none). */
     madePosts?: number;
 }
@@ -323,6 +326,32 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         await load();
     };
 
+    // Disconnect and put back (server agent/grants-route.ts, `putBack`): an owner's, one tap after the in-page confirm, no code.
+    const handleRevokeAndPutBack = async (g: AgentGrantRow) => {
+        const n = g.takedownsHeld ?? 0;
+        const whose = g.mine || !g.member ? '' : ` (${g.member}'s)`;
+        if (!(await ask({
+            title: `Disconnect "${g.name}"${whose} and put back what it took down?`,
+            body: `It stops at once, and the ${n} post${n === 1 ? '' : 's'} it took down that ${n === 1 ? 'is' : 'are'} still waiting go${n === 1 ? 'es' : ''} back to where ${n === 1 ? 'it' : 'they'} stood.`,
+            confirmLabel: 'Disconnect and put back',
+        }))) return;
+        setMessage('');
+        try {
+            const { res, json } = await post(`${GRANTS}/${encodeURIComponent(g.id)}/revoke`, { putBack: true });
+            if (!res.ok) {
+                setMessage(`Not disconnected: ${json.error || `HTTP ${res.status}`}`);
+            } else {
+                const back = Array.isArray(json.putBack?.back) ? json.putBack.back.length : 0;
+                const hidden = Array.isArray(json.putBack?.stillHidden) ? json.putBack.stillHidden.length : 0;
+                setMessage(`Disconnected. ${back} post${back === 1 ? '' : 's'} put back${hidden ? `; ${hidden} stay${hidden === 1 ? 's' : ''} hidden for the moderators, as before the takedown` : ''}.`);
+            }
+            if (previewFor === g.id) setPreviewFor(null);
+        } catch (e: unknown) {
+            setMessage(e instanceof Error ? e.message : String(e));
+        }
+        await load();
+    };
+
     // Every post an assistant made that is still up, taken down as their author would (server agent/owner-posts.ts
     // removeAllMadeBy), for a disconnected one too. `code`: the fresh proof typed in the box, when the node asked one.
     const handleRemoveMade = async (id: string, label: string, count: number, code?: string) => {
@@ -504,6 +533,10 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 <li>
                                     Approve on your phone when it asks: check it names the assistant&rsquo;s address, then type the two digits.
                                     {isOwner ? ' Tick “May post for me” on that page only if it should post for you.' : ''}
+                                    {/* MCP-MODERATION S3: the page's second tick, for an owner's assistant or an admin's (one post a call). */}
+                                    {isOwner
+                                        ? ' Tick “May take down posts for me” only if it should take posts down for you.'
+                                        : ' Tick “May take down posts for me” on that page only if it should take posts down for you, one post a call.'}
                                 </li>
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
@@ -757,9 +790,9 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                                         : 'Reads only: not ticked to post'}
                                                 </p>
                                             )}
-                                            {g.role === 'owner' && g.canModerate === true && (
+                                            {(g.role === 'owner' || g.role === 'admin') && g.canModerate === true && (
                                                 <p className="text-[11px] text-nature-400 m-0 break-words" data-testid="agent-grant-moderates">
-                                                    May take down · {g.takedownsToday ?? 0} today
+                                                    May take down{g.role === 'admin' ? ', one post a call' : ''} · {g.takedownsToday ?? 0} today{(g.takedownsHeld ?? 0) > 0 ? ` · ${g.takedownsHeld} waiting` : ''}
                                                 </p>
                                             )}
                                             {typeof g.madePosts === 'number' && g.madePosts > 0 && (
@@ -796,6 +829,17 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                             >
                                                 Disconnect
                                             </button>
+                                            {isOwner && (g.takedownsHeld ?? 0) > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleRevokeAndPutBack(g)}
+                                                    aria-label={`Disconnect ${g.name} and put back what it took down`}
+                                                    data-testid="agent-grant-revoke-put-back"
+                                                    className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                                >
+                                                    Disconnect and put back
+                                                </button>
+                                            )}
                                             {isOwner && typeof g.madePosts === 'number' && g.madePosts > 0 && removeButton(g.id, `"${g.name}"`, g.madePosts)}
                                         </div>
                                         {previewFor === g.id && previewPanel}

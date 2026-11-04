@@ -27,6 +27,13 @@ These style rules apply to all BeanPool translation drafting rounds (app words i
 
 ## 3. Recurring Glossary
 
+**The glossary is `scripts/words/GLOSSARY.csv`** (one row per term: what it means, whether it is `untranslatable` or `forbidden`, and the
+rendering in each language that has one). `node scripts/words/words.mjs check` holds every translation to it: a sentence that has a
+glossary term carries the language's rendering (or an allowed variant), every number in the English is in the translation, and
+"BeanPool" and typed words like CONFIRM stay as written. A rendering the glossary does not have yet is not yours to invent in one
+sentence: use one plain word and use it every time (and say in your report which word, so the glossary can take it). The list below
+is the short form.
+
 Reuse existing translations character-for-character across all files:
 - **Beans**: The unit of trade.
 - **Offer**: A post offering help, goods, or skills.
@@ -64,7 +71,9 @@ Before translating, check your language's existing catalog `_meta.glossary` in:
    - Translate into the exact plural categories required by your language (e.g. ru needs `one`, `few`, `many`, `other`; es/fr/pt need `one`, `other`). Check other plural entries in the same catalog file.
 
 4. **Numbers, Limits & Amounts**:
-   - Numbers, days, limits, and rules must stay EXACT (e.g. "30 days", "500 Beans", "2 must act together").
+   - Numbers, days, limits, and rules must stay EXACT (e.g. "30 days", "500 Beans", "2 must act together"). Write every number in the
+     English as a digit in your translation ("30 días", not "treinta días"; your language's own digits are fine): `words check` fails a
+     translation that lacks one.
    - Levels and tiers are merit badges: they NEVER lock or unlock features. Never translate a level sentence as if it gates or restricts an action.
 
 5. **Security & Safety Sentences**:
@@ -73,6 +82,7 @@ Before translating, check your language's existing catalog `_meta.glossary` in:
 
 6. **Literal Typed Words**:
    - Words that the member must type literally into an input stay in English (e.g. **CONFIRM**). The application validates the exact English word.
+   - "BeanPool" is never translated, transliterated or left out of a sentence that has it (`words check` fails the sentence).
 
 7. **Layout & Direction**:
    - Translate the words left and right, but never swap them: the app draws left-to-right in every language, so 'top left' stays the top LEFT in Arabic, Persian and Urdu too.

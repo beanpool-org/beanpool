@@ -142,6 +142,12 @@ export interface DiagnosticsResponse {
      * read its alert book. Settings' Home lists these as they are, never working them out again.
      */
     serverAlerts?: { count: number; items: ServerAlert[] } | null;
+    /**
+     * The Android app this node carries for its local network (the apk-on-node lane, lights-out H3): its version at least.
+     * Absent until that lane lands; "Ready for the hall" then says the APK is not on this node yet (lib/hall-ready.ts
+     * readApkState reads it leniently and shows nothing ticked for anything it cannot read).
+     */
+    apk?: { version: string; versionCode?: number; size?: number } | null;
 }
 
 /** One of the server's own alerts, as the node says it. `priority`: 5 urgent, 4 high, 3 warning, 2 low, 1 info. */
@@ -156,7 +162,11 @@ export interface ServerAlert {
 /** When the standby needs its owners: an incident, in the node's words, and each standby it watches. */
 export interface StandbyHealthBanner {
     incident: { id: string; startedAt: number; pushed: boolean; lines: string[]; whatToDo: string[] } | null;
-    standbys: { id: string; label: string; lastPullAt: number; lastCopyAt: number | null; lastExactAt: number | null; healthy: boolean }[];
+    standbys: {
+        id: string; label: string; lastPullAt: number; lastCopyAt: number | null; lastExactAt: number | null; healthy: boolean;
+        /** Whether the standby says it is paired with this server (services/standby-health.ts `Paired`); absent from a node before it. */
+        paired?: 'this' | 'other' | 'none' | 'unknown';
+    }[];
 }
 
 /** An owner's "this standby is gone for good": the node stops watching it until it reports again. */
@@ -2109,8 +2119,13 @@ export interface BackupVerificationResult {
     result?: unknown[];
 }
 
+/**
+ * The node's snapshot schedule, read from snapshots/list (which answers it as `config`), never from snapshots/config:
+ * that route both reads and saves, so the node's lights-out count (server services/lights-out.ts NOT_HALL_WRITES) can't
+ * tell a read there from a change, and an owner who only opened Settings in the hall would lose the stand-down offer.
+ */
 export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotScheduleConfig> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/list');
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),

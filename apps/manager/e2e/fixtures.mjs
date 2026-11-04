@@ -1054,9 +1054,13 @@ const AGENT_GRANTS = {
         { id: 'a9e5c0ffee00', name: 'Claude Desktop on the community hall laptop', member: 'Wilhelmina-Featherstonehaugh', mine: false, role: 'admin', via: 'token',
             createdAt: Date.UTC(2026, 9, 1), expiresAt: Date.UTC(2026, 9, 31), expired: false, lastUsedAt: Date.UTC(2026, 9, 12), callsToday: 1234 },
         { id: 'a9e5c0ffee02', name: 'Cursor', member: 'Olive', mine: true, role: 'owner', via: 'token',
-            createdAt: Date.UTC(2026, 9, 10), expiresAt: Date.UTC(2026, 11, 9), expired: false, lastUsedAt: null, callsToday: 0 },
+            createdAt: Date.UTC(2026, 9, 10), expiresAt: Date.UTC(2026, 11, 9), expired: false, lastUsedAt: null, callsToday: 0,
+            // Ticked "May take down posts for me", with takedowns still waiting: its row offers "Disconnect and put back" (MCP-MODERATION S2).
+            canModerate: true, takedownsToday: 2, takedownsHeld: 3 },
         { id: 'oa5c0ffee004', name: 'Claude', sendsTo: 'claude.ai', member: 'Wilhelmina-Featherstonehaugh', mine: false, role: 'admin', via: 'oauth',
-            createdAt: Date.UTC(2026, 9, 14), expiresAt: null, expired: false, lastUsedAt: Date.UTC(2026, 9, 14), callsToday: 12 },
+            createdAt: Date.UTC(2026, 9, 14), expiresAt: null, expired: false, lastUsedAt: Date.UTC(2026, 9, 14), callsToday: 12,
+            // Ticked on the consent page: an admin's takes one post a call (MCP-MODERATION S3), the longer line drawn at 320px.
+            canModerate: true, takedownsToday: 1 },
         { id: 'a9e5c0ffee03', name: 'Old helper', member: 'Former Admin', mine: false, role: null, via: 'token',
             createdAt: Date.UTC(2026, 8, 1), expiresAt: Date.UTC(2026, 9, 1), expired: true, lastUsedAt: Date.UTC(2026, 8, 20), callsToday: 0 },
     ],
@@ -1496,7 +1500,8 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/restore-points') return ok({ points: RESTORE_POINTS });
 
     // ---- snapshots ----
-    if (pathname === '/api/local/admin/snapshots/list') return ok({ snapshots: SNAPSHOTS });
+    // The node answers its schedule with the list (routes/backup.ts), and Settings reads it there (node-client fetchNodeSnapshotSchedule).
+    if (pathname === '/api/local/admin/snapshots/list') return ok({ snapshots: SNAPSHOTS, config: SNAPSHOT_SCHEDULE });
     if (pathname === '/api/local/admin/snapshots/create') return ok({ snapshot: { name: 'snap-2026-09-19T12-00-00Z-riverbend-community-exchange-full.db.gz', sizeBytes: 813000000, createdAt: '2026-09-19T12:00:00.000Z' } });
     if (pathname === '/api/local/admin/snapshots/delete') return ok({ success: true });
     if (pathname === '/api/local/admin/snapshots/config') return ok({ config: SNAPSHOT_SCHEDULE });

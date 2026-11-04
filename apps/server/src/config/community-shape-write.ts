@@ -91,7 +91,7 @@ export const SHAPE_STANDBY = 'This server is a standby copy of the community, no
 
 /** A refusal: the status, a code the page reads, and the sentence it shows (a lock's own why, for a 409). */
 export class ShapeChangeError extends Error {
-    constructor(readonly status: 400 | 403 | 409, readonly code: string, message: string, readonly setting?: string, readonly unlock?: string) {
+    constructor(readonly status: 400 | 403 | 409 | 429, readonly code: string, message: string, readonly setting?: string, readonly unlock?: string) {
         super(message);
         this.name = 'ShapeChangeError';
     }
@@ -137,7 +137,7 @@ const NOT_CHANGED_HERE: Record<string, string> = {
 };
 
 /** The settings' names, for the owners' alert and the server's log (design §8.1). */
-const SETTING_NAMES: Record<ShapeSettingName, string> = {
+export const SETTING_NAMES: Record<ShapeSettingName, string> = {
     join: 'Who can join', wordsDoor: '12 words at the open door',
     doorCheck: 'A person check on busy days', knocks: 'Requests to join', beans: 'Beans',
     knownFloor: 'Known floor for confirmed members', dmRequests: 'First message from someone new',

@@ -6,6 +6,7 @@ import type { RolesViewer } from './NodeRolesPanel';
 import { useInPageConfirm } from '../common/InPageConfirm';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
+import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
 
 /**
  * "Taken down by assistants" (scratch/fable-design/DESIGN-mcp-moderation-fable.md §3.13; the server is apps/server
@@ -42,7 +43,8 @@ export interface TakedownCall {
     at: string;
     reasonLabel: string;
     why: string;
-    via: 'ids' | 'reports';
+    /** author: `author_of`, one post and its author's others (MCP-MODERATION S2). */
+    via: 'ids' | 'reports' | 'author';
     finalAfter: string;
     posts: PostLine[];
 }
@@ -66,8 +68,8 @@ const childSafetyOpen = (p: PostLine) => isHeld(p) && p.childSafetyOpen === true
 const leftForDeal = (p: PostLine) => p.state === 'left_hidden' && p.leftFor !== 'child_safety';
 const stateWords = (p: PostLine) => {
     if (!childSafetyOpen(p)) return STATE_WORDS[p.state];
-    if (leftForDeal(p)) return `${STATE_WORDS.left_hidden}, and a Child safety report is open`;
-    return `${p.state === 'hidden' ? 'Hidden' : 'Left hidden'}: a Child safety report is open`;
+    if (leftForDeal(p)) return `${STATE_WORDS.left_hidden}, and ${CHILD_SAFETY_OPEN}`;
+    return `${p.state === 'hidden' ? 'Hidden' : 'Left hidden'}: ${CHILD_SAFETY_OPEN}`;
 };
 const DEAL_WARNING = 'It has a deal in escrow: removing it refunds the buyer, as any removal does.';
 const CHILD_SAFETY_WARNING = 'A Child safety report on it is still open, for a person to read. Removing the post closes that report and tells whoever filed it.';
@@ -186,7 +188,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
             <div className="border-b border-nature-800 pb-3 min-w-0">
                 <h3 id="agent-takedowns-title" className="text-base font-bold text-white m-0 break-words">Taken down by assistants</h3>
                 <p className="text-xs text-nature-400 m-0 mt-1 break-words">
-                    What an owner&apos;s AI assistant took down. It is hidden at once, and removed for good after 7 days unless you put it back here. Only a person can put a post back: it returns to where it stood, so a post hidden for review before stays hidden, and the reports the takedown closed open again.
+                    What an owner&apos;s or an admin&apos;s AI assistant took down. It is hidden at once, and removed for good after 7 days unless you put it back here. Only a person can put a post back: it returns to where it stood, so a post hidden for review before stays hidden, and the reports the takedown closed open again.
                 </p>
             </div>
             {message && <p role="status" className="text-sm text-nature-200 m-0 break-words">{message}</p>}
@@ -222,7 +224,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
                         <li key={t.id} className="border border-nature-800 rounded-xl p-3 sm:p-4 space-y-2 min-w-0" data-testid="agent-takedown">
                             <p className="text-sm text-white m-0 font-semibold break-words">{t.grantName}: {count(t.posts.length)}, {t.reasonLabel}</p>
                             <p className="text-xs text-nature-400 m-0 break-words">
-                                {when(t.at)} · {t.via === 'reports' ? 'by reports' : 'by post'}{t.member ? ` · for ${t.member}` : ''}{held.length > 0 ? ` · final ${when(t.finalAfter)}` : ''}
+                                {when(t.at)} · {t.via === 'reports' ? 'by reports' : t.via === 'author' ? "by one member's posts" : 'by post'}{t.member ? ` · for ${t.member}` : ''}{held.length > 0 ? ` · final ${when(t.finalAfter)}` : ''}
                             </p>
                             <div className="border-l-2 border-nature-700 pl-3 min-w-0">
                                 <p className="text-xs uppercase tracking-wide text-nature-400 m-0">The assistant&apos;s words</p>

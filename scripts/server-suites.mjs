@@ -17,6 +17,8 @@ export const DEFAULT_ENV = {
     ENABLE_PEER_CONNECTORS: 'true',
     // No test node asks GitHub for the latest release (its 30s timer fires in a slow run and trips the off-machine checks).
     DISABLE_UPDATE_CHECK: 'true',
+    // Nor for a newer Android APK (services/apk-mirror.ts; its first check is 10 minutes after the start, past any suite).
+    DISABLE_APK_UPDATE_CHECK: 'true',
     // A new install makes no admin password and ignores ADMIN_PASSWORD (config/local-config.ts initAdminPassword). The
     // suites that sign in with a password on a fresh data dir still get it from ADMIN_PASSWORD with this; the ones that
     // check a new install (test-no-password-fresh-install, test-node-claim, test-first-admin-password) remove it.
@@ -229,10 +231,13 @@ export const SUITES = [
     'test-admin-mcp-settings',
     'test-admin-mcp-suggestions',
     'test-admin-mcp-oauth',
+    'test-mcp-addresses',
     'test-mcp-owner-posts',
     'test-mcp-owner-reads',
     'test-mcp-owner-undo',
     'test-mcp-takedown',
+    'test-mcp-takedown-author',
+    'test-mcp-takedown-admin',
     'test-mcp-owner-edit',
     'test-mcp-owner-polls',
     'test-mcp-owner-tags',
@@ -629,6 +634,8 @@ export const SUITES = [
     'test-tls-first-boot',
     'test-acme-http01',
     'test-plain-http-gate',
+    'test-lights-out',
+    'test-apk-on-node',
     'test-key-succession',
     'test-dm-former-keys-readers',
     'test-group-history-after-rekey',

@@ -12,6 +12,11 @@ vi.mock('./EverydayRuleRows', () => ({ EverydayRuleRows: () => null }));
 vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));
 // So does "Taken down by assistants" (its own tests: AssistantTakedownsPanel.test.tsx).
 vi.mock('./AssistantTakedownsPanel', () => ({ AssistantTakedownsPanel: () => null }));
+// So does the posts screen, which reads the takedown record on mount for an owner or admin (its own tests: PostModerationPanel.test.tsx and
+// PostModerationPanel.types.test.tsx); here it only shows who it was told is looking.
+vi.mock('./PostModerationPanel', () => ({
+    PostModerationPanel: (props: { viewer?: unknown }) => <div data-testid="post-moderation-panel" data-viewer={JSON.stringify(props.viewer ?? null)} />,
+}));
 // So does the card of who reports stopped from sending message requests (its own tests: RequestLimitsCard.test.tsx).
 vi.mock('./RequestLimitsCard', () => ({ RequestLimitsCard: () => <div data-testid="request-limits-card" /> }));
 
@@ -442,6 +447,19 @@ describe('PeopleSafetySection Component', () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }));
         renderModeration([]);
         expect(await screen.findByTestId('request-limits-card')).toBeInTheDocument();
+    });
+
+    // MCP-MODERATION S4: the posts screen draws "taken down by an assistant" only for a session that may read that record, so the
+    // section must tell it who is looking, exactly as it tells the cards beside it.
+    it('tells the posts screen who is looking: the password, or the signed-in key and its role', () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) }));
+        renderModeration([]);
+        expect(JSON.parse(screen.getByTestId('post-moderation-panel').getAttribute('data-viewer') ?? 'null')).toEqual({ kind: 'password' });
+        cleanup();
+        const viewer = { kind: 'key' as const, memberPubkey: 'm'.repeat(64), role: 'moderator' as const };
+        renderModeration([], vi.fn(), { rolesViewer: viewer });
+        expect(JSON.parse(screen.getByTestId('post-moderation-panel').getAttribute('data-viewer') ?? 'null')).toEqual(viewer);
+        vi.unstubAllGlobals();
     });
 
     it('sub-tab count badge counts OPEN reports only and falls as handled', async () => {

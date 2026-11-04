@@ -398,7 +398,7 @@ describe('HomeScreen Component', () => {
 
         it('an admin gets a grey line and no button; All clear is hidden', () => {
             render(<HomeScreen {...defaultProps} viewer={ADMIN} nodeData={read as any} diag={diag} shape={baseShape(UNLOCKED)} />);
-            expect(screen.getByTestId('home-core-admin-line')).toHaveTextContent("The owners haven't confirmed the core settings yet. You can read them.");
+            expect(screen.getByTestId('home-core-admin-line')).toHaveTextContent("The owners haven't confirmed the core settings yet. You can read them and advise.");
             expect(screen.queryByRole('button', { name: /Core settings not confirmed yet/ })).toBeNull();
             expect(screen.getByTestId('home-action-required')).not.toHaveTextContent(/All clear/);
         });

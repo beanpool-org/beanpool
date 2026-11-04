@@ -34,6 +34,7 @@ import {
 import { changeEnterpriseFace, EnterpriseFaceRefusal, shopfrontOf } from '../engine/enterprise-shopfront.js';
 import { memberShop, newListingCategory, shopOf, visitorShop } from '../engine/shops.js';
 import { getChatMute } from '../engine/chat-mutes.js';
+import { enterpriseThreadReadRefusal } from '../engine/enterprise-thread.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { LISTING_COPY_CODE } from '../engine/escrow.js';
 import { pledgesReturnedAt as pledgesReturnedAtFor } from '../engine/unfunded-pledges.js';
@@ -1793,6 +1794,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const threadGetHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
+        // Every member of this community reads it, keepers or not, and nobody else, whatever ENFORCE_READ_AUTH says
+        // (#2157): GET /api/messages/:conversationId holds the same rule. Before the 404, as the read gate is.
+        const refusal = enterpriseThreadReadRefusal(ctx.state?.actor as string | undefined);
+        if (refusal) {
+            ctx.status = refusal.status;
+            ctx.body = refusal.code ? { error: refusal.error, code: refusal.code } : { error: refusal.error };
+            return;
+        }
         if (threadHidden(treasury)) {
             ctx.status = 404;
             ctx.body = { error: word('Enterprise not found') };
@@ -1810,7 +1819,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const messages = getEnterpriseThreadMessages(treasury, limit, offset);
 
         // The caller's own mute of this thread (groups decision 12), so the phone can show it and offer Unmute on the
-        // next visit. Additive: null for an unsigned read (read auth off) or a thread they never muted.
+        // next visit. Additive: null for a thread they never muted (an unsigned read is refused above).
         const actor = ctx.state?.actor as string | undefined;
         ctx.body = {
             conversation,

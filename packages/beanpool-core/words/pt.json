@@ -1972,5 +1972,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} em outra comunidade · Você não pode comprar nem pegar isto aqui.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} em {community} · Você não pode comprar nem pegar isto até {community} receber você.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 Explorar a comunidade global"
+  "🌍 Look around the global community": "🌍 Explorar a comunidade global",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Há um júri esperando sua resposta, pois o sorteio caiu em você. Responda em até um dia, ou sua vaga passa para o próximo membro sorteado.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "O júri de que você faz parte se encerra em cerca de um dia. Abra o BeanPool para votar.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "O membro sobre quem seu júri está decidindo respondeu ao caso. Abra o BeanPool para ler a resposta.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "O sorteio de um júri da sua comunidade caiu em você, e a votação termina em menos de 2 dias. Abra o BeanPool para fazer parte do júri ou se afastar.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "O sorteio de um júri da sua comunidade caiu em você. Abra o BeanPool em até 3 dias para fazer parte do júri ou se afastar."
 }

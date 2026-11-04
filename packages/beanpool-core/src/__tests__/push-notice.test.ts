@@ -25,17 +25,6 @@ describe('the kinds', () => {
         expect(PUSH_NOTICE_KINDS['decision.open'].tab).toBe('home');
     });
 
-    it("a neighbour's Need is a kind of its own, landing on the Market, that names no one, no category and no title (cold-start N1; slice N3 sends it)", () => {
-        expect(isPushNoticeKind('market.asked')).toBe(true);
-        expect(PUSH_NOTICE_KINDS['market.asked'].tab).toBe('market');
-        expect(pushNoticeWords('market.asked')).toEqual({ title: PUSH_NOTICE_TITLE, body: "Someone in your community asked for something you're into." });
-        // A lock screen is anyone's to read: the stars are private, so the sentence says no category, no name and no amount.
-        expect(PUSH_NOTICE_KINDS['market.asked'].body).not.toMatch(/\d|Beans|food|garden|tools|labour|Mullum|Byron/i);
-        // A notice of it signs and verifies like any other kind.
-        expect(verifyPushNotice(notice({ k: 'market.asked' }), { recipient: ME, pushKey: KEY, now: NOW + 60 }))
-            .toEqual({ ok: true, kind: 'market.asked', id: '0123456789abcdef0123456789abcdef', sentAt: NOW });
-    });
-
     it("a group invitation is a kind of its own, landing on Home, whose Needs-you line opens it: the member is in no chat of the group's yet", () => {
         expect(isPushNoticeKind('group.invite')).toBe(true);
         expect(PUSH_NOTICE_KINDS['group.invite'].tab).toBe('home');

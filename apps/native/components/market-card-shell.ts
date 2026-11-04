@@ -49,6 +49,7 @@ export function chipTones(colors: Colors): Record<CardChipRole, { bg: string; fg
 const weightOf = ({ weight }: CardType) => String(weight) as TextStyle['fontWeight'];
 
 const LIST = MARKET_CARD_TYPE.list;
+const PAGE = MARKET_CARD_TYPE.page;
 const GRID = MARKET_CARD_TYPE.grid;
 const SLOT = SHELL.photo.list.width;
 const GRID_PHOTO = SHELL.photo.grid;
@@ -64,6 +65,14 @@ export function makeCardShell(colors: Colors) {
         borderTopLeftRadius: SHELL.radius,
         borderBottomLeftRadius: SHELL.radius,
     };
+    /** The one card shadow, the card's and a page box's. */
+    const shadow = {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: SHELL.shadow.offsetY },
+        shadowOpacity: SHELL.shadow.opacity,
+        shadowRadius: SHELL.shadow.blur,
+        elevation: SHELL.shadow.elevation,
+    };
     const styles = StyleSheet.create({
         /** The card: corners, the 1 dp border, the card ground, the one shadow, the gap under it. */
         card: {
@@ -73,11 +82,7 @@ export function makeCardShell(colors: Colors) {
             borderColor: colors.border.default,
             overflow: 'hidden',
             marginBottom: SHELL.gap.list,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: SHELL.shadow.offsetY },
-            shadowOpacity: SHELL.shadow.opacity,
-            shadowRadius: SHELL.shadow.blur,
-            elevation: SHELL.shadow.elevation,
+            ...shadow,
         },
         /** The list card: the picture slot on the left, the text column beside it, no padding round the picture. */
         list: { flexDirection: 'row', padding: 0 },
@@ -159,6 +164,24 @@ export function makeCardShell(colors: Colors) {
          * less the text column's own padding.
          */
         clearOfClose: { marginRight: CLOSE.size + 2 * CLOSE.inset - SHELL.textPadding },
+        /**
+         * A page's box (DESIGN-detail-pages-fable.md §2.2, with the style box's one text padding, §3 row 3): the card's corners,
+         * border, ground and shadow round an object on an item's own page (the person, the note, the reminder, the guest list).
+         * The page places it: its margins are the page's rhythm, not the box's.
+         */
+        pageBox: {
+            backgroundColor: colors.surface.card,
+            borderRadius: SHELL.radius,
+            borderWidth: SHELL.borderWidth,
+            borderColor: colors.border.default,
+            padding: SHELL.textPadding,
+            ...shadow,
+        },
+        /** A box's label in small capitals (the capitals are the words'): 10/800, spaced 1.5, muted. */
+        boxLabel: { ...cardType(PAGE.boxLabel), letterSpacing: PAGE.boxLabelSpacing, color: colors.text.muted },
+        /** A page's button, filled or outlined: 48 tall, corners 12; its words 15/700. The caller gives the role's colours. */
+        pageButton: { minHeight: PAGE.buttonHeight, borderRadius: PAGE.buttonRadius, alignItems: 'center', justifyContent: 'center' },
+        pageButtonText: cardType(PAGE.button),
         /**
          * The grid (DESIGN-market-grid-sizes-fable.md §2.2, §2.5, slice PG2) is a list of rows: two tiles side by side with the
          * gutter between them and under the row, or a poll on its own, the list's width. A cell is half the row less the gutter

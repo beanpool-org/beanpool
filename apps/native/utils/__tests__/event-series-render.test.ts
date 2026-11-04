@@ -115,9 +115,14 @@ const expectLabelInName = (els: HTMLElement[]) => {
         expect((el.getAttribute('aria-label') ?? shown).startsWith(shown), `"${el.getAttribute('aria-label')}" starts with "${shown}"`).toBe(true);
     }
 };
+/** The page, then its next dates opened: the page draws them compact (the first and "and 2 more"), one tap opens the list. */
 const draw = async (view: any) => {
     node.view = view;
     await act(async () => { root.render(createElement(EventDetail, { post: series }) as unknown as Parameters<Root['render']>[0]); await new Promise((r) => setTimeout(r, 0)); });
+    const open = byTestId('event-next-dates-open');
+    expect(open, 'the next dates, compact').toHaveLength(1);
+    expect(byTestId('event-next-date')).toHaveLength(0);
+    await click(open[0]);
 };
 
 describe('the detail, drawn at 320 dp and 1.3×', () => {

@@ -267,10 +267,12 @@ export const COMPACT_TEXT = 'flex-1 min-w-0';
 export const COMPACT_TITLE = 'm-0 font-extrabold text-sm text-nature-950 dark:text-white truncate';
 
 /**
- * §1.3 A short line under the title (an event's when, its place; a poll's status, its answer): core's compact line, 11/500,
- * one line ending in "…", in the secondary ink. `leading-snug` so a row with two of them is a listing's row and one line.
+ * §1.3 A short line under the title (an event's when, its place; a poll's status, its answer): core's compact line, 11 px, one
+ * line ending in "…". `leading-snug` so a row with two of them is a listing's row and one line. The weight and the ink are the
+ * use's, never two of each on one line: `font-medium` + CARD_INK.secondary for a quiet line (core's 11/500), `font-bold` +
+ * CARD_INK.event for an event's when.
  */
-export const COMPACT_LINE = 'block min-w-0 truncate text-[11px] font-medium leading-snug text-nature-600 dark:text-nature-300';
+export const COMPACT_LINE = 'block min-w-0 truncate text-[11px] leading-snug';
 
 /**
  * The words inside a short line that say more than it: 📌 PINNED (the accent), CANCELLED / ENDED (danger), UPDATED and the

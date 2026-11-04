@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventCard, EventDetail } from './EventCard';
 import { MarketplaceCard } from './MarketplaceCard';
 import {
-    CARD_INK, GRID_PHOTO, GRID_ROW, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, LIST_PHOTO, LIST_PHOTO_FILL,
+    CARD_INK, COMPACT_PICTURE, GRID_PHOTO, GRID_ROW, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, LIST_PHOTO, LIST_PHOTO_FILL,
     chip, gridTile, listCard,
 } from './market-card-shell';
 import * as api from '../lib/api';
@@ -66,8 +66,9 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
     afterEach(() => { document.documentElement.style.fontSize = ''; });
 
     it('leads with the chips, then the date and time in the largest text, then title, place and distance, counts', () => {
-        // The stacked card: the compact view's, until its row joins the box (C1). The grid's tile is below (W3').
-        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} viewMode="compact" />);
+        // The stacked card: a grid card asked for with its buttons (`rsvpOnCard`); it was the compact view's until C1 made that
+        // the compact row (EventCard.compact.test.tsx). The grid's tile is below (W3').
+        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} viewMode="grid" rsvpOnCard />);
         const card = screen.getByTestId('event-card');
         const lines = within(card).getByRole('button', { name: /Open event/ }).querySelectorAll(':scope > span');
         // The chip row is the first line, as it is on the offer cards; the date has the next line to itself.
@@ -233,7 +234,8 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
     });
 
     it('hides decorative emojis from screen readers with aria-hidden="true"', () => {
-        const { container } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} viewMode="compact" />);
+        // The stacked card (a grid card with its buttons), the one that draws the counts with their 👥.
+        const { container } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} viewMode="grid" rsvpOnCard />);
         const hiddenEmojis = container.querySelectorAll('[aria-hidden="true"]');
         const hiddenTexts = Array.from(hiddenEmojis).map(e => e.textContent?.trim());
         expect(hiddenTexts).toContain('📍');
@@ -346,8 +348,9 @@ describe('EventCard without buttons (the Market, Your events)', () => {
     });
 
     it('the chip row reads EVENT, PINNED, then the state, from the central colour tokens', () => {
-        // The stacked card's own chips (the compact view, until C1); the list card's are the box's one chip (below).
-        renderAt320(<EventCard post={{ ...pinned, eventState: 'updated' }} identity={identity} viewMode="compact" />);
+        // The stacked card's own chips (a grid card with its buttons; the compact view's until C1); the list card's are the
+        // box's one chip (below).
+        renderAt320(<EventCard post={{ ...pinned, eventState: 'updated' }} identity={identity} viewMode="grid" rsvpOnCard />);
         const chips = screen.getByTestId('event-chips');
         expect(Array.from(chips.children).map(c => c.textContent)).toEqual(['EVENT', '📌 PINNED', 'UPDATED']);
         expect(screen.getByTestId('event-type-chip').className).toMatch(/bg-bp-tile-event-tint/);
@@ -538,18 +541,17 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
         expect(within(screen.getByTestId('event-card')).getByText(/SAT 28 SEP/).className).toContain(CARD_INK.event);
     });
 
-    // Decision 1 again, in the one view where matching the offer card means showing nothing: MarketplaceCard's
-    // compact branch is a condensed row with no photo at all, built to double the listings on screen. A thumbnail
-    // only the event had would make it the odd card out again, in the view with the least room for it.
-    it('shows no photo in the compact view, where the offer cards beside it have none either', () => {
-        renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="compact" />);
-        const card = screen.getByTestId('event-card');
-        expect(within(card).queryByRole('img')).toBeNull();
-        // And the lines stay the stack they have always been, not a column beside an empty gap.
-        const lines = within(card).getByRole('button', { name: /Open event/ }).querySelectorAll(':scope > span');
-        expect(lines[0]).toBe(screen.getByTestId('event-chips'));
-        expect(lines[1].textContent).toBe('SAT 28 SEP ·9:00–12:00');
-        expect(lines[2].textContent).toBe(baseEvent.title);
+    // Decision 1 again, in the compact view. This said "no photo in the compact view, where the offer cards beside it have
+    // none either"; that was stale (DESIGN-card-style-box-fable.md §3 row 10, measured: MarketplaceCard's compact row draws a
+    // 32 px picture). Since C1 the event's row is the listing's row, its picture included: the host's photo, 32 px, corners 8.
+    it('draws the host\'s photo in the compact row, 32 px, as the listing row beside it draws its own', () => {
+        renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="compact" onOpen={vi.fn()} />);
+        const slot = screen.getByTestId('compact-picture');
+        expect(slot.className).toBe(COMPACT_PICTURE);
+        expect(slot.querySelector('img')?.getAttribute('src')).toBe(withPhoto.photos[0]);
+        // The listing's row draws its picture in the same slot.
+        render(<MarketplaceCard post={{ ...withPhoto, type: 'offer', category: 'tools' }} viewMode="compact" />);
+        expect(screen.getByTestId('listing-compact-row').querySelector(`[class="${COMPACT_PICTURE}"]`)).not.toBeNull();
     });
 
     // Decision 4: at 320px with 1.3× text the photo gives way before the card does, and the RSVP row keeps the

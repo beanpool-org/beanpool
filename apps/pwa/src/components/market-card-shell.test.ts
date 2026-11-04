@@ -11,9 +11,10 @@ import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, type CardType } from '@beanpool/core';
 import {
-    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
+    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, COMPACT_END, COMPACT_LEAD, COMPACT_LINE, COMPACT_MARK, COMPACT_PICTURE, COMPACT_POLL_TILE,
+    COMPACT_ROW, COMPACT_TEXT, COMPACT_TITLE, COMPACT_WORD, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
     GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
-    PAGE_TYPE, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard,
+    PAGE_TYPE, POLL_CARD, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
 
 const classes = (s: string) => s.split(/\s+/).filter(Boolean);
@@ -366,5 +367,53 @@ describe('the page\'s parts hold core\'s numbers too (DESIGN-detail-pages-fable.
         expect(classes(EVENT_ANSWER.chosen)).toEqual(expect.arrayContaining(['bg-bp-event-fill', 'text-bp-event-on', 'hover:bg-bp-event-hover']));
         expect(classes(EVENT_ANSWER.open)).toEqual(expect.arrayContaining(['border-bp-ink-event', 'text-bp-ink-event', 'bg-[var(--bg-card)]']));
         expect(PAGE_INK.event).toBe('text-bp-ink-event');
+    });
+});
+
+// C1 (DESIGN-card-style-box-fable.md §1.3, §2): the compact row every kind draws (a listing, an event, a poll), and the poll's
+// card. The row's 16 either side and corners 12 are the web listing row's own (kept by the brief: "Listing compact rows
+// unchanged except the chip"); every other number is core's.
+describe('the compact row and the poll card hold core\'s numbers (C1)', () => {
+    it('the row: 10 above and below; the picture 32 square, corners 8; the end 45% of the row at most', () => {
+        expect(spacing(COMPACT_ROW, 'py')).toBe(MARKET_CARD_SHELL.compactPadding.vertical);
+        expect(spacing(COMPACT_PICTURE, 'w')).toBe(MARKET_CARD_SHELL.photo.compact.size);
+        expect(spacing(COMPACT_PICTURE, 'h')).toBe(MARKET_CARD_SHELL.photo.compact.size);
+        expect(radius(COMPACT_PICTURE)).toBe(MARKET_CARD_SHELL.photo.compact.radius);
+        expect(classes(COMPACT_PICTURE)).toEqual(expect.arrayContaining(['overflow-hidden', 'shrink-0']));
+        expect(classes(COMPACT_END)).toContain(`max-w-[${MARKET_CARD_SHELL.compactEndMaxPercent}%]`);
+        // The words give way before the end does; the row is one line of things, side by side.
+        expect(classes(COMPACT_LEAD)).toEqual(expect.arrayContaining(['min-w-0', 'flex-1']));
+        expect(classes(COMPACT_TEXT)).toEqual(expect.arrayContaining(['min-w-0', 'flex-1']));
+        expect(classes(COMPACT_ROW)).toEqual(expect.arrayContaining(['flex', 'flex-row', 'items-center', 'overflow-hidden', 'w-full']));
+    });
+
+    it('the type: the title 14/800 on one line; a short line 11/500 on one line', () => {
+        expect(typeOf(COMPACT_TITLE)).toEqual({ size: MARKET_CARD_TYPE.compact.title.size, weight: MARKET_CARD_TYPE.compact.title.weight });
+        expect(classes(COMPACT_TITLE)).toContain('truncate');
+        // A short line's weight is its use's (`font-medium` for the quiet ones, `font-bold` for the when), so the base is size only.
+        expect(typeOf(`${COMPACT_LINE} font-medium`).size).toBe(MARKET_CARD_TYPE.compact.line.size);
+        expect(typeOf(`${COMPACT_LINE} font-medium`).weight).toBe(MARKET_CARD_TYPE.compact.line.weight);
+        expect(classes(COMPACT_LINE).some(c => c in WEIGHT)).toBe(false);
+        expect(classes(COMPACT_LINE)).toEqual(expect.arrayContaining(['block', 'min-w-0', 'truncate']));
+        // The mark and the words in a line say more at the list card's weights: the mark 700, PINNED and the state the chip's 800.
+        expect(typeOf(COMPACT_MARK).weight).toBe(MARKET_CARD_TYPE.list.mark.weight);
+        for (const w of Object.values(COMPACT_WORD)) expect(typeOf(w).weight).toBe(MARKET_CHIP.type.weight);
+    });
+
+    it('the poll card: the card\'s corners 14, its 1 px outline, ground and shadow, 12 of padding (from 16)', () => {
+        expect(radius(POLL_CARD)).toBe(MARKET_CARD_SHELL.radius);
+        expect(classes(POLL_CARD)).toEqual(expect.arrayContaining(['border', 'bg-[var(--bg-card)]', 'shadow-sm', 'overflow-hidden']));
+        expect(spacing(POLL_CARD, 'p')).toBe(MARKET_CARD_SHELL.textPadding);
+        expect(classes(POLL_CARD).filter(c => c.startsWith('bg-'))).toEqual(['bg-[var(--bg-card)]']);
+    });
+
+    it('every colour on a row or the poll card is core\'s role or the card\'s: no raw violet, purple, blue or indigo', () => {
+        const all = [COMPACT_ROW, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_TEXT, COMPACT_TITLE, COMPACT_LINE, COMPACT_MARK, COMPACT_END,
+            COMPACT_POLL_TILE, POLL_CARD, ...Object.values(COMPACT_WORD)].join(' ');
+        expect(all).not.toMatch(/violet-|purple-|blue-|indigo-/);
+        expect(COMPACT_POLL_TILE).toContain('bg-bp-chip-poll-tint');
+        expect(COMPACT_WORD).toEqual({
+            pinned: 'font-extrabold text-bp-ink-accent', danger: 'font-extrabold text-bp-ink-danger', event: 'font-extrabold text-bp-tile-event-ink',
+        });
     });
 });

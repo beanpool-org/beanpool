@@ -954,5 +954,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ Туннель освобождённого имени остановлен. Этот сервер по-прежнему отвечает по адресам {addresses}.",
   "🫘 A project you backed changed its end date": "🫘 Проект, который вы поддержали, изменил дату окончания",
   "🫘 Pledges went back to their backers": "🫘 Вклады вернулись сторонникам",
-  "🫘 Your pledge came back": "🫘 Ваш вклад вернулся"
+  "🫘 Your pledge came back": "🫘 Ваш вклад вернулся",
+  "Answer serve or step_aside.": "Ответьте serve или step_aside.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "Вы проголосовали, поэтому входите в состав этого жюри. Вы можете изменить свой голос, пока голосование не закрыто."
 }

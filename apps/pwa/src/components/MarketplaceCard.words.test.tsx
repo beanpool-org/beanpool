@@ -97,8 +97,10 @@ describe('a Market card in the pseudo-locale', () => {
         expect(screen.getAllByText('🔒 Only Garden club can see this').length).toBeGreaterThan(0);
         expect(screen.getByText('💸 CASH TOO')).toHaveAttribute('title', 'Cash also needed for fuel or materials — agreed in chat');
         expect(screen.getByText('⏳ PENDING')).toBeInTheDocument();
-        expect(screen.getByText('⏸ Paused')).toBeInTheDocument();
-        expect(screen.getByText('👤 You')).toBeInTheDocument();
+        // The list card's chips are the style box's (W2, DESIGN-card-style-box-fable.md §1.2): the same keys, their capitals from
+        // core's upperCase(), never from a CSS rule that cannot capitalise Turkish or Greek.
+        expect(screen.getByText('⏸ PAUSED')).toBeInTheDocument();
+        expect(screen.getByText('👤 YOU')).toBeInTheDocument();
         expect(screen.getByText('🗞️ Daily Pulse')).toBeInTheDocument();
         expect(screen.getByText('DAILY PULSE')).toBeInTheDocument();
         expect(screen.queryByText('VIEW')).toBeNull();

@@ -171,6 +171,12 @@ test('scanAppWords: a key core already has is not missing in an app catalog (the
         assert.deepEqual(result.es.byCatalog.native.missingKeys.map((k) => k.key), ['Step aside']);
         assert.deepEqual(result.es.byCatalog.pwa.missingKeys.map((k) => k.key), ['Step aside']);
         assert.equal(result.es.missing, 2);
+        // The server reads some sentences from its own catalog alone, so core's sentence does not count for it.
+        const withServer = [...catalogDefs, { name: 'server', folder: 'apps/server/words' }];
+        fs.mkdirSync(path.join(tmp, 'apps/server/words'), { recursive: true });
+        fs.writeFileSync(path.join(tmp, 'apps/server/words/es.json'), JSON.stringify({ _meta: { language: 'es' } }));
+        const srv = await scanAppWords({ root: tmp, catalogDefs: withServer, langs: ['es'], extracted: [calls('core', []), { name: 'server', words: 'apps/server/words', calls: [{ fn: 't', text: 'Your deals', at: 'server/a.ts:1' }] }] });
+        assert.deepEqual(srv.es.byCatalog.server.missingKeys.map((k) => k.key), ['Your deals']);
         // When core does not have the key, it stays missing in the app.
         fs.writeFileSync(path.join(tmp, 'packages/beanpool-core/words/es.json'), JSON.stringify({ _meta: { language: 'es' } }));
         const gone = await scanAppWords({ root: tmp, catalogDefs, langs: ['es'], extracted: [calls('core', []), calls('native', ['Your deals'])] });

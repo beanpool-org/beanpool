@@ -88,9 +88,11 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
         }
     }
 
-    // The apps load core's catalog of a language together with their own (wordsFor in core's words.ts), so a key core
-    // already has is translated for them: "Your deals" is core's shared sentence, and an app catalog must not repeat it
-    // (apps/native/utils/__tests__/your-deals-words.test.ts). Counting it missing there would never end.
+    // The phone and web apps load core's catalog of a language together with their own (wordsFor in core's words.ts), so
+    // a key core already has is translated for them: "Your deals" is core's shared sentence, and an app catalog must not
+    // repeat it (apps/native/utils/__tests__/your-deals-words.test.ts). Counting it missing there would never end. The
+    // server is not in this list: some of its sentences are read from its own catalog alone (member-words.ts `refusals`).
+    const APPS_THAT_LOAD_CORE = new Set(['native', 'pwa']);
     const coreDef = catalogDefs.find((d) => d.name === 'core');
     const readCoreCatalog = (lang) => {
         if (!coreDef) return null;
@@ -126,7 +128,7 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
             if (catalog === null) {
                 // Whole file missing
                 for (const key of [...sourceKeys].sort()) {
-                    if (def.name !== 'core' && coreCatalog && Object.hasOwn(coreCatalog, key) && key !== '_meta') continue;
+                    if (APPS_THAT_LOAD_CORE.has(def.name) && coreCatalog && key !== '_meta' && Object.hasOwn(coreCatalog, key)) continue;
                     const item = {
                         catalog: def.name,
                         folder: def.folder,
@@ -141,7 +143,7 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
             } else {
                 for (const key of [...sourceKeys].sort()) {
                     if (!Object.hasOwn(catalog, key)) {
-                        if (def.name !== 'core' && coreCatalog && Object.hasOwn(coreCatalog, key) && key !== '_meta') continue;
+                        if (APPS_THAT_LOAD_CORE.has(def.name) && coreCatalog && key !== '_meta' && Object.hasOwn(coreCatalog, key)) continue;
                         const item = {
                             catalog: def.name,
                             folder: def.folder,

@@ -1,261 +1,282 @@
 #!/usr/bin/env node
 /**
- * Pictures of the Market grid (Card View), for review:
+ * The Market grid as a lattice (G2, DESIGN-market-grid-sizes-fable.md §2.2 to §2.4, §3 G2): pictures for review, and
+ * the row checks, measured in a real Chromium from the live layout:
  *
- *   node e2e/market-grid-shots.mjs <out-dir>
+ *   node e2e/market-grid-shots.mjs <out-dir> [--miss=self-start|block]
  *
- * One picture of the grid per column count — 5 (1440px), 4 (1200px), 3 (800px), 2 (640px) and 1 (320px, at
- * normal and at 1.3x text) — in light and in dark. Nothing here talks to a node; the feed is e2e/fixtures.mjs.
+ * Widths: 320, 320 at 1.3x text, 640, and with a 256 px left shim standing in for the app's sidebar (the harness has no
+ * App shell; the Tailwind breakpoints are the viewport's, the columns are not) 768, 768 at 1.3x, 1024, 1280 and 1920.
+ * Cases: the fixture (e2e/fixtures.mjs), the node's Daily Pulse (shown while there are under two listings), one pin, three
+ * pins (the cap: a listing, the event and the poll), and from three columns up the poll in the last column of the first
+ * row. Light and dark, a picture of each.
  *
- * Then one more picture per column count from `md` up, of the case the first set cannot show: the poll sitting in
- * the LAST column of a row, where the two columns it asks for do not fit. A plain auto-placed grid pushes it to
- * the next row and leaves that cell empty; the grid is `grid-flow-row-dense` so the tiles after it back-fill.
+ * Checks, every grid of every case and scheme (a non-zero exit names each miss):
+ *   - the column count for the width;
+ *   - every cell in a row is the row's height (the grid's own tracks), and every listing / Pulse tile fills its cell;
+ *   - every listing / Pulse tile's text block is core's MARKET_GRID_TEXT_BLOCK_REM (7.0625rem) at the root size, +-1 px;
+ *   - a row of only listing / Pulse tiles is no taller than its tiles' own photo + text block (+-1 px): one tile height;
+ *   - the poll is the whole row (one row tall) below 1024 px and a 2 x 2 square from 1024; its own content fits two tile
+ *     heights plus the gap (at 1x exactly, +1 px; at 1.3x within one text row), and the two rows it spans are no taller;
+ *   - no empty cell that a later one-cell tile could have taken (dense flow back-fills; the feed simply ending is not one);
+ *   - the pins are the grid's first items, newest pin first, each once; on screen no stream tile comes before a pinned
+ *     listing or event, and a pinned poll starts no lower than the row after them;
+ *   - nothing is wider than the screen.
+ * The event tile is not on the lattice until slice W3': it is drawn and named in the output, and left out of the tile
+ * checks; a row it sits in is checked for cell heights only.
  *
- * It also prints, for every width, what the pictures are meant to show, measured from the live layout rather
- * than eyeballed: the height of each listing tile, whether any VIEW button sits away from the bottom of its own
- * tile (the stretch this branch removes), whether any tile's CELL — the clickable, focusable grid item around
- * it — is taller than the tile, whether the VIEW buttons in a row line up, how many columns the poll spans,
- * whether any poll answer is truncated, and whether any row of the grid has an empty cell in it. A non-zero
- * exit means one of those is wrong.
+ * `--miss=self-start` puts #1092's cell back (`self-start`, no `h-full`), `--miss=block` lets the text block take its own
+ * height: either must make this exit non-zero (a check that cannot fail is not a check).
  *
+ * Nothing here talks to a node: every /api call is answered from e2e/fixtures.mjs (harness.mjs).
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global console, process, document -- Node, plus page.evaluate callbacks run in the browser */
+/* global console, process, document, window, getComputedStyle */
 import fs from 'node:fs';
 import path from 'node:path';
-import { startServer, launch, openMarket, grid } from './harness.mjs';
-import { postsWithPollAt } from './fixtures.mjs';
+import { startServer, launch, openMarket, settle } from './harness.mjs';
+import { POSTS, postsWithPollAt } from './fixtures.mjs';
 
-const out = process.argv[2];
+const args = process.argv.slice(2);
+const out = args.find(a => !a.startsWith('--'));
+const miss = (args.find(a => a.startsWith('--miss=')) || '').slice('--miss='.length) || null;
 if (!out) {
-    console.error('usage: node e2e/market-grid-shots.mjs <out-dir>');
+    console.error('usage: node e2e/market-grid-shots.mjs <out-dir> [--miss=self-start|block]');
+    process.exit(2);
+}
+const MISSES = {
+    // #1092's cell: `self-start` and no `h-full` (with `h-full` a start-aligned cell is still its grid area's height).
+    'self-start': 'div.grid.grid-flow-row-dense > * { align-self: start !important; height: auto !important; }',
+    block: '[data-testid="grid-text-block"] { height: auto !important; }',
+};
+if (miss && !MISSES[miss]) {
+    console.error(`unknown --miss=${miss}; one of ${Object.keys(MISSES).join(', ')}`);
     process.exit(2);
 }
 fs.mkdirSync(out, { recursive: true });
 
+/**
+ * Paths the harness answers 404 on purpose: the community's info (harness.mjs: absent, as on a node older than the switch,
+ * so no example cards) and the reader's node role (the poll card asks it for the owners' panel; a 404 is "not an owner").
+ * Any other unanswered path is a miss.
+ */
+const ANSWERED_404 = new Set(['/api/community/info', '/api/node-admin/me']);
+
+/** core's MARKET_GRID_TEXT_BLOCK_REM and one row of it (market-card-shell.ts); the web shell's test holds the classes to them. */
+const BLOCK_REM = 7.0625;
+const ROW_REM = 1.203125;
+
 const WIDTHS = [
-    { name: '5col-1440', width: 1440, columns: 5 },
-    { name: '4col-1200', width: 1200, columns: 4 },
-    { name: '3col-800', width: 800, columns: 3 },
-    { name: '2col-640', width: 640, columns: 2 },
-    { name: '1col-320', width: 320, columns: 1 },
-    { name: '1col-320-x1.3', width: 320, columns: 1, textScale: 1.3 },
+    { name: '320', width: 320, columns: 2 },
+    { name: '320-x1.3', width: 320, columns: 2, textScale: 1.3 },
+    { name: '640', width: 640, columns: 2 },
+    { name: '768-shim', width: 768, columns: 3, shim: true },
+    { name: '768-shim-x1.3', width: 768, columns: 3, shim: true, textScale: 1.3 },
+    { name: '1024-shim', width: 1024, columns: 4, shim: true },
+    { name: '1280-shim', width: 1280, columns: 5, shim: true },
+    { name: '1920-shim', width: 1920, columns: 5, shim: true },
 ];
 
-/**
- * Measured in the page: for every listing tile, the dead space between the last line of its description and the
- * top of its VIEW button — the gap Marty photographed. It has to be measured from the TEXT, not from the
- * description's box: VIEW stays pinned to the bottom by `mt-auto` and `flex-1` made the box itself swallow the
- * stretch, so both the box's edge and VIEW's were exactly where they should be while the card was hollow. Also
- * the tile's height, and how many
- * optional badge rows it carries (👤 You, ⏸ Paused, 🔒 group, 🗞️ Daily Pulse — each one is a row of its own in
- * the tile's header, and the only thing left that still changes a tile's height). Plus the poll's column span,
- * how many columns its answers are in, and whether any answer is clipped.
- */
-function measure() {
-    const gridEl = document.querySelector('div.grid.grid-cols-1');
-    const cells = [...gridEl.children];
-    const columns = getComputedStyle(gridEl).gridTemplateColumns.split(' ').filter(Boolean);
-    const colCount = columns.length;
-    // How many columns a cell covers, from its width: one column plus a gap for each extra column it takes.
-    const colWidth = parseFloat(columns[0]);
-    const gap = parseFloat(getComputedStyle(gridEl).columnGap) || 0;
-    const spanOf = (el) => Math.round((el.getBoundingClientRect().width + gap) / (colWidth + gap));
+const HOUR = 60 * 60 * 1000;
+const iso = (ms) => new Date(Date.now() + ms).toISOString();
+/** The node's own Daily Pulse, drawn as the Pulse tile (its author is "Daily Pulse"). */
+const PULSE = {
+    id: 'pulse-1', type: 'offer', category: 'community', status: 'active', active: true, credits: 0, priceType: 'fixed',
+    title: 'Daily Pulse: what the village is up to', description: 'Three new offers, a working bee on Saturday and the shed poll.',
+    authorPublicKey: 'daily-pulse', authorCallsign: 'Daily Pulse', createdAt: iso(-HOUR / 2), photos: [],
+};
+const pin = (posts, ids) => posts.map(p => (ids.includes(p.id)
+    ? { ...p, pinnedUntil: iso(48 * HOUR), pinnedAt: iso(-HOUR * (ids.indexOf(p.id) + 1)) }
+    : p));
+const CASES = [
+    { name: 'fixture', posts: POSTS, pins: [] },
+    // The Market shows the node's Pulse only while it has fewer than two listings (MarketplacePage): one listing, the
+    // event, the poll and the Pulse.
+    { name: 'pulse', posts: [PULSE, ...POSTS.filter(p => ['m-1', 'e-1', 'p-1'].includes(p.id))], pins: [], needs: 'pulse' },
+    { name: 'one-pin', posts: pin(POSTS, ['m-2']), pins: ['m-2'] },
+    // Newest pin first: the listing, then the event, then the poll.
+    { name: 'three-pins', posts: pin(POSTS, ['m-2', 'e-1', 'p-1']), pins: ['m-2', 'e-1', 'p-1'] },
+    { name: 'poll-last-column', posts: null, pins: [], minColumns: 3 },
+];
 
-    const tiles = cells
-        .map((cell) => ({ cell, view: cell.querySelector('div.rounded-full.mt-auto') }))
-        .filter(t => t.view)
-        .map(({ cell, view }) => {
+/** Everything measured in the page, for every grid on it. */
+function measure() {
+    const px = (v) => parseFloat(v) || 0;
+    const root = px(getComputedStyle(document.documentElement).fontSize);
+    const grids = [...document.querySelectorAll('div.grid.grid-flow-row-dense')].map((gridEl) => {
+        const cs = getComputedStyle(gridEl);
+        const cols = cs.gridTemplateColumns.split(' ').filter(Boolean).map(px);
+        const rows = cs.gridTemplateRows.split(' ').filter(Boolean).map(px);
+        const colGap = px(cs.columnGap);
+        const rowGap = px(cs.rowGap);
+        const g = gridEl.getBoundingClientRect();
+        // Track starts, from the grid's own tracks.
+        const colStarts = cols.map((_, i) => cols.slice(0, i).reduce((a, b) => a + b + colGap, 0));
+        const rowStarts = rows.map((_, i) => rows.slice(0, i).reduce((a, b) => a + b + rowGap, 0));
+        const nearest = (starts, v) => starts.reduce((best, s, i) => (Math.abs(s - v) < Math.abs(starts[best] - v) ? i : best), 0);
+        const cells = [...gridEl.children].map((cell, index) => {
+            const r = cell.getBoundingClientRect();
+            const top = r.top - g.top;
+            const left = r.left - g.left;
+            const row = nearest(rowStarts, top);
+            const col = nearest(colStarts, left);
+            const rowSpan = rowStarts.filter(s => s >= top - 1 && s < top + r.height - 1).length;
+            const colSpan = colStarts.filter(s => s >= left - 1 && s < left + r.width - 1).length;
+            const tracksHeight = rows.slice(row, row + rowSpan).reduce((a, b) => a + b, 0) + rowGap * (rowSpan - 1);
+            const kind = cell.querySelector('[data-testid="event-card"]') ? 'event'
+                : cell.querySelector('[data-testid="listing-grid-tile"]')
+                    ? ((cell.getAttribute('aria-label') || '').startsWith('Daily Pulse') ? 'pulse' : 'listing')
+                    : (cell.textContent.includes('POLL') ? 'poll' : 'other');
             const tile = cell.firstElementChild;
-            const t = tile.getBoundingClientRect();
-            const v = view.getBoundingClientRect();
-            const p = tile.querySelector('p');
-            const d = p.getBoundingClientRect();
-            // line-clamp-1: one line of text, wherever the box's own bottom edge has ended up.
-            const lineHeight = parseFloat(getComputedStyle(p).lineHeight);
+            const t = tile ? tile.getBoundingClientRect() : r;
+            const block = cell.querySelector('[data-testid="grid-text-block"]');
+            const photo = block ? block.previousElementSibling : null;
+            const tcs = tile ? getComputedStyle(tile) : null;
+            const natural = block && photo
+                ? photo.getBoundingClientRect().height + block.getBoundingClientRect().height + px(tcs.borderTopWidth) + px(tcs.borderBottomWidth)
+                : null;
+            // The poll's own height: what its content needs, measured with the stretch taken off for a moment.
+            let pollNatural = null;
+            if (kind === 'poll' && tile) {
+                const was = [cell.style.alignSelf, tile.style.height];
+                cell.style.alignSelf = 'start';
+                tile.style.height = 'auto';
+                pollNatural = tile.getBoundingClientRect().height;
+                [cell.style.alignSelf, tile.style.height] = was;
+            }
             return {
-                title: (tile.querySelector('span.font-bold')?.textContent || '').slice(0, 28),
-                tileHeight: Math.round(t.height),
-                // The cell, not the tile: the cell is the grid item, and it is what carries the click and the
-                // focus ring. Without `self-start` the grid stretches it to the row while the tile keeps its
-                // own height, so the two come apart.
-                cellHeight: Math.round(cell.getBoundingClientRect().height),
-                badgeRows: tile.firstElementChild.querySelectorAll(':scope > div > div.mt-1').length,
-                // The description's own `mb-3` is the whole of this gap on a tile that is not stretched.
-                gapBelowDescription: Math.round(v.top - (d.top + lineHeight)),
-                viewBottom: Math.round(v.bottom + window.scrollY),
-                tileTop: Math.round(t.top + window.scrollY),
+                index, kind, row, col, rowSpan, colSpan,
+                pinned: cell.getAttribute('data-testid') === 'market-pinned-tile',
+                label: (cell.getAttribute('aria-label') || tile?.querySelector('h3')?.textContent || cell.textContent).trim().slice(0, 40),
+                cellH: r.height, tracksHeight, tileH: t.height,
+                blockH: block ? block.getBoundingClientRect().height : null,
+                natural, pollNatural,
             };
         });
-
-    const pollCell = cells.find(c => c.textContent.includes('POLL'));
-    const pollSpan = pollCell ? spanOf(pollCell) : 0;
-
-    // Every row of the grid, by the columns its cells actually cover. Cells in one row share a top edge (the row
-    // stretches them), so that is what groups them. Any row but the last that does not add up to the full column
-    // count has a hole in it — the empty cell a two-column poll leaves behind when it will not fit.
-    const byTop = new Map();
-    for (const cell of cells) {
-        const top = Math.round(cell.getBoundingClientRect().top + window.scrollY);
-        byTop.set(top, (byTop.get(top) || 0) + spanOf(cell));
-    }
-    const rows = [...byTop.entries()].sort((a, b) => a[0] - b[0]);
-    const rowFill = rows.map(([, filled]) => filled);
-
-    // Where the poll ended up on screen — not where it is in the feed. `grid-flow-row-dense` can move the tiles
-    // after it, so the only honest answer comes from the geometry.
-    const gridLeft = gridEl.getBoundingClientRect().left;
-    const pollAt = pollCell
-        ? {
-            row: rows.findIndex(([top]) => top === Math.round(pollCell.getBoundingClientRect().top + window.scrollY)) + 1,
-            column: Math.round((pollCell.getBoundingClientRect().left - gridLeft) / (colWidth + gap)) + 1,
-        }
-        : null;
-    const pollAnswers = pollCell
-        ? [...pollCell.querySelectorAll('button span.font-bold')].map(s => ({
-            text: s.textContent.trim().slice(0, 40),
-            clipped: s.scrollWidth > s.clientWidth + 1,
-        }))
-        : [];
-    // The answer buttons are the ones carrying aria-pressed; the author's profile button comes before them.
-    const answerButton = pollCell && [...pollCell.querySelectorAll('button')].find(b => b.hasAttribute('aria-pressed'));
-    const pollAnswerColumns = answerButton
-        ? getComputedStyle(answerButton.parentElement).gridTemplateColumns.split(' ').filter(Boolean).length
-        : 0;
-
-    return { colCount, tiles, pollSpan, pollAt, pollAnswers, pollAnswerColumns, rowFill };
+        return { cols: cols.length, colWidth: cols[0], colGap, rowGap, rows, cells };
+    });
+    return {
+        root,
+        grids,
+        overflow: document.documentElement.scrollWidth - window.innerWidth,
+    };
 }
 
-/**
- * The tiles whose CELL is taller than the tile itself. The cell is the grid item: it carries the `onClick`, the
- * `role="button"` and the `focus-visible` ring, so every pixel of that overhang is blank space that opens the
- * listing when clicked and that the focus ring draws around. A grid with no `items-*` stretches its items to the
- * row, so in the poll's row — and the poll is the tallest thing in the grid by design — this was the whole
- * difference between a ~257px card and the poll. `self-start` on the cell is what closes it.
- */
-const stretchedCells = (m) => m.tiles
-    .map(t => ({ title: t.title, overhang: t.cellHeight - t.tileHeight }))
-    .filter(t => t.overhang > 1);
+/** Every check for one measured page; returns the misses. */
+function check(m, spec, pins) {
+    const misses = [];
+    const fail = (msg) => misses.push(msg);
+    const scale = spec.textScale ?? 1;
+    const block = BLOCK_REM * m.root;
+    const textRow = ROW_REM * m.root;
+    if (m.overflow > 0) fail(`page is ${m.overflow}px wider than the screen`);
+    if (!m.grids.length) fail('no grid drawn');
+    m.grids.forEach((g, gi) => {
+        const at = m.grids.length > 1 ? `grid ${gi + 1}: ` : '';
+        if (g.cols !== spec.columns) fail(`${at}${g.cols} columns (expected ${spec.columns})`);
+        const lattice = (c) => c.kind === 'listing' || c.kind === 'pulse';
+        for (const c of g.cells) {
+            if (Math.abs(c.cellH - c.tracksHeight) > 1) fail(`${at}"${c.label}" cell is ${c.cellH.toFixed(1)}px in a ${c.tracksHeight.toFixed(1)}px row: not the row's height`);
+            if (lattice(c)) {
+                if (Math.abs(c.tileH - c.cellH) > 1) fail(`${at}"${c.label}" tile is ${c.tileH.toFixed(1)}px in a ${c.cellH.toFixed(1)}px cell: it does not fill it`);
+                if (c.blockH === null || Math.abs(c.blockH - block) > 1) fail(`${at}"${c.label}" text block is ${c.blockH?.toFixed(1)}px (expected ${block.toFixed(1)})`);
+            }
+        }
+        // One tile height: a row of only lattice tiles (none spanning into it) is its tiles' own height.
+        const tile = Math.max(0, ...g.cells.filter(lattice).map(c => c.natural));
+        g.rows.forEach((h, r) => {
+            const inRow = g.cells.filter(c => r >= c.row && r < c.row + c.rowSpan);
+            if (!inRow.length || !inRow.every(c => lattice(c) && c.rowSpan === 1)) return;
+            const own = Math.max(...inRow.map(c => c.natural));
+            if (h > own + 1) fail(`${at}row ${r + 1} is ${h.toFixed(1)}px for tiles of ${own.toFixed(1)}px`);
+            const spread = own - Math.min(...inRow.map(c => c.natural));
+            if (spread > 1) fail(`${at}row ${r + 1}: its tiles' own heights differ by ${spread.toFixed(1)}px`);
+        });
+        // The poll.
+        for (const p of g.cells.filter(c => c.kind === 'poll')) {
+            if (spec.columns < 4) {
+                if (p.colSpan !== g.cols || p.rowSpan !== 1) fail(`${at}poll is ${p.colSpan} x ${p.rowSpan} (expected the whole row, ${g.cols} x 1)`);
+            } else {
+                if (p.colSpan !== 2 || p.rowSpan !== 2) fail(`${at}poll is ${p.colSpan} x ${p.rowSpan} (expected 2 x 2)`);
+                const square = 2 * tile + g.rowGap;
+                const allow = scale === 1 ? 1 : textRow;
+                if (p.pollNatural > square + allow) fail(`${at}poll needs ${p.pollNatural.toFixed(1)}px; its square is ${square.toFixed(1)} (+${allow.toFixed(1)} allowed)`);
+                const beside = g.cells.filter(c => c !== p && c.row >= p.row && c.row < p.row + 2);
+                const rowsTotal = p.tracksHeight;
+                if (beside.every(lattice) && rowsTotal > square + allow) fail(`${at}the poll's two rows are ${rowsTotal.toFixed(1)}px; two tiles and the gap are ${square.toFixed(1)}`);
+            }
+        }
+        // No empty cell a later one-cell tile could have taken.
+        const filled = g.rows.map(() => new Array(g.cols).fill(false));
+        for (const c of g.cells) for (let r = c.row; r < c.row + c.rowSpan; r++) for (let k = c.col; k < c.col + c.colSpan; k++) if (filled[r]) filled[r][k] = true;
+        filled.forEach((cells, r) => {
+            const empty = cells.filter(x => !x).length;
+            const later = g.cells.some(c => c.row > r && c.rowSpan === 1 && c.colSpan === 1);
+            if (empty && later) fail(`${at}row ${r + 1} has ${empty} empty cell(s) and a tile drawn below it`);
+        });
+    });
+    // Pins: the first items of the first grid, newest first, each once; no stream tile before a pinned listing or event.
+    if (pins.length && m.grids.length) {
+        const first = m.grids[0].cells;
+        const pinned = m.grids.flatMap(g => g.cells.filter(c => c.pinned));
+        if (pinned.length !== pins.length) fail(`${pinned.length} pinned tiles (expected ${pins.length})`);
+        if (!first.slice(0, pins.length).every(c => c.pinned)) fail('the pins are not the grid\'s first items');
+        const order = [...first].sort((a, b) => a.row - b.row || a.col - b.col);
+        const lastPin = Math.max(-1, ...order.map((c, i) => (c.pinned && c.kind !== 'poll' ? i : -1)));
+        const firstStream = order.findIndex(c => !c.pinned);
+        if (firstStream !== -1 && firstStream < lastPin) fail('a stream tile is drawn before a pinned tile');
+        const pinRows = first.filter(c => c.pinned && c.kind !== 'poll').map(c => c.row);
+        for (const p of first.filter(c => c.pinned && c.kind === 'poll')) {
+            if (pinRows.length && p.row > Math.max(...pinRows) + 1) fail(`the pinned poll starts at row ${p.row + 1}, below the other pins' rows`);
+        }
+    }
+    return misses;
+}
 
-/** The rows with an empty cell in them: every row but the last that does not fill its columns. */
-const holes = (m) => m.rowFill
-    .slice(0, -1)
-    .map((filled, i) => ({ row: i + 1, filled }))
-    .filter(r => r.filled < m.colCount);
+function report(m) {
+    for (const [gi, g] of m.grids.entries()) {
+        console.log(`    grid${m.grids.length > 1 ? ` ${gi + 1}` : ''}: ${g.cols} x ${g.colWidth.toFixed(0)}px, gap ${g.colGap}, rows ${g.rows.map(r => r.toFixed(0)).join('/')}`);
+        for (const c of g.cells) {
+            const what = c.kind === 'event' ? ' (event: on the lattice in W3\')' : c.kind === 'poll' ? ` ${c.colSpan} x ${c.rowSpan}, needs ${c.pollNatural?.toFixed(0)}px` : '';
+            console.log(`      r${c.row + 1}c${c.col + 1} ${c.kind.padEnd(7)} ${c.pinned ? '📌 ' : ''}tile ${c.tileH.toFixed(0)}${c.blockH ? ` block ${c.blockH.toFixed(1)}` : ''}${what}  "${c.label}"`);
+        }
+    }
+}
 
 const problems = [];
-const note = (width, ok, message) => {
-    console.log(`  ${ok ? '✓' : '✗'} ${message}`);
-    if (!ok) problems.push(`${width}: ${message}`);
-};
-
 const { origin, close } = await startServer();
 const browser = await launch();
 try {
-    for (const spec of WIDTHS) {
-        for (const dark of [false, true]) {
-            const { context, page, unrouted } = await openMarket(browser, origin, {
-                width: spec.width, height: 1000, dark, textScale: spec.textScale ?? 1,
-            });
-            const file = path.join(out, `${spec.name}-${dark ? 'dark' : 'light'}.png`);
-            await grid(page).screenshot({ path: file, animations: 'disabled' });
-            console.log(file);
-
-            if (unrouted.length) problems.push(`${spec.name}: unanswered API paths ${[...new Set(unrouted)].join(', ')}`);
-
-            if (!dark) {
+    for (const kase of CASES) {
+        for (const spec of WIDTHS) {
+            if (kase.minColumns && spec.columns < kase.minColumns) continue;
+            const posts = kase.posts ?? postsWithPollAt(spec.columns - 1);
+            for (const dark of [false, true]) {
+                const name = `${kase.name}-${spec.name}-${dark ? 'dark' : 'light'}`;
+                const { context, page, unrouted } = await openMarket(browser, origin, {
+                    width: spec.width, height: 1200, dark, textScale: spec.textScale ?? 1, posts,
+                });
+                if (spec.shim) await page.addStyleTag({ content: '#root { padding-left: 256px; }' });
+                if (miss) await page.addStyleTag({ content: MISSES[miss] });
+                if (spec.shim || miss) await settle(page);
+                const file = path.join(out, `${name}.png`);
+                const first = page.locator('div.grid.grid-flow-row-dense').first();
+                await first.locator('..').screenshot({ path: file, animations: 'disabled' });
+                const unexpected = [...new Set(unrouted)].filter(p => !ANSWERED_404.has(p));
+                if (unexpected.length) problems.push(`${name}: unanswered API paths ${unexpected.join(', ')}`);
                 const m = await page.evaluate(measure);
-                const label = `${spec.width}px${spec.textScale ? ` @${spec.textScale}x` : ''}`;
-                note(label, m.colCount === spec.columns, `${m.colCount} columns (expected ${spec.columns})`);
-
-                // The stretch Marty photographed: dead space between the description and VIEW. On a tile that
-                // takes its own height this is exactly the description's `mb-3`, which is 0.75rem and so follows
-                // the text scale.
-                const margin = Math.round(12 * (spec.textScale ?? 1));
-                const worst = Math.max(...m.tiles.map(t => t.gapBelowDescription));
-                note(label, worst <= margin + 2,
-                    `no tile stretched — largest dead space between the description's line and VIEW is ${worst}px `
-                    + `(the description's own margin is ${margin}px)`);
-
-                // ...and the cell around it, which the tile's own box cannot show.
-                const stretched = stretchedCells(m);
-                note(label, stretched.length === 0,
-                    `every cell is its tile's height — no clickable overhang below a card`
-                    + `${stretched.length ? `: ${stretched.map(t => `"${t.title}" +${t.overhang}px`).join(', ')}` : ''}`);
-
-                // Same height: a tile's height no longer depends on its text or on whether it has a photo. An
-                // optional badge (👤 You, ⏸ Paused, 🔒 group, 🗞️ Daily Pulse) still adds its own row — see the PR.
-                const plain = m.tiles.filter(t => t.badgeRows === 0);
-                const heights = [...new Set(plain.map(t => t.tileHeight))];
-                note(label, heights.length === 1,
-                    `every listing tile without an extra badge is ${heights.join('/')}px tall (${plain.length} of ${m.tiles.length} tiles)`);
-                for (const t of m.tiles.filter(t => t.badgeRows > 0)) {
-                    console.log(`    · "${t.title}" carries ${t.badgeRows} badge row(s) and is ${t.tileHeight - heights[0]}px taller`);
+                const misses = check(m, spec, kase.pins);
+                if (kase.needs && !m.grids.some(g => g.cells.some(c => c.kind === kase.needs))) misses.push(`no ${kase.needs} tile drawn`);
+                console.log(`${misses.length ? '✗' : '✓'} ${name} (root ${m.root}px, block ${(BLOCK_REM * m.root).toFixed(1)}px)  ${file}`);
+                if (!dark) report(m);
+                for (const x of misses) {
+                    console.log(`    ✗ ${x}`);
+                    problems.push(`${name}: ${x}`);
                 }
-
-                // Lined up: tiles that start on the same row end their VIEW on the same line.
-                const rows = new Map();
-                for (const t of plain) rows.set(t.tileTop, [...(rows.get(t.tileTop) || []), t.viewBottom]);
-                const ragged = [...rows.entries()].filter(([, bottoms]) => new Set(bottoms).size > 1);
-                note(label, ragged.length === 0, `VIEW buttons line up in every row (${rows.size} rows of tiles)`);
-
-                const expectedSpan = spec.width >= 768 ? 2 : 1;
-                note(label, m.pollSpan === expectedSpan, `poll spans ${m.pollSpan} column(s) (expected ${expectedSpan})`);
-                const expectedAnswerCols = spec.width >= 768 ? 2 : 1;
-                note(label, m.pollAnswerColumns === expectedAnswerCols,
-                    `poll answers in ${m.pollAnswerColumns} column(s) (expected ${expectedAnswerCols})`);
-
-                const clipped = m.pollAnswers.filter(a => a.clipped);
-                note(label, clipped.length === 0,
-                    `no poll answer truncated${clipped.length ? `: ${clipped.map(c => c.text).join(' | ')}` : ''}`);
-
-                const empty = holes(m);
-                note(label, empty.length === 0,
-                    `no row has an empty cell — rows are ${m.rowFill.join('/')} of ${m.colCount} columns`
-                    + `${empty.length ? ` (row ${empty.map(e => e.row).join(', ')} short)` : ''}`);
+                await context.close();
             }
-            await context.close();
         }
-    }
-
-    // The poll in the LAST column of a row. The feed above happens to put it where its two columns fit at every
-    // width but 1200px, so on its own it would let a grid that cannot place a wide tile through. Here the poll is
-    // moved to the last column of the first row at each column count, which is the worst case there is.
-    console.log('\nPoll in the last column of a row:');
-    for (const spec of WIDTHS.filter(w => w.columns >= 3)) {
-        const posts = postsWithPollAt(spec.columns - 1);
-        const { context, page, unrouted } = await openMarket(browser, origin, {
-            width: spec.width, height: 1000, posts,
-        });
-        const file = path.join(out, `poll-last-column-${spec.name}-light.png`);
-        await grid(page).screenshot({ path: file, animations: 'disabled' });
-        console.log(file);
-
-        if (unrouted.length) problems.push(`poll-last-column-${spec.name}: unanswered API paths ${[...new Set(unrouted)].join(', ')}`);
-
-        const m = await page.evaluate(measure);
-        const label = `${spec.width}px, poll at ${spec.columns - 1}`;
-        note(label, m.colCount === spec.columns, `${m.colCount} columns (expected ${spec.columns})`);
-        note(label, m.pollSpan === 2, `poll still spans ${m.pollSpan} column(s) (expected 2)`);
-
-        // This pass puts the poll in a row with listing tiles at every width, so it is the strongest case for
-        // the overhang: the poll sets the row height and the tiles beside it are half of it.
-        const stretched = stretchedCells(m);
-        note(label, stretched.length === 0,
-            `every cell is its tile's height — no clickable overhang below a card`
-            + `${stretched.length ? `: ${stretched.map(t => `"${t.title}" +${t.overhang}px`).join(', ')}` : ''}`);
-
-        // Without `grid-flow-row-dense` this is where the grid leaves a hole: the poll cannot start in the last
-        // column, moves to the next row, and the cell it passed over stays blank.
-        const empty = holes(m);
-        note(label, empty.length === 0,
-            `no row has an empty cell — rows are ${m.rowFill.join('/')} of ${m.colCount} columns`
-            + `${empty.length ? ` (row ${empty.map(e => e.row).join(', ')} short)` : ''}`);
-        console.log(`    · the poll asked for the last column of row 1 and is drawn at row ${m.pollAt.row}, `
-            + `column ${m.pollAt.column}`
-            + `${empty.length ? ', and row 1 is left with a blank cell' : '; a tile from after it fills row 1 instead'}`);
-        await context.close();
     }
 } finally {
     await browser.close();
@@ -263,8 +284,8 @@ try {
 }
 
 if (problems.length) {
-    console.error(`\n${problems.length} problem(s):`);
+    console.error(`\n${problems.length} miss(es)${miss ? ` (with --miss=${miss})` : ''}:`);
     for (const p of problems) console.error(`  - ${p}`);
     process.exit(1);
 }
-console.log('\nMarket grid: every width checked.');
+console.log('\nMarket grid: every width, case and scheme checked; the lattice holds.');

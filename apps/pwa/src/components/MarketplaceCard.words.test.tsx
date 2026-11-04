@@ -104,7 +104,8 @@ describe('a Market card in the pseudo-locale', () => {
         // core's upperCase(), never from a CSS rule that cannot capitalise Turkish or Greek.
         expect(screen.getByText('⏸ PAUSED')).toBeInTheDocument();
         expect(screen.getByText('👤 YOU')).toBeInTheDocument();
-        expect(screen.getByText('🗞️ Daily Pulse')).toBeInTheDocument();
+        // The grid's Pulse pill is the one chip now (G2), its capitals from core's upperCase(), as the list card's (W2).
+        expect(screen.getByText('🗞️ DAILY PULSE')).toBeInTheDocument();
         // The grid's DAILY PULSE foot label left the tile in G2 (DESIGN-market-grid-sizes-fable.md §2.2): the pill says it.
         expect(screen.queryByText('DAILY PULSE')).toBeNull();
         expect(screen.queryByText('VIEW')).toBeNull();

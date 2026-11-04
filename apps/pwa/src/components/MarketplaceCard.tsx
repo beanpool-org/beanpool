@@ -375,9 +375,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const tileKind = isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing');
     const rowChip = (() => {
         if (dealChip) {
-            return <span data-testid="card-deal-chip" className={gridChip(dealChip === 'in-trust' ? 'ok' : 'warn')}>{listingChipWords(dealChip)}</span>;
+            return <span data-testid="card-deal-chip" className={gridChip(dealChip === 'in-trust' ? 'ok' : 'warn')}>{upperCase(listingChipWords(dealChip))}</span>;
         }
-        if (isPaused) return <span className={gridChip('warn')}>{t('⏸ Paused')}</span>;
+        if (isPaused) return <span className={gridChip('warn')}>{upperCase(t('⏸ Paused'))}</span>;
         if (groupScopeBadge) return <span className={gridChip('quiet')}>{groupScopeBadge}</span>;
         // RECURRING by the photo's precedence, PENDING > YOU > RECURRING: an own or pending listing's chip says more.
         if (post.repeatable && !isOwnPost && post.status !== 'pending') return <span className={gridChip('quiet')}>{t('↻ RECURRING')}</span>;
@@ -450,7 +450,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <>
                         {/* Row 3: the Pulse's pill; row 4: one line of its news */}
                         <div className={GRID_ROW}>
-                            <span className={gridChip('warn')}>{t('🗞️ Daily Pulse')}</span>
+                            <span className={gridChip('warn')}>{upperCase(t('🗞️ Daily Pulse'))}</span>
                         </div>
                         <div className={GRID_ROW}>
                             {post.description && (

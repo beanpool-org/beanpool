@@ -107,7 +107,7 @@ describe('MarketplaceCard S5 design requirements', () => {
 
         const block = getByTestId('grid-text-block');
         const rows = Array.from(block.children) as HTMLElement[];
-        expect(rows.map(r => r.textContent)).toEqual(['Daily Pulse 27 Oct', '🗞️ Daily Pulse', 'Today in the community']);
+        expect(rows.map(r => r.textContent)).toEqual(['Daily Pulse 27 Oct', '🗞️ DAILY PULSE', 'Today in the community']);
         expect(screen.getByText('Today in the community').className).toContain('truncate');
         expect(screen.queryByText('DAILY PULSE')).toBeNull();
     });
@@ -190,7 +190,7 @@ describe('MarketplaceCard grid tile on the lattice (G2)', () => {
         expect(deal.chips).toBe(1);
         expect(deal.last.getAttribute('data-testid')).toBe('card-deal-chip');
         expect(deal.last.className).toBe(gridChip('ok'));
-        expect(row4({}, everything).text).toBe('📍3.0 km⏸ Paused');
+        expect(row4({}, everything).text).toBe('📍3.0 km⏸ PAUSED');
         expect(row4({}, { ...everything, status: 'active' }).text).toBe('📍3.0 km🔒 Only Gardeners can see this');
         const recurring = row4({}, { repeatable: true });
         expect(recurring.text).toBe('📍3.0 km↻ RECURRING');

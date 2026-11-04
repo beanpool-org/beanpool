@@ -29,7 +29,8 @@ import { sheetStyles } from '../../components/home/sheet-parts';
 import { STRIP_NAME_BASIS_DP, st as arrangeStyles } from '../../components/home/ArrangeParts';
 import { ADD_CARD_DOT_DP, ADD_CARD_DOT_GAP_DP, ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
 import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
-import { ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest } from '@beanpool/core';
+import { ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest, PRICING_CATEGORIES, STARTER_OFFERS, starterSheet, t } from '@beanpool/core';
+import { starter } from '../../components/home/StarterOffersSheet';
 import { FAB_BAND_DP } from '../fab-band';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
@@ -566,5 +567,48 @@ describe('new fixed strings at 320dp x 1.3 (Home slice W5)', () => {
             expect(longestWord(str, num(s.rowLine.fontSize)), str).toBeLessThan(CARD_INNER);
             expect(longestWord(str, num(s.rowSub.fontSize)), str).toBeLessThan(CARD_INNER);
         }
+    });
+});
+
+describe('the starter sheet at 320dp × 1.3 (cold start O2: What could you offer?)', () => {
+    const e = sheetStyles as unknown as Record<string, Record<string, unknown>>;
+    const st = starter as unknown as Record<string, Record<string, unknown>>;
+    const CHEVRON = 22;
+    /** A row's text beside the emoji and the chevron, inside the group's border and padding. */
+    const room = SCREEN - 2 * num(e.list.paddingHorizontal) - 2 * num(st.group.borderWidth) - 2 * num(st.group.paddingHorizontal)
+        - num(st.icon.width) - CHEVRON - 2 * num(s.row.gap);
+    const drafts = PRICING_CATEGORIES.flatMap(c => STARTER_OFFERS[c.id].map(o => o.title));
+
+    it('a row is one 48dp target: the emoji and the chevron never shrink, the text takes what is left', () => {
+        expect(num(s.row.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(s.rowText).toMatchObject({ flex: 1, minWidth: 0 });
+        expect(st.icon).toMatchObject({ flexShrink: 0 });
+        expect(room).toBeGreaterThanOrEqual(180);
+    });
+
+    it('all 51 draft titles keep their longest word in the room beside the emoji and the chevron', () => {
+        expect(drafts).toHaveLength(51);
+        for (const title of drafts) expect(longestWord(t(title), num(s.rowLine.fontSize)), title).toBeLessThan(room);
+    });
+
+    it('every price line keeps its longest word, however large the figure', () => {
+        for (const price of ['Free', '99999 Beans', '99999 Beans an hour']) expect(longestWord(price, num(s.rowSub.fontSize)), price).toBeLessThan(room);
+    });
+
+    it('the heading wraps beside Cancel, and the note and "Something else" fit', () => {
+        const sheet = starterSheet([], { beans: true, guide: null });
+        const cancel = Math.max(num(e.done.minWidth), textWidth(t('Cancel'), num(e.doneText.fontSize)) + 2 * num(e.done.paddingHorizontal));
+        const headingRoom = SCREEN - num(e.head.paddingLeft) - num(e.head.paddingRight) - cancel;
+        expect(longestWord(sheet.title, num(e.title.fontSize)), sheet.title).toBeLessThan(headingRoom);
+        expect(longestWord(sheet.note, num(e.note.fontSize)), sheet.note).toBeLessThan(SCREEN - 2 * num(e.list.paddingHorizontal));
+        expect(longestWord(sheet.other.title, num(s.rowLine.fontSize)), sheet.other.title).toBeLessThan(room);
+        expect(num(e.done.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+    });
+
+    it('the sheet draws rows that wrap to three lines, never one line cut off, and its keyboard is nobody\'s: it has no input', () => {
+        const source = read('components/home/StarterOffersSheet.tsx');
+        expect(source).not.toMatch(/TextInput|KeyboardProvider/);
+        expect(source).toMatch(/<ScrollView contentContainerStyle=\{sheetStyles\.list\}>/);
+        expect(source).toMatch(/lines=\{3\}/);
     });
 });

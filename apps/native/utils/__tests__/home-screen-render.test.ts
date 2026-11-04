@@ -166,6 +166,11 @@ vi.mock('../../components/ExampleListings', () => ({
     },
 }));
 vi.mock('../db', () => ({ getMarketplaceTransactions: vi.fn(async () => []), getUnreadByConversation: vi.fn(async () => []) }));
+// The sheet of starter drafts (slice O2): the community's price guide it reads as it opens, and the composer door a row calls.
+// Their own tests: tools-template.test.ts (the door), starter-offers.test.ts (the guide read).
+const starterWorld = vi.hoisted(() => ({ guide: null as unknown, opened: [] as unknown[], opens: true, hold: Promise.resolve() as Promise<void> }));
+vi.mock('../starter-offers', () => ({ readPricingGuide: vi.fn(async () => starterWorld.guide) }));
+vi.mock('../../tools/doors', () => ({ openStarterOffer: vi.fn(async (opening: unknown) => { starterWorld.opened.push(opening); await starterWorld.hold; return starterWorld.opens; }) }));
 vi.mock('../pulse', () => ({ resolvePulseThumbnailUrl: (u: string | null, i: { id: string }) => (u ? `${u}/api/pulse/items/${i.id}/thumbnail` : null) }));
 // The phone's place (H4: the global node's "near you"): allowed or not, and the last one known. Home must never ask.
 const loc = vi.hoisted(() => ({ status: 'denied', last: null as null | { coords: { latitude: number; longitude: number } }, asked: 0 }));
@@ -185,7 +190,7 @@ import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import * as tourStore from '../tour-store';
-import { START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
+import { DEFAULT_PRICING_CATALOG, START_CARD_WORDS, searchFromMarket } from '@beanpool/core';
 import { lightColors } from '../../constants/colors';
 import { QUIET_OPACITY } from '../../components/home/quiet';
 import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
@@ -434,7 +439,12 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
         await act(async () => { (document.querySelector('[data-testid="home-market-all"]') as HTMLElement).click(); });
         expect(nav.router.navigate).toHaveBeenCalledWith('/(tabs)/market');
         await act(async () => { (document.querySelector('[data-testid="home-step-post-offer"]') as HTMLElement).click(); });
+        // "Post an Offer" opens the sheet of drafts (slice O2); the composer opens from a row, and "Something else" is the blank one.
+        expect(document.querySelector('[data-testid="starter-offers-sheet"]')).not.toBeNull();
+        expect(nav.router.push).not.toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'offer' } });
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-other"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'offer' } });
+        expect(document.querySelector('[data-testid="starter-offers-sheet"]')).toBeNull();
         await act(async () => { (document.querySelector('[data-testid="home-arrange-open"]') as HTMLElement).click(); });
         expect(document.querySelector('[data-testid="home-arrange-done"]')).not.toBeNull();
     });
@@ -870,9 +880,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-needs-deal → /(tabs)/market tab=deals',
             'home-needs-message → /(tabs)/chats view=messages&filter=unread',
             'home-needs-group → /(tabs)/chats view=groups',
-            'home-step-offer → /new-listing newPost=offer',
             'home-step-photo → /(tabs)/settings section=profile',
-            'home-step-post-offer → /new-listing newPost=offer',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-deals-line → /(tabs)/market tab=deals',
             'home-enterprise-line → /treasury-detail publicKey=ent1&name=Tool Library',
@@ -934,7 +942,6 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-step-area → /your-area',
             'home-step-photo → /(tabs)/settings section=profile',
             'home-step-sawLedger → /(tabs)/ledger',
-            'home-step-post → /new-listing newPost=offer',
             'home-step-saidHello → /(tabs)/people view=community',
             'home-step-watch → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',
@@ -954,7 +961,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
 };
 
 /** Controls that act on Home itself rather than open a screen. */
-const IN_PLACE = /^(home-card-[a-z]+-menu|home-add-card|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show|home-community-shape-summary)$/;
+const IN_PLACE = /^(home-card-[a-z]+-menu|home-add-card|home-step-offer|home-step-post-offer|home-step-post|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show|home-community-shape-summary)$/;
 
 /** Ids a link passes as they are; every other param's value must be one its screen names. */
 const FREE_PARAMS = new Set(['id', 'txId', 'publicKey', 'name']);
@@ -2246,6 +2253,9 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         await act(async () => { (steps.querySelector('[data-testid="home-step-sawLedger"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith('/(tabs)/ledger');
         await act(async () => { (steps.querySelector('[data-testid="home-step-post"]') as HTMLElement).click(); });
+        // The first post on the global community also starts from the sheet; "Something else" is the blank composer.
+        expect(document.querySelector('[data-testid="starter-offers-sheet"]')).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-other"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'offer' } });
         await act(async () => { (steps.querySelector('[data-testid="home-step-saidHello"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/people', params: { view: 'community' } });
@@ -4830,5 +4840,153 @@ describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fa
     it('an older node sends no field: no pin anywhere', async () => {
         await render();
         expect(document.body.textContent).not.toContain('📌');
+    });
+});
+
+// ── "What could you offer?" (cold start, slice O2): what Post your first Offer opens ─────────────────────────────────────
+
+describe('What could you offer? (cold start O2): the sheet First steps opens, then the composer', () => {
+    const open = async (testId = 'home-step-post-offer') => {
+        await act(async () => { (document.querySelector(`[data-testid="${testId}"]`) as HTMLElement).click(); });
+        await settle(3);
+    };
+    const sheet = () => document.querySelector('[data-testid="starter-offers-sheet"]');
+    const rowLabels = () => Array.from(document.querySelectorAll('[data-testid^="starter-offer-"]')).map(e => e.getAttribute('aria-label'));
+    const withStars = (interests: string[]): HomeAnswer => { const a = localMember(); return { ...a, me: { ...a.me!, interests } }; };
+    beforeEach(() => {
+        starterWorld.guide = DEFAULT_PRICING_CATALOG;
+        starterWorld.opened.length = 0;
+        starterWorld.opens = true;
+    });
+
+    it('a member who starred nothing sees an hour of help, lend a tool and the garden, each with the community guide\'s figure', async () => {
+        await render();
+        expect(sheet()).toBeNull();
+        await open();
+        expect(sheet()).not.toBeNull();
+        expect(document.querySelector('[data-testid="starter-offers-title"]')!.textContent).toBe('What could you offer?');
+        expect(document.querySelector('[data-testid="starter-offers-note"]')!.textContent).toBe('Pick one. Every word is yours to change before it posts.');
+        expect(rowLabels()).toEqual([
+            'An hour of help, 25 Beans an hour. Opens a new Offer with this filled in.',
+            'Lend a tool, Free. Opens a new Offer with this filled in.',
+            'Extra from the garden, 6 Beans. Opens a new Offer with this filled in.',
+            'Something else. Opens a blank new Offer.',
+        ]);
+        // Nothing opened yet, and nothing said as done: a sheet is a door.
+        expect(starterWorld.opened).toEqual([]);
+        expect(nav.router.push).not.toHaveBeenCalledWith(expect.objectContaining({ pathname: '/new-listing' }));
+        expect(document.querySelector('[data-testid="starter-offers-sheet"]')!.textContent).not.toMatch(/posted|sent|saved|published/i);
+    });
+
+    it('the rows follow what the member starred, in the order they starred it', async () => {
+        node.answer = withStars(['animals', 'transport']);
+        await render();
+        await open();
+        expect(rowLabels().slice(0, 3).map(l => l!.split(',')[0].split('.')[0])).toEqual(['Dog walking', 'A lift into town', 'Pet sitting']);
+    });
+
+    it('a row opens the composer with that draft (the door), and the sheet goes; the draft is the row\'s own words, price and category', async () => {
+        await render();
+        await open();
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-labour.1"]') as HTMLElement).click(); });
+        await settle(3);
+        expect(starterWorld.opened).toEqual([{
+            title: 'An hour of help', description: 'An extra pair of hands for jobs around the house or yard. Tell me what and when.',
+            category: 'labour', credits: 25, priceType: 'hourly',
+        }]);
+        expect(sheet()).toBeNull();
+    });
+
+    it('a second tap while the first pick is still opening the composer opens it once, not twice', async () => {
+        await render();
+        await open();
+        // The door is still writing the first pick's draft (held here) when the member taps again.
+        let release!: () => void;
+        starterWorld.hold = new Promise<void>((resolve) => { release = resolve; });
+        try {
+            await act(async () => { (document.querySelector('[data-testid="starter-offer-tools.1"]') as HTMLElement).click(); });
+            await settle(3);
+            expect(starterWorld.opened).toHaveLength(1);
+            await act(async () => { (document.querySelector('[data-testid="starter-offer-garden.1"]') as HTMLElement).click(); });
+            await settle(3);
+            expect(starterWorld.opened).toHaveLength(1);
+            expect(sheet()).not.toBeNull();
+        } finally {
+            release();
+            starterWorld.hold = Promise.resolve();
+        }
+        await settle(3);
+        expect(starterWorld.opened).toHaveLength(1);
+        expect(sheet()).toBeNull();
+        // Once it has opened, the next pick (the sheet opened again) goes through as ever.
+        await open();
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-garden.1"]') as HTMLElement).click(); });
+        await settle(3);
+        expect(starterWorld.opened).toHaveLength(2);
+    });
+
+    it('when the member keeps the unfinished post the door would have replaced, the sheet stays for another pick', async () => {
+        starterWorld.opens = false;
+        await render();
+        await open();
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-tools.1"]') as HTMLElement).click(); });
+        await settle(3);
+        expect(starterWorld.opened).toHaveLength(1);
+        expect(sheet()).not.toBeNull();
+    });
+
+    it('Cancel closes it: nothing opened, nothing written, no route', async () => {
+        await render();
+        await open();
+        await act(async () => { (document.querySelector('[data-testid="starter-offers-cancel"]') as HTMLElement).click(); });
+        expect(sheet()).toBeNull();
+        expect(starterWorld.opened).toEqual([]);
+        expect(nav.router.push).not.toHaveBeenCalledWith(expect.objectContaining({ pathname: '/new-listing' }));
+    });
+
+    it('Something else is the blank composer, as this step opened before', async () => {
+        await render();
+        await open();
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-other"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'offer' } });
+        expect(starterWorld.opened).toEqual([]);
+        expect(sheet()).toBeNull();
+    });
+
+    it('a guide that cannot be read leaves the prices off the rows, and a paid draft opens with its price empty', async () => {
+        starterWorld.guide = null;
+        await render();
+        await open();
+        expect(rowLabels().slice(0, 3)).toEqual([
+            'An hour of help. Opens a new Offer with this filled in.',
+            'Lend a tool, Free. Opens a new Offer with this filled in.',
+            'Extra from the garden. Opens a new Offer with this filled in.',
+        ]);
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-garden.1"]') as HTMLElement).click(); });
+        await settle(3);
+        expect(starterWorld.opened).toEqual([expect.objectContaining({ category: 'garden', credits: null, priceType: 'fixed' })]);
+    });
+
+    it('where Beans are off (the global community) the same step opens it with no price column, and every draft free', async () => {
+        node.answer = globalMember(3);
+        await render();
+        await open('home-step-post');
+        expect(rowLabels().slice(0, 3)).toEqual([
+            'An hour of help. Opens a new Offer with this filled in.',
+            'Lend a tool. Opens a new Offer with this filled in.',
+            'Extra from the garden. Opens a new Offer with this filled in.',
+        ]);
+        await act(async () => { (document.querySelector('[data-testid="starter-offer-labour.1"]') as HTMLElement).click(); });
+        await settle(3);
+        expect(starterWorld.opened).toEqual([expect.objectContaining({ category: 'labour', credits: 0, priceType: 'fixed' })]);
+    });
+
+    it('a step already done is not a button, so it opens nothing', async () => {
+        const a = localMember();
+        node.answer = { ...a, cards: { ...a.cards, steps: { ...a.cards.steps!, firstOffer: true, firstPost: true, photo: false, invited: false } } };
+        await render();
+        expect(document.querySelector('[data-testid="home-step-post-offer"]')).toBeNull();
+        expect(byLabel('Post your first Offer, done')).not.toBeNull();
+        expect(sheet()).toBeNull();
     });
 });

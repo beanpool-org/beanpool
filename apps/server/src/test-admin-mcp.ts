@@ -34,7 +34,7 @@ import Database from 'better-sqlite3';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, submitReport, getReports } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, submitReport, getReports, getCommunityHealth } from './state-engine.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { resetAdminAuthTarpit, TOKEN_REFUSED_CODE } from './admin-auth.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
@@ -356,6 +356,19 @@ async function main(): Promise<void> {
         const health = structured(answers.server_health);
         assert(Array.isArray(health.communityAlerts) && health.communityAlerts.every((f: any) => !('description' in f) && !('members' in f)),
             'server_health gives community alerts by type only, never their members or description');
+        // A member who has not traded for a month is news for the owner's Settings, not an alert the assistant brings up.
+        const joinedBefore = db.prepare('SELECT joined_at FROM members WHERE public_key = ?').pluck().get(poster.pub) as string;
+        db.prepare("UPDATE members SET joined_at = strftime('%Y-%m-%dT%H:%M:%fZ','now','-200 days') WHERE public_key = ?").run(poster.pub);
+        try {
+            const raised = getCommunityHealth().flags.filter((f) => f.type === 'inactive_member' && f.members.includes(poster.pub));
+            const idleHealth = structured(await client.callTool({ name: 'server_health', arguments: {} }));
+            assert(raised.length === 1 && raised[0].severity === 'info',
+                `this world raises the inactive-member flag, as information (${JSON.stringify(raised.map((f) => f.severity))})`);
+            assert(!(idleHealth.communityAlerts ?? []).some((f: any) => f.type === 'inactive_member' || f.severity === 'info'),
+                `server_health does not report members with no trades as a community alert (${JSON.stringify(idleHealth.communityAlerts)})`);
+        } finally {
+            db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(joinedBefore, poster.pub);
+        }
         const seeded = (health.serverAlerts ?? []).find((a: any) => a.key === 'standby.incident');
         assert(seeded?.title === 'standby needs attention' && !('detail' in seeded) && !/Reggie|stalled/.test(JSON.stringify(health)),
             `server_health names an active server alert by its title, never its detail (${JSON.stringify(health.serverAlerts)})`);

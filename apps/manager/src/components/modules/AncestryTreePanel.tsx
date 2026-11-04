@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { TIER_LEVELS, tierForCredit, tierIndexForName } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { pruneInviteBranch, getTfaSessionToken, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
+import { flagsNeedingLook } from '../../lib/flag-words';
 import { PruneBranchModal } from './PruneBranchModal';
 import { nodeCredential } from '../../lib/profiles';
 
@@ -48,7 +49,8 @@ export function AncestryTreePanel({
 
     const healthFlags = useMemo(() => {
         const health = nodeData?.health as { flags?: NodeHealthFlag[] } | undefined;
-        return Array.isArray(health?.flags) ? health.flags : [];
+        // News (members with no trades for a while) is no threat: it does not mark the tree or fill its Threats filter.
+        return Array.isArray(health?.flags) ? flagsNeedingLook(health.flags) : [];
     }, [nodeData?.health]);
 
     const reports = useMemo(() => {

@@ -8043,7 +8043,12 @@ export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfa
 
 // ===================== COMMUNITY HEALTH =====================
 
-export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
+/**
+ * `info` is for a flag that is news, not a problem (inactive_member): the owner's apps list it quietly, count it nowhere, and
+ * the owner's assistant does not report it as an alert. `days` is the look-back an inactive_member flag used, so the owner's
+ * screen can say it in its own words without reading it out of `description`.
+ */
+export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'info' | 'warning' | 'alert' | 'critical'; description: string; members: string[]; days?: number; }
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
 export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; minAppVersionFrom: string | null; appFloors: Record<AppPlatform, PlatformFloor>; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
@@ -8189,7 +8194,8 @@ export function getCommunityHealth(): CommunityHealth {
     // ========== HEALTH FLAG DETECTION ==========
     const flags: HealthFlag[] = [];
     
-    // 1. Inactive Members: no transactions in N days, and must have joined > N days ago
+    // 1. Inactive Members: no Beans trades in N days, and must have joined > N days ago. Posts and chat do not count here, so
+    // this is news for the owner (severity info), not a warning: someone may be busy every day and simply not trade.
     try {
         const inactiveRows = db.prepare(`
             SELECT m.public_key, m.callsign FROM members m 
@@ -8204,9 +8210,10 @@ export function getCommunityHealth(): CommunityHealth {
         if (inactiveRows.length > 0) {
             flags.push({
                 type: 'inactive_member',
-                severity: 'warning',
-                description: `${inactiveRows.length} member${inactiveRows.length > 1 ? 's' : ''} with no activity for ${t.inactiveMemberDays}+ days`,
-                members: inactiveRows.map(r => r.public_key)
+                severity: 'info',
+                description: `${inactiveRows.length} member${inactiveRows.length > 1 ? 's have' : ' has'} not traded Beans for ${t.inactiveMemberDays}+ days`,
+                members: inactiveRows.map(r => r.public_key),
+                days: t.inactiveMemberDays
             });
         }
     } catch (e) { console.error('Health flag check (inactive) failed:', e); }

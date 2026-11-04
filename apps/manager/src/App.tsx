@@ -73,6 +73,7 @@ import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
+import { flagsStatus, isInformationFlag } from './lib/flag-words';
 import { startKeySession, carriesHandoff, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
 import { FreshProofRequiredError } from './lib/fresh-proof';
 import { ModeratorView } from './components/modules/ModeratorView';
@@ -583,10 +584,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             (r: NodeReport) => !savedDismissed.has(r.id || r.targetPubkey || r.reason || '')
         );
 
-        const hasAlert = flags.some((f: NodeHealthFlag) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-        const hasWarning = flags.some((f: NodeHealthFlag) => f.severity === 'warning');
-
-        const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
+        const status: NodeHealthStatus = flagsStatus(flags, reports.length > 0);
         setNodeHealthMap((prev) => ({ ...prev, [profileId]: status }));
     }, []);
 
@@ -999,10 +997,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
             const flags = data?.health?.flags || [];
             const reports = data?.reports || [];
-            const hasAlert = flags.some((f: NodeHealthFlag) => f.severity === 'critical' || f.severity === 'alert') || reports.length > 0;
-            const hasWarning = flags.some((f: NodeHealthFlag) => f.severity === 'warning');
-
-            const status: NodeHealthStatus = hasAlert ? 'alert' : hasWarning ? 'warning' : 'online';
+            const status: NodeHealthStatus = flagsStatus(flags, reports.length > 0);
             setNodeHealthMap((prev) => ({ ...prev, [activeNode.id]: status }));
         } catch (e: unknown) {
             const errMsg = e instanceof Error ? e.message : String(e);
@@ -1244,7 +1239,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     ) : 0;
 
     const activeMemberWarning = activeNodeData ? (
-        (activeNodeData.health?.flags || []).filter((f: NodeHealthFlag) => !globalDismissed.has(f.id || f.type || f.description || '') && f.severity === 'warning').length
+        (activeNodeData.health?.flags || []).filter((f: NodeHealthFlag) => !globalDismissed.has(f.id || f.type || f.description || '') && f.severity === 'warning' && !isInformationFlag(f)).length
     ) : 0;
 
     const logErrorsCount = nodeLogs.filter((l: LogEntry) => String(l.level || '').toUpperCase() === 'ERROR').length;

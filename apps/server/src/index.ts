@@ -103,6 +103,7 @@ import { startImageEvacuation } from './services/image-evacuation.js';
 import { checkImageStoreAtBoot } from './storage/image-store.js';
 import { startOrphanObjectSweep } from './engine/storage-health.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
+import { startApkMirror } from './services/apk-mirror.js';
 import { initShutdownRecovery, startFollowedUncleanStop } from './engine/shutdown-recovery.js';
 import { secureDataDirAtBoot } from './boot-file-safety.js';
 
@@ -234,6 +235,9 @@ async function main() {
     // Step 6.1: the wash analysis's first refresh, in the background, now the server listens (state-engine.ts
     // startWashTradingRefreshAtBoot): the first floor read finds it landed. Not awaited.
     void startWashTradingRefreshAtBoot();
+    // Step 6.2: the Android APK served on the local network (lights-out H3): which one is held, and the daily check for a
+    // newer one, 10 to 40 minutes from now (DISABLE_APK_UPDATE_CHECK=true leaves it out). Never blocks the start.
+    void startApkMirror();
 
     // Step 7: libp2p (persistent identity, no auto-discovery)
     const p2pNode = await startP2P(PORT_P2P, PORT_P2P_WS);

@@ -33,13 +33,20 @@ export function AddressFallbackCard({ colors }: { colors: AppColors }) {
     const busyRef = useRef(false);
     /** The ask while Home is in view, else null. */
     const checkRef = useRef<(() => void) | null>(null);
+    /**
+     * Bumped by each look, by "Not now" and by the move: a look's answer shows only if nothing bumped it since the look
+     * began, so one still on its way never puts back what the member just declined, or what a later look found (review of
+     * 533de50e; the follow card's `latest`).
+     */
+    const latestRef = useRef(0);
 
     useFocusEffect(
         useCallback(() => {
             let live = true;
             const check = () => {
                 if (busyRef.current) return;
-                addressFallbackOffer().then(o => { if (live && !busyRef.current) setOffer(o); }).catch(() => {});
+                const mine = ++latestRef.current;
+                addressFallbackOffer().then(o => { if (live && mine === latestRef.current && !busyRef.current) setOffer(o); }).catch(() => {});
             };
             checkRef.current = check;
             check();
@@ -68,6 +75,7 @@ export function AddressFallbackCard({ colors }: { colors: AppColors }) {
     const moveThere = async () => {
         if (busyRef.current) return;
         busyRef.current = true;
+        latestRef.current++;
         setBusy(true);
         let result: FollowResult;
         try {
@@ -97,6 +105,7 @@ export function AddressFallbackCard({ colors }: { colors: AppColors }) {
     };
 
     const notNow = () => {
+        latestRef.current++;
         setOffer(null);
         snoozeAddressFallback(offer).catch(() => {});
     };

@@ -63,6 +63,35 @@ jobs:
           tags: |
             type=sha,prefix=
 
+      # The Android APK the node serves on its local network (lights-out H3): the newest android-v* release's, its SHA-256
+      # and signing certificate checked (apps/server/src/services/apk-release.ts), into a folder of its own that the
+      # Dockerfile's `apk` stage takes as a layer. The cache keeps the last checked APK, so an unchanged APK is not
+      # downloaded again, and so a build whose newest APK can't be fetched or checked reuses it (a warning names it)
+      # rather than fail; with no APK at all the build fails.
+      - name: Set up Node for the APK check
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Restore the last checked APK
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/apk-cache
+          key: android-apk-none
+          restore-keys: android-apk-
+
+      - name: Fetch and check the Android APK
+        id: apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --experimental-strip-types scripts/apk/fetch-image-apk.mjs --out "$RUNNER_TEMP/apk-layer" --cache "$RUNNER_TEMP/apk-cache"
+
+      - name: Keep the checked APK for the next build
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/apk-cache
+          key: android-apk-${{ steps.apk.outputs.tag }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
@@ -76,6 +105,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
+          # The APK folder the step above made, as the Dockerfile's `apk` stage.
+          build-contexts: |
+            apk=${{ runner.temp }}/apk-layer
 
   # A node release tag (v1.2.27): the multi-arch release image, :latest, the semver tags and the GitHub Release. The
   # job starts only once Marty approves it in the `release` environment.
@@ -126,6 +158,35 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
+      # The Android APK the node serves on its local network (lights-out H3): the newest android-v* release's, its SHA-256
+      # and signing certificate checked (apps/server/src/services/apk-release.ts), into a folder of its own that the
+      # Dockerfile's `apk` stage takes as a layer. The cache keeps the last checked APK, so an unchanged APK is not
+      # downloaded again, and so a build whose newest APK can't be fetched or checked reuses it (a warning names it)
+      # rather than fail; with no APK at all the build fails.
+      - name: Set up Node for the APK check
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Restore the last checked APK
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/apk-cache
+          key: android-apk-none
+          restore-keys: android-apk-
+
+      - name: Fetch and check the Android APK
+        id: apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --experimental-strip-types scripts/apk/fetch-image-apk.mjs --out "$RUNNER_TEMP/apk-layer" --cache "$RUNNER_TEMP/apk-cache"
+
+      - name: Keep the checked APK for the next build
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/apk-cache
+          key: android-apk-${{ steps.apk.outputs.tag }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
@@ -139,6 +200,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
+          # The APK folder the step above made, as the Dockerfile's `apk` stage.
+          build-contexts: |
+            apk=${{ runner.temp }}/apk-layer
 
       - name: Generate Release Notes
         run: |

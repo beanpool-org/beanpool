@@ -16,6 +16,7 @@ import { useStyles } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
 import { useCommunities } from '../utils/use-communities';
 import { plainOriginOf } from '../utils/node-url';
+import { isGuestNode } from '../utils/nodes';
 import { queueProfileCopy, readCopySource, type CopyResult, type CopySource } from '../utils/profile-copy';
 
 /**
@@ -94,10 +95,29 @@ export function CopyProfileCard({ publicKey }: { publicKey: string }): React.JSX
         return () => { live = false; };
     }, [publicKey, active]);
 
-    // Another community that holds the member: not the one the phone is on, and not one visited as a guest.
+    // Which saved communities were visited only as a guest (utils/nodes.ts markGuestNode), read for the communities now listed.
+    // The row's `status` cannot say: useCommunities gives every row 'checking' first and 'offline' the moment the health read
+    // fails, before it asks about membership at all, so a guest community that is down or not yet checked looks like any other.
+    // A copy kept for one would be sent on every visit, answered "Member not found", and never clear. A read that has not
+    // come back for the listed communities leaves them all out; one that fails counts every one as a guest (fails closed).
+    const listed = rows.map((r) => r.url).join('\n');
+    const [guests, setGuests] = useState<{ listed: string; urls: Set<string> } | null>(null);
+    useEffect(() => {
+        let live = true;
+        const urls = listed ? listed.split('\n') : [];
+        Promise.all(urls.map((u) => isGuestNode(u).catch(() => true)))
+            .then((marks) => { if (live) setGuests({ listed, urls: new Set(urls.filter((_, i) => marks[i])) }); })
+            .catch(() => { if (live) setGuests({ listed, urls: new Set(urls) }); });
+        return () => { live = false; };
+    }, [listed]);
+    const marksRead = guests !== null && guests.listed === listed;
+
+    // Another community that holds the member: not the one the phone is on, and not one visited as a guest, whatever its status.
     const targets = useMemo(
-        () => rows.filter((r) => r.status !== 'guest' && plainOriginOf(r.url) !== plainOriginOf(source?.from ?? active)),
-        [rows, source, active],
+        () => (marksRead
+            ? rows.filter((r) => r.status !== 'guest' && !guests!.urls.has(r.url) && plainOriginOf(r.url) !== plainOriginOf(source?.from ?? active))
+            : []),
+        [rows, source, active, marksRead, guests],
     );
     const chosen = targets.find((r) => r.url === target) ?? null;
     const hasPhoto = !!source && source.photo !== 'none';
@@ -170,7 +190,7 @@ export function CopyProfileCard({ publicKey }: { publicKey: string }): React.JSX
             {!hasPhoto ? <Text style={styles.note}>{t('The ready-made picture is not a photo you chose, so it is not copied.')}</Text> : null}
 
             <Text style={styles.heading} accessibilityRole="header">{t('Copy to')}</Text>
-            {targets.length === 0 ? <Text style={styles.none}>{t('You have not joined another community on this phone yet.')}</Text> : null}
+            {marksRead && targets.length === 0 ? <Text style={styles.none}>{t('You have not joined another community on this phone yet.')}</Text> : null}
             {targets.map((r) => {
                 const on = r.url === target;
                 return (

@@ -14,7 +14,9 @@ import { keepPendingProfileChange } from './pending-profile-sync';
  * What it does is KEEP the copy for the chosen community (pending-profile-sync.ts keepPendingProfileChange, `copy`), as an
  * offline Save is kept. The phone publishes to the community it is on, so the copy goes the next time the member opens that
  * community (pillar-sync's retry, db.ts pushProfileToServer), and it carries the name and the photo kept and nothing of
- * that community's own row. No community is contacted here but the one the copy is made FROM, for the photo's bytes.
+ * that community's own row. This module moves no profile data to any community and asks none but the one the copy is made
+ * FROM, for the photo's bytes. (The card lists the communities through useCommunities, which sends each saved one the same
+ * health read and signed membership probe the community sheet sends; no name or photo goes with those.)
  */
 
 /** What the community the phone is on holds for the member, as a copy would read it: local, nothing fetched yet. */

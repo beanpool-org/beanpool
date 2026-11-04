@@ -42,10 +42,14 @@ vi.mock('react-native', () => {
     };
 });
 
-const mem = vi.hoisted(() => ({ store: new Map<string, string>(), writes: [] as string[] }));
+// `gate.guestMarks`, when set, holds the read of the guest marks (nodes.ts GUEST_KEY) until the test lets it go.
+const mem = vi.hoisted(() => ({ store: new Map<string, string>(), writes: [] as string[], gate: { guestMarks: null as null | Promise<void> } }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (k: string) => mem.store.get(k) ?? null),
+        getItem: vi.fn(async (k: string) => {
+            if (k === 'beanpool_guest_nodes' && mem.gate.guestMarks) await mem.gate.guestMarks;
+            return mem.store.get(k) ?? null;
+        }),
         setItem: vi.fn(async (k: string, v: string) => { mem.writes.push(k); mem.store.set(k, v); }),
         removeItem: vi.fn(async (k: string) => { mem.store.delete(k); }),
     },
@@ -90,6 +94,7 @@ let fetched: string[] = [];
 beforeEach(() => {
     mem.store.clear();
     mem.writes = [];
+    mem.gate.guestMarks = null;
     mem.store.set('beanpool_anchor_url', FIRST);
     communities.active = FIRST;
     communities.rows = [
@@ -288,6 +293,84 @@ describe('the tap keeps exactly what was ticked, for the community that was pick
         await render();
         expect(text()).toContain('You have not joined another community on this phone yet.');
         expect(go().getAttribute('aria-disabled')).toBe('true');
+    });
+});
+
+describe('a community visited only as a guest is never offered, whatever its status says', () => {
+    // utils/nodes.ts markGuestNode: the mark a member leaves by choosing to look around a community they are not in.
+    const markAsGuest = (...urls: string[]) => mem.store.set('beanpool_guest_nodes', JSON.stringify(urls));
+    const GUEST_DOWN = 'https://guest-down.example.test';
+    const GUEST_CHECKING = 'https://guest-checking.example.test';
+
+    it('a guest community that does not answer (offline) is not a place to copy to: nothing would ever arrive there', async () => {
+        markAsGuest(GUEST_DOWN);
+        communities.rows = [
+            { url: FIRST, name: 'First Beans', status: 'online' },
+            { url: SECOND, name: 'Second Beans', status: 'online' },
+            { url: GUEST_DOWN, name: 'Guest Down Beans', status: 'offline' },
+        ];
+        await render();
+        expect(byId(`copy-profile-to-${SECOND}`)).not.toBeNull();
+        expect(byId(`copy-profile-to-${GUEST_DOWN}`)).toBeNull();
+        expect(text()).not.toContain('Guest Down Beans');
+    });
+
+    it('a guest community still being checked is not offered either', async () => {
+        markAsGuest(GUEST_CHECKING);
+        communities.rows = [
+            { url: FIRST, name: 'First Beans', status: 'online' },
+            { url: GUEST_CHECKING, name: 'Guest Checking Beans', status: 'checking' },
+        ];
+        await render();
+        expect(byId(`copy-profile-to-${GUEST_CHECKING}`)).toBeNull();
+        expect(text()).toContain('You have not joined another community on this phone yet.');
+    });
+
+    it('a guest community the check has called a member of nowhere (status guest) is still left out', async () => {
+        markAsGuest(GUEST);
+        await render();
+        expect(byId(`copy-profile-to-${GUEST}`)).toBeNull();
+    });
+
+    it('a saved community with no guest mark that does not answer is still offered, with its waiting line', async () => {
+        markAsGuest(GUEST_DOWN);
+        await render();
+        expect(byId(`copy-profile-to-${THIRD}`)).not.toBeNull();
+        expect(byId(`copy-profile-to-${THIRD}`)!.textContent).toContain('Not reachable right now. The copy waits until you open it.');
+    });
+
+    it('while the guest marks are still being read nothing is offered, so a guest community cannot be picked in that moment; then the rest appear', async () => {
+        markAsGuest(GUEST_DOWN);
+        communities.rows = [
+            { url: FIRST, name: 'First Beans', status: 'online' },
+            { url: SECOND, name: 'Second Beans', status: 'online' },
+            { url: GUEST_DOWN, name: 'Guest Down Beans', status: 'offline' },
+        ];
+        let release!: () => void;
+        mem.gate.guestMarks = new Promise<void>((r) => { release = r; });
+        await render();
+        expect(byId(`copy-profile-to-${GUEST_DOWN}`)).toBeNull();
+        expect(byId(`copy-profile-to-${SECOND}`)).toBeNull();
+        // Not "you have not joined another community": the answer is not in yet.
+        expect(text()).not.toContain('You have not joined another community on this phone yet.');
+        await act(async () => { release(); });
+        await settle();
+        expect(byId(`copy-profile-to-${SECOND}`)).not.toBeNull();
+        expect(byId(`copy-profile-to-${GUEST_DOWN}`)).toBeNull();
+    });
+
+    it('a tap on the one community left keeps its copy; nothing is kept for the guest one', async () => {
+        markAsGuest(GUEST_DOWN);
+        communities.rows = [
+            { url: FIRST, name: 'First Beans', status: 'online' },
+            { url: SECOND, name: 'Second Beans', status: 'online' },
+            { url: GUEST_DOWN, name: 'Guest Down Beans', status: 'offline' },
+        ];
+        await render();
+        await press(byId(`copy-profile-to-${SECOND}`));
+        await press(go());
+        expect(entryOf(SECOND)).toEqual({ publicKey: KEY, callsign: 'Rosa', avatar: DATA, chosenOnly: true });
+        expect(entryOf(GUEST_DOWN)).toBeUndefined();
     });
 });
 

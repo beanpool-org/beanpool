@@ -36,7 +36,7 @@ import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
-import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
+import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -3630,6 +3630,12 @@ export interface DecisionTally {
     minYes?: number;
     /** A pause's own vote fewer than 3 members could vote on, so its quorum can't be met: an owner may decide it. */
     tooFewToVote?: boolean;
+    /**
+     * A vote a drawn jury decides (removal jury J1): while it is open the node sends `turnout` and none of the split
+     * (yesWeight, noWeight, totalWeight, supportRatio, passed are absent then), so the card counts jurors (J2a, J3).
+     */
+    decider?: 'jury';
+    turnout?: JuryTurnout;
 }
 
 export interface DecisionWithTally extends Decision {
@@ -3725,6 +3731,24 @@ export async function replyToRemovalCase(decisionId: string, reply: string): Pro
  */
 export async function reportRemovalCase(decisionId: string): Promise<{ success: boolean; duplicate?: boolean }> {
     return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/report`, {});
+}
+
+/**
+ * The jury of a vote a jury decides (removal jury, GET …/jury): its pool, the draw's facts and the signer's own seat, and
+ * after close who voted and who didn't serve. Signed: the node answers members only. Null for a vote no jury decides (and
+ * from a node older than the route); throws when the node can't be reached, so the card can offer to try again.
+ */
+export async function getDecisionJury(decisionId: string): Promise<ServedJury | null> {
+    const res = await signedGet(`/api/commons/decisions/${encodeURIComponent(decisionId)}/jury`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    const data = await res.json();
+    return data?.jury ?? null;
+}
+
+/** A seated juror's answer to their seat (J2b): Serve, or Step aside (no reason asked). The node answers with their jury read. */
+export async function answerJurySeat(decisionId: string, answer: 'serve' | 'step_aside'): Promise<{ success: boolean; jury: ServedJury | null }> {
+    return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/jury/answer`, { answer });
 }
 
 export async function updatePost(id: string, updates: any) {
@@ -7593,23 +7617,29 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     // a portable photo still sitting in this community's row (an offline pick). There is no session pick on this
     // path — it runs with no screen in front of it. The parked copy, and the change it waits in, retire only
     // after a verified 2xx: every `return false` below leaves them for the next retry.
+    // A copy the member asked for from another community (Profile S4) is all that waits here: it sends the name and the photo
+    // kept for it and nothing of this community's row, whose bio and contact may be older than the community's own.
+    const copyOnly = pending?.chosenOnly === true;
     const decision = await resolveProfilePublishAvatar({
         parked: pending?.avatar,
-        catchUp: { localRow: profile?.avatar_url },
+        ...(copyOnly ? {} : { catchUp: { localRow: profile?.avatar_url } }),
     });
     const avatar = decision.avatar;
 
     // A name changed here and not yet accepted wins over the row's: a members sync landing first writes the name the
     // node still holds over the row. Once the community has refused the waiting name for good, no name goes (the row
     // may still hold the refused one), and the community keeps the name it holds (#2461 review r4368601839).
-    const callsign = pending?.callsign || (pending?.refusedCallsign !== undefined ? undefined : profile?.callsign || identity.callsign);
+    // A copy that carries no name leaves the community's name as it is.
+    const callsign = copyOnly
+        ? pending?.callsign
+        : pending?.callsign || (pending?.refusedCallsign !== undefined ? undefined : profile?.callsign || identity.callsign);
     // Profile S2-W: bio and contact belong to this community alone; no fallback to phone-wide canonical across communities.
-    const bio = profile?.bio ?? '';
-    const contactValue = profile?.contact_value ?? null;
-    const contactVisibility = profile?.contact_visibility ?? undefined;
+    const bio = copyOnly ? '' : profile?.bio ?? '';
+    const contactValue = copyOnly ? null : profile?.contact_value ?? null;
+    const contactVisibility = copyOnly ? undefined : profile?.contact_visibility ?? undefined;
     // What waits for this community, or a device copy newer than its row: never its own row sent back, and never to a
-    // community that doesn't say this key is a member (utils/working-style.ts).
-    const publicArchetype = await archetypeToSend(anchorUrl, identity, profile?.archetype);
+    // community that doesn't say this key is a member (utils/working-style.ts). A copy sends none.
+    const publicArchetype = copyOnly ? null : await archetypeToSend(anchorUrl, identity, profile?.archetype);
 
     // The bail-out used to be `if (!avatar)`, from when a picture was the only thing this
     // published. It now carries bio, contact and archetype too, so keying it on the avatar
@@ -7687,8 +7717,9 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
         // community's, and this one's profile stays out of it. This community's next members sync brings it home.
         if (!(await stillOnCommunity(anchorUrl))) return true;
         // Mirror what was just published into THIS node's local DB when it was
-        // missing, so local reads and the marketplace pre-check see it at once.
-        if (!profile?.avatar_url || publicArchetype) {
+        // missing, so local reads and the marketplace pre-check see it at once. A copied photo goes in over the one the row
+        // holds (a node's own URL for the photo that was here): it is the member's new photo here.
+        if (!profile?.avatar_url || publicArchetype || (copyOnly && avatar)) {
             try {
                 await updateMemberProfile(identity.publicKey, {
                     callsign: rowCallsign ?? profile?.callsign ?? identity.callsign,

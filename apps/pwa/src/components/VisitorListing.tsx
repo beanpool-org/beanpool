@@ -12,7 +12,8 @@ import { formatEventWhen } from '../lib/events';
 import { VISITOR_WORDS, visitorDistanceText, visitorKmText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
 import { CategoryTile } from './CategoryTile';
-import { copyCardLine, copyFromLine, copyPriceLine, eventCopyOf, listPhotoUrl, t } from '@beanpool/core';
+import { copyCardLine, copyFromLine, copyPriceLine, eventCopyOf, t } from '@beanpool/core';
+import { ListPhoto } from './ListPhoto';
 import { EventCopyDoor } from './EventCopyDoor';
 import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
 
@@ -70,9 +71,11 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
             className="self-start w-full min-w-0 text-left bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 shadow-sm flex flex-row gap-3 cursor-pointer hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
         >
             <span className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center">
-                {photo
-                    ? <img src={listPhotoUrl(photo)} alt="" className="w-full h-full object-cover" />
-                    : <CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="thumb" />}
+                <ListPhoto
+                    photo={photo}
+                    fallback={<CategoryTile category={post.category} kind={post.type === 'event' ? 'event' : 'listing'} size="thumb" />}
+                    alt="" className="w-full h-full object-cover"
+                />
             </span>
             <span className="flex-1 min-w-0 flex flex-col gap-1">
                 <span className="font-extrabold text-base leading-snug text-nature-950 dark:text-white break-words">{post.title}</span>

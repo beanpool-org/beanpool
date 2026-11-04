@@ -12,7 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShowcaseFeature, FeatureMode } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useNodeProfileState } from './use-node-profile';
-import { effectiveFeatures, readNodeProfile, showcaseMode, type NodeFeatures } from './node-profile';
+import { effectiveFeatures, readReaderFeatures, showcaseMode, type NodeFeatures } from './node-profile';
 import { signedGet } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 import { readerFeaturesHeld as cache, readerFeaturesKey as cacheKey } from './reads-own';
@@ -36,9 +36,8 @@ async function askReader(url: string, identity: BeanPoolIdentity, fetchTimeoutMs
     try {
         const res = await signedGet(url, '/api/community/me', identity, stop.signal);
         if (!res.ok) return { features: null, freshMs: READER_RETRY_MS };
-        const body = (await res.json().catch(() => null)) as { features?: unknown } | null;
-        if (!body?.features || typeof body.features !== 'object') return { features: null, freshMs: READER_FRESH_MS };
-        return { features: readNodeProfile({ features: body.features })?.features ?? null, freshMs: READER_FRESH_MS };
+        // Its features, and who decides a removal, which a member's answer says beside them (slice J3); null: it says none.
+        return { features: readReaderFeatures(await res.json().catch(() => null)), freshMs: READER_FRESH_MS };
     } catch {
         return { features: null, freshMs: READER_RETRY_MS };
     } finally {

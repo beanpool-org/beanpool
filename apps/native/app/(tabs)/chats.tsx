@@ -33,7 +33,8 @@ import { switchCommunity, communitySwitchUnderWay } from '../../utils/use-commun
 import { getPendingOnboarding } from '../../utils/onboarding-state';
 import { useOtherCommunitiesNotices } from '../../utils/use-notice-counts';
 import { OtherCommunityNotices } from '../../components/OtherCommunityNotices';
-import { listPhotoUrl, t, tn, word, type WordKey } from '@beanpool/core';
+import { t, tn, word, type WordKey } from '@beanpool/core';
+import { ListPhoto } from '../../components/ListPhoto';
 
 /** Talk's three panes: word() keys, shown through t() where the switch is drawn. */
 const TALK_PANES: ReadonlyArray<{ id: TalkView; label: WordKey }> = [
@@ -569,7 +570,17 @@ export default function ChatsScreen() {
                 {item.postId && item.postPhoto && typeof item.postPhoto === 'string' && item.postPhoto.trim() !== '' && item.postPhoto !== 'null' && item.postPhoto !== 'undefined' ? (
                     <View style={styles.avatarComposite}>
                         {/* Post photo as primary (rounded square) */}
-                        <Image source={{ uri: listPhotoUrl(item.postPhoto) }} style={styles.postPhotoAvatar} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" />
+                        <ListPhoto
+                            photo={item.postPhoto}
+                            style={styles.postPhotoAvatar}
+                            accessibilityElementsHidden={true}
+                            importantForAccessibility="no-hide-descendants"
+                            fallback={(
+                                <View style={[styles.avatar, styles.avatarMarketplace]}>
+                                    <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.primary} />
+                                </View>
+                            )}
+                        />
                         {/* Peer profile overlay (small circle) */}
                         <View style={styles.overlayAvatarWrap}>
                             <MemberAvatar avatarUrl={item.peerAvatar} pubkey={item.peerPubkey || ''} callsign={item.peer} size={20} />

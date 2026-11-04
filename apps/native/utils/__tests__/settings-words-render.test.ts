@@ -189,6 +189,8 @@ const node = vi.hoisted(() => ({
     rule: undefined as undefined | 'vault' | 'server' | 'none',
     /** `features` on GET /api/community/me; null: the reader's own read goes unanswered. */
     me: null as null | Record<string, unknown>,
+    /** What GET /api/community/me says beside `features` (removal jury J3: who decides a removal, to a member). */
+    meBeside: {} as Record<string, unknown>,
     /** GET /api/community/known-rule's answer; null: a 404, as an older node. */
     knownRule: null as null | Record<string, unknown>,
 }));
@@ -214,7 +216,7 @@ vi.mock('../node-post', async (importOriginal) => {
     return {
         signedPost: async () => new Response(JSON.stringify({ keepers: [], enrolledSso: [], threshold: 1, recoverable: false, total: 0 }), { status: 200 }),
         signedGet: async (_url: string, route: string) => (route === '/api/community/me' && node.me
-            ? new Response(JSON.stringify({ features: node.me }), { status: 200 })
+            ? new Response(JSON.stringify({ features: node.me, ...node.meBeside }), { status: 200 })
             : new Response('{}', { status: 404 })),
         anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
         // The node doesn't answer the delete in time: what purgeAccountOnNode throws then.
@@ -335,6 +337,7 @@ beforeEach(() => {
     node.lastPlan = false;
     node.rule = undefined;
     node.me = null;
+    node.meBeside = {};
     node.knownRule = null;
     readerFeaturesHeld.clear();
     sheet.props = null;
@@ -857,6 +860,14 @@ describe('Settings → "How this community works": the floor and the rule throug
         expect(shapeSheet()).not.toContain('(the known floor)');
         expect(shapeSheet()).not.toContain('admins can see');
     });
+
+    it('who decides a removal, from beside the features a member\'s answer says (removal jury J3)', async () => {
+        node.me = WIRE;
+        node.meBeside = { removalDecider: 'jury' };
+        await renderIn('en');
+        await open();
+        expect(shapeSheet()).toContain('decided by a jury drawn at random; while fewer than 36 members could serve on one, by everyone who can vote');
+    });
 });
 
 describe('the lower layers\' lines the cards translate where they show them, held to their sources', () => {
@@ -940,7 +951,9 @@ describe('Settings at 320 dp with 1.3× text, in the pseudo-locale', () => {
             expect(label.getAttribute('data-lines'), text).toBe('2');
             const px = 13 * SCALE * Number(label.getAttribute('data-min-scale'));
             expect(widthOf(longestWord(text), px), longestWord(text)).toBeLessThanOrEqual(third);
-            expect(widthOf(text, px), text).toBeLessThanOrEqual(2 * third * 0.9);
+            // Plus one tilde at the smallest size: the pseudo pad rounds up to whole tildes (slice T4, 4 Nov 2026), so the
+            // 13-letter "Same as phone" carries 6 at 40 % where 35 % gave 5 (132.0 against 129.6 dp; a tilde is 6.3 dp here).
+            expect(widthOf(text, px), text).toBeLessThanOrEqual(2 * third * 0.9 + widthOf('~', px));
         }
     });
 });

@@ -3,6 +3,7 @@
  * Friends, Recovery, Push Notifications, Preferences, Ratings routes.
  */
 
+import { publicLightsOut } from '../services/lights-out.js';
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
@@ -61,7 +62,7 @@ import {
 import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
-import { featuresFor } from '../config/features-for.js';
+import { featuresFor, removalDeciderFor } from '../config/features-for.js';
 import { confirmationOf } from '../engine/community-health.js';
 import { getStartCommunityUrl } from '../config/start-community.js';
 import { recoveryCopies } from '../config/recovery-copies.js';
@@ -853,6 +854,10 @@ router.get('/api/community/info', async (ctx) => {
         // Where members' copies go (config/recovery-copies.ts, vault rethink VR2): `vault`, `server` or `none`. The apps
         // read it where a copy is made; an app from before it ignores it.
         recoveryCopies: recoveryCopies(),
+        // Lights-out (services/lights-out.ts publicLightsOut, design §2.1 item 2): whether the hall is open here, at what
+        // address, how old the record is, and where phones go home to (`{ on: false, home }` while off). Always present on a
+        // node that knows lights-out, so the phone tells it from an older one (absent).
+        lightsOut: publicLightsOut(),
     };
     // A tag of the reader and the answer, so an app asking again for what it holds gets a 304 (slice L0). Never shared:
     // a signer's answer carries their own count, and nobody's needs an edge (the counts are cached here already). The JSON
@@ -892,9 +897,12 @@ router.get('/api/community/me', async (ctx) => {
     }
     ctx.set('Cache-Control', 'private, no-store');
     // `features`: the reader's own effective set (config/features-for.ts), today the node's, as /api/community/info says.
+    // Beside it, never in it, who decides a removal, to a reader who reads as a member (removalDeciderFor, slice J3).
+    const removalRule = removalDeciderFor(actor);
     ctx.body = {
         publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor),
         features: featuresFor(actor),
+        ...(removalRule ? { removalDecider: removalRule } : {}),
         // Whether the rule on what the admins can see applies to them, and since when: a new `confirmedAt` is a new
         // confirmation, so the app shows its card again (engine/community-health.ts confirmationOf).
         ...confirmationOf(actor),
@@ -1021,7 +1029,9 @@ router.get('/api/community/health', async (ctx) => {
     // update. Anything else (an older app, the web app, a monitor) can't say which kind of phone it is on, and gets the
     // lower of the two platforms' floors (getUnnamedAppFloor): MIN_APP_VERSION, as always, unless both platforms have
     // been raised past it.
-    const health = getPublicCommunityHealth();
+    // `lightsOut`: as /api/community/info carries it (services/lights-out.ts publicLightsOut): the phone's health ping is how
+    // it learns the hall opened, or closed and where home is (design §2.5).
+    const health = { ...getPublicCommunityHealth(), lightsOut: publicLightsOut() };
     const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
     ctx.vary(APP_VERSION_HEADER);
     ctx.body = app ? { ...health, minAppVersion: getPlatformFloor(app.platform) } : health;

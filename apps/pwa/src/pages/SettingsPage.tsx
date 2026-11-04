@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { AREA_STEP_WORDS, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, t, tn } from '@beanpool/core';
+import { AREA_STEP_WORDS, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, t, tn } from '@beanpool/core';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
@@ -35,6 +35,7 @@ import { WaysBackSection } from '../components/WaysBackSection';
 import { CommunityAdminsSection } from '../components/CommunityAdminsSection';
 import { webCommunityCopyStatus, type WebCommunityCopyStatus } from '../lib/community-copy';
 import { MemberAvatar } from '../components/MemberAvatar';
+import { CopyPhotoHere } from '../components/CopyPhotoHere';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
 } from '../lib/event-extras';
@@ -270,9 +271,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         let cancelled = false;
         getCommunityMe()
             .then((me) => {
-                if (!cancelled && me?.features && typeof me.features === 'object') {
-                    setMemberFeatures(me.features as Record<string, unknown>);
-                }
+                // The features, and who decides a removal, which a member's answer says beside them (removal jury J3).
+                const features = shapeFeaturesOf(me);
+                if (!cancelled && features) setMemberFeatures(features);
             })
             .catch(() => {});
         return () => { cancelled = true; };
@@ -1010,6 +1011,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
+                                {/* Copy on request (Profile S4): the photo this browser kept from another community, into this one, only on the tap. */}
+                                <CopyPhotoHere publicKey={identity.publicKey} />
 
 
 

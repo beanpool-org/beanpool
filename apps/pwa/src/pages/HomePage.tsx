@@ -35,7 +35,7 @@ import {
     HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings, readToolsSettings,
+    ARRANGE_WORDS, arrangeMovedLine, homeCardHue, homeCardType, readDecideSettings, readSearchSettings, readToolsSettings,
     type CardHue,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
     capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word,
@@ -78,7 +78,7 @@ import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide, loadBundledGuide } from '../lib/guide';
 import type { Guide } from '@beanpool/core';
-import { copyPriceLine, eventCopyOf } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, shapeFeaturesOf } from '@beanpool/core';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -90,6 +90,7 @@ import {
 } from '../lib/tour-store';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { CategoryTile } from '../components/CategoryTile';
+import { ListPhoto } from '../components/ListPhoto';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, packedHeight, useCardContainer } from '../components/HomeCard';
@@ -344,12 +345,9 @@ function MarketListingItem({
     onNavigate: (page: string, id?: string) => void;
     nextImageLoading: () => 'eager' | 'lazy';
 }) {
-    // Its own photo, else its enterprise's banner (Pictures S6). A banner that will not load gives way to the tile, never
-    // an empty box (review of #2565, finding 8); the URL that failed is kept, so a new one is tried.
-    const [failedBanner, setFailedBanner] = useState<string | null>(null);
-    const banner = item.bannerUrl && item.bannerUrl !== failedBanner ? item.bannerUrl : null;
-    const photo = resolveImageUrl(item.photoUrl || banner);
-    const onPictureError = item.photoUrl ? undefined : () => setFailedBanner(item.bannerUrl ?? null);
+    // Its own photo, else its enterprise's banner (Pictures S6). A picture that will not load steps down to the photo's own
+    // URL, then the tile, never an empty box (review of #2565, finding 8; components/ListPhoto.tsx).
+    const photo = resolveImageUrl(item.photoUrl || item.bannerUrl);
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
     const copy = eventCopyOf(item);
     const price = copy ? copyPriceLine(copy)
@@ -374,21 +372,19 @@ function MarketListingItem({
                 data-testid={testId}
                 className="w-full min-h-[44px] p-2 text-left bg-transparent border border-border-primary hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-                {photo ? (
-                    <img
-                        src={listPhotoUrl(photo)}
-                        alt=""
-                        loading={nextImageLoading()}
-                        decoding="async"
-                        onError={onPictureError}
-                        className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
-                        style={{ objectPosition: '50% 33%' }}
-                    />
-                ) : (
-                    <div className="w-full h-24 rounded-lg overflow-hidden mb-2">
-                        <CategoryTile category={item.category} size="grid" />
-                    </div>
-                )}
+                <ListPhoto
+                    photo={photo}
+                    alt=""
+                    loading={photo ? nextImageLoading() : undefined}
+                    decoding="async"
+                    className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
+                    style={{ objectPosition: '50% 33%' }}
+                    fallback={(
+                        <div className="w-full h-24 rounded-lg overflow-hidden mb-2">
+                            <CategoryTile category={item.category} size="grid" />
+                        </div>
+                    )}
+                />
                 <div className="min-w-0 flex-1">
                     <div className="mb-1">
                         <span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>
@@ -415,20 +411,18 @@ function MarketListingItem({
             testId={testId}
             label={label}
         >
-            {photo ? (
-                <img
-                    src={listPhotoUrl(photo)}
-                    alt=""
-                    loading={nextImageLoading()}
-                    decoding="async"
-                    onError={onPictureError}
-                    className="shrink-0 w-12 h-12 rounded-lg object-cover bg-bg-hover"
-                />
-            ) : (
-                <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden">
-                    <CategoryTile category={item.category} size="thumb" />
-                </div>
-            )}
+            <ListPhoto
+                photo={photo}
+                alt=""
+                loading={photo ? nextImageLoading() : undefined}
+                decoding="async"
+                className="shrink-0 w-12 h-12 rounded-lg object-cover bg-bg-hover"
+                fallback={(
+                    <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden">
+                        <CategoryTile category={item.category} size="thumb" />
+                    </div>
+                )}
+            />
             <span className="min-w-0 flex-1">
                 <span className="block break-words">
                     <span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>
@@ -3106,7 +3100,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 <CommunityShapeModal
                     isOpen={shapeModalOpen}
                     onClose={() => setShapeModalOpen(false)}
-                    features={answer?.features}
+                    // The features, and who decides a removal, which a member's Home says beside them (removal jury J3).
+                    features={shapeFeaturesOf(answer)}
                     onOpenGuide={() => onNavigate('guide', 'how-your-community-works')}
                 />
             </div>

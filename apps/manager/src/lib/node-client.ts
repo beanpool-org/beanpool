@@ -2119,8 +2119,13 @@ export interface BackupVerificationResult {
     result?: unknown[];
 }
 
+/**
+ * The node's snapshot schedule, read from snapshots/list (which answers it as `config`), never from snapshots/config:
+ * that route both reads and saves, so the node's lights-out count (server services/lights-out.ts NOT_HALL_WRITES) can't
+ * tell a read there from a change, and an owner who only opened Settings in the hall would lose the stand-down offer.
+ */
 export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<SnapshotScheduleConfig> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/config');
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/snapshots/list');
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
@@ -3019,7 +3024,25 @@ export interface AdminDecisionItem {
         minYes?: number;
         /** A pause's own vote fewer than 3 members could vote on: an owner may decide it (ownerDecideRemoval). */
         tooFewToVote?: boolean;
+        /**
+         * A vote a drawn jury decides (removal jury): how many jurors voted, how many sit, how many must vote. While it is
+         * open the node sends this and none of the split (yesWeight, noWeight and supportRatio are absent then).
+         */
+        decider?: 'jury';
+        turnout?: { voted: number; size: number; mustVote: number };
     };
+}
+
+/**
+ * An admin's line for a Decision's numbers (DecisionsAdminPanel): a jury's open vote counts jurors, never a split the node
+ * didn't send; any other vote, and a closed jury's, its turnout and totals.
+ */
+export function adminTallyLine(tally: AdminDecisionItem['tally'], status: string): string {
+    const turnout = tally.turnout;
+    if (turnout && (status === 'open' || typeof tally.yesWeight !== 'number')) {
+        return `${turnout.voted} of ${turnout.size} jurors have voted · ${turnout.mustVote} must vote · how they voted stays hidden until it closes`;
+    }
+    return `${tally.totalVoters} of ${tally.quorumRequired} votes needed · Yes ${tally.yesWeight} · No ${tally.noWeight}`;
 }
 
 async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, unknown>, adminPassword?: string, tfaToken?: string): Promise<T> {

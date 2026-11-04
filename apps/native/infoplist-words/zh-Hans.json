@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "断网时，BeanPool 用它在会堂的 Wi-Fi 上连接你们社区的笔记本电脑。"
+  }
+}

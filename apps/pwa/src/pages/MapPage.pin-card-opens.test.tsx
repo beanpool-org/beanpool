@@ -167,6 +167,26 @@ describe("MapPage: the pin card opens its listing from anywhere on it", () => {
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-eggs');
     });
 
+    // Both halves together (the sync of #2838 with the small-cards rule): a small copy that fails steps down to the full photo,
+    // then to the category tile, never an empty slot; and through every step the photo has no control of its own.
+    it("a failed small photo steps down to the full photo, then the category tile, and the card still opens the listing", async () => {
+        const PHOTO = '/api/marketplace/posts/post-eggs/photos/0?v=1&k=KEY0';
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([{ ...post, photos: [PHOTO] }] as any);
+        const onNavigate = vi.fn();
+        const { card } = await openPinCard(onNavigate);
+        expect(card.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO}&size=thumb2`);
+        fireEvent.error(card.querySelector('img')!);
+        expect(card.querySelector('img')?.getAttribute('src')).toBe(PHOTO);
+        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close preview', 'View Details']);
+        fireEvent.error(card.querySelector('img')!);
+        expect(card.querySelector('img')).toBeNull();
+        expect(within(card).getByText('🥕')).toBeInTheDocument();
+        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close preview', 'View Details']);
+        fireEvent.click(within(card).getByTestId('map-preview-tap'));
+        expect(onNavigate).toHaveBeenCalledTimes(1);
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-eggs');
+    });
+
     it('the View Details button opens it once (the press does not reach the card as well), and is described by the title', async () => {
         const onNavigate = vi.fn();
         const { card } = await openPinCard(onNavigate);

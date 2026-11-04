@@ -10,6 +10,10 @@
 //     For each language with work, writes a self-contained brief file for an AGY Flash run
 //     embedding the shared style rules (STYLE.md), listing exact keys/pages with English and
 //     source hashes, and commit/push steps per catalog/page. Deterministic output.
+//
+// What counts as "missing" follows the tests, not only the sources (4 Nov, #2841 and #2842): a phone or web sentence that
+// core's own sources also use is core's. Both apps load [their catalog, core's] with core winning, so the app's copy would
+// never show (your-deals-words.test.ts forbids it for "Your deals"). It is not missing there.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,10 +23,15 @@ import { glossaryForBrief, readGlossary } from './glossary.mjs';
 import { GUIDE_LANGS, guideBodyHash, loadGuide, parseGuideMarkdown } from '../../packages/beanpool-guide/src/guide.mjs';
 import { checkGuideTitles, draftGuideTitles, guideSourceHash, readGuideTitles } from '../../packages/beanpool-guide/src/titles.mjs';
 
+/**
+ * `throughCore`: the package's words are read as [its catalog, core's catalog], core's last, so a sentence core's own sources
+ * use is core's to translate and the package's copy would never show (apps/native/utils/words-catalogs.ts, apps/pwa/src/lib/
+ * language.ts). The server is not one: its refusals are translated with the server's catalog alone (member-words.ts).
+ */
 export const APP_CATALOG_DEFS = Object.freeze([
     { name: 'core', folder: 'packages/beanpool-core/words' },
-    { name: 'native', folder: 'apps/native/words' },
-    { name: 'pwa', folder: 'apps/pwa/words' },
+    { name: 'native', folder: 'apps/native/words', throughCore: true },
+    { name: 'pwa', folder: 'apps/pwa/words', throughCore: true },
     { name: 'server', folder: 'apps/server/words' },
 ]);
 
@@ -64,7 +73,13 @@ export async function scanWebsitePages(root = ROOT, _langs = null) {
     };
 }
 
-/** Scan app words for missing and orphaned keys per catalog. */
+/**
+ * Scan app words for missing and orphaned keys per catalog.
+ *
+ * A key is missing in a catalog when the package's sources use it and the language's file lacks it, except in a `throughCore`
+ * package (the phone, the web app): a key core's sources also use is core's to translate, so it is not missing there. It still
+ * counts as USED there, so a copy an older round put in the catalog is not orphaned.
+ */
 export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS, langs = null, extracted = null } = {}) {
     const { callKey } = await loadCoreChecks(root);
     extracted ??= extractRepo(root);
@@ -88,6 +103,10 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
         }
     }
 
+    // The sentences core's own sources use: core's catalog translates them for every package that loads it.
+    const coreDef = catalogDefs.find((d) => d.name === 'core');
+    const coreKeys = (coreDef && byFolder.get(coreDef.folder)?.keys) || new Set();
+
     const result = {};
     for (const lang of targetLangs) {
         result[lang] = { missing: 0, stale: 0, orphaned: 0, byCatalog: {}, items: [] };
@@ -108,10 +127,13 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
 
             const catMissing = [];
             const catOrphaned = [];
+            // Core's own sentences are not this package's to draft (see above).
+            const isCoresToTranslate = (key) => def.throughCore === true && coreKeys.has(key);
 
             if (catalog === null) {
                 // Whole file missing
                 for (const key of [...sourceKeys].sort()) {
+                    if (isCoresToTranslate(key)) continue;
                     const item = {
                         catalog: def.name,
                         folder: def.folder,
@@ -125,7 +147,7 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
                 }
             } else {
                 for (const key of [...sourceKeys].sort()) {
-                    if (!Object.hasOwn(catalog, key)) {
+                    if (!Object.hasOwn(catalog, key) && !isCoresToTranslate(key)) {
                         const item = {
                             catalog: def.name,
                             folder: def.folder,

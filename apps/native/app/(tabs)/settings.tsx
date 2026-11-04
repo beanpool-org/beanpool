@@ -80,6 +80,7 @@ import { howThisCommunityWorksLabelWords, howThisCommunityWorksSubtitleWords } f
 import { askNodeRole, canManageNode } from '../../utils/node-admin';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { ChatMemoryCard } from '../../components/ChatMemoryCard';
+import { CopyProfileCard } from '../../components/CopyProfileCard';
 import { CHAT_MEMORY_COPY } from '../../utils/chat-memory';
 import { communityName } from '../../utils/community-name';
 import { useGlobalEntry } from '../../utils/use-global-entry';
@@ -326,7 +327,7 @@ export default function SettingsScreen() {
         // ─── Archetype Card ───
     }));
 
-    const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'diagnostics' | 'protection' | 'chatMemory'>('menu');
+    const [mode, setMode] = useState<'menu' | 'profile' | 'seed' | 'advanced' | 'wipe' | 'notifications' | 'diagnostics' | 'protection' | 'chatMemory' | 'copyProfile'>('menu');
 
     // --- Protection state ---
     const [protectionResult, setProtectionResult] = useState<KeeperEnrolmentResult | null>(null);
@@ -1964,6 +1965,16 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
+                    {/* Copy on request (Profile S4): this community's name and photo, in another community, only when the member asks. */}
+                    <Pressable style={styles.menuBtn} onPress={() => setMode('copyProfile')} accessibilityRole="button" testID="settings-copy-profile">
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📋</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>{t("Use this name and photo in another community")}</Text>
+                            <Text style={styles.menuSub}>{t("Copy them across, only when you ask")}</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+
                     <Pressable style={styles.menuBtn} onPress={() => { setMode('protection'); }} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                         <View style={{ flex: 1 }}>
@@ -2772,6 +2783,16 @@ export default function SettingsScreen() {
                 </View>
             )}
 
+            {mode === 'copyProfile' && (
+                <View style={styles.card}>
+                    <Text style={styles.sectionTitle}>{t("Use this name and photo in another community")}</Text>
+                    <CopyProfileCard publicKey={identity.publicKey} />
+                    <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
+                        <Text style={styles.backBtnText}>{t('← Back')}</Text>
+                    </Pressable>
+                </View>
+            )}
+
             {mode === 'advanced' && (
                 <View style={styles.card}>
                     <Text style={styles.sectionTitle}>{t("Saved communities")}</Text>
@@ -2908,6 +2929,12 @@ export default function SettingsScreen() {
                     
                     <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">
                         {advancedLoading ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
+                    </Pressable>
+
+                    {/* Lights-out H2: the typed hall door (app/hall.tsx). Your own community, on the hall laptop's number,
+                        checked first and with your copy carried: not a new community in this list. */}
+                    <Pressable testID="settings-hall-door" style={styles.backBtn} onPress={() => router.push('/hall')} accessibilityRole="button">
+                        <Text style={styles.backBtnText}>{t("In the hall? Enter the laptop's address")}</Text>
                     </Pressable>
 
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">

@@ -15,6 +15,7 @@ import {
 import './draft.test.mjs';
 import './glossary.test.mjs';
 import './constants.test.mjs';
+import './pseudo.test.mjs';
 
 const pkgOf = (file, text, extra = {}) => {
     const { calls, found, problems } = extractFromSource(file, text);

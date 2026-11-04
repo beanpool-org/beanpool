@@ -9,7 +9,8 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, listPhotoUrl, t, tn, word, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, word, type QuizResult } from '@beanpool/core';
+import { ListPhoto } from '../components/ListPhoto';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
 import { RemoveWorkingStyleButton } from '../components/RemoveWorkingStyleButton';
@@ -883,9 +884,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                         <div className="flex gap-3">
                                                             {coverImage ? (
                                                                 // The photo is part of the card: a tap on it opens the post (Marty's standing rule, small
-                                                                // cards open the item); the enlarge lives on the post's own page.
+                                                                // cards open the item); the enlarge lives on the post's own page. A small copy that fails
+                                                                // steps down to the full photo, then the box tile (#2838), never an empty slot. The row
+                                                                // names itself ("View post: ..."), so the picture is decorative.
                                                                 <div className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
-                                                                    <img src={listPhotoUrl(coverImage)} alt="" className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
+                                                                    <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-2xl opacity-50">📦</span></span>} alt="" className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
                                                                 </div>
                                                             ) : (
                                                                 <div className="w-14 h-14 rounded-lg bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-2xl opacity-50">

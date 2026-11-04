@@ -36,8 +36,8 @@ function stubRule(rule: unknown) {
         : new Response('{}', { status: 404 }))));
 }
 
-async function openRulesPage(features: Record<string, unknown>) {
-    vi.mocked(api.getCommunityMe).mockResolvedValue({ features } as Awaited<ReturnType<typeof api.getCommunityMe>>);
+async function openRulesPage(features: Record<string, unknown>, beside: Record<string, unknown> = {}) {
+    vi.mocked(api.getCommunityMe).mockResolvedValue({ features, ...beside } as Awaited<ReturnType<typeof api.getCommunityMe>>);
     render(<SettingsPage identity={identity} onIdentityUpdated={() => {}} onBack={() => {}} themePreference="system" onThemePreferenceChange={() => {}} />);
     await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
     fireEvent.click(await screen.findByTestId('settings-how-this-community-works'));
@@ -65,6 +65,11 @@ describe('Settings → "How this community works" (review of #2746)', () => {
         const modal = await openRulesPage({ ...WIRE, debtLinePct: 30, quietDays: 90 });
         await waitFor(() => expect(modal.textContent).toContain("more than 30% of their credit line, or are in debit and haven't made a sale for 90 days"));
         await waitFor(() => expect(modal.textContent).toContain('The line of 30% applies from 16 November.'));
+    });
+
+    it('who decides a removal, from beside the features the member\'s answer says (removal jury J3)', async () => {
+        const modal = await openRulesPage(WIRE, { removalDecider: 'jury' });
+        await waitFor(() => expect(modal.textContent).toContain('decided by a jury drawn at random; while fewer than 36 members could serve on one, by everyone who can vote'));
     });
 
     it('a node older than the rule: the floor alone', async () => {

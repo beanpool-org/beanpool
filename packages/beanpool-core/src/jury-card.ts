@@ -147,7 +147,11 @@ export function juryOffersVote(view: JurySeatView): boolean {
     return view === 'ask' || view === 'serving' || view === 'voted';
 }
 
-/** The juror's own lines (design §9; call 2 point 5's words), or the reader's, in neutral words. */
+/**
+ * The juror's own lines (design §9; call 2 point 5's words), or the reader's, in neutral words. The answer is due at a set
+ * minute (server jurorAnswerBy: 72 hours after the seat), so its line names the time as well as the day, in the reader's
+ * language and the device's own clock, as the card's other dates are.
+ */
 export function jurySeatLines(view: JurySeatView, opts: { name: string; answerBy?: string | null; closesAt?: string | null; now?: number }): string[] {
     const now = opts.now ?? Date.now();
     const closes = opts.closesAt ? Date.parse(opts.closesAt) : NaN;
@@ -161,7 +165,9 @@ export function jurySeatLines(view: JurySeatView, opts: { name: string; answerBy
             return [
                 t("You were drawn for this jury. Read the case and {name}'s answer, then vote.", { name: opts.name }),
                 Number.isFinite(by)
-                    ? t("Answer by {date}: serve, or step aside. If you don't answer, your seat goes to the next member drawn.", { date: formatDate(new Date(by), 'weekday-day-month') })
+                    ? t("Answer by {time} on {date}: serve, or step aside. If you don't answer, your seat goes to the next member drawn.", {
+                        time: formatDate(new Date(by), 'time'), date: formatDate(new Date(by), 'weekday-day-month'),
+                    })
                     : t("Answer soon: serve, or step aside. If you don't answer, your seat goes to the next member drawn."),
                 ...(late ? [t('This vote closes in less than two days.')] : []),
                 stepAside,

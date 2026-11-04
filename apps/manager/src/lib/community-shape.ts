@@ -2,6 +2,7 @@
  * How this community works: client model and helpers (scratch/fable-design/DESIGN-community-shape-settings-fable.md).
  * Reads GET /api/local/admin/community-shape (slice S1) and writes POST /api/local/admin/community-shape (slice S2).
  */
+import { juryRuleFor } from '@beanpool/core';
 import { buildAdminHeaders, passwordField, resolveNodeApiUrl } from './node-client';
 import { t, proofField, throwIfFreshProof } from './fresh-proof';
 
@@ -505,10 +506,11 @@ export function getConsequenceSentence(
             const pool = s.removalDecider?.poolSize ?? 0;
             const rule = String(targetValue);
             const everyoneToday = rule === 'everyone' || (rule === 'automatic' && pool < 100) || (rule === 'jury' && pool < 36);
-            return (everyoneToday
-                ? t('The next removal is decided this way; a vote already open keeps its rule. Every member is told. Today everyone who can vote would decide one ({n} could serve on a jury).')
-                : t('The next removal is decided this way; a vote already open keeps its rule. Every member is told. Today a jury of 12 would decide one ({n} could serve on a jury).')
-            ).replace('{n}', pool.toLocaleString('en'));
+            const n = pool.toLocaleString('en');
+            // The jury's size is the draw's own (core juryRuleFor, design §5): 12, or 18 once 1,000 could serve.
+            return everyoneToday
+                ? t('The next removal is decided this way; a vote already open keeps its rule. Every member is told. Today everyone who can vote would decide one ({n} could serve on a jury).', { n })
+                : t('The next removal is decided this way; a vote already open keeps its rule. Every member is told. Today a jury of {size} would decide one ({n} could serve on a jury).', { size: juryRuleFor(pool).size, n });
         }
         case 'probation':
             return targetValue === true

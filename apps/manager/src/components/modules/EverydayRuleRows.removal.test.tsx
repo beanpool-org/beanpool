@@ -74,6 +74,31 @@ describe('Who decides a removal, in the rules the server applies', () => {
         expect(sent[0].changes).toEqual({ removalDecider: 'jury' });
     });
 
+    it('from 1,000 who could serve, the consequence names the jury of 18 the draw would seat (core juryRuleFor), never 12', async () => {
+        mockApi(shapeOf({ value: 'everyone', configured: 'everyone', source: 'owner', lock: null, poolSize: 1200 }));
+        render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="rules" title="Rules the server applies" />);
+        expect(await screen.findByTestId('shape-row-removalDecider')).toHaveTextContent('1,200 members could serve on a jury today.');
+        fireEvent.click(screen.getByTestId('shape-expand-removalDecider'));
+        for (const choice of [/^Automatic/, /^A jury/]) {
+            fireEvent.click(screen.getByRole('radio', { name: choice }));
+            expect(screen.getByTestId('shape-consequence')).toHaveTextContent('Today a jury of 18 would decide one (1,200 could serve on a jury).');
+            expect(screen.getByTestId('shape-consequence')).not.toHaveTextContent(/jury of 12/);
+        }
+    });
+
+    it("the rules card's Changes lines name the rule as the row does, never the raw value", async () => {
+        const shape = shapeOf({ value: 'jury', configured: 'jury', source: 'owner', lock: null, poolSize: 140 });
+        shape.log = [{
+            id: '1', kept: 'community_settings_log', at: '2026-11-03T09:00:00Z', actor: OWNER.memberPubkey, actorCallsign: 'Ada', actorRole: 'owner',
+            setting: 'removalDecider', from: 'automatic', to: 'jury', note: null,
+        }];
+        mockApi(shape);
+        render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="rules" title="Rules the server applies" />);
+        const log = await screen.findByTestId('shape-audit-log');
+        expect(log).toHaveTextContent('Who decides a removal: Automatic → A jury');
+        expect(log).not.toHaveTextContent(/automatic → jury/);
+    });
+
     it('while fewer than 36 could serve, the row still opens and only A jury is held back, with the lock\'s words', async () => {
         const sent = mockApi(shapeOf({ value: 'automatic', configured: 'automatic', source: 'default', lock: POOL_TOO_SMALL, poolSize: 20 }));
         render(<EverydayRuleRows activeNode={NODE} viewer={OWNER} group="rules" title="Rules the server applies" />);

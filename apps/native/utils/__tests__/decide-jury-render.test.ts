@@ -181,6 +181,8 @@ describe('an open jury vote on the phone', () => {
         await render([juryVote('open')]);
         expect(byTestId('jury-seat-ask')).toBeTruthy();
         expect(host.textContent).toContain("You were drawn for this jury. Read the case and Dave's answer, then vote.");
+        // The time the seat goes as well as the day: it goes at a set minute, 72 hours after the seat.
+        expect(host.textContent).toMatch(/Answer by \d{1,2}:\d{2} on \S+ \d{1,2} \S+: serve, or step aside\./);
         expect(voteButtons()).toHaveLength(0);
         await press(button(/^Serve$/));
         expect(node.answers).toEqual(['serve']);

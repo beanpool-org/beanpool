@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     checkServedJury, communityShapeLines, isJuryVote, juryCheckLine, juryClosedLists, juryDecidesLine, juryDraw, juryOffersVote, juryOutcomeLine,
-    juryPoolLine, juryRuleLine, jurySeatLines, jurySeatView, juryTurnoutLine, juryTurnoutOf, removalDeciderLine, type ServedJury,
+    juryPoolLine, juryRuleLine, jurySeatLines, jurySeatView, juryTurnoutLine, juryTurnoutOf, removalDeciderLine, setLanguage, type ServedJury,
 } from '../index.js';
 
 const key = (i: number) => i.toString(16).padStart(64, '0');
@@ -132,12 +132,30 @@ describe('the jury card', () => {
         const now = Date.parse('2026-11-04T00:00:00.000Z');
         const lines = jurySeatLines('ask', { name: 'Dave', answerBy: '2026-11-07T00:00:00.000Z', closesAt: '2026-11-11T00:00:00.000Z', now });
         expect(lines[0]).toBe("You were drawn for this jury. Read the case and Dave's answer, then vote.");
-        expect(lines[1]).toMatch(/^Answer by .+: serve, or step aside\. If you don't answer, your seat goes to the next member drawn\.$/);
+        expect(lines[1]).toMatch(/^Answer by \d{1,2}:\d{2} on \S+ \d{1,2} \S+: serve, or step aside\. If you don't answer, your seat goes to the next member drawn\.$/);
         expect(lines).toContain("Step aside if you know them too well to judge, or can't give it the time. Nobody is told why.");
         expect(lines).not.toContain('This vote closes in less than two days.');
         const late = jurySeatLines('ask', { name: 'Dave', answerBy: '2026-11-05T00:00:00.000Z', closesAt: '2026-11-05T00:00:00.000Z', now });
         expect(late).toContain('This vote closes in less than two days.');
         expect(jurySeatLines('voted', { name: 'Dave' }).join(' ')).not.toMatch(/Step aside/);
+    });
+
+    it('the answer-by line names the minute the seat goes as well as the day, in the reader\'s language and the device\'s clock', () => {
+        // Seated Tue 3 Nov at 14:05 on this device's clock: the seat goes 72 hours on, at 14:05 on Friday, not at Friday's end.
+        const due = new Date(2026, 10, 6, 14, 5, 30).toISOString();
+        const now = new Date(2026, 10, 3, 14, 5, 30).getTime();
+        const line = (lang?: Parameters<typeof setLanguage>[0]) => {
+            if (lang) setLanguage(lang);
+            try {
+                return jurySeatLines('ask', { name: 'Dave', answerBy: due, closesAt: new Date(2026, 10, 10, 14, 5).toISOString(), now })[1];
+            } finally {
+                setLanguage('en');
+            }
+        };
+        expect(line()).toBe("Answer by 14:05 on Fri 6 Nov: serve, or step aside. If you don't answer, your seat goes to the next member drawn.");
+        // Indonesian writes the time with a dot and its own weekday ("14.05", "Jum, 6 Nov"): the line follows the reader's language.
+        expect(line('id')).toContain('14.05');
+        expect(line('id')).toContain('Jum, 6 Nov');
     });
 
     it('says how a closed jury ended (design §9)', () => {

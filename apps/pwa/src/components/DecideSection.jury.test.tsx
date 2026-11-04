@@ -112,7 +112,8 @@ describe('an open jury vote', () => {
         renderDecide([juryVote('open')]);
         await screen.findByTestId('jury-seat-ask');
         expect(screen.getByText("You were drawn for this jury. Read the case and Dave's answer, then vote.")).toBeInTheDocument();
-        expect(screen.getByText(/^Answer by .+: serve, or step aside\./)).toBeInTheDocument();
+        // The time the seat goes as well as the day: it goes at a set minute, 72 hours after the seat.
+        expect(screen.getByText(/^Answer by \d{1,2}:\d{2} on \S+ \d{1,2} \S+: serve, or step aside\./)).toBeInTheDocument();
         expect(screen.getByText("Step aside if you know them too well to judge, or can't give it the time. Nobody is told why.")).toBeInTheDocument();
         expect(voteButtons()).toHaveLength(0);
         fireEvent.click(screen.getByRole('button', { name: 'Serve' }));

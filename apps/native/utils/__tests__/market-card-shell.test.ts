@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, brandColours, contrastRatio, gridTextBlockHeight } from '@beanpool/core';
+import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_SCRIM_PILL, blendOver, brandColours, contrastRatio, gridTextBlockHeight } from '@beanpool/core';
 
 /**
  * The phone's style box (components/market-card-shell.ts, slice P2 of DESIGN-card-style-box-fable.md): every number in its
@@ -75,6 +75,29 @@ describe('the box is core\'s numbers', () => {
         expect(b.lastRow).toMatchObject({ flexDirection: 'row', overflow: 'hidden' });
     });
 
+    it('the grid tile\'s photo (P3\'): the 4:3 frame, the photo laid over it edge to edge, the type chip\'s corner, the scrim pills: core\'s numbers', () => {
+        const PILL = MARKET_SCRIM_PILL;
+        expect(shell.gridImageWrapper).toEqual({ position: 'relative', width: '100%', aspectRatio: MARKET_CARD_SHELL.photo.grid.aspectWidth / MARKET_CARD_SHELL.photo.grid.aspectHeight });
+        expect(shell.gridImage).toEqual({ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 });
+        expect(shell.gridTypeSlot).toEqual({ position: 'absolute', top: PILL.inset, left: PILL.inset });
+        expect(shell.gridBadgeRow).toEqual({ position: 'absolute', left: PILL.inset, right: PILL.inset, bottom: PILL.inset, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: PILL.gap });
+        expect(shell.gridBadge).toEqual({
+            backgroundColor: lightColors.overlay.scrim, borderColor: lightColors.overlay.scrimEdge, maxWidth: '100%',
+            paddingHorizontal: PILL.paddingHorizontal, paddingVertical: PILL.paddingVertical, borderRadius: PILL.radius, borderWidth: PILL.borderWidth,
+        });
+        expect(shell.gridPriceEnd).toEqual({ marginLeft: 'auto' });
+    });
+
+    it('the grid tile\'s words (PG2, P3\'): core\'s type, written out; an event\'s date and time the loud line in the event ink, its title the second', () => {
+        const GRID = MARKET_CARD_TYPE.grid;
+        expect(shell.gridTitle).toEqual({ ...cardType(GRID.loud), color: lightColors.text.body });
+        expect(shell.gridLine).toEqual({ ...cardType(GRID.place), color: lightColors.text.secondary });
+        expect(shell.gridWhen).toEqual({ ...cardType(GRID.loud), color: lightColors.tile.event.ink });
+        expect(shell.gridSecond).toEqual({ ...cardType(GRID.second), color: lightColors.text.body });
+        expect(shell.gridPriceText).toEqual({ ...cardType(GRID.price), color: lightColors.text.inverse });
+        expect(shell.gridPinText).toEqual({ ...cardType(MARKET_SCRIM_PILL.quiet), color: lightColors.text.inverse });
+    });
+
     it('a font scale that is not a positive number counts as 1, as core\'s does', () => {
         for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(gridTextBlock(bad)).toEqual(gridTextBlock(1));
     });
@@ -110,8 +133,23 @@ describe.each(THEMES)('the %s chips', (theme, colors, brand) => {
 
     it('the card\'s inks read on the card ground', () => {
         const shell = makeCardShell(colors);
-        for (const ink of [shell.loud.color, shell.second.color, shell.place.color, shell.mark.color, shell.gridTitle.color, shell.gridLine.color] as string[]) {
+        for (const ink of [shell.loud.color, shell.second.color, shell.place.color, shell.mark.color, shell.gridTitle.color, shell.gridLine.color, shell.gridWhen.color, shell.gridSecond.color] as string[]) {
             expect(contrastRatio(ink, colors.surface.card), `${theme} ${ink} on ${colors.surface.card}`).toBeGreaterThanOrEqual(4.5);
         }
+    });
+
+    it('the words on a grid photo (a price, your mark, 📌 PINNED) read 4.5:1 or more on the scrim, over a white photo or a black one', () => {
+        const shell = makeCardShell(colors);
+        const [r, g, b, a] = colors.overlay.scrim.match(/[\d.]+/g)!.map(Number);
+        const scrim = '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+        for (const under of ['#ffffff', '#000000']) {
+            const ground = blendOver(scrim, a, under);
+            for (const ink of [shell.gridPriceText.color, shell.gridPinText.color] as string[]) {
+                expect(contrastRatio(ink, ground), `${theme} ${ink} on ${ground}`).toBeGreaterThanOrEqual(4.5);
+            }
+        }
+        // Why the mark is white, not the event's violet (DESIGN-market-grid-sizes-fable.md §2.6): on the light scrim the violet
+        // reads about 1 : 1 over a white photo.
+        if (theme === 'light') expect(contrastRatio(colors.tile.event.ink, blendOver(scrim, a, '#ffffff'))).toBeLessThan(4.5);
     });
 });

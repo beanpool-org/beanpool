@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Αυτό το μήνυμα δεν ήταν δυνατό να επαληθευτεί, επομένως δεν εμφανίζεται.",
   "🗳️ Create Poll": "🗳️ Δημιουργία ψηφοφορίας",
   "🟢 List an Offer first to post Needs": "🟢 Καταχώρισε πρώτα μια Προσφορά για να δημοσιεύσεις Ανάγκες",
-  "🤝 Chosen": "🤝 Επιλεγμένες"
+  "🤝 Chosen": "🤝 Επιλεγμένες",
+  "Done. This is now your photo here.": "Έγινε. Αυτή είναι τώρα η φωτογραφία σου εδώ.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "Αντιγράφεται μόνο η φωτογραφία. Το όνομά σου και τα υπόλοιπα του προφίλ σου εδώ μένουν όπως είναι.",
+  "Use the photo from {community} here?": "Να χρησιμοποιηθεί εδώ η φωτογραφία από την κοινότητα {community};",
+  "Use the photo you chose last here?": "Να χρησιμοποιηθεί εδώ η φωτογραφία που διάλεξες τελευταία;",
+  "Use this photo here": "Χρήση αυτής της φωτογραφίας εδώ"
 }

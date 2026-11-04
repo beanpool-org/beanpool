@@ -4052,7 +4052,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 // The cards of a list, in the member's view mode: the nearby listings, and the fill beneath them (`fillHeading`
                 // given: one section under that heading, not the day groups, and no distance, as "Show everywhere" shows them).
-                const renderCards = (filtered: MarketplacePost[], fillHeading?: string) => {
+                const renderCards = (filtered: MarketplacePost[], fillHeading?: string, pins: MarketplacePost[] = []) => {
                     // "New since you last looked": one line in the heading's style above the first post listed at or before this
                     // browser's stamp (core newSinceIndex). Only the main list: not the pinned block, not the fill.
                     const newSinceLine = (className: string) => (
@@ -4065,6 +4065,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     );
                     if (viewMode === 'grid') {
                         // The grid has no headings: the line spans the row it starts, and the tiles carry on beneath it.
+                        // The pins (`pins`, the grid only: DESIGN-market-grid-sizes-fable.md §2.1) are its first cells, with no
+                        // heading over them: their pill and their place say it, and the stream carries on in the same row, so a
+                        // pin never leaves a cell empty. The line's index counts the stream only (`filtered`), and it is drawn
+                        // after the first group, which holds the pins, so a pin is never below it.
                         const gridLineAt = fillHeading || !seenEligible ? -1 : newSinceIndex(filtered, seenListed, orderNow);
                         return (
                             // `grid-flow-row-dense`: the poll below takes two columns from `md` up, and a
@@ -4077,10 +4081,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <>
                             {fillHeading && (
                                 <div className="flex items-center gap-3 mt-2 mb-2">
-                                    <span
-                                        data-testid={fillHeading === t('Pinned') ? 'market-pinned-heading' : undefined}
-                                        className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap"
-                                    >
+                                    <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">
                                         {fillHeading}
                                     </span>
                                     <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
@@ -4092,15 +4093,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 after, each keeping its own back-fill for the poll. */}
                             {(() => {
                             const gridClass = 'grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5';
-                            const tiles = filtered.map((post) => (() => {
+                            const drawTile = (post: MarketplacePost, pinned: boolean) => {
                                     if (post.type === 'event') {
                                         return (
-                                            <div key={post.id} className="h-full">
+                                            <div key={post.id} data-testid={pinned ? 'market-pinned-tile' : undefined} className="h-full">
                                                 <EventCard
                                                     post={post}
                                                     identity={identity}
                                                     viewMode={viewMode}
-                                                    distanceKm={fillHeading && fillHeading !== t('Pinned') ? null : eventDistance(post)}
+                                                    distanceKm={fillHeading ? null : eventDistance(post)}
                                                     onOpen={() => setSelectedPost(post)}
                                                     onRsvpChange={() => { refresh().catch(() => {}); }}
                                                 />
@@ -4113,7 +4114,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             // note and the turnout row. One column of the grid is too narrow for its
                                             // answers ("It's Am…", and at 320 px with 1.3x text "Other"), so it takes two
                                             // at every width: the whole row on a phone.
-                                            <div key={post.id} className="h-full col-span-2">
+                                            <div key={post.id} data-testid={pinned ? 'market-pinned-tile' : undefined} className="h-full col-span-2">
                                                 <PollCard
                                                     post={post}
                                                     identity={identity}
@@ -4129,6 +4130,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     return (
                                     <div
                                         key={post.id}
+                                        data-testid={pinned ? 'market-pinned-tile' : undefined}
                                         onClick={isPulse ? undefined : () => setSelectedPost(post)}
                                         onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                         role={isPulse ? undefined : "button"}
@@ -4157,7 +4159,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             viewMode={viewMode}
                                             isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
                                             dealChip={dealChips.get(post.id) ?? null}
-                                            distanceKm={near && (fillHeading ? fillHeading === t('Pinned') : true) ? distanceOf(post) : null}
+                                            distanceKm={near && !fillHeading ? distanceOf(post) : null}
                                             beansMarked={priceMarked}
                                             onPhotoClick={(photos, idx, e) => {
                                                 setLightboxState({
@@ -4171,14 +4173,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         />
                                     </div>
                                     );
-                            })());
+                            };
+                            // The pins first (newest pin first, as `pins` comes), then the stream. A pin is not in the stream
+                            // (`unpinnedFiltered` leaves it out), so no post is drawn twice.
+                            const pinTiles = pins.map((post) => drawTile(post, true));
+                            const tiles = filtered.map((post) => drawTile(post, false));
                             return gridLineAt > 0 ? (
                                 <>
-                                    <div className={gridClass}>{tiles.slice(0, gridLineAt)}</div>
+                                    <div className={gridClass}>{[...pinTiles, ...tiles.slice(0, gridLineAt)]}</div>
                                     {newSinceLine('my-3.5')}
                                     <div className={gridClass}>{tiles.slice(gridLineAt)}</div>
                                 </>
-                            ) : <div className={gridClass}>{tiles}</div>;
+                            ) : <div className={gridClass}>{[...pinTiles, ...tiles]}</div>;
                             })()}
                             </>
                         );
@@ -4306,12 +4312,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     );
                 };
 
-                const pinnedSection = pinnedPosts.length > 0 ? (
+                // List and compact keep the Pinned heading and block; the grid has neither: its pins are its first cells
+                // (`gridPins`, drawn by renderCards).
+                const pinnedSection = pinnedPosts.length > 0 && viewMode !== 'grid' ? (
                     <div data-testid="market-pinned-block" className="mb-4">
                         {renderCards(pinnedPosts, t('Pinned'))}
                     </div>
                 ) : null;
 
+                const gridPins = viewMode === 'grid' ? pinnedPosts : [];
                 const fillSection = fillRows.length > 0 ? (
                     <div data-testid="market-fill" className="mt-4">
                         {renderCards(fillRows, t('Newest from elsewhere'))}
@@ -4502,7 +4511,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         ) : (
                             <>
                                 {pinnedSection}
-                                {unpinnedFiltered.length > 0 && renderCards(unpinnedFiltered)}
+                                {(unpinnedFiltered.length > 0 || gridPins.length > 0) && renderCards(unpinnedFiltered, undefined, gridPins)}
                             </>
                         )}
                         {filtered.length > 0 && fillSection}

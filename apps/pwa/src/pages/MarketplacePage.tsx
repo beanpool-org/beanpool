@@ -12,6 +12,7 @@ import { AuthorCard } from '../components/AuthorCard';
 import { useCoversScreen } from '../lib/screen-cover';
 import { nodeRefusal } from '../lib/node-refusal';
 import { MarketplaceCard } from '../components/MarketplaceCard';
+import { GRID, GRID_POLL_CELL } from '../components/market-card-shell';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
@@ -4079,7 +4080,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 #2811, measured in Chromium). With a line the grid is two grids, the tiles before it and the tiles
                                 after, each keeping its own back-fill for the poll. */}
                             {(() => {
-                            const gridClass = 'grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5';
+                            // The lattice (components/market-card-shell.ts GRID, DESIGN-market-grid-sizes-fable.md §2.2): every
+                            // tile fills its cell and is the photo over a fixed four-row block, so a row's tiles are one height.
+                            const gridClass = GRID;
                             const drawTile = (post: MarketplacePost, pinned: boolean) => {
                                     if (post.type === 'event') {
                                         return (
@@ -4097,11 +4100,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     }
                                     if (post.type === 'poll') {
                                         return (
-                                            // A poll is the tallest thing in the grid: four answers, the open-ballot
-                                            // note and the turnout row. One column of the grid is too narrow for its
-                                            // answers ("It's Am…", and at 320 px with 1.3x text "Other"), so it takes two
-                                            // at every width: the whole row on a phone.
-                                            <div key={post.id} data-testid={pinned ? 'market-pinned-tile' : undefined} className="h-full col-span-2">
+                                            // A poll is the tallest thing in the grid: four answers, the ballot note and the
+                                            // turnout row. One column is too narrow for its answers ("It's Am…", and at 320 px
+                                            // with 1.3x text "Other"). At two and three columns it is the whole row at its own
+                                            // height (nothing sits beside it); from four up a 2 x 2 square the tiles flow round
+                                            // (GRID_POLL_CELL, DESIGN-market-grid-sizes-fable.md §2.3).
+                                            <div key={post.id} data-testid={pinned ? 'market-pinned-tile' : undefined} className={GRID_POLL_CELL}>
                                                 <PollCard
                                                     post={post}
                                                     identity={identity}
@@ -4122,16 +4126,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         role={isPulse ? undefined : "button"}
                                         tabIndex={isPulse ? undefined : 0}
                                         aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
-                                        // No `h-full`: the tile keeps its own height rather than stretching to
-                                        // whatever shares its row (see MarketplaceCard's grid return).
-                                        // `self-start` is the other half of that: this div is the grid
-                                        // ITEM, and a grid with no `items-*` stretches its items to the
-                                        // row. Dropping `h-full` stops the tile filling the cell but
-                                        // leaves the cell row-tall, and the cell is what carries the
-                                        // click and the focus ring — so in the poll's row the ring drew
-                                        // around blank space below the card and a click there opened the
-                                        // listing (review on #1092).
-                                        className={`self-start rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
+                                        // The cell IS the card (G2, DESIGN-market-grid-sizes-fable.md §0.3): the grid
+                                        // stretches this item to its row, and the tile inside is `h-full`, so every
+                                        // tile in a row is one height and there is no blank cell space around a card
+                                        // for the click and the focus ring to cover (#1092's objection to stretching
+                                        // was a cell taller than its card; here the card fills the cell). No
+                                        // `self-start`: that kept each tile at its own height, the gaps Marty saw.
+                                        className={`h-full rounded-[14px] ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
                                     >
                                         <MarketplaceCard
                                             post={post as any}
@@ -4158,7 +4159,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             return gridLineAt > 0 ? (
                                 <>
                                     <div className={gridClass}>{[...pinTiles, ...tiles.slice(0, gridLineAt)]}</div>
-                                    {newSinceLine('my-3.5')}
+                                    {newSinceLine('my-4')}
                                     <div className={gridClass}>{tiles.slice(gridLineAt)}</div>
                                 </>
                             ) : <div className={gridClass}>{[...pinTiles, ...tiles]}</div>;

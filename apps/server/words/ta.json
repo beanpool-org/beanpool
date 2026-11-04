@@ -961,5 +961,6 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "பதிவு {when} வரையிலானது. அதற்குப் பிறகு பழைய சேவையகத்தில் நடந்த பரிவர்த்தனைகள் இங்கு இல்லை.",
   "The record is the one this laptop holds.": "பதிவு என்பது இந்த மடிக்கணினி வைத்திருப்பதே.",
   "This laptop's key ends in {key}. Compare it with the poster.": "இந்த மடிக்கணினியின் விசை {key}-இல் முடிகிறது. அதைச் சுவரொட்டியுடன் ஒப்பிடுங்கள்.",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "விமானப் பயன்முறையை இயக்கி, பிறகு Wi-Fi-யை மீண்டும் இயக்குங்கள்."
+  "Turn on airplane mode, then turn Wi-Fi back on.": "விமானப் பயன்முறையை இயக்கி, பிறகு Wi-Fi-யை மீண்டும் இயக்குங்கள்.",
+  "Open in the BeanPool app": "BeanPool செயலியில் திறக்கவும்"
 }

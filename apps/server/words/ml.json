@@ -961,5 +961,6 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "രേഖ {when} വരെയുള്ളതാണ്. അതിനുശേഷം പഴയ സെർവറിൽ നടന്ന ഇടപാടുകൾ ഇവിടെയില്ല.",
   "The record is the one this laptop holds.": "രേഖ ഈ ലാപ്ടോപ്പിൽ ഉള്ളതുതന്നെയാണ്.",
   "This laptop's key ends in {key}. Compare it with the poster.": "ഈ ലാപ്ടോപ്പിന്റെ കീ {key}-ൽ അവസാനിക്കുന്നു. അത് പോസ്റ്ററുമായി താരതമ്യം ചെയ്യുക.",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "ഫ്ലൈറ്റ് മോഡ് ഓണാക്കുക, എന്നിട്ട് Wi-Fi വീണ്ടും ഓണാക്കുക."
+  "Turn on airplane mode, then turn Wi-Fi back on.": "ഫ്ലൈറ്റ് മോഡ് ഓണാക്കുക, എന്നിട്ട് Wi-Fi വീണ്ടും ഓണാക്കുക.",
+  "Open in the BeanPool app": "BeanPool ആപ്പിൽ തുറക്കുക"
 }

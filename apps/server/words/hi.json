@@ -961,5 +961,6 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "रिकॉर्ड {when} तक का है। उसके बाद पुराने सर्वर पर हुए लेन-देन यहाँ नहीं हैं।",
   "The record is the one this laptop holds.": "रिकॉर्ड वही है जो इस लैपटॉप के पास है।",
   "This laptop's key ends in {key}. Compare it with the poster.": "इस लैपटॉप की कुंजी {key} पर समाप्त होती है। इसे पोस्टर से मिलाएँ।",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "एयरप्लेन मोड चालू करें, फिर Wi-Fi दोबारा चालू करें।"
+  "Turn on airplane mode, then turn Wi-Fi back on.": "एयरप्लेन मोड चालू करें, फिर Wi-Fi दोबारा चालू करें।",
+  "Open in the BeanPool app": "BeanPool ऐप में खोलें"
 }

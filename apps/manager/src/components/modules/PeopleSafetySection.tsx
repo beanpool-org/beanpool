@@ -17,7 +17,8 @@ import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, type NodeReport } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, fetchAllPosts, type NodeReport } from '../../lib/node-client';
+import { LoadMoreRow } from '../../lib/node-data-pages';
 import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
 import { nodeCredential } from '../../lib/profiles';
 import { ReportedGroupMessage } from './ReportedGroupMessage';
@@ -152,7 +153,9 @@ export function PeopleSafetySection({
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
     // Bursts exist only where members join through the open door (`invited_by` 'open:<provider>', the global community):
     // anywhere else this screen asks the node nothing about them.
-    const hasDoorMembers = members.some(m => String((m as { invitedBy?: unknown }).invitedBy ?? '').startsWith('open:'));
+    const hasDoorMembers = typeof nodeData?.counts?.doorMembers === 'number'
+        ? nodeData.counts.doorMembers > 0
+        : members.some(m => String((m as { invitedBy?: unknown }).invitedBy ?? '').startsWith('open:'));
 
     const getOutcome = (r: NodeReport): 'open' | 'dismissed' | 'actioned' => {
         const id = String(r.id);
@@ -176,7 +179,19 @@ export function PeopleSafetySection({
         if (!isOwnerViewer) return;
         setBulkDeleteResult(null);
         const cutoffMs = Date.now() - bulkDeleteDays * 24 * 60 * 60 * 1000;
-        const posts = (nodeData?.posts || []) as Array<{ id: string; createdAt?: string | number }>;
+        // The posts held are the pages read so far: while the node holds more, every page is read first (capacity fix 3).
+        let posts = (nodeData?.posts || []) as Array<{ id: string; createdAt?: string | number }>;
+        if (nodeData?.postsNext) {
+            setBulkDeleting(true);
+            try {
+                posts = await fetchAllPosts(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)) as typeof posts;
+            } catch (e: unknown) {
+                setBulkDeleteResult(`Couldn't read every post to find the old ones: ${e instanceof Error ? e.message : String(e)}`);
+                return;
+            } finally {
+                setBulkDeleting(false);
+            }
+        }
         const stalePostIds = posts
             .filter((p) => p.createdAt && new Date(p.createdAt).getTime() < cutoffMs)
             .map((p) => p.id);
@@ -718,6 +733,7 @@ export function PeopleSafetySection({
                             onRefresh={onRefresh}
                             viewer={rolesViewer}
                         />
+                        <LoadMoreRow kind="posts" searching />
                     </SectionErrorBoundary>
                 </div>
             )}

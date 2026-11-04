@@ -12,6 +12,8 @@ import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNode
 import { FreshProofRequiredError } from '../../lib/fresh-proof';
 import type { KnownFloorException } from './MemberKnownFloorPanel';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { LoadMoreRow } from '../../lib/node-data-pages';
+import type { NodeDataCounts } from '../../lib/node-client';
 import { OfferPhotoPicker } from '../common/OfferPhotoPicker';
 
 export interface MemberItem {
@@ -87,6 +89,10 @@ export interface NodeDataPayload {
         walSizeBytes?: number;
         [key: string]: unknown;
     };
+    /** The node's counts; `members` and `posts` hold only the pages read so far (lib/node-client fetchNodeData). */
+    counts?: NodeDataCounts;
+    membersNext?: string | null;
+    postsNext?: string | null;
     [key: string]: unknown;
 }
 
@@ -517,9 +523,12 @@ export function MembersModule({
     };
 
     const members = nodeData?.members || [];
+    // Every owner on the node, not only those on the pages read so far: removing the last one is refused by this count.
+    const countedOwners = nodeData?.counts?.owners;
     const ownerCount = React.useMemo(() => {
+        if (typeof countedOwners === 'number') return countedOwners;
         return members.filter((m) => (m.nodeRole || (m as any).role) === 'owner').length;
-    }, [members]);
+    }, [members, countedOwners]);
     const profiles = nodeData?.profiles || [];
     const posts = nodeData?.posts || [];
 
@@ -554,7 +563,9 @@ export function MembersModule({
         return name.includes(term) || pub.includes(term);
     });
 
+    const countedPlatforms = nodeData?.counts?.platforms;
     const platformTallies = React.useMemo(() => {
+        if (countedPlatforms) return { ios: countedPlatforms.ios, android: countedPlatforms.android, pwa: countedPlatforms.web, unknown: countedPlatforms.unknown };
         let ios = 0;
         let android = 0;
         let pwa = 0;
@@ -569,7 +580,7 @@ export function MembersModule({
         });
 
         return { ios, android, pwa, unknown };
-    }, [members]);
+    }, [members, countedPlatforms]);
 
     return (
         <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 space-y-6 shadow-xl font-sans animate-fade-in">
@@ -778,6 +789,7 @@ export function MembersModule({
                             />
                         </div>
 
+                        <LoadMoreRow kind="members" searching={!!searchTerm.trim()} />
                         {filteredMembers.length > 0 ? (
                             <div className="bg-nature-950/80 border border-nature-800 rounded-xl overflow-hidden text-xs">
                                 <div className="hidden md:grid grid-cols-12 bg-nature-900/90 p-3 text-nature-400 font-bold border-b border-nature-800">

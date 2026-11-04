@@ -3,6 +3,7 @@ import { TIER_LEVELS, tierForCredit, tierIndexForName } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { pruneInviteBranch, getTfaSessionToken, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
 import { PruneBranchModal } from './PruneBranchModal';
+import { LoadMoreRow } from '../../lib/node-data-pages';
 import { nodeCredential } from '../../lib/profiles';
 
 export interface AncestryTreePanelProps {
@@ -643,6 +644,9 @@ export function AncestryTreePanel({
                         Showing {matchCount} of {members.length} members
                     </span>
                 </div>
+                {/* The node's members come a page at a time, oldest joined first, so an inviter is always drawn before the
+                    members they brought in; the tree grows at its leaves as more pages come (capacity fix 3). */}
+                <LoadMoreRow kind="members" searching={!!searchQuery.trim()} />
 
                 {/* Filter buttons */}
                 <div id="audit-filter-bar" className="flex items-center gap-1.5 flex-wrap pt-1">

@@ -155,11 +155,15 @@ describe('MarketplaceCard picture ladder: a listing photo whose small copy fails
         expect(queryByTestId('category-tile')).toBeInTheDocument();
     });
 
-    it.each(['grid', 'list'] as const)('the %s card keeps its photo button only while there is a picture to enlarge', (viewMode) => {
-        const { container, queryByLabelText } = render(<MarketplaceCard post={post} viewMode={viewMode} onPhotoClick={vi.fn()} />);
-        expect(queryByLabelText(`View enlarged photo: ${post.title}`)).not.toBeNull();
+    // The photo is part of the card and opens the item (Marty, 4 Nov: small cards open the item); enlarging is on the item's page.
+    it.each(['grid', 'list'] as const)('the %s card has no photo button at any step of the ladder', (viewMode) => {
+        const { container, queryByLabelText } = render(<MarketplaceCard post={post} viewMode={viewMode} />);
+        expect(queryByLabelText(`View enlarged photo: ${post.title}`)).toBeNull();
+        expect(container.querySelector(`${ALT}`)?.closest('button')).toBeNull();
         fireEvent.error(container.querySelector(ALT)!);
-        expect(queryByLabelText(`View enlarged photo: ${post.title}`)).not.toBeNull();
+        expect(container.querySelector(ALT)?.getAttribute('src')).toBe(PHOTOS[0]);
+        expect(queryByLabelText(`View enlarged photo: ${post.title}`)).toBeNull();
+        expect(container.querySelector(`${ALT}`)?.closest('button')).toBeNull();
         fireEvent.error(container.querySelector(ALT)!);
         expect(queryByLabelText(`View enlarged photo: ${post.title}`)).toBeNull();
     });

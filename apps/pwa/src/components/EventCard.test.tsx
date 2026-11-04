@@ -7,6 +7,7 @@ import {
     chip, gridTile, listCard,
 } from './market-card-shell';
 import * as api from '../lib/api';
+import { formatEventWhen } from '../lib/events';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -904,7 +905,8 @@ describe("The event's grid tile, on the lattice (W3')", () => {
         expect(mark).toHaveTextContent('Going ✓');
         expect(mark.className).toBe(GRID_SCRIM_MARK);
         expect(foot.lastElementChild).toBe(mark);
-        expect(screen.getByRole('button', { name: /^Open event: / })).toHaveAccessibleName(`Open event: ${baseEvent.title}, Going ✓`);
+        // The when is spoken whole (the rows show it in pieces), then the answer (#2897 review).
+        expect(screen.getByRole('button', { name: /^Open event: / })).toHaveAccessibleName(`Open event: ${baseEvent.title}, ${formatEventWhen(baseEvent as any)}, Going ✓`);
         // The counts are the page's in the grid.
         expect(screen.getByTestId('event-card').textContent).not.toMatch(/\d+ going|interested|👥/);
         for (const id of ['event-counts', 'event-my-answer', 'event-hosting']) expect(screen.queryByTestId(id)).toBeNull();
@@ -963,7 +965,7 @@ describe("The event's grid tile, on the lattice (W3')", () => {
         expect(lock.className.startsWith(GRID_SCRIM_PILL)).toBe(true);
         // The card's one label says it too: a screen reader hears the button's label, not what is inside it.
         expect(screen.getByRole('button', { name: /^Open event: / }))
-            .toHaveAccessibleName(`Open event: ${baseEvent.title}, Going ✓, 🔒 Only Byron Gardeners can see this`);
+            .toHaveAccessibleName(new RegExp(`^Open event: ${baseEvent.title}, .+, UPDATED, Going ✓, 🔒 Only Byron Gardeners can see this$`));
         expect(screen.getByTestId('grid-row-4').textContent).toBe('📍 Bindarrabi Hall · 2.4 km');
         expect(screen.getByTestId('event-type-chip').className).toBe(chip('event'));
     });

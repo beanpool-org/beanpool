@@ -502,8 +502,10 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
         const copyDistance = distanceKm == null ? '' : visitor ? visitorDistanceText(distanceKm) : formatDistance(distanceKm);
         const lastRow = copy?.from ? [copyFromLine(copy.from), copyDistance].filter(Boolean).join(' · ') : place;
         const glyph = copy?.from ? '' : p.eventOnline ? '🌐 ' : '📍 ';
-        // The label stands in for what is inside the button: the title, the viewer's answer, who can see it, a copy's line.
-        const tileLabel = [openLabel, myAnswer, lock, copyLine].filter(Boolean).join(', ');
+        // The label stands in for what is inside the button, so it says all the tile shows: the title, the when in full (the
+        // viewer's clock with "your time" when it differs, as the list card's line says it; the phone's tile speaks the same),
+        // the state, the viewer's answer, who can see it, a copy's line (#2897 review).
+        const tileLabel = [openLabel, formatEventWhen(p), state ? stateWords(state) : null, myAnswer, lock, copyLine].filter(Boolean).join(', ');
         return (
             <div data-testid="event-card" className={`${gridTile()} transition-shadow duration-300 hover:shadow-md`}>
                 <button

@@ -104,7 +104,7 @@ const POSTS = vi.hoisted(() => [
     { id: 'p-eggs', type: 'offer', status: 'active', title: 'Fresh duck eggs', category: 'food', author_pubkey: 'k', credits: 5, photos: [], lat: -28.65, lng: 153.6 },
     { id: 'p-tools', type: 'need', status: 'active', title: 'Borrow a ladder', category: 'tools', author_pubkey: 'm', credits: 3, photos: [], lat: -28.66, lng: 153.61 },
 ]);
-vi.mock('../db', () => ({ getPosts: async () => POSTS }));
+vi.mock('../db', () => ({ getPosts: async () => POSTS, getMemberRatings: async () => ({ average: 0, count: 0 }) }));
 
 import { Platform } from 'react-native';
 import MapScreen from '../../app/(tabs)/map';

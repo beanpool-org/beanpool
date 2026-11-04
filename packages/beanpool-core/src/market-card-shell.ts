@@ -40,6 +40,11 @@ export const MARKET_CARD_SHELL = {
     shadow: { offsetY: 2, opacity: 0.05, blur: 8, elevation: 2 },
     /** The map pop-up's: the card plus a floating shadow. */
     floatingShadow: { offsetY: 10, opacity: 0.15, blur: 20, elevation: 20 },
+    /**
+     * The map pop-up (DESIGN-card-style-box-fable.md §2, slice M1): the list card 16 in from the screen's edges, and its one
+     * other control, the ✕: 28 round, 8 in from the card's top-right corner, on the subtle ground, its glyph 12/800.
+     */
+    popUp: { margin: 16, close: { size: 28, inset: 8, type: type(12, 800) } },
     /** The photo slot of each size. */
     photo: {
         /** Beside the text, flush under the card's left corners, the card's full height. */

@@ -304,13 +304,17 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(bypassing(), 'events').toEqual([]);
     });
 
-    it('a listing\'s preview: its category in capitals, the Elder\'s name line, View Details, Close', async () => {
+    // The pin's card is the Market's list card (slice M1): the type chip, the category chip, the who-line with its tier; no
+    // View Details button (the whole card opens the listing).
+    it('a listing\'s preview: its OFFER and category chips, the Elder\'s tier on the who-line, Close; no View Details', async () => {
         await renderIn('xx');
         await click(marker(POSTS[0] as any), 'the eggs pin');
         expect(host.textContent).toContain('Fresh duck eggs');
-        expect(host.textContent).toContain(upperCase(xx('Food'), 'xx'));
-        expect(host.textContent).toContain(xx('{name} ✨ Elder').replace('{name}', 'Kofi'));
-        expect(byText(xx('View Details'))).not.toBeNull();
+        expect(host.querySelector('[data-testid="map-preview-type-chip"]')?.textContent).toBe(xx('OFFER'));
+        expect(host.querySelector('[data-testid="map-preview-category-chip"]')?.textContent).toContain(xx('Food'));
+        expect(host.querySelector('[data-testid="map-preview-author"] [data-testid="author-tier"]')?.textContent).toContain(xx('Elder'));
+        expect(host.querySelector('[data-testid="map-preview-author"]')?.textContent).toContain('Kofi');
+        expect(host.textContent).not.toContain(xx('View Details'));
         expect(byLabel(xx('Close preview'))).not.toBeNull();
         expect(byLabel(xx('Close'))).not.toBeNull();
         expect(bypassing()).toEqual([]);
@@ -326,13 +330,16 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(preview.replace(copyPriceLine(eventCopyOf(COPY as any)!), '')).not.toMatch(/\d/);
     });
 
-    it('an event\'s preview: its date, UPDATED, how many are going, View event', async () => {
+    // The Market's event card (EventCard): the EVENT and UPDATED chips, the counts once someone has answered; no View event.
+    it('an event\'s preview: its EVENT and UPDATED chips, its date, how many are going; no View event', async () => {
         await renderIn('xx');
         await click(marker(POSTS[2] as any), 'the event pin');
         expect(host.textContent).toContain('Repair café');
-        expect(host.textContent).toContain(xx('UPDATED'));
-        expect(host.textContent).toContain(xx('{n} going').replace('{n}', '2'));
-        expect(byText(xx('View event'))).not.toBeNull();
+        expect(host.querySelector('[data-testid="event-type-chip"]')?.textContent).toBe(upperCase(xx('EVENT'), 'xx'));
+        expect(host.querySelector('[data-testid="event-state-chip"]')?.textContent).toBe(xx('UPDATED'));
+        expect(host.querySelector('[data-testid="event-when"]')?.textContent).not.toBe('');
+        expect(host.querySelector('[data-testid="event-counts"]')?.textContent).toBe(`👥 ${xx('{going} going · {interested} interested').replace('{going}', '2').replace('{interested}', '0')}`);
+        expect(host.textContent).not.toContain(xx('View event'));
         expect(bypassing()).toEqual([]);
     });
 
@@ -507,14 +514,16 @@ describe('the Map in English: the words are as they were', () => {
         for (const pill of ['All', 'Offers', 'Needs', 'Events']) expect(byText(pill), pill).not.toBeNull();
         expect(buttonHolding('ADD POST')!.textContent).toBe('+ADD POST');
         await click(marker(POSTS[0] as any), 'the eggs pin');
-        expect(host.textContent).toContain('FOOD');
-        expect(host.textContent).toContain('Kofi ✨ Elder');
-        expect(byText('View Details')).not.toBeNull();
+        expect(host.querySelector('[data-testid="map-preview-type-chip"]')?.textContent).toBe('OFFER');
+        expect(host.querySelector('[data-testid="map-preview-category-chip"]')?.textContent).toContain('Food');
+        expect(host.querySelector('[data-testid="map-preview-author"]')?.textContent).toContain('Kofi');
+        expect(host.querySelector('[data-testid="map-preview-author"] [data-testid="author-tier"]')?.textContent).toContain('Elder');
+        expect(host.textContent).not.toContain('View Details');
         await click(byLabel('Close'), 'Close');
         await click(marker(POSTS[2] as any), 'the event pin');
-        expect(host.textContent).toContain('UPDATED');
-        expect(host.textContent).toContain('👥 2 going');
-        expect(byText('View event')).not.toBeNull();
+        expect(host.querySelector('[data-testid="event-state-chip"]')?.textContent).toBe('UPDATED');
+        expect(host.querySelector('[data-testid="event-counts"]')?.textContent).toBe('👥 2 going · 0 interested');
+        expect(host.textContent).not.toContain('View event');
     });
 
     it('the form: the labels in capitals as the style drew them, the fee line whole, Confirm Pin', async () => {

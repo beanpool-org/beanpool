@@ -322,20 +322,25 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
             await showTile(BYRON);
             const rows = Array.from(blockEl().children);
             expect(rows).toHaveLength(4);
-            expect(rows.map(r => r.textContent)).toEqual(['SAT 7 NOV', '15:00–20:00', 'Byron Bay Twilight Market', '🕒 your time · 📍 Railway Park']);
+            expect(rows.map(r => Array.from(r.children).map(c => c.textContent))).toEqual([['SAT 7 NOV'], ['15:00–20:00'], ['Byron Bay Twilight Market'], ['🕒 your time', '📍 Railway Park']]);
             expect(host.textContent).not.toContain('16:00');
             expect(host.textContent).not.toContain('21:00');
-            // The label opens the last row, whole (the place gives way after it), in the event's ink beside the place's grey.
+            // The label opens the last row as its own line, never shrunk for the place (one truncating line would put its "…"
+            // inside the label at 320 dp and 1.3x); the place after it gives way, as a listing's row 4 lays out its pieces.
+            const block = gridTextBlock(1.3);
             const yours = byTestId('event-your-time')!;
-            expect(rows[3].firstElementChild?.firstElementChild).toBe(yours);
-            expect(rows[3].firstElementChild?.getAttribute('data-lines')).toBe('1');
-            expect(styleOf(yours)).toMatchObject({ color: lightColors.tile.event.ink, fontWeight: '700' });
+            expect(rows[3].firstElementChild).toBe(yours);
+            expect(yours.getAttribute('data-lines')).toBe('1');
+            expect(styleOf(yours)).toMatchObject({ fontSize: 14, color: lightColors.tile.event.ink, fontWeight: '700', flexShrink: 0, maxWidth: '100%' });
+            expect(styleOf(rows[3])).toEqual(block.lastRow);
+            expect(styleOf(rows[3].children[1])).toMatchObject({ ...block.lastRowPiece, fontSize: 14, color: lightColors.text.secondary });
+            expect(rows[3].children[1].getAttribute('data-lines')).toBe('1');
             // The label speaks the reader's clock too, with "your time".
             expect(card().getAttribute('aria-label')).toBe('Event: Byron Bay Twilight Market, SAT 7 NOV · 15:00–20:00 your time');
-            // The lattice is untouched: four rows of the listing's height, in the listing's block.
-            const block = gridTextBlock(1.3);
+            // The lattice is untouched: four rows of the listing's height (the last laid out as a listing's), in its block.
             expect(styleOf(blockEl())).toEqual(block.block);
-            for (const r of rows) expect(styleOf(r)).toEqual(block.row);
+            for (const r of rows.slice(0, 3)) expect(styleOf(r)).toEqual(block.row);
+            expect(styleOf(rows[3]).height).toBe(block.row.height);
         });
 
         it('dark: the label keeps the event\'s ink of the dark theme', async () => {
@@ -346,7 +351,8 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
 
         it('no place to name: the last row is the label alone', async () => {
             await showTile({ ...BYRON, eventPlaceName: null });
-            expect(Array.from(blockEl().children)[3].textContent).toBe('🕒 your time');
+            const last = Array.from(blockEl().children)[3];
+            expect(Array.from(last.children).map(c => c.textContent)).toEqual(['🕒 your time']);
         });
 
         it('the reader in the place\'s own zone (Byron read in Byron): the place\'s time, nothing to label', async () => {
@@ -375,7 +381,8 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
                 eventStartLocal: '2026-11-06T10:26', eventEndLocal: '2026-11-07T12:26',
             });
             const rows = Array.from(blockEl().children);
-            expect(rows.map(r => r.textContent)).toEqual(['FRI 6 NOV', '9:26', 'Byron Bay Twilight Market', '🕒 your time · 📍 Railway Park']);
+            expect(rows.map(r => r.textContent)).toEqual(['FRI 6 NOV', '9:26', 'Byron Bay Twilight Market', '🕒 your time📍 Railway Park']);
+            expect(byTestId('event-your-time')?.textContent).toBe('🕒 your time');
         });
     });
 

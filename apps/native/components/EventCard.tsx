@@ -31,7 +31,7 @@
  * date shows its start ("FRI 6 NOV" / "10:26"; the end is on the page). When the reader's clock differs from the place's (a
  * Byron event read on a Gold Coast phone), both rows are the reader's own clock, and the last row opens with "🕒 your time"
  * before the place (DESIGN-event-times §4: a member never reads the place's clock as their own). "15:00–20:00 your time"
- * cannot fit the time row at 320 dp and 1.3x (205 dp of text in 110), nor can "15:00 your time" (122 to 140 dp).
+ * cannot fit the time row at 320 dp and 1.3x (188 dp of text in 110, in Android's Roboto), nor can "15:00 your time" (130).
  *
  * The counts and "You're hosting this event" are on the event's page in the grid; the list card keeps them.
  */
@@ -164,15 +164,18 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                     <View style={gridBlock.row}>
                         <Text style={shell.gridSecond} numberOfLines={1}>{post.title}</Text>
                     </View>
-                    <View style={gridBlock.row} testID="grid-last-row">
-                        {(!!yourTime || !!place) && (
-                            <Text style={shell.gridLine} numberOfLines={1}>
-                                {!!yourTime && <Text testID="event-your-time" style={styles.yourTime}>{yourTime}</Text>}
-                                {!!yourTime && !!place && ' · '}
-                                {place}
-                            </Text>
-                        )}
-                    </View>
+                    {yourTime ? (
+                        // The label first and whole, its own line (one truncating line would put its "…" inside the label at
+                        // 320 dp and 1.3x); the place after it gives way, as a listing's row 4 lays out its distance and chip.
+                        <View style={gridBlock.lastRow} testID="grid-last-row">
+                            <Text testID="event-your-time" style={[shell.gridLine, styles.yourTime]} numberOfLines={1}>{yourTime}</Text>
+                            {!!place && <Text style={[shell.gridLine, gridBlock.lastRowPiece]} numberOfLines={1}>{place}</Text>}
+                        </View>
+                    ) : (
+                        <View style={gridBlock.row} testID="grid-last-row">
+                            {!!place && <Text style={shell.gridLine} numberOfLines={1}>{place}</Text>}
+                        </View>
+                    )}
                 </View>
             </Pressable>
         );
@@ -240,7 +243,8 @@ const makeStyles = ({ colors }: ThemeContextType) =>
             marginBottom: 2,
         },
         repeats: { fontSize: 13, fontWeight: '700', color: colors.accent.primary, marginBottom: 2 },
-        // The grid tile's "🕒 your time": in the event's ink, with the date and the time it labels.
-        yourTime: { color: colors.tile.event.ink, fontWeight: '700' },
+        // The grid tile's "🕒 your time": in the event's ink, with the date and the time it labels; never shrunk for the place,
+        // and cut with "…" at the row's end only where a language's label is longer than the row.
+        yourTime: { color: colors.tile.event.ink, fontWeight: '700', flexShrink: 0, maxWidth: '100%' },
         line: { marginBottom: 2 },
     });

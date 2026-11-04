@@ -8,7 +8,7 @@
  * error about a feature they never asked for.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { t } from '@beanpool/core';
 import {
     getMyEvents, getNodeApiUrl, getNotificationPreferences, isRouteMissing, setEventReminder, type MarketplacePost,
@@ -23,6 +23,7 @@ import { eventShareWhen } from '../lib/events';
 import { Sentence } from './Sentence';
 import { useShare } from './SharePost';
 import { MenuChoices, useInFlowMenu } from './ShareMenu';
+import { PAGE_BOX, PAGE_BUTTON, PAGE_INK } from './market-card-shell';
 
 /** The community's own address: the node the web app is talking to, or wherever it is being served from. */
 export function nodeOrigin(): string {
@@ -43,13 +44,15 @@ export function shareableEvent(post: MarketplacePost): ShareableEvent {
     };
 }
 
-const BUTTON =
-    'min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 '
-    + 'dark:text-violet-200 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 '
-    + 'focus-visible:ring-offset-1';
+/**
+ * The quiet row's button: the neutral outline (DESIGN-detail-pages-fable.md §2.2, slice DW1). Each one is as wide as its own
+ * words and only grows to share the row, so "📅 Add to calendar" drops to a row of its own before it is cut (320 px, 130%).
+ */
+const QUIET_ITEM = `grow basis-auto break-words ${PAGE_BUTTON.quiet}`;
 
 /**
- * Share and Add to calendar.
+ * Share and Add to calendar: the event page's quiet row (DESIGN-detail-pages-fable.md §2.1 row 8). `lead` is the page's own
+ * first item in the same row (the event's chat, for the host and anyone Going), so the row is one row of neutral buttons.
  *
  * Share is ONE button (DESIGN-detail-pages-fable.md §2.5, slice DW2) that opens a menu of the ways this member has here,
  * each with its sentence (components/SharePost.tsx useShare). Share with members hands the event's text to the browser's
@@ -58,7 +61,7 @@ const BUTTON =
  * for any calendar app, and Google Calendar. The calendar file builds the .ics here and downloads it: no node, no account,
  * and the same file the phone app shares. Google Calendar opens Google's template URL in a new tab.
  */
-export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
+export function EventShareAndCalendar({ post, lead }: { post: MarketplacePost; lead?: ReactNode }) {
     const [note, setNote] = useState<string | null>(null);
     const calendar = useInFlowMenu();
     const event = shareableEvent(post);
@@ -99,7 +102,7 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
     // Share with members hands over the event's own words (what, when, where, the link), not just its title.
     const shareMenu = useShare(post, {
         kind: 'event',
-        triggerClassName: `flex-1 min-w-[8rem] ${BUTTON}`,
+        triggerClassName: QUIET_ITEM,
         triggerTestId: 'event-share',
         membersLineTestId: 'event-share-members-note',
         shareWithMembers: share,
@@ -126,9 +129,10 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
 
     return (
         <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-2">
+            <div data-testid="event-quiet-row" className="flex flex-wrap gap-2">
+                {lead}
                 {shareMenu.trigger}
-                <div className="flex-1 min-w-[8rem]">
+                <div className="grow basis-auto flex">
                     <button
                         ref={calendar.buttonRef}
                         type="button"
@@ -136,13 +140,13 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
                         onClick={calendar.toggle}
                         aria-expanded={calendar.open}
                         aria-haspopup="menu"
-                        className={`w-full ${BUTTON}`}
+                        className={`w-full break-words ${PAGE_BUTTON.quiet}`}
                     >
                         <span aria-hidden="true">📅 </span>{t('Add to calendar')}
                     </button>
                 </div>
             </div>
-            {/* In the page's flow, not floating: the event's card is overflow-hidden and would cut a floating menu off. */}
+            {/* In the page's flow, under the row it opened from (the calendar's menu was built so, and is keyboard-handled). */}
             {shareMenu.menu}
             {calendar.open && (
                 <MenuChoices
@@ -154,7 +158,7 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
                     ]}
                 />
             )}
-            {note && <p role="status" data-testid="event-share-note" className="m-0 text-xs text-nature-600 dark:text-nature-400">{note}</p>}
+            {note && <p role="status" data-testid="event-share-note" className={`m-0 text-xs ${PAGE_INK.secondary}`}>{note}</p>}
             {/* What a way of sharing leaves under the row: a link to copy by hand, the invite panel, the ask's answer. */}
             {shareMenu.after}
         </div>
@@ -245,9 +249,9 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
     };
 
     return (
-        <div data-testid="event-reminder" className="flex flex-col gap-2 p-3 rounded-xl border border-nature-200 dark:border-nature-800">
+        <div data-testid="event-reminder" className={`flex flex-col gap-2 ${PAGE_BOX}`}>
             <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-                <p className="m-0 min-w-0 text-sm font-semibold text-nature-800 dark:text-nature-200">
+                <p className={`m-0 min-w-0 text-sm font-semibold ${PAGE_INK.body}`}>
                     <span aria-hidden="true">⏰ </span>
                     <Sentence
                         text={t('Remind me: {choice}')}
@@ -259,7 +263,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                     data-testid="event-reminder-change"
                     onClick={() => (open ? setOpen(false) : openPicker())}
                     aria-expanded={open}
-                    className={BUTTON}
+                    className={PAGE_BUTTON.quiet}
                 >
                     {open ? t('Close') : t('Change')}
                 </button>
@@ -275,7 +279,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                             <label key={minutes} className="flex items-center gap-2 min-h-[48px] text-sm font-semibold text-nature-800 dark:text-nature-200 cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    className="w-5 h-5 accent-violet-700"
+                                    className="w-5 h-5 accent-bp-event-fill"
                                     checked={draft.includes(minutes)}
                                     onChange={e => setDraft(d => (e.target.checked ? [...d, minutes] : d.filter(m => m !== minutes)))}
                                 />
@@ -292,7 +296,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                             data-testid="event-reminder-save"
                             disabled={saving}
                             onClick={() => save(draft)}
-                            className="flex-1 min-w-[8rem] min-h-[48px] px-3 rounded-xl border border-violet-700 text-sm font-bold text-white bg-violet-700 dark:bg-violet-600 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                            className={`flex-1 min-w-[8rem] ${PAGE_BUTTON.eventFill}`}
                         >
                             {saving ? t('Saving…') : t('Save for this event')}
                         </button>
@@ -302,7 +306,7 @@ export function EventReminder({ post, identity, myRsvp }: ReminderProps) {
                                 data-testid="event-reminder-reset"
                                 disabled={saving}
                                 onClick={() => save(null)}
-                                className={`flex-1 min-w-[8rem] disabled:opacity-60 ${BUTTON}`}
+                                className={`flex-1 min-w-[8rem] ${PAGE_BUTTON.quiet}`}
                             >
                                 {t('Use my default')}
                             </button>

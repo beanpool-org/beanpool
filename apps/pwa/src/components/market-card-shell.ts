@@ -124,3 +124,84 @@ export const CARD_INK = {
     /** The place, the distance, a price's unit, the counts. */
     secondary: 'text-nature-600 dark:text-nature-300',
 } as const;
+
+/*
+ * The pages (DESIGN-detail-pages-fable.md §2.2, slice DW1 for the event page; the Offer / Need page joins in DW3): the same
+ * box, drawn as the page's boxes and buttons. Core's MARKET_CARD_TYPE.page holds the numbers; market-card-shell.test.ts holds
+ * these classes to them. The page's words are in rem, so a member's larger text setting (130% at the floor) grows them.
+ */
+
+/**
+ * A box on a page (the note for people who are going, Remind me, the host's guest list, the person): the card's corners,
+ * outline, ground and shadow, with the card's 12 of padding (the style box's §3 row 3: one number for every box).
+ */
+export const PAGE_BOX = `rounded-[14px] border ${BORDER} ${GROUND} p-3 shadow-sm`;
+
+/**
+ * A box's label, in small capitals: 10/800, letter-spaced 1.5, 8 above what it names. The web writes its labels in sentence
+ * case and draws the capitals here ("Hosted by", as its "Posted by"). The muted ink is nature-600 / nature-300, not the
+ * design's nature-500 / nature-400: 10 px words need 4.5:1, and nature-500 is 3.3:1 on the card ground (nature-600 is 4.9).
+ */
+const BOX_LABEL_TYPE = 'm-0 mb-2 text-[0.625rem] font-extrabold tracking-[1.5px] uppercase leading-normal';
+export const BOX_LABEL = {
+    muted: `${BOX_LABEL_TYPE} text-nature-600 dark:text-nature-300`,
+    /** The note for people who are going: an event's own words, in the event ink. */
+    event: `${BOX_LABEL_TYPE} text-bp-ink-event`,
+} as const;
+
+/** A page's button: 48 tall, corners 12, 15/700, a 1.5 px outline. */
+const PAGE_BUTTON_TYPE = 'text-[0.9375rem] font-bold leading-tight';
+const PAGE_BUTTON_FRAME = `min-h-[48px] px-3 rounded-xl border-[1.5px] ${PAGE_BUTTON_TYPE} cursor-pointer transition-colors `
+    + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed';
+
+/**
+ * The event's two answers, on the card (the map's preview) and on the page: chosen = the one event fill with white words in
+ * both schemes (core's `event` role); not chosen = the event ink's outline and words on the card ground (`ink.event`).
+ */
+export const EVENT_ANSWER = {
+    chosen: 'bg-bp-event-fill border-bp-event-fill text-bp-event-on hover:bg-bp-event-hover hover:border-bp-event-hover',
+    open: `${GROUND} border-bp-ink-event text-bp-ink-event hover:bg-bp-tile-event-tint`,
+} as const;
+
+export const PAGE_BUTTON = {
+    /** The commit on an event: Edit event, Let in ✓, Save for this event. */
+    eventFill: `${PAGE_BUTTON_FRAME} ${EVENT_ANSWER.chosen} focus-visible:ring-bp-ink-event`,
+    /** An event's other buttons: Let in, Let everyone in, Copy to a new date. */
+    eventOutline: `${PAGE_BUTTON_FRAME} ${EVENT_ANSWER.open} focus-visible:ring-bp-ink-event`,
+    /** The quiet row (the chat, Share, Add to calendar) and Remind me's Change: the neutral outline, the page's own words. */
+    quiet: `${PAGE_BUTTON_FRAME} ${GROUND} border-nature-300 dark:border-nature-700 text-nature-900 dark:text-white `
+        + 'hover:bg-nature-50 dark:hover:bg-nature-800 focus-visible:ring-nature-600 dark:focus-visible:ring-nature-300',
+} as const;
+
+/** Going / Interested on the page: the page button's type. The map's preview card keeps the card's own. */
+export const PAGE_ANSWER_TYPE = PAGE_BUTTON_TYPE;
+
+/** §2.3 The page's type. */
+export const PAGE_TYPE = {
+    /** An event's when: 18/900, in the event ink. */
+    when: 'text-lg font-black leading-tight',
+    /** An event's title: 20/800. */
+    title: 'text-xl font-extrabold leading-snug',
+    /** The place, the online line: 14/600, the page's own words. */
+    place: 'text-sm font-semibold',
+    /** The description: 15 on 22. */
+    description: 'text-[0.9375rem] leading-[1.375rem]',
+    /** A box's note, the counts, the hint lines: 13. */
+    note: 'text-[0.8125rem] leading-snug',
+    /** "Show on map", "Join": a link in the event ink, the whole 48 px row its target. */
+    link: 'text-sm font-bold underline underline-offset-2',
+    /** 🚩 Report: 13/700 in the danger ink. */
+    report: 'text-[0.8125rem] font-bold',
+} as const;
+
+/** The page's inks. */
+export const PAGE_INK = {
+    /** The page's own words: the place, the description, a box's words. */
+    body: 'text-nature-800 dark:text-nature-200',
+    /** The clock notes, the counts, the hints. */
+    secondary: 'text-nature-600 dark:text-nature-300',
+    /** The event violet as words: the when, the repeat line, "You're hosting this event", Show on map. */
+    event: 'text-bp-ink-event',
+    /** 🚩 Report. */
+    danger: 'text-bp-ink-danger',
+} as const;

@@ -204,11 +204,20 @@ export const GRID_TIME_ROW = 'shrink-0 h-[1.203125rem] min-w-0 flex flex-wrap co
 export const GRID_TIME_PIECE = 'shrink-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis';
 
 /**
- * The viewer's own answer on an event tile ("Going ✓"), where a listing's price sits: the foot row's end (`ml-auto`), a loud
- * scrim pill in core's grid price type (13/700). White words on the scrim in both schemes: the event ink there would be
- * dark violet on near black in the light scheme. One line; only a pill wider than the whole foot row ends in "…".
+ * The viewer's own answer on an event tile ("Going ✓"), where a listing's price sits: the foot row's end (`ml-auto`), the
+ * scrim pill's own size (10/700, as PINNED beside it). Not the price's 13/700: "Interested ✓" at 13/700 measured 124 px in
+ * the 111 px foot row at 320 x 1.3 (Chromium, market-grid-shots.mjs). White words on the scrim in both schemes: the event ink
+ * there would be dark violet on near black in the light scheme. One line; only a pill wider than the whole row ends in "…".
  */
-export const GRID_SCRIM_MARK = 'ml-auto inline-block min-w-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis px-2 py-1 rounded-lg text-[13px] font-bold leading-normal bg-nature-900/90 text-white shadow-md';
+export const GRID_SCRIM_MARK = 'ml-auto inline-block min-w-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis px-1.5 py-0.5 rounded-md text-[10px] font-bold leading-normal bg-nature-900/90 text-white shadow-sm';
+
+/**
+ * A label that leads a grid row, whole ("🕒 your time" before an event's place, DESIGN-grid-event-rows-fable.md): the chip's
+ * type (10/800), as the listing tile's distance tag in its row 4, never shrunk for what follows it. At the row's 14/800 it
+ * measured 109 px in a 101 px row at 320 x 1.3 (Chromium); at 10/800 it is whole there. Only a label wider than the whole
+ * row (a long language) ends in "…".
+ */
+export const GRID_ROW_LABEL = 'shrink-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-extrabold leading-normal';
 
 /** The inks on the card ground, light and dark. */
 export const CARD_INK = {

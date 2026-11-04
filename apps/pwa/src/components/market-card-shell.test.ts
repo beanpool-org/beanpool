@@ -12,7 +12,7 @@ import tailwindcss from 'tailwindcss';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, type CardType } from '@beanpool/core';
 import {
     BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
-    GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
+    GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
     PAGE_TYPE, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
 
@@ -281,11 +281,19 @@ describe('the grid tile holds core\'s numbers', () => {
         expect(classes(GRID_TIME_PIECE)).not.toContain('min-w-0');
     });
 
-    it('the mark pill: core\'s grid price type, white on the scrim at the foot row\'s end, one line', () => {
-        const { size, weight } = typeOf(GRID_SCRIM_MARK);
-        expect({ size, weight }).toEqual({ size: MARKET_CARD_TYPE.grid.price.size, weight: MARKET_CARD_TYPE.grid.price.weight });
+    it('the mark pill: the scrim pill\'s size, padding and corners, white on the scrim at the foot row\'s end, one line', () => {
+        expect(typeOf(GRID_SCRIM_MARK)).toEqual(typeOf(GRID_SCRIM_PILL));
+        expect(typeOf(GRID_SCRIM_MARK).size).toBe(MARKET_CHIP.type.size);
+        expect(spacing(GRID_SCRIM_MARK, 'px')).toBe(MARKET_CHIP.paddingHorizontal);
+        expect(spacing(GRID_SCRIM_MARK, 'py')).toBe(MARKET_CHIP.paddingVertical);
+        expect(radius(GRID_SCRIM_MARK)).toBe(MARKET_CHIP.radius);
         expect(classes(GRID_SCRIM_MARK)).toEqual(expect.arrayContaining(['ml-auto', 'bg-nature-900/90', 'text-white', 'whitespace-nowrap', 'max-w-full', 'text-ellipsis']));
         expect(classes(GRID_SCRIM_MARK)).not.toContain('uppercase');
+    });
+
+    it('a row\'s leading label: the one chip\'s type, whole, never shrunk', () => {
+        expect(typeOf(GRID_ROW_LABEL)).toEqual(asType(MARKET_CHIP.type));
+        expect(classes(GRID_ROW_LABEL)).toEqual(expect.arrayContaining(['shrink-0', 'max-w-full', 'whitespace-nowrap', 'text-ellipsis']));
     });
 
     it('the grid photo\'s crop is core\'s focus', () => {
@@ -295,7 +303,7 @@ describe('the grid tile holds core\'s numbers', () => {
 
     it('no raw violet, purple, blue or nature-950 in the grid\'s classes', () => {
         const all = [GRID, GRID_POLL_CELL, gridTile(), gridTile({ elder: true }), gridTile({ pulse: true }), GRID_PHOTO, GRID_TEXT,
-            GRID_TITLE, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL, GRID_SCRIM_MARK, GRID_TIME_ROW, GRID_TIME_PIECE, ...Object.values(GRID_TYPE)].join(' ');
+            GRID_TITLE, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL, GRID_SCRIM_MARK, GRID_ROW_LABEL, GRID_TIME_ROW, GRID_TIME_PIECE, ...Object.values(GRID_TYPE)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
     });
 });

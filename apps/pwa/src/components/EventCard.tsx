@@ -44,7 +44,7 @@ import { ListPhoto } from './ListPhoto';
 import { ImageLightbox } from './ImageLightbox';
 import { ReportModal } from './ReportModal';
 import {
-    BOX_LABEL, CARD_INK, EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
+    BOX_LABEL, CARD_INK, EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
     GRID_TIME_ROW, GRID_TYPE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE,
     chip, gridTile, listCard,
 } from './market-card-shell';
@@ -538,7 +538,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                         </span>
                         <span data-testid="grid-row-4" className={GRID_ROW}>
                             {yourTime && (
-                                <span data-testid="event-your-time" className={`shrink-0 max-w-full truncate ${GRID_TYPE.loud} ${CARD_INK.event}`}>{yourTime}</span>
+                                <span data-testid="event-your-time" className={`${GRID_ROW_LABEL} ${CARD_INK.event}`}>{yourTime}</span>
                             )}
                             {lastRow && (
                                 <span data-testid="event-tile-place" className={`min-w-0 truncate ${GRID_TYPE.place} ${CARD_INK.secondary}`}>

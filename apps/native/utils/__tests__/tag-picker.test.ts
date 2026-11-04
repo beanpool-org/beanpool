@@ -13,9 +13,15 @@ import {
     tagIndex,
     searchTagsFor,
     setLanguage,
+    wordKey,
 } from '@beanpool/core';
-import { catalogsFor } from '../words-catalogs';
 import { marketSearchMatches, marketSearchToSave } from '../market-filters';
+
+// FIXTURE, not a real translation: a Spanish catalog that names ONE tag (lemon) and leaves every other tag in English. The
+// checks below need exactly that: a language label for one tag beside English labels for the rest. The real Spanish catalog
+// is full now, so its own "Le…" labels (Leche, Leña, Lectura…) fill the first eight places of 'le' and the premise "Spanish
+// is partly English" no longer holds; with a fixture it holds whatever gets translated.
+const SPANISH_LEMON = [{ [wordKey('Lemon', 'tag')]: 'Limón' }];
 
 describe('TagPicker logic', () => {
     it('enforces cap of at most 5 tags (≤ 5)', () => {
@@ -34,7 +40,7 @@ describe('TagPicker logic', () => {
 
     it('searches from 2 characters in two languages (Spanish and English)', () => {
         try {
-            setLanguage('es', catalogsFor('es'));
+            setLanguage('es', SPANISH_LEMON);
             const index = tagIndex();
 
             // Less than 2 characters does not search
@@ -141,7 +147,7 @@ describe('Composers sending tags', () => {
 describe('Market search sends q AND tags', () => {
     it('resolves typed query words to tag IDs and sends both q and tags', () => {
         try {
-            setLanguage('es', catalogsFor('es'));
+            setLanguage('es', SPANISH_LEMON);
             const q = 'limón';
             const resolved = searchTagsFor(q);
             expect(resolved).toContain('food.fruit.lemon');
@@ -162,7 +168,7 @@ describe('Market search sends q AND tags', () => {
 
     it('cross-language search: typing Spanish "limón" matches listing tagged food.fruit.lemon', () => {
         try {
-            setLanguage('es', catalogsFor('es'));
+            setLanguage('es', SPANISH_LEMON);
             const post = {
                 title: 'Homegrown organic citrus',
                 description: 'Pick up from my backyard garden',
@@ -179,7 +185,7 @@ describe('Market search sends q AND tags', () => {
 
     it('saved search stores resolved tag IDs', () => {
         try {
-            setLanguage('es', catalogsFor('es'));
+            setLanguage('es', SPANISH_LEMON);
             const filterState = {
                 type: 'all' as const,
                 category: 'food',

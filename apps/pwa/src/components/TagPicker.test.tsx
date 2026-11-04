@@ -2,9 +2,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import React, { useState } from 'react';
 import { TagPicker } from './TagPicker';
-import { POST_TAGS_MAX, SUGGESTED_TAGS_MAX, searchTagsFor, tagIndex, postTagsOf, buildTagIndex, wordsFor, setLanguage } from '@beanpool/core';
-import coreEs from '@beanpool/core/words/es.json';
+import { POST_TAGS_MAX, SUGGESTED_TAGS_MAX, searchTagsFor, tagIndex, postTagsOf, buildTagIndex, wordKey, wordsFor, setLanguage } from '@beanpool/core';
 import { matchesExpandedSearch } from '../lib/search';
+
+// FIXTURE, not a real translation: a Spanish catalog that names ONE tag (lemon) and leaves every other tag in English. The
+// two-language checks below need exactly that: a language label for one tag beside English labels for the rest. The real
+// Spanish catalog is full now, so its own "Le…" labels (Leche, Leña, Lectura…) fill the first eight places of 'le' and
+// the premise "Spanish is partly English" no longer holds; with a fixture it holds whatever gets translated.
+const SPANISH_LEMON = { [wordKey('Lemon', 'tag')]: 'Limón' };
 
 describe('TagPicker Web Component', () => {
     it('renders "Tags · optional" row with chosen chips and + Add button', () => {
@@ -72,7 +77,7 @@ describe('TagPicker Web Component', () => {
     });
 
     it('searches from 2 characters in two languages (Spanish and English)', () => {
-        const index = buildTagIndex(wordsFor('es', [coreEs]));
+        const index = buildTagIndex(wordsFor('es', [SPANISH_LEMON]));
         expect('a'.length >= 2).toBe(false);
 
         // English search from 2 chars
@@ -196,7 +201,7 @@ describe('TagPicker Web Component', () => {
 
     it('cross-language search: matchesExpandedSearch matches Spanish query with tagged post', () => {
         try {
-            setLanguage('es', [coreEs]);
+            setLanguage('es', [SPANISH_LEMON]);
             // Post tagged food.fruit.lemon in English text
             const matches = matchesExpandedSearch(
                 'limón',

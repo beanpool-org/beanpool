@@ -29,8 +29,10 @@ export function ShareSheet({ visible, onClose, onDismiss, items, body, holding =
     visible: boolean;
     onClose: () => void;
     /**
-     * A share is being made (a link, an invite) or the phone's share sheet is up: Cancel (drawn dimmed), the backdrop and
-     * Android Back do nothing, so the share never opens after the sheet has gone. The sheet closes once the share has answered.
+     * A share is being made (a link, an invite) or the phone's share sheet is up: Cancel and every item (drawn dimmed), the
+     * backdrop and Android Back do nothing, so the share never opens after the sheet has gone and no second one starts while
+     * it is being made. The sheet closes once the share has answered; a share the community does not answer stops waiting at
+     * its time limit (utils/peek.ts, utils/invite-and-share.ts), so the hold always ends.
      */
     holding?: boolean;
     /** iOS: once the sheet is gone, so another sheet (the ask form) can open after it. */
@@ -53,20 +55,25 @@ export function ShareSheet({ visible, onClose, onDismiss, items, body, holding =
                     {/* The ways scroll when they are taller than the screen (the invite panel with its vouch choice, a long
                         language at 1.3×, a 569 dp phone); the title and Cancel stay put. */}
                     <ScrollView style={styles.ways} bounces={false} keyboardShouldPersistTaps="handled" testID={`${testID}-ways`}>
-                    {items.map((item) => (
+                    {items.map((item) => {
+                        // While a share is in flight every way waits with Cancel: one that closes the sheet (the ask) or starts
+                        // another share would close it under the one being made, or make a second link.
+                        const off = !!item.busy || holding;
+                        return (
                         <Pressable
                             key={item.key}
                             onPress={item.onPress}
-                            disabled={item.busy}
-                            style={({ pressed }) => [styles.item, (pressed || item.expanded) && styles.itemPressed, item.busy && styles.itemBusy]}
+                            disabled={off}
+                            style={({ pressed }) => [styles.item, (pressed || item.expanded) && styles.itemPressed, off && styles.itemBusy]}
                             accessibilityRole="button"
-                            accessibilityState={{ busy: !!item.busy, disabled: !!item.busy, ...(item.expanded !== undefined ? { expanded: item.expanded } : {}) }}
+                            accessibilityState={{ busy: !!item.busy, disabled: off, ...(item.expanded !== undefined ? { expanded: item.expanded } : {}) }}
                             testID={item.testID}
                         >
                             <Text style={styles.itemText} maxFontSizeMultiplier={1.3}>{item.label}</Text>
                             {item.line ? <Text style={styles.itemLine} maxFontSizeMultiplier={1.3} testID={item.lineTestID}>{item.line}</Text> : null}
                         </Pressable>
-                    ))}
+                        );
+                    })}
                     {body}
                     </ScrollView>
                     <Pressable onPress={close} disabled={holding} style={({ pressed }) => [styles.cancel, pressed && styles.itemPressed, holding && styles.itemBusy]}

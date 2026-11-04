@@ -77,7 +77,15 @@ describe('an answer without the community\'s words', () => {
     it('a link made: the community\'s own address, the post and the ticket', async () => {
         signedRequestWithMethod.mockResolvedValueOnce({ ticket: 'AbCdEfGhIjKlMnOpQrSt_-', postId: 'p-ladder', expiresAt: SOON });
         expect(await makePeekLink('p-ladder')).toEqual({ link: 'https://castlemaine.beanpool.org/?post=p-ladder&peek=AbCdEfGhIjKlMnOpQrSt_-', expiresAt: SOON });
-        expect(signedRequestWithMethod).toHaveBeenCalledWith('POST', '/api/peek', { postId: 'p-ladder' }, { withStatus: true });
+        // With a signal: the link is waited for TIMEOUT_MS at most (share-sheet-holds.test.ts runs the limit itself).
+        expect(signedRequestWithMethod).toHaveBeenCalledWith('POST', '/api/peek', { postId: 'p-ladder' }, { withStatus: true, signal: expect.any(AbortSignal) });
+        expect((signedRequestWithMethod.mock.calls[0][3] as { signal: AbortSignal }).signal.aborted).toBe(false);
+    });
+
+    it('Stop sharing is asked as before, with no time limit of its own', async () => {
+        signedRequestWithMethod.mockResolvedValueOnce({});
+        await stopPeekShare('r1');
+        expect(signedRequestWithMethod).toHaveBeenCalledWith('POST', '/api/peek/stop', { id: 'r1' }, { withStatus: true });
     });
 });
 
@@ -167,7 +175,7 @@ describe('a link made but not handed over', () => {
         share.mockResolvedValue({ action: Share.dismissedAction });
         await tapShare(unsent);
         await confirmShareOutside({ id: 'p-other', title: 'Other' }, undefined, unsent, undefined, { confirmed: true });
-        expect(signedRequestWithMethod).toHaveBeenLastCalledWith('POST', '/api/peek', { postId: 'p-other' }, { withStatus: true });
+        expect(signedRequestWithMethod).toHaveBeenLastCalledWith('POST', '/api/peek', { postId: 'p-other' }, { withStatus: true, signal: expect.any(AbortSignal) });
     });
 
     it('confirmed (the sheet\'s item) asks no question and makes the link; unconfirmed makes nothing until Share on the question', async () => {

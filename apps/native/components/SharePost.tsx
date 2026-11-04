@@ -125,7 +125,8 @@ function useAskAdmin() {
  * The one Share button and its sheet, for a listing or an event. `onShareMembers` hands the members' link to the share sheet
  * (the listing's and the event's words differ); the rest is the same for both. A tap that shares keeps the sheet open until
  * the share sheet has answered, then closes it (on iOS a share sheet presented while the Modal is still going would not show).
- * Until then Cancel, the backdrop and Back do nothing (ShareSheet `holding`).
+ * Until then Cancel, every way, the backdrop and Back do nothing (ShareSheet `holding`): one share at a time, and only its own
+ * answer closes the sheet. A community that does not answer ends the hold at the request's time limit, with its words.
  */
 export function ShareButton({ post, onShareMembers, accessibilityLabel, style, buttonStyle, textStyle, oneLine }: {
     post: any;
@@ -191,9 +192,11 @@ export function ShareButton({ post, onShareMembers, accessibilityLabel, style, b
     const makeInvite = async () => {
         if (await invite.make()) close();
     };
-    // A share in flight (the link or the invite being made, or the phone's share sheet up): the sheet ignores Cancel, the
-    // backdrop and Back until it has answered, then closes itself. Closed sooner, the share would still open after it (Android)
-    // or never answer (iOS, presented while the sheet fades), leaving its item dimmed and a made link unkept.
+    // A share in flight (the link or the invite being made, or the phone's share sheet up): the sheet ignores Cancel, every
+    // way, the backdrop and Back until it has answered, then closes itself. Closed sooner, the share would still open after it
+    // (Android) or never answer (iOS, presented while the sheet fades), leaving its item dimmed and a made link unkept; a second
+    // way started meanwhile would close the sheet under the first, or make a second link. The link and the invite each stop
+    // waiting at their time limit (utils/peek.ts makePeekLink, utils/invite-and-share.ts makeInviteForShare), so this ends.
     const holding = busy !== null || invite.busy;
 
     const items: ShareSheetItem[] = [{
@@ -230,7 +233,7 @@ export function ShareButton({ post, onShareMembers, accessibilityLabel, style, b
                 onDismiss={dismissed}
                 // The invite panel takes the other ways' place; its own way stays above it, a tap away from the list.
                 items={panel ? items.filter((i) => i.key === 'invite') : items}
-                body={panel && showInvite ? <InviteAndSharePanel invite={invite} onMake={() => void makeInvite()} /> : null}
+                body={panel && showInvite ? <InviteAndSharePanel invite={invite} held={holding} onMake={() => void makeInvite()} /> : null}
             />
             {ask.sheet}
         </View>

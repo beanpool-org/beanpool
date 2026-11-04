@@ -111,17 +111,21 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
     return { offered, offersVouch, vouchLevel, setVouchLevel, busy, note, clearNote: () => setNote(null), make };
 }
 
-/** The panel the sheet's Invite and share item opens: what the invite does, the vouch where offered, and the one button. */
-export function InviteAndSharePanel({ invite, onMake }: { invite: InviteAndShare; onMake: () => void }) {
+/**
+ * The panel the sheet's Invite and share item opens: what the invite does, the vouch where offered, and the one button. `held`:
+ * another share is in flight (components/ShareSheet.tsx `holding`), so Make waits too.
+ */
+export function InviteAndSharePanel({ invite, onMake, held = false }: { invite: InviteAndShare; onMake: () => void; held?: boolean }) {
     const styles = useStyles(makeStyles);
     const { colors } = useTheme();
+    const off = invite.busy || held;
     return (
         <View style={styles.block} testID="invite-and-share">
             <View style={styles.panel} testID="invite-and-share-panel">
                 <Text style={styles.panelText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.panel)}</Text>
                 {invite.offersVouch && <InviteVouchChoice value={invite.vouchLevel} onChange={invite.setVouchLevel} colors={colors} />}
-                <Pressable onPress={onMake} disabled={invite.busy} style={[styles.make, invite.busy && { opacity: 0.6 }]} accessibilityRole="button"
-                    accessibilityState={{ disabled: invite.busy }} testID="invite-and-share-make">
+                <Pressable onPress={onMake} disabled={off} style={[styles.make, off && { opacity: 0.6 }]} accessibilityRole="button"
+                    accessibilityState={{ disabled: off }} testID="invite-and-share-make">
                     <Text style={styles.makeText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.make)}</Text>
                 </Pressable>
             </View>

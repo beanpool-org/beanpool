@@ -72,7 +72,7 @@ vi.mock('../../app/ThemeContext', async () => {
 });
 
 import { SharePostButtons } from '../../components/SharePost';
-import { offersInviteAndShare, makeInviteForShare } from '../invite-and-share';
+import { offersInviteAndShare, makeInviteForShare, INVITE_FOR_SHARE_WAIT_MS } from '../invite-and-share';
 
 const POST = { id: '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34', title: 'Ladder for borrowing' };
 const NODE = 'https://mullum.example';
@@ -264,5 +264,24 @@ describe('what it never makes', () => {
         expect(down).toMatchObject({ ok: false, offline: true });
         const refused = await makeInviteForShare(NODE, id, null, undefined, { signedHeaders, fetchImpl: (async () => ({ ok: false, status: 500, json: async () => ({}) })) as any });
         expect(refused).toMatchObject({ ok: false, offline: false });
+    });
+
+    it('makeInviteForShare, on its own: a community that never answers is no answer at INVITE_FOR_SHARE_WAIT_MS, and the request is given up', async () => {
+        vi.useFakeTimers();
+        try {
+            const id = { publicKey: 'pk', privateKey: 'sk', callsign: 'x' } as any;
+            const signals: AbortSignal[] = [];
+            const fetchImpl = ((_url: string, init: { signal: AbortSignal }) => { signals.push(init.signal); return new Promise(() => {}); }) as any;
+            let settled: unknown = 'waiting';
+            void makeInviteForShare(NODE, id, null, undefined, { signedHeaders: (async () => ({})) as any, fetchImpl }).then((r) => { settled = r; });
+            await vi.advanceTimersByTimeAsync(INVITE_FOR_SHARE_WAIT_MS - 1);
+            expect(settled).toBe('waiting');
+            expect(signals[0]?.aborted).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(settled).toMatchObject({ ok: false, offline: true });
+            expect(signals[0].aborted).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

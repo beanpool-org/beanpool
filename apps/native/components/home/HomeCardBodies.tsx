@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import type { AppColors } from '../../constants/colors';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { MemberAvatar } from '../MemberAvatar';
 import { ExampleListings } from '../ExampleListings';
 import { CategoryTile, type CategoryTileKind } from '../CategoryTile';
+import { ListPhoto } from '../ListPhoto';
 import { resolvePulseThumbnailUrl } from '../../utils/pulse';
 import { eventHomeWhen, formatDistance } from '../../utils/events';
 import { closesInWords, type NeedsYouEntry } from '../../utils/needs-you';
@@ -17,7 +17,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -351,12 +351,19 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
  */
 function Thumb({ uri, category, kind, colors }: { uri: string | null; category?: string | null; kind?: CategoryTileKind; colors: AppColors }) {
     const s = homeStyles(colors);
-    const [failed, setFailed] = React.useState<string | null>(null);
-    if (uri && uri !== failed) return <Image source={{ uri }} style={s.thumb} contentFit="cover" accessibilityIgnoresInvertColors onError={() => setFailed(uri)} />;
+    // The picture's own URL: ListPhoto asks the node for the small copy, then steps down to this, then to the tile.
     return (
-        <View style={[s.thumb, { overflow: 'hidden' }]}>
-            <CategoryTile category={category} kind={kind} size="thumb" />
-        </View>
+        <ListPhoto
+            photo={uri}
+            style={s.thumb}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+            fallback={(
+                <View style={[s.thumb, { overflow: 'hidden' }]}>
+                    <CategoryTile category={category} kind={kind} size="thumb" />
+                </View>
+            )}
+        />
     );
 }
 
@@ -408,7 +415,7 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
             sub={facts || category}
             a11y={a11y}
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
-            left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl || p.bannerUrl))} category={p.category} kind="listing" colors={colors} />}
+            left={<Thumb uri={onNode(nodeUrl, p.photoUrl || p.bannerUrl)} category={p.category} kind="listing" colors={colors} />}
             subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
             testID={testID}
         />

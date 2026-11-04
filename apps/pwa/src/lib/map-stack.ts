@@ -4,7 +4,7 @@
  * MapPage's maxClusterRadius, 40 px: at 17 that is 47.8 m at the equator, 42 m at Bangalow. A 40 px pin is that wide, so
  * pins closer than that sit on top of each other however they are tapped.
  */
-import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, copyFromLine, eventCopyOf, listPhotoUrl, orderStack, t, type StackBubble } from '@beanpool/core';
+import { MAP_TAP_CAP_ZOOM, bubbleLandingZoom, bubbleTap, copyFromLine, eventCopyOf, orderStack, t, type StackBubble } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 import { formatEventWhen } from './events';
 import { MARKETPLACE_CATEGORIES_BY_ID } from './marketplace';
@@ -76,6 +76,7 @@ export interface StackPin {
     type: string;
     /** An event's date line. */
     when: string | null;
+    /** The listing photo's own URL: the list draws its small copy and steps down from it (components/ListPhoto.tsx). */
     photo: string | null;
     emoji: string;
     /** An event's start in ms, else null. */
@@ -116,7 +117,7 @@ export function stackPinFromPost(
         title: post.title,
         type: typeLabel,
         when: post.type === 'event' ? formatEventWhen(post) || null : null,
-        photo: post.photos?.[0] ? listPhotoUrl(post.photos[0]) : null,
+        photo: post.photos?.[0] || null,
         emoji: MARKETPLACE_CATEGORIES_BY_ID.get(post.category)?.emoji || '📌',
         eventStartMs: post.type === 'event' ? Date.parse(post.eventStartAt ?? '') : null,
         createdMs: Date.parse(post.createdAt ?? ''),

@@ -90,7 +90,8 @@ export const KEPT_WORDS = {
     overLimit: "Over today's limit: the rest wait for tomorrow (UTC), or an owner raises the Owner and admin limit.",
 } as const;
 
-export interface TakedownGrant { id: string; name: string; member: string }
+/** The grant a call is for; `role` is its member's now (an admin's takes one post a call: agent/owner-takedowns.ts), for the alert's words. */
+export interface TakedownGrant { id: string; name: string; member: string; role?: 'owner' | 'admin' }
 
 export type TakedownVia = 'ids' | 'reports' | 'author';
 
@@ -225,7 +226,7 @@ export function takeDownPosts(cb: ModerationNoticeCallbacks, input: TakeDownInpu
     // count keeps its one line after that.
     noteSecurityEvent({
         key: 'sec.agent', detail: '', perDay: OWNER_ALERT_WORDS.assistantTakedowns, perDayAdds: removed.length,
-        actor: grant.member, actorRole: 'owner', ...(before === 0 ? { high: true } : { quiet: true }),
+        actor: grant.member, actorRole: grant.role ?? 'owner', ...(before === 0 ? { high: true } : { quiet: true }),
     });
     return { takedownId: id, ...out };
 }

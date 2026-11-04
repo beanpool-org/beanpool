@@ -14,6 +14,7 @@
     "test:connected-assistants": "node e2e/connected-assistants.mjs",
     "test:agent-suggestions": "node e2e/agent-suggestions.mjs",
     "test:assistant-takedowns": "node e2e/assistant-takedowns.mjs",
+    "test:post-types": "node e2e/post-moderation-types.mjs",
     "test:in-page-confirm": "node e2e/in-page-confirm.mjs",
     "screenshots": "node e2e/screenshots.mjs",
     "manual-shots": "node e2e/manual-shots.mjs"

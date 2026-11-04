@@ -126,8 +126,8 @@ function oauthGrantView(g: OAuthGrantView, me: string | null, now = Date.now()) 
         lastUsedAt: g.lastUsedAt,
         callsToday: agentCallsToday(g.id, now),
         canPost: g.canPost === true,
-        canModerate: false,
-        takedownsToday: 0,
+        canModerate: g.canModerate === true,
+        takedownsToday: takedownsTodayBy(g.id, now),
         takedownsHeld: takedownsHeldBy(g.id),
         postsToday: agentCreatesToday(g.id, now),
         madePosts: madePostsCount(g.id),
@@ -174,7 +174,7 @@ function previewGrant(ctx: any, grantId: unknown): AgentGrant | { error: string 
         if (o) {
             const r = nodeRoleOf(o.member);
             if (r !== 'owner' && r !== 'admin') return { error: 'Its member is no longer an owner or admin: it reads nothing now' };
-            return { id: o.id, name: o.clientName || 'AI assistant', member: o.member, role: r, via: 'oauth', createdAt: o.createdAt, expiresAt: null, canPost: o.canPost === true, canModerate: false };
+            return { id: o.id, name: o.clientName || 'AI assistant', member: o.member, role: r, via: 'oauth', createdAt: o.createdAt, expiresAt: null, canPost: o.canPost === true, canModerate: o.canModerate === true };
         }
         const t = visibleGrants(ctx).find((g) => g.id === grantId);
         if (!t) return { error: 'No such assistant' };

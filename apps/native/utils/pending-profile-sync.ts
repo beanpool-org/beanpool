@@ -58,6 +58,12 @@ export interface PendingProfileChange {
     avatar?: string;
     /** A name the community refused for good: the retry sends none, and the community keeps the one it holds. */
     refusedCallsign?: string;
+    /**
+     * Holds nothing but a copy the member asked for (Profile S4): the retry publishes the name and the photo kept here and
+     * NOTHING from this community's row, whose bio and contact may be older than the community's own. Set only by a copy
+     * made where nothing else waited; any other change kept here takes it off, so the row goes with that change.
+     */
+    chosenOnly?: true;
 }
 
 /** What a community answered when it refused a name for good: its status and its own sentence, if it gave one. */
@@ -102,12 +108,13 @@ async function readEntry(key: string, storage: PendingProfileStorage): Promise<P
     try {
         const parsed: unknown = JSON.parse((await storage.getItem(key)) ?? 'null');
         if (!parsed || typeof parsed !== 'object' || typeof (parsed as PendingProfileChange).publicKey !== 'string') return null;
-        const { publicKey, callsign, avatar, refusedCallsign } = parsed as PendingProfileChange;
+        const { publicKey, callsign, avatar, refusedCallsign, chosenOnly } = parsed as PendingProfileChange;
         return {
             publicKey,
             ...(typeof callsign === 'string' ? { callsign } : {}),
             ...(typeof avatar === 'string' ? { avatar } : {}),
             ...(typeof refusedCallsign === 'string' ? { refusedCallsign } : {}),
+            ...(chosenOnly === true ? { chosenOnly: true as const } : {}),
         };
     } catch {
         return null;
@@ -115,7 +122,8 @@ async function readEntry(key: string, storage: PendingProfileStorage): Promise<P
 }
 
 const sameEntry = (a: PendingProfileChange | null, b: PendingProfileChange | null) =>
-    a?.publicKey === b?.publicKey && a?.callsign === b?.callsign && a?.avatar === b?.avatar && a?.refusedCallsign === b?.refusedCallsign;
+    a?.publicKey === b?.publicKey && a?.callsign === b?.callsign && a?.avatar === b?.avatar && a?.refusedCallsign === b?.refusedCallsign
+    && a?.chosenOnly === b?.chosenOnly;
 
 /**
  * An older build's flag, moved to the community its anchor names, for `publicKey` (the account on the phone: Sign Out
@@ -166,12 +174,27 @@ export async function pendingProfileChange(community: string | null | undefined,
 /**
  * A Save that couldn't reach `community`: keep `change` for it, over what already waits there (a field left out keeps
  * the one waiting). Nothing is kept for an address that isn't plain, nor with no community: answers whether it was.
+ *
+ * `copy`: the change is a copy the member asked for from another community (Profile S4, utils/profile-copy.ts), so where
+ * nothing waited it is kept `chosenOnly`, and the retry publishes it and nothing of this community's row. Where a change
+ * already waits, that change stays as it is (a bio edit still goes with the row), and a change that is not a copy takes
+ * `chosenOnly` off whatever it finds.
  */
-export async function keepPendingProfileChange(community: string | null | undefined, publicKey: string, change: ProfileChange): Promise<boolean> {
+export async function keepPendingProfileChange(
+    community: string | null | undefined,
+    publicKey: string,
+    change: ProfileChange,
+    opts?: { copy?: boolean },
+): Promise<boolean> {
     const key = keyOf(community);
     if (!key || !publicKey) return false;
     const held = await pendingProfileChange(community, publicKey);
     const kept: PendingProfileChange = { ...(held ?? {}), publicKey };
+    if (opts?.copy) {
+        if (!held) kept.chosenOnly = true;
+    } else {
+        delete kept.chosenOnly;
+    }
     if (change.callsign) {
         kept.callsign = change.callsign;
         // A name the member gives now goes, whatever was refused before.
@@ -310,7 +333,11 @@ export async function pendingNameAccepted(community: string | null | undefined):
     await AsyncStorage.removeItem(refusalKeyOf(community)!);
     const entry = await readEntry(key, AsyncStorage);
     if (!entry || (entry.callsign === undefined && entry.refusedCallsign === undefined)) return;
-    const rest: PendingProfileChange = { publicKey: entry.publicKey, ...(entry.avatar !== undefined ? { avatar: entry.avatar } : {}) };
+    const rest: PendingProfileChange = {
+        publicKey: entry.publicKey,
+        ...(entry.avatar !== undefined ? { avatar: entry.avatar } : {}),
+        ...(entry.chosenOnly ? { chosenOnly: true as const } : {}),
+    };
     await AsyncStorage.setItem(key, JSON.stringify(rest));
 }
 
@@ -342,6 +369,7 @@ export async function pendingNameRefused(
     const rest: PendingProfileChange = {
         publicKey: onlyIf.publicKey,
         ...(onlyIf.avatar !== undefined ? { avatar: onlyIf.avatar } : {}),
+        ...(onlyIf.chosenOnly ? { chosenOnly: true as const } : {}),
         refusedCallsign: callsign,
     };
     await AsyncStorage.setItem(key, JSON.stringify(rest));

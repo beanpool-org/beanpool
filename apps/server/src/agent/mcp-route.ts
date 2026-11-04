@@ -38,7 +38,7 @@ import { logAddressTag } from '../log-address.js';
 import { clientLimiterKey, isTrustedProxy } from '../client-ip.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
-import { grantModerates, grantPosts, offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
+import { grantModerates, grantPosts, offersSuggestions, toolDescription, toolsFor, unlistedToolWords, type AgentGrant } from './tools.js';
 import { AGENT_CREATE_BODY_MAX } from './owner-posts.js';
 import { dropEveryPhotoLink } from './owner-photos.js';
 import { PROMPTS, promptText, welcomeInstructions, type WelcomeFacts } from './welcome.js';
@@ -161,7 +161,8 @@ export function agentGrantFrom(ctx: any): GrantCheck {
         if (r !== 'owner' && r !== 'admin') return { ok: false, status: 401, error: 'Invalid, revoked or expired token', grantId: g.id };
         return {
             ok: true,
-            grant: { id: g.id, name: g.clientName || 'AI assistant', member: g.member, role: r, via: 'oauth', createdAt: g.createdAt, expiresAt: null, canPost: g.canPost === true, canModerate: false },
+            // The consent page's ticks are the grant's; the role is the member's now, read here on every request (MCP-MODERATION S3).
+            grant: { id: g.id, name: g.clientName || 'AI assistant', member: g.member, role: r, via: 'oauth', createdAt: g.createdAt, expiresAt: null, canPost: g.canPost === true, canModerate: g.canModerate === true },
         };
     }
     if (!m || !looksLikeAutomationToken(m[1])) return { ok: false, status: 401, error: UNAUTHORISED };
@@ -239,7 +240,8 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
         const argNames = Object.keys(args).slice(0, 10).map((k) => k.slice(0, 40));
         if (!tool) {
             logger.info('AGENT', 'Assistant asked for a tool it does not have', { ...logBase, tool: String(name).slice(0, 60), args: argNames });
-            return { content: [{ type: 'text' as const, text: `There is no tool "${String(name).slice(0, 60)}" for this assistant.` }], isError: true };
+            // A tools list read before its member's role changed still names a tool: a few say in words why it is not this grant's now.
+            return { content: [{ type: 'text' as const, text: unlistedToolWords(String(name), grant) }], isError: true };
         }
         let out;
         try {

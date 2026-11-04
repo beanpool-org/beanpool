@@ -54,9 +54,10 @@ export async function stopPeekShare(id: string): Promise<void> {
     await request('POST', '/api/peek/stop', { id });
 }
 
-const ANDROID_PACKAGE = 'org.beanpool.pillar';
-const PLAY_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
-const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
+/** The app's public store listings (also the lobby's own-door app offer, lib/global-entry.ts openDoorAppDoors). */
+export const ANDROID_PACKAGE = 'org.beanpool.pillar';
+export const PLAY_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
+export const APP_STORE_URL = 'https://apps.apple.com/app/id6761870086';
 
 /**
  * The peek's phone doors, as the node's share page has them (apps/server routes/peek.ts peekPageLinks): on Android the

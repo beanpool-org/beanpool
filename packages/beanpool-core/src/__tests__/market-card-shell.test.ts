@@ -32,6 +32,10 @@ describe('the shell (§1.1)', () => {
         expect(MARKET_CARD_SHELL.floatingShadow).toEqual({ offsetY: 10, opacity: 0.15, blur: 20, elevation: 20 });
     });
 
+    it('sets the map pop-up 16 in from the screen, its ✕ 28 round and 8 in from the corner (slice M1)', () => {
+        expect(MARKET_CARD_SHELL.popUp).toEqual({ margin: 16, close: { size: 28, inset: 8, type: { size: 12, weight: 800 } } });
+    });
+
     it('gives each size its photo: 80 wide in the list, 4:3 cropped at 50% 33% in the grid, 32 with radius 8 in a compact row', () => {
         expect(MARKET_CARD_SHELL.photo.list).toEqual({ width: 80 });
         expect(MARKET_CARD_SHELL.photo.grid).toEqual({ aspectWidth: 4, aspectHeight: 3, cropX: 50, cropY: 33 });

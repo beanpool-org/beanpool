@@ -57,15 +57,36 @@ export const EVENT_ACCENT = '#7c3aed';
  * built by the same function at the phone's font scale market.tsx reads (gridTextBlock(fontScale)), so the two cannot differ.
  * Compact is the list card until slice C1.
  */
-type EventCardProps = {
+interface EventCardBaseProps {
     post: any;
     currentPubkey?: string | null;
     myLocation?: { lat: number; lng: number } | null;
-} & ({ viewMode?: 'list' | 'compact'; fontScale?: undefined } | { viewMode: 'grid'; fontScale: number });
+}
+
+/** The list card (and compact, until C1): on the Market, or as the map's pin card. */
+interface EventCardListProps extends EventCardBaseProps {
+    viewMode?: 'list' | 'compact';
+    fontScale?: undefined;
+    /**
+     * The map's pin card (components/MapPreviewCard.tsx, slice M1): this same card, floating over the map with the ✕ the pop-up
+     * draws over its top-right corner. Its press is the pop-up's (it closes as the event opens), it keeps the name the map's card
+     * has always had ("Open event: {title}", map-preview-opens-render), and its chip row stops short of the ✕.
+     */
+    popUp?: { onOpen: () => void };
+}
+
+/** The grid's tile. Never the map's pin card: `popUp` is the list card's alone, so the two never meet. */
+interface EventCardGridProps extends EventCardBaseProps {
+    viewMode: 'grid';
+    fontScale: number;
+    popUp?: undefined;
+}
+
+type EventCardProps = EventCardListProps | EventCardGridProps;
 
 const count = (n: unknown): number => Number(n ?? 0) || 0;
 
-export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale }: EventCardProps) {
+export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale, popUp }: EventCardProps) {
     const shell = useCardShell();
     const styles = useStyles(makeStyles);
     const gridBlock = useMemo(() => gridTextBlock(fontScale ?? 1), [fontScale]);
@@ -107,7 +128,8 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
         : t('Event: {title}, {when}', { title: post.title, when });
     const pinned = isPostPinned(post);
 
-    if (viewMode === 'grid') {
+    // A pin card (popUp) is always the list card, whatever else it is handed.
+    if (viewMode === 'grid' && !popUp) {
         // The tile's mark is the member's own answer, on the photo where a listing's price sits; a host's line and the counts
         // are the page's (§2.2). The date and the time each take a row, each kept whole (core eventTileWhen).
         const tileMark = hosting ? null : answer;
@@ -181,13 +203,16 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
         );
     }
 
+    // The map's name for its card; an event with no title is "Event", as the map's card has always read it (eventPinCard).
+    const named = popUp ? t('Open event: {title}', { title: post.title || t('Event') }) : label;
+
     return (
         <Pressable
-            style={[shell.card, shell.list]}
-            onPress={() => router.push(`/post/${post.id}`)}
+            style={[shell.card, shell.list, popUp && shell.floating]}
+            onPress={popUp ? popUp.onOpen : () => router.push(`/post/${post.id}`)}
             accessibilityRole="button"
-            accessibilityLabel={mark ? `${label}, ${mark}` : label}
-            testID={`event-card-${post.id}`}
+            accessibilityLabel={mark ? `${named}, ${mark}` : named}
+            testID={popUp ? 'map-preview-open' : `event-card-${post.id}`}
         >
             {/*
               * The host's photo in the list card's slot, exactly as the Offer card beside it draws its own (market.tsx list
@@ -206,7 +231,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                 tileBox={shell.listPhotoBox}
             />
             <View style={shell.listText}>
-                <View style={[shell.chipRow, styles.chipRow]}>
+                <View style={[shell.chipRow, styles.chipRow, popUp && shell.clearOfClose]}>
                     <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
                     {pinned && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
                     {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}

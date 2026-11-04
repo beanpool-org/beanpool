@@ -1,14 +1,14 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, useReducer } from 'react';
-import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, Pressable, Image as RNImage, Linking, DeviceEventEmitter, Animated, PixelRatio, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, Platform, Alert, TouchableOpacity, ScrollView, Pressable, Image as RNImage, Linking, DeviceEventEmitter, PixelRatio, Dimensions } from 'react-native';
 import * as Location from 'expo-location';
 import MapView, { Marker, PROVIDER_DEFAULT } from '../../components/Map';
 import { MapAreaRing } from '../../components/MapAreaRing';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { STACK_LIST_CLOSED, copyPriceLine, eventCopyOf, settleMapStop, stackDropped, stackRestWatch, stackShut, stackTapped, t, upperCase, type StackListState } from '@beanpool/core';
+import { STACK_LIST_CLOSED, eventCopyOf, settleMapStop, stackDropped, stackRestWatch, stackShut, stackTapped, t, type StackListState } from '@beanpool/core';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MemberAvatar } from '../../components/MemberAvatar';
+import { MapPreviewCard } from '../../components/MapPreviewCard';
 import { getPosts } from '../../utils/db';
-import { CurrencyDisplay, useCurrencyString } from '../../components/CurrencyDisplay';
+import { useCurrencyString } from '../../components/CurrencyDisplay';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -17,7 +17,7 @@ import { FilterChipPicker } from '../../components/FilterChipPicker';
 import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR, EVENT_PIN } from '../../components/UnifiedMapPin';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EVENT_ACCENT } from '../../components/EventCard';
-import { eventPinCard, type EventWindow } from '../../utils/events';
+import { type EventWindow } from '../../utils/events';
 import {
     mapSecondRow, visibleMarketPins, visibleEventPins, mapFiltersActive, categoryChipLabel, categoryPanelReducer,
     eventFitCoordinates, eventFitPadding, type MapTypeFilter,
@@ -250,27 +250,6 @@ export default function MapScreen() {
         // Map Preview Card
         previewCardWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 150, justifyContent: 'flex-end' },
         previewCardOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
-        eventPreviewCard: { borderLeftWidth: 4, borderLeftColor: EVENT_ACCENT },
-        eventPreviewBody: { flex: 1, padding: 16, paddingRight: 48 },
-        eventPreviewWhenRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
-        eventPreviewWhen: { flexShrink: 1, fontSize: 17, fontWeight: '800', color: colors.event.ink },
-        eventPreviewBadge: { fontSize: 11, fontWeight: '800', color: colors.event.ink, borderWidth: 1, borderColor: EVENT_ACCENT, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
-        eventPreviewMeta: { fontSize: 14, color: colors.text.secondary, marginTop: 2 },
-        previewCard: { backgroundColor: colors.surface.card, margin: 16, borderRadius: 24, padding: 0, flexDirection: 'row', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 20, overflow: 'hidden' },
-        previewTap: { flex: 1, flexDirection: 'row' },
-        previewThumb: { width: 125, height: '100%', minHeight: 125, borderTopLeftRadius: 24, borderBottomLeftRadius: 24, borderTopRightRadius: 0, borderBottomRightRadius: 0, backgroundColor: colors.surface.subtle },
-        previewThumbPlaceholder: { width: 125, height: '100%', minHeight: 125, borderTopLeftRadius: 24, borderBottomLeftRadius: 24, borderTopRightRadius: 0, borderBottomRightRadius: 0, justifyContent: 'center', alignItems: 'center' },
-        previewInfo: { flex: 1, padding: 14, justifyContent: 'center' },
-        previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingRight: 32 },
-        previewCategory: { fontSize: 12, fontWeight: '700', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5, flex: 1 },
-        previewCredits: { fontSize: 14, fontWeight: '800', color: colors.brand.primary },
-        previewTitle: { fontSize: 18, fontWeight: '800', color: colors.text.heading, marginBottom: 4 },
-        previewCopyLine: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 12 },
-        previewAuthor: { fontSize: 14, fontWeight: '500', color: colors.text.secondary },
-        previewActionBtn: { paddingVertical: 7, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
-        previewActionText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-        previewClose: { position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: 14, backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' },
-        previewCloseText: { fontSize: 12, fontWeight: '800', color: colors.text.secondary },
 
         // FAB
         fab: { position: 'absolute', bottom: 32, right: 24, backgroundColor: colors.action.fab, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 8, zIndex: 100 },
@@ -718,127 +697,21 @@ export default function MapScreen() {
                 </View>
             )}
 
-            {/* An event's pin card: date and time first, the place and how many are going. An event is not a
-                listing — no category and no bean amount (events round 2, B1). */}
-            {selectedPostPreview && selectedPostPreview.type === 'event' && (() => {
-                const card = eventPinCard(selectedPostPreview);
-                return (
-                    <SafeAreaView style={styles.previewCardWrapper} pointerEvents="box-none">
-                        <Pressable accessibilityRole="button" accessibilityLabel={t('Close preview')} style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
-                        <Animated.View style={[styles.previewCard, styles.eventPreviewCard]}>
-                            <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel={t('Open event: {title}', { title: card.title })}
-                                testID="map-preview-open"
-                                style={styles.eventPreviewBody}
-                                onPress={() => {
-                                    setSelectedPostPreview(null);
-                                    router.push(`/post/${selectedPostPreview.id}`);
-                                }}
-                            >
-                                <View style={styles.eventPreviewWhenRow}>
-                                    <Text style={styles.eventPreviewWhen} numberOfLines={2}>{card.when}</Text>
-                                    {card.badge && <Text style={styles.eventPreviewBadge} numberOfLines={1}>{card.badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>}
-                                </View>
-                                <Text style={styles.previewTitle} numberOfLines={2}>{card.title}</Text>
-                                {card.place && <Text style={styles.eventPreviewMeta} numberOfLines={1}>📍 {card.place}</Text>}
-                                <Text style={styles.eventPreviewMeta} numberOfLines={1}>👥 {card.going}</Text>
-                                {/* The button keeps its look and its press; the card around it is the one thing a screen reader meets. */}
-                                <Pressable
-                                    accessible={false}
-                                    style={[styles.previewActionBtn, { backgroundColor: EVENT_ACCENT, marginTop: 10 }]}
-                                    onPress={() => {
-                                        setSelectedPostPreview(null);
-                                        router.push(`/post/${selectedPostPreview.id}`);
-                                    }}
-                                >
-                                    <Text style={styles.previewActionText}>{t('View event')}</Text>
-                                </Pressable>
-                            </Pressable>
-                            <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
-                                <Text style={styles.previewCloseText}>✕</Text>
-                            </Pressable>
-                        </Animated.View>
-                    </SafeAreaView>
-                );
-            })()}
-
-            {/* Map Preview Card (Bottom Sheet style) */}
-            {selectedPostPreview && selectedPostPreview.type !== 'event' && (
+            {/* A pin's card: the Market's list card from the style box with a ✕ (components/MapPreviewCard.tsx; Marty, 4 Nov:
+                "look at the similar market place offer"). The whole card opens the item; the ✕ is its one other control. */}
+            {selectedPostPreview && (
                 <SafeAreaView style={styles.previewCardWrapper} pointerEvents="box-none">
                     <Pressable accessibilityRole="button" accessibilityLabel={t('Close preview')} style={styles.previewCardOverlay} onPress={() => setSelectedPostPreview(null)} />
-                    <Animated.View style={styles.previewCard}>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Open listing: {title}', { title: selectedPostPreview.title })}
-                            testID="map-preview-open"
-                            style={styles.previewTap}
-                            onPress={() => {
-                                setSelectedPostPreview(null);
-                                router.push(`/post/${selectedPostPreview.id}`);
-                            }}
-                        >
-                        {selectedPostPreview.photos && selectedPostPreview.photos.length > 0 && 
-                         typeof selectedPostPreview.photos[0] === 'string' &&
-                         selectedPostPreview.photos[0].trim() !== '' &&
-                         selectedPostPreview.photos[0] !== 'null' &&
-                         selectedPostPreview.photos[0] !== 'undefined' ? (
-                            <RNImage source={{ uri: selectedPostPreview.photos[0] }} style={styles.previewThumb} />
-                        ) : (
-                            <View style={[styles.previewThumbPlaceholder, { backgroundColor: selectedPostPreview.type === 'offer' ? colors.market.offer.bg : colors.market.need.bg }]}>
-                                <Text style={{ fontSize: 36, color: '#000', lineHeight: 44, textAlign: 'center' }}>{categoryEmoji(selectedPostPreview.category)}</Text>
-                            </View>
-                        )}
-                        <View style={styles.previewInfo}>
-                            <View style={styles.previewHeader}>
-                                <Text style={styles.previewCategory} numberOfLines={1}>
-                                    {upperCase(categoryLabel(selectedPostPreview.category))}
-                                </Text>
-                                {showsBeans && !previewCopy && (
-                                <CurrencyDisplay
-                                    asView={true}
-                                    style={styles.previewCredits}
-                                    amount={selectedPostPreview.credits}
-                                />
-                                )}
-                            </View>
-                            <Text style={styles.previewTitle} numberOfLines={1}>
-                                {selectedPostPreview.title}
-                            </Text>
-                            {previewCopy ? (
-                                <Text style={styles.previewCopyLine} testID="map-preview-copy-line">{copyPriceLine(previewCopy)}</Text>
-                            ) : (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }} testID="map-preview-author">
-                                    <MemberAvatar 
-                                        avatarUrl={selectedPostPreview.author_avatar}
-                                        pubkey={selectedPostPreview.author_pubkey || ''}
-                                        callsign={selectedPostPreview.author_callsign || '?'}
-                                        size={20}
-                                    />
-                                    <Text style={[styles.previewAuthor, { color: colors.brand.primary }]} numberOfLines={1}>
-                                        {selectedPostPreview.author_energy_cycled && selectedPostPreview.author_energy_cycled >= 10000
-                                            ? t('{name} ✨ Elder', { name: selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown') })
-                                            : selectedPostPreview.author_callsign || selectedPostPreview.author_pubkey?.slice(0, 6) || t('Unknown')}
-                                    </Text>
-                                </View>
-                            )}
-                            {/* The button keeps its look and its press; the card around it is the one thing a screen reader meets. */}
-                            <Pressable
-                                accessible={false}
-                                style={[styles.previewActionBtn, { backgroundColor: selectedPostPreview.type === 'offer' ? colors.brand.fill : colors.action.fab }]}
-                                onPress={() => {
-                                    setSelectedPostPreview(null);
-                                    router.push(`/post/${selectedPostPreview.id}`);
-                                }}
-                            >
-                                <Text style={styles.previewActionText}>{t('View Details')}</Text>
-                            </Pressable>
-                        </View>
-                        </Pressable>
-                        <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={styles.previewClose} onPress={() => setSelectedPostPreview(null)} hitSlop={15}>
-                            <Text style={styles.previewCloseText}>✕</Text>
-                        </Pressable>
-                    </Animated.View>
+                    <MapPreviewCard
+                        post={selectedPostPreview}
+                        copy={previewCopy}
+                        showsBeans={showsBeans}
+                        onOpen={() => {
+                            setSelectedPostPreview(null);
+                            router.push(`/post/${selectedPostPreview.id}`);
+                        }}
+                        onClose={() => setSelectedPostPreview(null)}
+                    />
                 </SafeAreaView>
             )}
 

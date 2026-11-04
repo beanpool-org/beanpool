@@ -28,8 +28,12 @@ const GROUND = 'bg-[var(--bg-card)]';
  */
 const PULSE = 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.15)]';
 
-/** An Elder's card: a 3 px gold left border (§1.1 variants). */
-const ELDER = 'border-l-[3px] border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]';
+/**
+ * An Elder's card: a 3 px gold left border (§1.1 variants), in both schemes. `dark:border-l-amber-400` is not a repeat:
+ * a `dark:` class comes later in the stylesheet than a plain one of the same weight, so without it `BORDER`'s
+ * `dark:border-nature-800` (every side) turns the left side green-grey in dark (#2873: measured rgb(67, 78, 67)).
+ */
+const ELDER = 'border-l-[3px] border-l-amber-400 dark:border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]';
 
 /** The list card's outer box. A Pulse card has its own border; an Elder's adds its left border. */
 export function listCard({ pulse = false, elder = false }: { pulse?: boolean; elder?: boolean } = {}): string {
@@ -52,8 +56,12 @@ export const LIST_TEXT = 'flex-1 min-w-0 flex flex-col gap-1 p-3';
 /**
  * §1.2 The one chip: 10/800, 6 across by 2 down, corners 6, one line, never shrunk. Capitals come from the words (core's
  * upperCase() or the key itself), never from a class a language cannot follow.
+ *
+ * Never past its row either: a chip whose words are wider than the whole row (a long category, "📜 Mindset & Philosophy"
+ * beside the price at 320 x 1.3, longer in German, Malayalam or Tamil) stays one line and ends in an ellipsis at the row's
+ * edge, instead of running out under the card's edge and being cut there (#2873). A chip that fits is drawn whole.
  */
-export const CHIP = 'inline-block shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md text-[10px] font-extrabold leading-normal tracking-wide';
+export const CHIP = 'inline-block shrink-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis px-1.5 py-0.5 rounded-md text-[10px] font-extrabold leading-normal tracking-wide';
 
 /** The same chip for a sentence (the group lock, "🔒 Only {group} can see this"): it wraps inside the card, never past it. */
 export const CHIP_SENTENCE = 'inline-block min-w-0 max-w-full whitespace-normal break-words px-1.5 py-0.5 rounded-md text-[10px] font-extrabold leading-normal tracking-wide';

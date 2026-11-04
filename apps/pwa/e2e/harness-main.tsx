@@ -12,6 +12,7 @@
 import { createRoot } from 'react-dom/client';
 import { MarketplacePage } from '../src/pages/MarketplacePage';
 import { useTheme } from '../src/lib/useTheme';
+import { startLanguage } from '../src/lib/language';
 import { IDENTITY } from './fixtures.mjs';
 import '../src/index.css';
 
@@ -20,4 +21,5 @@ function Harness() {
     return <MarketplacePage identity={IDENTITY as never} isMember={true} />;
 }
 
-createRoot(document.getElementById('root')!).render(<Harness />);
+// The language as the app starts it (main.tsx): `?lang=de` draws the Market in German. Without one, English, as before.
+startLanguage().finally(() => createRoot(document.getElementById('root')!).render(<Harness />));

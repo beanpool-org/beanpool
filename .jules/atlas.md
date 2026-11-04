@@ -299,3 +299,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `checkRecoveryCodeApi` in `apps/manager/src/lib/node-client.ts` was untested directly.
 **Learning:** Testing `checkRecoveryCodeApi` verified matching recovery code response parsing, non-matching code handling (`matches: false, codeId: null`), typo status 400 responses (`typo: true` with error message), and unexpected server error rethrowing.
 **Action:** Continue identifying helper functions in `apps/manager/src/lib/node-client.ts` or other utilities for direct unit test coverage.
+
+## 2026-11-05 - [manager tests] ChangesLog component unit tests
+**Gap:** `ChangesLog` component in `apps/manager/src/components/modules/ChangesLog.tsx` was untested.
+**Learning:** `ShapeLogLine` requires `id: string` and string literal union `kept: 'community_settings_log' | 'known_floor_log'`. Testing verified empty log fallback text, actor resolution, core settings formatting (`core.lock`, `core.unlock`, advice lines), setting change transitions, and the `limit` display cap.
+**Action:** Continue identifying untested UI components or helper modules across `apps/manager/src/components/modules/`.

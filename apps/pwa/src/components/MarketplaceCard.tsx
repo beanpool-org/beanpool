@@ -58,9 +58,7 @@ interface Props {
     remoteNode?: string;
     onTrade?: (post: MarketplacePost) => void;
     viewMode?: 'grid' | 'list' | 'compact';
-    onOpenProfile?: (pubkey: string) => void;
     isOwnPost?: boolean;
-    onPhotoClick?: (photos: string[], initialIndex: number, e: React.MouseEvent) => void;
     /** How far the listing is (km), as the node measured it from the point the Market read from; none, no distance. */
     distanceKm?: number | null;
     /**
@@ -76,7 +74,7 @@ interface Props {
     dealChip?: ListingChip | null;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick, distanceKm, beansMarked = false, dealChip = null }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', isOwnPost, distanceKm, beansMarked = false, dealChip = null }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -116,8 +114,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             />
         </>
     );
-    // Only actual listing photos should open the zoom lightbox; shop banner is card branding fallback
-    const photosToZoom = firstPhoto ? post.photos! : [];
+    // The photo is part of the card: a tap on it opens the listing, as on the phone (Marty's standing rule, small-cards-open-the-item).
+    // The enlarge lives on the listing's own page, never on a card (no button, so the card stays one element).
     // A member's copy on the global community: where it is from and its price there, in words, where its author would be.
     const copy = eventCopyOf(post);
     // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`). A copy's `credits`
@@ -286,30 +284,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             >
                 {/* Left Thumbnail (80px) */}
                 <div className="w-20 h-20 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
-                    {photosToZoom.length > 0 && displayImage ? (
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                if (onPhotoClick) {
-                                    e.stopPropagation();
-                                    onPhotoClick(photosToZoom, 0, e);
-                                }
-                            }}
-                            onKeyDown={(e) => {
-                                if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    onPhotoClick(photosToZoom, 0, e as any);
-                                }
-                            }}
-                            aria-label={t('View enlarged photo: {title}', { title: post.title })}
-                            className={`w-full h-full block rounded-xl overflow-hidden ${
-                                onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
-                            }`}
-                        >
-                            {cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />)}
-                        </button>
-                    ) : displayImage ? (
+                    {displayImage ? (
                         cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />)
                     ) : (
                         <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
@@ -390,7 +365,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         mode="full"
                         showTier={!beansMarked}
                         isFounding={!beansMarked && !!post.authorFoundingNeeded}
-                        onOpenProfile={onOpenProfile}
                     />}
                 </div>
                 
@@ -415,30 +389,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         >
             {/* 4:3 Media Box at Card Top (edge to edge, radius 14) */}
             <div className="relative w-full aspect-[4/3] overflow-hidden">
-                {photosToZoom.length > 0 && displayImage ? (
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            if (onPhotoClick) {
-                                e.stopPropagation();
-                                onPhotoClick(photosToZoom, 0, e);
-                            }
-                        }}
-                        onKeyDown={(e) => {
-                            if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                onPhotoClick(photosToZoom, 0, e as any);
-                            }
-                        }}
-                        aria-label={t('View enlarged photo: {title}', { title: post.title })}
-                        className={`w-full h-full block overflow-hidden ${
-                            onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
-                        }`}
-                    >
-                        {cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="grid" />, GRID_CROP)}
-                    </button>
-                ) : displayImage ? (
+                {displayImage ? (
                     cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="grid" />, GRID_CROP)
                 ) : (
                     <CategoryTile
@@ -510,7 +461,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     mode="compact"
                     showTier={!beansMarked}
                     isFounding={!beansMarked && !!post.authorFoundingNeeded}
-                    onOpenProfile={onOpenProfile}
                 />}
 
                 {pinnedChip && (

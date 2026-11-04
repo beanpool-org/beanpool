@@ -18,7 +18,10 @@ interface PostAuthorTrustProps {
     avatarUrl?: string | null;
     /** 'compact' = grid cards, 'full' = list cards */
     mode?: 'compact' | 'full';
-    /** Whether to show navigation to public profile */
+    /**
+     * Whether a tap on the chip opens the author's profile. Off by default: a chip sits on a small card, and a tap anywhere
+     * on a small card opens the ITEM, never its owner (Marty, 4 Nov). The profile opens from the item's own screen.
+     */
     navigable?: boolean;
     /** Whether author needs a founding trade (no prior trades completed) */
     isFounding?: boolean;
@@ -33,7 +36,7 @@ interface PostAuthorTrustProps {
  * Hybrid Trust Display: Tier Badge + Star Rating / Founding Trade indicator
  * Tier badge shows unless `showTier` is false. Star rating shows when count > 0; otherwise founding badge shows if isFounding is true.
  */
-export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl, mode = 'full', navigable = true, isFounding = false, showTier = true }: PostAuthorTrustProps) {
+export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl, mode = 'full', navigable = false, isFounding = false, showTier = true }: PostAuthorTrustProps) {
     const [ratingInfo, setRatingInfo] = useState<{ average: number; count: number } | null>(null);
     const tier = getTrustTier(energyCycled);
     const { colors } = useTheme();

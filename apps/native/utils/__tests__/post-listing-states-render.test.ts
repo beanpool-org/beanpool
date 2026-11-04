@@ -650,3 +650,16 @@ describe("a member's copy on the global community, on the listing's page (slice 
         expect(host.textContent).not.toContain('Shown on the global community');
     });
 });
+
+// The person on an item's own screen is where their profile opens (Marty, 4 Nov 2026: "Once they are in the item and then they
+// click on the person that is a good time to go to the profile"). The small cards that lead here open the listing and never its
+// owner (cards-open-item-render.test.ts, map-preview-opens-render.test.ts).
+describe("the listing's own page: the person on it opens their profile", () => {
+    beforeEach(() => { look.theme = 'light'; });
+
+    it('"Posted by" is a button, and a tap on it opens the poster\'s profile', async () => {
+        await open(listing({ repeatable: 0 }));
+        await press(host, 'POSTED BY');
+        expect(nav.to).toContainEqual({ pathname: '/public-profile', params: { publicKey: 'damo-key', callsign: 'Damo' } });
+    });
+});

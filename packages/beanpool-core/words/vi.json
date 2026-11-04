@@ -1914,5 +1914,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} ở một cộng đồng khác · Bạn không thể mua hay nhận mục này ở đây.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} tại {community} · Bạn chưa thể mua hay nhận mục này cho đến khi {community} chào đón bạn.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 Xem qua cộng đồng toàn cầu"
+  "🌍 Look around the global community": "🌍 Xem qua cộng đồng toàn cầu",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Một bồi thẩm đoàn mà bạn được chọn vào đang chờ câu trả lời của bạn. Hãy trả lời trong vòng một ngày, nếu không chỗ của bạn sẽ chuyển cho thành viên tiếp theo được chọn.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "Một bồi thẩm đoàn mà bạn tham gia sẽ đóng sau khoảng một ngày. Hãy mở BeanPool để bỏ phiếu.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "Thành viên mà bồi thẩm đoàn của bạn đang quyết định về đã trả lời vụ việc. Hãy mở BeanPool để đọc.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "Bạn được chọn vào một bồi thẩm đoàn trong cộng đồng của mình, và cuộc bỏ phiếu sẽ đóng sau chưa đầy hai ngày. Hãy mở BeanPool để tham gia hoặc rút lui.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "Bạn được chọn vào một bồi thẩm đoàn trong cộng đồng của mình. Hãy mở BeanPool trong vòng ba ngày để tham gia hoặc rút lui."
 }

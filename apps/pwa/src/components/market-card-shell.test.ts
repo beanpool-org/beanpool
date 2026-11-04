@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url';
 import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, type CardType } from '@beanpool/core';
-import { CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, listCard } from './market-card-shell';
+import { CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, listCard } from './market-card-shell';
 
 const classes = (s: string) => s.split(/\s+/).filter(Boolean);
 
@@ -175,8 +175,25 @@ describe('the web style box holds core\'s numbers', () => {
         expect(LIST_BEAN_PX).toBe(14);
     });
 
+    it('the map pop-up (M1): the card\'s corners and core\'s floating shadow; a ✕ of 44 to tap, 28 to see, kept clear of the first row', () => {
+        expect(radius(POP_UP)).toBe(MARKET_CARD_SHELL.radius);
+        const shadow = classes(POP_UP).find(c => c.startsWith('shadow-['))?.match(/^shadow-\[0_(\d+)px_(\d+)px_rgba\(0,0,0,([\d.]+)\)\]$/);
+        expect(shadow).toBeTruthy();
+        const { offsetY, blur, opacity } = MARKET_CARD_SHELL.floatingShadow;
+        expect([Number(shadow![1]), Number(shadow![2]), Number(shadow![3])]).toEqual([offsetY, blur, opacity]);
+        expect(classes(POP_UP_CLOSE)).toEqual(expect.arrayContaining(['absolute', 'top-0', 'end-0', 'min-w-[44px]', 'min-h-[44px]', 'focus-visible:ring-2']));
+        // Nothing holds the target under 44.
+        expect(classes(POP_UP_CLOSE).filter(c => /^(w|h|max-w|max-h)-/.test(c))).toEqual([]);
+        expect(spacing(POP_UP_CLOSE_DOT, 'w')).toBe(28);
+        expect(spacing(POP_UP_CLOSE_DOT, 'h')).toBe(28);
+        // The circle's near edge is its inset (p-1.5) plus 28 from the card's end; the first row stops at the text's padding
+        // (12) plus the room: the room must reach past the circle.
+        expect(MARKET_CARD_SHELL.textPadding + spacing(POP_UP_CLOSE_ROOM, 'pe')!).toBeGreaterThanOrEqual(spacing(POP_UP_CLOSE, 'p')! + 28);
+    });
+
     it('every colour is core\'s role or the card token: no raw violet, purple, blue or nature-950', () => {
         const all = [listCard(), listCard({ elder: true }), listCard({ pulse: true }), CHIP, CHIP_SENTENCE, LIST_PHOTO, LIST_TEXT,
+            POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT,
             ...Object.values(CHIP_TONE), ...Object.values(LIST_TYPE), ...Object.values(CARD_INK)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
         for (const tone of Object.values(CHIP_TONE)) expect(tone).toMatch(/^bg-bp-[a-z-]+-tint text-bp-[a-z-]+-ink$/);

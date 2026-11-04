@@ -37,7 +37,7 @@ import { AuthorCard, useMemberRatings } from './AuthorCard';
 import { CategoryTile } from './CategoryTile';
 import { PostTagChips } from './PostTagChips';
 import { ListPhoto } from './ListPhoto';
-import { CARD_INK, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, listCard } from './market-card-shell';
+import { CARD_INK, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, POP_UP_CLOSE_ROOM, chip, listCard } from './market-card-shell';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -132,11 +132,15 @@ function StateBadge({ post, box = false }: { post: MarketplacePost; box?: boolea
  * which keeps its whole line (Marty's Byron screenshot, 4 Nov 2026: the date wrapped to two lines on a pinned card).
  * No chip, no row.
  */
-function EventChips({ post, withType = false, box = false }: { post: MarketplacePost; withType?: boolean; box?: boolean }) {
+function EventChips({ post, withType = false, box = false, endRoom = false }: {
+    post: MarketplacePost; withType?: boolean; box?: boolean;
+    /** The map's pop-up: room at the row's end for the pop-up's ✕. */
+    endRoom?: boolean;
+}) {
     const pinned = pinLive(post as any);
     if (!withType && !pinned && !eventStateOf(post)) return null;
     return (
-        <span data-testid="event-chips" className="flex flex-wrap items-center gap-1 min-w-0 w-full">
+        <span data-testid="event-chips" className={`flex flex-wrap items-center gap-1 min-w-0 w-full${endRoom ? ` ${POP_UP_CLOSE_ROOM}` : ''}`}>
             {withType && (
                 <span data-testid="event-type-chip" className={box ? chip('event') : `${CHIP} bg-bp-tile-event-tint text-bp-tile-event-ink`}>
                     {upperCase(t('EVENT', undefined, 'event category tile label'))}
@@ -350,9 +354,14 @@ interface EventCardProps {
      * distance only from a point the visitor shared, in whole km, since the node places the event at its area's centre.
      */
     visitor?: boolean;
+    /**
+     * The map's pop-up (DESIGN-card-style-box-fable.md §2, slice M1): the list card with the pop-up's ✕ in its top end
+     * corner, which the map draws beside the card. The chip row keeps room for it. List view only.
+     */
+    popUp?: boolean;
 }
 
-export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, rsvpOnCard = false, visitor = false }: EventCardProps) {
+export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, rsvpOnCard = false, visitor = false, popUp = false }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
     const copy = eventCopyOf(p);
@@ -408,7 +417,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                         />
                     </span>
                     <span className={LIST_TEXT}>
-                        <EventChips post={p} withType box />
+                        <EventChips post={p} withType box endRoom={popUp} />
                         <EventWhen post={p} testId="event-when" className={`${LIST_TYPE.loud} ${CARD_INK.event}`} repeatClassName={CARD_INK.event} />
                         <span dir="auto" className={`w-full min-w-0 break-words line-clamp-2 ${LIST_TYPE.second} ${CARD_INK.title}`}>
                             {p.title}
@@ -441,7 +450,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                         )}
                     </span>
                 </button>
-                {/* Only the map's preview asks for the buttons, and it is a grid card; here they keep a row of their own under the card's lines. */}
+                {/* Only the map's pop-up asks for the buttons (and it is this list card); they keep a row of their own under the card's lines. */}
                 {rsvpOnCard && !visitor && !copy && <div className="basis-full px-3 pb-3"><RsvpButtons rsvp={rsvp} /></div>}
                 {rsvpOnCard && rsvp.error && (
                     <p role="alert" className="basis-full m-0 px-3 pb-3 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>

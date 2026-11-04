@@ -5,7 +5,7 @@
  * Stores latest state in localStorage for offline read-only access.
  */
 
-import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
+import { createDeferredSync, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
 import { routeLivePostChange } from './live-posts';
@@ -20,6 +20,7 @@ import {
     clearSyncCursor,
     computeUpdatedAfter,
     SYNC_CURSOR_KEY,
+    lastSyncStartedAt,
 } from './sync-coordinator';
 
 export {
@@ -68,6 +69,14 @@ let visitorSocket = false;
 /** Whether the socket being opened carries the member's signature: only such a socket gets `new_message`. */
 let signedSocket = false;
 const visitorDoorbells = createVisitorDoorbells({ read: () => requestSync() });
+/**
+ * The one refresh a burst of wide doorbells owes (@beanpool/core createDeferredSync): a random 0–5 minutes on, dropped
+ * when a refresh starts meanwhile, and when the socket is replaced (its opening refreshes).
+ */
+const deferredSync = createDeferredSync({
+    run: () => { requestSync().catch(err => console.warn('[WS Sync] Deferred sync error:', err)); },
+    lastSyncStartedAt,
+});
 let isConnecting = false;
 /** Bumped by reconnectToAnchor: a connect still reading the identity from before it opens nothing. */
 let connectGeneration = 0;
@@ -314,6 +323,13 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
                     visitorDoorbells.ring();
                     return;
                 }
+                // An open group made or changed, someone else's card, a removed account: sent to every open tab at once
+                // (@beanpool/core isWideDoorbell). Each tab's refresh of every open view waits its random turn, one for a
+                // burst, as the phone's sync does. (An announcement never got here: it is shown above.)
+                if (isWideDoorbell(data, memberPubkey)) {
+                    deferredSync.ask();
+                    return;
+                }
                 requestSync().catch(err => {
                     console.warn('[WS Sync] Broadcast sync error:', err);
                 });
@@ -428,6 +444,8 @@ export function reconnectToAnchor(): void {
     }
     // The member's socket opens with a sync of its own: nothing the lobby held back is read on its behalf later.
     visitorDoorbells.reset();
+    // Nor what a wide doorbell was still owed.
+    deferredSync.cancel();
     connectGeneration++;
     isConnecting = false;
     reconnectAttempt = 0;
@@ -580,6 +598,7 @@ export function resetSyncForTest(): void {
     visitorSocket = false;
     signedSocket = false;
     visitorDoorbells.reset();
+    deferredSync.cancel();
     isConnecting = false;
     currentUrl = null;
     listeners = [];
@@ -590,6 +609,10 @@ export function resetSyncForTest(): void {
 
 export function getWatchdogArmedForTest(): boolean {
     return watchdogArmed;
+}
+
+export function deferredSyncPendingForTest(): boolean {
+    return deferredSync.isPending();
 }
 
 export function getLastPongAtForTest(): number | null {

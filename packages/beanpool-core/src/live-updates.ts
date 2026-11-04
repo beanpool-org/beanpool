@@ -194,3 +194,105 @@ export function messageBackstopDue(lastReadAt: number, now: number, alive: boole
     if (!alive) return true;
     return now - lastReadAt >= MESSAGE_BACKSTOP_ALIVE_MS - MESSAGE_BACKSTOP_TICK_MS / 2;
 }
+
+// ===================== WIDE DOORBELLS =====================
+
+/**
+ * The events a node sends to every member socket (or to many) that change something only a few screens show: an open
+ * group made or changed, a member's card (an owner's action, a vouch, a badge, a holiday), a removed account, an
+ * announcement. Every phone answered each with its whole catch-up sync at once, the area's listings included, so one
+ * open-group create on the global node sent p95 to 9.3 s at 100 open phones and to 30 s timeouts at 200
+ * (scratch/capacity-1104/REPORT.md, bottleneck 2). The apps now show what the event carries at once (the announcement;
+ * the screens that show groups, a card or Home read that one thing again), and any whole sync the event still needs
+ * waits a random 0–5 minutes, one for a burst (createDeferredSync), and is dropped when a sync starts meanwhile.
+ *
+ * `profile_updated` or `user_pruned` naming the member themself is not wide: that change is theirs (their standing,
+ * their listings paused), and one phone syncing at once is no crowd.
+ */
+export const WIDE_DOORBELL_TYPES: ReadonlySet<string> = new Set([
+    'group_created', 'group_updated', 'profile_updated', 'user_pruned', 'system_announcement',
+]);
+
+/** The deferred sync waits a uniformly random 0–5 minutes: the apps' own periodic sync's period. */
+export const WIDE_SYNC_SPREAD_MS = 300_000;
+
+/** The random wait before the sync a wide doorbell still needs. */
+export function wideSyncDelayMs(random: () => number = Math.random): number {
+    return Math.floor(random() * WIDE_SYNC_SPREAD_MS);
+}
+
+/**
+ * Whether a live-feed event is a wide doorbell for the member whose socket it came on (`selfKey`, null when the socket
+ * is not signed by one). A card change or removal naming that member is theirs, not wide; one naming nobody (the bare
+ * doorbell a visitor's or a suspended member's socket gets) is wide, since it names no one in particular.
+ *
+ * A group made or changed is wide only when the group it carries is open: an open group's is the one the node sends to
+ * every socket (state-engine.ts createGroup, updateGroup, updateGroupPolicy). A private group's goes to its own members
+ * alone (its rename, photo or policy, its closing by vote, someone seated in a place circle, which stays invite-only),
+ * so it is no crowd and its refresh stays immediate. Every group event the node sends carries its group (groupAsListed);
+ * one that carried none would name no group in particular, so it is wide, as a bare card doorbell is.
+ */
+export function isWideDoorbell(event: unknown, selfKey: string | null | undefined): boolean {
+    if (!isObject(event) || typeof event.type !== 'string' || !WIDE_DOORBELL_TYPES.has(event.type)) return false;
+    if ((event.type === 'group_created' || event.type === 'group_updated') && isObject(event.group)) {
+        return event.group.joinPolicy === 'open';
+    }
+    if (event.type === 'profile_updated' || event.type === 'user_pruned') {
+        const named = typeof event.publicKey === 'string' && event.publicKey ? event.publicKey : null;
+        if (named !== null && !!selfKey && named === selfKey) return false;
+    }
+    return true;
+}
+
+export interface DeferredSyncDeps {
+    /** Starts the app's catch-up sync (its own queue coalesces it with any already running). */
+    run: () => void;
+    /** When the app's last catch-up sync started, in ms (0 when none has): one that started after a doorbell read its change. */
+    lastSyncStartedAt: () => number;
+    now?: () => number;
+    random?: () => number;
+    setTimer?: (fn: () => void, ms: number) => unknown;
+    clearTimer?: (handle: unknown) => void;
+}
+
+export interface DeferredSync {
+    /** A wide doorbell rang that still needs a sync: one is set for a random 0–5 minutes on, unless one is set already. */
+    ask(): void;
+    /** The socket closed: its reopening runs a catch-up sync of its own, which covers what was asked. */
+    cancel(): void;
+    isPending(): boolean;
+}
+
+/**
+ * The one deferred sync for a burst of wide doorbells. However many ring, at most one timer is set; when it fires it
+ * syncs only if no sync has started since the last doorbell (that sync read everything changed before it), so a
+ * periodic or foreground sync in between takes its place. A doorbell after that sync started is still owed one.
+ */
+export function createDeferredSync(deps: DeferredSyncDeps): DeferredSync {
+    // Read when used, not when made: a fake clock or random installed after this was made still counts.
+    const now = deps.now ?? (() => Date.now());
+    const random = deps.random ?? (() => Math.random());
+    const setTimer = deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+    const clearTimer = deps.clearTimer ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>));
+    let timer: unknown = null;
+    let lastAskAt = 0;
+    const fire = () => {
+        timer = null;
+        if (deps.lastSyncStartedAt() > lastAskAt) return;
+        deps.run();
+    };
+    return {
+        ask() {
+            lastAskAt = now();
+            if (timer !== null) return;
+            timer = setTimer(fire, wideSyncDelayMs(random));
+        },
+        cancel() {
+            if (timer !== null) clearTimer(timer);
+            timer = null;
+        },
+        isPending() {
+            return timer !== null;
+        },
+    };
+}

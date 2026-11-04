@@ -1850,8 +1850,8 @@ export default function MarketScreen() {
                     {/* The text block is always four rows, whatever the tile holds (DESIGN-market-grid-sizes-fable.md §2.2): the
                         title's two, the author (or a copy's line), and one last line that is cut, never wrapped: the distance,
                         then one chip at most, the group's lock before RECURRING (a deal is on the photo). What a tile has no
-                        room for is on the page it opens. The Daily Pulse (slice P3'): its title's two, its pill where an author
-                        would be (the one place the tile says what it is), and one line of its news. */}
+                        room for is on the page it opens. The Daily Pulse (slice P3'): its title's two, its 🗞️ PULSE pill where an
+                        author would be (moved off the photo: the one place the tile says what it is), and one line of its news. */}
                     <View style={gridBlock.block} testID="grid-text-block">
                         <View style={gridBlock.titleBox}>
                             <Text style={shell.gridTitle} numberOfLines={2}>
@@ -1861,7 +1861,7 @@ export default function MarketScreen() {
                         {isPulse ? (
                             <>
                                 <View style={gridBlock.lastRow}>
-                                    <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="warn" label={t('🗞️ DAILY PULSE')} testID="pulse-chip" /></View>
+                                    <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="warn" label={t('🗞️ PULSE')} testID="pulse-chip" /></View>
                                 </View>
                                 <View style={gridBlock.row} testID="grid-last-row">
                                     {item.description ? <Text style={shell.gridLine} numberOfLines={1} testID="pulse-line">{item.description}</Text> : null}

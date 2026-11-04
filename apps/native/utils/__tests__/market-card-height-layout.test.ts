@@ -784,7 +784,7 @@ describe("an event and the Daily Pulse in the grid are tiles: the listing's shel
         expect(l.height(blockOf(pulse))).toBeCloseTo(BLOCK, 3);
         const rows = Array.from(blockOf(pulse).children);
         expect(rows).toHaveLength(3);
-        expect(rows[1].querySelector('[data-testid="pulse-chip"]')?.textContent).toBe('🗞️ DAILY PULSE');
+        expect(rows[1].querySelector('[data-testid="pulse-chip"]')?.textContent).toBe('🗞️ PULSE');
         const news = rows[2].querySelector('[data-testid="pulse-line"]')!;
         expect(news.textContent).toBe(PULSE.description);
         expect(news.getAttribute('data-lines')).toBe('1');

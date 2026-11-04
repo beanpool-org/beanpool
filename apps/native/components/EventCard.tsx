@@ -19,7 +19,8 @@
  *
  * In the grid (slice P3', DESIGN-market-grid-sizes-fable.md §2.2) the event is a tile like the listing beside it, from the same
  * box: the 4:3 photo flush at the top, EVENT at its top-left, the foot row of pills (📌 PINNED, CANCELLED / UPDATED, and your
- * mark at the end, where a listing's price sits), then the four-row text block the listing tiles use, the very same one:
+ * mark at the end, where a listing's price sits), then the listing tiles' four-row text block (gridTextBlock at the font scale
+ * market.tsx reads, so the same numbers):
  *
  *   SAT 7 NOV                                         the date, in the event's ink
  *   16:00–21:00                                       the time (a repeating event with no time: its ↻ rule)

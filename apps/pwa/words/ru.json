@@ -4997,5 +4997,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Сообщение не удалось проверить, поэтому оно не показано.",
   "🗳️ Create Poll": "🗳️ Создать опрос",
   "🟢 List an Offer first to post Needs": "🟢 Сначала создайте Предложение, чтобы публиковать Спрос",
-  "🤝 Chosen": "🤝 Выбранным"
+  "🤝 Chosen": "🤝 Выбранным",
+  "Done. This is now your photo here.": "Готово. Теперь это ваше фото здесь.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "Копируется только фото. Ваше имя и остальной профиль здесь остаются как есть.",
+  "Use the photo from {community} here?": "Использовать здесь фото из {community}?",
+  "Use the photo you chose last here?": "Использовать здесь фото, которое вы выбрали последним?",
+  "Use this photo here": "Использовать это фото здесь"
 }

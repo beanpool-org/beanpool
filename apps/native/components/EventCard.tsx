@@ -119,8 +119,10 @@ export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
                 <Text style={[shell.second, styles.line]} numberOfLines={2}>{post.title}</Text>
                 {!!placeLine && <Text style={[shell.place, styles.line]} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
                 {copy?.from && <Text style={[shell.place, styles.line]} numberOfLines={2} testID="event-copy-line">{copyCardLine(copy.from)}</Text>}
-                {!!mark && <Text testID="event-mark" style={shell.mark} numberOfLines={1}>{mark}</Text>}
-                {!!counts && <Text testID="event-counts" style={shell.place} numberOfLines={1}>👥 {counts}</Text>}
+                {/* Two lines at most, never cut: beside the picture, at 320 dp and 1.3x text, "You're hosting this event" and
+                    "4 going · 2 interested" each need a second line (market-order-320.mjs measures it). */}
+                {!!mark && <Text testID="event-mark" style={shell.mark} numberOfLines={2}>{mark}</Text>}
+                {!!counts && <Text testID="event-counts" style={shell.place} numberOfLines={2}>👥 {counts}</Text>}
             </View>
         </Pressable>
     );

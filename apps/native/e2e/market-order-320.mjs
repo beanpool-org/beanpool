@@ -270,6 +270,7 @@ if (c === 'local') {
     globalThis.__posts = [
         post('g1', 'Sourdough starter', { created_at: ago(10), lat: -28.58, lng: 153.5, author_callsign: 'Lee', credits: 0 }),
         post('g2', 'Mutual credit 101, online', { type: 'event', category: 'events', created_at: ago(60 * 24 * 12), lat: null, lng: null, author_callsign: 'Ana',
+            author_pubkey: 'my-own-member-key',
             event_start_at: ahead(60 * 20), event_end_at: ahead(60 * 22), event_state: 'scheduled', credits: 0 }),
         post('g6', 'Byron Bay Farmers Market — Weekly Thursday', { type: 'event', category: 'events', created_at: ago(60 * 3), lat: -28.66, lng: 153.6,
             author_callsign: 'Byron Markets', event_start_at: ahead(60 * 30), event_end_at: ahead(60 * 34), event_state: 'scheduled',
@@ -355,6 +356,8 @@ for (const scheme of ['light', 'dark']) {
                     const when = card.querySelector('[data-testid="event-when"]');
                     return { id: card.getAttribute('data-testid'), left: r.left, right: r.right, height: r.height, slotLeft: slot.left, slotWidth: slot.width,
                         slotHeight: slot.height, chipInWhen: when ? when.querySelectorAll('[data-testid]').length : -1,
+                        // The status line (the mark, the host's line, the counts) is never cut at 320dp and 1.3x.
+                        cut: ['event-mark', 'event-counts'].filter(id => { const e = card.querySelector(`[data-testid="${id}"]`); return e && (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1); }),
                         buttons: card.querySelectorAll('[role="button"]').length, text: card.innerText.split('\n').filter(Boolean) };
                 }),
                 // Each title's card (its nearest button) and where the member sees it: for the grid's first-cells check.
@@ -377,6 +380,7 @@ for (const scheme of ['light', 'dark']) {
                 if (Math.abs(e.slotHeight - (e.height - 2)) > 0.5) fail(`${e.id}: the picture is ${e.slotHeight} tall, not the card's ${e.height - 2}`);
                 if (e.chipInWhen !== 0) fail(`${e.id}: the when line holds ${e.chipInWhen} chip(s)`);
                 if (e.buttons) fail(`${e.id}: ${e.buttons} button(s) inside the card`);
+                if (e.cut.length) fail(`${e.id}: its ${e.cut.join(', ')} line is cut`);
                 if (e.text.some(l => /^Going$|^Interested$/.test(l))) fail(`${e.id}: a Going / Interested button's words are on the card`);
                 if (e.text.some(l => /^👥 0 going · 0 interested$/.test(l))) fail(`${e.id}: zero counts drawn`);
             }

@@ -659,6 +659,7 @@ export const SUITES = [
     'test-succession-broadcast-after-commit',
     'test-enterprise-location',
     'test-enterprise-thread',
+    'test-enterprise-thread-read-gate',
     'test-enterprise-closed-states',
     'test-slice6-review-findings',
     'test-security-followups-0919',
@@ -725,6 +726,9 @@ export const VARIANTS = [
     // Messaging IDOR (A2-2/A2-3/A2-15) with read auth opted out: another member, a key that is no member and an unsigned
     // caller still cannot read a member's conversations (#2119). The plain run covers read auth ON.
     { name: 'test-messaging-idor', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // An enterprise's discussion thread with read auth opted out: an unsigned caller, a key that is no member and a visitor's
+    // row read it by its id and on its own route before (#2157). The plain run covers read auth ON.
+    { name: 'test-enterprise-thread-read-gate', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // A member's unread counts on a local node, where requests are off and `requests` is 0; and there with read auth opted
     // out, where the route's own checks are all there is (a global node won't start with it off).

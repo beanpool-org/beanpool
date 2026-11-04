@@ -6,10 +6,11 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
-import { getMember, getConversation, type Conversation } from '@beanpool/engine';
+import { getMember, getConversation, passesReadGate, type Conversation } from '@beanpool/engine';
 import { isSyntheticAccount, word } from '@beanpool/core';
 import type { MessagingCallbacks } from './messaging.js';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
+import { NOT_A_MEMBER_CODE } from './members.js';
 import { avatarUrlOf } from '@beanpool/core';
 
 export interface EnterpriseThreadMessage {
@@ -42,6 +43,25 @@ export function isEnterpriseThreadGone(enterprisePubkey: string): boolean {
     const row = db.prepare('SELECT is_treasury, status FROM members WHERE public_key = ?').get(enterprisePubkey) as
         { is_treasury: number; status: string | null } | undefined;
     return !row || !row.is_treasury || isEnterpriseThreadHidden(row.status);
+}
+
+/**
+ * Who may read an enterprise's discussion thread, on its own route (routes/treasury.ts) or by its id (GET
+ * /api/messages/:conversationId): every member of this community, keepers or not, and nobody else. That is the read
+ * gate's own test of those routes (passesReadGate: a suspended or disabled member passes, a visitor's row does not), held
+ * whatever ENFORCE_READ_AUTH says (#2157), as a DM, a group's chat and an event's chat are their people's whatever it says
+ * (#2119). With read auth opted out, an unsigned caller, a key that is no member here and a visitor's row read the whole
+ * thread before, and its id is no secret: it is the enterprise's own key, which the enterprises' list names.
+ *
+ * The refusal has the statuses the gate gives where read auth is on, so the apps see nothing new: 403 `not_a_member` to a
+ * signed non-member, in the gate's own words, and 401 to an unsigned caller, in this one's (the gate's 401 says "Missing
+ * cryptographic signature headers", untranslated). Asked before whether the enterprise is gone, as the gate is, so a
+ * non-member is answered the same for a gone one. Null when `reader`, the verified signer, may read.
+ */
+export function enterpriseThreadReadRefusal(reader: string | undefined): { status: 401 | 403; error: string; code?: string } | null {
+    if (!reader) return { status: 401, error: word('A signed request is required') };
+    if (!passesReadGate(db, reader)) return { status: 403, error: word('Read access requires a member identity'), code: NOT_A_MEMBER_CODE };
+    return null;
 }
 
 /**

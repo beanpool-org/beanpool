@@ -105,7 +105,8 @@ describe("the host's panel (320px, 130%)", () => {
         const buttons = within(panel).getAllByTestId('event-let-in');
         expect(buttons.map(b => b.textContent)).toEqual(['Let in', 'Let in', 'Let in ✓']);
         expect(buttons.map(b => b.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true']);
-        for (const b of buttons) expect(b.className).toMatch(/min-h-\[44px\]/);
+        // The page's buttons are 48 tall (DW1, the style box's page button); until DW1 these were 44.
+        for (const b of buttons) expect(b.className).toMatch(/min-h-\[48px\]/);
         expect(within(panel).getByText('Interested')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Let Sam in' }));
         await waitFor(() => expect(api.letInToEvent).toHaveBeenCalledWith('ev-1', { memberPublicKey: 'a' }, true));

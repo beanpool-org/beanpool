@@ -377,12 +377,15 @@ describe('EventCard without buttons (the Market, Your events)', () => {
         expect(screen.getByTestId('event-rsvp-row')).toBeInTheDocument();
     });
 
-    it('the page keeps its pin and its badge, in a row above the date', () => {
+    // DW1 (DESIGN-detail-pages-fable.md §2.1 row 1, Marty 4 Nov 2026: "All Fable's picks"): the page's chip row is the card's,
+    // EVENT first. Until DW1 the page left EVENT out ("it is plainly an event"); the phone's page (DP1) and the card both lead with it.
+    it('the page keeps its pin and its badge, in the card\'s chip row above the date: EVENT, PINNED, the state', () => {
         renderAt320(<EventDetail post={{ ...pinned, eventState: 'updated' }} identity={identity} />);
         const detail = screen.getByTestId('event-detail');
         const chips = within(detail).getByTestId('event-chips');
-        // No EVENT chip on the page: it is plainly an event.
-        expect(Array.from(chips.children).map(c => c.textContent)).toEqual(['📌 PINNED', 'UPDATED']);
+        expect(Array.from(chips.children).map(c => c.textContent)).toEqual(['EVENT', '📌 PINNED', 'UPDATED']);
+        // The style box's one chip, each in its tone (market-card-shell.ts), as on the list card.
+        expect(Array.from(chips.children).map(c => c.className)).toEqual([chip('event'), chip('pinned'), chip('event')]);
         // The heading is the date alone now: the pin and the badge are no longer words inside it.
         const heading = within(detail).getByRole('heading', { level: 2 });
         expect(heading.textContent).toBe('SAT 28 SEP ·9:00–12:00');
@@ -390,9 +393,9 @@ describe('EventCard without buttons (the Market, Your events)', () => {
         expect(chips.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it('the page has no chip row when there is nothing to put in it', () => {
+    it('with nothing else to say, the page\'s chip row is EVENT alone', () => {
         renderAt320(<EventDetail post={{ ...baseEvent, myRsvp: null }} identity={identity} />);
-        expect(screen.queryByTestId('event-chips')).toBeNull();
+        expect(Array.from(screen.getByTestId('event-chips').children).map(c => c.textContent)).toEqual(['EVENT']);
     });
 });
 
@@ -570,18 +573,26 @@ describe('EventDetail', () => {
         expect(screen.queryByRole('button', { name: 'Cancel event' })).not.toBeInTheDocument();
     });
 
-    it('EventDetail with photos uses responsive two-column layout on wide screens with full-height photo', () => {
+    // DW1 (§2.1, §3): one column below 768 px, the chips and the loud lines BEFORE the photo; from 768 px the photo takes the
+    // left column and the rest the right, placed by the grid as the listing's page places its photos (no order-*, so the DOM
+    // order and Tab follow the phone's). Until DW1 the page was one card with the photo first and \`md:flex-row\` halves.
+    it('EventDetail with photos uses responsive two-column layout on wide screens: the photo left, the rest right, the DOM in the phone\'s order', () => {
         const withPhoto = { ...baseEvent, photos: ['/uploads/event.jpg'] };
         render(<EventDetail post={withPhoto} identity={identity} />);
         const detail = screen.getByTestId('event-detail');
-        const classes = detail.className.split(/\s+/);
-        expect(classes).toContain('md:flex');
-        expect(classes).toContain('md:flex-row');
+        const cls = (el: Element) => el.className.split(/\s+/);
+        expect(cls(detail)).toEqual(expect.arrayContaining(['flex', 'flex-col', 'md:grid', 'md:grid-cols-2']));
+        expect(cls(detail).some(c => /order-/.test(c))).toBe(false);
 
         // The event's photo, by its alt (the host's box now carries a face of its own).
         const img = within(detail).getByRole('img', { name: withPhoto.title });
-        const photoWrapper = img.parentElement as HTMLElement;
-        expect(photoWrapper.className.split(/\s+/)).toContain('md:w-1/2');
+        const photo = screen.getByTestId('event-photo');
+        expect(photo.contains(img)).toBe(true);
+        expect(cls(photo)).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-start-1', 'md:row-span-2']));
+        expect(cls(screen.getByTestId('event-head'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1']));
+        expect(cls(screen.getByTestId('event-body'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-2']));
+        // The phone's order in the DOM: the head, the photo, the rest.
+        expect(Array.from(detail.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-head', 'event-photo', 'event-body']);
     });
 
     it("gives the host who's going and Cancel event", async () => {

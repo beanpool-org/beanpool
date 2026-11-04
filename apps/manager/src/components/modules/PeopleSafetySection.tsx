@@ -248,7 +248,7 @@ export function PeopleSafetySection({
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
-                        Members ({members.length})
+                        Members ({nodeData?.counts?.members ?? members.length})
                     </button>
                     <button
                         onClick={() => setSubTab('invites')}

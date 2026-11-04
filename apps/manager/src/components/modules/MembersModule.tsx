@@ -735,7 +735,7 @@ export function MembersModule({
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 text-xs">
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Total Members</span>
-                            <span className="text-2xl font-black text-white font-mono">{members.length}</span>
+                            <span className="text-2xl font-black text-white font-mono">{nodeData?.counts?.members ?? members.length}</span>
                         </div>
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Device Platforms</span>
@@ -760,11 +760,13 @@ export function MembersModule({
                                     if (frozen) return false;
                                     return m.canVouch || Array.from(customVouchers).some(v => pk === v || (pk && v && (pk.startsWith(v) || v.startsWith(pk))));
                                 }).length}
+                                {/* Of the members read so far: at least this many while the node holds more (capacity fix 3). */}
+                                {nodeData?.membersNext ? '+' : ''}
                             </span>
                         </div>
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Active Listings</span>
-                            <span className="text-2xl font-black text-sky-400 font-mono">{posts.length}</span>
+                            <span className="text-2xl font-black text-sky-400 font-mono">{posts.length}{nodeData?.postsNext ? '+' : ''}</span>
                         </div>
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Community Standing</span>

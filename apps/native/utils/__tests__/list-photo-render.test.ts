@@ -13,12 +13,16 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+const progress = vi.hoisted(() => ({ last: null as null | (() => void) }));
 vi.mock('expo-image', () => ({
-    Image: ({ source, onError, accessibilityLabel, style }: { source?: { uri?: string }; onError?: () => void; accessibilityLabel?: string; style?: unknown }) =>
-        createElement('img', { 'data-src': source?.uri, 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(style), onError }),
+    Image: ({ source, onError, onLoad, onProgress, accessibilityLabel, style }: { source?: { uri?: string }; onError?: () => void; onLoad?: () => void; onProgress?: () => void; accessibilityLabel?: string; style?: unknown }) => {
+        progress.last = onProgress ?? null;
+        return createElement('img', { 'data-src': source?.uri, 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(style), onError, onLoad });
+    },
 }));
 
 import { ListPhoto } from '../../components/ListPhoto';
+import { LIST_PHOTO_WAIT_MS } from '@beanpool/core';
 
 const NODE = 'https://global.example';
 const PHOTO = `${NODE}/api/marketplace/posts/p1/photos/0?v=17&k=KEY0`;
@@ -42,22 +46,26 @@ const img = () => host.querySelector<HTMLImageElement>('img[data-src]');
 const drawn = () => host.querySelector('[data-testid="the-fallback"]');
 const fail = async () => { expect(img()).not.toBeNull(); await act(async () => { img()!.dispatchEvent(new Event('error')); }); };
 
+const load = async () => { expect(img()).not.toBeNull(); await act(async () => { img()!.dispatchEvent(new Event('load')); }); };
+
 describe('ListPhoto', () => {
-    it('draws the small copy, then the photo\'s own URL, then the fallback', async () => {
+    it("draws the small copy, asks it once more past every cache, then the photo's own URL, then the fallback", async () => {
         await show(PHOTO);
         expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2`);
-        expect(drawn()).toBeNull();
+        await fail();
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
         await fail();
         expect(img()?.getAttribute('data-src')).toBe(PHOTO);
-        expect(drawn()).toBeNull();
         await fail();
         expect(img()).toBeNull();
         expect(drawn()).not.toBeNull();
     });
 
-    it('hands its other props to the picture', async () => {
+    it('hands its other props to the picture, and its own style once it has drawn', async () => {
         await show(PHOTO);
         expect(img()?.getAttribute('aria-label')).toBe('Loaf');
+        expect(img()?.getAttribute('data-style')).toBe('[{"width":48},{"position":"absolute","opacity":0}]');
+        await load();
         expect(img()?.getAttribute('data-style')).toBe('{"width":48}');
     });
 
@@ -81,11 +89,81 @@ describe('ListPhoto', () => {
         await show(PHOTO);
         await fail();
         await fail();
+        await fail();
         await show(PHOTO);
         expect(img()).toBeNull();
         expect(drawn()).not.toBeNull();
         await show(PHOTO_2);
         expect(img()?.getAttribute('data-src')).toBe(`${PHOTO_2}&size=thumb2`);
+    });
+});
+
+// card-photo-blank (Marty, 4 Nov 2026): on global a card showed an empty slot, no photo and no tile, through two restarts,
+// while its small copy was served fine; expo-image sent neither onLoad nor onError.
+describe('ListPhoto: never an empty slot while the photo loads', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('draws the fallback in the slot until the photo has drawn, then the photo alone', async () => {
+        await show(PHOTO);
+        expect(drawn()).not.toBeNull();
+        expect(img()).not.toBeNull();
+        await load();
         expect(drawn()).toBeNull();
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2`);
+    });
+
+    it('draws the fallback again while each step down loads', async () => {
+        await show(PHOTO);
+        await fail();
+        expect(drawn()).not.toBeNull();
+        await fail();
+        expect(drawn()).not.toBeNull();
+        await load();
+        expect(drawn()).toBeNull();
+        expect(img()?.getAttribute('data-src')).toBe(PHOTO);
+    });
+
+    it('a photo that neither draws nor fails within LIST_PHOTO_WAIT_MS counts as failed and steps down', async () => {
+        vi.useFakeTimers();
+        await show(PHOTO);
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS - 1); });
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2`);
+        await act(async () => { vi.advanceTimersByTime(1); });
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS); });
+        expect(img()?.getAttribute('data-src')).toBe(PHOTO);
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS); });
+        expect(img()).toBeNull();
+        expect(drawn()).not.toBeNull();
+    });
+
+    it('bytes still arriving start the wait again, so a slow phone is not cut off', async () => {
+        vi.useFakeTimers();
+        await show(PHOTO);
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS - 1000); });
+        await act(async () => { progress.last?.(); });
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS - 1000); });
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2`);
+        await act(async () => { vi.advanceTimersByTime(1000); });
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
+    });
+
+    it('a photo that has drawn is never stepped down by the wait', async () => {
+        vi.useFakeTimers();
+        await show(PHOTO);
+        await load();
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS * 5); });
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2`);
+        expect(drawn()).toBeNull();
+    });
+
+    it('no step leaves the slot empty: until a photo has drawn, every step shows the fallback', async () => {
+        await show(PHOTO);
+        expect(drawn()).not.toBeNull();
+        for (let i = 0; i < 4; i++) {
+            if (img()) await fail();
+            expect(drawn()).not.toBeNull();
+        }
+        expect(img()).toBeNull();
     });
 });

@@ -266,6 +266,22 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         expect(reads().filter((r) => r.startsWith('/api/marketplace/posts?'))).toEqual([`/api/marketplace/posts?author=${ENT}&limit=200`]);
     });
 
+    it("a shop tile's photo the URL filter refuses (PWA-2) draws the category tile, never the refused URL in an <img>", async () => {
+        const REFUSED = [
+            'http://elsewhere.example/api/marketplace/posts/p1/photos/0',
+            'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22/%3E',
+            '/api/marketplace/posts/p1/photos/0?v=1&k="x onerror=1"',
+        ];
+        for (const photo of REFUSED) {
+            const offers = OFFERS.map((o) => (o.id === 'p1' ? { ...o, photos: [photo] } : o));
+            await open({ detail: membersView(), keeperOf: [], offers });
+            const tile = await screen.findByTestId('shopfront-featured-p1');
+            expect(tile.querySelector('img'), photo).toBeNull();
+            expect(within(tile).getByTestId('category-tile'), photo).toBeInTheDocument();
+            cleanup();
+        }
+    });
+
     it("Message writes to the lead keeper, named; never to themselves", async () => {
         const { onMessage } = await open({ detail: membersView(), keeperOf: [] });
         const message = byId('shopfront-message')!;

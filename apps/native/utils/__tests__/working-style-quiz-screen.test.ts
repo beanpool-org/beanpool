@@ -97,6 +97,8 @@ vi.mock('expo-router', () => ({
     useFocusEffect: (cb: () => void) => { cb(); },
 }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+// The profile's listing cards draw through components/ListPhoto, which imports expo-image (a native module this test does not load).
+vi.mock('expo-image', () => ({ Image: () => null }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: me.identity, setIdentity: vi.fn() }) }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');

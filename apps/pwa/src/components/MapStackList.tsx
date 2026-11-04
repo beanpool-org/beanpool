@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { STACK_LIST_SHARE, stackHeading, t } from '@beanpool/core';
 import type { StackPin } from '../lib/map-stack';
+import { ListPhoto } from './ListPhoto';
 
 /**
  * The pins of a bubble that cannot split (Marty, 2 Nov; the phone's components/MapStackList.tsx is its twin): a panel over
@@ -54,9 +55,7 @@ export function MapStackList({ pins, covered, takeFocus, onClose, heading }: { p
                             className="w-full min-h-[72px] flex items-center gap-3 px-4 py-2 bg-transparent border-none text-left hover:bg-nature-50 dark:hover:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500"
                         >
                             <span className="flex-shrink-0 w-[56px] h-[56px] rounded-[10px] overflow-hidden bg-nature-100 dark:bg-nature-800 flex items-center justify-center" aria-hidden="true">
-                                {pin.photo
-                                    ? <img src={pin.photo} alt="" loading="lazy" className="w-full h-full object-cover" />
-                                    : <span className="text-2xl">{pin.emoji}</span>}
+                                <ListPhoto photo={pin.photo} fallback={<span className="text-2xl">{pin.emoji}</span>} alt="" loading="lazy" className="w-full h-full object-cover" />
                             </span>
                             <span className="flex-1 min-w-0 flex flex-col">
                                 <span className="text-[0.9375rem] font-bold leading-snug text-gray-900 dark:text-white break-words line-clamp-2">{pin.title}</span>

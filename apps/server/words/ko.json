@@ -933,5 +933,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ 해제된 이름의 터널이 멈췄어요. 이 서버는 여전히 {addresses}에서 응답해요.",
   "🫘 A project you backed changed its end date": "🫘 내가 후원한 프로젝트가 마감일을 바꿨어요",
   "🫘 Pledges went back to their backers": "🫘 약정이 후원자에게 돌아갔어요",
-  "🫘 Your pledge came back": "🫘 내 약정이 돌아왔어요"
+  "🫘 Your pledge came back": "🫘 내 약정이 돌아왔어요",
+  "Answer serve or step_aside.": "serve 또는 step_aside로 답하세요.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "투표했으므로 이 배심단에서 활동해요. 투표가 마감될 때까지 내 투표를 바꿀 수 있어요."
 }

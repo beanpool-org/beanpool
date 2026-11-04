@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Hindi ma-verify ang mensaheng ito, kaya hindi ito ipinapakita.",
   "🗳️ Create Poll": "🗳️ Gumawa ng Poll",
   "🟢 List an Offer first to post Needs": "🟢 Mag-list muna ng Alok para makapag-post ng Kahilingan",
-  "🤝 Chosen": "🤝 Napili"
+  "🤝 Chosen": "🤝 Napili",
+  "Done. This is now your photo here.": "Tapos na. Ito na ngayon ang iyong larawan dito.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "Ang larawan lang ang kokopyahin. Mananatili ang iyong pangalan at ang iba pa sa iyong profile dito.",
+  "Use the photo from {community} here?": "Gamitin dito ang larawan mula sa {community}?",
+  "Use the photo you chose last here?": "Gamitin dito ang huling larawang pinili mo?",
+  "Use this photo here": "Gamitin ang larawang ito dito"
 }

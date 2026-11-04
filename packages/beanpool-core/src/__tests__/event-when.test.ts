@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CURRENT_ZONE_IDS, eventPlaceTimeText, eventTileWhen, eventWhenParts, offsetMinutesOf, zoneLabelFor } from '../event-when.js';
+import { setLanguage } from '../words.js';
 
 const line = (p: ReturnType<typeof eventWhenParts>) => p ? `${p.first}${p.sep}${p.second}` : null;
 
@@ -69,19 +70,19 @@ describe('eventTileWhen — the grid tile\'s two rows', () => {
 
     it('in person, the reader in the place\'s clock: the place\'s date and its span, nothing to label', () => {
         expect(eventTileWhen({ ...byron, deviceStart: '2026-11-07T16:00', deviceEnd: '2026-11-07T21:00' }))
-            .toEqual({ date: 'SAT 7 NOV', time: '16:00–21:00', yours: false });
+            .toEqual({ date: 'SAT 7 NOV', time: '16:00–21:00', timePieces: ['16:00', '–21:00'], yours: false });
     });
 
     it('in person, a reader in Queensland (an hour behind): the reader\'s own clock, marked as theirs, never the place\'s bare 16:00', () => {
         const rows = eventTileWhen({ ...byron, deviceStart: '2026-11-07T15:00', deviceEnd: '2026-11-07T20:00' });
-        expect(rows).toEqual({ date: 'SAT 7 NOV', time: '15:00–20:00', yours: true });
+        expect(rows).toEqual({ date: 'SAT 7 NOV', time: '15:00–20:00', timePieces: ['15:00', '–20:00'], yours: true });
         // The card's own line still leads with the place's clock and notes the reader's: the two agree on the instant.
         expect(eventWhenParts({ ...byron, deviceStart: '2026-11-07T15:00', deviceEnd: '2026-11-07T20:00' })!.note).toBe('Sydney time · 15:00 your time');
     });
 
     it('in person, a reader whose date differs (Lagos read in Sydney): the reader\'s own date and time', () => {
         expect(eventTileWhen({ ...lagos, deviceStart: '2026-10-18T06:50', deviceEnd: '2026-10-18T08:50' }))
-            .toEqual({ date: 'SUN 18 OCT', time: '6:50–8:50', yours: true });
+            .toEqual({ date: 'SUN 18 OCT', time: '6:50–8:50', timePieces: ['6:50', '–8:50'], yours: true });
     });
 
     it('an event that ends on a later date: the start\'s date, then its start time (the end is on the page)', () => {
@@ -90,23 +91,47 @@ describe('eventTileWhen — the grid tile\'s two rows', () => {
             startLocal: '2026-11-06T10:26', endLocal: '2026-11-07T12:26', tz: 'Australia/Sydney', online: false,
         };
         expect(eventTileWhen({ ...twoDay, deviceStart: '2026-11-06T10:26', deviceEnd: '2026-11-07T12:26' }))
-            .toEqual({ date: 'FRI 6 NOV', time: '10:26', yours: false });
+            .toEqual({ date: 'FRI 6 NOV', time: '10:26', timePieces: ['10:26'], yours: false });
         // A reader in Queensland: their own start, marked as theirs.
         expect(eventTileWhen({ ...twoDay, deviceStart: '2026-11-06T09:26', deviceEnd: '2026-11-07T11:26' }))
-            .toEqual({ date: 'FRI 6 NOV', time: '9:26', yours: true });
+            .toEqual({ date: 'FRI 6 NOV', time: '9:26', timePieces: ['9:26'], yours: true });
         // The reader's span crosses midnight where the place's does not: still the start alone.
         expect(eventTileWhen({ ...byron, deviceStart: '2026-11-07T23:00', deviceEnd: '2026-11-08T04:00' }))
-            .toEqual({ date: 'SAT 7 NOV', time: '23:00', yours: true });
+            .toEqual({ date: 'SAT 7 NOV', time: '23:00', timePieces: ['23:00'], yours: true });
     });
 
-    it('online: the reader\'s own clock with "your time" in the row, as the card\'s line; nothing more to label', () => {
-        expect(eventTileWhen({ ...byron, online: true, deviceStart: '2026-11-07T05:00', deviceEnd: '2026-11-07T10:00' }))
-            .toEqual({ date: 'SAT 7 NOV', time: '5:00–10:00 your time', yours: false });
+    // DESIGN-grid-event-rows call 3: every clock on the tile is the reader's own, and an online event has no second clock on the
+    // tile to tell it from, so "your time" labels nothing there. The card's line keeps it (eventWhenParts, below).
+    it('online: the reader\'s own bare span, no "your time" in the row; the card\'s own line keeps the label', () => {
+        const online = { ...byron, online: true, deviceStart: '2026-11-07T05:00', deviceEnd: '2026-11-07T10:00' };
+        expect(eventTileWhen(online)).toEqual({ date: 'SAT 7 NOV', time: '5:00–10:00', timePieces: ['5:00', '–10:00'], yours: false });
+        expect(eventWhenParts(online)!.second).toBe('5:00–10:00 your time');
+        // A lone start online: one piece.
+        expect(eventTileWhen({ ...online, deviceEnd: null })).toMatchObject({ time: '5:00', timePieces: ['5:00'] });
+    });
+
+    // DESIGN-grid-event-rows call 4: the time row is two whole pieces, and the end piece drops whole when it has no room, so the
+    // dash travels with the end: a row that shows only the start reads "10:26", never "10:26–".
+    it('the time row\'s pieces: the start, then the dash on the end piece; their join is the row; in every language\'s clock', () => {
+        const same = eventTileWhen({ ...byron, deviceStart: '2026-11-07T16:00', deviceEnd: '2026-11-07T21:00' })!;
+        expect(same.timePieces).toEqual(['16:00', '–21:00']);
+        expect(same.timePieces.join('')).toBe(same.time);
+        expect(same.timePieces[0]).not.toMatch(/[–-]/);
+        expect(same.timePieces[1].startsWith('–')).toBe(true);
+        // Indonesian writes its clock with a dot: the pieces are the language's own clock, split by core, never re-parsed.
+        setLanguage('id');
+        try {
+            const id = eventTileWhen({ ...byron, deviceStart: '2026-11-07T16:00', deviceEnd: '2026-11-07T21:00' })!;
+            expect(id.timePieces).toEqual(['16.00', '–21.00']);
+            expect(id.timePieces.join('')).toBe(id.time);
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('a node that sends no local clock: the device\'s rows, as the card; an unreadable start: null', () => {
         expect(eventTileWhen({ startAt: lagos.startAt, endAt: lagos.endAt, deviceStart: '2026-10-17T15:50', deviceEnd: '2026-10-17T17:50' }))
-            .toEqual({ date: 'SAT 17 OCT', time: '15:50–17:50', yours: false });
+            .toEqual({ date: 'SAT 17 OCT', time: '15:50–17:50', timePieces: ['15:50', '–17:50'], yours: false });
         expect(eventTileWhen({ deviceStart: 'not a clock' })).toBeNull();
     });
 });

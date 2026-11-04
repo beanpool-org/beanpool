@@ -25,9 +25,14 @@ export interface ShareSheetItem {
     expanded?: boolean;
 }
 
-export function ShareSheet({ visible, onClose, onDismiss, items, body, testID = 'share-sheet' }: {
+export function ShareSheet({ visible, onClose, onDismiss, items, body, holding = false, testID = 'share-sheet' }: {
     visible: boolean;
     onClose: () => void;
+    /**
+     * A share is being made (a link, an invite) or the phone's share sheet is up: Cancel (drawn dimmed), the backdrop and
+     * Android Back do nothing, so the share never opens after the sheet has gone. The sheet closes once the share has answered.
+     */
+    holding?: boolean;
     /** iOS: once the sheet is gone, so another sheet (the ask form) can open after it. */
     onDismiss?: () => void;
     items: ShareSheetItem[];
@@ -37,10 +42,12 @@ export function ShareSheet({ visible, onClose, onDismiss, items, body, testID = 
 }) {
     const insets = useSafeAreaInsets();
     const styles = useStyles(makeStyles);
+    const close = () => { if (!holding) onClose(); };
     return (
-        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onDismiss={onDismiss} statusBarTranslucent>
+        <Modal visible={visible} transparent animationType="fade" onRequestClose={close} onDismiss={onDismiss} statusBarTranslucent>
             <View style={styles.backdrop}>
-                <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')} />
+                <Pressable style={StyleSheet.absoluteFill} onPress={close} disabled={holding} accessibilityRole="button" accessibilityLabel={t('Close')}
+                    accessibilityState={{ disabled: holding }} />
                 <View style={[styles.card, { paddingBottom: 16 + insets.bottom }]} testID={testID}>
                     <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.3}>{t('Share')}</Text>
                     {/* The ways scroll when they are taller than the screen (the invite panel with its vouch choice, a long
@@ -62,7 +69,8 @@ export function ShareSheet({ visible, onClose, onDismiss, items, body, testID = 
                     ))}
                     {body}
                     </ScrollView>
-                    <Pressable onPress={onClose} style={({ pressed }) => [styles.cancel, pressed && styles.itemPressed]} accessibilityRole="button" testID={`${testID}-cancel`}>
+                    <Pressable onPress={close} disabled={holding} style={({ pressed }) => [styles.cancel, pressed && styles.itemPressed, holding && styles.itemBusy]}
+                        accessibilityRole="button" accessibilityState={{ disabled: holding }} testID={`${testID}-cancel`}>
                         <Text style={styles.cancelText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Cancel')}</Text>
                     </Pressable>
                 </View>

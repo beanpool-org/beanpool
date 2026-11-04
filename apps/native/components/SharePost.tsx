@@ -125,6 +125,7 @@ function useAskAdmin() {
  * The one Share button and its sheet, for a listing or an event. `onShareMembers` hands the members' link to the share sheet
  * (the listing's and the event's words differ); the rest is the same for both. A tap that shares keeps the sheet open until
  * the share sheet has answered, then closes it (on iOS a share sheet presented while the Modal is still going would not show).
+ * Until then Cancel, the backdrop and Back do nothing (ShareSheet `holding`).
  */
 export function ShareButton({ post, onShareMembers, accessibilityLabel, style, buttonStyle, textStyle, oneLine }: {
     post: any;
@@ -190,6 +191,10 @@ export function ShareButton({ post, onShareMembers, accessibilityLabel, style, b
     const makeInvite = async () => {
         if (await invite.make()) close();
     };
+    // A share in flight (the link or the invite being made, or the phone's share sheet up): the sheet ignores Cancel, the
+    // backdrop and Back until it has answered, then closes itself. Closed sooner, the share would still open after it (Android)
+    // or never answer (iOS, presented while the sheet fades), leaving its item dimmed and a made link unkept.
+    const holding = busy !== null || invite.busy;
 
     const items: ShareSheetItem[] = [{
         key: 'members', label: t(W.shareWithMembers), line: says.membersLine ? t(says.membersLine) : null,
@@ -221,6 +226,7 @@ export function ShareButton({ post, onShareMembers, accessibilityLabel, style, b
             <ShareSheet
                 visible={open}
                 onClose={() => close()}
+                holding={holding}
                 onDismiss={dismissed}
                 // The invite panel takes the other ways' place; its own way stays above it, a tap away from the list.
                 items={panel ? items.filter((i) => i.key === 'invite') : items}

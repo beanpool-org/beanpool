@@ -27,8 +27,8 @@
     {
       "id": "server",
       "title": "Running the server",
-      "summary": "Backups, updates and health, the app's floor, your address and peers, rate limits, showing what a local community does, a global community's limits, and AI assistants.",
-      "pages": ["backups-and-replicas", "updates-and-health", "app-floor", "address-and-peers", "rate-limits", "private-preview", "showcase", "global-limits", "ai-assistant"]
+      "summary": "Backups, the checklist and the steps for when the internet and the phone network go down, updates and health, the app's floor, your address and peers, rate limits, showing what a local community does, a global community's limits, and AI assistants.",
+      "pages": ["backups-and-replicas", "before-the-lights-go-out", "when-the-lights-go-out", "updates-and-health","app-floor", "address-and-peers", "rate-limits", "private-preview", "showcase", "global-limits", "ai-assistant"]
     },
     {
       "id": "privacy",

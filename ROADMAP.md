@@ -90,7 +90,7 @@
 - ✅ **A11y & Stability** — Fixed P2P stream crash loops and applied accessibility improvements across components.
 - ✅ **Sanitized Syncing** — Automatic filtering of synthetic "Visitor" and escrow accounts from local databases and UI elements.
 - ✅ **Map Clustering Stabilization** — Patched `react-native-map-clustering` to prevent marker disappearance on iOS during zoom and scroll interactions.
-- ✅ **Offline Queue** — Built native SQLite capability to draft and save marketplace posts whilst offline, syncing automatically when connection restores.
+- ⛔ **Offline Queue** — not built. A listing in progress is kept as a draft on the phone; nothing is queued to send later, and a post is kept only after the server accepts it.
 - ✅ **Database Backup & Reset Safeguards** — Streaming `tar.gz` database snapshot downloads via the System tab, plus type-to-confirm and backup prompts to protect against accidental node resets.
 - ✅ **Admin Branch Stats** — Inline stats chips (posts, msgs, deals) and expandable branch aggregate cards in the Audit tree, optimized with a single-pass SQL query.
 - ✅ **Map Centering & Location Fixes** — Map now centers dynamically on the node's configured `serviceRadius` (defaulting to Mullumbimby), and Leaflet async "ghost pin" leak bugs were resolved.
@@ -178,7 +178,7 @@
 - [x] **Federation Protocol — Phase 2** — Remote marketplace browsing, Connected Communities UI, node badges
 - [x] **Federation Protocol — Phase 3** — Cross-node trading (Accept Offer on remote node) with Libp2p identity verification
 - [x] **Federation Protocol — Phase 4** — Cross-node E2E messaging and mesh fund validation over authenticated Noise streams
-- [x] **Offline Queue** — Queue posts/transactions/messages when offline, replay on reconnect (save pending_upload to SQLite)
+- [ ] **Offline Queue** — not built: no pending_upload exists and nothing replays on reconnect. A listing in progress is kept as a draft on the phone, and a post is kept only after the server accepts it.
 - [ ] **Federation (Native)** — remote marketplace browsing on native
 
 ### Governance & Credits
@@ -262,7 +262,7 @@ A release log moved here from the README on 23 October 2026, kept for the record
 - ✅ **Directory Publisher (Decentralized)** — nodes push metadata to beanpool.org Supabase global directory using Libp2p Ed25519 cryptographic signatures to prevent spoofing and replay attacks.
 - ✅ Push Notifications — Expo push tokens, DM/marketplace alerts, per-member notification preferences
 - ✅ Native Background Sync — SQLite `dbSyncLock` Mutex Queue safely handling parallel `applyDelta` and foreground Map/Inbox requests without `database is locked` panics.
-- ✅ Offline Outbox — Draft and queue marketplace posts while offline, syncs automatically when connection restores.
+- ⛔ Offline Outbox — not built. Nothing is queued to send later: a post is kept only after the server accepts it. What exists is a draft, saved on the phone as you type in the new-listing screen and restored when you come back to it.
 - ✅ Live Inbox Parity — Base64 E2E plaintext message decryption, real-time polling, and global unread notification tab badges.
 - ✅ Native Identity Flow — self-managed identity creation and 12-word recovery via Expo SecureStore
 - ✅ Community Projects Tab — native-only crowdfunding feature with progress bars and proposal creation

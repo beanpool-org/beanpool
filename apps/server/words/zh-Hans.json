@@ -933,5 +933,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ 已释放名称的隧道已停止。本服务器仍可通过 {addresses} 访问。",
   "🫘 A project you backed changed its end date": "🫘 你支持的一个项目更改了截止日期",
   "🫘 Pledges went back to their backers": "🫘 认捐已退还给支持者",
-  "🫘 Your pledge came back": "🫘 你的认捐已退还"
+  "🫘 Your pledge came back": "🫘 你的认捐已退还",
+  "Answer serve or step_aside.": "回复 serve 或 step_aside。",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "你已投票，所以你在这个陪审团中任职。在投票结束前你可以更改你的投票。"
 }

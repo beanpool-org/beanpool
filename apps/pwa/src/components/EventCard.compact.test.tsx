@@ -40,7 +40,7 @@ const has = (el: Element, s: string) => s.split(/\s+/).every(c => classes(el).in
 afterEach(() => { cleanup(); document.documentElement.style.fontSize = ''; });
 
 /** The when's pieces as drawn: a whole piece (COMPACT_PIECE) or the words of a sentence round the time. */
-const pieces = () => Array.from(screen.getByTestId('event-when').children).map(c => [c.getAttribute('data-piece'), c.textContent]);
+const pieces = () => Array.from(screen.getByTestId('event-when').children).map((c): [string | null, string] => [c.getAttribute('data-piece'), c.textContent ?? '']);
 
 /** Runs `body` with a language's real catalogs (this app's words, core's words and core's dates), as the app loads them. */
 async function inLanguage(lang: string, body: () => void) {

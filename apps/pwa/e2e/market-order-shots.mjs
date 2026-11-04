@@ -30,10 +30,16 @@
  * row like a listing's: one button; no taller than a listing's row and one line; its picture 32 square; its chip the one chip
  * (10/800); the event's when whole; the poll's mark its chosen answer ✓; nothing on the poll's row to vote with.
  *
+ * compact-kinds (the review of #2904): the compact view at 320 px x 1.3 in en, fr, de, ru, es and pt, the reader in Brisbane,
+ * with an event in person, one online, one read in another clock and one over two days, light and dark
+ * (`web-compact-kinds-{de,ru}-*`). Fails when an event row overflows itself, or its EVENT chip or its mark is cut or past the
+ * row's content edge, or the start's date and time give way while the end still has room to give, or the row is taller than
+ * a listing's row and one line. Run it alone: `node e2e/market-order-shots.mjs <out-dir> compact-kinds`.
+ *
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global console, process, document -- Node, plus page.evaluate callbacks run in the browser */
+/* global console, process, document, window, localStorage, getComputedStyle, URL -- Node, plus page.evaluate callbacks run in the browser */
 import fs from 'node:fs';
 import path from 'node:path';
 import { startServer, launch, settle, TEXT_SCALE_CSS } from './harness.mjs';

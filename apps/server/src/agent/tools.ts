@@ -7,6 +7,8 @@
  * answer carries a key, a balance of any member, a reporter, a DM, a photo, an address or URL (the node's own included:
  * links are Settings paths the assistant joins to the address in its welcome), a host, a log line, or a destination's name.
  * The one exception is what a tool is for: photo_upload_link answers an address on this node, which the assistant sends photos to.
+ * The other is this community's own hosts, which it publishes anyway: node_overview's addressHost, and server_health's
+ * `addresses` (DNS robustness S6, agent/server-addresses.ts), each with what this server's check found there, never what it points at.
  * (my_posts reads back an online event's join link, as the fenced text it is.)
  * Member-written text comes back only fenced (agent/fence.ts) and, in lists, only when `include_text` is asked for.
  *
@@ -53,6 +55,7 @@ import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
 import { OWNER_READ_TOOLS } from './owner-reads.js';
 import { OWNER_TAKEDOWN_TOOLS, takedownsSummary } from './owner-takedowns.js';
 import { OWNER_SEED_TOOLS } from './owner-seeds.js';
+import { serverAddresses, NOT_CHECKED_STEP, SERVER_ADDRESS_KINDS, SERVER_ADDRESS_STANDINGS } from './server-addresses.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, suggestionAsks, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
@@ -138,6 +141,26 @@ const FENCED_OR_NULL = {
 };
 const ARR = { type: 'array' };
 const FIRST_TRADE_WINDOW = OBJ({ joined: NUM, firstListing: NUM, firstTrade: NUM_OR_NULL, daysToFirstListing: NUM_OR_NULL, daysFromListingToTrade: NUM_OR_NULL });
+const HEALTH_PROPS: Record<string, JsonSchema> = {
+    diskUsedPercent: NUM_OR_NULL, memory: OBJ({ systemUsedPercent: NUM, processMb: NUM }), uncleanStop: BOOL, crashLoop: BOOL,
+    watchdog: OBJ({ present: BOOL, healthy: BOOL }), tlsFallback: BOOL, standbyIncident: { type: ['boolean', 'null'] },
+    serverAlerts: { type: ['array', 'null'] }, communityAlerts: ARR,
+};
+/** One of server_health's `addresses` (agent/server-addresses.ts). */
+const SERVER_ADDRESS_ROW = OBJ({
+    host: STR,
+    kind: { type: 'string', enum: [...SERVER_ADDRESS_KINDS] },
+    main: BOOL,
+    answers: { type: ['string', 'null'], enum: ['own', 'other', 'other-origin', 'silence', 'tls', null] },
+    checkedAt: STR_OR_NULL,
+    step: STR,
+    nextStep: STR,
+    standing: {
+        type: ['object', 'null'],
+        properties: { state: { type: 'string', enum: [...SERVER_ADDRESS_STANDINGS] }, registrarSays: STR_OR_NULL, words: STR },
+        required: ['state', 'registrarSays', 'words'],
+    },
+});
 
 function clampLimit(v: unknown, def = 20): number {
     const n = Math.floor(Number(v));
@@ -309,14 +332,20 @@ export const AGENT_TOOLS: AgentTool[] = [
         name: 'server_health',
         title: 'Server health',
         reads: 'disk use, memory, an unclean stop, a crash loop, the watchdog, a certificate fallback, a standby incident, the '
-            + "server's active alerts by name (owner grants), and the community alerts' types without names",
-        never: "a flag's members or description, an alert's detail, the alerts channel's address, or log lines",
+            + "server's active alerts by name (owner grants), the community alerts' types without names, and, on the main server, "
+            + "`addresses`: each published address of this community, main first, with its host, its kind, whether it is the main one, "
+            + 'what answered there when this server last checked it (own: this server; other: a server with another key; other-origin: '
+            + "something that isn't a BeanPool server; silence: nothing; tls: a certificate phones refuse; null: not asked, or "
+            + `step ${NOT_CHECKED_STEP}), when, and the one next step in words to pass on. A BeanPool name the address service doesn't `
+            + "simply give this community has a `standing` (at-risk or contradiction: what the address service says, and Settings' "
+            + 'words for it, which say what to do; pass those on with the next step, which then never says there is nothing to do), '
+            + 'otherwise null. The check looks from this server every '
+            + '15 minutes and can be wrong where phones are right: the check link it may name is https://<that host>/check, opened '
+            + 'on a phone on mobile data',
+        never: "a flag's members or description, an alert's detail, the alerts channel's address, what a name points at, a "
+            + "server's key, or log lines",
         inputSchema: NO_ARGS,
-        outputSchema: OBJ({
-            diskUsedPercent: NUM_OR_NULL, memory: OBJ({ systemUsedPercent: NUM, processMb: NUM }), uncleanStop: BOOL, crashLoop: BOOL,
-            watchdog: OBJ({ present: BOOL, healthy: BOOL }), tlsFallback: BOOL, standbyIncident: { type: ['boolean', 'null'] },
-            serverAlerts: { type: ['array', 'null'] }, communityAlerts: ARR,
-        }),
+        outputSchema: OBJ({ ...HEALTH_PROPS, addresses: { type: 'array', items: SERVER_ADDRESS_ROW } }, Object.keys(HEALTH_PROPS)),
         run: (grant) => {
             let diskUsedPercent: number | null = null;
             try { diskUsedPercent = Math.round(getDiskHealth().usedPercent * 10) / 10; } catch { /* a disk that cannot be read is unknown */ }
@@ -325,6 +354,8 @@ export const AGENT_TOOLS: AgentTool[] = [
             const watchdog = readWatchdogStatus();
             const flags = getCommunityHealth().flags ?? [];
             const total = os.totalmem();
+            // On the main server only, for owners and admins alike (Settings shows both the report): a standby's answer is today's.
+            const addresses = serverAddresses();
             return {
                 ok: true, rows: 1,
                 result: {
@@ -343,6 +374,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                     communityAlerts: flags.map((f) => ({
                         type: f.type, severity: f.severity, namesMembers: Array.isArray(f.members) && f.members.length > 0,
                     })),
+                    ...(addresses ? { addresses } : {}),
                 },
             };
         },

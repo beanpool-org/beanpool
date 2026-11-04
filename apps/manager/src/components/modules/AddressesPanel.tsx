@@ -18,7 +18,7 @@
  * Central tokens only (bg-bp-*, text-bp-*, nature-*, oat-*, terra-*); accessible at 320 px with 130 % text.
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { ADDRESS_SCREEN_WORDS, addressNextStep, type AddressReach } from '@beanpool/core';
+import { ADDRESS_SCREEN_WORDS, addressReachSentence, type AddressReach } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { nodeCredential } from '../../lib/profiles';
 import {
@@ -136,12 +136,11 @@ export function appsTodayText(today: number): string {
 
 /**
  * The reach sentence. Beside a name's standing, which says what to do, it never adds "Nothing to do": a lost name with
- * members still on it is not a closed matter. A step this manager doesn't know reads as the node said it.
+ * members still on it is not a closed matter. The rule is core's (addressReachSentence), which an owner's assistant reads
+ * too (apps/server agent/server-addresses.ts). A step this manager doesn't know reads as the node said it.
  */
 export function reachSentence(reach: AddressReach, besideStanding: boolean): string {
-    if (besideStanding && reach.step === 'fine') return t(W.reachFine);
-    if (besideStanding && reach.step === 'no-longer-ours') return t(W.reachNoLonger);
-    return addressNextStep(reach.step, reach.minutes, { t, tn }) || reach.nextStep;
+    return addressReachSentence(reach.step, reach.minutes, besideStanding, { t, tn }) || reach.nextStep;
 }
 
 /**

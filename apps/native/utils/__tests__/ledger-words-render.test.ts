@@ -560,7 +560,9 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
         expect(span.getAttribute('data-shrinks'), words).toBe('true');
         const px = Number(span.getAttribute('data-font')) * SCALE * Number(span.getAttribute('data-min-scale'));
         expect(widthOf(longestWord(words), px), longestWord(words)).toBeLessThanOrEqual(width);
-        expect(widthOf(words, px), words).toBeLessThanOrEqual(lines * width * 0.9);
+        // Plus one tilde at the smallest size: the pseudo pad rounds up to whole tildes (slice T4, 4 Nov 2026), so the 23-letter
+        // "beans of value to trade" carries 10 at 40 % / 30 % where 35 % gave 9 (232.7 against 230.4 dp; a tilde is 6.7 dp).
+        expect(widthOf(words, px), words).toBeLessThanOrEqual(lines * width * 0.9 + widthOf('~', px));
     }
 
     it('the shelf\'s four states, the three achievement labels and the two path labels take a second line and shrink, never cut short', async () => {

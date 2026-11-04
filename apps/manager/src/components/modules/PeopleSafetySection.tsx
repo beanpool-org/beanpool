@@ -716,6 +716,7 @@ export function PeopleSafetySection({
                             posts={nodeData?.posts as any}
                             activeNode={activeNode}
                             onRefresh={onRefresh}
+                            viewer={rolesViewer}
                         />
                     </SectionErrorBoundary>
                 </div>

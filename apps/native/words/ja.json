@@ -6730,5 +6730,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community}は現在サインインを確認できないため、何も追加されませんでした。後でもう一度お試しください。",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community}は{provider}サインインに対応していません。別の方法をお試しください。",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "現在{community}に接続できないため、何も追加されませんでした。接続を確認してもう一度お試しください。",
-  "HOSTED BY": "主催"
+  "HOSTED BY": "主催",
+  "Open event: {title}": "イベントを開く: {title}",
+  "Open listing: {title}": "掲載を開く: {title}"
 }

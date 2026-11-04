@@ -41,9 +41,11 @@ describe('Phone Market card ladder (Pictures S6)', () => {
     it('MarketCardPicture draws the picture while it loads, and the CategoryTile when there is none or every step failed', () => {
         // The small copy first (listPhotoUrl), then the photo's own URL, then the tile: stepped down in nextListPhotoUrl, drawn
         // and failed for real in market-card-picture-retry.test.ts.
-        expect(pictureSrc).toMatch(/listPhotoUrl\(picture\)/);
-        expect(pictureSrc).toMatch(/if \(picture && shown\) \{\s*return \(\s*<Image\s+source=\{\{ uri: shown \}\}/);
-        expect(pictureSrc).toMatch(/const tile = <CategoryTile /);
+        // card-photo-blank: the tile holds the slot until the photo has drawn (useListPhotoSteps).
+        expect(pictureSrc).toMatch(/useListPhotoSteps\(picture,/);
+        expect(pictureSrc).toMatch(/if \(!picture \|\| !steps\.shown\) return tile;/);
+        expect(pictureSrc).toMatch(/\{steps\.drawn \? null : tile\}\s*<Image\s+source=\{\{ uri: steps\.shown \}\}/);
+        expect(pictureSrc).toMatch(/const tileOnly = <CategoryTile /);
     });
 
     it('Home MarketRow falls back to enterprise banner before CategoryTile', () => {
@@ -63,7 +65,9 @@ describe('Phone Market card ladder (Pictures S6)', () => {
 
     it('onError only heals listings with actual coverImage photos, and every failure steps the picture down', () => {
         // A banner that fails is never sent to the listing-photo heal: it gives way to the tile instead.
-        expect(pictureSrc).toMatch(/if \(cover\) refreshListingAfterPhotoError\(postId, cover\);\s*setSteppedDown\(\{ photo: picture, shown: nextListPhotoUrl\(picture, shown\) \}\);/);
+        // Every failure, an error or a wait that ran out, calls the hook's onFailed before it steps down (useListPhotoSteps).
+        expect(pictureSrc).toMatch(/useListPhotoSteps\(picture, \(\) => \{ if \(cover\) refreshListingAfterPhotoError\(postId, cover\); \}\)/);
+        expect(pictureSrc).toMatch(/onError=\{steps\.onError\}/);
         expect(marketSrc).not.toMatch(/refreshListingAfterPhotoError/);
     });
 });

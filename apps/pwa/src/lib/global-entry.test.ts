@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    APP_GLOBAL_HOST, APP_GLOBAL_LINK, IOS_GLOBAL_DOOR_FROM, PHONE_BROWSER_QUERY, globalCommunityLink, isAppsGlobal, isIOS, isPhoneBrowser, lobbyJoinWays,
-    phoneLaterLines,
+    APP_GLOBAL_HOST, APP_GLOBAL_LINK, IOS_GLOBAL_DOOR_FROM, IOS_OPEN_DOOR_FROM, PHONE_BROWSER_QUERY, globalCommunityLink, isAppsGlobal, isIOS, isPhoneBrowser,
+    lobbyJoinWays, openDoorAppDoors, phoneLaterLines,
 } from './global-entry';
 
 /** A browser whose matchMedia answers `matches` for the phone query (and records what it was asked). */
@@ -140,6 +140,85 @@ describe("lobbyJoinWays: the Join card's ways in, in order", () => {
             expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, platform: 'android', appVersions: undefined }))
                 .toEqual(['app', 'browser', 'have-account']);
         });
+    });
+});
+
+describe("lobbyJoinWays at a self-hoster's open community (issue #2563): the app at its own address", () => {
+    it('a phone with a link for this community, its door open: the app first', () => {
+        expect(lobbyJoinWays({ phone: true, appsGlobal: false, doorOpen: true, ownDoorLink: true })).toEqual(['app', 'browser', 'have-account']);
+    });
+
+    it('no link for this phone, a computer, or a door that turns strangers away: the browser join, as before', () => {
+        expect(lobbyJoinWays({ phone: true, appsGlobal: false, doorOpen: true, ownDoorLink: false })).toEqual(['browser', 'have-account']);
+        expect(lobbyJoinWays({ phone: false, appsGlobal: false, doorOpen: true, ownDoorLink: true })).toEqual(['browser', 'have-account']);
+        expect(lobbyJoinWays({ phone: true, appsGlobal: false, doorOpen: false, ownDoorLink: true })).toEqual(['browser', 'have-account']);
+    });
+
+    it("an iPhone browser: only once the App Store build has the account-less door (S2), read on its own gate, not the global door's", () => {
+        // The global door's version has the global door but not S2: its gate would let it through; this community's must not.
+        expect(IOS_OPEN_DOOR_FROM).not.toBe(IOS_GLOBAL_DOOR_FROM);
+        expect(lobbyJoinWays({ phone: true, appsGlobal: false, doorOpen: true, ownDoorLink: true, platform: 'ios', appVersions: { ios: IOS_GLOBAL_DOOR_FROM } }))
+            .toEqual(['browser', 'have-account']);
+        expect(lobbyJoinWays({ phone: true, appsGlobal: false, doorOpen: true, ownDoorLink: true, platform: 'ios', appVersions: { ios: IOS_OPEN_DOOR_FROM } }))
+            .toEqual(['app', 'browser', 'have-account']);
+        expect(lobbyJoinWays({ phone: true, appsGlobal: false, doorOpen: true, ownDoorLink: true, platform: 'ios', appVersions: undefined }))
+            .toEqual(['browser', 'have-account']);
+        // Android has no gate, as at the global.
+        expect(lobbyJoinWays({ phone: true, appsGlobal: false, doorOpen: true, ownDoorLink: true, platform: 'android', appVersions: { ios: '1.0.0' } }))
+            .toEqual(['app', 'browser', 'have-account']);
+    });
+
+    it("the app's global keeps its own gate when a link for its own address exists too", () => {
+        expect(lobbyJoinWays({ phone: true, appsGlobal: true, doorOpen: true, ownDoorLink: true, platform: 'ios', appVersions: { ios: IOS_GLOBAL_DOOR_FROM } }))
+            .toEqual(['app', 'browser', 'have-account']);
+    });
+});
+
+describe("openDoorAppDoors: the app's door link for the page's own address, carrying nothing signed or of ours", () => {
+    const ANDROID = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
+    const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+    const PLAY = 'https://play.google.com/store/apps/details?id=org.beanpool.pillar';
+
+    it('an iPhone: beanpool://join-open-door?node=<the address>, and the App Store beside it', () => {
+        expect(openDoorAppDoors('https://hall.example.org', IPHONE)).toEqual({
+            app: 'beanpool://join-open-door?node=https%3A%2F%2Fhall.example.org',
+            store: 'https://apps.apple.com/app/id6761870086',
+            platform: 'ios',
+        });
+    });
+
+    it('Android: the same link by intent, with Google Play as its own fallback (no referrer, nothing carried)', () => {
+        const doors = openDoorAppDoors('https://hall.example.org', ANDROID)!;
+        expect(doors.platform).toBe('android');
+        expect(doors.store).toBe(PLAY);
+        expect(doors.app).toBe(
+            'intent://join-open-door?node=https%3A%2F%2Fhall.example.org#Intent;scheme=beanpool;package=org.beanpool.pillar;'
+            + `S.browser_fallback_url=${encodeURIComponent(PLAY)};end`);
+        expect(doors.app).not.toMatch(/referrer/);
+    });
+
+    it("names the page's own address only: a port is kept, and nothing of beanpool.org is in either link", () => {
+        for (const ua of [ANDROID, IPHONE]) {
+            const doors = openDoorAppDoors('https://hall.example.org:8443', ua)!;
+            expect(doors.app).toContain(encodeURIComponent('https://hall.example.org:8443'));
+            expect(decodeURIComponent(doors.app)).not.toMatch(/beanpool\.org/);
+            // The only address besides the community's is the store's own listing.
+            expect(doors.store).toMatch(/^https:\/\/(play\.google\.com|apps\.apple\.com)\//);
+        }
+    });
+
+    it("a LAN address over plain http, as a lights-out node serves it: allowed (the phone's cleartext rule); a public one over http: no link", () => {
+        expect(openDoorAppDoors('http://192.168.1.20', IPHONE)?.app).toBe('beanpool://join-open-door?node=http%3A%2F%2F192.168.1.20');
+        expect(openDoorAppDoors('http://hall.example.org', IPHONE)).toBeNull();
+        expect(openDoorAppDoors('http://203.0.113.9', ANDROID)).toBeNull();
+    });
+
+    it('anything that is not a plain address, a computer, or no address: no link, so the browser join stays', () => {
+        for (const origin of [null, undefined, '', 'not a url', 'ftp://hall.example.org', 'https://u:p@hall.example.org', 'https://hall.example.org/app', 'https://hall.example.org/?x=1', 'https://hall.example.org/#top']) {
+            expect(openDoorAppDoors(origin, IPHONE), String(origin)).toBeNull();
+        }
+        expect(openDoorAppDoors('https://hall.example.org', 'Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/120.0')).toBeNull();
+        expect(openDoorAppDoors('https://hall.example.org', '')).toBeNull();
     });
 });
 

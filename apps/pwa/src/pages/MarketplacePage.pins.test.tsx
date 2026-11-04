@@ -1,6 +1,7 @@
 /**
- * Tests for web Market pinning (pinning-s3):
- * - Pinned block at top of Market with live pinned posts.
+ * Tests for web Market pinning (pinning-s3; the grid's first cells: market-grid G1, DESIGN-market-grid-sizes-fable.md §2.1):
+ * - The grid (the web's default) has no Pinned heading and no block: the pins are its first cells (market-pinned-tile).
+ *   List and compact keep the Pinned heading and block.
  * - Up to 3 pins (PINS_MAX = 3), ordered newest pin first (pinnedAt DESC).
  * - Pins excluded from the main feed below (no duplication).
  * - Suppressed under member-narrowing: search query, tags, or distance setting (near.from === 'setting').
@@ -130,32 +131,52 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
         vi.useRealTimers();
     });
 
-    it('renders the Pinned block with live pinned posts ordered newest pin first, capped at 3', async () => {
-        // 4 live pinned posts + 2 normal posts
-        const pin1 = makePost('pin-1', 'First Pin (Oldest)', {
-            pinnedAt: new Date(NOW - 4000).toISOString(),
-            pinnedUntil: FUTURE_3D,
-        });
-        const pin2 = makePost('pin-2', 'Second Pin', {
-            pinnedAt: new Date(NOW - 3000).toISOString(),
-            pinnedUntil: FUTURE_3D,
-        });
-        const pin3 = makePost('pin-3', 'Third Pin', {
-            pinnedAt: new Date(NOW - 2000).toISOString(),
-            pinnedUntil: FUTURE_3D,
-        });
-        const pin4 = makePost('pin-4', 'Fourth Pin (Newest)', {
-            pinnedAt: new Date(NOW - 1000).toISOString(),
-            pinnedUntil: FUTURE_3D,
-        });
-        const regular1 = makePost('reg-1', 'Regular Post 1', {
-            createdAt: new Date(NOW - 10_000).toISOString(),
-        });
-        const regular2 = makePost('reg-2', 'Regular Post 2', {
-            createdAt: new Date(NOW - 20_000).toISOString(),
-        });
+    // Four live pins (the cap is three) and two ordinary posts. Newest pin first: pin4, pin3, pin2; pin1 is fourth and
+    // drops to the stream.
+    const fourPinsAndTwo = () => [
+        makePost('pin-1', 'First Pin (Oldest)', { pinnedAt: new Date(NOW - 4000).toISOString(), pinnedUntil: FUTURE_3D }),
+        makePost('pin-2', 'Second Pin', { pinnedAt: new Date(NOW - 3000).toISOString(), pinnedUntil: FUTURE_3D }),
+        makePost('pin-3', 'Third Pin', { pinnedAt: new Date(NOW - 2000).toISOString(), pinnedUntil: FUTURE_3D }),
+        makePost('pin-4', 'Fourth Pin (Newest)', { pinnedAt: new Date(NOW - 1000).toISOString(), pinnedUntil: FUTURE_3D }),
+        makePost('reg-1', 'Regular Post 1', { createdAt: new Date(NOW - 10_000).toISOString() }),
+        makePost('reg-2', 'Regular Post 2', { createdAt: new Date(NOW - 20_000).toISOString() }),
+    ];
+    /** The cells of the first grid on the page, in drawn order. */
+    const firstGridCells = () => Array.from(document.querySelector('div.grid-flow-row-dense')!.children) as HTMLElement[];
 
-        stubNode([pin1, pin2, pin3, pin4, regular1, regular2]);
+    it('grid (the default): the pins are the first cells, newest pin first, capped at 3, and there is no Pinned heading or block', async () => {
+        stubNode(fourPinsAndTwo());
+
+        render(<MarketplacePage identity={identity} isMember={true} />);
+
+        await waitFor(() => expect(screen.getAllByTestId('market-pinned-tile').length).toBe(3));
+
+        // pin4 (newest: -1000), pin3 (-2000), pin2 (-3000). pin1 is 4th so drops to the stream.
+        const tiles = screen.getAllByTestId('market-pinned-tile');
+        expect(tiles.map(t => t.textContent)).toEqual(['Fourth Pin (Newest)', 'Third Pin', 'Second Pin']);
+
+        // No heading and no block in the grid: the pill and the position say it.
+        expect(screen.queryByTestId('market-pinned-heading')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('market-pinned-block')).not.toBeInTheDocument();
+        expect(screen.queryByText('Pinned')).not.toBeInTheDocument();
+
+        // The first three cells of the first grid are the pins, in that order; the stream carries on in the same grid.
+        const cells = firstGridCells();
+        expect(cells.slice(0, 3)).toEqual(tiles);
+        // (The stream is newest-listed first, so the 4th pin, listed 50 s ago, comes after the two posts listed 10 and 20 s ago.)
+        expect(cells.slice(3).map(c => c.textContent)).toEqual(['Regular Post 1', 'Regular Post 2', 'First Pin (Oldest)']);
+        expect(cells.slice(3).every(c => c.getAttribute('data-testid') !== 'market-pinned-tile')).toBe(true);
+        expect(document.querySelectorAll('div.grid-flow-row-dense').length).toBe(1);
+
+        // No post is drawn twice.
+        const allCards = screen.getAllByTestId('market-post-card');
+        expect(allCards.length).toBe(6);
+        expect(new Set(allCards.map(c => c.textContent)).size).toBe(6);
+    });
+
+    it.each([['list'], ['compact']])('%s view keeps the Pinned heading and block, with the pins out of the stream below', async (mode) => {
+        localStorage.setItem('marketplace_view_mode', mode);
+        stubNode(fourPinsAndTwo());
 
         render(<MarketplacePage identity={identity} isMember={true} />);
 
@@ -164,8 +185,7 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
             expect(screen.getByTestId('market-pinned-heading')).toHaveTextContent(/Pinned/i);
         });
 
-        // Inside market-pinned-block, only 3 posts should appear, newest pin first:
-        // pin4 (newest: -1000), pin3 (-2000), pin2 (-3000). pin1 is 4th so drops to unpinned feed.
+        // Inside market-pinned-block, only 3 posts should appear, newest pin first.
         const pinnedBlock = screen.getByTestId('market-pinned-block');
         const pinnedCards = pinnedBlock.querySelectorAll('[data-testid="market-post-card"]');
         expect(pinnedCards.length).toBe(3);
@@ -173,14 +193,85 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
         expect(pinnedCards[1].textContent).toBe('Third Pin');
         expect(pinnedCards[2].textContent).toBe('Second Pin');
 
+        // The grid's cell marker is the grid's alone.
+        expect(screen.queryByTestId('market-pinned-tile')).not.toBeInTheDocument();
+
         // Check that pin4, pin3, pin2 are NOT duplicated in the whole document:
         const allCards = screen.getAllByTestId('market-post-card');
         expect(allCards.length).toBe(6); // 3 in pinned block + 3 in unpinned feed (pin1 + reg1 + reg2)
-        const allTitles = allCards.map(c => c.textContent);
-        expect(new Set(allTitles).size).toBe(6);
+        expect(new Set(allCards.map(c => c.textContent)).size).toBe(6);
     });
 
-    it('a pin that has ended leaves the block at the next draw, in a tab left open', async () => {
+    it.each([[1], [2], [3], [4]])('grid: %i live pin(s) draw min(pins, 3) market-pinned-tile cells', async (pins) => {
+        const posts = fourPinsAndTwo();
+        // Keep the first `pins` pins live; the others are ordinary posts.
+        const shaped = posts.map((p, i) => (i < 4 && i >= pins ? { ...p, pinnedUntil: null, pinnedAt: null } : p));
+        stubNode(shaped);
+
+        render(<MarketplacePage identity={identity} isMember={true} />);
+
+        await waitFor(() => expect(screen.getAllByTestId('market-post-card').length).toBe(6));
+        expect(screen.getAllByTestId('market-pinned-tile').length).toBe(Math.min(pins, 3));
+        expect(firstGridCells().length).toBe(6);
+    });
+
+    it('grid: one pin and nothing else is still drawn, as the one cell of the grid', async () => {
+        stubNode([makePost('pin-1', 'Only Pin', { pinnedAt: new Date(NOW - 1000).toISOString(), pinnedUntil: FUTURE_3D })]);
+
+        render(<MarketplacePage identity={identity} isMember={true} />);
+
+        await waitFor(() => expect(screen.getAllByTestId('market-pinned-tile').length).toBe(1));
+        expect(screen.getByTestId('market-pinned-tile')).toHaveTextContent('Only Pin');
+        expect(firstGridCells().length).toBe(1);
+        expect(screen.queryByTestId('market-pinned-heading')).not.toBeInTheDocument();
+    });
+
+    it('grid: "New since you last looked" counts the stream only, and the pins stay above the line', async () => {
+        // The stamp is the second ordinary post's time: reg-1 is new, reg-2 is the first seen one, so the line goes between them.
+        const stamp = NOW - 20_000;
+        localStorage.setItem('bp_market_seen_listed', String(stamp));
+        stubNode([
+            makePost('pin-1', 'Pin One', { pinnedAt: new Date(NOW - 2000).toISOString(), pinnedUntil: FUTURE_3D, createdAt: new Date(NOW - 90_000).toISOString() }),
+            makePost('pin-2', 'Pin Two', { pinnedAt: new Date(NOW - 1000).toISOString(), pinnedUntil: FUTURE_3D, createdAt: new Date(NOW - 95_000).toISOString() }),
+            makePost('reg-1', 'Regular Post 1', { createdAt: new Date(NOW - 10_000).toISOString() }),
+            makePost('reg-2', 'Regular Post 2', { createdAt: new Date(stamp).toISOString() }),
+            makePost('reg-3', 'Regular Post 3', { createdAt: new Date(NOW - 30_000).toISOString() }),
+        ]);
+
+        render(<MarketplacePage identity={identity} isMember={true} />);
+
+        await waitFor(() => expect(screen.getAllByTestId('market-pinned-tile').length).toBe(2));
+        const line = screen.getByTestId('market-new-since');
+        const before = line.previousElementSibling as HTMLElement;
+        const after = line.nextElementSibling as HTMLElement;
+        // Two grids, the line between them; both pins in the first one, before the new tile; the seen tiles after.
+        expect(Array.from(before.children).map(c => c.textContent)).toEqual(['Pin Two', 'Pin One', 'Regular Post 1']);
+        expect(Array.from(after.children).map(c => c.textContent)).toEqual(['Regular Post 2', 'Regular Post 3']);
+        for (const tile of screen.getAllByTestId('market-pinned-tile')) {
+            expect(line.compareDocumentPosition(tile) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+        }
+    });
+
+    it('a pin that has ended leaves the grid at the next draw, in a tab left open', async () => {
+        const ends = Date.now() + 60_000;
+        const pin = makePost('pin-1', 'Ending Pin', { pinnedUntil: new Date(ends).toISOString(), pinnedAt: new Date(Date.now() - 1000).toISOString() });
+        stubNode([pin, makePost('reg-1', 'Regular Post 1')]);
+        const { rerender } = render(<MarketplacePage identity={identity} isMember={true} />);
+        await waitFor(() => expect(screen.getByTestId('market-pinned-tile')).toBeInTheDocument());
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date(ends + 1000));
+        try {
+            rerender(<MarketplacePage identity={identity} isMember={true} />);
+            expect(screen.queryByTestId('market-pinned-tile')).toBeNull();
+            // It is still a post in the Market: in the stream now, drawn once.
+            expect(screen.getAllByText('Ending Pin').length).toBe(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('a pin that has ended leaves the list view\'s Pinned block at the next draw', async () => {
+        localStorage.setItem('marketplace_view_mode', 'list');
         const ends = Date.now() + 60_000;
         const pin = makePost('pin-1', 'Ending Pin', { pinnedUntil: new Date(ends).toISOString(), pinnedAt: new Date(Date.now() - 1000).toISOString() });
         stubNode([pin, makePost('reg-1', 'Regular Post 1')]);
@@ -196,7 +287,34 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
         }
     });
 
-    it('suppresses the Pinned block under search narrowing', async () => {
+    it('suppresses the pins under search narrowing (grid)', async () => {
+        const pin1 = makePost('pin-1', 'Pinned Post', {
+            pinnedAt: new Date(NOW - 1000).toISOString(),
+            pinnedUntil: FUTURE_3D,
+        });
+        const reg1 = makePost('reg-1', 'Regular Post');
+
+        stubNode([pin1, reg1]);
+
+        render(<MarketplacePage identity={identity} isMember={true} />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('market-pinned-tile')).toBeInTheDocument();
+        });
+
+        // Type into search box
+        const searchInput = screen.getByPlaceholderText(/Search/i);
+        fireEvent.change(searchInput, { target: { value: 'Post' } });
+
+        await waitFor(() => {
+            expect(screen.queryByTestId('market-pinned-tile')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('market-pinned-block')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('market-pinned-heading')).not.toBeInTheDocument();
+        });
+    });
+
+    it('suppresses the Pinned block under search narrowing (list)', async () => {
+        localStorage.setItem('marketplace_view_mode', 'list');
         const pin1 = makePost('pin-1', 'Pinned Post', {
             pinnedAt: new Date(NOW - 1000).toISOString(),
             pinnedUntil: FUTURE_3D,
@@ -211,7 +329,6 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
             expect(screen.getByTestId('market-pinned-block')).toBeInTheDocument();
         });
 
-        // Type into search box
         const searchInput = screen.getByPlaceholderText(/Search/i);
         fireEvent.change(searchInput, { target: { value: 'Post' } });
 
@@ -221,7 +338,8 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
         });
     });
 
-    it('suppresses the Pinned block when user has selected distance setting (near.from === "setting")', async () => {
+    it.each([['grid'], ['list']])('suppresses the pins when user has selected distance setting (near.from === "setting"), %s view', async (mode) => {
+        localStorage.setItem('marketplace_view_mode', mode);
         radiusMock.current = { lat: 51.5, lng: -0.1, radiusKm: 25 };
         const pin1 = makePost('pin-1', 'Pinned Post', {
             pinnedAt: new Date(NOW - 1000).toISOString(),
@@ -238,11 +356,13 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
             expect(cards.length).toBe(2);
         });
 
-        // Under radiusSettings, pinned block must be suppressed
+        // Under radiusSettings, the pins must be suppressed
         expect(screen.queryByTestId('market-pinned-block')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('market-pinned-tile')).not.toBeInTheDocument();
     });
 
-    it('does NOT render expired pins in the Pinned block', async () => {
+    it.each([['grid'], ['list']])('does NOT render expired pins as pins, %s view', async (mode) => {
+        localStorage.setItem('marketplace_view_mode', mode);
         const expiredPin = makePost('pin-exp', 'Expired Pin', {
             pinnedAt: new Date(NOW - 100_000).toISOString(),
             pinnedUntil: PAST_1D,
@@ -258,11 +378,13 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
             expect(cards.length).toBe(2);
         });
 
-        // No live pins -> no pinned block
+        // No live pins -> no pinned block, no pinned cell
         expect(screen.queryByTestId('market-pinned-block')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('market-pinned-tile')).not.toBeInTheDocument();
     });
 
-    it('shows the Pinned block on global area read where near.from === "area"', async () => {
+    it.each([['grid', 'market-pinned-tile'], ['list', 'market-pinned-block']])('shows the pins on global area read where near.from === "area", %s view', async (mode, testid) => {
+        localStorage.setItem('marketplace_view_mode', mode);
         vi.spyOn(api, 'getNodeConfig').mockResolvedValue({
             nearbyListings: { radiusKm: 250 },
         } as any);
@@ -283,8 +405,8 @@ describe('MarketplacePage pinning (pinning-s3)', () => {
         render(<MarketplacePage identity={identity} isMember={true} />);
 
         await waitFor(() => {
-            // Pinned block is retained because near.from === 'area' (not 'setting')
-            expect(screen.getByTestId('market-pinned-block')).toBeInTheDocument();
+            // The pin is retained because near.from === 'area' (not 'setting')
+            expect(screen.getByTestId(testid)).toBeInTheDocument();
         });
     });
 

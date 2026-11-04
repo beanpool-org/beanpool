@@ -407,7 +407,7 @@ export function MyDealsModal({
                                             >
                                                 <div className="flex gap-3 mb-2">
                                                     {item.coverImage ? (
-                                                        <div className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
+                                                        <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                             <ListPhoto photo={item.coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span></span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                         </div>
                                                     ) : (
@@ -502,7 +502,7 @@ export function MyDealsModal({
                                         >
                                             <div className="flex gap-3 mb-2">
                                                 {item.coverImage ? (
-                                                    <div className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
+                                                    <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                         <ListPhoto photo={item.coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl text-nature-600 dark:text-nature-300" aria-hidden="true">{isBuyer ? '🛒' : '🏷️'}</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                     </div>
                                                 ) : (
@@ -626,7 +626,7 @@ export function MyDealsModal({
                                         >
                                             <div className="flex gap-4">
                                                 {coverImage ? (
-                                                    <div className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
+                                                    <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                         <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-xl opacity-50">📦</span></span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                     </div>
                                                 ) : (
@@ -700,7 +700,7 @@ export function MyDealsModal({
                                     >
                                         <div className="flex gap-4">
                                             {coverImage ? (
-                                                <div className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
+                                                <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                     <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl text-nature-600 dark:text-nature-300" aria-hidden="true">📦</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                 </div>
                                             ) : (

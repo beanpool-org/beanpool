@@ -52,7 +52,7 @@ describe('an event in the pseudo-locale', () => {
     it('the card: the time, the counts and Going ✓ / Interested; a cancelled one', async () => {
         await showIn('xx');
         // The Market's card: the chip, my answer as text, and no buttons.
-        const market = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} />);
+        const market = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} viewMode="list" />);
         expect(bracketed()).toBeGreaterThan(2);
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
         expect(screen.getByTestId('event-type-chip').textContent).toBe(xx('EVENT'));
@@ -61,7 +61,7 @@ describe('an event in the pseudo-locale', () => {
         market.unmount();
 
         // Nobody's answer but the counts, once someone has answered.
-        const counts = render(<EventCard post={{ ...event, myRsvp: null }} identity={identity} onOpen={vi.fn()} />);
+        const counts = render(<EventCard post={{ ...event, myRsvp: null }} identity={identity} onOpen={vi.fn()} viewMode="list" />);
         expect(screen.getByText(xx('{going} going · {interested} interested').replace('{going}', '7').replace('{interested}', '3'))).toBeInTheDocument();
         counts.unmount();
 
@@ -73,9 +73,52 @@ describe('an event in the pseudo-locale', () => {
         expect(screen.getByText(xx('{going} going · {interested} interested').replace('{going}', '7').replace('{interested}', '3'))).toBeInTheDocument();
         unmount();
 
-        render(<EventCard post={{ ...event, eventState: 'cancelled', status: 'cancelled' }} identity={identity} />);
+        render(<EventCard post={{ ...event, eventState: 'cancelled', status: 'cancelled' }} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-state-badge').textContent).toBe(xx('CANCELLED'));
         expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+    });
+
+    // W3': the grid's tile (DESIGN-grid-event-rows-fable.md): the chip, the pills, the mark, the date and the time, the lock's
+    // sentence as its pill's name, "Online", a copy's "from {community}" and the reader's "your time", each through t().
+    it('the grid tile: EVENT, the pills and the mark, the rows, the lock, Online, a copy and "your time"', async () => {
+        await showIn('xx');
+        const pinned = { pinnedAt: new Date().toISOString(), pinnedUntil: new Date(Date.now() + 3 * 24 * HOUR).toISOString() };
+        const pin = render(<EventCard post={{ ...event, ...pinned }} identity={identity} onOpen={vi.fn()} />);
+        expect(screen.getByTestId('event-pinned-chip').textContent).toBe(xx('📌 PINNED'));
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+        pin.unmount();
+
+        // A group-only event (never pinned: only a public one can be).
+        const grid = render(<EventCard post={{ ...hosted, myRsvp: 'going', eventRsvps: undefined, eventState: 'updated', targetGroupId: 'g-1' }} identity={identity} onOpen={vi.fn()} />);
+        expect(bracketed()).toBeGreaterThan(3);
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+        expect(screen.getByTestId('event-type-chip').textContent).toBe(xx('EVENT'));
+        expect(screen.getByTestId('event-state-badge').textContent).toBe(xx('UPDATED'));
+        expect(screen.getByTestId('event-mark').textContent).toBe(xx('{label} ✓').replace('{label}', xx('Going')));
+        expect(screen.getByTestId('event-lock-pill').getAttribute('aria-label')).toBe(xx('🔒 Only {group} can see this').replace('{group}', 'Garden Club'));
+        grid.unmount();
+
+        const online = render(<EventCard post={{ ...event, eventOnline: true, eventPlaceName: undefined }} identity={identity} />);
+        expect(screen.getByTestId('grid-row-4').textContent).toBe(`🌐 ${xx('Online')}`);
+        expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+        online.unmount();
+
+        const from = { host: 'mullum.example.org', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' };
+        const copy = render(<EventCard post={{ ...event, myRsvp: null, shownCopy: true, shownFrom: from } as any} identity={identity} />);
+        expect(screen.getByTestId('grid-row-4').textContent).toBe(xx('from {community}').replace('{community}', 'Mullumbimby'));
+        expect(bypassing(document.body, { others: [...OTHERS, 'Mullumbimby'] })).toEqual([]);
+        copy.unmount();
+
+        // Read across a zone line (the place's clock is Sydney's, the reader's is not): the tile says whose clock it shows.
+        const savedTz = process.env.TZ;
+        process.env.TZ = 'Australia/Brisbane';
+        try {
+            render(<EventCard post={{ ...event, eventStartAt: '2030-11-09T05:00:00.000Z', eventEndAt: '2030-11-09T10:00:00.000Z', eventStartLocal: '2030-11-09T16:00', eventEndLocal: '2030-11-09T21:00', eventTz: 'Australia/Sydney' }} identity={identity} />);
+            expect(screen.getByTestId('event-your-time').textContent).toBe(xx('{time} your time').replace('{time}', '🕒'));
+            expect(bypassing(document.body, { others: OTHERS })).toEqual([]);
+        } finally {
+            if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz;
+        }
     });
 
     it("an attendee's page: the host line, the note, Share and Add to calendar, the chat entry", async () => {
@@ -110,7 +153,7 @@ describe('an event in the pseudo-locale', () => {
 describe('an event in English', () => {
     it('in English nothing is bracketed, and the words are as they were', async () => {
         // The Market's card: one button, my answer in its label and as text, the chip.
-        const market = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} />);
+        const market = render(<EventCard post={event} identity={identity} onOpen={vi.fn()} viewMode="list" />);
         expect(bracketed()).toBe(0);
         expect(screen.getByRole('button', { name: 'Open event: Working bee at the hall, Going ✓' })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Going ✓' })).toBeNull();

@@ -27,10 +27,33 @@ const member: any = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me' };
 
 describe('a copy on a card', () => {
     it('says where it is from and the door, and offers no Going', () => {
-        render(<EventCard post={copy} identity={member} />);
+        render(<EventCard post={copy} identity={member} viewMode="list" />);
         expect(screen.getByTestId('event-copy-line').textContent).toBe('from Mullumbimby · Ask to join');
         expect(screen.queryByTestId('event-rsvp-row')).toBeNull();
         expect(document.body.textContent).not.toMatch(/0 going/);
+    });
+
+    // DESIGN-grid-event-rows-fable.md call 2: on the grid tile a copy's row 4 is its community in the place's stead, with the
+    // distance after it; the door's word is the page's, and nobody answers a copy here, so no mark either.
+    it("in the grid: row 4 is 'from {community}' and the distance, in the place's stead; no door word, no mark", () => {
+        const { unmount } = render(<EventCard post={{ ...copy, myRsvp: 'going', eventPlaceName: 'Railway Park' }} identity={member} distanceKm={740} />);
+        expect(screen.getByTestId('grid-row-4').textContent).toBe('from Mullumbimby · 740 km');
+        const card = screen.getByTestId('event-card');
+        expect(card.textContent).not.toMatch(/Railway Park|Ask to join|Going/);
+        expect(screen.queryByTestId('event-mark')).toBeNull();
+        expect(screen.queryByTestId('event-rsvp-row')).toBeNull();
+        // The card's label still says whose it is, with its door, as the list card's does.
+        expect(screen.getByRole('button', { name: /^Open event: / })).toHaveAccessibleName('Open event: Street party, from Mullumbimby · Ask to join');
+        unmount();
+
+        // No distance known: the community alone.
+        const { unmount: u2 } = render(<EventCard post={copy} identity={member} />);
+        expect(screen.getByTestId('grid-row-4').textContent).toBe('from Mullumbimby');
+        u2();
+
+        // A copy with no row of the directory: its place line, as any event.
+        render(<EventCard post={{ ...event, shownCopy: true, eventPlaceName: 'Railway Park' }} identity={member} distanceKm={740} />);
+        expect(screen.getByTestId('grid-row-4').textContent).toBe('📍 Railway Park · 740 km');
     });
 
     it('a plain event keeps its Going where the card asks for it (the map preview), and no copy line', () => {

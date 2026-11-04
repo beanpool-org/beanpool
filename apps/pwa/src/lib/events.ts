@@ -9,8 +9,8 @@
  */
 
 import {
-    deviceLocalClock, eventPlaceTimeText, eventWhenParts as whenParts, formatDate, localClockMs, repeatCaption, repeatChoiceKeyOf, repeatPatternFor,
-    t, tn, type EventWhenParts, type RepeatChoiceKey, type RepeatPattern, freeTagsOf, postTagsOf, storedFreeTags,
+    deviceLocalClock, eventPlaceTimeText, eventTileWhen as tileWhen, eventWhenParts as whenParts, formatDate, localClockMs, repeatCaption, repeatChoiceKeyOf, repeatPatternFor,
+    t, tn, type EventTileWhen, type EventWhenInput, type EventWhenParts, type RepeatChoiceKey, type RepeatPattern, freeTagsOf, postTagsOf, storedFreeTags,
 } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 
@@ -42,6 +42,22 @@ function addClockMinutes(local: string, minutes: number): string | null {
  * A node that sends no clock or zone gives the viewer's own lines, as before.
  */
 export function eventWhenParts(post: EventTimeFields): EventWhenParts | null {
+    const input = eventWhenInput(post);
+    return input ? whenParts(input) : null;
+}
+
+/**
+ * The Market grid tile's date row and time row (core eventTileWhen, DESIGN-grid-event-rows-fable.md): every clock on the tile
+ * is the viewer's own; `yours` when that differs from the place's clock (the tile then says "your time"); an event ending on a
+ * later date shows its start; the time row in whole pieces, the dash on the end piece. Null without a readable start.
+ */
+export function eventTileWhenFor(post: EventTimeFields): EventTileWhen | null {
+    const input = eventWhenInput(post);
+    return input ? tileWhen(input) : null;
+}
+
+/** The node's clocks for an event and this browser's rendering of its instant: what core's when functions read. */
+function eventWhenInput(post: EventTimeFields): EventWhenInput | null {
     if (!post.eventStartAt) return null;
     const start = new Date(post.eventStartAt);
     if (Number.isNaN(start.getTime())) return null;
@@ -50,7 +66,7 @@ export function eventWhenParts(post: EventTimeFields): EventWhenParts | null {
     // A place clock with no end clock (never sent by a node that stores clocks, but cheap to cover): the same length on the clock.
     const endLocal = post.eventEndLocal
         || (post.eventStartLocal && hasEnd ? addClockMinutes(post.eventStartLocal, Math.round((end.getTime() - start.getTime()) / 60000)) : null);
-    return whenParts({
+    return {
         startAt: post.eventStartAt,
         endAt: hasEnd ? end.toISOString() : null,
         startLocal: post.eventStartLocal ?? null,
@@ -59,7 +75,7 @@ export function eventWhenParts(post: EventTimeFields): EventWhenParts | null {
         online: post.eventOnline ?? false,
         deviceStart: deviceLocalClock(start),
         deviceEnd: hasEnd ? deviceLocalClock(end) : null,
-    });
+    };
 }
 
 /**

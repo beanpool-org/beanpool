@@ -124,7 +124,7 @@ describe('a rule the form cannot make: every 3 weeks, every 3 months (review of 
     const quarterly = { ...series, eventRepeat: { freq: 'monthly', interval: 3, byMonthDay: 15, time: '18:50', minutes: 120 } };
 
     it('the card says it as it is', () => {
-        at320(<EventCard post={quarterly} identity={identity} />);
+        at320(<EventCard post={quarterly} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every 3 months on the 15th');
     });
 
@@ -216,18 +216,18 @@ describe('what create and edit send', () => {
 
 describe('the ↻ caption: card, map popup (the same card) and Home', () => {
     it('the card shows the next date and the caption under it', () => {
-        at320(<EventCard post={series} identity={identity} />);
+        at320(<EventCard post={series} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every Friday');
         expect(screen.getByTestId('event-repeat-caption').className).toMatch(/break-words/);
     });
 
     it('with a last date', () => {
-        at320(<EventCard post={{ ...series, eventRepeatUntil: '2027-12-17' }} identity={identity} />);
+        at320(<EventCard post={{ ...series, eventRepeatUntil: '2027-12-17' }} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every Friday · until 17 Dec 2027');
     });
 
     it('a one-off has none', () => {
-        at320(<EventCard post={{ ...series, eventRepeat: undefined, eventNextDates: undefined }} identity={identity} />);
+        at320(<EventCard post={{ ...series, eventRepeat: undefined, eventNextDates: undefined }} identity={identity} viewMode="list" />);
         expect(screen.queryByTestId('event-repeat-caption')).not.toBeInTheDocument();
     });
 
@@ -235,7 +235,7 @@ describe('the ↻ caption: card, map popup (the same card) and Home', () => {
         const row = { postId: 'ev-s', title: 'Friday dinner', startAt: series.eventStartAt, endAt: series.eventEndAt, placeName: 'Bangalow Hall',
             rsvp: 'going' as const, photo: null, reminderOffsets: null, startLocal: series.eventStartLocal, endLocal: series.eventEndLocal, tz: series.eventTz,
             repeat: { freq: 'weekly' as const, interval: 1, byDay: 'FR' as const }, repeatUntil: '2027-12-17' };
-        at320(<EventCard post={myEventAsPost(row)} identity={identity} />);
+        at320(<EventCard post={myEventAsPost(row)} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-repeat-caption')).toHaveTextContent('↻ Every Friday · until 17 Dec 2027');
         const oneOff = { ...row, repeat: undefined, repeatUntil: undefined };
         expect(myEventAsPost(oneOff).eventRepeat).toBeUndefined();

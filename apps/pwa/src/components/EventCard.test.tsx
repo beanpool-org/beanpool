@@ -2,7 +2,10 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventCard, EventDetail } from './EventCard';
 import { MarketplaceCard } from './MarketplaceCard';
-import { CARD_INK, LIST_PHOTO, LIST_PHOTO_FILL, chip, listCard } from './market-card-shell';
+import {
+    CARD_INK, GRID_PHOTO, GRID_ROW, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, LIST_PHOTO, LIST_PHOTO_FILL,
+    chip, gridTile, listCard,
+} from './market-card-shell';
 import * as api from '../lib/api';
 
 vi.mock('../lib/api', async () => {
@@ -62,7 +65,8 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
     afterEach(() => { document.documentElement.style.fontSize = ''; });
 
     it('leads with the chips, then the date and time in the largest text, then title, place and distance, counts', () => {
-        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} />);
+        // The stacked card: the compact view's, until its row joins the box (C1). The grid's tile is below (W3').
+        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} viewMode="compact" />);
         const card = screen.getByTestId('event-card');
         const lines = within(card).getByRole('button', { name: /Open event/ }).querySelectorAll(':scope > span');
         // The chip row is the first line, as it is on the offer cards; the date has the next line to itself.
@@ -228,7 +232,7 @@ describe('EventCard at 320px (docs/events-on-the-map.md §3)', () => {
     });
 
     it('hides decorative emojis from screen readers with aria-hidden="true"', () => {
-        const { container } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} />);
+        const { container } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} viewMode="compact" />);
         const hiddenEmojis = container.querySelectorAll('[aria-hidden="true"]');
         const hiddenTexts = Array.from(hiddenEmojis).map(e => e.textContent?.trim());
         expect(hiddenTexts).toContain('📍');
@@ -263,7 +267,7 @@ describe('EventCard without buttons (the Market, Your events)', () => {
     });
 
     it('shows my answer as text inside the card, and says it in the button’s label', () => {
-        const { unmount } = renderAt320(<EventCard post={baseEvent} identity={identity} onOpen={() => {}} />);
+        const { unmount } = renderAt320(<EventCard post={baseEvent} identity={identity} onOpen={() => {}} viewMode="list" />);
         const mark = screen.getByTestId('event-my-answer');
         expect(mark).toHaveTextContent('Going ✓');
         expect(mark.closest('button')).toBe(screen.getByRole('button', { name: /^Open event: / }));
@@ -275,22 +279,22 @@ describe('EventCard without buttons (the Market, Your events)', () => {
         expect(screen.queryByTestId('event-counts')).toBeNull();
         unmount();
 
-        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: 'interested' }} identity={identity} onOpen={() => {}} />);
+        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: 'interested' }} identity={identity} onOpen={() => {}} viewMode="list" />);
         expect(screen.getByTestId('event-my-answer')).toHaveTextContent('Interested ✓');
     });
 
     it('with no answer of mine: the counts once anyone has answered, nothing at 0 going · 0 interested', () => {
-        const { unmount } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, goingCount: 3, interestedCount: 1 }} identity={identity} />);
+        const { unmount } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, goingCount: 3, interestedCount: 1 }} identity={identity} viewMode="list" />);
         expect(screen.queryByTestId('event-my-answer')).toBeNull();
         expect(screen.getByTestId('event-counts')).toHaveTextContent('3 going · 1 interested');
         unmount();
 
         // One of the two is enough to say it.
-        const { unmount: unmount2 } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, goingCount: 0, interestedCount: 2 }} identity={identity} />);
+        const { unmount: unmount2 } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, goingCount: 0, interestedCount: 2 }} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-counts')).toHaveTextContent('0 going · 2 interested');
         unmount2();
 
-        const { container } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, goingCount: 0, interestedCount: 0 }} identity={identity} />);
+        const { container } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, goingCount: 0, interestedCount: 0 }} identity={identity} viewMode="list" />);
         expect(screen.queryByTestId('event-counts')).toBeNull();
         expect(container.textContent).not.toMatch(/going|interested/i);
     });
@@ -305,7 +309,7 @@ describe('EventCard without buttons (the Market, Your events)', () => {
 
     it('says the host is hosting, and keeps the host’s counts under it', () => {
         const hosted: any = { ...baseEvent, myRsvp: null, eventRsvps: [{ memberPubkey: 'b', memberCallsign: 'Bo', status: 'going', updatedAt: '' }] };
-        renderAt320(<EventCard post={hosted} identity={identity} />);
+        renderAt320(<EventCard post={hosted} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-hosting')).toHaveTextContent("You're hosting this event");
         expect(screen.getByTestId('event-hosting').closest('button')).toBe(screen.getByRole('button', { name: /^Open event: / }));
         // The label stands in for what is inside the button, so a screen reader still hears that this is theirs.
@@ -316,14 +320,14 @@ describe('EventCard without buttons (the Market, Your events)', () => {
 
     it('a member’s copy on the global community has its copy line and no answer or counts', () => {
         const from = { host: 'mullum.example.org', postId: 'home-1', name: 'Mullumbimby', url: 'https://mullum.example.org', door: 'ask' };
-        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: 'going', shownCopy: true, shownFrom: from } as any} identity={identity} />);
+        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: 'going', shownCopy: true, shownFrom: from } as any} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-copy-line')).toBeInTheDocument();
         expect(screen.queryByTestId('event-my-answer')).toBeNull();
         expect(screen.queryByTestId('event-counts')).toBeNull();
     });
 
     it('keeps the date whole and alone on its line: the pin is in the chip row above it', () => {
-        renderAt320(<EventCard post={pinned} identity={identity} />);
+        renderAt320(<EventCard post={pinned} identity={identity} viewMode="list" />);
         const chips = screen.getByTestId('event-chips');
         const pin = screen.getByTestId('event-pinned-chip');
         const when = screen.getByTestId('event-when');
@@ -341,7 +345,8 @@ describe('EventCard without buttons (the Market, Your events)', () => {
     });
 
     it('the chip row reads EVENT, PINNED, then the state, from the central colour tokens', () => {
-        renderAt320(<EventCard post={{ ...pinned, eventState: 'updated' }} identity={identity} />);
+        // The stacked card's own chips (the compact view, until C1); the list card's are the box's one chip (below).
+        renderAt320(<EventCard post={{ ...pinned, eventState: 'updated' }} identity={identity} viewMode="compact" />);
         const chips = screen.getByTestId('event-chips');
         expect(Array.from(chips.children).map(c => c.textContent)).toEqual(['EVENT', '📌 PINNED', 'UPDATED']);
         expect(screen.getByTestId('event-type-chip').className).toMatch(/bg-bp-tile-event-tint/);
@@ -359,13 +364,13 @@ describe('EventCard without buttons (the Market, Your events)', () => {
     });
 
     it('CANCELLED and ENDED wear the danger chip', () => {
-        const { unmount } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, eventState: 'cancelled' }} identity={identity} />);
+        const { unmount } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, eventState: 'cancelled' }} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-state-badge')).toHaveTextContent('CANCELLED');
         expect(screen.getByTestId('event-state-badge').className).toMatch(/bg-bp-chip-danger-tint/);
         expect(screen.getByTestId('event-state-badge').className).toMatch(/text-bp-chip-danger-ink/);
         unmount();
         const over = new Date(2020, 0, 1, 9, 0).getTime();
-        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, eventStartAt: new Date(over).toISOString(), eventEndAt: new Date(over + HOUR).toISOString() }} identity={identity} />);
+        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, eventStartAt: new Date(over).toISOString(), eventEndAt: new Date(over + HOUR).toISOString() }} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-state-badge')).toHaveTextContent('ENDED');
         expect(screen.getByTestId('event-state-badge').className).toMatch(/bg-bp-chip-danger-tint/);
     });
@@ -404,6 +409,8 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
 
     it('shows the first photo, with the title as its alt text', () => {
         renderAt320(<EventCard post={withPhoto} identity={identity} distanceKm={2.4} />);
+        // The picture hook (card-photo-blank): the event tile holds the slot until the photo has drawn.
+        fireEvent.load(screen.getByTestId('event-card').querySelector('img')!);
         const img = within(screen.getByTestId('event-card')).getByRole('img');
         expect(img).toHaveAttribute('src', '/uploads/working-bee.jpg');
         expect(img).toHaveAttribute('alt', baseEvent.title);
@@ -430,6 +437,7 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
         renderAt320(<EventCard post={withPhoto} identity={identity} onOpen={() => {}} />);
         const card = screen.getByTestId('event-card');
         const open = within(card).getByRole('button', { name: /Open event/ });
+        fireEvent.load(card.querySelector('img')!);
         const img = within(card).getByRole('img');
         expect(open.contains(img)).toBe(true);
         expect(img.closest('button')).toBe(open);
@@ -437,16 +445,29 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
     });
 
     // Decision 1: an event should sit among the offers, so the photo takes the same size, crop and rounding the
-    // offer card uses in that view — MarketplaceCard's 110px banner in the grid, its 80px square in the list.
-    // W2 of the style box (DESIGN-card-style-box-fable.md §1.1; DESIGN-market-event-cards-fable.md §3 W2): in the list the
-    // event IS the offer's card: the same frame, and the photo flush under its left corners, the card's full height.
-    it('matches the offer card: a banner in the grid; in the list the same box, the photo flush and the card\'s full height', () => {
-        const { unmount } = renderAt320(<EventCard post={withPhoto} identity={identity} />);
-        const grid = within(screen.getByTestId('event-card')).getByRole('img');
-        expect(grid.className).toMatch(/h-\[110px\]/);
-        expect(grid.className).toMatch(/w-full/);
-        expect(grid.className).toMatch(/object-cover/);
-        expect(grid.className).toMatch(/rounded-xl/);
+    // offer card uses in that view. W2 of the style box (DESIGN-card-style-box-fable.md §1.1; DESIGN-market-event-cards-fable.md
+    // §3 W2): in the list the event IS the offer's card: the same frame, and the photo flush under its left corners, the card's
+    // full height. W3' (DESIGN-market-grid-sizes-fable.md §2.2): in the grid the event's 110px banner goes and the photo is the
+    // listing tile's, 4:3 flush under the tile's top corners with the same crop.
+    it('matches the offer card: the listing tile\'s 4:3 slot in the grid; in the list the same box, the photo flush and the card\'s full height', () => {
+        const { unmount } = renderAt320(
+            <>
+                <EventCard post={withPhoto} identity={identity} />
+                <MarketplaceCard post={{ ...baseEvent, id: 'of-1', type: 'offer', photos: ['/uploads/offer.jpg'] } as any} viewMode="grid" />
+            </>,
+        );
+        const gridSlot = screen.getByTestId('event-grid-photo');
+        const offerTile = screen.getByTestId('listing-grid-tile');
+        // The same slot class as the listing tile's photo box (its first child), flush: the first thing in the card's button.
+        expect(gridSlot.className).toBe(`block ${(offerTile.firstElementChild as HTMLElement).className}`);
+        expect(gridSlot.className).toContain(GRID_PHOTO);
+        expect(gridSlot.parentElement!.firstElementChild).toBe(gridSlot);
+        expect(within(gridSlot).getByTestId('category-tile')).toBeInTheDocument();
+        fireEvent.load(gridSlot.querySelector('img')!);
+        const grid = within(gridSlot).getByRole('img');
+        expect(grid.className).toBe('w-full h-full object-cover');
+        expect(grid.style.objectPosition).toBe('50% 33%');
+        expect(grid.className).not.toMatch(/h-\[110px\]|rounded-xl/);
         unmount();
 
         renderAt320(<EventCard post={withPhoto} identity={identity} viewMode="list" onOpen={() => {}} />);
@@ -765,7 +786,7 @@ describe('Event times on the card and the detail (DESIGN-event-times §4, slice 
     };
 
     it('in person somewhere else: the place clock leads, the second time under it, each half whole', () => {
-        renderAt320(<EventCard post={lagos} identity={identity} distanceKm={2.4} />);
+        renderAt320(<EventCard post={lagos} identity={identity} distanceKm={2.4} viewMode="list" />);
         const when = screen.getByTestId('event-when');
         expect(Array.from(when.children).map(c => c.textContent)).toEqual(['SAT 28 SEP ·', '20:50–22:50']);
         expect(when.getAttribute('aria-label')).toBe('SAT 28 SEP · 20:50–22:50 · Lagos time · 15:50 your time');
@@ -778,13 +799,13 @@ describe('Event times on the card and the detail (DESIGN-event-times §4, slice 
 
     it('in person where the reader is: no second line', () => {
         const here = { ...lagos, eventStartAt: '2030-09-29T00:50:00.000Z', eventEndAt: '2030-09-29T02:50:00.000Z', eventTz: 'America/New_York' };
-        renderAt320(<EventCard post={here} identity={identity} />);
+        renderAt320(<EventCard post={here} identity={identity} viewMode="list" />);
         expect(screen.getByTestId('event-when').getAttribute('aria-label')).toBe('SAT 28 SEP · 20:50–22:50');
         expect(screen.queryByTestId('event-when-note')).not.toBeInTheDocument();
     });
 
     it("online: the reader's own time, \"your time\", and Online where the place goes", () => {
-        renderAt320(<EventCard post={online} identity={identity} distanceKm={3} />);
+        renderAt320(<EventCard post={online} identity={identity} distanceKm={3} viewMode="list" />);
         expect(screen.getByTestId('event-when').getAttribute('aria-label')).toBe('FRI 18 OCT · 5:50–7:50 your time');
         // "your time" is a whole piece of its own, so the line can wrap before it at 320px in the page's large text.
         expect(Array.from(screen.getByTestId('event-when').children).map(c => [c.textContent, /whitespace-nowrap/.test(c.className)])).toEqual([
@@ -822,5 +843,195 @@ describe('Event times on the card and the detail (DESIGN-event-times §4, slice 
     it('never makes a link of anything but http(s)', () => {
         render(<EventDetail post={{ ...online, eventLink: 'javascript:alert(1)' }} identity={identity} />);
         expect(screen.queryByTestId('event-join')).not.toBeInTheDocument();
+    });
+});
+
+/**
+ * W3' (DESIGN-market-grid-sizes-fable.md §2.2, §3 W3'; DESIGN-grid-event-rows-fable.md): in the Market's grid the event is the
+ * listing tile, so a row holding an event is one tile height. Its text block is a listing's: four rows, the date, the time,
+ * the title, the place · distance. Every clock on it is the reader's own; the time row is whole pieces from core.
+ */
+describe("The event's grid tile, on the lattice (W3')", () => {
+    const savedTz = process.env.TZ;
+    beforeEach(() => { vi.mocked(api.rsvpEvent).mockReset(); });
+    afterEach(() => { if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz; document.documentElement.style.fontSize = ''; });
+    const rows = () => Array.from(screen.getByTestId('grid-text-block').children) as HTMLElement[];
+    const pieces = () => within(screen.getByTestId('event-tile-time')).queryAllByTestId('event-time-piece').map(p => p.textContent);
+    // Sat 9 Nov 2030, 16:00–21:00 at Railway Park in NSW on daylight time (UTC+11) = 05:00Z–10:00Z.
+    const byron: any = {
+        ...baseEvent, myRsvp: null, eventStartAt: '2030-11-09T05:00:00.000Z', eventEndAt: '2030-11-09T10:00:00.000Z',
+        eventStartLocal: '2030-11-09T16:00', eventEndLocal: '2030-11-09T21:00', eventTz: 'Australia/Sydney', eventOnline: false,
+        eventPlaceName: 'Railway Park',
+    };
+
+    it("the four rows, in the listing tile's own block and frame: date, time, title, place · distance", () => {
+        renderAt320(
+            <>
+                <EventCard post={{ ...baseEvent, myRsvp: null }} identity={identity} distanceKm={2.4} />
+                <MarketplaceCard post={{ ...baseEvent, id: 'of-1', type: 'offer' } as any} viewMode="grid" distanceKm={2.4} />
+            </>,
+        );
+        const [event, listing] = screen.getAllByTestId('grid-text-block');
+        // The same block (GRID_TEXT: a fixed 7.0625rem, four rows) and the same frame, so the same height at every width.
+        expect(event.className).toBe(GRID_TEXT);
+        expect(event.className).toBe(listing.className);
+        expect(screen.getByTestId('event-card').className.startsWith(gridTile())).toBe(true);
+        expect(screen.getByTestId('listing-grid-tile').className.startsWith(gridTile())).toBe(true);
+        const r = Array.from(event.children) as HTMLElement[];
+        expect(r.map(x => x.textContent)).toEqual(['SAT 28 SEP', '9:00–12:00', baseEvent.title, '📍 Bindarrabi Hall · 2.4 km']);
+        // Each one row tall: the listing's row, and the time row the same height with its pieces wrapping under its clip.
+        expect([r[0], r[2], r[3]].map(x => x.className)).toEqual([GRID_ROW, GRID_ROW, GRID_ROW]);
+        expect(r[1].className.startsWith(GRID_TIME_ROW)).toBe(true);
+        // The date and the time in the event ink; the title and the place truncate inside their rows.
+        expect(screen.getByTestId('event-tile-date').className).toContain(CARD_INK.event);
+        expect(r[1].className).toContain(CARD_INK.event);
+        for (const id of ['event-tile-title', 'event-tile-place']) expect(screen.getByTestId(id).className).toMatch(/(^| )truncate( |$)/);
+        // None of the stacked card's lines in the tile: no chip row, no when line, no second clock line, no repeat line.
+        for (const id of ['event-chips', 'event-when', 'event-when-note', 'event-repeat-caption']) expect(screen.queryByTestId(id)).toBeNull();
+    });
+
+    it('the time row: two whole pieces, the dash on the end piece, their join the span; neither shrinks', () => {
+        renderAt320(<EventCard post={baseEvent} identity={identity} />);
+        expect(pieces()).toEqual(['9:00', '–12:00']);
+        for (const p of within(screen.getByTestId('event-tile-time')).getAllByTestId('event-time-piece')) expect(p.className).toBe(GRID_TIME_PIECE);
+        expect(pieces()[0]).not.toMatch(/[–-]$/);
+    });
+
+    it("the mark: the viewer's own answer as the pill at the photo's foot, last; no counts, no host's line", () => {
+        const { unmount } = renderAt320(<EventCard post={{ ...baseEvent, goingCount: 7, interestedCount: 3 }} identity={identity} onOpen={() => {}} />);
+        const foot = screen.getByTestId('grid-badge-row');
+        const mark = within(foot).getByTestId('event-mark');
+        expect(mark).toHaveTextContent('Going ✓');
+        expect(mark.className).toBe(GRID_SCRIM_MARK);
+        expect(foot.lastElementChild).toBe(mark);
+        expect(screen.getByRole('button', { name: /^Open event: / })).toHaveAccessibleName(`Open event: ${baseEvent.title}, Going ✓`);
+        // The counts are the page's in the grid.
+        expect(screen.getByTestId('event-card').textContent).not.toMatch(/\d+ going|interested|👥/);
+        for (const id of ['event-counts', 'event-my-answer', 'event-hosting']) expect(screen.queryByTestId(id)).toBeNull();
+        unmount();
+
+        const { unmount: u2 } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: 'interested' }} identity={identity} />);
+        expect(screen.getByTestId('event-mark')).toHaveTextContent('Interested ✓');
+        u2();
+
+        // Nobody's answer: no mark and no counts, whatever the counts are.
+        const { unmount: u3 } = renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, goingCount: 7, interestedCount: 3 }} identity={identity} />);
+        expect(screen.queryByTestId('event-mark')).toBeNull();
+        expect(screen.getByTestId('event-card').textContent).not.toMatch(/\d+ going|interested/);
+        u3();
+
+        // The host: no mark, no "You're hosting this event", no counts (the page has all three).
+        const hosted: any = { ...baseEvent, myRsvp: null, eventRsvps: [{ memberPubkey: 'b', memberCallsign: 'Bo', status: 'going', updatedAt: '' }] };
+        renderAt320(<EventCard post={hosted} identity={identity} />);
+        expect(screen.queryByTestId('event-mark')).toBeNull();
+        expect(screen.queryByTestId('event-hosting')).toBeNull();
+        expect(screen.getByTestId('event-card').textContent).not.toMatch(/hosting|\d+ going/);
+    });
+
+    it('no button but the card: one press that opens the event from anywhere on it, and answers nothing', () => {
+        const onOpen = vi.fn();
+        renderAt320(<EventCard post={baseEvent} identity={identity} onOpen={onOpen} />);
+        const card = screen.getByTestId('event-card');
+        const buttons = within(card).getAllByRole('button');
+        expect(buttons).toHaveLength(1);
+        expect(screen.queryByTestId('event-rsvp-row')).toBeNull();
+        for (const id of ['event-grid-photo', 'grid-badge-row', 'grid-text-block']) expect(buttons[0].contains(screen.getByTestId(id))).toBe(true);
+        fireEvent.click(screen.getByTestId('event-mark'));
+        fireEvent.click(screen.getByTestId('event-tile-place'));
+        expect(onOpen).toHaveBeenCalledTimes(2);
+        expect(api.rsvpEvent).not.toHaveBeenCalled();
+    });
+
+    it("the foot row: PINNED, the state, 🔒 for a group-only event with its sentence as the pill's name, the mark at the end; row 4 keeps the place", () => {
+        // A pinned event (only a public one can be: core's pinLive): PINNED, then the state, then the mark.
+        const pinnedPost: any = { ...baseEvent, eventState: 'updated', pinnedAt: new Date().toISOString(), pinnedUntil: new Date(Date.now() + 3 * 24 * HOUR).toISOString() };
+        const { unmount } = renderAt320(<EventCard post={pinnedPost} identity={identity} />);
+        expect(Array.from(screen.getByTestId('grid-badge-row').children).map(c => c.textContent?.trim())).toEqual(['📌 PINNED', 'UPDATED', 'Going ✓']);
+        unmount();
+
+        // A group-only event: the state, then 🔒, then the mark.
+        const post: any = { ...baseEvent, eventState: 'updated', audienceScope: 'group', targetGroupId: 'g-1', targetGroupName: 'Byron Gardeners' };
+        renderAt320(<EventCard post={post} identity={identity} distanceKm={2.4} />);
+        const foot = screen.getByTestId('grid-badge-row');
+        expect(Array.from(foot.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-state-badge', 'event-lock-pill', 'event-mark']);
+        expect(Array.from(foot.children).map(c => c.textContent?.trim())).toEqual(['UPDATED', '🔒', 'Going ✓']);
+        const lock = screen.getByTestId('event-lock-pill');
+        expect(lock).toHaveAttribute('role', 'img');
+        expect(lock).toHaveAttribute('aria-label', '🔒 Only Byron Gardeners can see this');
+        expect(lock).toHaveAttribute('title', '🔒 Only Byron Gardeners can see this');
+        expect(screen.getByTestId('event-state-badge').className).toBe(GRID_SCRIM_PILL);
+        expect(lock.className.startsWith(GRID_SCRIM_PILL)).toBe(true);
+        // The card's one label says it too: a screen reader hears the button's label, not what is inside it.
+        expect(screen.getByRole('button', { name: /^Open event: / }))
+            .toHaveAccessibleName(`Open event: ${baseEvent.title}, Going ✓, 🔒 Only Byron Gardeners can see this`);
+        expect(screen.getByTestId('grid-row-4').textContent).toBe('📍 Bindarrabi Hall · 2.4 km');
+        expect(screen.getByTestId('event-type-chip').className).toBe(chip('event'));
+    });
+
+    it('a public event has no lock pill; CANCELLED is a pill on the photo, as PINNED is', () => {
+        renderAt320(<EventCard post={{ ...baseEvent, myRsvp: null, eventState: 'cancelled' }} identity={identity} />);
+        expect(screen.queryByTestId('event-lock-pill')).toBeNull();
+        expect(screen.getByTestId('event-state-badge')).toHaveTextContent('CANCELLED');
+        expect(screen.getByTestId('event-state-badge').className).toBe(GRID_SCRIM_PILL);
+        expect(screen.getByTestId('grid-badge-row').contains(screen.getByTestId('event-state-badge'))).toBe(true);
+    });
+
+    it("a Byron 16:00 read in Queensland: the reader's own clock in rows 1 and 2, '🕒 your time' first and whole in row 4, never the place's bare 16:00", () => {
+        process.env.TZ = 'Australia/Brisbane';
+        renderAt320(<EventCard post={byron} identity={identity} distanceKm={3} />);
+        expect(rows().map(x => x.textContent)).toEqual(['SAT 9 NOV', '15:00–20:00', baseEvent.title, '🕒 your time📍 Railway Park · 3.0 km']);
+        expect(pieces()).toEqual(['15:00', '–20:00']);
+        const label = screen.getByTestId('event-your-time');
+        expect(label.textContent).toBe('🕒 your time');
+        expect(screen.getByTestId('grid-row-4').firstElementChild).toBe(label);
+        // Whole: never shrunk for the place, which gives way after it.
+        expect(label.className).toMatch(/(^| )shrink-0( |$)/);
+        expect(label.className).toContain(CARD_INK.event);
+        expect(screen.getByTestId('event-tile-place').className).toMatch(/(^| )min-w-0( |$)/);
+        expect(screen.getByTestId('event-card').textContent).not.toMatch(/16:00|21:00/);
+    });
+
+    it("the same event read in NSW: the place's own clock, nothing to label", () => {
+        process.env.TZ = 'Australia/Sydney';
+        renderAt320(<EventCard post={byron} identity={identity} />);
+        expect(rows()[0].textContent).toBe('SAT 9 NOV');
+        expect(pieces()).toEqual(['16:00', '–21:00']);
+        expect(screen.queryByTestId('event-your-time')).toBeNull();
+        expect(screen.getByTestId('event-card').textContent).not.toMatch(/your time/);
+    });
+
+    it("an event that ends on a later date: row 1 the start's date, row 2 its start time alone, one piece; the end is the page's", () => {
+        process.env.TZ = 'Australia/Sydney';
+        // Fri 8 Nov 2030 10:26 to Sat 9 Nov 12:26 in Sydney (UTC+11).
+        const twoDay: any = {
+            ...baseEvent, eventStartAt: '2030-11-07T23:26:00.000Z', eventEndAt: '2030-11-09T01:26:00.000Z',
+            eventStartLocal: '2030-11-08T10:26', eventEndLocal: '2030-11-09T12:26', eventTz: 'Australia/Sydney', eventOnline: false,
+        };
+        renderAt320(<EventCard post={twoDay} identity={identity} />);
+        expect(screen.getByTestId('event-tile-date').textContent).toBe('FRI 8 NOV');
+        expect(pieces()).toEqual(['10:26']);
+        expect(screen.getByTestId('event-card').textContent).not.toMatch(/SAT 9 NOV|12:26|–/);
+        expect(screen.queryByTestId('event-your-time')).toBeNull();
+    });
+
+    it("online: row 2 the reader's bare span and 'your time' in no row; row 4 🌐 Online", () => {
+        process.env.TZ = 'America/New_York';
+        // A Sydney host's Fri 18 Oct 2030 20:50 (AEDT): 09:50Z, 5:50 in New York.
+        const online: any = {
+            ...baseEvent, myRsvp: null, lat: undefined, lng: undefined, eventPlaceName: undefined,
+            eventStartAt: '2030-10-18T09:50:00.000Z', eventEndAt: '2030-10-18T11:50:00.000Z',
+            eventStartLocal: '2030-10-18T20:50', eventEndLocal: '2030-10-18T22:50', eventTz: 'Australia/Sydney', eventOnline: true,
+        };
+        renderAt320(<EventCard post={online} identity={identity} distanceKm={3} />);
+        expect(rows().map(x => x.textContent)).toEqual(['FRI 18 OCT', '5:50–7:50', baseEvent.title, '🌐 Online']);
+        expect(pieces()).toEqual(['5:50', '–7:50']);
+        expect(screen.getByTestId('event-card').textContent).not.toMatch(/your time/);
+        expect(screen.queryByTestId('event-your-time')).toBeNull();
+    });
+
+    it("the map's preview (a grid card with its buttons) keeps the stacked card until the pop-up is the list card (M1)", () => {
+        renderAt320(<EventCard post={baseEvent} identity={identity} rsvpOnCard />);
+        expect(screen.queryByTestId('grid-text-block')).toBeNull();
+        expect(screen.getByTestId('event-rsvp-row')).toBeInTheDocument();
     });
 });

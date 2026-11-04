@@ -11,8 +11,8 @@ import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, type CardType } from '@beanpool/core';
 import {
-    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL,
-    GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
+    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
+    GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
     PAGE_TYPE, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
 
@@ -263,9 +263,39 @@ describe('the grid tile holds core\'s numbers', () => {
         expect(classes(GRID_SCRIM_PILL)).toEqual(expect.arrayContaining(['bg-nature-900/90', 'text-white']));
     });
 
+    // W3': the event tile's own rows and pills (DESIGN-grid-event-rows-fable.md).
+    it.each(Object.keys(GRID_TYPE) as (keyof typeof GRID_TYPE)[])('the grid\'s %s type is core\'s in size and weight, and one row tall', (role) => {
+        const { size, weight, line } = typeOf(GRID_TYPE[role]);
+        const core = MARKET_CARD_TYPE.grid[role] as CardType;
+        expect({ size, weight }).toEqual({ size: core.size, weight: core.weight });
+        // text-sm leading-snug: 1.203125rem, the row (core's line is the phone's 18).
+        expect(line! / 16).toBe(MARKET_GRID_TEXT_BLOCK.rowHeightRem);
+    });
+
+    it('the time row is one row tall, wraps its pieces and clips them; a piece is whole and never shrinks', () => {
+        expect(rem(GRID_TIME_ROW, 'h')).toBe(MARKET_GRID_TEXT_BLOCK.rowHeightRem);
+        expect(classes(GRID_TIME_ROW)).toEqual(expect.arrayContaining(['flex', 'flex-wrap', 'content-start', 'overflow-hidden', 'shrink-0', 'min-w-0']));
+        // No gap: the dash is the end piece's own, so the span reads "10:26–14:26" whole.
+        expect(classes(GRID_TIME_ROW).some(c => /^gap-/.test(c))).toBe(false);
+        expect(classes(GRID_TIME_PIECE)).toEqual(expect.arrayContaining(['shrink-0', 'whitespace-nowrap', 'max-w-full']));
+        expect(classes(GRID_TIME_PIECE)).not.toContain('min-w-0');
+    });
+
+    it('the mark pill: core\'s grid price type, white on the scrim at the foot row\'s end, one line', () => {
+        const { size, weight } = typeOf(GRID_SCRIM_MARK);
+        expect({ size, weight }).toEqual({ size: MARKET_CARD_TYPE.grid.price.size, weight: MARKET_CARD_TYPE.grid.price.weight });
+        expect(classes(GRID_SCRIM_MARK)).toEqual(expect.arrayContaining(['ml-auto', 'bg-nature-900/90', 'text-white', 'whitespace-nowrap', 'max-w-full', 'text-ellipsis']));
+        expect(classes(GRID_SCRIM_MARK)).not.toContain('uppercase');
+    });
+
+    it('the grid photo\'s crop is core\'s focus', () => {
+        const { cropX, cropY } = MARKET_CARD_SHELL.photo.grid;
+        expect(GRID_PHOTO_CROP.objectPosition).toBe(`${cropX}% ${cropY}%`);
+    });
+
     it('no raw violet, purple, blue or nature-950 in the grid\'s classes', () => {
         const all = [GRID, GRID_POLL_CELL, gridTile(), gridTile({ elder: true }), gridTile({ pulse: true }), GRID_PHOTO, GRID_TEXT,
-            GRID_TITLE, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL].join(' ');
+            GRID_TITLE, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL, GRID_SCRIM_MARK, GRID_TIME_ROW, GRID_TIME_PIECE, ...Object.values(GRID_TYPE)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
     });
 });

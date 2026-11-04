@@ -10,7 +10,8 @@
  * Slice W2 puts the LIST card on it, for listings (MarketplaceCard) and events (EventCard): the photo flush under the
  * card's left corners and the card's full height, the text beside it, the one chip, the type scale. A list card takes the
  * height its lines need (Marty, 4 Nov 2026: "the big card doesnt need to conform to the same size"): nothing here fixes
- * or equalises a list card's height. The grid tile and the compact row join in their own slices.
+ * or equalises a list card's height. Slice G2 puts the GRID tile on it: one height per row ("the other smaller tiles yes").
+ * The compact row joins in its own slice.
  */
 
 /** §1.1 The list card's frame: corners 14, a 1 px border, the card shadow; the photo and the text sit side by side. */
@@ -136,6 +137,61 @@ export const POP_UP_CLOSE_DOT = 'w-7 h-7 rounded-full bg-nature-100 dark:bg-natu
  * words do not). Measured at 320 x 1.3: without the height an event's date ran under the circle (map-pop-up-card-shots.mjs).
  */
 export const POP_UP_CLOSE_ROOM = 'pe-8 min-h-6';
+
+/**
+ * The grid (slice G2, DESIGN-market-grid-sizes-fable.md §2.2 to §2.4): a lattice. Every tile in a row is the same height,
+ * because each is the photo (4:3, following the column) over a text block of exactly four rows (in rem, following the text
+ * size), and each tile fills its cell. The gutter is the box's 16 (`gap-4`, from `gap-3.5`).
+ *
+ * The columns: 2 to 767 px, 3 from 768, 4 from 1024, 5 from 1280 (viewport breakpoints, as before). `grid-flow-row-dense`
+ * lets the tiles after a poll back-fill a cell its two columns cannot start in (#1092).
+ */
+export const GRID = 'grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4';
+
+/**
+ * The poll's cell (§2.3): the whole row at two and three columns, where nothing sits beside it, at its own height; from four
+ * columns up a 2 x 2 square that the tiles flow round. It fills its cell, so its turnout row sits at the square's foot.
+ */
+export const GRID_POLL_CELL = 'h-full col-span-2 md:col-span-3 lg:col-span-2 lg:row-span-2';
+
+/** A grid tile's outer box: the list card's corners, border, ground and shadow, the photo on top, filling its cell. */
+const GRID_FRAME = 'relative flex flex-col h-full w-full min-w-0 overflow-hidden rounded-[14px] border shadow-sm';
+
+/** The grid tile's outer box. A Pulse tile has its own border; an Elder's adds its left border. */
+export function gridTile({ pulse = false, elder = false }: { pulse?: boolean; elder?: boolean } = {}): string {
+    if (pulse) return `${GRID_FRAME} ${GROUND} ${PULSE}`;
+    return `${GRID_FRAME} ${BORDER} ${GROUND}${elder ? ` ${ELDER}` : ''}`;
+}
+
+/** The tile's photo: 4:3, flush under the tile's top corners, never squeezed by the text block. */
+export const GRID_PHOTO = 'relative w-full aspect-[4/3] overflow-hidden shrink-0';
+
+/**
+ * The text block under the photo: 12 of padding, rows 4 apart, and a FIXED height of four rows, `1.5rem + 4 x 1.203125rem +
+ * 3 x 0.25rem` = 7.0625rem (core's MARKET_GRID_TEXT_BLOCK_REM; 113 px at 16 px text, 147 at 1.3x). Whatever a tile holds, its
+ * block is this tall, so a tile with a row to spare is the same box with a blank line inside it, never a shorter tile.
+ */
+export const GRID_TEXT = 'min-w-0 flex flex-col gap-1 p-3 h-[7.0625rem] shrink-0 overflow-hidden';
+
+/** Rows 1 and 2: the title, two lines at most, and two rows reserved however short it is. 14/800 on 1.203125rem. */
+export const GRID_TITLE = 'm-0 shrink-0 text-sm font-extrabold leading-snug line-clamp-2 min-h-[2.40625rem]';
+
+/** Rows 3 and 4: one line each, exactly a row tall; what is longer ends in an ellipsis inside the row. */
+export const GRID_ROW = 'shrink-0 h-[1.203125rem] min-w-0 flex items-center gap-1.5 overflow-hidden whitespace-nowrap';
+
+/** The one chip in a grid row: as `CHIP`, but it gives way to the distance before it and ends in an ellipsis. */
+export const GRID_ROW_CHIP = 'inline-block min-w-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis px-1.5 py-0.5 rounded-md text-[10px] font-extrabold leading-normal tracking-wide';
+
+/** A chip of one tone in a grid row. */
+export function gridChip(tone: ChipTone): string {
+    return `${GRID_ROW_CHIP} ${CHIP_TONE[tone]}`;
+}
+
+/**
+ * A pill on the tile's photo, at its foot (📌 PINNED; the phone's `gridBadge`): the scrim, white words, 10/700, the chip's
+ * padding and corners. Readable on any photo, in either scheme.
+ */
+export const GRID_SCRIM_PILL = 'inline-block shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md text-[10px] font-bold leading-normal bg-nature-900/90 text-white shadow-sm';
 
 /** The inks on the card ground, light and dark. */
 export const CARD_INK = {

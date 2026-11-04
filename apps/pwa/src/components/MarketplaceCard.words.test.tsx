@@ -62,6 +62,8 @@ describe('a Market card in the pseudo-locale', () => {
             <div>
                 <MarketplaceCard post={withPhoto} viewMode="grid" />
                 <MarketplaceCard post={need} viewMode="grid" />
+                {/* A grid tile's row 4 holds one chip (G2): the group lock beats RECURRING on `withPhoto`, so this one carries it. */}
+                <MarketplaceCard post={{ ...base, id: 'p5', repeatable: true } as MarketplacePost} viewMode="grid" />
                 <MarketplaceCard post={marked} viewMode="list" isOwnPost distanceKm={2.4} />
                 <MarketplaceCard post={marked} viewMode="compact" isOwnPost authorEnergy={100000} />
             </div>,
@@ -72,7 +74,8 @@ describe('a Market card in the pseudo-locale', () => {
         expect(screen.getAllByText(xx('↻ RECURRING')).length).toBeGreaterThan(1);
         expect(screen.getByText(xx('⏳ PENDING'))).toBeInTheDocument();
         expect(screen.getByText(xx('💸 CASH TOO')).getAttribute('title')).toBe(xx('Cash also needed for fuel or materials — agreed in chat'));
-        expect(screen.getByText(xx('🔒 Only {group} can see this').replace('{group}', 'Garden club'), { selector: '.rounded-md' })).toBeInTheDocument();
+        // The grid tile's row-4 chip is the one chip now (G2), as the list card's is: both read their own words.
+        expect(screen.getAllByText(xx('🔒 Only {group} can see this').replace('{group}', 'Garden club'), { selector: '.rounded-md' }).length).toBeGreaterThan(1);
         expect(screen.getByText(xx('{distance} km').replace('{distance}', '2.4'))).toBeInTheDocument();
         expect(screen.getByText(xx('Food & Produce'))).toBeInTheDocument();
         expect(screen.getAllByText(xx('/hr')).length).toBeGreaterThan(0);
@@ -101,8 +104,10 @@ describe('a Market card in the pseudo-locale', () => {
         // core's upperCase(), never from a CSS rule that cannot capitalise Turkish or Greek.
         expect(screen.getByText('⏸ PAUSED')).toBeInTheDocument();
         expect(screen.getByText('👤 YOU')).toBeInTheDocument();
-        expect(screen.getByText('🗞️ Daily Pulse')).toBeInTheDocument();
-        expect(screen.getByText('DAILY PULSE')).toBeInTheDocument();
+        // The grid's Pulse pill is the one chip now (G2), its capitals from core's upperCase(), as the list card's (W2).
+        expect(screen.getByText('🗞️ DAILY PULSE')).toBeInTheDocument();
+        // The grid's DAILY PULSE foot label left the tile in G2 (DESIGN-market-grid-sizes-fable.md §2.2): the pill says it.
+        expect(screen.queryByText('DAILY PULSE')).toBeNull();
         expect(screen.queryByText('VIEW')).toBeNull();
         expect(screen.queryByText('No description provided.')).toBeNull();
         expect(screen.getByText('420 m')).toBeInTheDocument();

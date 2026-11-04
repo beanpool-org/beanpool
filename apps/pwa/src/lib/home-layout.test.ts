@@ -11,7 +11,7 @@ const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: 
 import {
     FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, HOME_PACK_FLIP_MS, HOME_PACK_MAX_FLIPS, HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
     columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
-    moveCard, moveCardTo, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
+    moveCard, moveCardTo, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, placeLifted, placedBoxes, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
 import { arrangeCards, cardLine, reorderAmong, reorderIds } from './home-layout';
@@ -570,6 +570,143 @@ describe('packing by height on a wide screen (DESIGN-home-layout-fable.md §3.1,
             { id: 'c3', col: 2, rowStart: 15, rowSpan: 17 },
             { id: 'c4', col: 1, rowStart: 30, rowSpan: 24 },
         ]);
+    });
+});
+
+describe('where a held card lands: placeLifted (DESIGN-home-arrange-in-place-fable.md §2.3, slice A2)', () => {
+    type Item = PackableCard & { movable?: boolean };
+    const stack = (...hs: number[]): Item[] => hs.map((height, i) => ({ id: String.fromCharCode(97 + i), height, movable: true }));
+    /** The lifted card's box with it at place `to`. */
+    const boxAt = (items: Item[], id: string, to: number, cols: number, colWidth: number, gap: number) =>
+        placedBoxes(reorderIds(items, items.filter(i => i.movable).map(i => i.id), id, to), cols, colWidth, gap).get(id)!;
+    const inside = (p: { x: number; y: number }, b: { x: number; y: number; width: number; height: number }) => p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height;
+    const away = (p: { x: number; y: number }, b: { x: number; y: number; width: number; height: number }) =>
+        Math.hypot(Math.max(b.x - p.x, 0, p.x - b.x - b.width), Math.max(b.y - p.y, 0, p.y - b.y - b.height));
+
+    it('one column: the place whose box holds the pointer, the card under the finger moving down', () => {
+        // a b c d, 100 px each with 16 px between: a 0–100, b 116–216, c 232–332, d 348–448.
+        const items = stack(100, 100, 100, 100);
+        expect(placeLifted(items, 'd', { x: 50, y: 40 }, 1, 300, 16, 3)).toBe(0);
+        expect(placeLifted(items, 'd', { x: 50, y: 150 }, 1, 300, 16, 3)).toBe(1);
+        expect(placeLifted(items, 'd', { x: 50, y: 300 }, 1, 300, 16, 3)).toBe(2);
+        expect(placeLifted(items, 'a', { x: 50, y: 440 }, 1, 300, 16, 0)).toBe(3);
+        // Past the last card, or above the first: the nearest place.
+        expect(placeLifted(items, 'a', { x: 50, y: 900 }, 1, 300, 16, 0)).toBe(3);
+        expect(placeLifted(items, 'd', { x: 50, y: -60 }, 1, 300, 16, 3)).toBe(0);
+        // The cards that can't move keep their slots: Needs you on top stays first whatever the pointer says.
+        const fixed: Item[] = [{ id: 'needs', height: 80, fullRow: true }, ...stack(100, 100, 100)];
+        expect(placeLifted(fixed, 'c', { x: 50, y: 10 }, 1, 300, 16, 2)).toBe(0);
+        expect(placeLifted(fixed, 'needs', { x: 50, y: 300 }, 1, 300, 16, 0)).toBe(0);
+    });
+
+    it('one column: a lifted card taller than the one under the pointer goes before it, wherever on that card the pointer is', () => {
+        // a b c at 100 px, the lifted d at 300 px, last. On Home: a 0–100, b 116–216, c 232–332.
+        const items = stack(100, 100, 100, 300);
+        for (const y of [120, 160, 210]) expect(placeLifted(items, 'd', { x: 50, y }, 1, 300, 16, 3), `pointer at ${y} on b`).toBe(1);
+        for (const y of [240, 330]) expect(placeLifted(items, 'd', { x: 50, y }, 1, 300, 16, 3), `pointer at ${y} on c`).toBe(2);
+        // To go after c, point below it.
+        expect(placeLifted(items, 'd', { x: 50, y: 420 }, 1, 300, 16, 3)).toBe(3);
+    });
+
+    // A busy Home at 1280 px (three columns of 320 px): Needs you, the six Marty has (Sun and moon, Your beans, Your groups,
+    // Tips, New in the market, Coming up), First steps, the strip and the tile, and the community card last.
+    const BUSY: Item[] = [
+        { id: 'needs', height: 84, fullRow: true },
+        { id: 'sky', height: 86, movable: true }, { id: 'beans', height: 94, movable: true }, { id: 'groups', height: 172, movable: true },
+        { id: 'tips', height: 168, movable: true }, { id: 'market', height: 176, movable: true }, { id: 'events', height: 236, movable: true },
+        { id: 'steps', height: 120, movable: true },
+        { id: 'arrange-strip', height: 220, fullRow: true }, { id: 'arrange-add', height: 48, fullRow: true },
+        { id: 'community', height: 120, fullRow: true },
+    ];
+    const MOVABLE = BUSY.filter(i => i.movable).map(i => i.id);
+    const COL = 320;
+    const GAP = HOME_COLUMN_GAP;
+
+    it('three columns: wherever some place puts the card under the pointer, the card goes to one of those places; elsewhere, to the nearest', () => {
+        const home = placedBoxes(BUSY, 3, COL, GAP);
+        const column = (x: number) => Math.floor(x / (COL + GAP));
+        let overCards = 0;
+        let hops = 0;
+        for (const id of MOVABLE) {
+            for (let col = 0; col < 3; col++) {
+                for (let y = 0; y <= 700; y += 10) {
+                    const p = { x: col * (COL + GAP) + COL / 2, y };
+                    const current = MOVABLE.indexOf(id);
+                    const to = placeLifted(BUSY, id, p, 3, COL, GAP, current);
+                    const boxes = MOVABLE.map((_, k) => boxAt(BUSY, id, k, 3, COL, GAP));
+                    const can = boxes.map((b, k) => (inside(p, b) ? k : -1)).filter(k => k >= 0);
+                    if (can.length) expect(can, `${id} at column ${col + 1}, ${y} px`).toContain(to);
+                    else expect(away(p, boxes[to]), `${id} at column ${col + 1}, ${y} px: the nearest`).toBeCloseTo(Math.min(...boxes.map(b => away(p, b))), 6);
+                    // Pointed at another card where Home draws it: does the held card land in the pointer's column?
+                    if (MOVABLE.some(o => o !== id && inside(p, home.get(o)!))) {
+                        overCards++;
+                        if (column(boxes[to].x) !== col) hops++;
+                    }
+                }
+            }
+        }
+        // Pointed at another card, the held card lands in the pointer's column (design §5's stop: more than 2 drops in 20 a column
+        // over). Measured on this fixture: 0 of 642 points; the rest of "as near as the columns allow" is up or down.
+        expect(overCards).toBeGreaterThan(200);
+        expect(hops / overCards).toBeLessThanOrEqual(0.1);
+    });
+
+    it('three columns: a pointer in column 3 puts the card in column 3 when a place lands there, and where none can (under the columns) the nearest box wins', () => {
+        // Tips held over column 3, just under Your groups: the place before Coming up lands it there.
+        const groups = boxAt(BUSY, 'groups', MOVABLE.indexOf('groups'), 3, COL, GAP);
+        expect(groups.x).toBe(2 * (COL + GAP));
+        const p = { x: 2 * (COL + GAP) + 40, y: groups.y + groups.height + 30 };
+        const to = placeLifted(BUSY, 'tips', p, 3, COL, GAP, MOVABLE.indexOf('tips'));
+        expect(boxAt(BUSY, 'tips', to, 3, COL, GAP).x).toBe(2 * (COL + GAP));
+        expect(inside(p, boxAt(BUSY, 'tips', to, 3, COL, GAP))).toBe(true);
+        // Far under every column, past the community card: nothing lands there, so the place whose box is nearest.
+        const deep = { x: 2 * (COL + GAP) + 40, y: 5000 };
+        const toDeep = placeLifted(BUSY, 'tips', deep, 3, COL, GAP, MOVABLE.indexOf('tips'));
+        const all = MOVABLE.map((_, k) => away(deep, boxAt(BUSY, 'tips', k, 3, COL, GAP)));
+        expect(all[toDeep]).toBe(Math.min(...all));
+        expect(all.some(d => d === 0)).toBe(false);
+    });
+
+    it('the same point twice gives the same place, and a still pointer never flips it back and forth', () => {
+        for (const id of MOVABLE) {
+            for (const p of [{ x: 100, y: 200 }, { x: 500, y: 260 }, { x: 900, y: 330 }, { x: 500, y: 90 }]) {
+                const first = placeLifted(BUSY, id, p, 3, COL, GAP, MOVABLE.indexOf(id));
+                const again = placeLifted(BUSY, id, p, 3, COL, GAP, first);
+                expect(again, `${id} at ${p.x}, ${p.y}`).toBe(first);
+                expect(placeLifted(BUSY, id, p, 3, COL, GAP, again)).toBe(first);
+            }
+        }
+    });
+
+    it('a tie goes to the place nearest the current one, then the smaller', () => {
+        // One column, the lifted d 300 px tall: at y 250 its box holds the pointer at places 0, 1 and 2 (0–300, 116–416, 232–532).
+        const items = stack(100, 100, 100, 300);
+        const p = { x: 50, y: 250 };
+        expect([0, 1, 2].every(k => inside(p, boxAt(items, 'd', k, 1, 300, 16)))).toBe(true);
+        expect(placeLifted(items, 'd', p, 1, 300, 16, 3)).toBe(2);
+        expect(placeLifted(items, 'd', p, 1, 300, 16, 1)).toBe(1);
+        expect(placeLifted(items, 'd', p, 1, 300, 16, 0)).toBe(0);
+        // Equally near the current place on either side (two zero-height cards make three places one box): the smaller.
+        const flat = stack(0, 0, 0, 100);
+        expect(placeLifted(flat, 'd', { x: 50, y: 50 }, 1, 300, 0, 1)).toBe(1);
+        expect(placeLifted(flat, 'd', { x: 50, y: 50 }, 1, 300, 0, 1.5)).toBe(1);
+    });
+
+    it('a card that is not one that moves, or not there, keeps its place', () => {
+        expect(placeLifted(BUSY, 'needs', { x: 10, y: 600 }, 3, COL, GAP, 4)).toBe(4);
+        expect(placeLifted(BUSY, 'nobody', { x: 10, y: 600 }, 3, COL, GAP, 2)).toBe(2);
+    });
+
+    it('placedBoxes: packed cells in px from the first column and the grid top; one column a plain stack', () => {
+        const items: Item[] = [{ id: 'n', height: 80, fullRow: true }, { id: 'x', height: 100 }, { id: 'y', height: 40 }];
+        const packed = placedBoxes(items, 2, 300, 16);
+        expect(packed.get('n')).toEqual({ x: 0, y: 0, width: 616, height: 80 });
+        // Needs you spans ceil((80 + 16) / 4) = 24 rows: the next cards start at row 25, 96 px down.
+        expect(packed.get('x')).toEqual({ x: 0, y: 96, width: 300, height: 100 });
+        expect(packed.get('y')).toEqual({ x: 316, y: 96, width: 300, height: 40 });
+        const plain = placedBoxes(items, 1, 300, 12);
+        expect(plain.get('x')).toEqual({ x: 0, y: 92, width: 300, height: 100 });
+        expect(plain.get('y')).toEqual({ x: 0, y: 204, width: 300, height: 40 });
     });
 });
 

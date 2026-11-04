@@ -33,6 +33,7 @@
  *   tier-locked, examples always say Example, nothing here blocks the app or waits on the network to draw.
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
     HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipText, tipsCaption, tipsFor, tipsNextLabel,
@@ -63,10 +64,10 @@ import {
 import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, HOME_PACK_ROW_HEIGHT, NOT_ON_ACCOUNT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, arrangeCards, askPinned, canMoveCard, moveCardTo, reorderIds,
     canRemoveCard, cardLabelName, cardName, cardOnNode, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
-    listOf, moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
+    listOf, moveCard, ownMarkedSave, packHome, pickLayout, pickerGroups, placeLifted, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, settleHeights, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent, type PackHeight, type PackableCard,
 } from '../lib/home-layout';
-import { useArrangeDrag } from '../lib/arrange-drag';
+import { useArrangeDrag, type HeldPress } from '../lib/arrange-drag';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { markHomeInflight, recordHomeAnswer } from '../lib/home-store';
 import { settleInterests, shareInterests } from '../lib/home-interests';
@@ -95,7 +96,7 @@ import { CategoryTile } from '../components/CategoryTile';
 import { ListPhoto } from '../components/ListPhoto';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
-import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
+import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, liftedStyle, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
 import { ArrangeStrip, type StripRow } from '../components/ArrangeStrip';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
@@ -1678,9 +1679,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // nothing to show keep their slots in that list, untouched, which is what lets a card move among the ones a member sees.
     const savedIds = new Set(inArrange ? listOf(shownLayout(answer, layout, { tourOver })).map(c => c.id) : []);
     const movableNow = inArrange ? shown.filter(c => drawnNow(c) && canMoveCard(c.type, foldedPins) && savedIds.has(c.id)) : [];
-    // Dragging a band (L3): the lifted card's place is live, so the cards are laid out in the order the drop would make.
+    // Dragging a card (A2): the lifted card's place is live, so the cards are laid out in the order the drop would make.
     const movableIds = movableNow.map(c => c.id);
-    const drag = useArrangeDrag({ gridRef, enabled: inArrange, onDrop: dropInArrange, ids: movableIds });
+    const drag = useArrangeDrag({ gridRef, enabled: inArrange, onDrop: dropInArrange, ids: movableIds, place: placeInArrange });
     const liveShown = inArrange && drag.lift ? reorderIds(shown, movableIds, drag.lift.id, drag.lift.to) : shown;
     const shownKey = liveShown.map(c => `${c.id}:${c.type}`).join(',');
 
@@ -1698,50 +1699,67 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         setCardHeights(prev => settleHeights(prev, seen, now));
     }, [cols, shownKey, inArrange, idleKey, notesUnderFirst, fewerOpen, hintOpen, safetyDrawn]);
 
-    const packedList = useMemo(() => {
-        if (cols <= 1 || typeof ResizeObserver === 'undefined') return [];
-        if (Object.keys(cardHeights).length === 0) return [];
+    /**
+     * The grid's children in packing order, for the cards in `cards`' order: what Home packs, and what a held card's place is
+     * worked out on (`placeInArrange`), so the two can never disagree. `heightOf` gives each one's height.
+     */
+    function packItems(cards: readonly HomeCardInstance[], heightOf: (id: string) => number): PackableCard[] {
         const items: PackableCard[] = [];
         // Arrange's two extras come after every drawn card and are full rows, so no drawn card changes its cell when Arrange
         // opens: the packing places in order, and a full row waits for every column. The strip, when there is one, then the tile.
         const extras: PackableCard[] = [
-            ...(idleKey ? [{ id: ARRANGE_STRIP, height: cardHeights[ARRANGE_STRIP]?.height ?? 0, fullRow: true }] : []),
-            { id: ARRANGE_ADD, height: cardHeights[ARRANGE_ADD]?.height ?? 0, fullRow: true },
+            ...(idleKey ? [{ id: ARRANGE_STRIP, height: heightOf(ARRANGE_STRIP), fullRow: true }] : []),
+            { id: ARRANGE_ADD, height: heightOf(ARRANGE_ADD), fullRow: true },
         ];
-        const cards = liveShown;
         for (let i = 0; i < cards.length; i++) {
             const card = cards[i];
             if (card.type === 'safety' && !safetyDrawn) continue;
             // Arrange's strip and tile stand last, before the community card.
             if (inArrange && card.type === FIXED_LAST) items.push(...extras);
-            items.push({
-                id: card.id,
-                height: cardHeights[card.id]?.height ?? 0,
-                fullRow: spansRow(card.type),
-            });
+            items.push({ id: card.id, height: heightOf(card.id), fullRow: spansRow(card.type) });
             if (i === 0 && notesUnderFirst) {
-                if (fewerOpen && !isVisitor) {
-                    items.push({
-                        id: NOTE_FEWER,
-                        height: cardHeights[NOTE_FEWER]?.height ?? 0,
-                        fullRow: true,
-                    });
-                }
-                if (hintOpen && !isVisitor && !startUp) {
-                    items.push({
-                        id: NOTE_HINT,
-                        height: cardHeights[NOTE_HINT]?.height ?? 0,
-                        fullRow: true,
-                    });
-                }
+                if (fewerOpen && !isVisitor) items.push({ id: NOTE_FEWER, height: heightOf(NOTE_FEWER), fullRow: true });
+                if (hintOpen && !isVisitor && !startUp) items.push({ id: NOTE_HINT, height: heightOf(NOTE_HINT), fullRow: true });
             }
         }
         if (inArrange && !cards.some(c => c.type === FIXED_LAST)) items.push(...extras);
-        return packHome(items, cols);
+        return items;
+    }
+
+    const packedList = useMemo(() => {
+        if (cols <= 1 || typeof ResizeObserver === 'undefined') return [];
+        if (Object.keys(cardHeights).length === 0) return [];
+        return packHome(packItems(liveShown, (id) => cardHeights[id]?.height ?? 0), cols);
     }, [cols, shownKey, inArrange, idleKey, cardHeights, notesUnderFirst, fewerOpen, hintOpen, isVisitor, startUp, safetyDrawn]);
 
     const packedMap = useMemo(() => new Map(packedList.map(p => [p.id, p])), [packedList]);
     const isPacked = typeof ResizeObserver !== 'undefined' && cols > 1 && packedList.length > 0;
+
+    /**
+     * Where a held card lands with the pointer at `point` (px from the grid's corner): core's `placeLifted` (design §2.3) on
+     * the same packing the grid draws. Packed, the cells are the packing's, from the heights it packs with and the columns
+     * as drawn (each at most 576 px, the grid centred); one column is the cards as they stand, each with its margins.
+     */
+    function placeInArrange(id: string, point: { x: number; y: number }, current: number): number {
+        const grid = gridRef.current;
+        if (!grid) return current;
+        const width = grid.clientWidth;
+        const n = isPacked ? cols : 1;
+        const colWidth = Math.min(HOME_COLUMN_MAX, (width - (n - 1) * HOME_COLUMN_GAP) / n);
+        const left = (width - (n * colWidth + (n - 1) * HOME_COLUMN_GAP)) / 2;
+        let heightOf = (k: string) => cardHeights[k]?.height ?? 0;
+        if (!isPacked) {
+            const outer = new Map<string, number>();
+            for (const el of Array.from(grid.children) as HTMLElement[]) {
+                const k = packIdOf(el);
+                const css = getComputedStyle(el);
+                if (k) outer.set(k, packedHeight(el) + (parseFloat(css.marginTop) || 0) + (parseFloat(css.marginBottom) || 0));
+            }
+            heightOf = (k) => outer.get(k) ?? 0;
+        }
+        const items = packItems(shown, heightOf).map(it => ({ ...it, movable: movableIds.includes(it.id) }));
+        return placeLifted(items, id, { x: point.x - left, y: point.y }, n, colWidth, isPacked ? HOME_COLUMN_GAP : 0, current);
+    }
 
     // ── Arrange (DESIGN-home-layout-fable.md §3.2) ──
     // The card it was entered from, whose "…" takes focus back at Done (Arrange › when there is none).
@@ -1758,10 +1776,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         if (!changeLayout((l) => moveCardTo(l, id, to, movableNow, Date.now(), foldedPins))) { focusArrow.current = null; return; }
         setLive(arrangeMovedLine(cardLabelName(card, String(answer?.profile)), to + 1, movableNow.length));
     }
-    function startArrange(from?: string) {
+    // Arrange opened by a hold whose press goes on as a drag: the page stays where it is under the finger (no scroll to the card).
+    const arrangeHeld = useRef(false);
+    function startArrange(from?: string, press?: HeldPress) {
         arrangeFrom.current = from ?? null;
+        arrangeHeld.current = !!press;
         setArranging(true);
         setLive(t(ARRANGE_WORDS.openedDrag));
+        // The hold goes on as a drag (A2): the card lifts as soon as Arrange has drawn it.
+        if (from && press) drag.adopt(from, press);
     }
     function endArrange(quiet = false) {
         arrangeBack.current = { quiet };
@@ -1793,9 +1816,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         if (inArrange) {
             const id = arrangeFrom.current;
             const arrow = id && (page?.querySelector<HTMLElement>(`[data-testid="home-arrange-up-${id}"]:not([disabled])`) ?? page?.querySelector<HTMLElement>(`[data-testid="home-arrange-down-${id}"]:not([disabled])`));
-            (arrow || page?.querySelector<HTMLElement>('[data-testid="home-arrange-done"]'))?.focus();
-            if (arrow) arrow.closest('section')?.scrollIntoView?.({ block: 'center' });
-            else page?.scrollIntoView?.({ block: 'start' });
+            const held = arrangeHeld.current;
+            arrangeHeld.current = false;
+            (arrow || page?.querySelector<HTMLElement>('[data-testid="home-arrange-done"]'))?.focus(held ? { preventScroll: true } : undefined);
+            // Opened by a hold: the card is under the finger that holds it, so nothing scrolls.
+            if (!held && arrow) arrow.closest('section')?.scrollIntoView?.({ block: 'center' });
+            else if (!held) page?.scrollIntoView?.({ block: 'start' });
             // Escape is Done, unless a dialog in front has the keys (components/dialog-focus.ts).
             const onKey = (e: KeyboardEvent) => {
                 if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
@@ -1825,29 +1851,24 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         arrow?.focus();
         arrow?.closest('section')?.scrollIntoView?.({ block: 'nearest' });
     }, [layout]);
-    // A moved card slides from where it stood (none with reduced motion). Entering Arrange moves nothing, so it has no settle of its own.
+    // A moved card slides from where it stood (none with reduced motion), the held card too: it is the preview of the drop,
+    // and its band is in the pointer's hand (A2). Entering Arrange moves nothing, so it has no settle of its own.
     const stood = useRef(new Map<string, { x: number; y: number }>());
-    const liftedId = drag.lift?.id;
     useLayoutEffect(() => {
         const grid = gridRef.current;
         const calm = reducedMotion();
-        const dropped = drag.settle.current;
-        drag.settle.current = null;
         if (!inArrange || !grid) { stood.current = new Map(); return; }
         const box = grid.getBoundingClientRect();
         const next = new Map<string, { x: number; y: number }>();
         for (const el of Array.from(grid.children) as HTMLElement[]) {
             const id = packIdOf(el);
-            // The card in the air follows the pointer; it is back in its slot, or let go from where it was, below.
-            if (!id || id === liftedId) continue;
+            if (!id) continue;
             const r = el.getBoundingClientRect();
             const at = { x: r.left - box.left, y: r.top - box.top };
-            const was = dropped?.id === id ? dropped : stood.current.get(id);
-            const letGo = was === dropped;
+            const was = stood.current.get(id);
             next.set(id, at);
             if (!calm && was && (was.x !== at.x || was.y !== at.y)) {
-                const from = `translate(${was.x - at.x}px, ${was.y - at.y}px)${letGo ? ' scale(1.02)' : ''}`;
-                el.animate?.([{ transform: from }, { transform: 'none' }], { duration: 150, easing: 'ease-out' });
+                el.animate?.([{ transform: `translate(${was.x - at.x}px, ${was.y - at.y}px)` }, { transform: 'none' }], { duration: 150, easing: 'ease-out' });
             }
         }
         stood.current = next;
@@ -2336,14 +2357,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         hasSettings: !!homeCardType(card.type)?.readSettings && card.type !== 'tools',
     }));
 
-    /** A card's band in Arrange: ↑ ↓ (or Stays here, on the cards that don't move), and the drag's handle. */
-    function arrangeBandFor(card: HomeCardInstance, withDrag = true): ArrangeBand {
+    /** A card in Arrange: ↑ ↓ on its band (or Stays here, on the cards that don't move), and the whole card the drag's handle. */
+    function arrangeBandFor(card: HomeCardInstance): ArrangeBand {
         const label = cardLabelName(card, profile);
         const at = movable.findIndex(m => m.id === card.id);
         return at < 0
             ? { label, stays: true }
             : { label, canUp: at > 0, canDown: at < movable.length - 1, across: cols > 1, onMove: (d) => moveInArrange(card, d),
-                ...(withDrag ? { drag: drag.bandProps(card.id) } : {}), lifted: drag.lift?.id === card.id };
+                drag: drag.cardProps(card.id), lifted: drag.lift?.id === card.id };
     }
 
     function renderCard(card: HomeCardInstance, index: number): ReactNode {
@@ -2363,7 +2384,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             style: { ...cardStyle(index), ...placementStyle, ...liveOrder(card.id) },
             onHeight: reportHeight(card.id),
             // Getting started has no "…" and no hold: Skip is its remove.
-            onHold: isVisitor || card.type === 'start' ? undefined : () => startArrange(card.id),
+            onHold: isVisitor || card.type === 'start' ? undefined : (press: HeldPress) => startArrange(card.id, press),
             // In Arrange the card is as it is drawn: arrows on its band in place of Tune and "…", its body quiet until Done.
             arrange: inArrange ? arrangeBandFor(card) : undefined,
             quiet: inArrange,
@@ -2383,16 +2404,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 // (arriving second in the order, it moved every card after it to another cell).
                 return identity && (
                     <OneWayBackCard key={id} identity={identity} placement="landing" onSeeWords={onSeeWords} known={!!c.safety} onDrawn={setSafetyDrawn}
-                        keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => (
-                        <PackedBlock onHeight={common.onHeight} style={common.style} data-testid={`home-card-${card.id}`} className="mb-3 [&>section]:mb-0 [&>div>section]:mb-0">
-                            {/* In Arrange its arrows take the "…"'s row (the same height) and its body goes quiet: it has no band
-                                to hold, so it is moved by the arrows alone until the whole card is the handle (slice A2). */}
-                            {inArrange
-                                ? <div className="flex justify-end -mb-2"><ArrangeControls id={card.id} band={arrangeBandFor(card, false)} /></div>
-                                : common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
-                            <CardBody id={card.id} quiet={inArrange}>{oneWayBack}</CardBody>
-                        </PackedBlock>
-                    )} />
+                        keepsNoCopies={communityInfo?.recoveryCopies === 'none'} frame={(oneWayBack) => {
+                            const band = inArrange ? arrangeBandFor(card) : undefined;
+                            return (
+                                <PackedBlock onHeight={common.onHeight} data-testid={`home-card-${card.id}`} className="mb-3 [&>section]:mb-0 [&>div>section]:mb-0"
+                                    data-lifted={band?.lifted ? 'true' : undefined}
+                                    {...(band?.drag ? { onPointerDown: band.drag.onPointerDown, onContextMenu: band.drag.onContextMenu } : {})}
+                                    style={{ ...common.style, ...band?.drag?.style, ...(band?.lifted ? liftedStyle(`var(--bp-card-${hue}-ink)`) : {}) }}>
+                                    {/* In Arrange its arrows take the "…"'s row (the same height) and its body goes quiet: it has no band,
+                                        so the whole card is its handle, as every card's is (A2). */}
+                                    {band
+                                        ? <div className="flex justify-end -mb-2"><ArrangeControls id={card.id} band={band} /></div>
+                                        : common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
+                                    <CardBody id={card.id} quiet={inArrange}>{oneWayBack}</CardBody>
+                                </PackedBlock>
+                            );
+                        }} />
                 );
             case 'find': {
                 const f = c.find!;
@@ -3007,6 +3034,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         );
     });
     if (!shown.some(c => c.type === FIXED_LAST)) gridChildren.push(...arrangeExtras);
+    // What the pointer carries while a card is held (A2, design §2.3): the card's band, its name on its tint in its ink, a ring
+    // in the ink (dark has no readable shadow) and a soft shadow in light. One fixed element over the page; the hook moves it.
+    const liftedCard = drag.lift ? shown.find(c => c.id === drag.lift!.id) : undefined;
+    const liftedHue: CardHue | null = liftedCard ? homeCardHue(liftedCard) : null;
+    const ghost = liftedCard && liftedHue && typeof document !== 'undefined' ? createPortal(
+        <div ref={drag.ghostRef} data-testid="home-arrange-ghost" aria-hidden="true"
+            className="fixed left-0 top-0 z-50 pointer-events-none min-h-[48px] px-4 py-1 flex items-center rounded-2xl shadow-lg dark:shadow-none"
+            style={{ backgroundColor: `var(--bp-card-${liftedHue}-tint)`, color: `var(--bp-card-${liftedHue}-ink)`, outline: `2px solid var(--bp-card-${liftedHue}-ink)`, willChange: 'transform' }}>
+            <span className="min-w-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider">{nameOf(liftedCard)}</span>
+        </div>,
+        document.body,
+    ) : null;
 
     return (
         <div ref={setPage} className="px-4 pt-2 pb-6 min-w-0" data-testid="home-page" data-columns={cols}>
@@ -3081,6 +3120,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 }}>
                     {gridChildren}
                 </div>
+                {ghost}
                 {inArrange && (
                     <div className="flex justify-center">
                         <button type="button" data-testid="home-arrange-reset"

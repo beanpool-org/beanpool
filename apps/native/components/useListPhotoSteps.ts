@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LIST_PHOTO_WAIT_MS, listPhotoUrl, nextListPhotoUrl } from '@beanpool/core';
+import { LIST_PHOTO_LONGEST_MS, LIST_PHOTO_WAIT_MS, listPhotoUrl, nextListPhotoUrl } from '@beanpool/core';
 
 /**
  * The photo a list card's picture is drawing, and when to give up on it (card-photo-retry, then card-photo-blank, Marty
@@ -10,8 +10,9 @@ import { LIST_PHOTO_WAIT_MS, listPhotoUrl, nextListPhotoUrl } from '@beanpool/co
  * call, a response that trickles never fails, and a load waiting for its view's size or paused with the screen sends no
  * event; iOS: a load SDWebImage cancels, or one that ends with no image and no error, sends none). So a card does not
  * wait for onError alone: `drawn` is true only once the photo it shows has called onLoad, and the card draws its tile
- * or fallback until then; a photo that has neither loaded nor failed within LIST_PHOTO_WAIT_MS of its last bytes
- * counts as failed and takes the same step down (@beanpool/core nextListPhotoUrl: the small copy once more past every
+ * or fallback until then; a photo that has neither loaded nor failed within LIST_PHOTO_WAIT_MS of its last bytes, or
+ * within LIST_PHOTO_LONGEST_MS of being shown however many bytes still trickle in, counts as failed and takes the same
+ * step down (@beanpool/core nextListPhotoUrl: the small copy once more past every
  * cache, the photo's own URL, then nothing).
  *
  * The URL that failed is kept beside its step, not a flag, so a new URL the next sync brings starts again from its
@@ -30,8 +31,12 @@ export function useListPhotoSteps(photo: string | null | undefined, onFailed?: (
         setSteppedDown({ photo: p, shown: nextListPhotoUrl(p, failed) });
     }, []);
 
-    // The wait: started when a URL is shown, started again on every progress event, stopped by onLoad or onError.
+    // The wait: started when a URL is shown, started again on every progress event (one comes with every read, so a
+    // trickle sends them for ever) but never past LIST_PHOTO_LONGEST_MS from when that URL was shown, stopped by onLoad
+    // or onError.
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const shownAt = useRef(0);
+    useEffect(() => { shownAt.current = Date.now(); }, [photo, shown]);
     const stop = useCallback(() => {
         if (timer.current) clearTimeout(timer.current);
         timer.current = null;
@@ -41,7 +46,8 @@ export function useListPhotoSteps(photo: string | null | undefined, onFailed?: (
         if (!photo || !shown || drawn) return;
         const p = photo;
         const failed = shown;
-        timer.current = setTimeout(() => { timer.current = null; fail(p, failed); }, LIST_PHOTO_WAIT_MS);
+        const left = Math.max(0, Math.min(LIST_PHOTO_WAIT_MS, shownAt.current + LIST_PHOTO_LONGEST_MS - Date.now()));
+        timer.current = setTimeout(() => { timer.current = null; fail(p, failed); }, left);
     }, [photo, shown, drawn, fail, stop]);
     useEffect(() => { arm(); return stop; }, [arm, stop]);
 

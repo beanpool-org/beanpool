@@ -22,7 +22,7 @@ vi.mock('expo-image', () => ({
 }));
 
 import { ListPhoto } from '../../components/ListPhoto';
-import { LIST_PHOTO_WAIT_MS } from '@beanpool/core';
+import { LIST_PHOTO_LONGEST_MS, LIST_PHOTO_WAIT_MS } from '@beanpool/core';
 
 const NODE = 'https://global.example';
 const PHOTO = `${NODE}/api/marketplace/posts/p1/photos/0?v=17&k=KEY0`;
@@ -146,6 +146,33 @@ describe('ListPhoto: never an empty slot while the photo loads', () => {
         expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2`);
         await act(async () => { vi.advanceTimersByTime(1000); });
         expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
+    });
+
+    // expo-image on Android sends onProgress on every read of the response (react-native ProgressResponseBody.kt read(),
+    // passed on by expo-image's OkHttpProgressListener whenever the length is known), so a response that sends a byte
+    // every few seconds would start the wait again for ever (card-photo-blank).
+    it('bytes that trickle in for ever still count as failed by LIST_PHOTO_LONGEST_MS, at each step', async () => {
+        vi.useFakeTimers();
+        await show(PHOTO);
+        const trickle = async (ms: number) => {
+            for (let t = 0; t < ms; t += 5000) {
+                await act(async () => { vi.advanceTimersByTime(Math.min(5000, ms - t)); });
+                await act(async () => { progress.last?.(); });
+            }
+        };
+        await trickle(LIST_PHOTO_LONGEST_MS - 5000);
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2`);
+        await act(async () => { vi.advanceTimersByTime(5000); });
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
+        expect(drawn()).not.toBeNull();
+        await trickle(LIST_PHOTO_LONGEST_MS - 5000);
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO}&size=thumb2&retry=1`);
+        await act(async () => { vi.advanceTimersByTime(5000); });
+        expect(img()?.getAttribute('data-src')).toBe(PHOTO);
+        await trickle(LIST_PHOTO_LONGEST_MS - 5000);
+        await act(async () => { vi.advanceTimersByTime(5000); });
+        expect(img()).toBeNull();
+        expect(drawn()).not.toBeNull();
     });
 
     it('a photo that has drawn is never stepped down by the wait', async () => {

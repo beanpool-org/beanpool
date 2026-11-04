@@ -29,10 +29,18 @@ export function listPhotoUrl<T extends string | null | undefined>(url: T): T {
  * read, no limit on the whole call), so a response that trickles never fails, and a load that waits for a size or is
  * paused sends no event at all; an <img> on the web has no limit either. 10 s is OkHttp's own per-read limit: a small
  * copy (about 18 KB) that has not drawn by then on a working connection is not coming. The phone counts from the last
- * bytes it received, so a slow phone that is still receiving is not cut off; the web has no such event and counts from
- * the start.
+ * bytes it received, so a slow phone that is still receiving is not cut off, but never past LIST_PHOTO_LONGEST_MS; the
+ * web has no such event and counts from the start.
  */
 export const LIST_PHOTO_WAIT_MS = 10_000;
+
+/**
+ * However many bytes are still arriving, a list card never waits longer than this for one picture. expo-image on Android
+ * sends a progress event on every read of the response (react-native's ProgressResponseBody), so a response that sends
+ * one byte every few seconds would start LIST_PHOTO_WAIT_MS again for ever. 30 s lets a whole photo (about 84 KB) arrive
+ * at under 3 KB a second, a weak 2G link; a small copy that takes longer than that is trickling, not coming.
+ */
+export const LIST_PHOTO_LONGEST_MS = 30_000;
 
 /**
  * What a list card draws next when the picture it showed would not load (or did not load within LIST_PHOTO_WAIT_MS):

@@ -1765,6 +1765,10 @@ export default function MarketScreen() {
         const catEmoji = categoryEmoji(item.category);
         const catLabel = categoryLabel(item.category);
 
+        // The whole card is one button that opens the listing (Marty, 4 Nov): the author's chip inside is display only, and
+        // the card reads out as the listing (its title and that it is a listing), never as its owner.
+        const openLabel = isPulse ? undefined : t('Open listing: {title}', { title: item.title });
+
         if (viewMode === 'grid') {
             return (
                 <Pressable
@@ -1777,6 +1781,8 @@ export default function MarketScreen() {
                     disabled={isPulse}
                     onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
                     accessibilityRole={isPulse ? undefined : "button"}
+                    accessibilityLabel={openLabel}
+                    testID={`market-card-${item.id}`}
                 >
                     <View style={styles.gridImageWrapper}>
                         <MarketCardPicture
@@ -1855,7 +1861,7 @@ export default function MarketScreen() {
                         <Text style={styles.gridCardTitle} numberOfLines={2}>
                             {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                         </Text>
-                        {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />}
+                        {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
                         {distanceLine(item)}
                         {!!item.repeatable && !isOwn && item.status !== 'pending' && (
                             <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
@@ -1880,6 +1886,8 @@ export default function MarketScreen() {
                 <Pressable
                     disabled={isPulse}
                     accessibilityRole={isPulse ? undefined : "button"}
+                    accessibilityLabel={openLabel}
+                    testID={`market-card-${item.id}`}
                     onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
                 >
                     <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
@@ -1947,6 +1955,8 @@ export default function MarketScreen() {
             <Pressable
                 disabled={isPulse}
                 accessibilityRole={isPulse ? undefined : "button"}
+                accessibilityLabel={openLabel}
+                testID={`market-card-${item.id}`}
                 onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
@@ -2036,7 +2046,7 @@ export default function MarketScreen() {
                             {item.title}
                         </Text>
 
-                        {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} />}
+                        {copy ? <ListingCopyLine copy={copy} /> : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
                         {distanceLine(item)}
                     </View>
                 </View>

@@ -44,7 +44,7 @@ describe('a Market card in the pseudo-locale', () => {
         render(
             <div>
                 <MarketplaceCard post={marked} viewMode={viewMode} distanceKm={2.4} remoteNode="mullum" isOwnPost authorEnergy={100000} />
-                <MarketplaceCard post={withPhoto} viewMode={viewMode} distanceKm={0.42} onPhotoClick={() => {}} />
+                <MarketplaceCard post={withPhoto} viewMode={viewMode} distanceKm={0.42} />
                 <MarketplaceCard post={need} viewMode={viewMode} distanceKm={12} />
                 <MarketplaceCard post={paused} viewMode={viewMode} />
                 <MarketplaceCard post={pulse} viewMode={viewMode} />
@@ -60,13 +60,15 @@ describe('a Market card in the pseudo-locale', () => {
         await showIn('xx');
         render(
             <div>
-                <MarketplaceCard post={withPhoto} viewMode="grid" onPhotoClick={() => {}} />
+                <MarketplaceCard post={withPhoto} viewMode="grid" />
                 <MarketplaceCard post={need} viewMode="grid" />
                 <MarketplaceCard post={marked} viewMode="list" isOwnPost distanceKm={2.4} />
                 <MarketplaceCard post={marked} viewMode="compact" isOwnPost authorEnergy={100000} />
             </div>,
         );
-        expect(screen.getByRole('button', { name: xx('View enlarged photo: {title}').replace('{title}', 'Sourdough loaf') })).toBeInTheDocument();
+        // The photo is part of the card (4 Nov): it names the listing, and there is no enlarge button on a card.
+        expect(screen.getByAltText('Sourdough loaf')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /enlarged/ })).toBeNull();
         expect(screen.getAllByText(xx('↻ RECURRING')).length).toBeGreaterThan(1);
         expect(screen.getByText(xx('⏳ PENDING'))).toBeInTheDocument();
         expect(screen.getByText(xx('💸 CASH TOO')).getAttribute('title')).toBe(xx('Cash also needed for fuel or materials — agreed in chat'));
@@ -81,7 +83,7 @@ describe('a Market card in the pseudo-locale', () => {
     it('in English nothing is bracketed, and the words are as they were', () => {
         render(
             <div>
-                <MarketplaceCard post={withPhoto} viewMode="grid" onPhotoClick={() => {}} distanceKm={0.42} />
+                <MarketplaceCard post={withPhoto} viewMode="grid" distanceKm={0.42} />
                 <MarketplaceCard post={need} viewMode="grid" />
                 <MarketplaceCard post={marked} viewMode="list" isOwnPost distanceKm={2.4} />
                 <MarketplaceCard post={paused} viewMode="list" />
@@ -108,7 +110,8 @@ describe('a Market card in the pseudo-locale', () => {
         expect(screen.getByText('/day')).toBeInTheDocument();
         expect(screen.getAllByText('offer').length).toBeGreaterThan(0);
         expect(screen.getAllByAltText('B').length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: 'View enlarged photo: Sourdough loaf' })).toBeInTheDocument();
+        expect(screen.getByAltText('Sourdough loaf')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /enlarged/ })).toBeNull();
     });
 
     it('every category reads lib/marketplace.ts\'s own name, as before', () => {

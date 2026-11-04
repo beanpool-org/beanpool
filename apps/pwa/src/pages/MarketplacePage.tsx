@@ -4119,7 +4119,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     identity={identity}
                                                     viewMode={viewMode}
                                                     onVoteSuccess={() => refresh()}
-                                                    onOpenProfile={onOpenProfile}
                                                     informal={informalPolls} localWays={markWays}
                                                 />
                                             </div>
@@ -4159,15 +4158,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             dealChip={dealChips.get(post.id) ?? null}
                                             distanceKm={near && (fillHeading ? fillHeading === t('Pinned') : true) ? distanceOf(post) : null}
                                             beansMarked={priceMarked}
-                                            onPhotoClick={(photos, idx, e) => {
-                                                setLightboxState({
-                                                    isOpen: true,
-                                                    photos,
-                                                    initialIndex: idx,
-                                                    title: post.title,
-                                                    triggerElement: (e?.currentTarget as HTMLElement) || null,
-                                                });
-                                            }}
                                         />
                                     </div>
                                     );
@@ -4227,7 +4217,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         identity={identity}
                                                         viewMode={viewMode}
                                                         onVoteSuccess={() => refresh()}
-                                                        onOpenProfile={onOpenProfile}
                                                         informal={informalPolls} localWays={markWays}
                                                     />
                                                 </div>
@@ -4258,15 +4247,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             dealChip={dealChips.get(post.id) ?? null}
                                             distanceKm={near && (fillHeading ? fillHeading === t('Pinned') : true) ? distanceOf(post) : null}
                                             beansMarked={priceMarked}
-                                            onPhotoClick={(photos, idx, e) => {
-                                                setLightboxState({
-                                                    isOpen: true,
-                                                    photos,
-                                                    initialIndex: idx,
-                                                    title: post.title,
-                                                    triggerElement: (e?.currentTarget as HTMLElement) || null,
-                                                });
-                                            }}
                                         />
                                         </div>
                                         );

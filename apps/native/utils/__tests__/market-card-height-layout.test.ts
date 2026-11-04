@@ -803,6 +803,75 @@ describe("an event and the Daily Pulse in the grid are tiles: the listing's shel
 // The Market's fill (market-fill.ts): on a community that reads by area, a short nearby list is followed, in the list's
 // footer, by the newest from elsewhere. Those cards sit in views of their own (a plain one in the list view, a row of two
 // in the grid), so each view is laid out with Yoga here too.
+// Slice C1 (DESIGN-card-style-box-fable.md §0 item 2, §2 rows "Compact row, event / Poll"; Marty, 4 Nov: "and list view in phone -
+// the events dont change"): in the compact view an event and a poll are compact rows like a listing's, from the same box. Each is
+// ONE row, no taller than a listing's row and one line more (a line of the row's 11 dp words at 1.3x text), with the 32 dp
+// picture and the chip at the end; the poll's answers are on its page, not on the row. Laid out with Yoga at 320 dp and 1.3x text.
+describe('the compact view: an event and a poll are compact rows, one row no taller than a listing\'s and one line', () => {
+    const DAY = 86_400_000;
+    const SCALE = 1.3;
+    /** One line of the row's words (11 dp) as the layout model draws a line: a font size and a quarter, times the scale. */
+    const ONE_LINE = 11 * 1.25 * SCALE;
+    const LISTING = { ...LONE, id: 'c-eggs', title: 'Eggs from the back paddock', repeatable: 0, created_at: iso(now - 60_000) };
+    /** Byron's longest title, pinned, a place, the member's own answer: the most an event's row holds. */
+    const BYRON: any = {
+        id: 'ev-twilight', type: 'event', status: 'active', title: 'Byron Bay Twilight Market - Every Saturday', category: 'events',
+        author_pubkey: 'byron-key', author_callsign: 'Byron Markets', created_at: iso(now - 2 * 60_000),
+        event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 5 * 3_600_000), event_state: 'scheduled',
+        event_place_name: 'Railway Park, Jonson Street, Byron Bay', lat: -28.643, lng: 153.612,
+        pinnedAt: iso(now - 60_000), pinnedUntil: iso(now + 3 * DAY), myRsvp: 'going', goingCount: 12, interestedCount: 5, photos: [],
+    };
+    /** A poll the member has answered, with a long question and a long answer. */
+    const POLL = {
+        id: 'c-poll', type: 'poll', status: 'active', title: 'What would make trading on BeanPool easier for you this summer?',
+        description: 'Tell us', author_pubkey: 'dee-key', author_callsign: 'Dee', created_at: iso(now - 90_000),
+        poll_closes_at: iso(now + 11 * DAY), pollOpenVote: true, userVotedOptionId: 'o1', pollVotes: [],
+        pollOptions: [{ id: 'o1', text: 'Better matches between offers and needs', votes: 3 }, { id: 'o2', text: 'More events', votes: 1 }],
+    };
+    const byId = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement;
+    /** A listing's row: the compact row is the listing pressable's one child (an event's and a poll's row is the pressable). */
+    const listingRow = () => cardOf(LISTING.title).firstElementChild as HTMLElement;
+
+    it('at 320 x 1.3: the event row and the poll row are each one row, at most a listing row and one line tall, the same width', async () => {
+        await show([LISTING, BYRON, POLL], 'compact');
+        const l = lay(569);
+        const listing = listingRow();
+        const event = byId('event-card-ev-twilight');
+        const poll = byId('poll-row-c-poll');
+        expect(event, 'the event is a compact row').not.toBeNull();
+        expect(poll, 'the poll is a compact row').not.toBeNull();
+        expect(host.querySelector('[data-testid="poll-card"]'), 'no poll card in the compact view').toBeNull();
+        const listingHeight = l.height(listing);
+        for (const [name, row] of [['event', event], ['poll', poll]] as const) {
+            // One row: the picture, the words and the chip side by side, as the listing's.
+            expect(JSON.parse(row.getAttribute('data-style')!).flexDirection, name).toBe('row');
+            expect(l.height(row), `${name} ${l.height(row)} against the listing's ${listingHeight}`).toBeLessThanOrEqual(listingHeight + ONE_LINE);
+            expect(l.width(row), name).toBe(l.width(listing));
+            expect(at(l, row).left, name).toBe(at(l, listing).left);
+            // The 32 dp picture.
+            const picture = row.querySelector('[data-testid="compact-picture"]')!;
+            expect([l.width(picture), l.height(picture)], name).toEqual([32, 32]);
+            // Nothing inside it reaches past its right edge (a Text inside a Text is words of its parent, not a box).
+            const right = at(l, row).left + l.width(row);
+            for (const el of Array.from(row.querySelectorAll('*')).filter(e => !e.parentElement?.closest('span'))) expect(at(l, el).left + l.width(el), `${name}: ${el.textContent}`).toBeLessThanOrEqual(right + 0.5);
+        }
+    });
+
+    it('the pinned block too: a pinned event and a pinned poll are rows of the same width as the stream\'s', async () => {
+        const POLL_PINNED = { ...POLL, id: 'c-poll-pin', pinnedAt: iso(now - 60_000), pinnedUntil: iso(now + 3 * DAY) };
+        await show([LISTING, BYRON, POLL_PINNED], 'compact');
+        const block = host.querySelector('[data-testid="market-pinned-block"]') as HTMLElement;
+        expect(block).not.toBeNull();
+        const l = lay(569);
+        for (const id of ['event-card-ev-twilight', 'poll-row-c-poll-pin']) {
+            const row = block.querySelector(`[data-testid="${id}"]`) as HTMLElement;
+            expect(row, id).not.toBeNull();
+            expect(l.width(row), id).toBe(l.width(listingRow()));
+            expect(l.height(row), id).toBeLessThanOrEqual(l.height(listingRow()) + ONE_LINE);
+        }
+    });
+});
+
 describe('the fill beneath a short nearby list: its cards are their own height, in every view', () => {
     const FAR = Array.from({ length: 4 }, (_, i) => ({
         id: `far-${i}`, type: 'offer', status: 'active', title: `Far listing ${i} with a title long enough to need a second line`, description: 'From elsewhere',

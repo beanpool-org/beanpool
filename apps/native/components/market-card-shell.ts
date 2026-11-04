@@ -52,6 +52,7 @@ const LIST = MARKET_CARD_TYPE.list;
 const GRID = MARKET_CARD_TYPE.grid;
 const COMPACT = MARKET_CARD_TYPE.compact;
 const COMPACT_PHOTO = SHELL.photo.compact;
+const COMPACT_GAP = SHELL.compactGap;
 const SLOT = SHELL.photo.list.width;
 const GRID_PHOTO = SHELL.photo.grid;
 const POP_UP = SHELL.popUp;
@@ -215,7 +216,8 @@ export function makeCardShell(colors: Colors) {
          * The compact row (§1.3, slice C1), the same for every kind (a listing, an event, a poll): a row of the card's corners,
          * border and ground, 10 above and below and 12 either side, the 32 dp picture, the words, and the chip at the end. One
          * row height: the title one line, a short line or two under it, nothing that wraps the row taller than that. The row
-         * keeps the lighter shadow the compact view has always had (a list of rows, not of cards).
+         * keeps the lighter shadow the compact view has always had (a list of rows, not of cards), in the platform's own shadow
+         * colour (black, as the card's).
          */
         compactRow: {
             flexDirection: 'row',
@@ -227,27 +229,26 @@ export function makeCardShell(colors: Colors) {
             paddingVertical: SHELL.compactPadding.vertical,
             paddingHorizontal: SHELL.compactPadding.horizontal,
             marginBottom: SHELL.gap.compact,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.02,
-            shadowRadius: 1,
-            elevation: 1,
+            shadowOffset: { width: 0, height: SHELL.compactShadow.offsetY },
+            shadowOpacity: SHELL.compactShadow.opacity,
+            shadowRadius: SHELL.compactShadow.blur,
+            elevation: SHELL.compactShadow.elevation,
         },
-        /** Its picture: 32 square, corners 8, 10 before the words. */
-        compactPicture: { width: COMPACT_PHOTO.size, height: COMPACT_PHOTO.size, borderRadius: COMPACT_PHOTO.radius, overflow: 'hidden', marginRight: 10 },
-        compactImage: { width: '100%', height: '100%' },
+        /** Its picture: 32 square, corners 8, 10 before the words; the photo or the tile fills it (no percentage height). */
+        compactPicture: { width: COMPACT_PHOTO.size, height: COMPACT_PHOTO.size, borderRadius: COMPACT_PHOTO.radius, overflow: 'hidden', marginRight: COMPACT_GAP.picture },
+        compactImage: { width: COMPACT_PHOTO.size, height: COMPACT_PHOTO.size },
         /** The words between the picture and the chip: they give way, the chip never does. */
-        compactText: { flex: 1, minWidth: 0, marginRight: 8, justifyContent: 'center' },
+        compactText: { flex: 1, minWidth: 0, marginRight: COMPACT_GAP.text, justifyContent: 'center' },
         /** The title: 14/800, one line. */
         compactTitle: { fontSize: COMPACT.title.size, fontWeight: weightOf(COMPACT.title), color: colors.text.body },
         /** `by {name}`, an event's when, a poll's status, the place: 11/500 secondary. */
-        compactLine: { fontSize: COMPACT.line.size, fontWeight: weightOf(COMPACT.line), color: colors.text.secondary, marginTop: 1 },
+        compactLine: { fontSize: COMPACT.line.size, fontWeight: weightOf(COMPACT.line), color: colors.text.secondary, marginTop: COMPACT_GAP.line },
         /** The mark inside a compact line (Going ✓, a poll's chosen answer ✓): the line's size, bold, in the event's ink. */
         compactMark: { fontWeight: weightOf(LIST.mark), color: colors.tile.event.ink },
         /** The 📌 PINNED inside an event's line 2: the pinned chip's ink. */
         compactPinned: { fontWeight: weightOf(MARKET_CHIP.type), color: colors.accent.primary },
         /** The end of the row: a listing's price above its chip, an event's state chip under its EVENT. */
-        compactEnd: { alignItems: 'flex-end', justifyContent: 'center', gap: 4, flexShrink: 0, maxWidth: '45%' },
+        compactEnd: { alignItems: 'flex-end', justifyContent: 'center', gap: COMPACT_GAP.end, flexShrink: 0, maxWidth: `${SHELL.compactEndMaxPercent}%` },
         /** A listing's price there: 14/900. */
         compactPrice: { fontSize: COMPACT.price.size, fontWeight: weightOf(COMPACT.price), color: colors.text.body },
     });

@@ -1701,6 +1701,7 @@ export default function MarketScreen() {
                 <PollCard
                     post={item}
                     viewMode={viewMode}
+                    onOpen={() => router.push(`/post/${item.id}`)}
                     currentPubkey={identity?.publicKey}
                     onVoteSuccess={() => loadPosts()}
                     informal={pollsInformal(nodeProfile)}

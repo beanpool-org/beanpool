@@ -41,7 +41,6 @@ import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSea
 import { PollOtherAnswers } from './PollOtherAnswers';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { signedRequestWords } from './signed-request-lines';
-import { router } from 'expo-router';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE } from '@beanpool/core';
 import { CardChip, useCardShell } from './market-card-shell';
 
@@ -82,6 +81,8 @@ interface PollCardProps {
      * never on the row. The list and the grid draw the card.
      */
     viewMode?: 'list' | 'grid' | 'compact';
+    /** The compact row's one press: the Market opens the poll's page (/post/{id}). */
+    onOpen?: () => void;
     /**
      * The poll's page (app/post/[id].tsx): its author's name opens their profile, as every page's author does. The Market's
      * card has none: a profile is opened from inside the item (Marty, 4 Nov).
@@ -89,7 +90,7 @@ interface PollCardProps {
     onOpenProfile?: (who: { publicKey: string; callsign: string }) => void;
 }
 
-export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode = 'list', onOpenProfile }: PollCardProps) {
+export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode = 'list', onOpen, onOpenProfile }: PollCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
     // The style box (components/market-card-shell.ts): the card's shell, its chips and the compact row.
@@ -286,7 +287,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
         return (
             <Pressable
                 style={shell.compactRow}
-                onPress={() => router.push(`/post/${livePost.id}`)}
+                onPress={onOpen}
                 accessibilityRole="button"
                 accessibilityLabel={[t('Poll: {title}', { title: livePost.title }), status, rowMark].filter(Boolean).join(', ')}
                 testID={`poll-row-${livePost.id}`}

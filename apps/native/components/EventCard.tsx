@@ -223,16 +223,25 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
     }
 
     if (viewMode === 'compact' && !popUp) {
-        // The compact row (slice C1, DESIGN-market-event-cards-fable.md §2.4): the listing row's shell and its 32 dp picture,
-        // the title on one line, then the when in the reader's own clock ("your time" where it differs from the place's, as
-        // the tile says it: core's event-when) with your mark after it, then the place; EVENT at the end, and the state under
-        // it. 📌 PINNED opens line 2, as the chip row's second chip. The host's line and the counts are the page's.
+        // The compact row (slice C1, DESIGN-market-event-cards-fable.md §2.4): the listing row's shell, its 32 dp picture and
+        // its three lines at most, so the row is a listing's and one line more at 320 dp and 1.3x text (the Yoga test,
+        // market-card-height-layout). Line 1 the title; line 2 the when in the reader's own clock ("your time" where it differs
+        // from the place's, as the tile says it: core's event-when); line 3 📌 PINNED and the state (ENDED, UPDATED), the chip
+        // row's own words in their chips' ink, then the place, which gives way. Your mark ("Going ✓", "You're hosting this event")
+        // sits where a listing's price sits, above EVENT, as the tile puts it where a tile's price is: "{when} · {mark}" on one
+        // line is ~250 dp at 1.3x in a 164 dp line, and on two the row was 100 dp against a listing's 69 (measured). The counts
+        // are the page's.
         const tileWhen = eventTileWhenFor(post);
         const rowWhen = tileWhen?.spoken ?? when;
         const rowMark = hosting ? t("You're hosting this event") : answer;
         const lock = groupOnly ? t('🔒 Only {group} can see this', { group: groupName }) : null;
         const rowPlace = copy?.from ? [copyFromLine(copy.from), distance].filter(Boolean).join(' · ')
             : placeLine ? `${isOnlineEvent(post) ? '💻' : '📍'} ${placeLine}` : '';
+        const stateWord = badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event')
+            : badge === 'ENDED' ? t('ENDED', undefined, 'event')
+            : badge === 'UPDATED' ? t('UPDATED', undefined, 'event')
+            : null;
+        const lineThree = pinned || !!stateWord || !!rowPlace || !!lock;
         return (
             <Pressable
                 style={shell.compactRow}
@@ -254,19 +263,19 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                 </View>
                 <View style={shell.compactText}>
                     <Text style={shell.compactTitle} numberOfLines={1}>{post.title}</Text>
-                    <Text testID="event-when" style={[shell.compactLine, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>
-                        {pinned && <Text testID="pinned-chip" style={shell.compactPinned}>{t('📌 PINNED')} · </Text>}
-                        {rowWhen}
-                        {!!rowMark && <Text testID="event-mark" style={shell.compactMark}> · {rowMark}</Text>}
-                    </Text>
-                    {!!rowPlace && <Text style={shell.compactLine} numberOfLines={1}>{rowPlace}</Text>}
+                    <Text testID="event-when" style={[shell.compactLine, styles.compactWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{rowWhen}</Text>
+                    {lineThree && (
+                        <Text style={shell.compactLine} numberOfLines={1} testID="event-row-place">
+                            {pinned && <Text testID="pinned-chip" style={shell.compactPinned}>{t('📌 PINNED')} · </Text>}
+                            {!!stateWord && <Text testID="event-state-chip" style={badge === 'UPDATED' ? shell.compactMark : styles.compactDanger}>{stateWord} · </Text>}
+                            {!!lock && '🔒 '}
+                            {rowPlace}
+                        </Text>
+                    )}
                 </View>
                 <View style={shell.compactEnd}>
+                    {!!rowMark && <Text testID="event-mark" style={[shell.compactLine, shell.compactMark, styles.compactEndMark]} numberOfLines={2}>{rowMark}</Text>}
                     <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
-                    {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}
-                    {badge === 'ENDED' && <CardChip shell={shell} role="danger" label={t('ENDED', undefined, 'event')} testID="event-state-chip" />}
-                    {badge === 'UPDATED' && <CardChip shell={shell} role="event" label={t('UPDATED', undefined, 'event')} testID="event-state-chip" />}
-                    {!!lock && <View accessibilityLabel={lock} testID="event-group-chip"><CardChip shell={shell} role="quiet" label="🔒" /></View>}
                 </View>
             </Pressable>
         );
@@ -342,4 +351,10 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         // and cut with "…" at the row's end only where a language's label is longer than the row.
         yourTime: { color: colors.tile.event.ink, fontWeight: '700', flexShrink: 0, maxWidth: '100%' },
         line: { marginBottom: 2 },
+        // The compact row's when: the event's ink, the row's size, bold enough to be the row's loud line after the title.
+        compactWhen: { color: colors.tile.event.ink, fontWeight: '700' },
+        // CANCELLED / ENDED in line 3: the danger chip's ink, the chip's weight.
+        compactDanger: { color: colors.feedback.danger.fg, fontWeight: '800' },
+        // The mark at the row's end: right-aligned, as a listing's price is.
+        compactEndMark: { marginTop: 0, textAlign: 'right' },
     });

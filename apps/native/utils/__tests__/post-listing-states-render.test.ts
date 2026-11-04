@@ -663,3 +663,33 @@ describe("the listing's own page: the person on it opens their profile", () => {
         expect(nav.to).toContainEqual({ pathname: '/public-profile', params: { publicKey: 'damo-key', callsign: 'Damo' } });
     });
 });
+
+// Slice C1 (DESIGN-card-style-box-fable.md §2 row "Compact row, poll"): the Market's compact row opens /post/{id}, so a poll has
+// a page. It is the poll's own card under Back, as the web's poll page is its card: the answers are here (never on the row), and
+// its author's name opens their profile, from inside the item (Marty, 4 Nov).
+describe('a poll has a page: its card under Back, the answers on it, its author opening their profile', () => {
+    beforeEach(() => { look.theme = 'light'; });
+    const POLL = {
+        id: 'poll-1', type: 'poll', status: 'active', title: 'Where should the new tool shed go?', description: 'The working bee is on the 12th',
+        author_pubkey: 'dee-key', author_callsign: 'Dee', created_at: iso(Date.now() - 60_000), poll_closes_at: iso(Date.now() + 3 * 86_400_000),
+        poll_options: JSON.stringify([{ id: 'o1', text: 'North of the hall', votes: 2 }, { id: 'o2', text: 'Behind the south barn', votes: 1 }]),
+        poll_open_vote: 0, photos: '[]',
+    };
+
+    it('the page is the poll card: its question, its answers to choose from, no price and no Offer or Need heading', async () => {
+        await open(POLL);
+        expect(host.querySelector('[data-testid="poll-page"]'), 'the poll page').not.toBeNull();
+        expect(host.querySelector('[data-testid="poll-card"]'), 'the poll card on it').not.toBeNull();
+        expect(host.textContent).toContain('Where should the new tool shed go?');
+        expect(buttons().some(b => b.includes('North of the hall')), buttons().join(' | ')).toBe(true);
+        expect(buttons().some(b => b.includes('Behind the south barn'))).toBe(true);
+        expect(host.textContent).not.toContain('OFFER');
+        expect(host.textContent).not.toContain('NEED');
+    });
+
+    it("the author's name opens their profile", async () => {
+        await open(POLL);
+        await press(host, 'Dee');
+        expect(nav.to).toContainEqual({ pathname: '/public-profile', params: { publicKey: 'dee-key', callsign: 'Dee' } });
+    });
+});

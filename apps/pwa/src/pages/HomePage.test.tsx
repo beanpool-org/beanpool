@@ -1325,7 +1325,7 @@ describe('the Tips card (scratch/home/TIPS-DESIGN-fable.md §1, §5, §6 item 5)
         expect(screen.getByTestId('home-live')).toHaveTextContent(TIPS_DONE_WORDS);
         await waitFor(() => expect(screen.getByRole('button', { name: 'Card options for Coming up' })).toHaveFocus());
         openArrange();
-        expect(screen.getByTestId('home-arrange-line-tips')).toHaveTextContent('All tips seen');
+        expect(screen.getByTestId('home-arrange-strip-note-tips')).toHaveTextContent('All tips seen');
         // Removed and added again, it starts over from the first tip.
         fireEvent.click(screen.getByTestId('home-arrange-remove-tips'));
         expect(screen.queryByTestId('home-card-tips')).toBeNull();
@@ -1484,27 +1484,45 @@ describe('Arrange', () => {
     const savedTypes = () => (vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as ReturnType<typeof v2>).cards.map(c => c.type);
     const body = () => within(screen.getByTestId('home-card-market')).queryAllByTestId('home-market-item');
 
-    it('Arrange › folds the cards to their bands and one line: no bodies, no "…", the type\'s own line, said on entering', async () => {
+    it('Arrange › leaves every card as it is drawn (slice A1): the bodies stay, quiet and hidden, the "…" gives way to arrows, nothing folds; said on entering', async () => {
         await land();
         expect(body().length).toBeGreaterThan(0);
+        const before = cardIds();
         openArrange();
-        expect(body()).toHaveLength(0);
+        // The same cards, the same bodies: the row is still there, in a body that is dimmed, hidden from a screen reader and inert.
+        expect(body().length).toBeGreaterThan(0);
+        expect(cardIds()).toEqual(before);
+        const quiet = screen.getByTestId('card-body-market');
+        expect(quiet).toHaveAttribute('aria-hidden', 'true');
+        expect(quiet).toHaveAttribute('inert');
+        expect(quiet.style.opacity).toBe('0.55');
+        expect(quiet.style.pointerEvents).toBe('none');
+        expect(quiet).toContainElement(body()[0]);
         expect(screen.queryByTestId('home-card-menu')).toBeNull();
-        expect(screen.getByTestId('home-arrange-line-events')).toHaveTextContent('Events coming up soon.');
-        expect(screen.getByTestId('home-live')).toHaveTextContent('Arrange Home. Use the arrows on each card.');
-        expect(screen.getByTestId('home-arrange-bar')).toHaveTextContent("Arrange Home: use the arrows. Done when you're happy.");
-        // Nothing here promises a drag until L3 and L4 land.
-        expect(screen.getByTestId('home-arrange-bar').textContent).not.toMatch(/drag/i);
+        // Nothing is folded to "one line": no card says what it would say, and nothing in the grid is a fold.
+        expect(document.querySelector('[data-testid^="home-arrange-line-"]')).toBeNull();
+        expect(screen.getByTestId('home-live')).toHaveTextContent('Arrange Home. Hold a card to drag it, or use the arrows on each card.');
+        // The web promises the drag it has (§2.9); the phone's own words (ARRANGE_WORDS.bar, .opened) stay arrows-only until it can.
+        expect(screen.getByTestId('home-arrange-bar')).toHaveTextContent("Arrange Home: hold a card to drag it, or use the arrows. Done when you're happy.");
+        expect(ARRANGE_WORDS.bar).toBe("Arrange Home: use the arrows. Done when you're happy.");
+        expect(ARRANGE_WORDS.opened).toBe('Arrange Home. Use the arrows on each card.');
+        // Done brings every body back to life.
+        doneArrange();
+        expect(screen.queryByTestId('card-body-market')).toBeNull();
+        expect(body().length).toBeGreaterThan(0);
+        expect(cardIds()).toEqual(before);
     });
 
-    it('every control has a name, and Tab meets them in the member\'s order: Done, then each card\'s arrows, then Add a card, then Reset', async () => {
+    it('every control has a name, and Tab meets them in the member\'s order: Done, then each card\'s arrows, then Add a card, then Reset; the quiet bodies hold none', async () => {
         await land();
         openArrange();
         const page = screen.getByTestId('home-page');
-        const names = Array.from(page.querySelectorAll<HTMLElement>('button:not([disabled])')).map(b => b.getAttribute('aria-label') ?? b.textContent)
+        // A body is inert (jsdom does not take its buttons out of the tab order itself, a browser does): leave out what is inside one.
+        const names = Array.from(page.querySelectorAll<HTMLElement>('button:not([disabled])')).filter(b => !b.closest('[inert]')).map(b => b.getAttribute('aria-label') ?? b.textContent)
             .filter(name => name !== 'Dismiss'); // The "Use the phone app" card, above Arrange and no part of it.
+        // The one-time hint is not a card: it stays, after the first card, and its ✕ is Tab's next stop as it is on Home.
         expect(names).toEqual([
-            'Done arranging Home', 'Move New in the Market down', 'Move Coming up up', 'Move Coming up down', 'Move The Pulse up',
+            'Done arranging Home', 'Move New in the Market down', 'Close this tip', 'Move Coming up up', 'Move Coming up down', 'Move The Pulse up',
             'Add a card to Home', 'Reset to defaults',
         ]);
     });
@@ -1549,23 +1567,76 @@ describe('Arrange', () => {
         expect(cardIds()).toEqual(['needs', 'find', 'market', 'events', 'community']);
     });
 
-    it('a card with nothing to show folds too, with Remove: it goes, is said, is saved without it, and focus goes to the nearest card', async () => {
+    it('a card with nothing to show is not in the grid but in the strip under it, with Remove: it goes, is said, is saved without it, and focus goes to + Add a card', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['market', 'decide', 'pulse']) as never })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
         expect(screen.queryByTestId('home-card-decide')).toBeNull();
         openArrange();
-        expect(screen.getByTestId('home-arrange-line-decide')).toHaveTextContent('Nothing to show now');
-        // A drawn card has no Remove here: it is one tap away in its "…".
+        // Not a band among the others: the cards a member sees are the cards they move.
+        expect(screen.queryByTestId('home-card-decide')).toBeNull();
+        expect(cardIds()).toEqual(['market', 'pulse', 'community']);
+        const strip = screen.getByTestId('home-arrange-strip');
+        expect(within(strip).getByRole('heading', { name: 'Nothing to show now' })).toBeInTheDocument();
+        expect(within(strip).getByTestId('home-arrange-strip-row-decide')).toHaveTextContent('Decide');
+        // A drawn card has no Remove here: it is one tap away in its "…" when Home is as usual.
         expect(screen.queryByTestId('home-arrange-remove-market')).toBeNull();
         fireEvent.click(screen.getByTestId('home-arrange-remove-decide'));
         await waitFor(() => expect(savedTypes()).toEqual(['market', 'pulse']));
         expect(screen.queryByTestId('home-card-decide')).toBeNull();
         expect(screen.getByTestId('home-live').textContent).toMatch(/removed\. Add a card brings it back\.$/);
-        await waitFor(() => expect(screen.getByTestId('home-arrange-up-pulse')).toHaveFocus());
+        // The strip had one row: it is gone with it, and focus goes to the tile that stands where it was.
+        expect(screen.queryByTestId('home-arrange-strip')).toBeNull();
+        await waitFor(() => expect(screen.getByTestId('home-arrange-add')).toHaveFocus());
     });
 
-    it('+ Add a card opens the picker over Arrange; the new card folds in first, focus on its arrow; Escape in the picker closes only the picker', async () => {
+    it('the strip lists exactly the cards on the list that Home does not draw, in the saved order; Remove from a row keeps focus in the strip; it is absent when every card is drawn', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['decide', 'market', 'groups', 'events', 'joined']) as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-events');
+        openArrange();
+        // Decide, Your groups and Who joined have nothing to show: they stand in the strip, and the drawn cards are the moving ones.
+        const rows = () => Array.from(screen.getByTestId('home-arrange-strip').querySelectorAll('li')).map(li => li.getAttribute('data-testid')!.replace('home-arrange-strip-row-', ''));
+        expect(rows()).toEqual(['decide', 'groups', 'joined']);
+        expect(cardIds()).toEqual(['market', 'events', 'community']);
+        // Its rows have no arrows: a card you can't see is not moved.
+        for (const id of rows()) {
+            expect(screen.queryByTestId(`home-arrange-up-${id}`)).toBeNull();
+            expect(screen.queryByTestId(`home-arrange-down-${id}`)).toBeNull();
+        }
+        // The arrows move among the cards Home draws: Market ↓ lands past Coming up, and the saved list keeps the strip's slots.
+        fireEvent.click(screen.getByTestId('home-arrange-down-market'));
+        await waitFor(() => expect(savedTypes()).toEqual(['decide', 'events', 'groups', 'market', 'joined']));
+        expect(screen.getByTestId('home-live')).toHaveTextContent('New in the Market moved to 2 of 2');
+        // Remove the middle row: focus goes to the next row's Remove; the last row's goes to the one before it.
+        fireEvent.click(screen.getByTestId('home-arrange-remove-groups'));
+        await waitFor(() => expect(rows()).toEqual(['decide', 'joined']));
+        await waitFor(() => expect(screen.getByTestId('home-arrange-remove-joined')).toHaveFocus());
+        fireEvent.click(screen.getByTestId('home-arrange-remove-joined'));
+        await waitFor(() => expect(rows()).toEqual(['decide']));
+        await waitFor(() => expect(screen.getByTestId('home-arrange-remove-decide')).toHaveFocus());
+        // Every card on the list is drawn now: no strip.
+        fireEvent.click(screen.getByTestId('home-arrange-remove-decide'));
+        await waitFor(() => expect(screen.queryByTestId('home-arrange-strip')).toBeNull());
+        expect(savedTypes()).toEqual(['events', 'market']);
+        doneArrange();
+        expect(screen.queryByTestId('home-arrange-strip')).toBeNull();
+    });
+
+    it('Settings… is offered in the strip where the type has settings (and Remove everywhere); it opens that card\'s settings over Arrange', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['market', 'decide']) as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        openArrange();
+        const row = screen.getByTestId('home-arrange-strip-row-decide');
+        expect(within(row).getByRole('button', { name: 'Settings for Decide' })).toHaveTextContent('Settings…');
+        expect(within(row).getByRole('button', { name: 'Remove Decide from Home' })).toHaveTextContent('Remove');
+        fireEvent.click(screen.getByTestId('home-arrange-settings-decide'));
+        expect(await screen.findByRole('dialog')).toBeInTheDocument();
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+    });
+
+    it('+ Add a card opens the picker over Arrange; the new card is drawn first, focus on its arrow; Escape in the picker closes only the picker', async () => {
         await land();
         openArrange();
         fireEvent.click(screen.getByTestId('home-arrange-add'));
@@ -1581,7 +1652,7 @@ describe('Arrange', () => {
         await waitFor(() => expect(screen.getByTestId('home-arrange-down-beans')).toHaveFocus());
     });
 
-    it('Reset to defaults gives the newcomer\'s list, folded, and Arrange stands', async () => {
+    it('Reset to defaults gives the newcomer\'s list, and Arrange stands', async () => {
         await land();
         openArrange();
         fireEvent.click(screen.getByTestId('home-arrange-reset'));
@@ -1589,7 +1660,7 @@ describe('Arrange', () => {
         expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
     });
 
-    it('Done unfolds the cards, saves nothing more, and gives focus back to Arrange ›', async () => {
+    it('Done brings the taps back, saves nothing more, and gives focus back to Arrange ›', async () => {
         await land();
         const open = screen.getByTestId('home-arrange-open');
         open.focus();
@@ -1694,11 +1765,26 @@ describe('Arrange', () => {
         await showIn('xx');
         await land();
         openArrange();
-        expect(screen.getByTestId('home-arrange-bar')).toHaveTextContent(xx(ARRANGE_WORDS.bar));
+        expect(screen.getByTestId('home-arrange-bar')).toHaveTextContent(xx(ARRANGE_WORDS.barDrag));
         expect(screen.getByTestId('home-arrange-done')).toHaveAccessibleName(xx(ARRANGE_WORDS.done));
         expect(screen.getByTestId('home-arrange-stays-community')).toHaveTextContent(xx(ARRANGE_WORDS.stays));
         expect(bypassing(screen.getByTestId('home-arrange-bar'))).toEqual([]);
         expect(bypassing(screen.getByTestId('home-arrange-tile'))).toEqual([]);
+        expect(screen.getByTestId('home-live')).toHaveTextContent(xx(ARRANGE_WORDS.openedDrag));
+        backToEnglish();
+    });
+
+    it('in the pseudo-locale, the strip goes through the words layer too: its heading, its rows and their labels', async () => {
+        await showIn('xx');
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: v2(['market', 'decide', 'pulse']) as never })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        openArrange();
+        const strip = screen.getByTestId('home-arrange-strip');
+        expect(strip).toHaveTextContent(xx('Nothing to show now'));
+        expect(within(strip).getByTestId('home-arrange-remove-decide')).toHaveTextContent(xx('Remove'));
+        expect(within(strip).getByTestId('home-arrange-settings-decide')).toHaveTextContent(xx('Settings…'));
+        expect(bypassing(strip)).toEqual([]);
         backToEnglish();
     });
 });
@@ -2311,20 +2397,27 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         expect(band('search-k7mq').style.backgroundColor).toBe('var(--bp-card-lime-tint)');
     });
 
-    it('Arrange names the band by its words, so two searches read as two cards', async () => {
+    // In Arrange a card is the card Home draws (slice A1), so its band is Home's own and its words are in its dimmed first line; what tells
+    // two searches apart to a screen reader, and for a pair with the same words, is the name on each card's arrows.
+    it('Arrange keeps each saved search\'s own words on its card and names its arrows by them, so two searches read as two cards', async () => {
         nodeKeeping(answer(), v2(['market'], AT, [
             { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any' } },
             { id: 'search-m4p9', type: 'search', settings: { q: 'duck eggs', kind: 'any' } },
         ]));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
+        const heading = (id: string) => screen.getByTestId(`card-band-${id}`).querySelector('h2')!.textContent;
+        const onHome = [heading('search-k7mq'), heading('search-m4p9')];
         openArrange();
-        expect(screen.getByTestId('card-band-search-k7mq')).toHaveTextContent('eggs');
-        expect(screen.getByTestId('card-band-search-m4p9')).toHaveTextContent('duck eggs');
-        expect(screen.getByTestId('card-band-search-k7mq')).not.toHaveTextContent('A saved search');
+        // The heading is exactly what it was on Home (a band that changed its words could change its height, and a card its cell).
+        expect([heading('search-k7mq'), heading('search-m4p9')]).toEqual(onHome);
+        expect(screen.getByTestId('home-card-search-k7mq')).toHaveTextContent('eggs');
+        expect(screen.getByTestId('home-card-search-m4p9')).toHaveTextContent('duck eggs');
+        expect(screen.getByTestId('home-arrange-up-search-k7mq')).toHaveAccessibleName('Move "eggs" up');
+        expect(screen.getByTestId('home-arrange-up-search-m4p9')).toHaveAccessibleName('Move "duck eggs" up');
     });
 
-    it('Arrange: two searches with the same words and another kind read differently, bands and labels (review of #1716)', async () => {
+    it('Arrange: two searches with the same words and another kind are named apart on their arrows (review of #1716)', async () => {
         nodeKeeping(answer(), v2(['market'], AT, [
             { id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'offer' } },
             { id: 'search-m4p9', type: 'search', settings: { q: 'eggs', kind: 'need' } },
@@ -2333,10 +2426,6 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-search-k7mq');
         openArrange();
-        expect(screen.getByTestId('card-band-search-k7mq')).toHaveTextContent('Offers · eggs');
-        expect(screen.getByTestId('card-band-search-m4p9')).toHaveTextContent('Needs · eggs');
-        expect(screen.getByTestId('card-band-search-r8t2')).toHaveTextContent('eggs');
-        expect(screen.getByTestId('card-band-search-r8t2')).not.toHaveTextContent(/Offers|Needs|Both/);
         expect(screen.getByTestId('home-arrange-up-search-k7mq')).toHaveAccessibleName('Move "eggs" (Offers) up');
         expect(screen.getByTestId('home-arrange-up-search-m4p9')).toHaveAccessibleName('Move "eggs" (Needs) up');
         expect(screen.getByTestId('home-arrange-up-search-r8t2')).toHaveAccessibleName('Move "eggs" up');
@@ -2492,7 +2581,8 @@ describe('sun and moon: worked out in the browser, from the place the answer hol
         await screen.findByTestId('home-card-market');
         expect(screen.queryByTestId('home-card-sky')).toBeNull();
         openArrange();
-        expect(screen.getByTestId('home-arrange-line-sky')).toHaveTextContent(SKY_NO_PLACE_LINE);
+        // Not drawn, so in the strip, with its own line under its name.
+        expect(screen.getByTestId('home-arrange-strip-note-sky')).toHaveTextContent(SKY_NO_PLACE_LINE);
     });
 
     it('makes no request of its own: a landing with it asks exactly what a landing without it asks', async () => {
@@ -3067,18 +3157,27 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         expect(cardIds().slice(0, 2)).toEqual(['needs', 'tips']);
     });
 
-    it('"Your way back in" with something to say still has it in Arrange, and is drawn again after Done', async () => {
+    it('"Your way back in" with something to say is still drawn in Arrange, in its own cell: arrows on its row, its body quiet; it is not in the strip, and is the same card after Done', async () => {
         wordsOnly();
         await landAt(1400, SAFETY);
         await screen.findByTestId('one-way-back-landing');
+        const cell = screen.getByTestId('home-card-safety');
         openArrange();
-        expect(screen.getByTestId('home-arrange-line-safety')).not.toHaveTextContent('Nothing to show now');
+        expect(screen.getByTestId('home-card-safety')).toBe(cell);
+        expect(within(cell).getByTestId('home-arrange-down-safety')).toHaveAccessibleName('Move Your way back in later');
+        expect(within(cell).queryByTestId('home-card-menu')).toBeNull();
+        expect(within(cell).getByTestId('card-body-safety')).toContainElement(within(cell).getByTestId('one-way-back-landing'));
+        expect(within(cell).getByTestId('card-body-safety')).toHaveAttribute('inert');
+        expect(screen.queryByTestId('home-arrange-strip-row-safety')).toBeNull();
         doneArrange();
         expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
+        expect(screen.getByTestId('home-card-safety')).toBe(cell);
+        expect(within(cell).getByTestId('home-card-menu')).toBeInTheDocument();
     });
 
-    // Arrange shows it with nothing to say, so a move past it shows too: no press moves something a member can't see.
-    it('"Your way back in" with nothing to show folds in Arrange, says so, and the card under it moves past it', async () => {
+    // Arrange moves among the cards Home draws, so no press moves something a member can't see; what has nothing to say
+    // waits in the strip and keeps its slot in the saved list (DESIGN-home-arrange-in-place-fable.md §2.4).
+    it('"Your way back in" with nothing to show waits in the strip in Arrange, says so, and the card above it moves past the next drawn card, leaving the strip\'s slot where it is', async () => {
         wordsOnly();
         localStorage.setItem(`beanpool_one_way_back_${ME.publicKey}`, JSON.stringify({ checked: true }));
         width = 1400;
@@ -3089,11 +3188,12 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
         await pause();
         expect(cardIds()).toEqual(['needs', 'market', 'events', 'pulse', 'community']);
         openArrange();
-        expect(cardIds()).toEqual(['needs', 'market', 'safety', 'events', 'pulse', 'community']);
-        expect(screen.getByTestId('home-arrange-line-safety')).toHaveTextContent('Nothing to show now');
+        expect(cardIds()).toEqual(['needs', 'market', 'events', 'pulse', 'community']);
+        expect(screen.getByTestId('home-arrange-strip-row-safety')).toHaveTextContent('Your way back in');
+        expect(within(screen.getByTestId('home-arrange-strip')).getByRole('heading', { name: 'Nothing to show now' })).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('home-arrange-down-market'));
-        await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['safety', 'market', 'events', 'pulse']));
-        expect(cardIds()).toEqual(['needs', 'safety', 'market', 'events', 'pulse', 'community']);
+        await waitFor(() => expect(savedLayouts().at(-1)!.cards.map(c => c.type)).toEqual(['events', 'safety', 'market', 'pulse']));
+        expect(cardIds()).toEqual(['needs', 'events', 'market', 'pulse', 'community']);
     });
 
     // The answer's `safety` is the node's word that the member has only their 12 words, so a card not yet put away is
@@ -3434,6 +3534,64 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
         expect(tips.style.gridRow).toBe('34 / span 54');
         expect(events.style.gridColumn).toBe('2');
         expect(events.style.gridRow).toBe('34 / span 42');
+    });
+
+    // DESIGN-home-arrange-in-place-fable.md §2.1, §5 slice A1: "a drawn card changing its cell when Arrange opens is a red test,
+    // not a tolerance". The strip and the tile are full rows packed after every drawn card, so the community card, which is a
+    // full row itself and stands last, is the one card that moves: down, by exactly the strip and the tile.
+    it('entering Arrange moves no drawn card to another cell, in two and three columns: the strip and the tile stand after them, the community card below, and Done puts it all back', async () => {
+        const stand = (...rest: Array<[string, number]>) => ({
+            'home-card-needs': 100, 'home-card-tips': 200, 'home-card-events': 150, 'home-card-market': 120,
+            'home-card-pulse': 80, 'home-card-beans': 90, 'home-card-community': 110, 'home-arrange-strip': 220, 'home-arrange-tile': 48,
+            ...Object.fromEntries(rest),
+        });
+        const cells = () => Object.fromEntries(Array.from(grid().children)
+            .filter(el => /^home-(card-|hint$|fewer$)/.test(el.getAttribute('data-testid') ?? ''))
+            .map(el => [el.getAttribute('data-testid')!, `${(el as HTMLElement).style.gridColumn} | ${(el as HTMLElement).style.gridRow}`]));
+        const rows = (testId: string) => {
+            const m = /^(\d+) \/ span (\d+)$/.exec(screen.getByTestId(testId).style.gridRow);
+            if (!m) throw new Error(`${testId} has no row: ${screen.getByTestId(testId).style.gridRow}`);
+            return { start: Number(m[1]), span: Number(m[2]) };
+        };
+        for (const [w, heights] of [[800, stand()], [1400, stand(['home-card-tips', 300], ['home-card-market', 200], ['home-card-pulse', 50], ['home-card-beans', 60])]] as const) {
+            await landWithHeights(w, heights);
+            // The one-time hint stands in the grid under Needs you: it is part of what must not move.
+            await screen.findByTestId('home-hint');
+            const { 'home-card-community': communityOnHome, ...drawnOnHome } = cells();
+            expect(Object.keys(drawnOnHome).length, `${w}: the drawn cards and the hint`).toBeGreaterThan(6);
+            const homeEnds = rows('home-card-community');
+
+            openArrange();
+            const strip = rows('home-arrange-strip');
+            const tile = rows('home-arrange-tile');
+            const { 'home-card-community': communityInArrange, ...drawnInArrange } = cells();
+            // Every drawn card, and the hint, in the very cell it had.
+            expect(drawnInArrange, `${w}: no drawn card changed its cell`).toEqual(drawnOnHome);
+            // The strip waits for every column, then the tile, then the community card: each a full row, in that order.
+            expect(screen.getByTestId('home-arrange-strip').style.gridColumn).toBe('1 / -1');
+            expect(screen.getByTestId('home-arrange-tile').style.gridColumn).toBe('1 / -1');
+            expect(strip.start, `${w}: the strip starts where the community card did, under the deepest column`).toBe(homeEnds.start);
+            expect(tile.start).toBe(strip.start + strip.span);
+            expect(rows('home-card-community').start).toBe(tile.start + tile.span);
+            expect(communityOnHome).not.toBe(communityInArrange);
+
+            doneArrange();
+            expect(screen.queryByTestId('home-arrange-strip')).toBeNull();
+            expect(cells(), `${w}: Done leaves every cell as Home had it`).toEqual({ ...drawnOnHome, 'home-card-community': communityOnHome });
+            cleanup();
+        }
+    });
+
+    it('in Arrange the reading order is the drawn cards in the member\'s order, then the strip, the tile and the community card: the strip and tile are never among the cards', async () => {
+        await landWithHeights(800, {
+            'home-card-needs': 100, 'home-card-tips': 200, 'home-card-events': 150, 'home-card-market': 120,
+            'home-card-pulse': 80, 'home-card-beans': 90, 'home-card-community': 110, 'home-arrange-strip': 220, 'home-arrange-tile': 48,
+        });
+        openArrange();
+        const order = Array.from(grid().children).map(el => el.getAttribute('data-testid'));
+        // The reading order: the cards in the member's order, then the strip, the tile, and the community card last.
+        expect(order.slice(-3)).toEqual(['home-arrange-strip', 'home-arrange-tile', 'home-card-community']);
+        expect(order.indexOf('home-card-beans')).toBeLessThan(order.indexOf('home-arrange-strip'));
     });
 
     it('useLayoutEffect does not re-query DOM card heights when card set is unchanged across re-renders', async () => {

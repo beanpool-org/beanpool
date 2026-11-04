@@ -2,7 +2,8 @@
  * One card on Home (DESIGN-home-dashboard-fable.md §9, §10): a region with its own heading, so a screen reader jumps card
  * to card, and a small "…": Settings… (a type that has them) · Arrange · Remove, named by the card's screen-reader name
  * (a saved search by its words), given `onRemove` in place of `onHide`. Moving a card happens in one place, Arrange
- * (DESIGN-home-layout-fable.md §3.2): the card folds to its band and one line, and the band's arrows stand in for the "…".
+ * (DESIGN-home-arrange-in-place-fable.md §2.1): the card stays exactly as it is drawn, in the same place, and the band's
+ * arrows stand in for Tune and the "…" while its body goes quiet (a little dimmer, nothing in it takes a tap) until Done.
  *
  * The menu is a labelled button ("Card options for Coming up") that opens a short list of buttons under it: the first
  * item takes focus, the arrow keys move between them, Escape or a tap elsewhere closes it, and focus goes back to the
@@ -159,17 +160,37 @@ function useHold(onHold?: () => void) {
     };
 }
 
-/** The band's two arrows, or "Stays here", in the card's ink. */
-function ArrangeControls({ id, band, ink }: { id: string; band: ArrangeBand; ink: string }) {
-    if (band.stays) return <span data-testid={`home-arrange-stays-${id}`} className="shrink-0 text-xs font-bold" style={{ color: ink }}>{t(WORDS.stays)}</span>;
-    const arrow = 'shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-lg font-black cursor-pointer disabled:opacity-40 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
+/**
+ * A card's body while Arrange is open (DESIGN-home-arrange-in-place-fable.md §2.1): 55% opacity, and nothing in it takes
+ * a tap, a key or a screen reader's attention until Done, so a stray tap can't open an event or a listing half way
+ * through arranging. `pointer-events: none` and `aria-hidden` do it everywhere; the `inert` attribute, where the browser
+ * has it, also takes its buttons and links out of Tab. It adds no box of its own: a drawn card keeps its height.
+ */
+export function QuietBody({ id, children }: { id: string; children: ReactNode }) {
+    return (
+        <div data-testid={`card-body-${id}`} data-quiet="true" aria-hidden="true" inert style={{ opacity: 0.55, pointerEvents: 'none' }}>
+            {children}
+        </div>
+    );
+}
+
+/**
+ * The band's two arrows, or "Stays here", in the card's ink. `-my-1` keeps a band 48 px tall, as it is with the "…": the
+ * arrows are 44 px targets, and a band that grew by 4 px would move the cards under it (a drawn card never changes cell).
+ */
+export function ArrangeControls({ id, band, ink }: { id: string; band: ArrangeBand; ink?: string }) {
+    // No ink (a card with no tinted band, "Your way back in"): the page's own text colour.
+    const colour = ink ? { style: { color: ink } } : {};
+    const own = ink ? '' : ' text-text-primary';
+    if (band.stays) return <span data-testid={`home-arrange-stays-${id}`} className={`shrink-0 text-xs font-bold${own}`} {...colour}>{t(WORDS.stays)}</span>;
+    const arrow = `shrink-0 min-w-[44px] min-h-[44px] -my-1 flex items-center justify-center rounded-full bg-transparent border-0 text-lg font-black cursor-pointer disabled:opacity-40 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500${own}`;
     return (
         <>
-            <button type="button" className={arrow} style={{ color: ink }} data-testid={`home-arrange-up-${id}`} disabled={!band.canUp} onClick={() => band.onMove?.('up')}
+            <button type="button" className={arrow} {...colour} data-testid={`home-arrange-up-${id}`} disabled={!band.canUp} onClick={() => band.onMove?.('up')}
                 aria-label={band.across ? t('Move {card} earlier', { card: band.label }) : t('Move {card} up', { card: band.label })}>
                 <span aria-hidden="true">↑</span>
             </button>
-            <button type="button" className={arrow} style={{ color: ink }} data-testid={`home-arrange-down-${id}`} disabled={!band.canDown} onClick={() => band.onMove?.('down')}
+            <button type="button" className={arrow} {...colour} data-testid={`home-arrange-down-${id}`} disabled={!band.canDown} onClick={() => band.onMove?.('down')}
                 aria-label={band.across ? t('Move {card} later', { card: band.label }) : t('Move {card} down', { card: band.label })}>
                 <span aria-hidden="true">↓</span>
             </button>
@@ -195,8 +216,10 @@ interface CardProps {
     onHeight?: (height: number) => void;
     /** Holding the band enters Arrange; absent where it doesn't (a visitor's Home, Getting started). */
     onHold?: () => void;
-    /** In Arrange: the band's controls stand in for the "…" and the card is folded (`children` is its one line). */
+    /** In Arrange: the band's arrows (or Stays here) stand in for Tune and the "…"; the card is otherwise as it is drawn. */
     arrange?: ArrangeBand;
+    /** In Arrange: the body goes quiet (dimmer, inert, hidden from a screen reader) until Done. */
+    quiet?: boolean;
 }
 
 /** A packed child's height: its border box, whatever its span (it stands `align-self: start`). */
@@ -227,7 +250,7 @@ export function PackedBlock({ tag: Tag = 'div', onHeight, ...rest }: { tag?: 'di
     return <Tag ref={ref as RefObject<never>} {...rest} />;
 }
 
-export function HomeCard({ id, title, titleAside, menu, accent, children, style, hue, onHeight, onHold, arrange }: CardProps) {
+export function HomeCard({ id, title, titleAside, menu, accent, children, style, hue, onHeight, onHold, arrange, quiet }: CardProps) {
     const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
     const headingId = `home-card-${id}-title`;
     const sectionRef = useRef<HTMLElement | null>(null);
@@ -264,13 +287,13 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                     ...(arrange?.lifted ? { boxShadow: `0 0 0 2px var(--bp-card-${cardHue}-ink)`, zIndex: 10 } : {}),
                 }}
                 data-lifted={arrange?.lifted ? 'true' : undefined}
-                className={`bg-bg-card rounded-2xl shadow-sm border p-4 ${arrange ? 'pb-2' : ''} mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
+                className={`bg-bg-card rounded-2xl shadow-sm border p-4 mb-3 min-w-0 home-card-container ${accent ? '' : 'border-border-primary'}`}
             >
                 <div
                     {...hold}
                     {...(arrange?.drag ? { onPointerDown: arrange.drag.onPointerDown } : {})}
                     data-testid={`card-band-${id}`}
-                    className={`-mx-4 -mt-4 px-4 ${arrange ? 'mb-2' : 'mb-3'} py-1 rounded-t-2xl flex items-center justify-between min-h-[48px] gap-2 min-w-0`}
+                    className="-mx-4 -mt-4 px-4 mb-3 py-1 rounded-t-2xl flex items-center justify-between min-h-[48px] gap-2 min-w-0"
                     style={{
                         backgroundColor: `var(--bp-card-${cardHue}-tint)`,
                         color: `var(--bp-card-${cardHue}-ink)`,
@@ -293,7 +316,7 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                         )}
                     </div>
                 </div>
-                {children}
+                {quiet ? <QuietBody id={id}>{children}</QuietBody> : children}
             </section>
         </CardContainerContext.Provider>
     );

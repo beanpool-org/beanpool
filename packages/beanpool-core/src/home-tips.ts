@@ -27,6 +27,11 @@ export interface HomeTip {
     id: string;
     /** Shown through t() where it is drawn. */
     text: WordKey;
+    /**
+     * The same tip for an app whose cards can be dragged (the web's Arrange; the phone's follows it): `tipText` gives
+     * it in place of `text`. An app that cannot drag yet never says so.
+     */
+    dragText?: WordKey;
     /** The bundled guide page Read more opens; absent: no Read more. */
     guide?: string;
     when: (node: TipsNode, role: TipsRole) => boolean;
@@ -81,8 +86,12 @@ export const HOME_TIPS: readonly HomeTip[] = [
     { id: 'visitors', when: n => !beansOn(n), guide: 'privacy',
         text: word("People who haven't joined can see what's on offer and roughly where, never your name, your face or the exact spot.") },
     { id: 'guide', when: always, guide: 'the-bean',
-        text: word("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards.") },
+        text: word("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards."),
+        dragText: word("That's the last tip. The whole guide is in Settings under Help & how it works, and it works with no connection; Arrange, at the bottom, moves your cards: hold one to drag it.") },
 ];
+
+/** A tip's sentence as an app says it: through t(), the drag sentence where that app's cards can be dragged. */
+export const tipText = (tip: HomeTip, drag = false): string => t(drag && tip.dragText ? tip.dragText : tip.text);
 
 /** The tips this node shows this reader, in order. */
 export function tipsFor(node: TipsNode, role: TipsRole): HomeTip[] {

@@ -102,6 +102,10 @@ export const PUSH_NOTICE_KINDS = {
     'decision.jury-reply': { body: word('The member your jury is deciding about has answered the case. Open BeanPool to read it.'), tab: 'home' },
     'market.request': { body: word('Someone answered one of your listings.'), tab: 'market' },
     'market.answer': { body: word('There is news on one of your requests.'), tab: 'market' },
+    // To a member who starred a Need's category, when a neighbour in their community posts that Need (DESIGN-cold-start-trades-
+    // fable.md §2.1, slice N3 sends it): at most one a day, never to the Need's author, never on the worldwide community. It names
+    // no one, no category and no title; its details open the Need.
+    'market.asked': { body: word("Someone in your community asked for something you're into."), tab: 'market' },
     'market.listing': { body: word('There is news on one of your listings.'), tab: 'market' },
     'trade.update': { body: word('There is news on one of your trades.'), tab: 'market' },
     'review.new': { body: word('You have a new review.'), tab: 'market' },

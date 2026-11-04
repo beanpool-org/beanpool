@@ -128,6 +128,8 @@ export const SUITES = [
     'test-home-answer-parse-lands',
     'test-home-steps',
     'test-home-chat-card',
+    'test-home-asked-card',
+    'test-home-asked-card-global',
     'test-knock',
     'test-knock-ceiling',
     'test-knock-notices',

@@ -161,14 +161,26 @@ function useHold(onHold?: () => void) {
 }
 
 /**
- * A card's body while Arrange is open (DESIGN-home-arrange-in-place-fable.md §2.1): 55% opacity, and nothing in it takes
- * a tap, a key or a screen reader's attention until Done, so a stray tap can't open an event or a listing half way
- * through arranging. `pointer-events: none` and `aria-hidden` do it everywhere; the `inert` attribute, where the browser
- * has it, also takes its buttons and links out of Tab. It adds no box of its own: a drawn card keeps its height.
+ * A card's body (DESIGN-home-arrange-in-place-fable.md §2.1), the same element on Home, in Arrange and after Done: only its
+ * attributes change, so nothing in it is ever unmounted and mounted again when Arrange opens or closes (a body that was
+ * one element on Home and another in Arrange remounted everything in it: the Find card's AskedCommunity fetched again and
+ * drew a shorter loading box, scrolled itself again, and Ask to join lost what was typed; A1 review, 4 Nov).
+ *
+ * While `quiet` (Arrange is open) the body is 55% opacity, and nothing in it takes a tap, a key or a screen reader's
+ * attention until Done, so a stray tap can't open an event or a listing half way through arranging. `pointer-events: none`
+ * and `aria-hidden` do it everywhere; the `inert` attribute, where the browser has it, also takes its buttons and links
+ * out of Tab. On Home it carries nothing at all. It adds no padding, margin or box of its own, quiet or not: a drawn card
+ * keeps its height, and keeps its cell.
  */
-export function QuietBody({ id, children }: { id: string; children: ReactNode }) {
+export function CardBody({ id, quiet, children }: { id: string; quiet?: boolean; children: ReactNode }) {
     return (
-        <div data-testid={`card-body-${id}`} data-quiet="true" aria-hidden="true" inert style={{ opacity: 0.55, pointerEvents: 'none' }}>
+        <div
+            data-testid={quiet ? `card-body-${id}` : undefined}
+            data-quiet={quiet ? 'true' : undefined}
+            aria-hidden={quiet ? 'true' : undefined}
+            inert={quiet ? true : undefined}
+            style={quiet ? { opacity: 0.55, pointerEvents: 'none' } : undefined}
+        >
             {children}
         </div>
     );
@@ -316,7 +328,7 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                         )}
                     </div>
                 </div>
-                {quiet ? <QuietBody id={id}>{children}</QuietBody> : children}
+                <CardBody id={id} quiet={quiet}>{children}</CardBody>
             </section>
         </CardContainerContext.Provider>
     );

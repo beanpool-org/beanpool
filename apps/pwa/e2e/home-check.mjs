@@ -1382,6 +1382,12 @@ async function arrangeAcross(browser, root) {
                 }
                 await packedRight(page, `Home at ${tag}`);
                 const homeBoxes = await gridBoxes(page);
+                // Every element drawn in a card's body on Home, kept by reference: Arrange and Done must not unmount and mount
+                // them again (A1 review, 4 Nov: a body that was another element in Arrange did, and a card whose body fetches
+                // drew a shorter loading box, so cards packed after it could change cell).
+                await page.evaluate(() => { window.__homeBodies = Array.from(document.querySelectorAll('section[data-testid^="home-card-"] *')).filter((el) => !el.closest('[data-testid^="card-band-"]')); });
+                const replaced = () => page.evaluate(() => window.__homeBodies.filter((el) => !el.isConnected).map((el) => `${el.tagName.toLowerCase()}${el.dataset.testid ? `[${el.dataset.testid}]` : ''}`));
+                const bodiesDrawn = await page.evaluate(() => window.__homeBodies.length);
                 // The hold: half a second on a band, with no button under the pointer.
                 // In the middle of the window: the tab bar stands over the bottom of the page at 320 px.
                 await page.getByTestId('card-band-tips').evaluate((el) => el.scrollIntoView({ block: 'center' }));
@@ -1409,6 +1415,8 @@ async function arrangeAcross(browser, root) {
                 const arrangeBoxes = arrange.boxes;
                 const same = sameCards(homeBoxes, arrange);
                 check(same.ok, `${tag}: entering Arrange moves no card Home draws: ${same.how}${same.moved.length ? ` (${same.moved.join('; ')})` : ''}`);
+                const goneInArrange = await replaced();
+                check(bodiesDrawn > 20 && goneInArrange.length === 0, `${tag}: entering Arrange unmounts nothing in any card's body (${bodiesDrawn} elements kept${goneInArrange.length ? `, but ${goneInArrange.length} replaced: ${goneInArrange.slice(0, 6).join(' ')}` : ''})`);
                 const strip = arrangeBoxes['home-arrange-strip'];
                 const tile = arrangeBoxes['home-arrange-tile'];
                 const community = arrangeBoxes['home-card-community'];
@@ -1483,6 +1491,8 @@ async function arrangeAcross(browser, root) {
                 await barEl.waitFor({ state: 'detached' });
                 await wait(300);
                 await packedRight(page, `Home after Done at ${tag}`);
+                const goneAfterDone = await replaced();
+                check(goneAfterDone.length === 0, `${tag}: Done unmounts nothing in any card's body either (${bodiesDrawn} elements kept${goneAfterDone.length ? `, but ${goneAfterDone.length} replaced: ${goneAfterDone.slice(0, 6).join(' ')}` : ''})`);
                 await open();
                 await page.getByTestId('home-arrange-open').evaluate((el) => el.scrollIntoView({ block: 'center' }));
                 await page.getByTestId('home-arrange-open').click();

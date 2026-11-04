@@ -95,7 +95,7 @@ import { CategoryTile } from '../components/CategoryTile';
 import { ListPhoto } from '../components/ListPhoto';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { VISITOR_WORDS } from '../lib/visitor-lobby';
-import { ArrangeControls, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, QuietBody, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
+import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
 import { ArrangeStrip, type StripRow } from '../components/ArrangeStrip';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
@@ -2390,7 +2390,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             {inArrange
                                 ? <div className="flex justify-end -mb-2"><ArrangeControls id={card.id} band={arrangeBandFor(card, false)} /></div>
                                 : common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
-                            {inArrange ? <QuietBody id={card.id}>{oneWayBack}</QuietBody> : oneWayBack}
+                            <CardBody id={card.id} quiet={inArrange}>{oneWayBack}</CardBody>
                         </PackedBlock>
                     )} />
                 );

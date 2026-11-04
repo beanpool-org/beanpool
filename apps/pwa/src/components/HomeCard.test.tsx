@@ -2,6 +2,7 @@
  * A Home card's "…" (components/HomeCard.tsx): version 1's Hide, and the card frame's (CARD-FRAME §1.3, slice F3)
  * Settings… · Arrange · Remove, named by the card's screen-reader name, never its caption. The moves are in Arrange.
  */
+import { useEffect } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CardMenu, HomeCard, PackedBlock } from './HomeCard';
@@ -229,18 +230,68 @@ describe('HomeCard caption band (S1, scratch/fable-design/DESIGN-home-look-fable
             expect(screen.getByRole('heading', { name: 'Coming up' })).toBeInTheDocument();
         });
 
-        it('a card that is not quiet has no wrapper at all, and a quiet one is the same box: no padding or margin of its own', () => {
+        it('a card that is not quiet has no quiet body, and a quiet one is the same box, the same element: no padding or margin of its own', () => {
             const { container, rerender } = render(<HomeCard id="events" title="Coming up"><p>body</p></HomeCard>);
             const section = () => container.querySelector('section')!;
             const band = () => screen.getByTestId('card-band-events');
             const plain = { section: section().className, band: band().className };
+            const bodyElement = screen.getByText('body').parentElement;
             expect(screen.queryByTestId('card-body-events')).toBeNull();
             rerender(<HomeCard id="events" title="Coming up" arrange={{ label: 'Coming up', canUp: true, canDown: true }} quiet><p>body</p></HomeCard>);
             // Arrange used to fold the card (pb-2, mb-2): now the card is exactly the box it is on Home, or a card would change its cell.
             expect({ section: section().className, band: band().className }).toEqual(plain);
             const wrapper = screen.getByTestId('card-body-events');
+            expect(wrapper).toBe(bodyElement);
             expect(wrapper.className).toBe('');
             expect(wrapper.parentElement).toBe(section());
+        });
+
+        // The body is one element for the card's whole life on Home, and quiet only changes its attributes: a body that is a
+        // different element in Arrange unmounts everything in it (A1 review, 4 Nov: the Find card's AskedCommunity fetched
+        // again and drew a shorter loading box, so cards packed after it could change cell; it scrolled itself again; Ask to
+        // join lost what was typed). Measured: mounts 1 → 2 → 3 over Home → Arrange → Done.
+        it('the body is mounted once across Home → Arrange → Done: its children are never unmounted and mounted again, and keep what they hold', () => {
+            const mounted = vi.fn();
+            const unmounted = vi.fn();
+            function Probe() {
+                useEffect(() => { mounted(); return unmounted; }, []);
+                return <input data-testid="typed" aria-label="Typed" defaultValue="" />;
+            }
+            const arrangeBand = { label: 'Find', canUp: true, canDown: true };
+            const card = (inArrange: boolean) => (
+                <HomeCard id="find" title="Find" arrange={inArrange ? arrangeBand : undefined} quiet={inArrange}><Probe /><p>after</p></HomeCard>
+            );
+            const { rerender } = render(card(false));
+            const input = screen.getByTestId('typed');
+            fireEvent.change(input, { target: { value: 'a reason to join' } });
+            const after = screen.getByText('after');
+            expect(mounted).toHaveBeenCalledTimes(1);
+
+            rerender(card(true));
+            expect(mounted).toHaveBeenCalledTimes(1);
+            expect(unmounted).not.toHaveBeenCalled();
+            expect(screen.getByTestId('typed')).toBe(input);
+            expect(screen.getByText('after')).toBe(after);
+            expect(screen.getByTestId('card-body-find')).toHaveAttribute('inert');
+
+            rerender(card(false));
+            expect(mounted).toHaveBeenCalledTimes(1);
+            expect(unmounted).not.toHaveBeenCalled();
+            expect(screen.getByTestId('typed')).toBe(input);
+            expect(screen.getByTestId('typed')).toHaveValue('a reason to join');
+            expect(screen.getByText('after')).toBe(after);
+        });
+
+        it('on Home the one body element carries nothing quiet: not hidden, not inert, not dimmed, no pointer rule, and no test id or flag of Arrange', () => {
+            render(<HomeCard id="events" title="Coming up"><button type="button">Calendar ›</button></HomeCard>);
+            const wrapper = screen.getByText('Calendar ›').parentElement!;
+            expect(wrapper.parentElement).toBe(document.querySelector('[data-testid="home-card-events"]'));
+            expect(wrapper).not.toHaveAttribute('aria-hidden');
+            expect(wrapper).not.toHaveAttribute('inert');
+            expect(wrapper).not.toHaveAttribute('data-quiet');
+            expect(wrapper).not.toHaveAttribute('data-testid');
+            expect(wrapper.getAttribute('style') ?? '').toBe('');
+            expect(wrapper.className).toBe('');
         });
 
         it('Stays here: no arrows, the word says so, and the body is as quiet as any', () => {

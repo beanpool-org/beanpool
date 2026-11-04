@@ -1489,9 +1489,16 @@ describe('Arrange', () => {
         await land();
         expect(body().length).toBeGreaterThan(0);
         const before = cardIds();
+        // Every card's drawn body, as the very elements (A1 review, 4 Nov): a body that was a different element in Arrange
+        // unmounted everything in it, and mounted it again at Done.
+        const drawn = Array.from(document.querySelectorAll('section[data-testid^="home-card-"] *')).filter(el => !el.closest('[data-testid^="card-band-"]'));
+        expect(drawn.length).toBeGreaterThan(10);
+        const firstRow = body()[0];
         openArrange();
         // The same cards, the same bodies: the row is still there, in a body that is dimmed, hidden from a screen reader and inert.
         expect(body().length).toBeGreaterThan(0);
+        expect(body()[0]).toBe(firstRow);
+        expect(drawn.filter(el => !el.isConnected)).toEqual([]);
         expect(cardIds()).toEqual(before);
         const quiet = screen.getByTestId('card-body-market');
         expect(quiet).toHaveAttribute('aria-hidden', 'true');
@@ -1511,6 +1518,9 @@ describe('Arrange', () => {
         doneArrange();
         expect(screen.queryByTestId('card-body-market')).toBeNull();
         expect(body().length).toBeGreaterThan(0);
+        expect(body()[0]).toBe(firstRow);
+        // Nothing drawn on Home was unmounted and mounted again by Arrange or by Done.
+        expect(drawn.filter(el => !el.isConnected)).toEqual([]);
         expect(cardIds()).toEqual(before);
     });
 
@@ -3177,17 +3187,22 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
     it('"Your way back in" with something to say is still drawn in Arrange, in its own cell: arrows on its row, its body quiet; it is not in the strip, and is the same card after Done', async () => {
         wordsOnly();
         await landAt(1400, SAFETY);
-        await screen.findByTestId('one-way-back-landing');
+        const landing = await screen.findByTestId('one-way-back-landing');
         const cell = screen.getByTestId('home-card-safety');
+        const inside = Array.from(landing.querySelectorAll('*'));
         openArrange();
         expect(screen.getByTestId('home-card-safety')).toBe(cell);
+        // Its body is the same element in Arrange (A1 review, 4 Nov): nothing in it is unmounted and mounted again.
+        expect(within(cell).getByTestId('one-way-back-landing')).toBe(landing);
+        expect(inside.filter(el => !el.isConnected)).toEqual([]);
         expect(within(cell).getByTestId('home-arrange-down-safety')).toHaveAccessibleName('Move Your way back in later');
         expect(within(cell).queryByTestId('home-card-menu')).toBeNull();
         expect(within(cell).getByTestId('card-body-safety')).toContainElement(within(cell).getByTestId('one-way-back-landing'));
         expect(within(cell).getByTestId('card-body-safety')).toHaveAttribute('inert');
         expect(screen.queryByTestId('home-arrange-strip-row-safety')).toBeNull();
         doneArrange();
-        expect(await screen.findByTestId('one-way-back-landing')).toBeInTheDocument();
+        expect(await screen.findByTestId('one-way-back-landing')).toBe(landing);
+        expect(inside.filter(el => !el.isConnected)).toEqual([]);
         expect(screen.getByTestId('home-card-safety')).toBe(cell);
         expect(within(cell).getByTestId('home-card-menu')).toBeInTheDocument();
     });

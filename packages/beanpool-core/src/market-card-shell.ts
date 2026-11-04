@@ -68,6 +68,23 @@ export const MARKET_CHIP = {
     radius: 6,
 } as const;
 
+/**
+ * §1.2 The scrim pill: words on a grid tile's photo (📌 PINNED, a price, your mark on an event, PENDING, YOU, a deal), on
+ * `overlay.scrim` with its `scrimEdge`, in `text.inverse`, as the phone's tile has drawn them. Padding 8 across by 4 down,
+ * corners 8, a 1 edge. The pills sit in one row along the photo's foot, `inset` from its edges and `gap` apart; the type chip
+ * (the one chip) sits in the photo's top-left corner, the same `inset` in. A loud pill's words (the price, the mark) are the
+ * grid's `price` type; a quiet pill's (PINNED, an event's CANCELLED / UPDATED) are `quiet`.
+ */
+export const MARKET_SCRIM_PILL = {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    radius: 8,
+    borderWidth: 1,
+    inset: 8,
+    gap: 4,
+    quiet: type(10, 700),
+} as const;
+
 /** §1.3 The type scale, by size of card. */
 export const MARKET_CARD_TYPE = {
     list: {

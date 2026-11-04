@@ -11,7 +11,7 @@
  */
 import { createElement } from 'react';
 import { StyleSheet, Text, View, type TextStyle } from 'react-native';
-import { MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, gridTextBlockHeight, type CardType } from '@beanpool/core';
+import { MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_SCRIM_PILL as PILL, gridTextBlockHeight, type CardType } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 
 type Colors = ThemeContextType['colors'];
@@ -48,6 +48,7 @@ export function chipTones(colors: Colors): Record<CardChipRole, { bg: string; fg
 const LIST = MARKET_CARD_TYPE.list;
 const GRID = MARKET_CARD_TYPE.grid;
 const SLOT = SHELL.photo.list.width;
+const GRID_PHOTO = SHELL.photo.grid;
 
 /** The box's styles for one theme. `useCardShell()` is this, made once per theme. */
 export function makeCardShell(colors: Colors) {
@@ -115,6 +116,42 @@ export function makeCardShell(colors: Colors) {
         gridTitle: { ...cardType(GRID.loud), color: colors.text.body },
         /** Row 3 on a copy (its price there, in words) and row 4's distance: one line each. */
         gridLine: { ...cardType(GRID.place), color: colors.text.secondary },
+        /** An event tile's rows 1 and 2: the date, then the time, the loud line in the event's ink, one row each. */
+        gridWhen: { ...cardType(GRID.loud), color: colors.tile.event.ink },
+        /** An event tile's row 3: its title, one line. */
+        gridSecond: { ...cardType(GRID.second), color: colors.text.body },
+        /**
+         * The tile's photo and what sits on it, the same for every kind (slice P3': an event and the Daily Pulse are listing
+         * tiles too). The picture is 4:3 at the tile's width, flush under its top corners (the card's own overflow rounds
+         * them); the photo fills that frame (no percentage height: it is laid over the frame, edge to edge).
+         */
+        gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: GRID_PHOTO.aspectWidth / GRID_PHOTO.aspectHeight },
+        gridImage: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+        /** The type chip's place, the photo's top-left corner: OFFER / NEED, EVENT, as the one chip (CardChip). */
+        gridTypeSlot: { position: 'absolute', top: PILL.inset, left: PILL.inset },
+        /**
+         * The photo's foot: the pills at its start (a status, 📌 PINNED, a deal, an event's CANCELLED / UPDATED) and the loud
+         * thing at its end (a listing's price, your mark on an event). It wraps upwards when a language needs the room.
+         */
+        gridBadgeRow: { position: 'absolute', left: PILL.inset, right: PILL.inset, bottom: PILL.inset, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: PILL.gap },
+        /** A pill on the photo: the scrim, its light edge, white words. */
+        gridBadge: {
+            backgroundColor: colors.overlay.scrim,
+            paddingHorizontal: PILL.paddingHorizontal,
+            paddingVertical: PILL.paddingVertical,
+            borderRadius: PILL.radius,
+            borderWidth: PILL.borderWidth,
+            borderColor: colors.overlay.scrimEdge,
+            maxWidth: '100%',
+        },
+        gridPriceEnd: { marginLeft: 'auto' },
+        /**
+         * The loud pill's words: a price, or your mark ("Going ✓"). White on the scrim: the event's violet ink would read
+         * 1.0 to 1.8 : 1 on the light theme's scrim (slice P3' measured it), white reads 9.1 : 1 at the least.
+         */
+        gridPriceText: { ...cardType(GRID.price), color: colors.text.inverse },
+        /** A quiet pill's words: 📌 PINNED, an event's CANCELLED / UPDATED. */
+        gridPinText: { ...cardType(PILL.quiet), color: colors.text.inverse },
     });
     return { ...styles, tones: chipTones(colors) };
 }

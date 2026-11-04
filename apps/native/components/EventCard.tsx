@@ -16,14 +16,25 @@
  *
  * No button on the card (Marty, 4 Nov: Going / Interested on the event's page, the mark on the card): the whole card is one
  * press that opens the event, where the two big buttons are (EventDetail). A tap anywhere opens the item (#2839).
+ *
+ * In the grid (slice P3', DESIGN-market-grid-sizes-fable.md §2.2) the event is a tile like the listing beside it, from the same
+ * box: the 4:3 photo flush at the top, EVENT at its top-left, the foot row of pills (📌 PINNED, CANCELLED / UPDATED, and your
+ * mark at the end, where a listing's price sits), then the four-row text block the listing tiles use, the very same one:
+ *
+ *   SAT 7 NOV                                         the date, in the event's ink
+ *   16:00–21:00                                       the time (a repeating event with no time: its ↻ rule)
+ *   Byron Bay Twilight Market                         the title, one line
+ *   📍 Railway Park · 3 km                             the place, one line
+ *
+ * The counts and "You're hosting this event" are on the event's page in the grid; the list card keeps them.
  */
 
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { copyCardLine, eventCopyOf, t, upperCase } from '@beanpool/core';
 import { router } from 'expo-router';
-import { MarketCardPicture } from './MarketCardPicture';
-import { CardChip, useCardShell } from './market-card-shell';
+import { MARKET_GRID_CROP, MarketCardPicture } from './MarketCardPicture';
+import { CardChip, useCardShell, type GridTextBlock } from './market-card-shell';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { isPostPinned } from '../utils/pins';
 import {
@@ -34,15 +45,19 @@ import {
 /** The event violet of the map's pin and the page's buttons (map.tsx, EventDetail, EventExtras); the card no longer draws it. */
 export const EVENT_ACCENT = '#7c3aed';
 
-interface EventCardProps {
+/**
+ * The Market's view decides the card's size: the list card, or in the grid a tile that takes the grid's own text block (the
+ * one market.tsx draws its listing tiles with), so the two cannot differ. Compact is the list card until slice C1.
+ */
+type EventCardProps = {
     post: any;
     currentPubkey?: string | null;
     myLocation?: { lat: number; lng: number } | null;
-}
+} & ({ viewMode?: 'list' | 'compact'; gridBlock?: undefined } | { viewMode: 'grid'; gridBlock: GridTextBlock });
 
 const count = (n: unknown): number => Number(n ?? 0) || 0;
 
-export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
+export function EventCard({ post, currentPubkey, myLocation, viewMode, gridBlock }: EventCardProps) {
     const shell = useCardShell();
     const styles = useStyles(makeStyles);
 
@@ -71,16 +86,74 @@ export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
     const going = count(post.goingCount ?? post.event_going_count);
     const interested = count(post.interestedCount ?? post.event_interested_count);
     const hosting = isOwnEvent(post, currentPubkey);
-    const mark = hosting ? t("You're hosting this event")
-        : copy ? null
+    const answer = copy ? null
         : mine === 'going' ? t('{label} ✓', { label: t('Going') })
         : mine === 'interested' ? t('{label} ✓', { label: t('Interested') })
         : null;
+    const mark = hosting ? t("You're hosting this event") : answer;
     const counts = !mark && !copy && (going > 0 || interested > 0) ? formatRsvpCounts(going, interested) : null;
 
     const label = badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when })
         : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when })
         : t('Event: {title}, {when}', { title: post.title, when });
+    const pinned = isPostPinned(post);
+
+    if (viewMode === 'grid') {
+        // The tile's mark is the member's own answer, on the photo where a listing's price sits; a host's line and the counts
+        // are the page's (§2.2). The date and the time each take a row: the when's two pieces, kept whole.
+        const tileMark = hosting ? null : answer;
+        const parts = eventWhen(post);
+        const time = parts?.second || (repeats ? `↻ ${repeats}` : '');
+        return (
+            <Pressable
+                style={[shell.card, shell.gridTile]}
+                onPress={() => router.push(`/post/${post.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={tileMark ? `${label}, ${tileMark}` : label}
+                testID={`event-card-${post.id}`}
+            >
+                <View style={shell.gridImageWrapper}>
+                    <MarketCardPicture
+                        postId={post.id}
+                        cover={photo}
+                        picture={photo}
+                        kind="event"
+                        size="grid"
+                        contentPosition={MARKET_GRID_CROP}
+                        accessibilityLabel={post.title}
+                        imageStyle={shell.gridImage}
+                    />
+                    <View style={shell.gridBadgeRow} testID="grid-badge-row">
+                        {pinned && <View style={shell.gridBadge} testID="pinned-chip"><Text style={shell.gridPinText}>{t('📌 PINNED')}</Text></View>}
+                        {badge === 'CANCELLED' && <View style={shell.gridBadge} testID="event-state-chip"><Text style={shell.gridPinText}>{t('CANCELLED', undefined, 'event')}</Text></View>}
+                        {badge === 'UPDATED' && <View style={shell.gridBadge} testID="event-state-chip"><Text style={shell.gridPinText}>{t('UPDATED', undefined, 'event')}</Text></View>}
+                        {!!tileMark && (
+                            <View style={[shell.gridBadge, shell.gridPriceEnd]} testID="event-mark">
+                                <Text style={shell.gridPriceText} numberOfLines={1}>{tileMark}</Text>
+                            </View>
+                        )}
+                    </View>
+                    <View style={shell.gridTypeSlot}>
+                        <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
+                    </View>
+                </View>
+                <View style={gridBlock.block} testID="grid-text-block">
+                    <View style={gridBlock.row}>
+                        <Text testID="event-when" style={[shell.gridWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{parts?.first ?? ''}</Text>
+                    </View>
+                    <View style={gridBlock.row}>
+                        <Text testID="event-time" style={[shell.gridWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{time}</Text>
+                    </View>
+                    <View style={gridBlock.row}>
+                        <Text style={shell.gridSecond} numberOfLines={1}>{post.title}</Text>
+                    </View>
+                    <View style={gridBlock.row} testID="grid-last-row">
+                        {!!placeLine && <Text style={shell.gridLine} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
+                    </View>
+                </View>
+            </Pressable>
+        );
+    }
 
     return (
         <Pressable
@@ -109,7 +182,7 @@ export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
             <View style={shell.listText}>
                 <View style={[shell.chipRow, styles.chipRow]}>
                     <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
-                    {isPostPinned(post) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
+                    {pinned && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
                     {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}
                     {badge === 'UPDATED' && <CardChip shell={shell} role="event" label={t('UPDATED', undefined, 'event')} testID="event-state-chip" />}
                     {groupOnly && <CardChip shell={shell} role="quiet" label={t('🔒 Only {group} can see this', { group: groupName })} testID="event-group-chip" wrap />}

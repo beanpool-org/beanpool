@@ -9,14 +9,22 @@ import { getDoor, type Door } from './door.js';
 import { db } from '../db/db.js';
 import { confirmationDialOn, knownFloor, readsAsMember } from '@beanpool/engine';
 import { healthSettings } from '../engine/community-health.js';
+import { removalDecider, type RemovalDecider } from './removal-decider.js';
 
-export type ReaderFeatures = NodeFeatures & { door: Door };
+/**
+ * `removalDecider`: who decides a removal here (config/removal-decider.ts), in a member's read only, beside the rule's lines:
+ * "How this community works" says it on the phone and the web (core removalDeciderLine, slice J3). The rule, never how
+ * many could serve today: that number would tell a visitor roughly how big the community is.
+ */
+export type ReaderFeatures = NodeFeatures & { door: Door; removalDecider?: RemovalDecider };
 
 /** The reader's effective features: what `features` says on GET /api/community/me and GET /api/home. */
 export function featuresFor(actor: string | null | undefined): ReaderFeatures {
     const nodeFeatures = getNodeFeatures();
     const res: ReaderFeatures = { ...nodeFeatures, door: getDoor() };
-    if (actor && nodeFeatures.beans && readsAsMember(db, actor) && confirmationDialOn(db)) {
+    const member = !!actor && readsAsMember(db, actor);
+    if (member) res.removalDecider = removalDecider();
+    if (member && nodeFeatures.beans && confirmationDialOn(db)) {
         res.knownFloor = knownFloor(db);
         const { debtLinePct, quietDays } = healthSettings();
         res.debtLinePct = debtLinePct;

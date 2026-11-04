@@ -106,6 +106,11 @@ export interface NodeFeatures {
      */
     knownFloor?: number;
     /**
+     * Who decides a removal (apps/server config/removal-decider.ts), in a member's read: "How this community works" says the
+     * rule (core removalDeciderLine). Absent from a node older than slice J3, which then draws no line.
+     */
+    removalDecider?: 'automatic' | 'everyone' | 'jury';
+    /**
      * The rule's two lines, which a member's read says beside the floor (apps/server config/features-for.ts): the community's
      * public settings, not a member's. "How this community works" states the rule from them, on every way into it.
      */
@@ -456,6 +461,7 @@ export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?
         if (typeof reader[key] === 'number') out[key] = reader[key];
     }
     if (reader.door) out.door = reader.door;
+    if (reader.removalDecider) out.removalDecider = reader.removalDecider;
     return out;
 }
 

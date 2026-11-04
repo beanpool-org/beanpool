@@ -158,6 +158,7 @@ async function main() {
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
     const { readShape } = await import('./config/community-shape.js');
     const { readCommunitySettings } = await import('./config/community-settings.js');
+    const { setRemovalDecider } = await import('./config/removal-decider.js');
 
     await initTls();
     se.initStateEngine();
@@ -256,29 +257,51 @@ async function main() {
         return out;
     };
 
-    // ── 1. Behind the setting ───────────────────────────────────────────────────────────────────────────────────────
-    console.log('1. Behind the setting: no choice made, everyone decides, even at 150');
+    // ── 1. No choice made: Automatic (J3 turned the default from Everyone) ──────────────────────────────────────────
+    console.log('1. No choice made: Automatic, the default since J3, so at 151 a jury decides');
     const shape0 = readShape().settings.removalDecider;
-    assert(shape0.configured === 'everyone' && shape0.value === 'everyone' && shape0.source === 'default' && shape0.lock === null && shape0.poolSize === 151,
-        `How this community works reads Who decides a removal: everyone, the default for now, no lock, 151 could serve, FrozenFay among them (${JSON.stringify(shape0)})`);
-    const plain = nextSubject();
-    const plainVote = pauseOf(plain);
-    assert(paramsOf(plainVote).decider === 'everyone' && !('jury' in paramsOf(plainVote)), `the pause's vote says everyone decides it (${JSON.stringify(paramsOf(plainVote).decider)})`);
-    assert(rollOf(plainVote).length === 0 && poolRowOf(plainVote) === undefined, 'no roll and no pool are kept for it');
-    assert(de.tallyDecision(plainVote).decider === undefined && de.tallyDecision(plainVote).quorumRequired >= 3, "its tally is today's: no jury in it");
-    de.adminLiftSuspension(plain.pk, ada.pk);
-    // An owner choosing Everyone while Everyone is still the default: kept as a row all the same (review of #2793), so J3's
-    // change of default leaves this community on Everyone. Quietly: no rule changed, so no log line and no notice.
+    assert(shape0.configured === 'automatic' && shape0.value === 'automatic' && shape0.source === 'default' && shape0.lock === null && shape0.poolSize === 151,
+        `How this community works reads Who decides a removal: Automatic, the default, no lock, 151 could serve, FrozenFay among them (${JSON.stringify(shape0)})`);
+    // A member's read of the community says the rule, for "How this community works" on the phone and the web; a read that
+    // isn't a member's says nothing of it.
+    const meRead = await signed('GET', '/api/community/me', gen);
+    assert(meRead.status === 200 && meRead.body?.features?.removalDecider === 'automatic',
+        `a member's /api/community/me says who decides a removal: automatic (${meRead.status} ${JSON.stringify(meRead.body?.features?.removalDecider)})`);
+    const { featuresFor } = await import('./config/features-for.js');
+    assert(!('removalDecider' in featuresFor(null)) && !('removalDecider' in featuresFor(keypair('NotAMember').pk)),
+        'and a read that is no member\'s carries no rule');
+    const byDefault = nextSubject();
+    const autoVote = pauseOf(byDefault);
+    assert(paramsOf(autoVote).decider === 'jury' && paramsOf(autoVote).jury?.size === 12 && paramsOf(autoVote).jury?.poolSize === 150,
+        `with no choice made, the pause's vote says a jury of 12 decides it, from 150 who could serve (${JSON.stringify({ decider: paramsOf(autoVote).decider, jury: paramsOf(autoVote).jury })})`);
+    assert(rollOf(autoVote).filter(r => r.status === 'on').length === 12 && poolRowOf(autoVote) !== undefined, 'its roll of 12 and its pool are kept');
+    assert(de.tallyDecision(autoVote).decider === 'jury' && de.tallyDecision(autoVote).quorumRequired === 9, "its tally is the jury's: 9 of 12 must vote");
+    de.adminLiftSuspension(byDefault.pk, ada.pk);
+    // An owner choosing Automatic while Automatic is the default: kept as a row all the same (review of #2793). Quietly: no
+    // rule changed, so no log line and no notice.
     const countOf = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
     const logRowsBefore = countOf('SELECT COUNT(*) AS c FROM community_settings_log');
     const noticesBefore0 = countOf('SELECT COUNT(*) AS c FROM moderation_notices');
-    const asDefault = await setDecider('everyone');
+    const asDefault = await setDecider('automatic');
     const asRow = readShape().settings.removalDecider;
-    assert(asDefault.status === 200 && asDefault.body?.told === 'nobody' && asRow.configured === 'everyone' && asRow.source === 'owner'
-        && readCommunitySettings().nodeConfig.removal_decider === 'everyone',
-        `an owner choosing Everyone on the default keeps it as a row: 200, source owner (${asDefault.status} ${JSON.stringify(asRow)})`);
+    assert(asDefault.status === 200 && asDefault.body?.told === 'nobody' && asRow.configured === 'automatic' && asRow.source === 'owner'
+        && readCommunitySettings().nodeConfig.removal_decider === 'automatic',
+        `an owner choosing Automatic on the default keeps it as a row: 200, source owner (${asDefault.status} ${JSON.stringify(asRow)})`);
     assert(countOf('SELECT COUNT(*) AS c FROM community_settings_log') === logRowsBefore && countOf('SELECT COUNT(*) AS c FROM moderation_notices') === noticesBefore0,
         'and quietly: no owner log line, nothing told to members');
+    // A community whose owner chose Everyone before J3 kept it as a row (J1's quiet write, as above): the change of default
+    // leaves it on Everyone. Written as that row was, with no log line, so section 2 starts from Everyone as it always did.
+    setRemovalDecider('everyone');
+    const keptEveryone = readShape().settings.removalDecider;
+    assert(keptEveryone.configured === 'everyone' && keptEveryone.value === 'everyone' && keptEveryone.source === 'owner',
+        `an owner's Everyone from before J3 still reads Everyone: the new default overrides no choice (${JSON.stringify(keptEveryone)})`);
+    // And a pause there is everyone's to decide, at 151, as before J3 (later sections use it as the vote no jury decides).
+    const plain = nextSubject();
+    const plainVote = pauseOf(plain);
+    assert(paramsOf(plainVote).decider === 'everyone' && !('jury' in paramsOf(plainVote)), `under it the pause's vote says everyone decides it (${JSON.stringify(paramsOf(plainVote).decider)})`);
+    assert(rollOf(plainVote).length === 0 && poolRowOf(plainVote) === undefined, 'no roll and no pool are kept for it');
+    assert(de.tallyDecision(plainVote).decider === undefined && de.tallyDecision(plainVote).quorumRequired >= 3, "its tally is today's: no jury in it");
+    de.adminLiftSuspension(plain.pk, ada.pk);
 
     // ── 2. Who decides a removal ────────────────────────────────────────────────────────────────────────────────────
     console.log('\n2. Who decides a removal: the owners set it; A jury is locked while fewer than 36 could serve');

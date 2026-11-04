@@ -23,7 +23,7 @@ import {
 } from './draft.mjs';
 import { guideBodyHash, loadGuide } from '../../packages/beanpool-guide/src/guide.mjs';
 import { guideSourceHash } from '../../packages/beanpool-guide/src/titles.mjs';
-import { ROOT, baselineBase } from './words.mjs';
+import { ROOT, baselineBase, catalogLangs, extractRepo, loadCoreChecks } from './words.mjs';
 
 function makeTempDir(prefix = 'words-draft-test-') {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -147,40 +147,6 @@ test('scanAppWords accurately counts missing, stale (0), and orphaned keys with 
         assert.equal(es.byCatalog.native.missing, 0);
         assert.equal(es.byCatalog.native.orphaned, 1);
         assert.equal(es.byCatalog.native.orphanedKeys[0].key, 'Old sentence');
-    } finally {
-        fs.rmSync(tmp, { recursive: true, force: true });
-    }
-});
-
-test('scanAppWords: a key core already has is not missing in an app catalog (the apps load core\'s catalog with their own)', async () => {
-    const tmp = makeTempDir();
-    try {
-        const catalogDefs = [
-            { name: 'core', folder: 'packages/beanpool-core/words' },
-            { name: 'native', folder: 'apps/native/words' },
-            { name: 'pwa', folder: 'apps/pwa/words' },
-        ];
-        for (const def of catalogDefs) fs.mkdirSync(path.join(tmp, def.folder), { recursive: true });
-        fs.writeFileSync(path.join(tmp, 'packages/beanpool-core/words/es.json'), JSON.stringify({ _meta: { language: 'es' }, 'Your deals': 'Tus tratos' }));
-        fs.writeFileSync(path.join(tmp, 'apps/native/words/es.json'), JSON.stringify({ _meta: { language: 'es' } }));
-        // The web app has no file for Spanish at all yet: core's sentence is still translated for it.
-        const calls = (name, texts) => ({ name, words: catalogDefs.find((d) => d.name === name).folder, calls: texts.map((text, i) => ({ fn: 't', text, at: `${name}/a.ts:${i + 1}` })) });
-        const extracted = [calls('core', ['Your deals']), calls('native', ['Your deals', 'Step aside']), calls('pwa', ['Your deals', 'Step aside'])];
-        const result = await scanAppWords({ root: tmp, catalogDefs, langs: ['es'], extracted });
-        assert.deepEqual(result.es.byCatalog.core.missingKeys.map((k) => k.key), []);
-        assert.deepEqual(result.es.byCatalog.native.missingKeys.map((k) => k.key), ['Step aside']);
-        assert.deepEqual(result.es.byCatalog.pwa.missingKeys.map((k) => k.key), ['Step aside']);
-        assert.equal(result.es.missing, 2);
-        // The server reads some sentences from its own catalog alone, so core's sentence does not count for it.
-        const withServer = [...catalogDefs, { name: 'server', folder: 'apps/server/words' }];
-        fs.mkdirSync(path.join(tmp, 'apps/server/words'), { recursive: true });
-        fs.writeFileSync(path.join(tmp, 'apps/server/words/es.json'), JSON.stringify({ _meta: { language: 'es' } }));
-        const srv = await scanAppWords({ root: tmp, catalogDefs: withServer, langs: ['es'], extracted: [calls('core', []), { name: 'server', words: 'apps/server/words', calls: [{ fn: 't', text: 'Your deals', at: 'server/a.ts:1' }] }] });
-        assert.deepEqual(srv.es.byCatalog.server.missingKeys.map((k) => k.key), ['Your deals']);
-        // When core does not have the key, it stays missing in the app.
-        fs.writeFileSync(path.join(tmp, 'packages/beanpool-core/words/es.json'), JSON.stringify({ _meta: { language: 'es' } }));
-        const gone = await scanAppWords({ root: tmp, catalogDefs, langs: ['es'], extracted: [calls('core', []), calls('native', ['Your deals'])] });
-        assert.deepEqual(gone.es.byCatalog.native.missingKeys.map((k) => k.key), ['Your deals']);
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -747,6 +713,253 @@ test('step 1 of Section C creates target directory and drafts pages successfully
             const content = fs.readFileSync(targetFile, 'utf8');
             assert.match(content, new RegExp(`slug: ${page.slug}`));
         }
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+// ── What counts as missing follows the tests (4 Nov, #2841 / #2842) ────────────────────────────────────────────────
+//
+//   (a) a sentence core's own sources use is core's alone in the phone and the web app (your-deals-words.test.ts forbids
+//       the bare "Your deals" in their catalogs), so the tool must not ask for it there;
+//   (b) the welcome screens' sentences are ordinary keys: language-switch-render.test.ts reads each language's own catalog
+//       (#2847), so a round for some languages may draft them. The tool once held them back for a round of every language,
+//       for a rule no test holds (#2846 review, 4 Nov); (b) fails if that comes back.
+
+/** Write files (relative path -> text) under `tmp`. */
+function writeTree(tmp, files) {
+    for (const [rel, text] of Object.entries(files)) {
+        const file = path.join(tmp, rel);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, text);
+    }
+}
+
+/** A catalog file for every language in each folder, holding what `have[folder][lang]` gives. */
+async function writeCatalogs(tmp, folders, have = {}) {
+    for (const folder of folders) {
+        for (const lang of await catalogLangs(ROOT)) {
+            writeTree(tmp, { [`${folder}/${lang}.json`]: JSON.stringify({ _meta: { language: lang }, ...(have[folder]?.[lang] ?? {}) }) });
+        }
+    }
+}
+
+/** A two-page guide in `tmp`; the languages in `translated` have all of it, the others an empty titles file. */
+async function writeGuide(tmp, translated = []) {
+    const contentDir = path.join(tmp, 'packages/beanpool-guide/content');
+    writeTree(tmp, {
+        'packages/beanpool-guide/content/manifest.json': JSON.stringify({ sections: [{ id: 'about', title: 'About', summary: 'Sum', pages: ['faq', 'intro'] }] }),
+        'packages/beanpool-guide/content/about/faq.md': '---\nslug: faq\ntitle: FAQ\nsummary: Questions\nrelated: intro\n---\n\n## Questions\n\nAnswers.\n',
+        'packages/beanpool-guide/content/about/intro.md': '---\nslug: intro\ntitle: Intro\nsummary: Overview\nrelated: faq\n---\n\n## Intro\n\nText.\n',
+    });
+    const guide = loadGuide(contentDir);
+    const related = { faq: 'intro', intro: 'faq' };
+    for (const lang of await catalogLangs(ROOT)) {
+        if (!translated.includes(lang)) {
+            writeTree(tmp, { [`packages/beanpool-guide/content/${lang}/manifest.json`]: JSON.stringify({ sections: {}, pages: {} }) });
+            continue;
+        }
+        writeTree(tmp, {
+            [`packages/beanpool-guide/content/${lang}/manifest.json`]: JSON.stringify({
+                sections: { about: { title: { text: 'Acerca de', sourceHash: guideSourceHash('About') }, summary: { text: 'Resumen', sourceHash: guideSourceHash('Sum') } } },
+                pages: {
+                    faq: { title: { text: 'Preguntas', sourceHash: guideSourceHash('FAQ') }, summary: { text: 'Respuestas', sourceHash: guideSourceHash('Questions') } },
+                    intro: { title: { text: 'Introducción', sourceHash: guideSourceHash('Intro') }, summary: { text: 'Resumen', sourceHash: guideSourceHash('Overview') } },
+                },
+            }),
+        });
+        for (const g of guide.guides) {
+            writeTree(tmp, {
+                [`packages/beanpool-guide/content/${lang}/${g.section}/${g.slug}.md`]:
+                    `---\nslug: ${g.slug}\ntitle: ${g.title}\nsummary: Sum\nrelated: ${related[g.slug]}\nsource-hash: ${guideBodyHash(g)}\n---\n\n## ${g.title}\n\nTexto.\n`,
+            });
+        }
+    }
+}
+
+/** The text of `fn`'s console.log lines. */
+async function captureLog(fn) {
+    let out = '';
+    const original = console.log;
+    console.log = (...args) => { out += args.join(' ') + '\n'; };
+    try {
+        await fn();
+    } finally {
+        console.log = original;
+    }
+    return out;
+}
+
+/** The part of a brief under one app catalog's heading. */
+function catalogSection(brief, folder, lang) {
+    const start = brief.indexOf(`#### Catalog: ${folder}/${lang}.json`);
+    assert.ok(start >= 0, `the brief has a section for ${folder}/${lang}.json`);
+    const rest = brief.slice(start + 10);
+    const next = rest.search(/\n#### Catalog: |\n### 2\./);
+    return next < 0 ? rest : rest.slice(0, next);
+}
+
+const keyLine = (key) => `- **Key**: ${JSON.stringify(key)}`;
+
+// The welcome screens' two files, as the phone has them. (The extractor knows `word` and `t` by their import, or from a
+// words hook, as in the real files.)
+const WELCOME_SOURCE = `
+import { Alert } from 'react-native';
+export function Welcome() {
+    const { t } = useWords();
+    const first = t('Welcome A');
+    const second = t("Welcome B");
+    Alert.alert(t('In an alert'), t('Also in an alert'));
+    return [first, second];
+}
+`;
+const DOORS_SOURCE = `
+export function Doors() {
+    const { t } = useWords();
+    return t('Door A');
+}
+`;
+const OTHER_SOURCE = `
+export function Other() {
+    const { t } = useWords();
+    return [t('Plain other'), t('Shared')];
+}
+`;
+const coreSource = (...keys) => `import { word } from './words.js';\nexport const shared = [${keys.map((k) => `word(${JSON.stringify(k)})`).join(', ')}];\n`;
+// Every phone key of the fixture except core's "Shared".
+const PHONE_KEYS = ['Also in an alert', 'Door A', 'In an alert', 'Plain other', 'Welcome A', 'Welcome B'];
+
+/** A small tree with the welcome screens' two files at their real paths, one more phone file, core's sources and a catalog for every language. */
+async function welcomeTree(tmp, { coreKeys = ['Shared'], have = {}, translatedGuide = [] } = {}) {
+    writeTree(tmp, {
+        'apps/native/app/welcome.tsx': WELCOME_SOURCE,
+        'apps/native/components/WelcomeDoors.tsx': DOORS_SOURCE,
+        'apps/native/components/Other.tsx': OTHER_SOURCE,
+        'packages/beanpool-core/src/shared.ts': coreSource(...coreKeys),
+    });
+    await writeCatalogs(tmp, ['packages/beanpool-core/words', 'apps/native/words'], have);
+    await writeGuide(tmp, translatedGuide);
+}
+
+const missingByKey = (scan, lang, catalog) => Object.fromEntries(scan[lang].byCatalog[catalog].missingKeys.map((item) => [item.key, item]));
+
+test('(a) a sentence core\'s own sources use is core\'s alone in the phone and the web app: not missing there, not orphaned, still missing in the server', async () => {
+    const tmp = makeTempDir();
+    try {
+        writeTree(tmp, {
+            'packages/beanpool-core/src/deals.ts': coreSource('Your deals', 'Core only'),
+            'apps/native/components/Deals.tsx': "export function D() { const { t } = useWords(); return [t('Your deals'), t('Native only')]; }\n",
+            'apps/pwa/src/Deals.tsx': "export function D() { const { t } = useWords(); return [t('Your deals'), t('Web only')]; }\n",
+            'apps/server/src/deals.ts': "import { t } from '@beanpool/core';\nexport function d() { return [t('Your deals'), t('Server only')]; }\n",
+        });
+        // An older round put core's sentence in the phone's Spanish catalog: it is still used there, so it is not orphaned.
+        await writeCatalogs(tmp, APP_CATALOG_DEFS.map((d) => d.folder), { 'apps/native/words': { es: { 'Your deals': 'Tus tratos' } } });
+        const scan = await scanAppWords({ root: tmp, langs: ['es', 'pt'] });
+        for (const lang of ['es', 'pt']) {
+            assert.deepEqual(Object.keys(missingByKey(scan, lang, 'native')), ['Native only'], `${lang} native`);
+            assert.deepEqual(Object.keys(missingByKey(scan, lang, 'pwa')), ['Web only'], `${lang} web`);
+            // The server's refusals are translated with its own catalog alone, so core's copy does not stand for it there.
+            assert.deepEqual(Object.keys(missingByKey(scan, lang, 'server')).sort(), ['Server only', 'Your deals'], `${lang} server`);
+            // Core translates it: that is where it is missing.
+            assert.deepEqual(Object.keys(missingByKey(scan, lang, 'core')).sort(), ['Core only', 'Your deals'], `${lang} core`);
+        }
+        assert.equal(scan.es.byCatalog.native.orphaned, 0, 'the old copy in the phone catalog is still a used key');
+        // The report's total agrees with the lists.
+        assert.equal(scan.es.missing, 1 + 1 + 2 + 2);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('(a) on this tree no list asks the phone or the web app for "Your deals", or for any sentence core\'s own sources use', async () => {
+    const extracted = extractRepo(ROOT);
+    const { callKey } = await loadCoreChecks(ROOT);
+    const coreKeys = new Set(extracted.filter((p) => p.name === 'core').flatMap((p) => p.calls.map(callKey).filter(Boolean)));
+    assert.ok(coreKeys.has('Your deals'), 'premise: core draws the bare "Your deals" (Deals S7, your-deals-words.test.ts)');
+
+    // Every language: the lists of what is missing.
+    const scan = await scanAppWords({ root: ROOT, extracted });
+    assert.equal(Object.keys(scan).length, 24);
+    for (const [lang, result] of Object.entries(scan)) {
+        for (const catalog of ['native', 'pwa']) {
+            for (const item of result.byCatalog[catalog].missingKeys) {
+                assert.ok(!coreKeys.has(item.key), `${lang} ${catalog} is asked for "${item.key}", which core translates`);
+            }
+        }
+    }
+
+    // The brief for es, as the 4 Nov rounds were given it.
+    const tmp = makeTempDir();
+    try {
+        await writeBriefs({ root: ROOT, dir: path.join(tmp, 'briefs'), langs: ['es'], extracted });
+        const brief = fs.readFileSync(path.join(tmp, 'briefs', 'brief-es.md'), 'utf8');
+        for (const folder of ['apps/native/words', 'apps/pwa/words']) {
+            assert.ok(!catalogSection(brief, folder, 'es').includes(keyLine('Your deals')), `${folder}/es.json is not asked for "Your deals"`);
+        }
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('(b) a round for some languages asks for the welcome sentences like any others: nothing is held back for a round of every language', async () => {
+    const tmp = makeTempDir();
+    try {
+        // The welcome screens' sentences are in no catalog yet, as on the tree the #2846 review measured.
+        await welcomeTree(tmp);
+        const scan = await scanAppWords({ root: tmp, langs: ['es'] });
+        const native = missingByKey(scan, 'es', 'native');
+        // "Shared" is core's. Every other key is asked for, the alert's words and the screens' cards alike.
+        assert.deepEqual(Object.keys(native).sort(), PHONE_KEYS);
+        for (const [key, item] of Object.entries(native)) assert.equal(item.group, undefined, `${key} belongs to no group`);
+
+        // The four-language groups the machine-drafting rounds run in (es/pt/fr/ru here).
+        const dir = path.join(tmp, 'briefs4');
+        const out = await captureLog(() => writeBriefs({ root: tmp, dir, langs: ['es', 'pt', 'fr', 'ru'] }));
+        for (const lang of ['es', 'pt', 'fr', 'ru']) {
+            const brief = fs.readFileSync(path.join(dir, `brief-${lang}.md`), 'utf8');
+            const section = catalogSection(brief, 'apps/native/words', lang);
+            for (const key of PHONE_KEYS) assert.ok(section.includes(`${keyLine(key)}\n`), `${lang}: "${key}" is asked for, as an ordinary key`);
+            assert.match(section, /\(6 missing\)/);
+            assert.ok(!/all languages at once|ALL-AT-ONCE|COMPLETE THE SET|Not in this brief|in every language's|would turn it red/i.test(brief), `${lang}: the brief gives no reason to leave a sentence out`);
+        }
+        assert.ok(!/left out|all-at-once/i.test(out), 'the run leaves nothing out');
+        assert.match(out, /wrote 4 brief\(s\)/);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('(b) a welcome sentence some language already has is asked for in the others as an ordinary key; --max-keys cuts it like any key', async () => {
+    const tmp = makeTempDir();
+    try {
+        await welcomeTree(tmp, { have: { 'apps/native/words': { pt: { 'Welcome A': 'Bem-vindo A' } } } });
+        const scan = await scanAppWords({ root: tmp, langs: ['es', 'pt'] });
+        assert.deepEqual(Object.keys(missingByKey(scan, 'es', 'native')).sort(), PHONE_KEYS, 'es: all asked for');
+        assert.deepEqual(Object.keys(missingByKey(scan, 'pt', 'native')).sort(), PHONE_KEYS.filter((k) => k !== 'Welcome A'), 'pt: all but its own');
+
+        // The cap counts every key the same (core's "Shared" takes the first, then five of the phone's are cut).
+        const dir = path.join(tmp, 'briefs-capped');
+        await captureLog(() => writeBriefs({ root: tmp, dir, langs: ['es'], maxKeys: 2 }));
+        const brief = fs.readFileSync(path.join(dir, 'brief-es.md'), 'utf8');
+        const section = catalogSection(brief, 'apps/native/words', 'es');
+        assert.equal(PHONE_KEYS.filter((key) => section.includes(keyLine(key))).length, 1, 'one phone key is listed');
+        assert.match(section, /and 5 more keys \(capped by --max-keys\)/);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('(b) the report counts the welcome sentences as plain missing words, with no "all-at-once" line', async () => {
+    const tmp = makeTempDir();
+    try {
+        await welcomeTree(tmp);
+        const out = await captureLog(() => reportDraft({ root: tmp, langs: ['es', 'pt'] }));
+        assert.match(out, /^ {4}native: 6 missing, 0 stale, 0 orphaned$/m);
+        assert.match(out, /^ {4}core: 1 missing, 0 stale, 0 orphaned$/m);
+        assert.ok(!/all-at-once/i.test(out));
+        // The heartbeat's summary line keeps its shape, and the README's language-list grep still finds only languages.
+        assert.match(out, /^words:draft: \d+ missing, \d+ stale across 2 languages$/m);
+        assert.deepEqual(out.split('\n').filter((line) => /^[a-z]{2,3}(-[A-Za-z]+)?:/.test(line)).map((line) => line.replace(/:.*/, '')), ['es', 'pt']);
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }

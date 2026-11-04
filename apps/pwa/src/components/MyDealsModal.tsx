@@ -13,7 +13,8 @@
 import { useState, useEffect, useRef, useMemo, type KeyboardEvent } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
 import { ImageLightbox } from './ImageLightbox';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, listPhotoUrl, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, t, word, type WordKey } from '@beanpool/core';
+import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
 import { StartCommunityScreen } from './StartCommunityScreen';
 import { SampleHeader, sampleDealChip, sampleDeals } from './ShowcasePreviews';
@@ -439,7 +440,7 @@ export function MyDealsModal({
                                                             aria-label={t('View enlarged photo: {title}', { title: item.postTitle })}
                                                             className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                         >
-                                                            <img src={listPhotoUrl(item.coverImage)} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
+                                                            <ListPhoto photo={item.coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl opacity-50" aria-hidden="true">{isBuyer ? '🛒' : '🏷️'}</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                         </button>
                                                     ) : (
                                                         <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
@@ -543,7 +544,7 @@ export function MyDealsModal({
                                                         aria-label={t('View enlarged photo: {title}', { title: item.postTitle })}
                                                         className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                     >
-                                                        <img src={listPhotoUrl(item.coverImage)} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
+                                                        <ListPhoto photo={item.coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl text-nature-600 dark:text-nature-300" aria-hidden="true">{isBuyer ? '🛒' : '🏷️'}</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                     </button>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
@@ -676,7 +677,7 @@ export function MyDealsModal({
                                                         aria-label={t('View enlarged photo: {title}', { title: item.title })}
                                                         className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                     >
-                                                        <img src={listPhotoUrl(coverImage)} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
+                                                        <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl opacity-50" aria-hidden="true">📦</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                     </button>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
@@ -759,7 +760,7 @@ export function MyDealsModal({
                                                     aria-label={t('View enlarged photo: {title}', { title: item.title })}
                                                     className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                 >
-                                                    <img src={listPhotoUrl(coverImage)} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
+                                                    <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl text-nature-600 dark:text-nature-300" aria-hidden="true">📦</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                 </button>
                                             ) : (
                                                 <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">

@@ -62,7 +62,8 @@ import { notifyConversationRead } from '../lib/conversation-read';
 import { FoldedChatText } from '../components/FoldedChatText';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { bundledGroupEmblem, dealStep, dealsNeedingMe, formatDate, groupClosedShown, groupNameShown, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { ListPhoto } from '../components/ListPhoto';
+import { bundledGroupEmblem, dealStep, dealsNeedingMe, formatDate, groupClosedShown, groupNameShown, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 
@@ -3794,13 +3795,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         overflow: 'hidden', flexShrink: 0, position: 'relative',
                                         background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     }}>
-                                        {conv.postPhoto ? (
-                                            <img src={listPhotoUrl(conv.postPhoto)} alt="" style={{
-                                                width: '44px', height: '44px', objectFit: 'cover', borderRadius: '12px',
-                                            }} />
-                                        ) : (
-                                            <span style={{ fontSize: '1.3rem' }}>🛍️</span>
-                                        )}
+                                        <ListPhoto
+                                            photo={conv.postPhoto}
+                                            fallback={<span style={{ fontSize: '1.3rem' }}>🛍️</span>}
+                                            alt=""
+                                            style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '12px' }}
+                                        />
                                         {/* Peer profile overlay */}
                                         <div style={{
                                             position: 'absolute', bottom: '-3px', right: '-3px',

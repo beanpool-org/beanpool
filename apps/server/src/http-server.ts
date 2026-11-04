@@ -10,6 +10,7 @@
  *   GET /.well-known/acme-challenge/:token — the http-01 answer (services/acme/challenge.ts), before everything else
  *   GET /         — Redirect to HTTPS landing page (public) or trust bootstrap (LAN)
  *   GET /trust    — Downloads the Root CA certificate (.pem); a redirect to HTTPS for a host with a CA certificate here
+ *   GET /hall     — Lights-out's poster, to the hall Wi-Fi only (routes/lights-out.ts)
  *   /ws, /ws/logs — WebSocket upgrades, handed to the HTTPS server's handler (same auth)
  */
 
@@ -22,6 +23,7 @@ import { getKoaApp, getUpgradeHandler } from './https-server.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { acmeChallengeMiddleware } from './services/acme/challenge.js';
 import { plainHttpGate, plainUpgradeAllowed } from './plain-http-gate.js';
+import { HALL_PATH, serveHallPage } from './routes/lights-out.js';
 import QRCode from 'qrcode';
 import { ANDROID_ON_NODE_WORDS } from '@beanpool/core';
 import { isDirectLanContext } from './direct-lan.js';
@@ -87,8 +89,21 @@ export async function startHttpServer(port: number): Promise<number> {
         await next();
     });
 
+    // The hall's poster (routes/lights-out.ts, design §2.6): to the hall Wi-Fi only, straight from it (direct-lan.ts, the
+    // rule /android uses too): a tunnel's or a proxy's request, and the Internet's, get a plain 404 with no hint the page
+    // exists. Before the CF_RECORD_NAME redirect, so a fleet node's hall page is never sent to its public name.
+    router.get(HALL_PATH, async (ctx) => {
+        if (!isDirectLanContext(ctx)) {
+            ctx.status = 404;
+            ctx.body = '';
+            return;
+        }
+        await serveHallPage(ctx);
+    });
+
     router.get('/(.*)', async (ctx, next) => {
         if (
+            ctx.path === HALL_PATH ||
             ctx.path.startsWith('/settings') || 
             ctx.path.startsWith('/api') || 
             ctx.path.startsWith('/app') || 

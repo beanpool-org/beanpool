@@ -378,9 +378,13 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
         return out;
     };
     const keys = Array.from(onCards(source).matchAll(/\bt\((['"])((?:(?!\1)[^\\]|\\.)*)\1/g)).map((m) => m[2].replace(/\\n/g, '\n').replace(/\\'/g, "'"));
-    /** The sentences some language's catalog has: the ones the drafting pass has reached. */
-    const draftedKeys = new Set(ALL_LANGS.filter((l) => l !== 'xx').flatMap((l) => Object.keys(catalog(NATIVE_WORDS, l))));
-    const drafted = (key: string) => draftedKeys.has(key);
+    /**
+     * What a member reads in `lang` for `key`: the catalog's translation where it has one, the English (the key) where it has
+     * not: the app's own fallback (design §5: a missing translation is a fallback, never a break). Decided per language, never
+     * from what OTHER languages have: the drafting passes fill the languages in groups, one pass after another, so "some
+     * language has the sentence" says nothing about this one.
+     */
+    const readIn = (lang: UiLang, key: string) => (lang === 'xx' ? inLang(lang, key) : ((catalog(NATIVE_WORDS, lang)[key] as string | undefined) ?? key));
 
     it('the screens\' sentences are through t(), and the two big buttons and Restore are the only lines with a limit (two lines)', () => {
         for (const key of ONE_LINE_BUTTONS) expect(keys).toContain(key);
@@ -423,11 +427,11 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
                 expect(widthOf(widestPiece(label), 18) * 0.6, `a word of "${label}" in ${lang}`).toBeLessThanOrEqual(BUTTON_LINE);
             }
             for (const key of keys) {
-                // A sentence the drafting pass has reached is in every language. One it hasn't reached yet (a sweep's new
-                // sentence: S3j's restore, door and backup steps) shows its English until it has (design §5: a missing
-                // translation is a fallback, never a break), so its English is what is measured.
-                if (lang !== 'xx' && drafted(key)) expect(typeof catalog(NATIVE_WORDS, lang)[key], `"${key}" has a ${lang} translation`).toBe('string');
-                const piece = widestPiece(lang === 'xx' || drafted(key) ? inLang(lang, key) : key);
+                // A sentence this language has is a real string, and that is what is measured. One it has not reached yet
+                // (a sweep's new sentence: S3j's restore, door and backup steps) shows its English until it has, so its
+                // English is what is measured. Which languages have it is each catalog's own, whatever the passes have filled.
+                if (lang !== 'xx' && key in catalog(NATIVE_WORDS, lang)) expect(typeof catalog(NATIVE_WORDS, lang)[key], `"${key}" has a ${lang} translation`).toBe('string');
+                const piece = widestPiece(readIn(lang, key));
                 expect(widthOf(piece, FONT_OF[key] ?? 16), `"${piece}" (${lang}) breaks inside a word on a 320 dp card`).toBeLessThanOrEqual(LINE_OF[key] ?? CARD_LINE);
             }
         }, 60_000);

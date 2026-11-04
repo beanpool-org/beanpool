@@ -229,11 +229,19 @@ export const lightColors = {
         border: brandLight.chip.accent.border, // a sage chip's outline; no words on it
     },
 
-    // Marketplace listing type — the one loud signal per card (core chip.ok / chip.need)
+    // Marketplace listing type — the one loud signal per card (core chip.ok / chip.need / chip.poll)
     market: {
         offer: { fg: brandLight.chip.ok.ink, bg: brandLight.chip.ok.tint },
         need: { fg: brandLight.chip.need.ink, bg: brandLight.chip.need.tint },
+        poll: { fg: brandLight.chip.poll.ink, bg: brandLight.chip.poll.tint }, // the POLL chip; EVENT stays tile.event
         author: palette.gray600, // seller name on listing cards
+    },
+
+    // The card style box's two other chips (core chip.quiet / chip.info): RECURRING, a category, a group's lock,
+    // "Closes in {n}d" and Closed are quiet; 👤 YOU is info. Amber stays money and caution (feedback.warning).
+    chip: {
+        quiet: { fg: brandLight.chip.quiet.ink, bg: brandLight.chip.quiet.tint },
+        info: { fg: brandLight.chip.info.ink, bg: brandLight.chip.info.tint },
     },
 
     // Category tile tints and inks
@@ -380,7 +388,14 @@ export const darkColors = {
     market: {
         offer: { fg: brandDark.chip.ok.ink, bg: brandDark.chip.ok.tint },
         need: { fg: brandDark.chip.need.ink, bg: brandDark.chip.need.tint }, // 5.56:1 (orange-800 was 4.33)
+        poll: { fg: brandDark.chip.poll.ink, bg: brandDark.chip.poll.tint },
         author: palette.gray300,
+    },
+
+    // The card style box's quiet and YOU chips (core chip.quiet / chip.info)
+    chip: {
+        quiet: { fg: brandDark.chip.quiet.ink, bg: brandDark.chip.quiet.tint },
+        info: { fg: brandDark.chip.info.ink, bg: brandDark.chip.info.tint },
     },
 
     // Category tile tints and inks

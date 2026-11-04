@@ -130,8 +130,12 @@ export const POP_UP_CLOSE = 'absolute top-0 end-0 z-10 min-w-[44px] min-h-[44px]
 /** The ✕'s circle: 28 across, the quiet ground and ink. */
 export const POP_UP_CLOSE_DOT = 'w-7 h-7 rounded-full bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 flex items-center justify-center text-xs font-extrabold';
 
-/** The room a pop-up card's first row keeps at its end, so its chips and price stop short of the ✕'s circle. */
-export const POP_UP_CLOSE_ROOM = 'pe-8';
+/**
+ * The room a pop-up card's first row keeps for the ✕'s circle: at its end, so its chips and price stop short of it, and in
+ * height, so the line under it starts below the circle at any text size (the circle grows with the text; a chip's 10 px
+ * words do not). Measured at 320 x 1.3: without the height an event's date ran under the circle (map-pop-up-card-shots.mjs).
+ */
+export const POP_UP_CLOSE_ROOM = 'pe-8 min-h-6';
 
 /** The inks on the card ground, light and dark. */
 export const CARD_INK = {

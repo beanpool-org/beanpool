@@ -189,6 +189,9 @@ describe('the web style box holds core\'s numbers', () => {
         // The circle's near edge is its inset (p-1.5) plus 28 from the card's end; the first row stops at the text's padding
         // (12) plus the room: the room must reach past the circle.
         expect(MARKET_CARD_SHELL.textPadding + spacing(POP_UP_CLOSE_ROOM, 'pe')!).toBeGreaterThanOrEqual(spacing(POP_UP_CLOSE, 'p')! + 28);
+        // And down: the circle's foot is its inset plus 28 from the card's top; the line under the first row starts at the
+        // text's padding plus the row's height at least (all in rem, so it holds at 1.3x text), past the circle's foot.
+        expect(MARKET_CARD_SHELL.textPadding + spacing(POP_UP_CLOSE_ROOM, 'min-h')!).toBeGreaterThan(spacing(POP_UP_CLOSE, 'p')! + 28);
     });
 
     it('every colour is core\'s role or the card token: no raw violet, purple, blue or nature-950', () => {

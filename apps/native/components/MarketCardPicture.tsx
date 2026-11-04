@@ -3,7 +3,7 @@ import { View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-nat
 import { Image, type ImageContentPosition } from 'expo-image';
 import { CategoryTile, type CategoryTileKind, type CategoryTileSize } from './CategoryTile';
 import { refreshListingAfterPhotoError } from '../utils/photo-refresh';
-import { HIDDEN_UNTIL_DRAWN, useListPhotoSteps } from './useListPhotoSteps';
+import { styleUntilDrawn, useListPhotoSteps } from './useListPhotoSteps';
 
 /** Grid cards only: the 32 and 80 dp thumbnails stay centred, as they are on the web. */
 export const MARKET_GRID_CROP: ImageContentPosition = { top: '33%', left: '50%' };
@@ -51,7 +51,7 @@ export function MarketCardPicture({ postId, cover, picture, category, kind, size
             {steps.drawn ? null : tile}
             <Image
                 source={{ uri: steps.shown }}
-                style={steps.drawn ? imageStyle : [imageStyle, HIDDEN_UNTIL_DRAWN]}
+                style={styleUntilDrawn(imageStyle, steps.drawn)}
                 accessibilityLabel={accessibilityLabel}
                 importantForAccessibility={steps.drawn ? 'auto' : 'no-hide-descendants'}
                 accessibilityElementsHidden={!steps.drawn}

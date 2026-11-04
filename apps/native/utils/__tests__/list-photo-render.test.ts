@@ -64,7 +64,7 @@ describe('ListPhoto', () => {
     it('hands its other props to the picture, and its own style once it has drawn', async () => {
         await show(PHOTO);
         expect(img()?.getAttribute('aria-label')).toBe('Loaf');
-        expect(img()?.getAttribute('data-style')).toBe('[{"width":48},{"position":"absolute","opacity":0}]');
+        expect(img()?.getAttribute('data-style')).toBe('{"width":48,"position":"absolute","opacity":0}');
         await load();
         expect(img()?.getAttribute('data-style')).toBe('{"width":48}');
     });

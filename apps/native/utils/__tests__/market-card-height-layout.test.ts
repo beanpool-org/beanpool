@@ -108,8 +108,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 // The picture as a phone draws it: its URL, its style, and what it does when the picture will not load.
 vi.mock('expo-image', () => ({
-    Image: ({ source, onError, style }: { source?: { uri?: string }; onError?: () => void; style?: unknown }) => createElement('img', {
-        'data-src': source?.uri, 'data-style': JSON.stringify(Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'))), onError,
+    Image: ({ source, onError, onLoad, style }: { source?: { uri?: string }; onError?: () => void; onLoad?: () => void; style?: unknown }) => createElement('img', {
+        'data-src': source?.uri, 'data-style': JSON.stringify(Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'))), onError, onLoad,
     }),
 }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
@@ -273,6 +273,15 @@ describe("a list-view card is its own height, never the screen's", () => {
         const row = () => cardOf(WITH_BANNER.title).firstElementChild as HTMLElement;
         const picture = () => row().querySelector('img[data-src]') as HTMLImageElement | null;
         expect(picture()?.getAttribute('data-src')).toBe(BANNER);
+        // card-photo-blank: until the banner has drawn, the tile holds the slot, at the card's own height.
+        const loadingTile = row().querySelector('[data-testid="category-tile"]') as HTMLElement;
+        expect(loadingTile).not.toBeNull();
+        const loadingHeights = heightsAcross(row());
+        expect(new Set(loadingHeights).size).toBe(1);
+        expect(loadingHeights[0]).toBeLessThan(250);
+        for (const height of HEIGHTS) expect(lay(height).height(loadingTile)).toBeCloseTo(lay(height).height(row()) - 2, 1);
+        await act(async () => { picture()!.dispatchEvent(new Event('load')); });
+        await settle(2);
         expect(row().querySelector('[data-testid="category-tile"]')).toBeNull();
         const bannerHeights = heightsAcross(row());
         expect(new Set(bannerHeights).size).toBe(1);

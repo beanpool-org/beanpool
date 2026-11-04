@@ -1,6 +1,6 @@
 import React, { type ReactNode } from 'react';
 import { Image, type ImageProps } from 'expo-image';
-import { HIDDEN_UNTIL_DRAWN, useListPhotoSteps } from './useListPhotoSteps';
+import { styleUntilDrawn, useListPhotoSteps } from './useListPhotoSteps';
 
 /**
  * ListPhoto: a listing's picture on a small card (card-photo-retry, Marty 4 Nov 2026: a card on global missed its photo in
@@ -25,7 +25,7 @@ export function ListPhoto({ photo, fallback, style, ...image }: {
             {steps.drawn ? null : fallback}
             <Image
                 {...image}
-                style={steps.drawn ? style : [style, HIDDEN_UNTIL_DRAWN]}
+                style={styleUntilDrawn(style, steps.drawn)}
                 importantForAccessibility={steps.drawn ? image.importantForAccessibility : 'no-hide-descendants'}
                 accessibilityElementsHidden={!steps.drawn}
                 source={{ uri: steps.shown }}

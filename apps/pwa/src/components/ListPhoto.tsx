@@ -21,10 +21,9 @@ export function ListPhoto({ photo, fallback, resolve, style, ...img }: {
     fallback: ReactNode;
     resolve?: (url: string) => string | null;
 } & Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'onError' | 'onLoad'>) {
-    const steps = useListPhotoSteps(photo);
-    const shown = steps.shown;
-    const src = shown && (resolve ? resolve(shown) : shown);
-    if (!photo || !shown || !src) return <>{fallback}</>;
+    const steps = useListPhotoSteps(photo, resolve);
+    const src = steps.src;
+    if (!photo || !steps.shown || !src) return <>{fallback}</>;
     return (
         <>
             {steps.drawn ? null : fallback}

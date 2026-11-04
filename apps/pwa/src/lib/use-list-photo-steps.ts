@@ -16,10 +16,13 @@ import { LIST_PHOTO_WAIT_MS, listPhotoUrl, nextListPhotoUrl } from '@beanpool/co
  * The URL that failed is kept beside its step, not a flag, so a new URL a later read brings starts again from its small
  * copy.
  */
-export function useListPhotoSteps(photo: string | null | undefined) {
+export function useListPhotoSteps(photo: string | null | undefined, resolve?: (url: string) => string | null) {
     const [steppedDown, setSteppedDown] = useState<{ photo: string; shown: string | null } | null>(null);
     const [drawnUrl, setDrawnUrl] = useState<string | null>(null);
     const shown = !photo ? null : steppedDown?.photo === photo ? steppedDown.shown : listPhotoUrl(photo);
+    // The address the <img> loads; null when there is nothing to draw or `resolve` refuses it (the card draws its fallback
+    // and nothing waits: a refused URL is never stepped past).
+    const src = shown && (resolve ? resolve(shown) : shown);
     const drawn = !!shown && drawnUrl === shown;
 
     const fail = useCallback((p: string, failed: string) => {
@@ -33,15 +36,16 @@ export function useListPhotoSteps(photo: string | null | undefined) {
     }, []);
     useEffect(() => {
         stop();
-        if (!photo || !shown || drawn) return stop;
+        if (!photo || !shown || !src || drawn) return stop;
         const p = photo;
         const failed = shown;
         timer.current = setTimeout(() => { timer.current = null; fail(p, failed); }, LIST_PHOTO_WAIT_MS);
         return stop;
-    }, [photo, shown, drawn, fail, stop]);
+    }, [photo, shown, src, drawn, fail, stop]);
 
     return {
         shown,
+        src,
         drawn,
         onLoad: useCallback(() => { stop(); if (shown) setDrawnUrl(shown); }, [shown, stop]),
         onError: useCallback(() => { stop(); if (photo && shown) fail(photo, shown); }, [photo, shown, fail, stop]),

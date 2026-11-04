@@ -946,6 +946,39 @@ export function namesKeyLabel(pin: NamesPin, gens: Map<string, NamesGeneration>,
     return g ? { n: g.n, maker: g.maker } : null;
 }
 
+// ── Two devices, one key ─────────────────────────────────────────────────────────────────────
+
+/** A merge of two records of one admin's key: the pin, and the keys one record trusted that stand dropped here. */
+export interface NamesMerged {
+    pin: NamesPin;
+    recheck: string[];
+}
+
+/**
+ * Two phones with one key (design §3 "higher seq", §5 "Merging"): `local` is this phone's pin, `other` the newer copy
+ * another phone saved. `other` is kept when its chain extends this phone's (same links, as far or further); otherwise
+ * this phone's pin is. Either way the rings are united (restricted to the kept pin's chain and `abandoned`, as
+ * `readNamesPin` holds), and the copy number is the higher one, so the next copy is numbered past both. `seen` stays
+ * this phone's. Never a pin numbered lower than either.
+ */
+export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesMerged {
+    const extends_ = other.chain.length >= local.chain.length && local.chain.every((l, i) => other.chain[i]?.id === l.id);
+    const kept = extends_ ? other : local;
+    const left = extends_ ? local : other;
+    // A statement either phone of this key abandoned stays abandoned (and its key in the ring). The other side's links off
+    // the kept chain (a fork) are NOT made abandoned here: that would change what the walk takes (names-list-trust.ts).
+    const keptIds = new Set(kept.chain.map((l) => l.id));
+    const abandoned = [...new Set([...kept.abandoned, ...left.abandoned])].filter((id) => !keptIds.has(id));
+    const onKept = new Set([...keptIds, ...abandoned]);
+    const ring: Record<string, string> = {};
+    for (const [id, key] of [...Object.entries(other.ring), ...Object.entries(local.ring)]) if (onKept.has(id) && !ring[id]) ring[id] = key;
+    // This phone's pending key: into the ring when its statement landed on the kept chain, else still pending.
+    let pending = kept.pending;
+    if (local.pending && onKept.has(local.pending.id)) ring[local.pending.id] ??= local.pending.key;
+    else if (local.pending) pending = local.pending;
+    return { pin: { ...kept, abandoned, ring, pending, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } }, recheck: [] };
+}
+
 // ── Checking a key in person ─────────────────────────────────────────────────────────────────
 
 /** What an admin's phone shows as a QR code: its own identity key, nothing else. */

@@ -3332,8 +3332,8 @@ describe('§8 21. Two phones, one key: the higher-seq copy is merged, never roll
         expect(a.notices).toContain(NAMES_COPY.copyNewer);
         expect((await open(ada)).notices).not.toContain(NAMES_COPY.copyNewer);
         // The merge itself: the further chain kept whichever side holds it, never a lower number, no key of either lost.
-        const ab = mergeNamesPins(was, phoneB);
-        const ba = mergeNamesPins(phoneB, was);
+        const ab = mergeNamesPins(was, phoneB).pin;
+        const ba = mergeNamesPins(phoneB, was).pin;
         for (const m of [ab, ba]) {
             expect(m.chain.map((l) => l.id)).toEqual(phoneB.chain.map((l) => l.id));
             expect(m.copy.seq).toBe(Math.max(was.copy.seq, phoneB.copy.seq));
@@ -3351,7 +3351,7 @@ describe('§5 merging keeps this phone\'s pending key (review 4171117464)', () =
     it('the other pin\'s chain holds the pending statement: its key goes into the ring under that id', () => {
         const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, pending: { ...link(G, 2), key: 'g-key' }, copy: { seq: 5 } };
         const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1), link(G, 2)], ring: { [K1]: 'k1-key' }, copy: { seq: 6 } };
-        const m = mergeNamesPins(local, other);
+        const m = mergeNamesPins(local, other).pin;
         expect(m.chain.map((l) => l.id)).toEqual([K1, G]);
         expect(m.ring).toEqual({ [K1]: 'k1-key', [G]: 'g-key' });
         expect(m.copy.seq).toBe(6);
@@ -3361,7 +3361,7 @@ describe('§5 merging keeps this phone\'s pending key (review 4171117464)', () =
         const pending = { ...link(G, 2), key: 'g-key' };
         const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, pending, copy: { seq: 5 } };
         const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, copy: { seq: 6 } };
-        const m = mergeNamesPins(local, other);
+        const m = mergeNamesPins(local, other).pin;
         expect(m.pending).toEqual(pending);
         expect(m.ring).toEqual({ [K1]: 'k1-key' });
     });
@@ -3370,7 +3370,7 @@ describe('§5 merging keeps this phone\'s pending key (review 4171117464)', () =
         const X = '33'.repeat(32);
         const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], abandoned: [X], ring: { [K1]: 'k1-key', [X]: 'x-key' }, copy: { seq: 5 } };
         const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1), link(G, 2)], ring: { [K1]: 'k1-key', [G]: 'g-key' }, copy: { seq: 6 } };
-        const m = mergeNamesPins(local, other);
+        const m = mergeNamesPins(local, other).pin;
         expect(m.abandoned).toEqual([X]);
         expect(m.ring).toEqual({ [K1]: 'k1-key', [G]: 'g-key', [X]: 'x-key' });
     });

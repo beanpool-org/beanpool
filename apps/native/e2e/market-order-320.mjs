@@ -23,6 +23,9 @@
  * --view grid (market grid PG1, DESIGN-market-grid-sizes-fable.md §2.1) taps the real "Grid view" button, then runs the cases
  * `local` and `global` (the New since line is a list-view line). In the grid there is no Pinned heading or block: the pin is the
  * grid's first cell with its 📌 PINNED pill, the first stream card is beside it in the same row, and no card is drawn twice.
+ * The lattice (PG2, §2.2, §2.5): the local case holds a poll too; every Offer / Need tile is half the row less the gutter, the
+ * tiles of a row are one height, each tile's text block is four rows (24 + (4 x 18 + 3 x 4) x 1.3 = 133.2 dp), and the poll is
+ * a row of its own at the list's width. An event in the grid is still the list card until P3': its height is printed, not held.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -123,12 +126,14 @@ const OVERRIDES = {
     },
     'components/MarketCardPicture': {
         MARKET_GRID_CROP: `1`,
-        // A thumbnail is drawn in the slot the card gives it (the list card's 80 dp slot, stretched to the card; compact's 32 dp
-        // box), as the real picture is; the grid's stays a 120 dp block.
-        MarketCardPicture: `({ size, imageStyle, tileBox }) => React.createElement(RN.View, { style: [size === 'thumb' ? (tileBox || imageStyle) : { width: '100%', height: 120, borderRadius: 8 }, { backgroundColor: globalThis.__theme.colors.surface.subtle }] })`,
+        // Every picture is drawn in the slot the card gives it, as the real one is: the list card's 80 dp slot, stretched to the
+        // card; compact's 32 dp box; the grid tile's 4:3 frame (PG2: a fixed block ran out of the frame over the title).
+        MarketCardPicture: `({ size, imageStyle, tileBox }) => React.createElement(RN.View, { style: [size === 'thumb' ? (tileBox || imageStyle) : imageStyle, { backgroundColor: globalThis.__theme.colors.surface.subtle }] })`,
     },
-    'components/CurrencyDisplay': { CurrencyDisplay: `({ amount }) => React.createElement(RN.Text, null, amount + ' Beans')` },
-    'components/PollCard': { PollCard: `({ post }) => React.createElement(RN.View, { style: { padding: 12, marginHorizontal: 16, marginBottom: 12, borderWidth: 1, borderColor: globalThis.__theme.colors.border.default, borderRadius: 12 } }, React.createElement(RN.Text, { style: { fontWeight: '800', color: globalThis.__theme.colors.text.heading } }, '🗳️ ' + post.title))` },
+    // In the style it is given, as the real one draws its amount (the grid's price pill is light words on the scrim).
+    'components/CurrencyDisplay': { CurrencyDisplay: `({ amount, style }) => React.createElement(RN.Text, { style }, amount + ' Beans')` },
+    // The poll card's box as the real one draws it (no side margin: it is the list's width; 14 under it), with its question.
+    'components/PollCard': { PollCard: `({ post }) => React.createElement(RN.View, { testID: 'poll-card', style: { padding: 16, marginBottom: 14, borderWidth: 1, borderColor: globalThis.__theme.colors.border.default, borderRadius: 16, backgroundColor: globalThis.__theme.colors.surface.card } }, React.createElement(RN.Text, { style: { fontWeight: '800', color: globalThis.__theme.colors.text.heading } }, '🗳️ ' + post.title))` },
     'components/PageTitle': { PageTitle: `({ title }) => React.createElement(RN.Text, { style: { fontSize: 24, fontWeight: '800', paddingHorizontal: 16, paddingTop: 8, color: globalThis.__theme.colors.text.heading } }, title)`, useTabRetapScrollTop: `() => {}` },
     'components/QuickReturn': {
         useQuickReturn: `() => ({ show() {}, hidden: false, titleHeight: 0, listInset: 0, listProps: {} })`,
@@ -245,6 +250,11 @@ if (c === 'local') {
             myRsvp: 'going', event_going_count: 12, event_interested_count: 5 })] : []),
         post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana' }),
         post('y', 'Someone to mind two goats', { type: 'need', category: 'pets', created_at: ago(60 * 26), author_callsign: 'Mo' }),
+        // The lattice (PG2): a poll in the grid is a row of its own; a recurring Offer with a two-line title beside a short one.
+        ...(${JSON.stringify(VIEW)} === 'grid' ? [
+            post('poll', 'Where should the new tool shed go?', { type: 'poll', category: 'general', created_at: ago(30), author_callsign: 'Dee' }),
+            post('r', 'Seedlings every week from the nursery bench', { created_at: ago(50), author_callsign: 'Lee', repeatable: 1 }),
+        ] : []),
     ];
 } else if (c === 'newsince' || c === 'newsince-day') {
     // New since you last looked (Market order S4): the stamp is a post's own listed time. 'newsince' stops inside Today; 'newsince-day'
@@ -360,6 +370,19 @@ for (const scheme of ['light', 'dark']) {
                         cut: ['event-mark', 'event-counts'].filter(id => { const e = card.querySelector(`[data-testid="${id}"]`); return e && (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1); }),
                         buttons: card.querySelectorAll('[role="button"]').length, text: card.innerText.split('\n').filter(Boolean) };
                 }),
+                // The grid's tiles (an Offer / Need / Pulse tile is its own button, market-card-<id>), each with its text block;
+                // the poll; the events (still the list card until P3').
+                tiles: Array.from(document.querySelectorAll('[data-testid^="market-card-"]')).map(card => {
+                    const r = card.getBoundingClientRect();
+                    const block = card.querySelector('[data-testid="grid-text-block"]');
+                    const b = block ? block.getBoundingClientRect() : null;
+                    const inner = block ? Array.from(block.children).map(x => x.getBoundingClientRect()) : [];
+                    return { id: card.getAttribute('data-testid'), left: r.left, top: r.top, width: r.width, height: r.height,
+                        block: b ? b.height : null, spills: b ? inner.filter(x => x.bottom > b.bottom - 12 + 0.5).length : -1,
+                        title: (card.innerText || '').split('\n').filter(Boolean).slice(-3).join(' / ').slice(0, 40) };
+                }),
+                polls: Array.from(document.querySelectorAll('[data-testid="poll-card"]')).map(p => { const r = p.getBoundingClientRect(); return { left: r.left, width: r.width, top: r.top, bottom: r.bottom }; }),
+                eventTiles: Array.from(document.querySelectorAll('[data-testid^="event-card-"]')).map(e => { const r = e.getBoundingClientRect(); return { id: e.getAttribute('data-testid'), top: r.top, height: r.height, width: r.width }; }),
                 // Each title's card (its nearest button) and where the member sees it: for the grid's first-cells check.
                 cards: TITLES.map(title => {
                     const leaves = Array.from(document.querySelectorAll('#root *')).filter(e => e.children.length === 0 && (e.textContent || '').includes(title));
@@ -385,6 +408,39 @@ for (const scheme of ['light', 'dark']) {
                 if (e.text.some(l => /^👥 0 going · 0 interested$/.test(l))) fail(`${e.id}: zero counts drawn`);
             }
             console.log('  events:', result.eventCards.map(e => `${e.id} ${Math.round(e.height)} dp [${e.text.join(' | ')}]`).join(' || '));
+        }
+        if (VIEW === 'grid') {
+            // The lattice (PG2): every Offer / Need tile half the row less the 16 dp gutter; the tiles of a row one height; each
+            // text block four rows, the same number; nothing in a block below its padding; a poll the list's width.
+            const BLOCK = 24 + (4 * 18 + 3 * 4) * SCALE;
+            const HALF = (WIDTH - 32 - 16) / 2;
+            if (!result.tiles.length) fail('no grid tiles drawn');
+            for (const t of result.tiles) {
+                if (Math.abs(t.width - HALF) > 0.5) fail(`${t.id} is ${t.width} wide, not half the row (${HALF})`);
+                if (t.block == null || Math.abs(t.block - BLOCK) > 0.5) fail(`${t.id}: text block ${t.block}, not ${BLOCK.toFixed(1)}`);
+                if (t.spills) fail(`${t.id}: ${t.spills} row(s) of its text block run past it`);
+            }
+            const rows = [];
+            for (const t of [...result.tiles].sort((a, b) => a.top - b.top)) {
+                const row = rows.find(r => Math.abs(r.top - t.top) < 1);
+                if (row) row.tiles.push(t); else rows.push({ top: t.top, tiles: [t] });
+            }
+            for (const r of rows) {
+                const hs = r.tiles.map(t => t.height);
+                if (Math.max(...hs) - Math.min(...hs) > 0.5) fail(`a row's tiles differ in height: ${r.tiles.map(t => `${t.id} ${t.height}`).join(', ')}`);
+            }
+            const lone = rows.filter(r => r.tiles.length === 1 && !result.eventTiles.some(e => Math.abs(e.top - r.top) < 1));
+            console.log('  tiles:', result.tiles.map(t => `${t.id.replace('market-card-', '')} ${Math.round(t.height * 10) / 10}`).join(', '),
+                '| rows', rows.length, '| events (list card until P3\')', result.eventTiles.map(e => `${e.id} ${Math.round(e.height)}`).join(', ') || 'none');
+            if (lone.length > 1) fail(`${lone.length} rows hold a lone tile; only the last may`);
+            if (which === 'local') {
+                if (result.polls.length !== 1) fail(`expected one poll, found ${result.polls.length}`);
+                for (const p of result.polls) {
+                    if (Math.abs(p.width - (WIDTH - 32)) > 0.5 || Math.abs(p.left - 16) > 0.5) fail(`the poll is ${p.width} wide at ${p.left}, not the list's ${WIDTH - 32} at 16`);
+                    if (result.tiles.some(t => t.top < p.bottom && t.top + t.height > p.top)) fail('a tile sits beside the poll');
+                }
+                console.log('  poll:', result.polls.map(p => `${p.width} wide at ${p.left}`).join(', '));
+            }
         }
         if (result.past) fail(`${result.past} element(s) drawn past the ${WIDTH}dp edge, in: ${result.pastIn.map(s => `"${s}"`).join(', ')}`);
         for (const gone of ['UPCOMING EVENTS', 'NEAREST FIRST']) if (result.text.includes(gone)) fail(`heading still drawn: ${gone}`);

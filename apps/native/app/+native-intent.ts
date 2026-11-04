@@ -5,6 +5,7 @@ import { postIdFromLink } from '../utils/event-extras';
 import { isAuthReturnLink } from '../utils/auth-return';
 import { linkCarriesInvite } from '../utils/welcome-invite';
 import { claimRouteFromSystemPath } from '../utils/claim-link';
+import { hallRouteFromSystemPath } from '../utils/hall-link';
 import { pairRouteFromSystemPath } from '../utils/pair-link';
 import { pairInRouteFromSystemPath } from '../utils/pair-in';
 import { holdStartUpLinkRoute } from '../utils/member-landing';
@@ -171,6 +172,14 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     // waiting, because the process that started it is gone, so the app opens as it does from its icon.
     if (isAuthReturnLink(path)) {
         return initial ? '/' : null;
+    }
+
+    // Lights-out H2: the hall poster's `beanpool://hall?at=…&for=…` (utils/hall-link.ts): the hall screen, with only the
+    // fields that passed their checks. The screen asks the laptop nothing until the member taps Join.
+    const hallRoute = hallRouteFromSystemPath(path);
+    if (hallRoute) {
+        if (initial) holdStartUpLinkRoute();
+        return hallRoute;
     }
 
     // `beanpool://claim?node=…[&id=…][&code=…]` (utils/claim-link.ts): the claim screen, with only the fields that passed

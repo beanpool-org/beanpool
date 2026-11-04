@@ -376,7 +376,9 @@ const makeStyles = ({ colors }: ThemeContextType) =>
     StyleSheet.create({
         // An item of the page's quiet row (EventDetail), which lines its items up from the top: a note under Share (an ask taken) never
         // stretches Add to calendar beside it.
-        rowItem: { flexGrow: 1, flexBasis: 130 },
+        // Sized to its label and growing to share the line, never shrunk under it: at 320 dp and 1.3x text "📅 Add to calendar"
+        // needs more than half the row, so it takes a line of its own rather than ellipsize (the answer buttons' rule).
+        rowItem: { flexGrow: 1, flexBasis: 'auto', flexShrink: 0, maxWidth: '100%' },
         // The quiet outline (§2.7): the strong border, the card ground, the body's words. The page button's height and corners.
         btn: { borderWidth: 1.5, borderColor: colors.border.strong, paddingHorizontal: 8, backgroundColor: colors.surface.card },
         btnText: { color: colors.text.body },

@@ -1972,5 +1972,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} katika jumuiya nyingine · Huwezi kununua au kuchukua hili hapa.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} katika {community} · Huwezi kununua au kuchukua hili hadi {community} ikukaribishe.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 Tazama jumuiya ya kimataifa"
+  "🌍 Look around the global community": "🌍 Tazama jumuiya ya kimataifa",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Baraza la wanachama ulilochaguliwa kwa bahati nasibu linasubiri jibu lako. Jibu ndani ya siku moja, la sivyo nafasi yako itapewa mwanachama anayefuata atakayechaguliwa.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "Baraza la wanachama ulilomo linafungwa baada ya takriban siku moja. Fungua BeanPool ili upige kura.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "Mwanachama ambaye baraza lako la wanachama linaamua kumhusu amejibu hoja. Fungua BeanPool ili uisome.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "Umechaguliwa kwa bahati nasibu kwenye baraza la wanachama katika jumuiya yako, na kura yake inafungwa baada ya chini ya siku mbili. Fungua BeanPool ili uhudumu au ujiweke kando.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "Umechaguliwa kwa bahati nasibu kwenye baraza la wanachama katika jumuiya yako. Fungua BeanPool ndani ya siku tatu ili uhudumu au ujiweke kando."
 }

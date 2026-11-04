@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ ছেড়ে দেওয়া নামের টানেল বন্ধ হয়ে গেছে। এই সার্ভার এখনো {addresses} ঠিকানায় সাড়া দেয়।",
   "🫘 A project you backed changed its end date": "🫘 আপনি যে প্রকল্পের সহযোগী, তার শেষ তারিখ বদলেছে",
   "🫘 Pledges went back to their backers": "🫘 অঙ্গীকারগুলো সহযোগীদের কাছে ফিরে গেছে",
-  "🫘 Your pledge came back": "🫘 আপনার অঙ্গীকার ফিরে এসেছে"
+  "🫘 Your pledge came back": "🫘 আপনার অঙ্গীকার ফিরে এসেছে",
+  "Answer serve or step_aside.": "serve বা step_aside দিয়ে উত্তর দিন।",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "আপনি ভোট দিয়েছেন, তাই আপনি এই জুরিতে কাজ করছেন। ভোট বন্ধ না হওয়া পর্যন্ত আপনি আপনার ভোট বদলাতে পারবেন।"
 }

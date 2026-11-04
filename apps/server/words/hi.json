@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ छोड़े गए नाम की टनल बंद हो गई है। यह सर्वर अब भी {addresses} पर उत्तर देता है।",
   "🫘 A project you backed changed its end date": "🫘 जिस परियोजना का आपने साथ दिया, उसकी समाप्ति तिथि बदल गई",
   "🫘 Pledges went back to their backers": "🫘 संकल्प सहयोगियों को लौटा दिए गए",
-  "🫘 Your pledge came back": "🫘 आपका संकल्प लौट आया"
+  "🫘 Your pledge came back": "🫘 आपका संकल्प लौट आया",
+  "Answer serve or step_aside.": "serve या step_aside से जवाब दें।",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "आपने वोट दे दिया है, इसलिए आप इस जूरी में सेवा दे रहे हैं। वोट बंद होने तक आप अपना वोट बदल सकते हैं।"
 }

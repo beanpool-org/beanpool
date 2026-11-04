@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ விடுவிக்கப்பட்ட பெயரின் டனல் நின்றுவிட்டது. இந்த சர்வர் இன்னும் {addresses} இல் பதிலளிக்கிறது.",
   "🫘 A project you backed changed its end date": "🫘 நீங்கள் ஆதரித்த திட்டம் அதன் முடிவுத் தேதியை மாற்றியது",
   "🫘 Pledges went back to their backers": "🫘 உறுதிமொழிகள் ஆதரவாளர்களுக்குத் திரும்பின",
-  "🫘 Your pledge came back": "🫘 உங்கள் உறுதிமொழி திரும்பி வந்தது"
+  "🫘 Your pledge came back": "🫘 உங்கள் உறுதிமொழி திரும்பி வந்தது",
+  "Answer serve or step_aside.": "serve அல்லது step_aside என்று பதிலளியுங்கள்.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "நீங்கள் வாக்களித்துவிட்டீர்கள், எனவே இந்த நடுவர் குழுவில் பணியாற்றுகிறீர்கள். வாக்கெடுப்பு முடியும் வரை உங்கள் வாக்கை மாற்றலாம்."
 }

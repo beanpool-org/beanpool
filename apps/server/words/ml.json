@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-d: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-d fix round 1: the recovery kit quotes each button as its screen draws it, one label per tag, the jury push and answer sentences, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ ഒഴിവാക്കിയ പേരിന്റെ ടണൽ നിലച്ചു. ഈ സെർവർ ഇപ്പോഴും {addresses} എന്നതിൽ മറുപടി നൽകുന്നു.",
   "🫘 A project you backed changed its end date": "🫘 നിങ്ങൾ പിന്തുണച്ച ഒരു പ്രോജക്റ്റ് അതിന്റെ അവസാന തീയതി മാറ്റി",
   "🫘 Pledges went back to their backers": "🫘 വാഗ്ദാനങ്ങൾ പിന്തുണക്കാർക്ക് തിരികെ നൽകി",
-  "🫘 Your pledge came back": "🫘 നിങ്ങളുടെ വാഗ്ദാനം തിരികെ വന്നു"
+  "🫘 Your pledge came back": "🫘 നിങ്ങളുടെ വാഗ്ദാനം തിരികെ വന്നു",
+  "Answer serve or step_aside.": "serve അല്ലെങ്കിൽ step_aside എന്ന് മറുപടി നൽകുക.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "നിങ്ങൾ വോട്ട് ചെയ്തു, അതിനാൽ ഈ ജൂറിയിൽ നിങ്ങൾ സേവനമനുഷ്ഠിക്കുന്നു. വോട്ടെടുപ്പ് അവസാനിക്കുന്നതുവരെ നിങ്ങൾക്ക് വോട്ട് മാറ്റാം."
 }

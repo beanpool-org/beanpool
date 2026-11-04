@@ -213,6 +213,49 @@ describe('the fallback card at 320 dp, text at 1.3x', () => {
         expect(addressFallbackOffer).toHaveBeenCalledTimes(3);
     });
 
+    it('"Not now" is never undone by a look already on its way; a look started after it shows what it finds (review of 533de50e)', async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const host = await render();
+        expect(card(host)).not.toBeNull();
+        // The next minute's look starts and is slow (the phone's address timing out); the member taps "Not now" meanwhile.
+        let answer!: (o: typeof OFFER | null) => void;
+        vi.mocked(addressFallbackOffer).mockImplementationOnce(() => new Promise(r => { answer = r; }));
+        await act(async () => { vi.advanceTimersByTime(FALLBACK_RECHECK_MS); });
+        expect(addressFallbackOffer).toHaveBeenCalledTimes(2);
+        await act(async () => { byId(host, 'address-fallback-later').click(); });
+        expect(card(host)).toBeNull();
+        expect(snoozeAddressFallback).toHaveBeenCalledTimes(1);
+        // That look ends with the pair just declined: before this fix the card was shown again until the next minute.
+        await act(async () => { answer(OFFER); });
+        await act(async () => {});
+        expect(card(host)).toBeNull();
+        // The next minute's look started after the tap: what it finds shows (another of the community's addresses).
+        const other = { ...OFFER, to: 'https://beans.example.net', host: 'beans.example.net' };
+        fallback.offer = other;
+        await act(async () => { vi.advanceTimersByTime(FALLBACK_RECHECK_MS); });
+        await act(async () => {});
+        expect(addressFallbackOffer).toHaveBeenCalledTimes(3);
+        expect(card(host)!.querySelector('[data-role="header"]')!.textContent).toContain('beans.example.net');
+    });
+
+    it('only the latest look\'s answer shows: one from before a switch never puts back what the look after it found', async () => {
+        const host = await render();
+        expect(card(host)).not.toBeNull();
+        let answer!: (o: typeof OFFER | null) => void;
+        vi.mocked(addressFallbackOffer).mockImplementationOnce(() => new Promise(r => { answer = r; }));
+        // Home comes back into view (a slow look), then the phone switches: the card goes, and the look after it finds nothing.
+        fallback.offer = null;
+        await act(async () => { for (const l of appState.listeners) { l('background'); l('active'); } });
+        await act(async () => { for (const l of switches.listeners) l(); });
+        await act(async () => {});
+        expect(addressFallbackOffer).toHaveBeenCalledTimes(3);
+        expect(card(host)).toBeNull();
+        // The look from before the switch ends with the old address's offer: not shown.
+        await act(async () => { answer(OFFER); });
+        await act(async () => {});
+        expect(card(host)).toBeNull();
+    });
+
     it('back in front from the background is the app opened again: marked, and asked at once; a prompt over the app is not', async () => {
         fallback.offer = null;
         const host = await render();

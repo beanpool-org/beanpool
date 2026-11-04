@@ -211,6 +211,19 @@ describe('the keyboard and the pointer', () => {
         await waitFor(() => expect(document.activeElement).toBe(trigger()));
     });
 
+    it('Escape stops at the menu: the page behind it never sees the key (a page that closes on Escape would close with it)', async () => {
+        await openWithTwoItems();
+        const seenByThePage = vi.fn();
+        window.addEventListener('keydown', seenByThePage);
+        try {
+            fireEvent.keyDown(screen.getByTestId('share-members-button'), { key: 'Escape' });
+        } finally {
+            window.removeEventListener('keydown', seenByThePage);
+        }
+        expect(screen.queryByRole('menu')).toBeNull();
+        expect(seenByThePage).not.toHaveBeenCalled();
+    });
+
     it('Tab closes the menu, so the member is never held in it', async () => {
         await openWithTwoItems();
         fireEvent.keyDown(screen.getByTestId('share-members-button'), { key: 'Tab' });

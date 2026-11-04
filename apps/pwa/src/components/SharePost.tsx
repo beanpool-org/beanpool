@@ -129,7 +129,7 @@ function useShareOutside(post: MarketplacePost, offered: boolean, line: string |
  * Share menu opens the ONE ask form People → Invites uses (components/InviteAsks.tsx AskSheet). Offered only to someone with a
  * key here (a guest has none). Once the node has taken the ask the member is told so, under the row.
  */
-function useAskAdmin(offered: boolean): SharePart | null {
+function useAskAdmin(offered: boolean, shareButton: () => HTMLElement | null | undefined): SharePart | null {
     const [hasKey, setHasKey] = useState(false);
     const [open, setOpen] = useState(false);
     const [sent, setSent] = useState(false);
@@ -145,7 +145,7 @@ function useAskAdmin(offered: boolean): SharePart | null {
         after: (sent || open) && (
             <div data-testid="share-ask-admin" className="flex flex-col gap-1">
                 {sent && <p role="status" data-testid="share-ask-admin-note" className="m-0 text-sm font-semibold text-bp-ink-accent break-words">{t(INVITE_ASK_WORDS.waiting)}</p>}
-                {open && <AskSheet onClose={() => setOpen(false)} onSent={() => { setOpen(false); setSent(true); }} />}
+                {open && <AskSheet onClose={() => setOpen(false)} onSent={() => { setOpen(false); setSent(true); }} fallback={shareButton} />}
             </div>
         ),
     };
@@ -194,7 +194,8 @@ export function useShare(post: MarketplacePost, opts: ShareOptions): { trigger: 
     // admins do. Where only admins invite and this member is none, the line stands and one more choice, "Ask an admin to
     // invite someone", opens the ask form of People → Invites (#2775). Never both.
     const invite = useInviteAndShare(post, says.showInviteButton && member);
-    const ask = useAskAdmin(says.showAskAdmin && member);
+    // The Ask item has gone with the menu by the time the form closes, so the form hands focus to the Share button.
+    const ask = useAskAdmin(says.showAskAdmin && member, () => menu.buttonRef.current);
 
     // A choice closes the menu and then does its work, in the same tap: a share sheet may only be opened by the tap itself.
     const pick = (part: SharePart, returnFocus = true): MenuChoice => ({ ...part.choice, onSelect: () => { menu.close(returnFocus); part.choice.onSelect(); } });

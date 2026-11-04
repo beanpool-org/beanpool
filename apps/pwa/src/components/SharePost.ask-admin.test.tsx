@@ -81,6 +81,61 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         expect(screen.getByTestId('share-ask-admin-note')).toHaveTextContent('Waiting for an admin');
     });
 
+    // The Ask is an item of the menu, and choosing it closes the menu in the same step that opens the sheet: the item the sheet
+    // would hand focus back to is gone. Focus goes to the Share button, never to the page's <body> (review of #2872).
+    const openAsk = async () => {
+        community(CLOSED);
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
+        await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        screen.getByTestId('share-button').focus();
+        openShare();
+        await waitFor(() => expect(screen.getByTestId('share-ask-admin-button')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('share-ask-admin-button'));
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('invite-ask-first-name')));
+    };
+
+    it('Escape on the ask form puts focus back on the Share button, not the page', async () => {
+        await openAsk();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByTestId('invite-ask-sheet')).toBeNull();
+        expect(document.activeElement).toBe(screen.getByTestId('share-button'));
+    });
+
+    it('Cancel on the ask form puts focus back on the Share button', async () => {
+        await openAsk();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByTestId('invite-ask-sheet')).toBeNull();
+        expect(document.activeElement).toBe(screen.getByTestId('share-button'));
+    });
+
+    it('Send puts focus back on the Share button, where the note that it went is read', async () => {
+        await openAsk();
+        fireEvent.change(screen.getByTestId('invite-ask-first-name'), { target: { value: 'Sam' } });
+        fireEvent.change(screen.getByTestId('invite-ask-how-known'), { target: { value: 'the bakery' } });
+        fireEvent.submit(screen.getByTestId('invite-ask-sheet').querySelector('form')!);
+        await waitFor(() => expect(screen.queryByTestId('invite-ask-sheet')).toBeNull());
+        expect(document.activeElement).toBe(screen.getByTestId('share-button'));
+    });
+
+    it('on an event the same: focus goes back to the event\'s Share button', async () => {
+        community(CLOSED);
+        vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
+        const event = {
+            ...post, type: 'event', category: 'community', title: 'Working bee at the hall', eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
+            lat: -28.55, lng: 153.5, eventPlaceName: 'Hall',
+            eventStartAt: new Date(Date.now() + 86400000).toISOString(), eventEndAt: new Date(Date.now() + 90000000).toISOString(),
+        } as any;
+        await act(async () => { render(<EventDetail post={event} identity={{ publicKey: 'pk-me', privateKey: 'sk', callsign: 'Ana' } as any} />); });
+        screen.getByTestId('event-share').focus();
+        fireEvent.click(screen.getByTestId('event-share'));
+        await waitFor(() => expect(screen.getByTestId('share-ask-admin-button')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('share-ask-admin-button'));
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('invite-ask-first-name')));
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByTestId('invite-ask-sheet')).toBeNull();
+        expect(document.activeElement).toBe(screen.getByTestId('event-share'));
+    });
+
     it('a refusal stays in the sheet, in the node\'s words, and nothing is claimed as sent', async () => {
         community(CLOSED);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);

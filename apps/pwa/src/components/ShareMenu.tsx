@@ -62,6 +62,9 @@ export function useInFlowMenu() {
     const onKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
             e.preventDefault();
+            // Escape puts the menu away and nothing else: a page that closes what it shows on Escape (the Market's open
+            // listing listens on window) must not see this one (review of #2872). React's root listener runs before window's.
+            e.stopPropagation();
             setOpen(false);
             requestAnimationFrame(() => buttonRef.current?.focus());
             return;

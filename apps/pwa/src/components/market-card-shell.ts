@@ -305,21 +305,23 @@ export const COMPACT_MARK = 'font-bold text-bp-tile-event-ink';
 export const COMPACT_END = 'flex flex-wrap items-center justify-end gap-x-2 gap-y-1 ml-3 max-w-[45%]';
 
 /*
- * An event's row, whose when must stay whole (measured at 320 px x 1.3, market-order-shots.mjs: the row's words have ~110 px
- * there, and "TUE 10 NOV ·" needs ~106). The words win the width and the end gives way to them, down to its chip:
- *   - COMPACT_LEAD_FIRM / COMPACT_TEXT_FIRM: the lead and the words without `min-w-0`, so they are never narrower than their
- *     widest whole piece (the date, the time);
+ * An event's row, whose date and time stay whole wherever the row has room for them, and whose end (the mark above EVENT) is
+ * never pushed out of it (measured at 320 px x 1.3 in en, fr, de, ru, es and pt, market-order-shots.mjs compact-kinds: the
+ * words have ~110 px there in English, and "SAM. 7 NOV. ·" or "СБ, 7 НОЯБ. ·" need about that). Who gives way, in order:
+ *   1. the mark: COMPACT_END_STACK takes the row's whole shortfall first (`shrink-[999]` against the lead's 1), down to its
+ *      chip, never narrower (`min-w-min`, which wins over the 45%); its words then end in "…" (COMPACT_MARK_GIVES);
+ *   2. then the words: COMPACT_LEAD_FIRM starts as wide as its widest whole piece (`w-min`: the date, the time), grows into
+ *      any room left, and can go narrower than that piece (`min-w-0`, with COMPACT_TEXT_FIRM), so a piece wider than the
+ *      words' whole room ends in "…" (COMPACT_PIECE) rather than pushing the end past the row's edge.
  *   - COMPACT_TITLE_GIVES: the title one line ending in "…" that asks for no width of its own (it may break anywhere, so it
  *     never sets the column's least width);
- *   - COMPACT_END_STACK: the mark above EVENT in a column, as wide as its widest piece when there is room, and never narrower
- *     than the chip. A flex-wrap end (COMPACT_END) keeps its pieces' width side by side even once they have wrapped: it left
- *     the words ~55 px;
  *   - COMPACT_MARK_GIVES: the mark's words, one line, giving way ("Interest… ✓") while its ✓ stays whole beside them.
+ * A flex-wrap end (COMPACT_END) keeps its pieces' width side by side even once they have wrapped: it left the words ~55 px.
  */
-export const COMPACT_LEAD_FIRM = 'flex items-center gap-3 flex-1';
-export const COMPACT_TEXT_FIRM = 'flex-1';
+export const COMPACT_LEAD_FIRM = 'flex items-center gap-3 flex-auto w-min min-w-0';
+export const COMPACT_TEXT_FIRM = 'flex-1 min-w-0';
 export const COMPACT_TITLE_GIVES = 'm-0 font-extrabold text-sm text-nature-950 dark:text-white line-clamp-1 break-all';
-export const COMPACT_END_STACK = 'flex flex-col items-end justify-center gap-1 ml-3 max-w-[45%]';
+export const COMPACT_END_STACK = 'flex flex-col items-end justify-center gap-1 ml-3 max-w-[45%] min-w-min shrink-[999]';
 export const COMPACT_MARK_GIVES = 'min-w-0 line-clamp-1 break-all';
 
 /**

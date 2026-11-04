@@ -27,7 +27,7 @@ import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, upperCase, word, p
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventRowWhen, eventRowWhenParts, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
+    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventRowWhen, eventRowWhenPieces, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
@@ -499,12 +499,9 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
         // above EVENT: "{when} · {mark}" has no room in the line. The counts are the page's. The whole row is one button that
         // opens the event.
         const rowWhen = eventRowWhen(p);
-        const rowParts = eventRowWhenParts(p);
-        // The when's whole pieces, as the list card's EventWhen cuts them: "SAT 7 NOV ·", "16:00–21:00", and "your time" apart.
-        const whenPieces = rowParts ? [
-            `${rowParts.first}${rowParts.sep === ' · ' ? ' ·' : ' –'}`,
-            ...(rowParts.second.endsWith(YOUR_TIME) ? [rowParts.second.slice(0, -YOUR_TIME.length), YOUR_TIME.trim()] : [rowParts.second]),
-        ] : [];
+        // The when's pieces (lib/events.ts eventRowWhenPieces): "SAT 7 NOV ·" and "16:00–21:00" whole, and "your time" split
+        // through its own sentence in every language, its words free to wrap and give way.
+        const whenPieces = eventRowWhenPieces(p);
         const state = eventStateOf(p);
         const pinned = pinLive(p as any);
         const lock = p.audienceScope === 'group' || !!p.targetGroupId
@@ -554,7 +551,11 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                             <span dir="auto" data-testid="event-row-title" className={COMPACT_TITLE_GIVES}>{p.title}</span>
                             <span data-testid="event-row-lines" className={`${COMPACT_LINES} font-medium ${CARD_INK.secondary}`}>
                                 <span data-testid="event-when" className={`font-bold ${CARD_INK.event}`}>
-                                    {whenPieces.map((piece, i) => <Fragment key={i}>{i > 0 && ' '}<span className={COMPACT_PIECE}>{piece}</span></Fragment>)}
+                                    {whenPieces.map((piece, i) => (piece.whole
+                                        ? <span key={i} data-piece="whole" className={COMPACT_PIECE}>{piece.text}</span>
+                                        : piece.text.trim()
+                                            ? <span key={i} data-piece="words">{piece.text}</span>
+                                            : <Fragment key={i}>{piece.text}</Fragment>))}
                                 </span>
                                 {pieces.map((piece, i) => <Fragment key={i}>{(whenPieces.length > 0 || i > 0) && ' · '}{piece}</Fragment>)}
                             </span>

@@ -17,6 +17,8 @@ import {
     COMPACT_TEXT_FIRM, COMPACT_TITLE, COMPACT_TITLE_GIVES, COMPACT_WORD, chip,
 } from './market-card-shell';
 
+import { addDateWords, setLanguage, t } from '@beanpool/core';
+
 vi.mock('../lib/api', async () => ({ ...(await vi.importActual<typeof import('../lib/api')>('../lib/api')), rsvpEvent: vi.fn() }));
 
 const HOUR = 3_600_000;
@@ -36,6 +38,23 @@ const classes = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/).f
 const has = (el: Element, s: string) => s.split(/\s+/).every(c => classes(el).includes(c));
 
 afterEach(() => { cleanup(); document.documentElement.style.fontSize = ''; });
+
+/** The when's pieces as drawn: a whole piece (COMPACT_PIECE) or the words of a sentence round the time. */
+const pieces = () => Array.from(screen.getByTestId('event-when').children).map(c => [c.getAttribute('data-piece'), c.textContent]);
+
+/** Runs `body` with a language's real catalogs (this app's words, core's words and core's dates), as the app loads them. */
+async function inLanguage(lang: string, body: () => void) {
+    const [app, core, dates] = await Promise.all([
+        import(`../../words/${lang}.json`), import(`../../../../packages/beanpool-core/words/${lang}.json`), import(`../../../../packages/beanpool-core/src/words-dates/${lang}.ts`),
+    ]);
+    try {
+        addDateWords(lang as any, dates.dateWords);
+        setLanguage(lang as any, [app.default, core.default]);
+        body();
+    } finally {
+        setLanguage('en');
+    }
+}
 
 function renderRow(post: any, opts: { onOpen?: () => void; distanceKm?: number | null } = {}) {
     document.documentElement.style.fontSize = '130%';
@@ -80,7 +99,8 @@ describe('the event\'s compact row (C1)', () => {
         ]);
         expect(has(screen.getByTestId('event-state-badge'), COMPACT_PIECE)).toBe(true);
         expect(classes(screen.getByTestId('event-row-title'))).toContain('line-clamp-1');
-        // The words keep their widest whole piece: no `min-w-0` on the lead or the words (the end gives way instead).
+        // The lead and the words start at their widest whole piece and can go narrower (min-w-0): the end gives way first,
+        // down to its chip, and is never pushed out of the row (market-card-shell.ts COMPACT_LEAD_FIRM; measured in Chromium).
         expect(screen.getByTestId('event-row-title').parentElement!.className).toBe(COMPACT_TEXT_FIRM);
         expect(screen.getByTestId('compact-picture').parentElement!.className).toBe(COMPACT_LEAD_FIRM);
         // The mark at the end, above EVENT, one line: its word gives way, its ✓ stays whole.
@@ -125,8 +145,43 @@ describe('the event\'s compact row (C1)', () => {
         const placeClock = '2030-09-28T10:00';
         renderRow({ ...event, eventStartLocal: placeClock, eventEndLocal: '2030-09-28T13:00', eventTz: 'Pacific/Noumea' });
         expect(screen.getByTestId('event-when').textContent).toBe('SAT 28 SEP · 9:00–12:00 your time');
-        // "your time" is a whole piece of its own, as on the list card.
-        expect(Array.from(screen.getByTestId('event-when').children).map(c => c.textContent)).toEqual(['SAT 28 SEP ·', '9:00–12:00', 'your time']);
+        // The time is a whole piece of its own; "your time" is the rest of its sentence, words that wrap and give way.
+        expect(pieces()).toEqual([['whole', 'SAT 28 SEP ·'], ['whole', '9:00–12:00'], ['words', ' your time']]);
+        expect(screen.getByTestId('event-when').querySelector('[data-piece="words"]')!.className).toBe('');
+    });
+
+    // The review of #2904: "your time" was split off with an English suffix test, so in every other language the time and its
+    // label were one whole piece, 159–235 px against ~110 of room at 320 x 1.3. It is split through the sentence itself
+    // (core's `{time} your time`), so the time is a whole piece in every language and the label sits where the language puts it.
+    it.each([
+        ['ru', ' по вашему времени', 'after'],
+        ['de', ' deine Zeit', 'after'],
+        ['ja', 'あなたの時間：', 'before'],
+    ])('in %s the time is a whole piece of its own and the rest of "{time} your time" is its words (%s)', async (lang, label, side) => {
+        await inLanguage(lang, () => {
+            const online = { ...event, eventOnline: true, eventPlaceName: undefined, eventTz: 'Pacific/Noumea', eventStartLocal: '2030-09-28T10:00', eventEndLocal: '2030-09-28T13:00' };
+            const zone = { ...event, eventTz: 'Pacific/Noumea', eventStartLocal: '2030-09-28T10:00', eventEndLocal: '2030-09-28T13:00' };
+            for (const post of [online, zone]) {
+                renderRow(post, { distanceKm: null });
+                const got = pieces();
+                const time = got.findIndex(([kind, text]) => kind === 'whole' && /^\d{1,2}[:.]\d\d/.test(text));
+                expect(time).toBeGreaterThan(0);
+                // The time alone, no label in it; the label is the sentence's own words, on the language's side of it.
+                expect(got[time][1]).not.toMatch(/[^\d:.–\s-]/);
+                expect(got[side === 'after' ? time + 1 : time - 1]).toEqual(['words', label]);
+                expect(got.filter(([kind]) => kind === 'words')).toEqual([['words', label]]);
+                // The pieces read the sentence as core words it.
+                expect(screen.getByTestId('event-when').textContent).toContain(t('{time} your time', { time: got[time][1] }));
+                cleanup();
+            }
+        });
+    });
+
+    it('over two days, the start\'s date and its time and the end\'s date and its time are each a whole piece', () => {
+        const late = new Date(2030, 8, 28, 22, 0).getTime();
+        renderRow({ ...event, eventStartAt: new Date(late).toISOString(), eventEndAt: new Date(late + 4 * HOUR).toISOString() });
+        expect(screen.getByTestId('event-when').textContent).toBe('SAT 28 SEP 22:00 – SUN 29 SEP 2:00');
+        expect(pieces()).toEqual([['whole', 'SAT 28 SEP'], ['whole', '22:00 –'], ['whole', 'SUN 29 SEP'], ['whole', '2:00']]);
     });
 
     it('the mark: Going ✓, Interested ✓ or You\'re hosting this event; nothing else (no counts, no buttons)', () => {

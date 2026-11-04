@@ -383,10 +383,14 @@ describe('the compact row and the poll card hold core\'s numbers (C1)', () => {
         expect(classes(COMPACT_PICTURE)).toEqual(expect.arrayContaining(['overflow-hidden', 'shrink-0']));
         expect(classes(COMPACT_END)).toContain(`max-w-[${MARKET_CARD_SHELL.compactEndMaxPercent}%]`);
         expect(classes(COMPACT_END_STACK)).toContain(`max-w-[${MARKET_CARD_SHELL.compactEndMaxPercent}%]`);
-        // An event's row: the end gives way to the words, which keep their widest whole piece (no min-w-0), and a whole piece is
-        // one line that never breaks; the block of short lines stops at two.
-        expect(classes(COMPACT_LEAD_FIRM)).not.toContain('min-w-0');
-        expect(classes(COMPACT_TEXT_FIRM)).not.toContain('min-w-0');
+        // An event's row: the end gives way first (it takes the shortfall, shrink 999 to the lead's 1) and never below its chip
+        // (min-content, which wins over the 45%); the words start at their widest whole piece (w-min) and can then go narrower
+        // (min-w-0), so nothing pushes the end out of the row (the review of #2904: without min-w-0 the words' widest piece did,
+        // and the row's overflow-hidden cut EVENT and the mark in fr, de, ru, es and pt). A whole piece is one line that never
+        // breaks; the block of short lines stops at two.
+        expect(classes(COMPACT_END_STACK)).toEqual(expect.arrayContaining(['min-w-min', 'shrink-[999]']));
+        expect(classes(COMPACT_LEAD_FIRM)).toEqual(expect.arrayContaining(['flex-auto', 'w-min', 'min-w-0']));
+        expect(classes(COMPACT_TEXT_FIRM)).toContain('min-w-0');
         expect(classes(COMPACT_PIECE)).toEqual(expect.arrayContaining(['inline-block', 'truncate', 'max-w-full']));
         expect(classes(COMPACT_LINES)).toContain('line-clamp-2');
         // `block` would beat line-clamp's display in the built CSS (measured: the block never stopped at two lines).

@@ -40,10 +40,14 @@ import { startServer, launch, settle, TEXT_SCALE_CSS } from './harness.mjs';
 import { mockResponse, IDENTITY } from './fixtures.mjs';
 
 const out = process.argv[2];
-if (!out) {
-    console.error('usage: node e2e/market-order-shots.mjs <out-dir>');
+// An optional case name runs that case alone: `node e2e/market-order-shots.mjs <out-dir> compact-kinds`.
+const only = process.argv[3] ?? null;
+const CASES = ['local', 'lang', 'compact', 'local-1280', 'global', 'compact-kinds'];
+if (!out || (only && !CASES.includes(only))) {
+    console.error(`usage: node e2e/market-order-shots.mjs <out-dir> [${CASES.join('|')}]`);
     process.exit(2);
 }
+const run = (name) => !only || only === name;
 fs.mkdirSync(out, { recursive: true });
 
 const NOW = new Date(2026, 10, 3, 15, 0, 0);
@@ -84,6 +88,25 @@ const POLL = {
     pollClosesAt: new Date(2026, 10, 14, 16, 0).toISOString(),
 };
 
+// C1, the compact view in six languages (the review of #2904): an event of each kind the row's when reads differently, the
+// reader in Brisbane (UTC+10) and every clock given in UTC, so the case reads the same on any machine. Each carries a mark,
+// so the row's end holds the mark above EVENT, and the end is what a too-wide when pushed out of the row.
+const KINDS_ZONE = 'Australia/Brisbane';
+const kind = (id, title, startAt, endAt, startLocal, endLocal, tz, over = {}) => eventPost(id, title, at(10, 1, 9, 0), new Date(startAt), {
+    eventStartAt: startAt, eventEndAt: endAt, eventStartLocal: startLocal, eventEndLocal: endLocal, eventTz: tz, myRsvp: 'interested', ...over,
+});
+const KIND_EVENTS = [
+    // In person, on the reader's own clock: "SAT 7 NOV · 16:00–18:00".
+    kind('k-plain', 'Repair Cafe', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T16:00', '2026-11-07T18:00', KINDS_ZONE),
+    // Online, hosted from Sydney (UTC+11): the reader's own clock, "16:00–18:00 your time".
+    kind('k-online', 'Seed swap call', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T17:00', '2026-11-07T19:00', 'Australia/Sydney', { eventOnline: true, eventPlaceName: null }),
+    // In person in Sydney, read in Brisbane: the reader's clock again, "your time".
+    kind('k-zone', 'Harbour clean-up', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T17:00', '2026-11-07T19:00', 'Australia/Sydney'),
+    // Over two days: "SAT 7 NOV 16:00 –" / "SUN 8 NOV 10:00".
+    kind('k-days', 'Overnight working bee', '2026-11-07T06:00:00.000Z', '2026-11-08T00:00:00.000Z', '2026-11-07T16:00', '2026-11-08T10:00', KINDS_ZONE, { myRsvp: 'going' }),
+];
+const KIND_LANGS = ['en', 'fr', 'de', 'ru', 'es', 'pt'];
+
 const LOCAL = [
     listing('ana-1', 'Bike tune-up', 'Ana', at(10, 3, 14, 0)),
     listing('ana-2', 'Firewood, split', 'Ana', at(10, 3, 13, 30)),
@@ -107,8 +130,10 @@ const GLOBAL_POSTS = [
     listing('g-4', 'Spare ladder', 'Bo', at(10, 1, 10, 0), { distanceKm: 3, category: 'tools' }),
 ];
 
-async function open(browser, origin, { dark, global, width = 320, scale = 1.3, sidebar = false, lang = null, view = 'list' }) {
-    const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
+async function open(browser, origin, { dark, global, width = 320, scale = 1.3, sidebar = false, lang = null, view = 'list', timezoneId = null, feed = null }) {
+    const context = await browser.newContext({
+        viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce', ...(timezoneId ? { timezoneId } : {}),
+    });
     await context.addInitScript(([mode, list]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
@@ -127,7 +152,8 @@ async function open(browser, origin, { dark, global, width = 320, scale = 1.3, s
             if (q.get('author') || q.get('id') || q.get('online')) body = [];
             else {
                 reads.push({ type: q.get('type'), sort: q.get('sort'), lat: q.get('lat') });
-                body = global ? GLOBAL_POSTS : (q.get('type') === 'event' ? LOCAL.filter(p => p.type === 'event') : view === 'compact' ? [POLL, ...LOCAL_FEED] : LOCAL_FEED);
+                if (feed) body = q.get('type') === 'event' ? feed.filter(p => p.type === 'event') : feed;
+                else body = global ? GLOBAL_POSTS : (q.get('type') === 'event' ? LOCAL.filter(p => p.type === 'event') : view === 'compact' ? [POLL, ...LOCAL_FEED] : LOCAL_FEED);
                 // The compact rows' longest marks: Repair Cafe "Interested ✓", and the pinned event the reader hosts.
                 if (view === 'compact') body = body.map(p => ({ ...p, ...COMPACT_MARKS[p.id] }));
             }
@@ -249,7 +275,7 @@ async function compactRows(page) {
         const chipCss = chipEl ? getComputedStyle(chipEl) : null;
         // The when's whole pieces (the date, the time): each drawn whole, and inside the two lines the block shows.
         const lines = row.querySelector('[data-testid="event-row-lines"]');
-        const whenPieces = Array.from(row.querySelectorAll('[data-testid="event-when"] > span'));
+        const whenPieces = Array.from(row.querySelectorAll('[data-testid="event-when"] > span[data-piece="whole"]'));
         const line = row.querySelector('[data-testid="event-row-lines"], [data-testid="poll-compact-line"]');
         return {
             kind,
@@ -260,9 +286,40 @@ async function compactRows(page) {
             // One short line's height: the line box the row's words are set on (`leading-snug`), as drawn.
             lineHeight: line ? +parseFloat(getComputedStyle(line).lineHeight).toFixed(2) : null,
             when: whenPieces.map(p => p.textContent).join(' ') || null,
-            whenWhole: lines ? whenPieces.length > 0 && whenPieces.every(p => p.scrollWidth <= p.clientWidth + 0.5
-                && p.getBoundingClientRect().bottom <= lines.getBoundingClientRect().bottom + 0.5) : null,
+            // The start's date and its time (the first two whole pieces) whole and inside the two lines; a piece gives way ("…")
+            // only when it is wider than the words' whole room AND the end has already given way down to its chip. Any later
+            // piece (the end of a two-day event) is whole where it is shown.
+            whenWhole: lines ? (() => {
+                const whole = (p) => p.scrollWidth <= p.clientWidth + 0.5;
+                const shown = (p) => p.getBoundingClientRect().bottom <= lines.getBoundingClientRect().bottom + 0.5;
+                const endAtChip = chipEl ? chipEl.parentElement.getBoundingClientRect().width <= chipEl.getBoundingClientRect().width + 1 : false;
+                const mayGiveWay = (p) => p.scrollWidth > lines.clientWidth + 0.5 && endAtChip;
+                const start = whenPieces.slice(0, 2);
+                return start.length === 2 && start.every(p => shown(p) && (whole(p) || mayGiveWay(p)))
+                    && whenPieces.slice(2).every(p => !shown(p) || whole(p) || mayGiveWay(p));
+            })() : null,
+            cut: whenPieces.filter(p => p.scrollWidth > p.clientWidth + 0.5).map(p => p.textContent),
             mark: row.querySelector('[data-testid="event-mark"], [data-testid="poll-mark"]')?.textContent ?? null,
+            ...(() => {
+                // The row's end (the mark above the chip): its right edge measured from the row's content edge (inside the border
+                // and the padding; negative is past it), the chip whole, and the words column ending before the end starts.
+                const css = getComputedStyle(row);
+                const inner = r.right - parseFloat(css.borderRightWidth) - parseFloat(css.paddingRight);
+                const markEl = row.querySelector('[data-testid="event-mark"], [data-testid="poll-mark"]');
+                const mr = markEl?.getBoundingClientRect();
+                const words = row.querySelector('[data-testid="event-row-lines"]')?.parentElement?.getBoundingClientRect();
+                const end = chipEl?.parentElement?.getBoundingClientRect();
+                return {
+                    scroll: `${row.scrollWidth}/${row.clientWidth}`,
+                    chipRight: chipEl ? +(inner - chipEl.getBoundingClientRect().right).toFixed(1) : null,
+                    chipWhole: chipEl ? chipEl.scrollWidth <= chipEl.clientWidth + 0.5 : null,
+                    chipText: chipEl?.textContent ?? null,
+                    markRight: mr ? +(inner - mr.right).toFixed(1) : null,
+                    markShown: mr ? mr.width >= 12 && mr.height > 0 : null,
+                    wordsClear: words && end ? words.right <= end.left + 0.5 : null,
+                    lines: lines ? Math.round(lines.getBoundingClientRect().height / parseFloat(getComputedStyle(lines).lineHeight)) : null,
+                };
+            })(),
             controls: row.querySelectorAll('button, input, a, [role="button"], [role="progressbar"]').length,
             isButton: row.tagName === 'BUTTON' || row.closest('[role="button"]') !== null,
         };
@@ -299,6 +356,25 @@ function checkCompactRows(rows, { label, maxWidth, scale }) {
     return { listingRow, oneLine, bound, events: events.map(r => [r.name, r.height]), poll: polls.map(r => [r.name, r.height]) };
 }
 
+/**
+ * The review of #2904: in a language whose when runs wider than English's, an event's row must still hold its end. Every event
+ * row: nothing past the row (scrollWidth), the EVENT chip whole and inside the row's content edge, the mark shown and inside
+ * it, the words ending before the end, the date and the time whole, and the row a listing's row and one line at most.
+ */
+function checkCompactEnds(rows, { label }) {
+    const events = rows.filter(r => r.kind === 'event');
+    check(events.length === KIND_EVENTS.length, `${label}: ${events.length} event rows (${KIND_EVENTS.length})`);
+    const show = (r) => `${r.name}: scroll ${r.scroll}, chip ${r.chipRight}${r.chipWhole ? '' : ' CUT'}, mark ${r.markRight}${r.markShown ? '' : ' GONE'} ${JSON.stringify(r.mark)}, when ${JSON.stringify(r.when)} ${r.whenWhole ? 'whole' : 'CUT'}${r.cut.length ? ` (gives way: ${JSON.stringify(r.cut)})` : ''}, ${r.lines} lines, ${r.height}px`;
+    for (const r of events) {
+        const ok = !r.over && r.chipWhole && r.chipRight >= -0.5 && r.markShown && r.markRight >= -0.5 && r.wordsClear && r.whenWhole;
+        check(ok, `${label}: ${show(r)}`);
+    }
+    const listingRow = Math.min(...rows.filter(r => r.kind === 'listing').map(r => r.height));
+    const oneLine = Math.max(...rows.filter(r => r.lineHeight !== null).map(r => r.lineHeight));
+    const bound = +(listingRow + oneLine + 0.5).toFixed(2);
+    check(events.every(r => r.height <= bound && r.lines <= 2), `${label}: every event row two short lines at most, a listing's row (${listingRow}px) and one line, ${bound}px (${JSON.stringify(events.map(r => [r.name, r.height, r.lines]))})`);
+}
+
 /** The headings and the card titles in page order (a heading is the small uppercase tracking-widest span). */
 const sequence = (page, titles) => page.evaluate((known) => {
     const out = [];
@@ -319,7 +395,7 @@ try {
     for (const dark of [false, true]) {
         const theme = dark ? 'dark' : 'light';
 
-        {
+        if (run('local')) {
             const { context, page, reads } = await open(browser, server.origin, { dark, global: false });
             const seq = await sequence(page, LOCAL.map(p => p.title));
             const wide = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -378,7 +454,7 @@ try {
             await context.close();
         }
 
-        for (const lang of ['ml', 'de']) {
+        for (const lang of run('lang') ? ['ml', 'de'] : []) {
             // #2873: the same list in a language whose category words run longer than English's (Malayalam "📜 മനോഭാവവും
             // തത്ത്വചിന്തയും", German "📜 Lebensart & Philosophie"): every chip still ends inside its card.
             const { context, page } = await open(browser, server.origin, { dark, global: false, lang });
@@ -396,7 +472,7 @@ try {
             await context.close();
         }
 
-        for (const [width, scale, sidebar] of [[320, 1.3, false], [1280, 1, true]]) {
+        for (const [width, scale, sidebar] of run('compact') ? [[320, 1.3, false], [1280, 1, true]] : []) {
             // C1: the compact view, at 320 x 1.3 and at 1280 beside the sidebar.
             const { context, page } = await open(browser, server.origin, { dark, global: false, width, scale, sidebar, view: 'compact' });
             const wide = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -416,7 +492,7 @@ try {
             await context.close();
         }
 
-        {
+        if (run('local-1280')) {
             // A desktop window: 1280 px at 1x text, the Market beside the sidebar (the style box's W2 shot "web also 1280 + sidebar").
             const { context, page } = await open(browser, server.origin, { dark, global: false, width: 1280, scale: 1, sidebar: true });
             const wide = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -426,7 +502,7 @@ try {
             await context.close();
         }
 
-        {
+        if (run('global')) {
             const { context, page, reads } = await open(browser, server.origin, { dark, global: true });
             const m = await page.evaluate(() => ({
                 wide: document.documentElement.scrollWidth,
@@ -441,6 +517,24 @@ try {
             // Each card here has its distance line under who: the picture still runs the card's full height.
             checkListCards(await listCards(page), { label: `${theme} global 320`, dark, maxWidth: 320, photos: 0, scale: 1.3, count: 4, events: 0, elders: 0 });
             await page.screenshot({ path: path.join(out, `web-global-line-${theme}.png`) });
+            await context.close();
+        }
+
+        for (const lang of run('compact-kinds') ? KIND_LANGS : []) {
+            // The review of #2904: the compact view at 320 x 1.3 in six languages, an event of each kind (in person, online, read
+            // in another clock, over two days), the reader in Brisbane. Pictures in de and ru.
+            const feed = [...LOCAL.filter(p => p.type !== 'event'), ...KIND_EVENTS];
+            const { context, page } = await open(browser, server.origin, { dark, global: false, lang, view: 'compact', timezoneId: KINDS_ZONE, feed });
+            const shown = await page.evaluate(() => document.documentElement.lang);
+            check(shown === lang, `${theme} kinds ${lang}: the page is in ${lang} (${shown})`);
+            const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+            check(wide <= 320, `${theme} kinds ${lang}: nothing wider than the screen (${wide}px)`);
+            checkCompactEnds(await compactRows(page), { label: `${theme} kinds ${lang} 320` });
+            if (lang === 'de' || lang === 'ru') {
+                await page.evaluate(() => document.querySelector('[data-testid="event-compact-row"]')?.scrollIntoView({ block: 'start' }));
+                await page.waitForTimeout(150);
+                await page.screenshot({ path: path.join(out, `web-compact-kinds-${lang}-${theme}.png`) });
+            }
             await context.close();
         }
     }

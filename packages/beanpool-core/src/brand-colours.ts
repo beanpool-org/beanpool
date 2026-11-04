@@ -84,6 +84,9 @@ const GREY_333 = '#333333';
 const BLUE_300 = '#93c5fd';
 const BLUE_600 = '#2563eb';
 const BLUE_700 = '#1d4ed8';
+const VIOLET_300 = '#c4b5fd';
+const VIOLET_700 = '#6d28d9';
+const VIOLET_800 = '#5b21b6';
 // The web's sage scale (tailwind `nature`). sage-650 sits halfway between nature-600 and 700.
 const NATURE_100 = '#eef1ee';
 const NATURE_200 = '#dce3dc';
@@ -129,6 +132,13 @@ export const BRAND_COLOURS = {
     cta: { fill: same(TERRA_600_DEEP), hover: same(TERRA_700), on: same(WHITE) },
     /** Commit buttons and the brand's own fill: Accept, Send Beans, Message, Join; the phone's `brand.fill`. */
     commit: { fill: same(EMERALD_700), hover: same(EMERALD_800), on: same(WHITE) },
+    /**
+     * An event's answer: the chosen Going / Interested, Edit event, Let in ✓ (DESIGN-detail-pages-fable.md §2.7, Marty 4 Nov 2026:
+     * "all Fable's picks"). One deep violet fill in both themes under white words, as `commit` is one deep green; `ink.event` is
+     * the same violet as words. The two event pages still draw the raw #7c3aed / violet-* classes; they move to this role in
+     * the detail-pages slices (DP1 / DW1), not here.
+     */
+    event: { fill: same(VIOLET_700), hover: same(VIOLET_800), on: same(WHITE) },
     /** The orange action: the phone's floating + button, the Need toggle. */
     action: { fill: same(ORANGE_700), hover: same(ORANGE_800), on: same(WHITE) },
     /** Destructive: Submit report, Remove, Delete; alert badges. */
@@ -241,6 +251,8 @@ export const BRAND_COLOURS = {
         accent: themed(SAGE_650, NATURE_300),
         /** Terracotta as words and icons: the manager's links, section labels and hovered titles. */
         terra: themed(TERRA_700, TERRA_400),
+        /** The event violet as words and outlines: when, the answer's outline and words, "You're hosting". The `tile.event` inks. */
+        event: themed(VIOLET_800, VIOLET_300),
         /**
          * The onboarding blue as words, outlines, rings and progress (the web's --link pair). Web only: see WEB_ONLY_INKS.
          */

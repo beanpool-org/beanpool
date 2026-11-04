@@ -37,7 +37,12 @@ import { AuthorCard, useMemberRatings } from './AuthorCard';
 import { CategoryTile } from './CategoryTile';
 import { PostTagChips } from './PostTagChips';
 import { ListPhoto } from './ListPhoto';
-import { CARD_INK, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, listCard } from './market-card-shell';
+import { ImageLightbox } from './ImageLightbox';
+import { ReportModal } from './ReportModal';
+import {
+    BOX_LABEL, CARD_INK, EVENT_ANSWER, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON,
+    PAGE_INK, PAGE_TYPE, chip, listCard,
+} from './market-card-shell';
 
 interface RsvpState {
     livePost: MarketplacePost;
@@ -163,11 +168,13 @@ function EventChips({ post, withType = false, box = false }: { post: Marketplace
  * is too narrow for both side by side — a narrow desktop column, or 320px at 130% text — Interested drops to a
  * full-width row of its own. Never a smaller font and never a truncated label: this is the word people tap.
  */
-function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
+function RsvpButtons({ rsvp, page = false }: { rsvp: RsvpState; page?: boolean }) {
     const { livePost, busy, canRsvp, tap } = rsvp;
+    // The page's buttons are the page's 15/700 (market-card-shell.ts PAGE_ANSWER_TYPE); the map's preview card keeps its own.
+    const type = page ? PAGE_ANSWER_TYPE : 'text-sm font-extrabold leading-tight';
     if (isEventHostView(livePost)) {
         return (
-            <p data-testid="event-hosting" className="m-0 text-sm font-bold text-violet-800 dark:text-violet-200">
+            <p data-testid="event-hosting" className={`m-0 ${page ? PAGE_ANSWER_TYPE : 'text-sm font-bold'} ${PAGE_INK.event}`}>
                 {t("You're hosting this event")}
             </p>
         );
@@ -183,10 +190,10 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
                 disabled={disabled}
                 onClick={(e) => { e.stopPropagation(); tap(status); }}
                 aria-busy={busy === status}
-                className={`relative grow basis-auto shrink-0 min-w-fit min-h-[48px] px-2 py-1 rounded-xl border text-sm font-extrabold leading-tight whitespace-nowrap transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${
-                    mine
-                        ? 'bg-violet-700 border-violet-700 text-white dark:bg-violet-600 dark:border-violet-500'
-                        : 'bg-white border-violet-300 text-violet-800 hover:bg-violet-50 dark:hover:bg-violet-950/40 dark:bg-nature-900 dark:border-violet-800 dark:text-violet-200'
+                // Core's event roles, light and dark (market-card-shell.ts EVENT_ANSWER): the chosen one on the event fill with white
+                // words, the other in the event ink's outline on the card ground.
+                className={`relative grow basis-auto shrink-0 min-w-fit min-h-[48px] px-2 py-1 rounded-xl border-[1.5px] ${type} whitespace-nowrap transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-event focus-visible:ring-offset-1 ${
+                    mine ? EVENT_ANSWER.chosen : EVENT_ANSWER.open
                 }`}
             >
                 {/*
@@ -225,9 +232,9 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
  * Under it, only when the viewer's clock differs from the place's, the second time (DESIGN-event-times §4): "Lagos time ·
  * 15:50 your time", its two halves whole in the same way. The detail adds an online event's host line.
  */
-function EventWhen({ post, className, testId, hostLine = false, repeatClassName = 'text-violet-800 dark:text-violet-200' }: {
+function EventWhen({ post, className, testId, hostLine = false, repeatClassName = CARD_INK.event }: {
     post: MarketplacePost; className: string; testId?: string; hostLine?: boolean;
-    /** The repeat line's colour: the card's is the event token (`CARD_INK.event`); the page keeps its own until its slice. */
+    /** The repeat line's colour: the event token on the card (`CARD_INK.event`) and on the page (`PAGE_INK.event`), the same violet. */
     repeatClassName?: string;
 }) {
     const parts = eventWhenParts(post);
@@ -272,7 +279,7 @@ function EventWhen({ post, className, testId, hostLine = false, repeatClassName 
                 </span>
             )}
             {hostLine && parts?.hostLine && (
-                <span data-testid="event-when-host" className="block w-full min-w-0 break-words text-sm font-semibold text-nature-600 dark:text-nature-400 leading-snug">
+                <span data-testid="event-when-host" className={`block w-full min-w-0 break-words text-sm font-semibold ${PAGE_INK.secondary} leading-snug`}>
                     {parts.hostLine}
                 </span>
             )}
@@ -482,13 +489,14 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     );
 
     return (
-        <div data-testid="event-card" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-violet-200 dark:border-violet-900/60 rounded-2xl p-3 shadow-sm flex flex-col gap-2 overflow-hidden">
+        // The grid tile joins the box in its own slice (W3'); until then its band is core's event tint, not a raw violet class.
+        <div data-testid="event-card" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-bp-tile-event-tint rounded-2xl p-3 shadow-sm flex flex-col gap-2 overflow-hidden">
             <button
                 type="button"
                 onClick={onOpen}
                 disabled={!onOpen}
                 aria-label={label}
-                className="w-full min-w-0 text-left bg-transparent border-0 p-0 flex flex-col gap-1 cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg"
+                className="w-full min-w-0 text-left bg-transparent border-0 p-0 flex flex-col gap-1 cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-event rounded-lg"
             >
                 {hasPicture && (
                     photo ? (
@@ -567,6 +575,9 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     const waiting = hostLetsIn ? eventWaitingCount(p.eventRsvps) : 0;
     const [letting, setLetting] = useState<string | null>(null);
     const [letInError, setLetInError] = useState<string | null>(null);
+    // The photo, whole (ImageLightbox), and the report form: each opened from its own button on the page.
+    const [lightbox, setLightbox] = useState<{ trigger: HTMLElement | null } | null>(null);
+    const [reporting, setReporting] = useState(false);
 
     const saveLetIn = async (key: string, who: { memberPublicKey: string } | { everyone: true }, on: boolean) => {
         if (letting) return;
@@ -608,20 +619,34 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
         }
     };
 
+    const photos = (p.photos ?? []).filter(photo => typeof photo === 'string' && photo.trim() !== '');
+    const hasPhoto = photos.length > 0;
+    const cancelled = p.eventState === 'cancelled' || p.status === 'cancelled';
+    const counts = !copy ? countsLine(p) : null;
+    const placeLine = [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || t('On the map');
+    // 🚩 Report, for anyone signed in who is not running it (the host, a keeper or convenor who sees the guest list) and not
+    // its author (a member's own copy on the global community).
+    const canReport = !!identity && !isHost && p.authorPublicKey !== identity.publicKey;
+    const chatWaiting = !!onOpenChat && !copy && letInState === 'waiting';
+    const chatOpen = !!onOpenChat && !copy && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting'));
+
+    // The page is one column, the parts in DESIGN-detail-pages-fable.md §2.1's order, drawn from the style box
+    // (components/market-card-shell.ts), as the phone's page is: the chips, the loud lines (when, title, place), the photo, the
+    // answer, the quiet row, the boxes, the description, the host, the host's own, Report. No outer card: the column is the
+    // page, and its boxes are the card family's. From 768 px a photo takes the left column and the rest the right, placed by
+    // the grid with the DOM order kept (so Tab reads the chips and the when before the photo), as the listing's page does.
     return (
-        <div data-testid="event-detail" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-violet-200 dark:border-violet-900/60 rounded-2xl overflow-hidden md:flex md:flex-row">
-            {p.photos && p.photos.length > 0 && (
-                <div className="md:w-1/2 md:shrink-0">
-                    <img src={p.photos[0]} alt={p.title} className="w-full h-56 sm:h-72 md:h-full md:max-h-none object-cover bg-nature-100 dark:bg-nature-900" />
-                </div>
-            )}
-            <div className="p-4 md:p-6 flex-1 flex flex-col gap-3 min-w-0">
-                {/* The pin and CANCELLED / UPDATED badge the page always showed, now above the date instead of in its row. */}
-                <EventChips post={p} />
+        <div
+            data-testid="event-detail"
+            className={`w-full min-w-0 flex flex-col gap-3 ${hasPhoto ? 'md:grid md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-6 md:gap-y-3 md:items-start' : ''}`}
+        >
+            {/* 1 and 4: the chip row, then the loud lines, the card's three in the card's order. */}
+            <div data-testid="event-head" className={`flex flex-col gap-2 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-1' : ''}`}>
+                <EventChips post={p} withType box />
                 <h2 className="m-0 min-w-0 flex flex-col gap-1">
-                    <EventWhen post={p} hostLine className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
+                    <EventWhen post={p} hostLine className={`${PAGE_TYPE.when} ${PAGE_INK.event}${cancelled ? ' line-through' : ''}`} repeatClassName={PAGE_INK.event} />
                 </h2>
-                <h3 dir="auto" className="m-0 text-lg font-extrabold text-nature-950 dark:text-white leading-snug break-words">{p.title}</h3>
+                <h3 dir="auto" className={`m-0 ${PAGE_TYPE.title} text-nature-950 dark:text-white break-words`}>{p.title}</h3>
                 <EventNextDates
                     post={p}
                     isHost={isHost && open}
@@ -630,8 +655,8 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 />
 
                 {p.eventOnline && (
-                    <div data-testid="event-online" className="flex flex-col items-start gap-1 min-w-0">
-                        <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
+                    <div data-testid="event-online" className="flex flex-wrap items-center gap-x-3 min-w-0">
+                        <span className={`min-w-0 break-words ${PAGE_TYPE.place} ${PAGE_INK.body}`}>
                             <span aria-hidden="true">🌐 </span>{t('Online')}
                         </span>
                         {joinHref(p.eventLink) ? (
@@ -640,14 +665,14 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 href={joinHref(p.eventLink)!}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                                className={`inline-flex items-center min-h-[48px] ${PAGE_TYPE.link} ${PAGE_INK.event} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-event rounded`}
                             >
                                 {t('Join')}
                             </a>
                         ) : !isHost && open ? (
                             // Going already: the host has not added one (yet). Never "tap Going" to someone who did. Where the host
                             // lets people in, the link waits for them like the note (eventPrivateOpenTo), and the hint says so.
-                            <p data-testid="event-join-hint" className="m-0 text-xs text-nature-500 dark:text-nature-400">
+                            <p data-testid="event-join-hint" className={`m-0 basis-full ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
                                 {letInLine
                                     ? t('The link to join shows here once the host lets you in.')
                                     : p.myRsvp === 'going' ? t('The host has not added a link to join yet.') : t('The link to join shows here once you tap Going.')}
@@ -657,108 +682,156 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 )}
 
                 {!p.eventOnline && (p.eventPlaceName || p.lat != null) && (
-                    <div className="flex flex-col items-start gap-1 min-w-0">
-                        <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">📍 </span>{[p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ') || t('On the map')}
+                    <div data-testid="event-place" className="flex flex-wrap items-center gap-x-3 min-w-0">
+                        <span className={`min-w-0 break-words ${PAGE_TYPE.place} ${PAGE_INK.body}`}>
+                            <span aria-hidden="true">📍 </span>{placeLine}
                         </span>
+                        {/* A link, not a button (§2.2), with the whole 48 px row as its target. */}
                         {onShowOnMap && p.lat != null && p.lng != null && (
                             <button
                                 type="button"
                                 onClick={() => onShowOnMap(p)}
-                                className="flex-shrink-0 min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                                className={`shrink-0 inline-flex items-center min-h-[48px] px-0 bg-transparent border-0 cursor-pointer ${PAGE_TYPE.link} ${PAGE_INK.event} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-event rounded`}
                             >
                                 {t('Show on map')}
                             </button>
                         )}
                         {/* Where anyone can join, the spot is the host's to give (DESIGN-global-member-privacy-fable.md §4). */}
                         {!copy && placeShownRoughly(p, identity?.publicKey, openMembership) && (
-                            <p data-testid="rough-place-line" className="m-0 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
+                            <p data-testid="rough-place-line" className={`m-0 basis-full text-sm ${PAGE_INK.secondary} leading-snug break-words`}>
                                 {t(PLACE_WORDS.roughPlace, { name: hostName })}
                             </p>
                         )}
                     </div>
                 )}
+            </div>
 
-                {p.description && (
-                    <p dir="auto" className="m-0 text-sm text-nature-700 dark:text-nature-300 whitespace-pre-wrap break-words">{p.description}</p>
-                )}
-                {onOpenTag && <PostTagChips tags={p.tags} freeTags={p.freeTags} onPick={onOpenTag} onPickFree={onOpenFreeTag} />}
+            {/*
+              * 5. The photo: 4:3, the column's width, under the shell's corners; a click shows it whole, uncropped (Marty's
+              * pick 2: the same 800 px photo, nothing stored). No photo: the event's tile, 3:1, inside the column.
+              */}
+            {hasPhoto ? (
+                <div data-testid="event-photo" className="min-w-0 md:col-start-1 md:row-start-1 md:row-span-2">
+                    <button
+                        type="button"
+                        data-testid="event-photo-open"
+                        onClick={(e) => setLightbox({ trigger: e.currentTarget })}
+                        aria-label={t('View enlarged photo {n} of {total}: {title}', { n: 1, total: photos.length, title: p.title })}
+                        className="block w-full aspect-[4/3] rounded-[14px] overflow-hidden border-0 p-0 bg-nature-100 dark:bg-nature-900 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-bp-ink-event"
+                    >
+                        <img src={photos[0]} alt={p.title} className="block w-full h-full object-cover" />
+                    </button>
+                </div>
+            ) : (
+                <div data-testid="event-tile-banner" className="w-full aspect-[3/1] rounded-[14px] overflow-hidden">
+                    <CategoryTile kind="event" size="banner" />
+                </div>
+            )}
+            {lightbox && (
+                <ImageLightbox
+                    isOpen
+                    photos={photos}
+                    initialIndex={0}
+                    title={p.title}
+                    triggerElement={lightbox.trigger}
+                    onClose={() => setLightbox(null)}
+                />
+            )}
 
-                {copy?.from && <p data-testid="event-copy-from" className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyFromLine(copy.from)}</p>}
-                {!copy && (
-                    <AuthorCard
-                        label={t('Hosted by')}
-                        pubkey={p.authorPublicKey}
-                        callsign={hostName}
-                        avatarUrl={p.authorAvatarUrl}
-                        ratings={hostRatings}
-                        onOpen={() => onOpenProfile?.(p.authorPublicKey)}
-                        testId="event-host-open"
-                    />
-                )}
-                {/* A group-only event says who can see it, just under the host's box. */}
-                {!copy && p.audienceScope === 'group' && !!p.targetGroupName && (
-                    <p data-testid="event-host-audience" className="m-0 -mt-1 text-sm text-nature-600 dark:text-nature-400 break-words">
-                        {t('🔒 Only {group} can see this', { group: p.targetGroupName })}
-                    </p>
-                )}
+            <div data-testid="event-body" className={`flex flex-col gap-4 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-2' : ''}`}>
+                {/* 7. The answer: Going / Interested, the host's line, or a copy's door; the counts only once someone has answered. */}
+                <div data-testid="event-action" className="flex flex-col gap-1.5 min-w-0">
+                    {copy ? open && !isOwnCopy && <EventCopyDoor copy={copy} /> : <RsvpButtons rsvp={rsvp} page />}
+                    {counts && (
+                        <p data-testid="event-counts" className={`m-0 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
+                            <span aria-hidden="true">👥 </span>{counts}
+                        </p>
+                    )}
+                    {letInLine && open && (
+                        <p data-testid="event-let-in-line" className={`m-0 text-sm ${PAGE_INK.body} break-words`}>{letInLine}</p>
+                    )}
+                    {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
+                </div>
 
-                {!copy && countsLine(p) && (
-                    <p className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300">
-                        <span aria-hidden="true">👥 </span>{countsLine(p)}
-                    </p>
-                )}
-                {copy ? open && !isOwnCopy && <EventCopyDoor copy={copy} /> : <RsvpButtons rsvp={rsvp} />}
-                {isHost && (
-                    <ShowOnGlobalHostRow post={p} identity={identity} enabled={!copy && open && p.eventOnline !== true && (p.audienceScope ?? 'public') === 'public' && p.authorPublicKey === identity?.publicKey} />
-                )}
-                {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
+                {/*
+                  * 8. The quiet row: the chat (for the host and anyone Going), Share, Add to calendar, in the neutral outline.
+                  * Share and the calendar need no node, so neither depends on its age.
+                  */}
+                <EventShareAndCalendar
+                    post={p}
+                    lead={(chatWaiting || chatOpen) ? (
+                        chatWaiting ? (
+                            <button
+                                type="button"
+                                disabled
+                                data-testid="event-chat-waiting"
+                                className={`basis-full text-left break-words ${PAGE_BUTTON.quiet}`}
+                            >
+                                💬 {eventChatWaitingText()}
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                data-testid="event-open-chat"
+                                onClick={() => onOpenChat!(p)}
+                                className={`basis-full text-left break-words ${PAGE_BUTTON.quiet}`}
+                            >
+                                <span aria-hidden="true">💬</span> {t('Open event chat')}
+                            </button>
+                        )
+                    ) : undefined}
+                />
 
-                {/* Send it on, and put it in a diary. Neither needs the node, so neither depends on its age. */}
-                <EventShareAndCalendar post={p} />
-                {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
+                {/* 9. Remind me, and the note for people who are going: boxes. The host has no RSVP, so no reminder (decision 2). */}
                 {!isHost && !copy && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} />}
-
-                {letInLine && open && (
-                    <p data-testid="event-let-in-line" className="m-0 text-sm text-nature-800 dark:text-nature-200 break-words">{letInLine}</p>
-                )}
-                {onOpenChat && !copy && letInState === 'waiting' && (
-                    <button
-                        type="button"
-                        disabled
-                        data-testid="event-chat-waiting"
-                        className="min-h-[48px] w-full px-3 rounded-xl border border-nature-200 dark:border-nature-700 text-sm font-semibold text-nature-700 dark:text-nature-300 bg-nature-50 dark:bg-nature-900 text-left break-words cursor-not-allowed"
-                    >
-                        💬 {eventChatWaitingText()}
-                    </button>
-                )}
-                {onOpenChat && !copy && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting')) && (
-                    <button
-                        type="button"
-                        data-testid="event-open-chat"
-                        onClick={() => onOpenChat(p)}
-                        className="min-h-[48px] w-full px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-violet-50 dark:bg-violet-950/40 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
-                    >
-                        <span aria-hidden="true">💬</span> {t('Open event chat')}
-                    </button>
-                )}
-
                 {p.eventPrivateNote ? (
-                    <div data-testid="event-private-note" className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800">
-                        <p className="m-0 mb-1 text-xs font-black uppercase tracking-wide text-violet-800 dark:text-violet-300">{t('Note for people who are going')}</p>
-                        <p dir="auto" className="m-0 text-sm text-nature-900 dark:text-nature-100 whitespace-pre-wrap break-words">{p.eventPrivateNote}</p>
+                    <div data-testid="event-private-note" className={PAGE_BOX}>
+                        <p className={BOX_LABEL.event}>{t('Note for people who are going')}</p>
+                        <p dir="auto" className={`m-0 text-sm ${PAGE_INK.body} whitespace-pre-wrap break-words`}>{p.eventPrivateNote}</p>
                     </div>
                 ) : !isHost && !copy && open && !letInLine ? (
-                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400">
+                    <p className={`m-0 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
                         {t('If the host left a note (a gate code, parking, what to bring), it shows here once you tap Going.')}
                     </p>
                 ) : null}
 
+                {/* 10. The description and the tags: reading comes after the answer (Marty's pick 1). */}
+                {p.description && (
+                    <p dir="auto" data-testid="event-description" className={`m-0 ${PAGE_TYPE.description} ${PAGE_INK.body} whitespace-pre-wrap break-words`}>{p.description}</p>
+                )}
+                {onOpenTag && <PostTagChips tags={p.tags} freeTags={p.freeTags} onPick={onOpenTag} onPickFree={onOpenFreeTag} />}
+
+                {/* 11. The person: a copy names where it comes from; otherwise the host is the box a listing's "Posted by" is. */}
+                {copy?.from && <p data-testid="event-copy-from" className={`m-0 text-sm font-semibold ${PAGE_INK.body} break-words`}>{copyFromLine(copy.from)}</p>}
+                {!copy && (
+                    <div className="flex flex-col gap-1.5 min-w-0">
+                        <AuthorCard
+                            label={t('Hosted by')}
+                            pubkey={p.authorPublicKey}
+                            callsign={hostName}
+                            avatarUrl={p.authorAvatarUrl}
+                            ratings={hostRatings}
+                            onOpen={() => onOpenProfile?.(p.authorPublicKey)}
+                            testId="event-host-open"
+                        />
+                        {/* A group-only event says who can see it, just under the host's box. */}
+                        {p.audienceScope === 'group' && !!p.targetGroupName && (
+                            <p data-testid="event-host-audience" className={`m-0 text-sm ${PAGE_INK.secondary} break-words`}>
+                                {t('🔒 Only {group} can see this', { group: p.targetGroupName })}
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {/* 12. The host's own: show it on the global community, and who's going with the host's tools. */}
                 {isHost && (
-                    <div data-testid="event-host-panel" className="flex flex-col gap-2 pt-2 border-t border-nature-100 dark:border-nature-800">
-                        <p className="m-0 text-xs font-black uppercase tracking-wide text-nature-500 dark:text-nature-400">{t("Who's going")}</p>
+                    <ShowOnGlobalHostRow post={p} identity={identity} enabled={!copy && open && p.eventOnline !== true && (p.audienceScope ?? 'public') === 'public' && p.authorPublicKey === identity?.publicKey} />
+                )}
+                {isHost && (
+                    <div data-testid="event-host-panel" className={`flex flex-col gap-2 ${PAGE_BOX}`}>
+                        <p className={`${BOX_LABEL.muted} !mb-0`}>{t("Who's going")}</p>
                         {waiting > 0 && (
-                            <p data-testid="event-waiting-count" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-200">{eventWaitingLine(waiting)}</p>
+                            <p data-testid="event-waiting-count" className={`m-0 text-sm font-bold ${PAGE_INK.body}`}>{eventWaitingLine(waiting)}</p>
                         )}
                         {waiting >= 2 && open && (
                             <button
@@ -766,13 +839,13 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 data-testid="event-let-everyone-in"
                                 onClick={letEveryoneIn}
                                 disabled={!!letting}
-                                className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                                className={PAGE_BUTTON.eventOutline}
                             >
                                 {t('Let everyone in')}
                             </button>
                         )}
                         {going.length === 0 && interested.length === 0 ? (
-                            <p className="m-0 text-sm text-nature-500 dark:text-nature-400">{t('Nobody yet.')}</p>
+                            <p className={`m-0 text-sm ${PAGE_INK.secondary}`}>{t('Nobody yet.')}</p>
                         ) : (
                             <ul className="m-0 p-0 list-none flex flex-col gap-1">
                                 {[...going, ...interested].map(r => (
@@ -788,14 +861,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                                 disabled={!!letting}
                                                 aria-pressed={!!r.letInAt}
                                                 aria-label={letInButtonLabel(!!r.letInAt, r.memberCallsign)}
-                                                className={`flex-shrink-0 min-h-[44px] min-w-[88px] px-3 rounded-xl border text-sm font-bold disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${r.letInAt
-                                                    ? 'border-violet-700 dark:border-violet-400 bg-violet-700 dark:bg-violet-600 text-white'
-                                                    : 'border-violet-300 dark:border-violet-800 bg-transparent text-violet-800 dark:text-violet-200'}`}
+                                                className={`shrink-0 min-w-[88px] ${r.letInAt ? PAGE_BUTTON.eventFill : PAGE_BUTTON.eventOutline}`}
                                             >
                                                 {r.letInAt ? t('Let in ✓') : t('Let in')}
                                             </button>
                                         ) : (
-                                            <span className="flex-shrink-0 text-xs font-bold text-nature-500 dark:text-nature-400">
+                                            <span className={`shrink-0 text-xs font-bold ${PAGE_INK.secondary}`}>
                                                 {r.status === 'going' ? t('Going') : t('Interested')}
                                             </span>
                                         )}
@@ -808,20 +879,20 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 type="button"
                                 data-testid="event-edit"
                                 onClick={() => onEdit(p)}
-                                className="min-h-[48px] px-3 rounded-xl border border-violet-700 dark:border-violet-400 text-sm font-bold text-white bg-violet-700 dark:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                                className={PAGE_BUTTON.eventFill}
                             >
                                 {t('Edit event')}
                             </button>
                         )}
                         {onEdit && editBlocked && (
-                            <p data-testid="event-edit-blocked" className="m-0 text-sm text-nature-600 dark:text-nature-400">{editBlockedWords(editBlocked)}</p>
+                            <p data-testid="event-edit-blocked" className={`m-0 text-sm ${PAGE_INK.secondary}`}>{editBlockedWords(editBlocked)}</p>
                         )}
                         {onCopyToNewDate && (
                             <button
                                 type="button"
                                 data-testid="event-copy-to-new-date"
                                 onClick={() => onCopyToNewDate(p)}
-                                className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
+                                className={PAGE_BUTTON.eventOutline}
                             >
                                 {t('Copy to a new date')}
                             </button>
@@ -831,7 +902,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 type="button"
                                 onClick={handleCancel}
                                 disabled={cancelling}
-                                className="min-h-[48px] px-3 rounded-xl border border-red-300 dark:border-red-900 text-sm font-bold text-red-700 dark:text-red-300 bg-transparent disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
+                                className="min-h-[48px] px-3 rounded-xl border-[1.5px] border-red-300 dark:border-red-900 text-[0.9375rem] font-bold leading-tight text-red-700 dark:text-red-300 bg-transparent disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
                             >
                                 {cancelling ? t('Cancelling…') : t('Cancel event')}
                             </button>
@@ -839,6 +910,28 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         {cancelError && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{cancelError}</p>}
                         {letInError && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{letInError}</p>}
                     </div>
+                )}
+
+                {/* 13. Report, last and small, as the listing's page has it: the web's event page had none (DW1). */}
+                {canReport && (
+                    <>
+                        <button
+                            type="button"
+                            data-testid="event-report"
+                            onClick={() => setReporting(true)}
+                            className={`self-start inline-flex items-center min-h-[48px] px-0 bg-transparent border-0 cursor-pointer hover:underline ${PAGE_TYPE.report} ${PAGE_INK.danger} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded`}
+                        >
+                            {t('🚩 Report')}
+                        </button>
+                        <ReportModal
+                            isOpen={reporting}
+                            onClose={() => setReporting(false)}
+                            reporterPubkey={identity!.publicKey}
+                            targetPubkey={p.authorPublicKey}
+                            targetName={p.title}
+                            targetPostId={p.id}
+                        />
+                    </>
                 )}
             </div>
         </div>

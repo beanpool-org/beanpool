@@ -14,6 +14,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventDetail } from './EventCard';
+import { BOX_LABEL, PAGE_BOX } from './market-card-shell';
 import * as api from '../lib/api';
 
 vi.mock('../lib/api', async () => {
@@ -55,14 +56,19 @@ describe("an event's page: the host is a box like a listing's \"Posted by\"", ()
         await waitFor(() => expect(api.getMemberRatings).toHaveBeenCalledWith('host-pk'));
     });
 
-    it('is the listing\'s card to the class: rounded, bordered, padded, the label in small capitals, light and dark pairs', () => {
+    // DW1 (DESIGN-detail-pages-fable.md §2.2): the box is the style box's page box, the shell's numbers (corners 14, 12 inside,
+    // the card ground and outline), and its label the box label (10/800 spaced 1.5, in a muted ink that holds 4.5:1). Until DW1
+    // it was its own rounded-2xl / p-4 box with a nature-400 label (2.4:1 on white).
+    it('is the listing\'s card to the class: the style box\'s page box, the label in small capitals, light and dark pairs', () => {
         render(<EventDetail post={event} identity={identity} />);
         const box = hostBox();
-        for (const c of ['bg-white', 'dark:bg-nature-950', 'rounded-2xl', 'border', 'border-nature-200', 'dark:border-nature-800', 'p-4', 'shadow-sm']) {
+        expect(box.className).toBe(PAGE_BOX);
+        for (const c of ['rounded-[14px]', 'border', 'border-nature-200', 'dark:border-nature-800', 'bg-[var(--bg-card)]', 'p-3', 'shadow-sm']) {
             expect(box.className.split(/\s+/), c).toContain(c);
         }
         const label = within(box).getByText('Hosted by');
-        for (const c of ['uppercase', 'tracking-widest', 'font-bold', 'text-nature-400', 'dark:text-nature-400']) {
+        expect(label.className).toBe(BOX_LABEL.muted);
+        for (const c of ['uppercase', 'tracking-[1.5px]', 'font-extrabold', 'text-nature-600', 'dark:text-nature-300']) {
             expect(label.className.split(/\s+/), c).toContain(c);
         }
         const name = within(hostButton()).getByText('Hazel');
@@ -85,11 +91,14 @@ describe("an event's page: the host is a box like a listing's \"Posted by\"", ()
         expect(Number(face.getAttribute('width'))).toBeGreaterThanOrEqual(48);
     });
 
-    it('sits after the description, where the listing puts its box, and before the going counts', () => {
+    // DW1 (§2.1, Marty's pick 1, "the description after the action row"): the answer and its counts come first, then the
+    // description, then the host's box. Until DW1 the counts sat under the box.
+    it('sits after the description, where the listing puts its box; the going counts are above both, with the answer', () => {
         render(<EventDetail post={event} identity={identity} />);
         const text = screen.getByTestId('event-detail').textContent!;
         expect(text.indexOf('Hosted by')).toBeGreaterThan(text.indexOf('Bring gloves and a shovel'));
-        expect(text.indexOf('7 going')).toBeGreaterThan(text.indexOf('Hosted by'));
+        expect(text.indexOf('7 going')).toBeGreaterThan(-1);
+        expect(text.indexOf('7 going')).toBeLessThan(text.indexOf('Bring gloves and a shovel'));
     });
 
     it("clicking the face and name opens the host's profile", async () => {

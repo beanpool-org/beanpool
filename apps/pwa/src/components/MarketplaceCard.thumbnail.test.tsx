@@ -72,7 +72,7 @@ describe('MarketplaceCard list card on the style box', () => {
             ...post, repeatable: true, cashAlsoNeeded: true, status: 'paused', audienceScope: 'group', targetGroupName: 'Gardeners',
         } as unknown as MarketplacePost;
         const { container, getByTestId, unmount } = render(<MarketplaceCard post={busy} viewMode="list" isOwnPost dealChip="asked" />);
-        const row = getByTestId('listing-list-card').querySelector('.flex-wrap')!;
+        const row = getByTestId('listing-list-chips');
         const chips = Array.from(row.children) as HTMLElement[];
         expect(chips.map(c => c.textContent)).toEqual([
             'OFFER', '👤 YOU', '🥕 Food & Produce', '↻ RECURRING', '💸 CASH TOO', '⏸ PAUSED', '🔒 Only Gardeners can see this', '✋ ASKED',
@@ -89,7 +89,7 @@ describe('MarketplaceCard list card on the style box', () => {
         // A pinned listing: the pin straight after the type, in the accent chip.
         const pinned = { ...post, pinnedAt: new Date().toISOString(), pinnedUntil: new Date(Date.now() + 86_400_000).toISOString() } as unknown as MarketplacePost;
         const again = render(<MarketplaceCard post={pinned} viewMode="list" />);
-        const pinRow = Array.from(again.getByTestId('listing-list-card').querySelector('.flex-wrap')!.children) as HTMLElement[];
+        const pinRow = Array.from(again.getByTestId('listing-list-chips').children) as HTMLElement[];
         expect(pinRow.map(c => c.textContent)).toEqual(['OFFER', '📌 PINNED', '🥕 Food & Produce']);
         expect(pinRow[1].className).toBe(chip('pinned'));
         expect(pinRow[1].getAttribute('data-testid')).toBe('card-pinned-chip');

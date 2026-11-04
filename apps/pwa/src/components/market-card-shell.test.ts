@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import postcss from 'postcss';
+import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, type CardType } from '@beanpool/core';
 import { CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, listCard } from './market-card-shell';
@@ -26,7 +26,9 @@ async function leftBorder(classString: string, scheme: 'light' | 'dark'): Promis
     const configUrl = pathToFileURL(path.resolve(__dirname, '../../tailwind.config.js')).href;
     const { default: config } = await import(/* @vite-ignore */ configUrl);
     const own = new Set(classes(classString));
-    const { root } = await postcss([tailwindcss({ ...config, content: [{ raw: `<div class="${classString}"></div>`, extension: 'html' }] })])
+    // Tailwind brings its own copy of postcss's types; the plugin is the same object either way.
+    const plugin = tailwindcss({ ...config, content: [{ raw: `<div class="${classString}"></div>`, extension: 'html' }] }) as unknown as AcceptedPlugin;
+    const { root } = await postcss([plugin])
         .process('@tailwind utilities;', { from: undefined });
     const set: { weight: number; order: number; colour: string }[] = [];
     let order = 0;

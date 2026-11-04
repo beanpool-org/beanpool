@@ -157,6 +157,9 @@ async function listCards(page) {
             .filter(el => el.getBoundingClientRect().right > inner + 0.5).map(el => el.textContent);
         const when = card.querySelector('[data-testid="event-when"] span');
         const title = card.querySelector('h3');
+        // A listing's head (the chips and the floated price): the title starts one row gap under the lower of the two.
+        const headParts = [card.querySelector('[data-testid="listing-list-price"]'), ...card.querySelectorAll('[data-testid="listing-list-chips"] > span')].filter(Boolean);
+        const headGap = title && headParts.length ? +(title.getBoundingClientRect().top - Math.max(...headParts.map(e => e.getBoundingClientRect().bottom))).toFixed(2) : null;
         return {
             name: (title?.textContent ?? card.querySelector('button')?.getAttribute('aria-label') ?? '').slice(0, 40),
             kind: card.getAttribute('data-testid'),
@@ -169,7 +172,7 @@ async function listCards(page) {
             photo: drawn ? Math.max(Math.abs(i.left - s.left), Math.abs(i.top - s.top), Math.abs(i.width - s.width), Math.abs(i.height - s.height)) : null,
             radius: css.borderTopLeftRadius, ground: css.backgroundColor,
             left: `${css.borderLeftWidth} ${css.borderLeftColor}`,
-            chips, chipsOut,
+            chips, chipsOut, headGap,
             when: when ? getComputedStyle(when).color : null,
             titleInk: title ? getComputedStyle(title).color : null,
         };
@@ -207,6 +210,8 @@ function checkListCards(cards, { label, dark, maxWidth, photos, scale, count = 9
     const eventCards = cards.filter(c => c.kind === 'event-card');
     check(eventCards.every(c => c.when === INK.event), `${label}: the when is the event token ${INK.event} (${JSON.stringify(eventCards.map(c => c.when))})`);
     const listings = cards.filter(c => c.kind === 'listing-list-card');
+    const gaps = listings.map(c => c.headGap);
+    check(gaps.every(g => g !== null && Math.abs(g - 4 * scale) <= 0.5), `${label}: a listing's title starts ${px(4)} under its chips and its price, rows 4 apart (${JSON.stringify(gaps)})`);
     check(listings.every(c => c.titleInk === INK.title), `${label}: a listing's title is the page's ink ${INK.title} (${JSON.stringify([...new Set(listings.map(c => c.titleInk))])})`);
 }
 

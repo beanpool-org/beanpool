@@ -58,8 +58,8 @@ export const LIST_TEXT = 'flex-1 min-w-0 flex flex-col gap-1 p-3';
  * upperCase() or the key itself), never from a class a language cannot follow.
  *
  * Never past its row either: a chip whose words are wider than the whole row (a long category, "📜 Mindset & Philosophy"
- * beside the price at 320 x 1.3, longer in German, Malayalam or Tamil) stays one line and ends in an ellipsis at the row's
- * edge, instead of running out under the card's edge and being cut there (#2873). A chip that fits is drawn whole.
+ * at 320 x 1.3, longer in German, Malayalam or Tamil) stays one line and ends in an ellipsis at the row's edge, instead
+ * of running out under the card's edge and being cut there (#2873). A chip that fits is drawn whole.
  */
 export const CHIP = 'inline-block shrink-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis px-1.5 py-0.5 rounded-md text-[10px] font-extrabold leading-normal tracking-wide';
 

@@ -11,7 +11,8 @@
  * card's left corners and the card's full height, the text beside it, the one chip, the type scale. A list card takes the
  * height its lines need (Marty, 4 Nov 2026: "the big card doesnt need to conform to the same size"): nothing here fixes
  * or equalises a list card's height. Slice G2 puts the GRID tile on it: one height per row ("the other smaller tiles yes");
- * slice W3' puts the event's tile on the same lattice. The compact row joins in its own slice.
+ * slice W3' puts the event's tile on the same lattice. Slice C1 puts the COMPACT row on it, for every kind (a listing, an
+ * event, a poll), and the poll's card.
  */
 
 /** §1.1 The list card's frame: corners 14, a 1 px border, the card shadow; the photo and the text sit side by side. */
@@ -240,6 +241,64 @@ export const GRID_SCRIM_MARK = 'ml-auto inline-block min-w-0 max-w-full whitespa
  * row (a long language) ends in "…".
  */
 export const GRID_ROW_LABEL = 'shrink-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-extrabold leading-normal';
+
+/*
+ * The compact row (slice C1, DESIGN-card-style-box-fable.md §1.3, §2): one row for every kind in the Market's compact view, a
+ * listing (MarketplaceCard), an event (EventCard) and a poll (PollCard), so the three are one height and one look. The 32 px
+ * picture (corners 8), the title on one line, one or two short lines under it, and at the end the price or the mark above the
+ * one chip. The row's frame is the web's listing row as it was (the brief: "Listing compact rows unchanged except the chip"):
+ * 10 above and below as core says, but 16 either side and corners 12 where core's (the phone's) row has 12 and 14, and the
+ * listing's who-line at 10 px where core's line is 11. Those are the web row's own until a slice moves the listing row.
+ */
+
+/** The row: the frame, the picture and the words on the left, the end on the right. */
+export const COMPACT_ROW = 'bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl px-4 py-2.5 shadow-sm cursor-pointer transition-all duration-300 hover:shadow-md flex flex-row items-center justify-between w-full relative overflow-hidden';
+
+/** The picture and the words, side by side, 12 apart; the words give way before the end does. */
+export const COMPACT_LEAD = 'flex items-center gap-3 min-w-0 flex-1';
+
+/** §1.1 The compact picture: 32 square, corners 8; what it holds covers it. */
+export const COMPACT_PICTURE = 'relative w-8 h-8 rounded-lg overflow-hidden shrink-0';
+
+/** The words beside the picture. */
+export const COMPACT_TEXT = 'flex-1 min-w-0';
+
+/** §1.3 The title: 14/800, one line. */
+export const COMPACT_TITLE = 'm-0 font-extrabold text-sm text-nature-950 dark:text-white truncate';
+
+/**
+ * §1.3 A short line under the title (an event's when, its place; a poll's status, its answer): core's compact line, 11/500,
+ * one line ending in "…", in the secondary ink. `leading-snug` so a row with two of them is a listing's row and one line.
+ */
+export const COMPACT_LINE = 'block min-w-0 truncate text-[11px] font-medium leading-snug text-nature-600 dark:text-nature-300';
+
+/**
+ * The words inside a short line that say more than it: 📌 PINNED (the accent), CANCELLED / ENDED (danger), UPDATED and the
+ * viewer's mark (the event violet), at the chip's weight. Inks for words on a card (core's `ink` roles), not a chip's.
+ */
+export const COMPACT_WORD = {
+    pinned: 'font-extrabold text-bp-ink-accent',
+    danger: 'font-extrabold text-bp-ink-danger',
+    event: 'font-extrabold text-bp-tile-event-ink',
+} as const;
+
+/** The viewer's mark ("Going ✓", "Better matches ✓"): the list card's mark weight, 700, in the event violet. */
+export const COMPACT_MARK = 'font-bold text-bp-tile-event-ink';
+
+/**
+ * The end: the price or the mark, then the type chip, side by side while there is room and the chip under it when not; 45% of
+ * the row at most (core's compactEndMaxPercent), so the title keeps its width.
+ */
+export const COMPACT_END = 'flex flex-wrap items-center justify-end gap-x-2 gap-y-1 ml-3 max-w-[45%]';
+
+/**
+ * The poll's card on the box (slice C1; the table's Poll row): the list card's corners, outline, ground and shadow, a column
+ * with 12 of padding (from 16), filling its cell in the grid.
+ */
+export const POLL_CARD = `relative flex flex-col h-full w-full min-w-0 overflow-hidden rounded-[14px] border shadow-sm hover:shadow-md transition-shadow ${BORDER} ${GROUND} p-3`;
+
+/** The poll's 32 px tile in a compact row: no photo, the poll's own plum ground and the ballot box. */
+export const COMPACT_POLL_TILE = 'w-full h-full flex items-center justify-center bg-bp-chip-poll-tint text-base leading-none';
 
 /** The inks on the card ground, light and dark. */
 export const CARD_INK = {

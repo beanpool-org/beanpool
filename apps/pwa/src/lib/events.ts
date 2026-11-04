@@ -56,6 +56,20 @@ export function eventTileWhenFor(post: EventTimeFields): EventTileWhen | null {
     return input ? tileWhen(input) : null;
 }
 
+/**
+ * The Market's compact row's when, one line (slice C1; the phone's eventTileWhenFor `spoken`): "SAT 7 NOV · 16:00–21:00". Its
+ * clock is the viewer's own, as the tile's: where that differs from the place's (a Byron 16:00 read in Queensland) the row
+ * reads "SAT 7 NOV · 15:00–20:00 your time" rather than the place's clock with a note it has no room for; online, the
+ * viewer's own clock, "your time", as every card says it. '' without a readable start.
+ */
+export function eventRowWhen(post: EventTimeFields): string {
+    const input = eventWhenInput(post);
+    if (!input) return '';
+    const own = tileWhen(input)?.yours ? whenParts({ ...input, online: true }) : null;
+    const parts = own ?? whenParts(input);
+    return parts ? `${parts.first}${parts.sep}${parts.second}` : '';
+}
+
 /** The node's clocks for an event and this browser's rendering of its instant: what core's when functions read. */
 function eventWhenInput(post: EventTimeFields): EventWhenInput | null {
     if (!post.eventStartAt) return null;

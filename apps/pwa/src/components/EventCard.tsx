@@ -22,12 +22,12 @@
  * shows the host controls here.
  */
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, upperCase, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
+    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventRowWhen, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
@@ -44,7 +44,8 @@ import { ListPhoto } from './ListPhoto';
 import { ImageLightbox } from './ImageLightbox';
 import { ReportModal } from './ReportModal';
 import {
-    BOX_LABEL, CARD_INK, EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
+    BOX_LABEL, CARD_INK, COMPACT_END, COMPACT_LEAD, COMPACT_LINE, COMPACT_MARK, COMPACT_PICTURE, COMPACT_ROW, COMPACT_TEXT, COMPACT_TITLE, COMPACT_WORD,
+    EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
     GRID_TIME_ROW, GRID_TYPE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE,
     POP_UP_CLOSE_ROOM, chip, gridTile, listCard,
 } from './market-card-shell';
@@ -359,9 +360,9 @@ interface EventCardProps {
     /**
      * Which shape the feed is in, so the event is the same card as the offers beside it (MarketplaceCard): in the grid the
      * listing tile, on the same lattice (W3'); in the list the list card, the photo flush on the left; in compact the
-     * stacked lines with no photo, until the compact row joins the box (C1). Defaults to the grid, which is how the Market
-     * opens. A grid card asked for with `rsvpOnCard` draws the stacked card with its buttons: no screen asks for that since
-     * the map's pop-up became the list card (M1, #2881), whose buttons are the list branch's.
+     * listing's compact row, its 32 px picture beside the title, the when and the place (C1). Defaults to the grid, which is
+     * how the Market opens. A grid card asked for with `rsvpOnCard` draws the stacked card with its buttons: no screen asks
+     * for that since the map's pop-up became the list card (M1, #2881), whose buttons are the list branch's.
      */
     viewMode?: 'grid' | 'list' | 'compact';
     onOpen?: () => void;
@@ -397,8 +398,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     // The host gave the event a photo; the card showed everything but. It is read straight off the post, the way
     // the offer cards and the event page read theirs — there is no second resolver on the web client.
     const firstPhoto = p.photos && p.photos.length > 0 ? p.photos[0] : null;
-    // The grid card shows the photo above its lines; the list card is the style box's (below). Compact has no picture
-    // yet: its row joins the box in its own slice (C1, DESIGN-card-style-box-fable.md §4).
+    // The stacked card (below) shows the photo above its lines in the grid; the list card, the tile and the compact row are
+    // the style box's and draw their own.
     const hasPicture = viewMode === 'grid';
     const photo = hasPicture ? firstPhoto : null;
 
@@ -478,6 +479,77 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 {rsvpOnCard && rsvp.error && (
                     <p role="alert" className="basis-full m-0 px-3 pb-3 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>
                 )}
+            </div>
+        );
+    }
+
+    if (viewMode === 'compact') {
+        // The compact row (slice C1, DESIGN-card-style-box-fable.md §2; DESIGN-market-event-cards-fable.md §2.4): the listing's
+        // row from the style box (market-card-shell.ts COMPACT_*), so an event in the compact view is one row among the
+        // listings', a listing's height and one line more at 320 px and 1.3x text (market-order-shots.mjs measures it). The 32 px
+        // picture (the photo, or the event tile until it has drawn), then the title; the when in the viewer's own clock ("your
+        // time" where it differs from the place's, as the tile reads it); then 📌 PINNED, the state and the place, each whole
+        // and in its own ink, the place giving way. As on the phone (#2903), the viewer's mark ("Going ✓", "You're hosting this
+        // event") sits where a listing's price sits, above EVENT: "{when} · {mark}" on one line has no room at 320 x 1.3. The
+        // counts are the page's. The whole row is one button that opens the event.
+        const rowWhen = eventRowWhen(p);
+        const state = eventStateOf(p);
+        const pinned = pinLive(p as any);
+        const lock = p.audienceScope === 'group' || !!p.targetGroupId
+            ? t('🔒 Only {group} can see this', { group: p.targetGroupName || t('Group') })
+            : null;
+        const copyDistance = distanceKm == null ? '' : visitor ? visitorDistanceText(distanceKm) : formatDistance(distanceKm);
+        const rowPlace = copy?.from ? [copyFromLine(copy.from), copyDistance].filter(Boolean).join(' · ') : place;
+        const glyph = copy?.from ? '' : p.eventOnline ? '🌐 ' : '📍 ';
+        const rowMark = hosting ? t("You're hosting this event") : myAnswer;
+        // Line three's pieces, ' · ' between them (the separator every line on a card uses).
+        const pieces = [
+            pinned ? <span key="pin" data-testid="event-pinned-chip" className={COMPACT_WORD.pinned}>{t('📌 PINNED')}</span> : null,
+            state ? <span key="state" data-testid="event-state-badge" className={state === 'updated' ? COMPACT_WORD.event : COMPACT_WORD.danger}>{stateWords(state)}</span> : null,
+            rowPlace || lock ? (
+                <span key="place">
+                    {lock && <span aria-hidden="true">🔒 </span>}
+                    {rowPlace && glyph && <span aria-hidden="true">{glyph}</span>}{rowPlace}
+                </span>
+            ) : null,
+        ].filter(Boolean);
+        const rowLabel = [openLabel, rowWhen, state ? stateWords(state) : null, rowMark, lock, copyLine].filter(Boolean).join(', ');
+        return (
+            <div data-testid="event-card" className="w-full min-w-0">
+                <button
+                    type="button"
+                    data-testid="event-compact-row"
+                    onClick={onOpen}
+                    disabled={!onOpen}
+                    aria-label={rowLabel}
+                    className={`${COMPACT_ROW} text-start disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500`}
+                >
+                    <span className={COMPACT_LEAD}>
+                        <span data-testid="compact-picture" className={COMPACT_PICTURE}>
+                            <ListPhoto
+                                photo={firstPhoto}
+                                alt={p.title}
+                                className="w-full h-full object-cover"
+                                fallback={<CategoryTile kind="event" size="thumb" />}
+                            />
+                        </span>
+                        <span className={COMPACT_TEXT}>
+                            <span dir="auto" data-testid="event-row-title" className={`block ${COMPACT_TITLE}`}>{p.title}</span>
+                            <span data-testid="event-when" className={`${COMPACT_LINE} font-bold ${CARD_INK.event}`}>{rowWhen}</span>
+                            {pieces.length > 0 && (
+                                <span data-testid="event-row-place" className={`${COMPACT_LINE} font-medium ${CARD_INK.secondary}`}>
+                                    {pieces.map((piece, i) => <Fragment key={i}>{i > 0 && ' · '}{piece}</Fragment>)}
+                                </span>
+                            )}
+                        </span>
+                    </span>
+                    <span className={COMPACT_END}>
+                        {rowMark && (
+                            <span data-testid="event-mark" className={`text-[11px] leading-snug text-end break-words line-clamp-2 ${COMPACT_MARK}`}>{rowMark}</span>
+                        )}
+                        <span data-testid="event-type-chip" className={chip('event')}>{upperCase(t('EVENT', undefined, 'event category tile label'))}</span>
+                    </span>
+                </button>
             </div>
         );
     }
@@ -601,8 +673,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     );
 
     return (
-        // The stacked card: the compact view, until its row joins the box (C1), and a grid card asked for with `rsvpOnCard`
-        // (no screen since the map's pop-up became the list card, M1). Its band is core's event tint, not a raw violet class.
+        // The stacked card: a grid card asked for with `rsvpOnCard` (no screen since the map's pop-up became the list card, M1;
+        // the compact view is the compact row since C1). Its band is core's event tint, not a raw violet class.
         <div data-testid="event-card" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-bp-tile-event-tint rounded-2xl p-3 shadow-sm flex flex-col gap-2 overflow-hidden">
             <button
                 type="button"

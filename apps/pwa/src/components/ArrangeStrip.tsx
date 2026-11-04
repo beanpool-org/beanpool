@@ -35,16 +35,17 @@ export function ArrangeStrip({ rows, onSettings, onRemove, onHeight, style }: Pr
     const headingId = useId();
     return (
         <PackedBlock tag="div" onHeight={onHeight} data-testid="home-arrange-strip" style={style} className="mb-3 min-w-0">
-            <section aria-labelledby={headingId} className="rounded-2xl border border-border-primary px-4 pt-3 pb-1 min-w-0">
+            {/* A surface of its own, so its words never sit on the page's pattern; dashed, like the tile, because it is a place and no card. */}
+            <section aria-labelledby={headingId} className="rounded-2xl border border-dashed border-border-primary bg-bg-card px-4 pt-3 pb-1 min-w-0">
                 <h2 id={headingId} className="m-0 mb-1 text-[0.7rem] font-extrabold uppercase tracking-wider text-text-secondary break-words">{t('Nothing to show now')}</h2>
                 <ul className="m-0 p-0 list-none">
                     {rows.map(row => (
                         <li key={row.id} data-testid={`home-arrange-strip-row-${row.id}`} className="py-1 flex flex-wrap items-center justify-between gap-x-2 min-w-0 min-h-[48px]">
-                            <span className="min-w-0 flex-1 basis-40 break-words text-sm font-semibold text-text-primary">
+                            <span className="min-w-0 flex-1 basis-24 break-words text-sm font-semibold text-text-primary">
                                 {row.name}
                                 {row.note && <span data-testid={`home-arrange-strip-note-${row.id}`} className="block text-xs font-normal text-text-secondary">{row.note}</span>}
                             </span>
-                            <span className="flex flex-wrap items-center justify-end gap-x-1 min-w-0">
+                            <span className="ml-auto flex flex-wrap items-center justify-end gap-x-1 min-w-0">
                                 {row.hasSettings && (
                                     <button type="button" className={ACTION} data-testid={`home-arrange-settings-${row.id}`} aria-label={t('Settings for {card}', { card: row.name })} onClick={() => onSettings(row.id)}>{t('Settings…')}</button>
                                 )}

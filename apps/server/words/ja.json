@@ -933,5 +933,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ 解放された名前のトンネルが止まりました。このサーバーはいまも{addresses}で応答します。",
   "🫘 A project you backed changed its end date": "🫘 あなたが支援したプロジェクトが終了日を変更しました",
   "🫘 Pledges went back to their backers": "🫘 プレッジが支援者に戻りました",
-  "🫘 Your pledge came back": "🫘 あなたのプレッジが戻りました"
+  "🫘 Your pledge came back": "🫘 あなたのプレッジが戻りました",
+  "Answer serve or step_aside.": "serve または step_aside で回答してください。",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "投票済みなので、この陪審を務めます。締め切りまで投票を変更できます。"
 }

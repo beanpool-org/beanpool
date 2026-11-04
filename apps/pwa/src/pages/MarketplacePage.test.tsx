@@ -284,12 +284,14 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
         expect(onPostOpened).toHaveBeenCalled();
     });
 
-    it('opens the event detail from the card, with the host line', async () => {
+    it("opens the event detail from the card, with the host's box", async () => {
         render(<MarketplacePage identity={identity} />);
         const open = await screen.findByRole('button', { name: 'Open event: Working bee' });
         await act(async () => { open.click(); });
         const detail = await screen.findByTestId('event-detail');
-        expect(detail).toHaveTextContent('Hosted by Hazel');
+        // The host is the box a listing's "Posted by" is (components/AuthorCard.tsx): the label above the button that opens them.
+        expect(within(screen.getByTestId('event-host-open').parentElement!).getByText('Hosted by')).toBeInTheDocument();
+        expect(screen.getByTestId('event-host-open')).toHaveTextContent('Hazel');
         expect(detail).toHaveTextContent('Bindarrabi Hall');
     });
 

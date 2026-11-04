@@ -64,6 +64,7 @@ vi.mock('../db', () => ({
 }));
 vi.mock('../haptics', () => ({ hapticTick: () => {} }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
+vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/EventCard', () => ({ EVENT_ACCENT: '#0a7' }));
 const copies = vi.hoisted(() => [] as any[]);
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: (p: any) => { if (p.prefill) copies.push(p.prefill); return null; } }));

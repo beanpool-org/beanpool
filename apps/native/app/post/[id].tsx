@@ -28,7 +28,7 @@ import { ReviewModal } from '../../components/ReviewModal';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { askForPostPhoto } from '../../utils/post-photo';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
-import { MemberAvatar } from '../../components/MemberAvatar';
+import { AuthorCard } from '../../components/AuthorCard';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { CategoryTile } from '../../components/CategoryTile';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
@@ -182,9 +182,6 @@ function confirmWorkedLabel(priceType: string | null | undefined): string {
     return t('CONFIRM ACTUAL UNITS WORKED');
 }
 
-/** "(4.5) • 3 Reviews": a member's average and how many reviews, in the member's language. */
-const reviewsLine = (average: number, count: number) => tn(count, '({average}) • {n} Reviews', '({average}) • {n} Reviews', { average: formatNumber(average, 1) });
-
 export default function PostDetailModal() {
     const insets = useSafeAreaInsets();
     const { theme, colors } = useTheme();
@@ -223,15 +220,7 @@ export default function PostDetailModal() {
         priceValue: { color: colors.text.body, fontSize: 36, fontWeight: '800' },
         priceCurrency: { fontSize: 20, fontWeight: '500', color: colors.text.secondary },
 
-        // Author Card
-        authorCard: { marginHorizontal: 20, backgroundColor: colors.surface.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-        authorCardLabel: { color: colors.text.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 12 },
-        authorRow: { flexDirection: 'row', alignItems: 'center' },
-        avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: theme === 'dark' ? 'rgba(217,119,87,0.2)' : 'rgba(217,119,87,0.1)', justifyContent: 'center', alignItems: 'center' },
-        avatarLetter: { color: palette.orangeAlt500, fontSize: 20, fontWeight: 'bold' },
-        authorInfo: { marginLeft: 12 },
-        authorName: { color: colors.text.body, fontSize: 16, fontWeight: '700' },
-        authorRating: { color: colors.text.secondary, fontSize: 12, marginTop: 2 },
+        // The author card's own styles live in components/AuthorCard.tsx.
         roughPlace: { color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: -8, marginBottom: 16 },
 
         // Own Post Actions
@@ -1520,57 +1509,27 @@ export default function PostDetailModal() {
                     </View>
                 )}
 
-                {/* Author / Counterparty Card */}
+                {/* Author / Counterparty Card: components/AuthorCard.tsx, the one box an event's "HOSTED BY" is too. */}
                 {isOwnPost && targetPeerPubkey ? (
-                    <Pressable accessibilityRole="button" style={styles.authorCard} onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: targetPeerPubkey, callsign: targetPeerCallsign } })}>
-                        <Text style={styles.authorCardLabel}>{isOffer ? t('ACCEPTED BY') : t('PROVIDER')}</Text>
-                        <View style={styles.authorRow}>
-                            <View style={styles.avatar}>
-                                <MemberAvatar avatarUrl={targetPeerAvatar} pubkey={targetPeerPubkey} callsign={targetPeerCallsign} size={48} borderRadius={24} />
-                            </View>
-                            <View style={styles.authorInfo}>
-                                <Text style={styles.authorName}>🤝 {targetPeerCallsign}</Text>
-                                <Text style={styles.authorRating}>
-                                    {targetPeerAvgRating !== null && targetPeerRatingCount > 0 ? (
-                                        <>
-                                            <Text style={{ color: colors.trust.star, letterSpacing: -1 }}>{renderBeans(targetPeerAvgRating)}</Text>
-                                            <Text> {reviewsLine(targetPeerAvgRating, targetPeerRatingCount)}</Text>
-                                        </>
-                                    ) : (
-                                        <Text>{t('☆☆☆☆☆ No ratings yet')}</Text>
-                                    )}
-                                </Text>
-                            </View>
-                        </View>
-                    </Pressable>
+                    <AuthorCard
+                        label={isOffer ? t('ACCEPTED BY') : t('PROVIDER')}
+                        pubkey={targetPeerPubkey}
+                        callsign={targetPeerCallsign}
+                        avatarUrl={targetPeerAvatar}
+                        rating={{ average: targetPeerAvgRating, count: targetPeerRatingCount }}
+                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: targetPeerPubkey, callsign: targetPeerCallsign } })}
+                    />
                 ) : (
-                    <Pressable
-                        accessibilityRole="button"
-                        style={styles.authorCard}
+                    <AuthorCard
+                        label={t('POSTED BY')}
+                        pubkey={post.author_pubkey}
+                        callsign={cardAuthor}
+                        avatarUrl={post.author_avatar}
+                        rating={{ average: authorAvgRating, count: authorRatingCount }}
                         // A visitors' view hides who posted (utils/posts-view.ts): there is no profile to open.
                         disabled={isHiddenAuthor(post.author_pubkey)}
                         onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: post.author_pubkey, callsign: cardAuthor } })}
-                    >
-                        <Text style={styles.authorCardLabel}>{t('POSTED BY')}</Text>
-                        <View style={styles.authorRow}>
-                            <View style={styles.avatar}>
-                                <MemberAvatar avatarUrl={post.author_avatar} pubkey={post.author_pubkey} callsign={cardAuthor} size={48} borderRadius={24} />
-                            </View>
-                            <View style={styles.authorInfo}>
-                                <Text style={styles.authorName}>🤝 {cardAuthor}</Text>
-                                <Text style={styles.authorRating}>
-                                    {authorAvgRating !== null && authorRatingCount > 0 ? (
-                                        <>
-                                            <Text style={{ color: colors.trust.star, letterSpacing: -1 }}>{renderBeans(authorAvgRating)}</Text>
-                                            <Text> {reviewsLine(authorAvgRating, authorRatingCount)}</Text>
-                                        </>
-                                    ) : (
-                                        <Text>{t('☆☆☆☆☆ No ratings yet')}</Text>
-                                    )}
-                                </Text>
-                            </View>
-                        </View>
-                    </Pressable>
+                    />
                 )}
                 {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md §4):
                     said here, so a pin on the map is never taken for the door. A keeper reads their enterprise's exactly. */}
@@ -2571,11 +2530,6 @@ export default function PostDetailModal() {
             )}
         </View>
     );
-}
-
-function renderBeans(rating: number): string {
-    const r = Math.round(rating) || 0;
-    return '★'.repeat(Math.min(r, 5)) + '☆'.repeat(Math.max(0, 5 - r));
 }
 
 function getTimeAgo(dateStr: string): string {

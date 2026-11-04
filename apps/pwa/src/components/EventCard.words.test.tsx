@@ -102,7 +102,11 @@ describe('an event in English', () => {
         unmount();
 
         render(<EventDetail post={hosted} identity={identity} onEdit={vi.fn()} />);
-        await waitFor(() => expect(screen.getByText('Hazel').closest('p')!.textContent).toBe('Hosted by Hazel · for Garden Club only'));
+        // The host is the box a listing's "Posted by" is (components/AuthorCard.tsx); a group-only event says who can see it under it.
+        // The box is the label above the button that opens the host: the button's parent holds both.
+        await waitFor(() => expect(within(screen.getByTestId('event-host-open').parentElement!).getByText('Hosted by')).toBeInTheDocument());
+        expect(within(screen.getByTestId('event-host-open')).getByText('Hazel')).toBeInTheDocument();
+        expect(screen.getByTestId('event-host-audience').textContent).toBe('🔒 Only Garden Club can see this');
         expect(bracketed()).toBe(0);
         expect(screen.getByText("You're hosting this event")).toBeInTheDocument();
         expect(screen.getByText("Who's going")).toBeInTheDocument();

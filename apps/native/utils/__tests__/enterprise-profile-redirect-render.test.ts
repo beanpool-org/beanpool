@@ -536,6 +536,8 @@ describe('Every door lands on the enterprise page', () => {
             [path.join('app', 'post', '[id].tsx')]: 3,
             [path.join('app', 'chat', '[id].tsx')]: 2,
             [path.join('app', '(tabs)', 'map.tsx')]: 1,
+            // An event's own screen: the host's box ("HOSTED BY", components/AuthorCard.tsx) opens the host, as a listing's "POSTED BY" does.
+            [path.join('components', 'EventDetail.tsx')]: 1,
             // The full Community Pulse list: a row about a member opens them.
             [path.join('app', '(tabs)', 'market.tsx')]: 1,
             [path.join('app', '(tabs)', 'people.tsx')]: 2,

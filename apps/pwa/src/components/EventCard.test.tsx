@@ -349,7 +349,8 @@ describe('EventDetail', () => {
         expect(classes).toContain('md:flex');
         expect(classes).toContain('md:flex-row');
 
-        const img = within(detail).getByRole('img');
+        // The event's photo, by its alt (the host's box now carries a face of its own).
+        const img = within(detail).getByRole('img', { name: withPhoto.title });
         const photoWrapper = img.parentElement as HTMLElement;
         expect(photoWrapper.className.split(/\s+/)).toContain('md:w-1/2');
     });

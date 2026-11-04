@@ -1245,6 +1245,8 @@ async function main(): Promise<void> {
             // community works (the exception an owner's or an admin's, the dial an owner's).
             'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount: 5000 },
             'POST /api/local/admin/community-shape': { changes: { knownFloor: { on: true, floor: 5000, cap: 5000 }, join: 'members' } },
+            // Advice to the owners about a Core setting (an owner's or an admin's): past the shape checks, it would leave a log line.
+            'POST /api/local/admin/community-shape/advice': { setting: 'beans', advice: 'Sentinel advice' },
             // Debts and a second chance: paying the Commons Beans it holds, and an admin's settle and work-off (admins only).
             'POST /api/commons/pay': { amount: 1 },
             'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
@@ -1366,7 +1368,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
             'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
             'GET /api/local/admin/known-floor/member/:pubkey',
-            'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health', 'GET /api/local/admin/community-shape', 'POST /api/local/admin/community-shape',
+            'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health', 'GET /api/local/admin/community-shape', 'POST /api/local/admin/community-shape', 'POST /api/local/admin/community-shape/advice',
             'POST /api/local/admin/start-community-url',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
             'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',

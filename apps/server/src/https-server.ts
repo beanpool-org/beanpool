@@ -137,6 +137,7 @@ import { LISTINGS_MEMBERS_ONLY } from './listings-members-only.js';
 import { peekTicketOpens } from './engine/peek-tickets.js';
 import { createPeekRoutes } from './routes/peek.js';
 import { createCheckPageRoutes } from './routes/check-page.js';
+import { androidOnTheLocalNetwork } from './routes/android.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
@@ -2058,6 +2059,10 @@ export async function startHttpsServer(port: number): Promise<number> {
             ctx.set('X-Admin-2FA-Session', ctx.state.tfaSessionToken);
         }
     });
+
+    // The Android APK, its page and the web app's link to it, only to a request straight off the local network; anyone else
+    // goes on as for a path that isn't there (routes/android.ts says why this is not a route of the router).
+    app.use(androidOnTheLocalNetwork());
 
     app.use(router.routes());
     app.use(router.allowedMethods());

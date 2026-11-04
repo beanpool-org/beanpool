@@ -20,6 +20,8 @@ function checkVaultVars(env) {
   }
 }
 
+const { iosPermissionLocales } = require('./plugins/ios-permission-locales');
+
 module.exports = ({ config }) => {
   checkVaultVars(process.env);
   return withSecrets(config);
@@ -27,6 +29,8 @@ module.exports = ({ config }) => {
 
 const withSecrets = (config) => ({
   ...config,
+  // The iOS permission pop-ups in each declared language (plugins/ios-permission-locales.js); English until translated.
+  locales: { ...(config.locales || {}), ...iosPermissionLocales(config.ios && config.ios.infoPlist) },
   android: {
     ...config.android,
     config: {

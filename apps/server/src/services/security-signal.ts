@@ -121,6 +121,13 @@ export const OWNER_ALERT_WORDS = {
     /** A Core setting changed while locked, with an owner's fresh proof: `changes` each "<setting> (<from> → <to>)". */
     coreUnlocked: (changes: string) => `A core setting was unlocked and changed, by an owner: ${changes}. `
         + "If that wasn't an owner you know, open Settings: How it works, then People & Safety → Owners & admins.",
+    /**
+     * Advice an admin (or an owner) left the owners about one Core setting (config/core-advice.ts, design §8.6). Names neither
+     * the adviser nor the advice: this leaves for the owners' channel, which "names no member"; the advice itself is read in
+     * Settings → Core settings, in the Changes log.
+     */
+    coreAdvice: (role: 'admin' | 'owner', setting: string) => `${role === 'owner' ? 'An owner' : 'An admin'} advised the owners about Core settings → ${setting}. `
+        + 'Read it in Settings, under Core settings.',
     channelChanged: (community: string) => `${community}: the alert channel was changed, by an owner. This is the last alert sent here.`,
     channelRemoved: (community: string) => `${community}: the alert channel was removed, by an owner. This is the last alert sent here.`,
     /** To the same channel, with its old token, when only the token changed (#2033 C1-N2): not "the last alert sent here". */

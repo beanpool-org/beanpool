@@ -5,7 +5,5 @@
     "apps/native/app/(tabs)": 4,
     "apps/native/components": 1
   },
-  "constants": {
-    "packages/beanpool-core/src": 1
-  }
+  "constants": {}
 }

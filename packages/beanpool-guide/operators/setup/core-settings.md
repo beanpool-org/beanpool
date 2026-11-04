@@ -7,7 +7,7 @@ related: the-settings-screens, members-and-invites, running-a-known-community, a
 
 **Core settings** is the last item in the left menu. It holds the settings your members joined under, the ones that are hard to take back, and the ones that are money. You set them once, when you start your community, and then you lock them. After that, changing one is deliberate: you unlock it, and Settings asks for your proof.
 
-Only an owner can confirm, lock and unlock. Admins can read every setting, its reasons and the log, but cannot change anything. Moderators and members don't see this page. Members keep their own "How this community works" facts on Home, and are told when a rule changes.
+Only an owner can confirm, lock and unlock. Admins can read every setting, its reasons and the log, and can advise the owners about a setting, but cannot change anything. Moderators and members don't see this page. Members keep their own "How this community works" facts on Home, and are told when a rule changes.
 
 ## What is a core setting
 
@@ -48,6 +48,10 @@ Everything the server refuses stays refused, and its own line says why. Beans ca
 
 These are everyday rules, so they need no unlocking: **Pause new members** and **Requests to join** are under **People & Safety → Invites & QR**; **First message from someone new**, **Limits on new accounts**, **Reported posts hidden and message requests cleared automatically** and **Repeat offenders muted automatically** are under **People & Safety → Triage & Moderation**; **Listed in the BeanPool directory**, **Share location & radius**, **Share member count**, **Share email**, **Share phone**, **Share health**, **Visitors** and **Private preview** are under **Appliance & Data → Node Identity**; **Connections to other communities** is under **Appliance & Data → Gateway & Peers**.
 
+## Advising the owners
+
+An admin sees **Advise the owners** under each core setting, before the lock and after it. Write up to 200 characters about that setting and press **Send**. It changes nothing and needs no proof. Every owner gets an alert that an admin advised about that setting, and your words are kept in **Changes** as "Advised the owners about ‹setting›", where owners and admins read them. The alert carries neither your words nor your name, because alerts can leave the server for a chat or phone channel. An owner answers by changing the setting, or by leaving it as it is: there is no reply thread. Each person can send up to 10 pieces of advice in a day.
+
 ## Changes
 
-The log at the bottom lists every change to the core settings: who, when, what changed, any note to members, and each lock and unlock.
+The log at the bottom lists every change to the core settings: who, when, what changed, any note to members, each lock and unlock, and each piece of advice to the owners.

@@ -1,0 +1,1228 @@
+{
+  "_about": "Known glossary / numbers / untranslatable problems in the catalogs (scripts/words/GLOSSARY.csv, packages/beanpool-core/src/words-check.ts), per catalog: a short hash of each problem. words.mjs check fails on a problem that is not listed here; `check --update` removes the ones that are fixed; adding one needs `check --update --raise \"<reason>\"`, which is recorded in `raises` (words.test.mjs compares with origin/main). `check --known` prints them in words.",
+  "known": {
+    "apps/native/words/ar": {
+      "numbers": [
+        "0053ebf8b3",
+        "016fa4d0f9",
+        "13a3641ce1",
+        "14dc55dd5d",
+        "182cbec9a7",
+        "1b6d135bfd",
+        "1d57a5a866",
+        "20c5a2e609",
+        "21d329d275",
+        "2581e05b74",
+        "2707deca2f",
+        "2720bd8bf6",
+        "2884041340",
+        "31c3fa819a",
+        "32bb89b3af",
+        "3afe388a0c",
+        "4701042cad",
+        "49d9f0d8e5",
+        "4e49d2fe60",
+        "60f01e3827",
+        "707d4f17ea",
+        "78299bc822",
+        "7daff0e04d",
+        "822dfc1581",
+        "85d15dbaf2",
+        "862857e44e",
+        "889f8d40c0",
+        "8b1b37f12f",
+        "8dd77a7b6a",
+        "97f2feec3f",
+        "a3fc80137f",
+        "a6a4ce0d28",
+        "af01bc53a1",
+        "ba9a0c61da",
+        "bad12d46de",
+        "c03f1e35de",
+        "d3c4b51575",
+        "d73e009c54",
+        "e306d88bb9",
+        "e503a66db9",
+        "eb5fec48c5",
+        "ecd48f8df1",
+        "f2a07369a3"
+      ]
+    },
+    "apps/native/words/bn": {
+      "numbers": [
+        "14dc55dd5d",
+        "85d15dbaf2",
+        "d4fc8e7fad"
+      ],
+      "untranslatable": [
+        "cb8f6f31de"
+      ]
+    },
+    "apps/native/words/de": {
+      "numbers": [
+        "3453b1145e",
+        "b905142f89"
+      ],
+      "untranslatable": [
+        "e240318024"
+      ]
+    },
+    "apps/native/words/el": {
+      "numbers": [
+        "b905142f89"
+      ],
+      "untranslatable": [
+        "0194f79852"
+      ]
+    },
+    "apps/native/words/es": {
+      "glossary": [
+        "0027bb79a7",
+        "035ad8c07e",
+        "0b53642ea6",
+        "0bee18f1fe",
+        "0ed0f5435e",
+        "1022977780",
+        "137329aa22",
+        "177fc23447",
+        "18c3af32fa",
+        "193ec060db",
+        "19b77ea801",
+        "1cabb52f7d",
+        "220b29db5e",
+        "24f02c67f9",
+        "255c4aaff3",
+        "2616afa359",
+        "291451c13f",
+        "2ae327baab",
+        "321c8a8618",
+        "33ea4ee82a",
+        "34685968cb",
+        "34c3cf64e6",
+        "36650e6b8c",
+        "38706af282",
+        "39bff46cef",
+        "3c88df93d9",
+        "3e420ab156",
+        "46e875eb1f",
+        "474c74d246",
+        "475bbbc5ba",
+        "49a295679c",
+        "4e87457da0",
+        "5296511cbf",
+        "5669773486",
+        "5ae5f00100",
+        "5b450d6ea2",
+        "5b45c0e808",
+        "5d288b0fbe",
+        "61b313878d",
+        "6593a66fe6",
+        "67b82c993e",
+        "6828d862c6",
+        "6b0e7da194",
+        "70ddc9e397",
+        "72288bc58a",
+        "7281c12b6e",
+        "752b2035f5",
+        "75de4c1f07",
+        "7a164283b0",
+        "7a6987c947",
+        "7c33a091c9",
+        "7d408076b9",
+        "80874d15f6",
+        "84f350dc8c",
+        "851c0ff885",
+        "8e25877f06",
+        "8fa6dbd254",
+        "97e989939d",
+        "9a07c238a0",
+        "9b321cd5ef",
+        "a1fec1188b",
+        "a348c78acd",
+        "a74771d0b8",
+        "ae1e94bc05",
+        "b23de00f1f",
+        "b48d80e825",
+        "b4906b4cf1",
+        "b5e5f4e1d7",
+        "b64fae00ce",
+        "b8d0981106",
+        "ba10a05b34",
+        "bb5cfe4e60",
+        "c051f046e1",
+        "c2620639a5",
+        "c29f5e0b58",
+        "c4bd02a204",
+        "c669898014",
+        "c6d7ca6878",
+        "c77f67de53",
+        "c7c1b03423",
+        "ca9378d8e1",
+        "caa6c4b8ff",
+        "cba061561c",
+        "cd609faa87",
+        "cdca730a3a",
+        "cfd5650c8c",
+        "d1b1642508",
+        "d5542cfc29",
+        "d8ca368dba",
+        "df354ec5b0",
+        "e09d6a4c94",
+        "e2924cd3d0",
+        "e398a3a3cd",
+        "e437994c53",
+        "e57dc56677",
+        "ed532be0ef",
+        "ee2b9b4cb9",
+        "ef1d7881b4",
+        "ef61e2ebd3",
+        "f1c4b3bfc5",
+        "f1cdb9b54f",
+        "f34df77a6a",
+        "f8ae76726b",
+        "f907c2e509",
+        "fc51df6081",
+        "fcb1b5e5ef",
+        "fe3f3c9a6c"
+      ]
+    },
+    "apps/native/words/fa": {
+      "numbers": [
+        "14dc55dd5d",
+        "85d15dbaf2"
+      ],
+      "untranslatable": [
+        "0194f79852",
+        "7cfe9ebd50",
+        "8947d26564",
+        "c0aeba6612",
+        "cb8f6f31de"
+      ]
+    },
+    "apps/native/words/fil": {
+      "numbers": [
+        "d3c4b51575"
+      ]
+    },
+    "apps/native/words/fr": {
+      "glossary": [
+        "0027bb79a7",
+        "013ee6583c",
+        "035ad8c07e",
+        "0ed0f5435e",
+        "1022977780",
+        "1250a72f75",
+        "137329aa22",
+        "151c40b456",
+        "17765c85d1",
+        "177fc23447",
+        "1cabb52f7d",
+        "1ce77f2b74",
+        "1d2fc66734",
+        "220b29db5e",
+        "291451c13f",
+        "2ae327baab",
+        "2f58cfdb77",
+        "31f31ed1c9",
+        "34c3cf64e6",
+        "36650e6b8c",
+        "39bff46cef",
+        "3b57f78edd",
+        "46e875eb1f",
+        "474c74d246",
+        "483ce80344",
+        "4e87457da0",
+        "5296511cbf",
+        "5b450d6ea2",
+        "5cfb014fac",
+        "5d288b0fbe",
+        "5d40b2d247",
+        "6828d862c6",
+        "6d88723930",
+        "72288bc58a",
+        "76116dae9b",
+        "7a6987c947",
+        "7d408076b9",
+        "80874d15f6",
+        "84f350dc8c",
+        "851c0ff885",
+        "86ffb06eaf",
+        "8bd428f9c9",
+        "99ec4f53e3",
+        "a0317eed3b",
+        "a6a2b30b08",
+        "a74771d0b8",
+        "ab26dc9ad9",
+        "afa35b6593",
+        "b48d80e825",
+        "b4906b4cf1",
+        "b5e5f4e1d7",
+        "ba10a05b34",
+        "bb5cfe4e60",
+        "be1d15f8a3",
+        "c2620639a5",
+        "c6d7ca6878",
+        "c77f67de53",
+        "c7c1b03423",
+        "caa3a14716",
+        "cd609faa87",
+        "d1b1642508",
+        "d697dc96f6",
+        "df354ec5b0",
+        "e398a3a3cd",
+        "e53f097c2d",
+        "ee2b9b4cb9",
+        "ef61e2ebd3",
+        "f1cdb9b54f",
+        "f4bc6ee431",
+        "f5257c98d6",
+        "f8ae76726b"
+      ],
+      "untranslatable": [
+        "e0c0052edf"
+      ]
+    },
+    "apps/native/words/hi": {
+      "numbers": [
+        "14dc55dd5d",
+        "85d15dbaf2",
+        "d3c4b51575"
+      ]
+    },
+    "apps/native/words/id": {
+      "numbers": [
+        "d3c4b51575"
+      ]
+    },
+    "apps/native/words/it": {
+      "numbers": [
+        "d3c4b51575"
+      ]
+    },
+    "apps/native/words/ja": {
+      "numbers": [
+        "14dc55dd5d",
+        "85d15dbaf2",
+        "d3c4b51575"
+      ]
+    },
+    "apps/native/words/ko": {
+      "numbers": [
+        "14dc55dd5d",
+        "3076877414",
+        "85d15dbaf2",
+        "d3c4b51575",
+        "e1cb8576dc"
+      ],
+      "untranslatable": [
+        "1f78ff9888"
+      ]
+    },
+    "apps/native/words/ml": {
+      "numbers": [
+        "01bf6f3e20",
+        "14dc55dd5d",
+        "3453b1145e",
+        "3689a3d846",
+        "85d15dbaf2",
+        "8d666c915f",
+        "b905142f89",
+        "d3c4b51575",
+        "d6c12adc08",
+        "e392efcfb5"
+      ],
+      "untranslatable": [
+        "0c20b10d70",
+        "20cf26b4b2",
+        "292cf615bb",
+        "60517c6307",
+        "6a819c4e07",
+        "a5a140f13d",
+        "c10dd21769",
+        "d5fb934f78"
+      ]
+    },
+    "apps/native/words/pt": {
+      "glossary": [
+        "0027bb79a7",
+        "0bee18f1fe",
+        "0ed0f5435e",
+        "1022977780",
+        "137329aa22",
+        "17765c85d1",
+        "177fc23447",
+        "180cc9458e",
+        "18c3af32fa",
+        "193ec060db",
+        "1cabb52f7d",
+        "220b29db5e",
+        "24f02c67f9",
+        "255c4aaff3",
+        "2616afa359",
+        "291451c13f",
+        "2ae327baab",
+        "321c8a8618",
+        "33ea4ee82a",
+        "34c3cf64e6",
+        "36650e6b8c",
+        "39bff46cef",
+        "3e420ab156",
+        "3ef235c41c",
+        "42232bbe0c",
+        "474c74d246",
+        "483ce80344",
+        "4e87457da0",
+        "5296511cbf",
+        "5669773486",
+        "5b450d6ea2",
+        "5b45c0e808",
+        "5d288b0fbe",
+        "5d40b2d247",
+        "61b313878d",
+        "6593a66fe6",
+        "6828d862c6",
+        "6b0e7da194",
+        "6ed3cc5e13",
+        "72288bc58a",
+        "7281c12b6e",
+        "752b2035f5",
+        "7a6987c947",
+        "7c33a091c9",
+        "7d408076b9",
+        "80874d15f6",
+        "84f350dc8c",
+        "851c0ff885",
+        "8e25877f06",
+        "97e989939d",
+        "9a07c238a0",
+        "9b321cd5ef",
+        "a1fec1188b",
+        "a74771d0b8",
+        "ab26dc9ad9",
+        "afa35b6593",
+        "b48d80e825",
+        "b4906b4cf1",
+        "b5e5f4e1d7",
+        "b8d0981106",
+        "ba10a05b34",
+        "bb5cfe4e60",
+        "be1d15f8a3",
+        "c051f046e1",
+        "c2620639a5",
+        "c669898014",
+        "c6d7ca6878",
+        "c77f67de53",
+        "c7c1b03423",
+        "ca9378d8e1",
+        "cd609faa87",
+        "cfd5650c8c",
+        "d1b1642508",
+        "e09d6a4c94",
+        "e398a3a3cd",
+        "eddcc6cf89",
+        "ee2b9b4cb9",
+        "ee569cf4b5",
+        "ef61e2ebd3",
+        "f1cdb9b54f",
+        "f4bc6ee431",
+        "f8ae76726b",
+        "f907c2e509",
+        "fe3f3c9a6c",
+        "fed3eb950a"
+      ]
+    },
+    "apps/native/words/ru": {
+      "glossary": [
+        "013ee6583c",
+        "0174a7ffc6",
+        "06a13b95f8",
+        "0a9cae7f0d",
+        "0b127d9208",
+        "0bee18f1fe",
+        "0e264a7c4d",
+        "0e84dde91e",
+        "1250a72f75",
+        "13f1ed9d92",
+        "151e97a88a",
+        "166b33c0da",
+        "16eba5e2fa",
+        "18c3af32fa",
+        "193ec060db",
+        "1ce77f2b74",
+        "1d092af50e",
+        "21622e9219",
+        "220b29db5e",
+        "244c1d71c2",
+        "24f02c67f9",
+        "252e4b464f",
+        "255c4aaff3",
+        "2616afa359",
+        "2748de8c9f",
+        "2a5d98a362",
+        "2ae327baab",
+        "2c2857d3b9",
+        "2d847b7092",
+        "2f58cfdb77",
+        "321c8a8618",
+        "33ea4ee82a",
+        "36650e6b8c",
+        "39bff46cef",
+        "3b57f78edd",
+        "3d48e74cb8",
+        "3e420ab156",
+        "463490e972",
+        "467c21cee7",
+        "474c74d246",
+        "47e420919f",
+        "488fcb2c27",
+        "4a019ad7aa",
+        "4c6cc0a4c0",
+        "5563b2b4fc",
+        "55f7ab5a41",
+        "565d164224",
+        "5669773486",
+        "581f7c050e",
+        "5a6837f862",
+        "5b45c0e808",
+        "5cfb014fac",
+        "5d288b0fbe",
+        "5f5934ac5c",
+        "61b313878d",
+        "620655321f",
+        "648989bf9a",
+        "6593a66fe6",
+        "682a0bf244",
+        "687f74fccc",
+        "698e47772e",
+        "6d5170158f",
+        "7220da3164",
+        "7281c12b6e",
+        "748485d725",
+        "752b2035f5",
+        "78316b32e8",
+        "7e7a754393",
+        "7f1d2b81f7",
+        "82c568cdb3",
+        "851c0ff885",
+        "8e25877f06",
+        "8fa6dbd254",
+        "901bfafec1",
+        "911b4e882c",
+        "94860dd06f",
+        "9569d66f1b",
+        "979366a27e",
+        "97e989939d",
+        "9a07c238a0",
+        "9b321cd5ef",
+        "9d9118bc8b",
+        "a1fec1188b",
+        "a64d4ac0ba",
+        "a7bd8f5c02",
+        "a8cfe80394",
+        "a8d901fe69",
+        "b359f8aac1",
+        "b48d80e825",
+        "b657055d3d",
+        "b75afcf640",
+        "b8d0981106",
+        "ba1411a526",
+        "bcc501309f",
+        "be1d15f8a3",
+        "be693135f5",
+        "c051f046e1",
+        "c22738652a",
+        "c2620639a5",
+        "c669898014",
+        "ca9378d8e1",
+        "ca9774b373",
+        "cae7d624bd",
+        "cb677cc198",
+        "cdea2d45d1",
+        "cfd5650c8c",
+        "d4f125b15d",
+        "d5542cfc29",
+        "d6a2cacf1e",
+        "db434b4f74",
+        "e160706072",
+        "e17c43e4e9",
+        "e2924cd3d0",
+        "e2e80032c0",
+        "e32c5c62a5",
+        "ef61e2ebd3",
+        "f01877fdf5",
+        "f19763992a",
+        "f1cdb9b54f",
+        "f4bc6ee431",
+        "f5257c98d6",
+        "f62893728d",
+        "f79e7233e6",
+        "f907c2e509",
+        "fb18e131e5",
+        "fe3f3c9a6c",
+        "ff1ed5a88e"
+      ],
+      "numbers": [
+        "16eb9522f3",
+        "5b2d9da807",
+        "68fc5d719c",
+        "7a0d82f687",
+        "85d15dbaf2",
+        "b905142f89",
+        "d3a52ae719",
+        "d51aa4c123",
+        "d51c8993b0"
+      ]
+    },
+    "apps/native/words/sw": {
+      "numbers": [
+        "d6c12adc08"
+      ]
+    },
+    "apps/native/words/ta": {
+      "numbers": [
+        "13a3641ce1",
+        "21d329d275",
+        "707d4f17ea",
+        "c4182fdcac",
+        "d4fc8e7fad",
+        "e9aab2ba6c"
+      ],
+      "untranslatable": [
+        "0194f79852",
+        "0c20b10d70",
+        "20cf26b4b2",
+        "292cf615bb",
+        "60517c6307",
+        "7cfe9ebd50",
+        "817330757e",
+        "a5a140f13d",
+        "c10dd21769",
+        "c9c7320f67",
+        "cb8f6f31de",
+        "cd24cbd2d0",
+        "cd633f9cab",
+        "d5fb934f78"
+      ]
+    },
+    "apps/native/words/tr": {
+      "numbers": [
+        "32936e63c3",
+        "3689a3d846"
+      ],
+      "untranslatable": [
+        "1f78ff9888"
+      ]
+    },
+    "apps/native/words/uk": {
+      "numbers": [
+        "32936e63c3"
+      ]
+    },
+    "apps/native/words/ur": {
+      "numbers": [
+        "01bf6f3e20",
+        "0c2717562b",
+        "14dc55dd5d",
+        "85d15dbaf2",
+        "9c0440f28c",
+        "b4121cdfb8",
+        "d3c4b51575",
+        "d6bceca8fa",
+        "e392efcfb5"
+      ]
+    },
+    "apps/native/words/vi": {
+      "numbers": [
+        "14dc55dd5d",
+        "85d15dbaf2",
+        "d3c4b51575"
+      ]
+    },
+    "apps/native/words/zh-Hans": {
+      "numbers": [
+        "016fa4d0f9",
+        "01bf6f3e20",
+        "14dc55dd5d",
+        "32bb89b3af",
+        "58e74afcd0",
+        "818e50c639",
+        "85d15dbaf2",
+        "889f8d40c0",
+        "8b1b37f12f",
+        "9898e22b69",
+        "c4182fdcac",
+        "d3c4b51575",
+        "d4fc8e7fad",
+        "e392efcfb5",
+        "e9aab2ba6c"
+      ]
+    },
+    "apps/native/words/zh-Hant": {
+      "numbers": [
+        "016fa4d0f9",
+        "01bf6f3e20",
+        "14dc55dd5d",
+        "32bb89b3af",
+        "818e50c639",
+        "85d15dbaf2",
+        "889f8d40c0",
+        "8b1b37f12f",
+        "9898e22b69",
+        "d3c4b51575",
+        "e392efcfb5"
+      ]
+    },
+    "apps/pwa/words/ar": {
+      "numbers": [
+        "14dc55dd5d",
+        "18192378db",
+        "182cbec9a7",
+        "1d57a5a866",
+        "20c5a2e609",
+        "2581e05b74",
+        "36a6a2ac03",
+        "3afe388a0c",
+        "41c240df3b",
+        "49d9f0d8e5",
+        "60f01e3827",
+        "7492a262ed",
+        "79678fcc58",
+        "7daff0e04d",
+        "8ae531b140",
+        "8dd77a7b6a",
+        "a389e8d993",
+        "a3fc80137f",
+        "af01bc53a1",
+        "ba9a0c61da",
+        "bad12d46de",
+        "d73e009c54",
+        "eb5fec48c5",
+        "ed861b5444",
+        "fe8d5c5ccb"
+      ]
+    },
+    "apps/pwa/words/bn": {
+      "numbers": [
+        "14dc55dd5d"
+      ]
+    },
+    "apps/pwa/words/de": {
+      "numbers": [
+        "3453b1145e",
+        "b905142f89"
+      ]
+    },
+    "apps/pwa/words/el": {
+      "numbers": [
+        "b905142f89"
+      ]
+    },
+    "apps/pwa/words/es": {
+      "glossary": [
+        "04f834416d",
+        "06e547cb12",
+        "09df11d6fb",
+        "0f29b7df4e",
+        "12ef83d202",
+        "137329aa22",
+        "1d080c4618",
+        "255c4aaff3",
+        "291451c13f",
+        "34685968cb",
+        "35a1b5fe56",
+        "36650e6b8c",
+        "394185ea1d",
+        "48bf6cda8b",
+        "49a295679c",
+        "4e87457da0",
+        "4ee42a0b7b",
+        "5296511cbf",
+        "5735138d91",
+        "6b0e7da194",
+        "75de4c1f07",
+        "84f350dc8c",
+        "86e92db973",
+        "8c42ef2c25",
+        "8cd8536830",
+        "8fa6dbd254",
+        "94566a6abd",
+        "95ffe787c9",
+        "982b7f52fe",
+        "991705a48f",
+        "a74771d0b8",
+        "b4906b4cf1",
+        "b5e5f4e1d7",
+        "b64fae00ce",
+        "ba10a05b34",
+        "bb5cfe4e60",
+        "c29f5e0b58",
+        "c6d7ca6878",
+        "c77f67de53",
+        "cd609faa87",
+        "d1b1642508",
+        "e398a3a3cd",
+        "e437994c53",
+        "ea9623395c",
+        "ee2b9b4cb9",
+        "f3d59842b4",
+        "f8ae76726b",
+        "ffb8fdfd57"
+      ]
+    },
+    "apps/pwa/words/fa": {
+      "numbers": [
+        "14dc55dd5d"
+      ]
+    },
+    "apps/pwa/words/fr": {
+      "glossary": [
+        "04f834416d",
+        "06e547cb12",
+        "09df11d6fb",
+        "12ef83d202",
+        "137329aa22",
+        "291451c13f",
+        "2f58cfdb77",
+        "349924aa88",
+        "36650e6b8c",
+        "394185ea1d",
+        "3b57f78edd",
+        "48306fad4f",
+        "48bf6cda8b",
+        "4c8396638d",
+        "4e87457da0",
+        "5296511cbf",
+        "5cfb014fac",
+        "639c4ae55e",
+        "7684c0254b",
+        "84f350dc8c",
+        "86e92db973",
+        "890b9c280e",
+        "8c42ef2c25",
+        "94566a6abd",
+        "95ffe787c9",
+        "982b7f52fe",
+        "991705a48f",
+        "a74771d0b8",
+        "ab26dc9ad9",
+        "b4906b4cf1",
+        "b5e5f4e1d7",
+        "ba10a05b34",
+        "bb5cfe4e60",
+        "bde396f239",
+        "c6d7ca6878",
+        "c77f67de53",
+        "cae76b0c32",
+        "cd609faa87",
+        "d1b1642508",
+        "d61c36b7f0",
+        "da7a40d278",
+        "e09afaa2a2",
+        "e398a3a3cd",
+        "e53f097c2d",
+        "ea9623395c",
+        "ee2b9b4cb9",
+        "f3d59842b4",
+        "f8ae76726b",
+        "ffb8fdfd57"
+      ]
+    },
+    "apps/pwa/words/hi": {
+      "numbers": [
+        "14dc55dd5d"
+      ]
+    },
+    "apps/pwa/words/ja": {
+      "numbers": [
+        "14dc55dd5d"
+      ]
+    },
+    "apps/pwa/words/ko": {
+      "numbers": [
+        "14dc55dd5d",
+        "3076877414",
+        "41c240df3b",
+        "e1cb8576dc"
+      ]
+    },
+    "apps/pwa/words/ml": {
+      "numbers": [
+        "01bf6f3e20",
+        "126979f26c",
+        "14dc55dd5d",
+        "3453b1145e",
+        "b905142f89"
+      ]
+    },
+    "apps/pwa/words/pt": {
+      "glossary": [
+        "04f834416d",
+        "06e547cb12",
+        "0972b7f8ed",
+        "09df11d6fb",
+        "0f1d652c9b",
+        "0f29b7df4e",
+        "12ef83d202",
+        "137329aa22",
+        "255c4aaff3",
+        "2748de8c9f",
+        "291451c13f",
+        "35a1b5fe56",
+        "36650e6b8c",
+        "4e87457da0",
+        "5296511cbf",
+        "6b0e7da194",
+        "76c6a1362e",
+        "84f350dc8c",
+        "86e92db973",
+        "8cd8536830",
+        "94566a6abd",
+        "982b7f52fe",
+        "991705a48f",
+        "a74771d0b8",
+        "ab26dc9ad9",
+        "b4906b4cf1",
+        "b5e5f4e1d7",
+        "ba10a05b34",
+        "bb5cfe4e60",
+        "c3a271e498",
+        "c6d7ca6878",
+        "c77f67de53",
+        "cd609faa87",
+        "d1b1642508",
+        "dd6452158c",
+        "e398a3a3cd",
+        "e41ae5ab05",
+        "ea9623395c",
+        "ee2b9b4cb9",
+        "f3d59842b4",
+        "f8ae76726b",
+        "ffb8fdfd57"
+      ],
+      "numbers": [
+        "126979f26c"
+      ]
+    },
+    "apps/pwa/words/ru": {
+      "glossary": [
+        "04f834416d",
+        "06a13b95f8",
+        "06e547cb12",
+        "0abb7a1f2b",
+        "0b127d9208",
+        "0e264a7c4d",
+        "0e84dde91e",
+        "12ef83d202",
+        "13f1ed9d92",
+        "151e97a88a",
+        "1d092af50e",
+        "208dcf1853",
+        "244c1d71c2",
+        "255c4aaff3",
+        "2748de8c9f",
+        "2c2857d3b9",
+        "2f58cfdb77",
+        "36650e6b8c",
+        "3b57f78edd",
+        "463490e972",
+        "47e420919f",
+        "488fcb2c27",
+        "4a019ad7aa",
+        "53d109bf2e",
+        "581f7c050e",
+        "5cfb014fac",
+        "5f5934ac5c",
+        "748485d725",
+        "7684c0254b",
+        "78316b32e8",
+        "791bba9689",
+        "7a092d3d86",
+        "7f1d2b81f7",
+        "82c568cdb3",
+        "86e92db973",
+        "8fa6dbd254",
+        "901bfafec1",
+        "979366a27e",
+        "982b7f52fe",
+        "9caee6173b",
+        "a8cfe80394",
+        "b359f8aac1",
+        "b657055d3d",
+        "b75afcf640",
+        "bd48167d9d",
+        "ca9774b373",
+        "cd609faa87",
+        "cea91877ce",
+        "d4f125b15d",
+        "d6a2cacf1e",
+        "d7ef71b36e",
+        "db434b4f74",
+        "dbd6d4b880",
+        "e160706072",
+        "e32c5c62a5",
+        "f425dfa512",
+        "f79e7233e6",
+        "f7c6d8b816",
+        "ff1ed5a88e",
+        "ffb8fdfd57"
+      ],
+      "numbers": [
+        "126979f26c",
+        "16eb9522f3",
+        "4ed9a305e4",
+        "67ed7d5320",
+        "68fc5d719c",
+        "7a0d82f687",
+        "b905142f89",
+        "d51aa4c123"
+      ]
+    },
+    "apps/pwa/words/tr": {
+      "numbers": [
+        "126979f26c"
+      ]
+    },
+    "apps/pwa/words/ur": {
+      "numbers": [
+        "01bf6f3e20",
+        "14dc55dd5d"
+      ]
+    },
+    "apps/pwa/words/vi": {
+      "numbers": [
+        "126979f26c",
+        "14dc55dd5d"
+      ]
+    },
+    "apps/pwa/words/zh-Hans": {
+      "numbers": [
+        "01bf6f3e20",
+        "14dc55dd5d",
+        "18192378db"
+      ]
+    },
+    "apps/pwa/words/zh-Hant": {
+      "numbers": [
+        "01bf6f3e20",
+        "14dc55dd5d",
+        "18192378db"
+      ]
+    },
+    "apps/server/words/ar": {
+      "numbers": [
+        "f7c4156d4e"
+      ]
+    },
+    "apps/server/words/es": {
+      "glossary": [
+        "0233bb68ed"
+      ]
+    },
+    "apps/server/words/pt": {
+      "glossary": [
+        "0233bb68ed",
+        "e60b49edfe"
+      ]
+    },
+    "apps/server/words/ru": {
+      "glossary": [
+        "e60b49edfe"
+      ]
+    },
+    "packages/beanpool-core/words/ar": {
+      "numbers": [
+        "b620704331",
+        "b902d2eabf",
+        "f428559173",
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/bn": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/es": {
+      "glossary": [
+        "020d92856e",
+        "03fa1c2ef3",
+        "21baed5459",
+        "390ac19860",
+        "3ce7acfdc1",
+        "4b6a54a95d",
+        "4c6e8ad40e",
+        "5358334e46",
+        "8cdbb45b20",
+        "bf89fd5798",
+        "c5cc6f80b6",
+        "d226c42c6f",
+        "ed07751d4e",
+        "f5282bd39d"
+      ],
+      "numbers": [
+        "b620704331",
+        "b902d2eabf",
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/fa": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/fil": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/fr": {
+      "glossary": [
+        "020d92856e",
+        "0c9b83dce1",
+        "21baed5459",
+        "4b6a54a95d",
+        "4c6e8ad40e",
+        "5f11137478",
+        "6c6451b503",
+        "8cdbb45b20",
+        "994557275e",
+        "ae97763d87",
+        "bf89fd5798",
+        "c44b66e2a6",
+        "c5cc6f80b6",
+        "c85b5e9d5d",
+        "d226c42c6f",
+        "d6e249e585",
+        "e8b9731f75",
+        "ed07751d4e",
+        "f4f2bbdc9a"
+      ],
+      "numbers": [
+        "b620704331",
+        "b902d2eabf",
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/hi": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/id": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/it": {
+      "numbers": [
+        "b620704331",
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/ml": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/pt": {
+      "glossary": [
+        "020d92856e",
+        "105e3787e2",
+        "21baed5459",
+        "3ce7acfdc1",
+        "4b6a54a95d",
+        "4c6e8ad40e",
+        "5358334e46",
+        "674ec0ab8e",
+        "6c6451b503",
+        "74e42c3eea",
+        "8cdbb45b20",
+        "9b6ffe247c",
+        "a30aee3f09",
+        "b6d7310ae5",
+        "bf89fd5798",
+        "c44b66e2a6",
+        "c5cc6f80b6",
+        "d226c42c6f",
+        "d6e249e585",
+        "e7d051c53f",
+        "ed07751d4e",
+        "f4f2bbdc9a",
+        "f5282bd39d"
+      ],
+      "numbers": [
+        "b620704331",
+        "b902d2eabf",
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/ru": {
+      "glossary": [
+        "020d92856e",
+        "03fa1c2ef3",
+        "0c9b83dce1",
+        "105e3787e2",
+        "21baed5459",
+        "2d5f6b0d38",
+        "33edd8caaf",
+        "390ac19860",
+        "3ce7acfdc1",
+        "45cdd6b4f2",
+        "4b6a54a95d",
+        "4c6e8ad40e",
+        "5556db812e",
+        "8cdbb45b20",
+        "994557275e",
+        "bf89fd5798",
+        "c85b5e9d5d",
+        "cf67508511",
+        "d1b91cb477",
+        "ed07751d4e",
+        "ef98e0dfbe",
+        "f83d47b241",
+        "ff998ccfea"
+      ],
+      "numbers": [
+        "b620704331",
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/sw": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/ta": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/tr": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/uk": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/ur": {
+      "numbers": [
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/zh-Hans": {
+      "numbers": [
+        "b902d2eabf",
+        "f56c075de1"
+      ]
+    },
+    "packages/beanpool-core/words/zh-Hant": {
+      "numbers": [
+        "b902d2eabf",
+        "f56c075de1"
+      ]
+    }
+  }
+}

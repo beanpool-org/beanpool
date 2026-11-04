@@ -5,9 +5,15 @@
  *
  * The page never says whose account it is (no callsign, name, photo or key): a page found in a drawer must not point
  * at an account. Every value on it is escaped for HTML.
+ *
+ * This file is on the 12 words' key path, so it reaches the words layer in no way (__tests__/recovery-path-files.test.ts):
+ * the page's own sentences come in as `lines`, made by recovery-kit-lines.ts (the member's language, fixed sentences
+ * only, handed no word), and the English below is what the page says with none. The date is a date, not a word
+ * (formatDate), as it has always been.
  */
 
 import { formatDate } from './words.js';
+import type { PrintedKitLines } from './recovery-kit-lines.js';
 
 export interface RecoveryKit {
     /** Exactly the member's 12 words, as the words screen shows them. */
@@ -55,6 +61,21 @@ export const KIT_WEB_RESTORE_STEPS = [
     'Click “Recover Identity”. Your name and picture come back once you’re in.',
 ] as const;
 
+/** What the page says with no `lines` given: English, exactly as the printed kit has always read. */
+const ENGLISH_PAGE: PrintedKitLines = {
+    lang: 'en',
+    title: KIT_TITLE,
+    community: 'Community:',
+    address: 'Address:',
+    madeOn: (date) => `Made on ${date}`,
+    warning: KIT_WARNING,
+    howBack: 'How to get back in',
+    onPhone: 'On a phone',
+    inBrowser: 'In a web browser',
+    phoneSteps: KIT_RESTORE_STEPS,
+    webSteps: KIT_WEB_RESTORE_STEPS,
+};
+
 function escapeHtml(value: string): string {
     return value
         .replace(/&/g, '&amp;')
@@ -76,8 +97,11 @@ function stepList(steps: readonly string[]): string {
 /**
  * The kit's page. Only the fields of {@link RecoveryKit} are read, whatever else the caller passes. One printed A4 or
  * Letter sheet at normal type: an `@page` rule, short sections, and no forced page breaks.
+ *
+ * `lines`: the page's sentences in the member's language (recovery-kit-lines.ts printedKitLines()); English when none.
+ * Every one is escaped, so a translation can hold any character. The 12 words are written as they are, never through them.
  */
-export function recoveryKitHtml(kit: RecoveryKit): string {
+export function recoveryKitHtml(kit: RecoveryKit, lines: PrintedKitLines = ENGLISH_PAGE): string {
     const { words, communityName, communityAddress, date } = kit;
     if (!Array.isArray(words) || words.length !== 12 || words.some((w) => typeof w !== 'string' || !w.trim())) {
         throw new Error('A recovery kit needs exactly 12 words.');
@@ -86,8 +110,8 @@ export function recoveryKitHtml(kit: RecoveryKit): string {
         `<div class="cell"><span class="n">${i + 1}.</span><span class="w">${escapeHtml(word.trim())}</span></div>`
     )).join('');
     return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(KIT_TITLE)}</title>
+<html lang="${escapeHtml(lines.lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(lines.title)}</title>
 <style>
   @page { margin: 14mm; }
   body { font-family: -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif; color: #111; margin: 0; }
@@ -105,16 +129,16 @@ export function recoveryKitHtml(kit: RecoveryKit): string {
   @media print { .cell, .warn, ol { break-inside: avoid; } }
 </style></head>
 <body>
-<h1>${escapeHtml(KIT_TITLE)}</h1>
-<p class="meta">Community: <strong>${escapeHtml(communityName)}</strong></p>
-<p class="meta">Address: <strong>${escapeHtml(communityAddress)}</strong></p>
-<p class="meta">Made on ${escapeHtml(kitDate(date))}</p>
+<h1>${escapeHtml(lines.title)}</h1>
+<p class="meta">${escapeHtml(lines.community)} <strong>${escapeHtml(communityName)}</strong></p>
+<p class="meta">${escapeHtml(lines.address)} <strong>${escapeHtml(communityAddress)}</strong></p>
+<p class="meta">${escapeHtml(lines.madeOn(kitDate(date)))}</p>
 <div class="grid">${cells}</div>
-<div class="warn">${escapeHtml(KIT_WARNING)}</div>
-<h2>How to get back in</h2>
-<h3>On a phone</h3>
-${stepList(KIT_RESTORE_STEPS)}
-<h3>In a web browser</h3>
-${stepList(KIT_WEB_RESTORE_STEPS)}
+<div class="warn">${escapeHtml(lines.warning)}</div>
+<h2>${escapeHtml(lines.howBack)}</h2>
+<h3>${escapeHtml(lines.onPhone)}</h3>
+${stepList(lines.phoneSteps)}
+<h3>${escapeHtml(lines.inBrowser)}</h3>
+${stepList(lines.webSteps)}
 </body></html>`;
 }

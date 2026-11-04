@@ -328,6 +328,34 @@ export async function confirmCoreSettings(
     return body;
 }
 
+/** The longest advice to the owners, in characters (server config/core-advice.ts ADVICE_MAX; the design's §5). */
+export const ADVICE_MAX = 200;
+
+/**
+ * Advise the owners about one Core setting (POST community-shape/advice; DESIGN-core-settings-fable.md §5): an admin's
+ * 200-character note, kept as a line in the Changes log and told to every owner as an alert. It changes nothing and asks no
+ * proof. Answers the shape with the new line at the head of its log. The advice is a person's words: the page draws it as
+ * text and nothing here reads it back to act on it.
+ */
+export async function adviseOwners(
+    nodeUrl: string,
+    credential: string | undefined,
+    setting: string,
+    advice: string,
+    tfaToken?: string,
+): Promise<{ shape: Shape; told: 'owners' }> {
+    const url = resolveNodeApiUrl(nodeUrl, '/api/local/admin/community-shape/advice');
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: buildAdminHeaders(credential, tfaToken),
+        credentials: 'same-origin',
+        body: JSON.stringify({ ...passwordField(credential), setting, advice: advice.trim() }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw shapeError(res.status, body);
+    return body;
+}
+
 /**
  * Save the community's place (the walkthrough's mandatory step on a local community; the same route Node Identity uses).
  * Only when none is set yet: Node Identity is where a place already set is changed.

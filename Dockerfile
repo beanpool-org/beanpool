@@ -72,9 +72,25 @@ RUN cd apps/server && pnpm run build
 FROM cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39 AS cloudflared
 
 # =============================================================================
+# The Android APK the node hands out on its local network (apps/server/src/services/apk-release.ts; lights-out H3)
+# =============================================================================
+# CI replaces this stage with the folder scripts/apk/fetch-image-apk.mjs fills (docker-publish.yml, build-contexts:
+# apk=…): beanpool-apk/ holding the newest android-v* APK, its SHA-256 and signing certificate checked, and its apk.json,
+# with every time and mode fixed, so the same APK makes the same layer. A build without that (deploy.sh's source build on a
+# node) copies this folder instead, which holds no APK: that node fetches one itself once it is online (services/apk-mirror.ts).
+FROM scratch AS apk
+COPY ops/apk-layer-empty/ /
+
+# =============================================================================
 # Stage 2: Runtime — clean Alpine with only what's needed to run
 # =============================================================================
 FROM node:22-alpine3.21 AS runtime
+
+# The APK first, as a layer of its own straight on the base image: every layer after it changes with each build (even
+# WORKDIR's folder has that build's time), and a layer is only the same layer on the same layers below it. So a node's
+# update downloads the APK's ~73 MB again only when the APK or the base image changed. Not --link: a source build on an
+# older Docker still reads this file.
+COPY --from=apk / /
 
 # Accept version from CI build args (from git tag)
 ARG APP_VERSION=""

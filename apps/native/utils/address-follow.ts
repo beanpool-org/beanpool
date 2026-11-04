@@ -343,8 +343,15 @@ async function snoozed(offer: AddressFollowOffer, now: number): Promise<boolean>
  * The card's question, or null: the phone's community lives somewhere else now, the member hasn't said "Not now" to it in
  * the last 7 days, and it is checked to be the same community. Writes nothing but what the phone verified of its own
  * community (above): never the community's address.
+ *
+ * `opts`, the fallback card's ask (utils/address-fallback.ts) while the phone's own address isn't answering: a 'same'
+ * checked before `sameSince` (when its run of failed tries began), or `sameWithin` ms ago or more, is checked again first.
+ * An hour-old 'same' says nothing of whether the new address answers now, and that card stands aside only for a move that
+ * can be made (review of 533de50e). Neither shortens a check that offered nothing.
  */
-export async function addressFollowOffer(injected?: Partial<AddressFollowDeps>): Promise<AddressFollowOffer | null> {
+export async function addressFollowOffer(
+    injected?: Partial<AddressFollowDeps>, opts?: { sameSince?: number; sameWithin?: number },
+): Promise<AddressFollowOffer | null> {
     const deps = await depsWith(injected);
     const anchor = await deps.anchor().catch(() => null);
     if (!anchor || !followableOrigin(anchor)) return null;
@@ -353,7 +360,10 @@ export async function addressFollowOffer(injected?: Partial<AddressFollowDeps>):
     const id = `${offer.from} ${offer.to}`;
     const memo = checked.get(id);
     const ttl = memo?.verdict === 'unreachable' ? UNREACHABLE_TTL_MS : VERDICT_TTL_MS;
-    let verdict = memo && deps.now() - memo.at >= 0 && deps.now() - memo.at < ttl ? memo.verdict : null;
+    const age = memo ? deps.now() - memo.at : -1;
+    const stale = !memo || age < 0 || age >= ttl || (memo.verdict === 'same' && (
+        (opts?.sameSince !== undefined && memo.at < opts.sameSince) || (opts?.sameWithin !== undefined && age >= opts.sameWithin)));
+    let verdict = stale ? null : memo.verdict;
     if (!verdict) {
         verdict = await checkFollow(offer, deps);
         checked.set(id, { verdict, at: deps.now() });

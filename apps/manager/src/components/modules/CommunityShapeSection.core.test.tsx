@@ -122,7 +122,7 @@ describe('Core settings — locked: Unlock to change', () => {
         mockApi(locked());
         render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
         await screen.findByText('🧭');
-        expect(screen.getByTestId('shape-core-lock-beans')).toHaveTextContent('Locked since 3 Nov 2026 by @ada. Only an owner unlocks it.');
+        expect(screen.getByTestId('shape-core-lock-beans')).toHaveTextContent('Locked since 3 Nov 2026 by @ada. Only an owner unlocks it; you can advise them below.');
         expect(screen.queryByRole('button', { name: 'Unlock to change' })).toBeNull();
         expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
     });
@@ -250,7 +250,7 @@ describe('Core settings — not confirmed yet: offered, never forced', () => {
         mockApi(shapeWith());
         render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
         await screen.findByText('🧭');
-        expect(screen.getByTestId('core-unconfirmed-admin')).toHaveTextContent("The owners haven't confirmed the core settings yet. You can read them.");
+        expect(screen.getByTestId('core-unconfirmed-admin')).toHaveTextContent("The owners haven't confirmed the core settings yet. You can read them and advise.");
         expect(screen.queryByTestId('core-walk-start')).toBeNull();
     });
 
@@ -473,5 +473,142 @@ describe('Core settings — the menu\'s "!" is told only what it means', () => {
         fireEvent.click(screen.getByTestId('walk-confirm'));
         await waitFor(() => expect(seen.at(-1)).toBe(false));
         expect(seen[0]).toBe(true);
+    });
+});
+
+describe('Core settings — an admin advises the owners (C4)', () => {
+    const locked = () => shapeWith({ core: { settings: [...CORE_SETTINGS], lock: LOCK, place: { needed: true, set: true } } });
+    const CORE_ROWS = ['join', 'beans', 'knownFloor', 'decisions', 'shareOutside', 'recoveryCopies'];
+    const adviceLine = (note: string, id = '9') => ({
+        id, kept: 'community_settings_log' as const, at: '2026-11-04T01:00:00.000Z', actor: 'a'.repeat(64), actorCallsign: 'ada', actorRole: 'admin',
+        setting: 'advice.beans', from: null, to: null, note,
+    });
+
+    it('an admin has one Advise the owners button on every Core row, locked or not, and never an Unlock or a Save', async () => {
+        for (const shape of [locked(), shapeWith()]) {
+            mockApi(shape);
+            render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+            await screen.findByText('🧭');
+            for (const id of CORE_ROWS) {
+                const row = screen.getByTestId(`shape-row-${id}`);
+                expect(within(row).getAllByRole('button')).toHaveLength(1);
+                expect(within(row).getByRole('button', { name: 'Advise the owners' })).toBeInTheDocument();
+            }
+            expect(screen.queryByRole('button', { name: 'Unlock to change' })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+            cleanup();
+        }
+    });
+
+    it('an owner never sees it (they have Unlock to change), and nor does an admin on a standby', async () => {
+        mockApi(locked());
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await screen.findByText('🧭');
+        expect(screen.queryByRole('button', { name: 'Advise the owners' })).toBeNull();
+        cleanup();
+        mockApi({ ...locked(), standby: true });
+        render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+        await screen.findByText('🧭');
+        expect(screen.queryByRole('button', { name: 'Advise the owners' })).toBeNull();
+        // The lock line does not promise advice a standby can't take.
+        expect(screen.getByTestId('shape-core-lock-beans')).toHaveTextContent('Locked since 3 Nov 2026 by @ada. Only an owner unlocks it.');
+        expect(screen.getByTestId('shape-core-lock-beans')).not.toHaveTextContent('advise');
+    });
+
+    it('opens a box for 200 characters, Send waits for words, and Cancel sends nothing', async () => {
+        const { sent } = mockApi(locked());
+        render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+        await screen.findByText('🧭');
+        fireEvent.click(within(screen.getByTestId('shape-row-beans')).getByRole('button', { name: 'Advise the owners' }));
+        const box = screen.getByLabelText('Your advice about Beans');
+        expect(box).toHaveAttribute('maxlength', '200');
+        expect(screen.getByTestId('shape-advise-count-beans')).toHaveTextContent('0 of 200');
+        expect(screen.getByTestId('shape-advise-send-beans')).toBeDisabled();
+        fireEvent.change(box, { target: { value: '   ' } });
+        expect(screen.getByTestId('shape-advise-send-beans')).toBeDisabled();
+        fireEvent.change(box, { target: { value: 'Keep Beans on' } });
+        expect(screen.getByTestId('shape-advise-count-beans')).toHaveTextContent('13 of 200');
+        expect(screen.getByTestId('shape-advise-send-beans')).toBeEnabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByTestId('shape-advise-form-beans')).toBeNull();
+        expect(within(screen.getByTestId('shape-row-beans')).getByRole('button', { name: 'Advise the owners' })).toBeInTheDocument();
+        expect(sent).toHaveLength(0);
+    });
+
+    it('Send posts the setting and the advice, shows the line in Changes, and says every owner is told', async () => {
+        const shape = locked();
+        const reply = { ...shape, log: [adviceLine('Keep Beans on: the market needs them.')] };
+        const { sent } = mockApi(shape, [{ ok: true, status: 200, body: { shape: reply, told: 'owners' } }]);
+        render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+        await screen.findByText('🧭');
+        expect(screen.getByText('No changes recorded yet.')).toBeInTheDocument();
+        fireEvent.click(within(screen.getByTestId('shape-row-beans')).getByRole('button', { name: 'Advise the owners' }));
+        fireEvent.change(screen.getByLabelText('Your advice about Beans'), { target: { value: '  Keep Beans on: the market needs them.  ' } });
+        fireEvent.click(screen.getByTestId('shape-advise-send-beans'));
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(sent[0].url).toContain('/api/local/admin/community-shape/advice');
+        expect(sent[0].body).toMatchObject({ setting: 'beans', advice: 'Keep Beans on: the market needs them.' });
+        expect(Object.keys(sent[0].body).sort()).toEqual(['advice', 'password', 'setting']);
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Sent. Every owner is told, and your words are under Changes below.'));
+        const log = screen.getByTestId('shape-audit-log');
+        expect(log).toHaveTextContent('@ada (admin) · 💬 Advised the owners about Beans · “Keep Beans on: the market needs them.”');
+        expect(screen.queryByTestId('shape-advise-form-beans')).toBeNull();
+    });
+
+    it('the log line names the setting as the page does, for each Core setting, for an owner too', async () => {
+        const shape = locked();
+        shape.log = ['join', 'knownFloor', 'shareOutside', 'recoveryCopies'].map((s, i) => ({ ...adviceLine(`about ${s}`, String(i + 1)), setting: `advice.${s}` }));
+        mockApi(shape);
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await screen.findByText('🧭');
+        const log = screen.getByTestId('shape-audit-log');
+        expect(log).toHaveTextContent('💬 Advised the owners about Who can join · “about join”');
+        expect(log).toHaveTextContent('💬 Advised the owners about Known floor for confirmed members · “about knownFloor”');
+        expect(log).toHaveTextContent('💬 Advised the owners about Members may share listings outside the community · “about shareOutside”');
+        expect(log).toHaveTextContent("💬 Advised the owners about Where members' copies go · “about recoveryCopies”");
+    });
+
+    it('the advice is drawn as text only: markup in it is never markup, and nothing in it is acted on', async () => {
+        const shape = locked();
+        const hostile = '<img src=x onerror="document.title=\'pwned\'"> <script>document.title=\'pwned\'</script> <b>bold</b> &amp; {{x}}';
+        shape.log = [adviceLine(hostile)];
+        mockApi(shape);
+        const { container } = render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await screen.findByText('🧭');
+        const log = screen.getByTestId('shape-audit-log');
+        expect(log.textContent).toContain(hostile);
+        expect(container.querySelector('img')).toBeNull();
+        expect(container.querySelector('script')).toBeNull();
+        expect(container.querySelector('b')).toBeNull();
+        expect(document.title).not.toBe('pwned');
+        // And what an admin types into the box goes out as text and comes back drawn as text.
+        cleanup();
+        const empty = locked();
+        const { sent } = mockApi(empty, [{ ok: true, status: 200, body: { shape: { ...empty, log: [adviceLine(hostile)] }, told: 'owners' } }]);
+        const second = render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+        await screen.findByText('🧭');
+        fireEvent.click(within(screen.getByTestId('shape-row-beans')).getByRole('button', { name: 'Advise the owners' }));
+        fireEvent.change(screen.getByLabelText('Your advice about Beans'), { target: { value: hostile } });
+        fireEvent.click(screen.getByTestId('shape-advise-send-beans'));
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(sent[0].body.advice).toBe(hostile);
+        await waitFor(() => expect(screen.getByTestId('shape-audit-log').textContent).toContain(hostile));
+        expect(second.container.querySelector('img')).toBeNull();
+        expect(second.container.querySelector('script')).toBeNull();
+    });
+
+    it("a refusal shows the server's sentence, keeps what was typed and writes no line", async () => {
+        const shape = locked();
+        const { sent } = mockApi(shape, [{ ok: false, status: 429, body: { error: 'That is 10 pieces of advice in a day. Send the next one tomorrow, or tell the owners another way. Nothing was saved.', code: 'advice_limit', setting: 'beans' } }]);
+        render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+        await screen.findByText('🧭');
+        fireEvent.click(within(screen.getByTestId('shape-row-beans')).getByRole('button', { name: 'Advise the owners' }));
+        fireEvent.change(screen.getByLabelText('Your advice about Beans'), { target: { value: 'One more' } });
+        fireEvent.click(screen.getByTestId('shape-advise-send-beans'));
+        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Send the next one tomorrow'));
+        expect(sent).toHaveLength(1);
+        expect(screen.getByLabelText('Your advice about Beans')).toHaveValue('One more');
+        expect(screen.getByText('No changes recorded yet.')).toBeInTheDocument();
+        expect(screen.queryByRole('status')).toBeNull();
     });
 });

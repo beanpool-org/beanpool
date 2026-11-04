@@ -2,10 +2,12 @@
  * EventCard / EventDetail — an event in the Market feed, the map preview and the post view
  * (docs/events-on-the-map.md §3).
  *
- * The card leads with the date and time in the largest text, then the title, the place and distance, the two
- * counts, and Going / Interested with the viewer's own status on the filled button. The host name is on the
- * detail, not the card. Built for 320px at 130% text: every row truncates, the buttons never shrink, and every
- * target is at least 48px tall.
+ * The card leads with a row of chips (EVENT, PINNED, CANCELLED / UPDATED), then the date and time in the largest
+ * text, then the title, the place and distance, and one status line: the viewer's own answer ("Going ✓"), else the
+ * counts once anyone has answered. Going / Interested live on the event's page (Marty, 4 Nov 2026: cards open,
+ * pages act); the one card that still carries the two buttons is the map's preview, which asks for them with
+ * `rsvpOnCard`. The host name is on the detail, not the card. Built for 320px at 130% text: every row truncates or
+ * wraps by whole pieces, and the card is one tap target.
  *
  * An event with a photo shows it above (grid) or beside (list) those lines, the same size and crop the offer
  * cards around it use — the host put it there, and a feed of pictures with one blank tile among them reads as
@@ -17,7 +19,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
+import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, upperCase, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
@@ -91,18 +93,55 @@ function useEventRsvp(post: MarketplacePost, identity: BeanPoolIdentity | null |
     return { livePost, setLivePost, busy, error, canRsvp, tap };
 }
 
-function StateBadge({ post }: { post: MarketplacePost }) {
+type EventStateKind = 'cancelled' | 'ended' | 'updated';
+
+/** Which state badge an event wears, if any: cancelled, ended (over and not cancelled), or updated. */
+function eventStateOf(post: MarketplacePost): EventStateKind | null {
     const ended = !isEventOpen(post) && post.eventState !== 'cancelled' && post.status !== 'cancelled';
-    const state = post.eventState === 'cancelled' || post.status === 'cancelled'
+    return post.eventState === 'cancelled' || post.status === 'cancelled'
         ? 'cancelled'
         : ended ? 'ended' : post.eventState === 'updated' ? 'updated' : null;
+}
+
+/** Every chip on an event is the same small pill: 10px, extra bold, one line, never squeezed by its neighbour. */
+const CHIP = 'flex-shrink-0 whitespace-nowrap text-[10px] font-extrabold tracking-wide px-2 py-0.5 rounded-md border border-transparent';
+
+function StateBadge({ post }: { post: MarketplacePost }) {
+    const state = eventStateOf(post);
     if (!state) return null;
+    // Core's colour tokens, light and dark: UPDATED is the event violet; CANCELLED and ENDED are the danger chip.
     const tone = state === 'updated'
-        ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-800'
-        : 'bg-red-100 text-red-700 border-red-300 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800';
+        ? 'bg-bp-tile-event-tint text-bp-tile-event-ink'
+        : 'bg-bp-chip-danger-tint text-bp-chip-danger-ink';
     return (
-        <span data-testid="event-state-badge" className={`flex-shrink-0 text-[11px] font-black tracking-wide px-2 py-0.5 rounded-md border ${tone}`}>
+        <span data-testid="event-state-badge" className={`${CHIP} ${tone}`}>
             {state === 'cancelled' ? t('CANCELLED', undefined, 'event') : state === 'ended' ? t('ENDED', undefined, 'event') : t('UPDATED', undefined, 'event')}
+        </span>
+    );
+}
+
+/**
+ * The chips above an event's date, in this order: EVENT (the card only: the page is plainly an event), 📌 PINNED,
+ * then CANCELLED / ENDED / UPDATED. They sit in a row of their own so a pin or a badge can never squeeze the date,
+ * which keeps its whole line (Marty's Byron screenshot, 4 Nov 2026: the date wrapped to two lines on a pinned card).
+ * No chip, no row.
+ */
+function EventChips({ post, withType = false }: { post: MarketplacePost; withType?: boolean }) {
+    const pinned = pinLive(post as any);
+    if (!withType && !pinned && !eventStateOf(post)) return null;
+    return (
+        <span data-testid="event-chips" className="flex flex-wrap items-center gap-1 min-w-0 w-full">
+            {withType && (
+                <span data-testid="event-type-chip" className={`${CHIP} bg-bp-tile-event-tint text-bp-tile-event-ink`}>
+                    {upperCase(t('EVENT', undefined, 'event category tile label'))}
+                </span>
+            )}
+            {pinned && (
+                <span data-testid="event-pinned-chip" className={`${CHIP} bg-bp-chip-accent-tint text-bp-chip-accent-ink shadow-xs`}>
+                    {t('📌 PINNED')}
+                </span>
+            )}
+            <StateBadge post={post} />
         </span>
     );
 }
@@ -172,9 +211,10 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
 }
 
 /**
- * The date, the time and the CANCELLED / UPDATED badge on the first line, never cut off and never overlapping:
- * each is a whole piece, and at 320px with large text the next piece moves down a line instead of being
- * truncated, because the time is the one thing on the card nobody can do without.
+ * The date and the time on the first line, never cut off and never overlapping: each is a whole piece, and at
+ * 320px with large text the next piece moves down a line instead of being truncated, because the time is the one
+ * thing on the card nobody can do without. The pin and the state badge are not here: they are the chip row above
+ * (EventChips), so nothing shares the date's line.
  *
  * Under it, only when the viewer's clock differs from the place's, the second time (DESIGN-event-times §4): "Lagos time ·
  * 15:50 your time", its two halves whole in the same way. The detail adds an online event's host line.
@@ -203,15 +243,6 @@ function EventWhen({ post, className, testId, hostLine = false }: { post: Market
                         </>
                     )}
                 </span>
-                {pinLive(post as any) && (
-                    <span
-                        data-testid="event-pinned-chip"
-                        className="flex-shrink-0 text-[11px] font-black tracking-wide px-2 py-0.5 rounded-md bg-bp-chip-accent-tint text-bp-chip-accent-ink border border-transparent shadow-xs"
-                    >
-                        {t('📌 PINNED')}
-                    </span>
-                )}
-                <StateBadge post={post} />
             </span>
             {parts?.note && (
                 // aria-hidden: the line above already reads the whole of it out (formatEventWhen).
@@ -262,14 +293,26 @@ function joinHref(link: string | undefined): string | null {
 }
 
 /**
- * "3 going · 1 interested", or null when the counts are not known.
+ * "3 going · 1 interested", or null when the counts are not known or when nobody has answered yet.
  *
  * "Your events" is built from `/api/events/mine`, which carries no counts — and "0 going" on an event the
- * viewer is going to is not a smaller truth, it is a wrong one. A row that does not know keeps quiet.
+ * viewer is going to is not a smaller truth, it is a wrong one. A row that does not know keeps quiet. So does a
+ * row where both are zero (Marty, 4 Nov 2026): eight cards of "0 going · 0 interested" read as a dead community,
+ * and the event's page shows the counts.
  */
 function countsLine(post: MarketplacePost): string | null {
     if (post.goingCount == null && post.interestedCount == null) return null;
-    return t('{going} going · {interested} interested', { going: post.goingCount ?? 0, interested: post.interestedCount ?? 0 });
+    const going = post.goingCount ?? 0;
+    const interested = post.interestedCount ?? 0;
+    if (going + interested === 0) return null;
+    return t('{going} going · {interested} interested', { going, interested });
+}
+
+/** The viewer's own answer as the card writes it: "Going ✓" / "Interested ✓", the same words as the selected button on the page. */
+function myAnswerLine(post: MarketplacePost): string | null {
+    if (post.myRsvp === 'going') return t('{label} ✓', { label: t('Going') });
+    if (post.myRsvp === 'interested') return t('{label} ✓', { label: t('Interested') });
+    return null;
 }
 
 interface EventCardProps {
@@ -287,13 +330,19 @@ interface EventCardProps {
     onOpen?: () => void;
     onRsvpChange?: (post: MarketplacePost) => void;
     /**
+     * Going / Interested on the card itself. Off by default: a card in the Market is one tap target that opens the
+     * event, shows the viewer's own answer as text ("Going ✓") and leaves answering to the event's page. The web
+     * map's preview is a single card, not a list, and the web's only way to answer from the map, so it turns this on.
+     */
+    rsvpOnCard?: boolean;
+    /**
      * A visitor to the global lobby (G9b): no RSVP row, and no typed place (the node sends none to a visitor); a
      * distance only from a point the visitor shared, in whole km, since the node places the event at its area's centre.
      */
     visitor?: boolean;
 }
 
-export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, visitor = false }: EventCardProps) {
+export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, rsvpOnCard = false, visitor = false }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
     const copy = eventCopyOf(p);
@@ -316,8 +365,20 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     // it has always been, in every view.
     const asRow = hasPicture && viewMode === 'list';
 
+    // The status line (DESIGN-market-event-cards-fable.md §2.2). Without the buttons the card says where the viewer
+    // stands as text: a host reads that they are hosting, anyone else who answered reads their answer. A member's copy
+    // on the global community has its copy line instead, and nobody there answers. With the buttons (the map's preview)
+    // the filled button is the answer and the hosting line stays the buttons' own.
+    const isHost = isEventHostView(p);
+    const hosting = !rsvpOnCard && !copy && isHost;
+    const myAnswer = !rsvpOnCard && !copy && !isHost ? myAnswerLine(p) : null;
+    // The counts only once someone has answered; a viewer's own answer stands in their place, as the page has them.
+    const counts = !copy && !myAnswer ? countsLine(p) : null;
+    const openLabel = t('Open event: {title}', { title: p.title });
+
     const lines = (
         <>
+            <EventChips post={p} withType />
             <EventWhen post={p} testId="event-when" className="text-lg font-black text-violet-800 dark:text-violet-200 leading-tight" />
             <span dir="auto" className="block w-full truncate text-base font-extrabold text-nature-950 dark:text-white leading-snug">
                 {p.title}
@@ -327,10 +388,20 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                     <span aria-hidden="true">{p.eventOnline ? '🌐 ' : '📍 '}</span>{place}
                 </span>
             )}
+            {hosting && (
+                <span data-testid="event-hosting" className="block w-full break-words text-sm font-bold text-bp-tile-event-ink">
+                    {t("You're hosting this event")}
+                </span>
+            )}
+            {myAnswer && (
+                <span data-testid="event-my-answer" className="block w-full break-words text-sm font-bold text-bp-tile-event-ink">
+                    {myAnswer}
+                </span>
+            )}
             {/* The counts wrap rather than cut: "interested" is the longest word on the card in most languages. */}
-            {!copy && countsLine(p) && (
-                <span className="block w-full break-words text-sm font-semibold text-nature-600 dark:text-nature-300">
-                    <span aria-hidden="true">👥 </span>{countsLine(p)}
+            {counts && (
+                <span data-testid="event-counts" className="block w-full break-words text-sm font-semibold text-nature-600 dark:text-nature-300">
+                    <span aria-hidden="true">👥 </span>{counts}
                 </span>
             )}
         </>
@@ -342,7 +413,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 type="button"
                 onClick={onOpen}
                 disabled={!onOpen}
-                aria-label={t('Open event: {title}', { title: p.title })}
+                // The label stands in for what is inside the button, so a viewer's own answer rides at its end.
+                aria-label={[openLabel, hosting ? t("You're hosting this event") : null, myAnswer].filter(Boolean).join(', ')}
                 className={`w-full min-w-0 text-left bg-transparent border-0 p-0 flex cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-lg ${
                     asRow ? 'flex-row items-start gap-3' : 'flex-col gap-1'
                 }`}
@@ -365,8 +437,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 {asRow ? <span className="min-w-0 flex-1 flex flex-col gap-1">{lines}</span> : lines}
             </button>
             {copy?.from && <p data-testid="event-copy-line" className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyCardLine(copy.from)}</p>}
-            {!visitor && !copy && <RsvpButtons rsvp={rsvp} />}
-            {rsvp.error && (
+            {rsvpOnCard && !visitor && !copy && <RsvpButtons rsvp={rsvp} />}
+            {rsvpOnCard && rsvp.error && (
                 <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>
             )}
         </div>
@@ -473,6 +545,8 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 </div>
             )}
             <div className="p-4 md:p-6 flex-1 flex flex-col gap-3 min-w-0">
+                {/* The pin and CANCELLED / UPDATED badge the page always showed, now above the date instead of in its row. */}
+                <EventChips post={p} />
                 <h2 className="m-0 min-w-0 flex flex-col gap-1">
                     <EventWhen post={p} hostLine className="text-xl font-black text-violet-800 dark:text-violet-200 leading-tight" />
                 </h2>

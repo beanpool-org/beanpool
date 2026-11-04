@@ -33,9 +33,15 @@ describe('a copy on a card', () => {
         expect(document.body.textContent).not.toMatch(/0 going/);
     });
 
-    it('a plain event keeps its Going', () => {
-        render(<EventCard post={event} identity={member} />);
+    it('a plain event keeps its Going where the card asks for it (the map preview), and no copy line', () => {
+        render(<EventCard post={event} identity={member} rsvpOnCard />);
         expect(screen.getByTestId('event-rsvp-row')).toBeTruthy();
+        expect(screen.queryByTestId('event-copy-line')).toBeNull();
+    });
+
+    it('a plain event in the Market has no Going on the card: the event’s page has it', () => {
+        render(<EventCard post={event} identity={member} />);
+        expect(screen.queryByTestId('event-rsvp-row')).toBeNull();
         expect(screen.queryByTestId('event-copy-line')).toBeNull();
     });
 });

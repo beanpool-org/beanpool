@@ -1330,6 +1330,19 @@ describe("MapPage: the type filter, the phone's All / Offers / Needs / Events (w
         expect(screen.getByTestId('map-calendar-button')).toBeTruthy();
     });
 
+    // The Market's event card has no Going / Interested (cards open, pages act); the map's preview is one card, not a
+    // list, and the web's only way to answer from the map, so it asks for them (EventCard rsvpOnCard).
+    it('an event pin opens the preview with Going and Interested still on it', async () => {
+        await draw();
+        const pin = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-event-pin'))!;
+        act(() => { pin.listeners['click']?.(); });
+        const preview = await screen.findByTestId('map-preview-card');
+        const card = within(preview).getByTestId('event-card');
+        expect(within(card).getByTestId('event-rsvp-row')).toBeTruthy();
+        expect(within(card).getByRole('button', { name: 'Going' })).toBeTruthy();
+        expect(within(card).getByRole('button', { name: 'Interested' })).toBeTruthy();
+    });
+
     it('a category under Offers narrows the offers, and the chip names it', async () => {
         await draw();
         await click('map-type-offers');

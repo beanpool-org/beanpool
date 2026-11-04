@@ -54,7 +54,8 @@ vi.mock('react-native', () => {
                 items.length
                     ? rows.map((row, r) => cell(
                         numColumns > 1
-                            ? cell(row.map((item, c) => createElement('div', { key: keyExtractor(item, r * numColumns + c), 'data-style': '{"flex":1}' }, renderItem({ item, index: r * numColumns + c }))), 'row', columnWrapperStyle)
+                            // RN's own row for numColumns > 1 is `flexDirection: 'row'`, with the columnWrapperStyle on top of it.
+                            ? cell(row.map((item, c) => createElement('div', { key: keyExtractor(item, r * numColumns + c), 'data-style': '{"flex":1}' }, renderItem({ item, index: r * numColumns + c }))), 'row', [{ flexDirection: 'row' }, columnWrapperStyle])
                             : renderItem({ item: row[0], index: r }),
                         keyExtractor(row[0], r)))
                     : ListEmptyComponent,
@@ -321,6 +322,86 @@ describe('the grid and compact views keep their cards their own height too', () 
             expect(new Set(heights).size, `${p.title}: ${heights.join(', ')}`).toBe(1);
             expect(heights[0], p.title).toBeLessThan(view === 'grid' ? 400 : 120);
         }
+    });
+});
+
+// Byron's phone, 4 Nov (Android): "the pinned one is smaller. and it looks bad". The Pinned block added a 16 dp margin of
+// its own inside a list that already pads 16 dp, so a pinned card sat 32 dp in from each edge and every other card 16 dp.
+// Laid out with Yoga at 320 dp and 1.3x text: a pinned card and a card under TODAY are the same width at the same left
+// edge, in every view, and the gap between pinned cards is the gap between the others.
+describe('a pinned card is the same width as every other card', () => {
+    const DAY = 86_400_000;
+    const pinned = (id: string, title: string, ageMs: number) => ({ ...LONE, id, title, created_at: iso(now - ageMs), pinnedAt: iso(now - ageMs), pinnedUntil: iso(now + 3 * DAY) });
+    const plain = (id: string, title: string, ageMs: number) => ({ ...LONE, id, title, created_at: iso(now - ageMs) });
+    const PIN_A = pinned('pin-a', 'Pinned sourdough loaves', 3 * 60_000);
+    const PIN_B = pinned('pin-b', 'Pinned garden spades', 4 * 60_000);
+    const STREAM_A = plain('str-a', 'Stream bicycle repairs', 1 * 60_000);
+    const STREAM_B = plain('str-b', 'Stream guitar lessons', 2 * 60_000);
+
+    /** An element's left edge and top in the list's own coordinates: Yoga gives each box in its parent's, so add them up. */
+    function at(l: ReturnType<typeof lay>, el: Element) {
+        let left = 0, top = 0;
+        for (let e: Element | null = el; e && e !== list(); e = e.parentElement) { const b = l.box(e); left += b.left; top += b.top; }
+        return { left, top };
+    }
+    /** A listing's card box: in the list and compact views the card is the pressable's child; in the grid it is the pressable. */
+    let view: 'list' | 'grid' | 'compact' = 'list';
+    const row = (title: string) => (view === 'grid' ? cardOf(title) : cardOf(title).firstElementChild) as HTMLElement;
+    beforeEach(() => { view = 'list'; });
+
+    it('list view: one pinned Offer and one Offer in the stream below it are the same width at the same left edge', async () => {
+        await show([PIN_A, STREAM_A]);
+        expect(host.querySelector('[data-testid="market-pinned-block"]')).not.toBeNull();
+        const l = lay(569);
+        const [pin, stream] = [row(PIN_A.title), row(STREAM_A.title)];
+        // The stream card is the list's width less its 16 dp of padding a side: the measure is sound.
+        expect(l.width(stream)).toBe(WIDTH - 32);
+        expect(at(l, stream).left).toBe(16);
+        // And the pinned card is that card's twin, not 16 dp narrower a side.
+        expect(l.width(pin)).toBe(l.width(stream));
+        expect(at(l, pin).left).toBe(at(l, stream).left);
+    });
+
+    it('list view: the gap between two pinned cards is the gap between two other cards', async () => {
+        await show([PIN_A, PIN_B, STREAM_A, STREAM_B]);
+        const l = lay(569);
+        const gap = (upper: HTMLElement, lower: HTMLElement) => at(l, lower).top - (at(l, upper).top + l.height(upper));
+        const [pinGap, streamGap] = [gap(row(PIN_A.title), row(PIN_B.title)), gap(row(STREAM_A.title), row(STREAM_B.title))];
+        expect(streamGap).toBe(8);
+        expect(pinGap).toBe(streamGap);
+    });
+
+    it.each(['grid', 'compact'] as const)('%s view: pinned cards are the width and left edge of the others', async (which) => {
+        view = which;
+        await show([PIN_A, PIN_B, STREAM_A, STREAM_B], which);
+        const l = lay(569);
+        // Left edges and widths, pinned against the stream's: the first of each pair in the grid, every card in compact.
+        const [pin, stream] = [row(PIN_A.title), row(STREAM_A.title)];
+        expect(at(l, stream).left).toBe(16);
+        expect(at(l, pin).left).toBe(at(l, stream).left);
+        expect(l.width(pin)).toBe(l.width(stream));
+        if (which === 'grid') {
+            // The second card of the pair keeps its place too, and the pair's gap is the stream pair's.
+            expect(at(l, row(PIN_B.title)).left).toBe(at(l, row(STREAM_B.title)).left);
+            expect(l.width(row(PIN_B.title))).toBe(l.width(row(STREAM_B.title)));
+        }
+        if (which === 'compact') {
+            const gap = (upper: HTMLElement, lower: HTMLElement) => at(l, lower).top - (at(l, upper).top + l.height(upper));
+            expect(gap(row(PIN_A.title), row(PIN_B.title))).toBe(gap(row(STREAM_A.title), row(STREAM_B.title)));
+        }
+    });
+
+    it('grid view: the gap between two rows of pinned cards is the gap between two rows of the others', async () => {
+        view = 'grid';
+        const PIN_C = pinned('pin-c', 'Pinned honey jars', 5 * 60_000);
+        const STREAM_C = plain('str-c', 'Stream hedge trimming', 6 * 60_000);
+        const STREAM_D = plain('str-d', 'Stream piano tuning', 7 * 60_000);
+        await show([PIN_A, PIN_B, PIN_C, STREAM_A, STREAM_B, STREAM_C, STREAM_D], 'grid');
+        const l = lay(569);
+        const gap = (upper: HTMLElement, lower: HTMLElement) => at(l, lower).top - (at(l, upper).top + l.height(upper));
+        const [pinRows, streamRows] = [gap(row(PIN_A.title), row(PIN_C.title)), gap(row(STREAM_A.title), row(STREAM_C.title))];
+        expect(streamRows).toBe(16);
+        expect(pinRows).toBe(streamRows);
     });
 });
 

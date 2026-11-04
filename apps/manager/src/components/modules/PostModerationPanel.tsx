@@ -69,14 +69,15 @@ export const isCopy = (p: PostModerationItem) => p.shownCopy === true || (typeof
  * an event takes the event tile's violet, a poll the sage accent, a copy the amber chip. An unknown type reads as the sage chip.
  */
 const CHIP_FRAME = 'border border-bp-chip-accent-border';
+const SAGE_CHIP = `bg-bp-chip-accent-tint text-bp-chip-accent-ink ${CHIP_FRAME}`;
 const TYPE_CHIPS: Record<string, string> = {
     offer: `bg-bp-chip-ok-tint text-bp-chip-ok-ink ${CHIP_FRAME}`,
     need: `bg-bp-chip-need-tint text-bp-chip-need-ink ${CHIP_FRAME}`,
     event: `bg-bp-tile-event-tint text-bp-tile-event-ink ${CHIP_FRAME}`,
-    poll: `bg-bp-chip-accent-tint text-bp-chip-accent-ink ${CHIP_FRAME}`,
+    poll: SAGE_CHIP,
 };
 const COPY_CHIP = `bg-bp-chip-warn-tint text-bp-chip-warn-ink ${CHIP_FRAME}`;
-export const chipClassFor = (type: unknown) => TYPE_CHIPS[typeof type === 'string' ? type.toLowerCase() : ''] ?? TYPE_CHIPS.poll;
+export const chipClassFor = (type: unknown) => TYPE_CHIPS[typeof type === 'string' ? type.toLowerCase() : ''] ?? SAGE_CHIP;
 
 const TAKEDOWNS = '/api/local/admin/agent/takedowns';
 
@@ -96,8 +97,9 @@ export function heldTakedowns(takedowns: unknown): Map<string, HeldTakedown> {
     const held = new Map<string, HeldTakedown>();
     if (!Array.isArray(takedowns)) return held;
     for (const call of takedowns) {
-        if (!call || typeof call !== 'object' || !Array.isArray((call as any).posts)) continue;
-        const { grantName, finalAfter, posts } = call as { grantName?: unknown; finalAfter?: unknown; posts: unknown[] };
+        if (!call || typeof call !== 'object') continue;
+        const { grantName, finalAfter, posts } = call as { grantName?: unknown; finalAfter?: unknown; posts?: unknown };
+        if (!Array.isArray(posts)) continue;
         for (const p of posts) {
             const post = p as { id?: unknown; state?: unknown; leftFor?: unknown } | null;
             if (!post || typeof post.id !== 'string' || (post.state !== 'hidden' && post.state !== 'left_hidden') || held.has(post.id)) continue;
@@ -372,7 +374,7 @@ export function PostModerationPanel({
                         id="admin-post-type-filter"
                         value={typeFilter}
                         onChange={(e) => setTypeFilter(e.target.value as PostTypeFilter)}
-                        className="w-full min-w-0 bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
+                        className="w-full min-w-0 overflow-hidden text-ellipsis bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
                     >
                         {TYPE_FILTERS.map((f) => (
                             <option key={f.value} value={f.value}>{f.label}</option>
@@ -465,7 +467,7 @@ export function PostModerationPanel({
                                     <p className="text-xs text-nature-300 line-clamp-1 m-0">
                                         {post.description || 'No description'}
                                     </p>
-                                    <div className="flex items-center gap-3 text-[11px] text-nature-400 font-mono">
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-nature-400 font-mono">
                                         <span>By: {author}</span>
                                         {post.price !== undefined && <span>{post.price} 🫘</span>}
                                         {createdStr && <span>{createdStr}</span>}

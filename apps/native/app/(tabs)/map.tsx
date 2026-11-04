@@ -657,6 +657,9 @@ export default function MapScreen() {
                         <Pressable accessibilityRole="button" accessibilityState={{ selected: mapTypeFilter === 'events' }} style={[styles.filterChip, mapTypeFilter === 'events' && styles.filterChipActiveEvents]} onPress={() => selectMapType('events')}>
                             <Text style={[styles.filterChipText, mapTypeFilter === 'events' && styles.filterChipTextOnViolet]}>{t('Events')}</Text>
                         </Pressable>
+                        <Pressable accessibilityRole="button" accessibilityLabel={t('Calendar')} style={styles.filterChip} onPress={() => { keepMapOnReturn.current = true; router.push('/calendar'); }}>
+                            <MaterialCommunityIcons name="calendar-month" size={20} color={colors.text.secondary} />
+                        </Pressable>
                         {mapFiltersActive(mapFilterState) && (
                             <Pressable accessibilityRole="button" accessibilityLabel={t('Clear filters')} style={styles.filterClear} onPress={() => { setMapTypeFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); }}>
                                 <Text style={styles.filterClearText}>✕</Text>

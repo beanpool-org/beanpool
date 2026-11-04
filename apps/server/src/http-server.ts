@@ -23,6 +23,15 @@ import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { acmeChallengeMiddleware } from './services/acme/challenge.js';
 import { plainHttpGate, plainUpgradeAllowed } from './plain-http-gate.js';
 import QRCode from 'qrcode';
+import { ANDROID_ON_NODE_WORDS } from '@beanpool/core';
+import { isDirectLanContext } from './direct-lan.js';
+import { ANDROID_PAGE, showsApkLink } from './routes/android.js';
+import { cardLanguage, escapeHtml } from './routes/community-card.js';
+import { wordsIn } from './member-words.js';
+
+/** /android and what is under it: handed to the HTTPS app only for a request straight off the local network
+ *  (routes/android.ts); anyone else meets this listener's answer for any other path. */
+const isAndroidPath = (p: string) => p === ANDROID_PAGE || p.startsWith(`${ANDROID_PAGE}/`);
 
 /** Tests only: called with each socket the plain listener accepts, before anything reads it (a test gives it another
  *  remote address there: test-plain-http-gate.ts). Null puts it back. */
@@ -55,6 +64,7 @@ export async function startHttpServer(port: number): Promise<number> {
         if (koaApp && (
             ctx.get('cf-connecting-ip') || 
             ctx.path === '/check' ||
+            (isAndroidPath(ctx.path) && isDirectLanContext(ctx)) ||
             ctx.path.startsWith('/api') || 
             ctx.path.startsWith('/settings') || 
             ctx.path.startsWith('/app') || 
@@ -115,6 +125,10 @@ export async function startHttpServer(port: number): Promise<number> {
 
         const trustQr = await QRCode.toDataURL(trustUrl, { width: 256, margin: 1 });
         const pwaQr = await QRCode.toDataURL(pwaUrl, { width: 256, margin: 1 });
+        // The Android APK this server holds, for a phone straight off the local network (routes/android.ts).
+        const apkLink = showsApkLink(ctx)
+            ? `    <p><a href="${ANDROID_PAGE}" class="btn" data-apk="link">${escapeHtml(wordsIn(cardLanguage(ctx)).t(ANDROID_ON_NODE_WORDS.getApp))}</a></p>\n`
+            : '';
 
         ctx.type = 'html';
         ctx.body = `<!DOCTYPE html>
@@ -194,7 +208,7 @@ export async function startHttpServer(port: number): Promise<number> {
       <br/>
       <a href="${pwaUrl}" class="btn">Open BeanPool PWA</a>
     </div>
-
+${apkLink}
     <p class="footer">Independent infrastructure for local communities.</p>
   </div>
 </body>

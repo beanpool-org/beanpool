@@ -100,7 +100,10 @@ async function main(): Promise<void> {
         if (!id) throw new Error(`could not post: ${r.status} ${r.error}`);
         return id;
     };
-    const clockIn = (days: number) => new Date(Date.now() + days * DAY).toISOString().slice(0, 11) + '10:00';
+    // The day is Sydney's, not UTC's: the event is at 10:00 Sydney time, and from 23:00 to 24:00 UTC the UTC date of
+    // 'tomorrow' is already today in Sydney, so a one-day event started in the past and was refused.
+    const clockIn = (days: number) => new Intl.DateTimeFormat('en-CA', { timeZone: SYD, year: 'numeric', month: '2-digit', day: '2-digit' })
+        .format(new Date(Date.now() + days * DAY)) + 'T10:00';
     // A member holds five upcoming events at most: each event has its own host.
     const eventIn = (days: number, title: string) => post(makeIdentity(`Host${++n}`), {
         type: 'event', title, description: 'Bring gloves', eventStartLocal: clockIn(days), eventTz: SYD, eventPlaceName: 'The hall',

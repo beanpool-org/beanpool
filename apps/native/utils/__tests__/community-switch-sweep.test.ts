@@ -120,6 +120,26 @@ describe('every write or removal of the phone\'s community announces it', () => 
         expect(writes.some(w => w.file === 'utils/reconnect.ts')).toBe(true);
     });
 
+    // DNS robustness S3 (scratch/fable-design/DESIGN-dns-robustness-fable.md §3.2): the fallback card moves the phone to
+    // another address its community published when its own stops answering, by the follow card's own move.
+    it('falling back to another address (address-fallback.ts) moves only through address-follow.ts moveCommunity, so switchPhoneTo', () => {
+        const fallback = code(fs.readFileSync(path.join(NATIVE, 'utils/address-fallback.ts'), 'utf8'));
+        // It writes no community address of its own, and has no switch of its own.
+        expect(writes.filter(w => w.file === 'utils/address-fallback.ts')).toEqual([]);
+        expect(fallback).not.toMatch(/beanpool_anchor_url/);
+        expect(fallback).not.toMatch(/switchTo\(|switchPhoneTo|setItem\(/);
+        // Its one move is the follow card's, handed the same dependencies (by default switchPhoneTo's, depsWith).
+        expect([...fallback.matchAll(/moveCommunity\(/g)]).toHaveLength(1);
+        expect(fallback).toMatch(/const moved = await moveCommunity\(offer, anchor, deps\);/);
+        expect(fallback).toMatch(/const deps = await depsWith\(injected\);/);
+        // moveCommunity holds address-follow.ts's one switch (pinned above), and the follow card moves through it too.
+        const follow = code(fs.readFileSync(path.join(NATIVE, 'utils/address-follow.ts'), 'utf8'));
+        const move = follow.slice(follow.indexOf('export async function moveCommunity('));
+        expect(move).toMatch(/^export async function moveCommunity\([\s\S]*?await deps\.switchTo\(offer\.to, offer\.from\);/);
+        expect(follow).toMatch(/const moved = await moveCommunity\(offer, anchor, deps\);/);
+        expect(follow).toMatch(/switchTo: switchPhoneTo,/);
+    });
+
     it('the exceptions: discovery writes a community only in a development build', () => {
         const sync = code(fs.readFileSync(path.join(NATIVE, 'services/pillar-sync.ts'), 'utf8'));
         const discover = sync.slice(sync.indexOf('async function discoverAnchor'), sync.indexOf("await AsyncStorage.setItem('beanpool_anchor_url', winningUrl)"));

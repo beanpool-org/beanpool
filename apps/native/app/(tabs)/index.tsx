@@ -19,6 +19,7 @@ import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { AddressFollowCard } from '../../components/AddressFollowCard';
+import { AddressFallbackCard } from '../../components/AddressFallbackCard';
 import { CopiesRuleCard } from '../../components/CopiesRuleCard';
 import { BringListingsSheet } from '../../components/BringListingsSheet';
 import { NotificationPermissionCard } from '../../components/NotificationPermissionCard';
@@ -1282,6 +1283,8 @@ export default function HomeScreen() {
                     {lookingAround && <LookAroundCard colors={colors} />}
                     <KeyMovedCard colors={colors} />
                     <AddressFollowCard colors={colors} />
+                    {/* The phone's address isn't answering and another the community published is the same community (DNS S3). */}
+                    <AddressFallbackCard colors={colors} />
                     {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
                     {!lookingAround && <CopiesRuleCard colors={colors} />}
                     <NotificationPermissionCard colors={colors} />

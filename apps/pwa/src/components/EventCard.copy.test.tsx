@@ -51,6 +51,11 @@ describe('a copy on a card', () => {
         expect(screen.getByTestId('grid-row-4').textContent).toBe('from Mullumbimby');
         u2();
 
+        // A visitor: the distance in whole km, as a visitor's place line has it (the node places it at its area's centre).
+        const { unmount: u3 } = render(<EventCard post={copy} identity={null} visitor distanceKm={7.4} />);
+        expect(screen.getByTestId('grid-row-4').textContent).toBe('from Mullumbimby · about 7 km');
+        u3();
+
         // A copy with no row of the directory: its place line, as any event.
         render(<EventCard post={{ ...event, shownCopy: true, eventPlaceName: 'Railway Park' }} identity={member} distanceKm={740} />);
         expect(screen.getByTestId('grid-row-4').textContent).toBe('📍 Railway Park · 740 km');

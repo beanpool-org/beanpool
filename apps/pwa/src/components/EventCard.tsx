@@ -487,10 +487,10 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
         const lock = p.audienceScope === 'group' || !!p.targetGroupId
             ? t('🔒 Only {group} can see this', { group: p.targetGroupName || t('Group') })
             : null;
-        // A member's copy on the global community says whose it is in the place's stead, with the distance after it.
-        const lastRow = copy?.from
-            ? [copyFromLine(copy.from), distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ')
-            : place;
+        // A member's copy on the global community says whose it is in the place's stead, with the distance after it (a
+        // visitor's in whole km, as their place line has it).
+        const copyDistance = distanceKm == null ? '' : visitor ? visitorDistanceText(distanceKm) : formatDistance(distanceKm);
+        const lastRow = copy?.from ? [copyFromLine(copy.from), copyDistance].filter(Boolean).join(' · ') : place;
         const glyph = copy?.from ? '' : p.eventOnline ? '🌐 ' : '📍 ';
         // The label stands in for what is inside the button: the title, the viewer's answer, who can see it, a copy's line.
         const tileLabel = [openLabel, myAnswer, lock, copyLine].filter(Boolean).join(', ');

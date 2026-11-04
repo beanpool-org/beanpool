@@ -671,6 +671,16 @@ describe('the grid is rows on a lattice: a pair is one height, the text block fo
         await show([SHORT, POLL], 'grid');
         expect(lay(569).width(pollCard())).toBe(listWidth);
     });
+
+    it('under a poll in the grid is the gutter, 16, as under a row of tiles (the poll card on the box, slice C1)', async () => {
+        await show([SHORT, FULL, POLL, C, D], 'grid');
+        const l = lay(569);
+        const poll = pollCard();
+        const nextRow = cardOf(C.title);
+        expect(at(l, nextRow).top - (at(l, poll).top + l.height(poll))).toBeCloseTo(16, 3);
+        const firstRow = cardOf(SHORT.title);
+        expect(at(l, poll).top - (at(l, firstRow).top + l.height(firstRow))).toBeCloseTo(16, 3);
+    });
 });
 
 // Slice P3' (DESIGN-market-grid-sizes-fable.md §2.2, §3 P3'; DESIGN-card-style-box-fable.md §2): an event and the Daily Pulse

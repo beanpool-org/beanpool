@@ -243,10 +243,18 @@ export function makeCardShell(colors: Colors) {
         compactTitle: { fontSize: COMPACT.title.size, fontWeight: weightOf(COMPACT.title), color: colors.text.body },
         /** `by {name}`, an event's when, a poll's status, the place: 11/500 secondary. */
         compactLine: { fontSize: COMPACT.line.size, fontWeight: weightOf(COMPACT.line), color: colors.text.secondary, marginTop: COMPACT_GAP.line },
-        /** The mark inside a compact line (Going ✓, a poll's chosen answer ✓): the line's size, bold, in the event's ink. */
-        compactMark: { fontWeight: weightOf(LIST.mark), color: colors.tile.event.ink },
-        /** The 📌 PINNED inside an event's line 2: the pinned chip's ink. */
-        compactPinned: { fontWeight: weightOf(MARKET_CHIP.type), color: colors.accent.primary },
+        /**
+         * The words inside a compact line, each the line's own size (written out, so a Text inside a Text is never drawn at a
+         * default size): the mark (Going ✓, a poll's chosen answer ✓) bold in the event's ink; 📌 PINNED in the pinned chip's
+         * ink; an event's CANCELLED / ENDED in the danger chip's; its UPDATED is the mark's violet.
+         */
+        compactMark: { fontSize: COMPACT.line.size, fontWeight: weightOf(LIST.mark), color: colors.tile.event.ink },
+        compactPinned: { fontSize: COMPACT.line.size, fontWeight: weightOf(MARKET_CHIP.type), color: colors.accent.primary },
+        compactDanger: { fontSize: COMPACT.line.size, fontWeight: weightOf(MARKET_CHIP.type), color: colors.feedback.danger.fg },
+        /** A poll's mark on its own line: the answer gives way, the ✓ after it never does. */
+        compactMarkRow: { flexDirection: 'row', alignItems: 'baseline', minWidth: 0 },
+        compactGiveWay: { flexShrink: 1, minWidth: 0 },
+        compactKeep: { flexShrink: 0 },
         /** The end of the row: a listing's price above its chip, an event's state chip under its EVENT. */
         compactEnd: { alignItems: 'flex-end', justifyContent: 'center', gap: COMPACT_GAP.end, flexShrink: 0, maxWidth: `${SHELL.compactEndMaxPercent}%` },
         /** A listing's price there: 14/900. */

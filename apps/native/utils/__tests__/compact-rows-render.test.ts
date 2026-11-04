@@ -111,7 +111,11 @@ describe('a poll in the compact view is a compact row that opens its page', () =
         expect(byTestId('poll-card'), 'not the card').toBeNull();
         expect(row.textContent).toContain('What would make trading on BeanPool easier for you?');
         expect(byTestId('poll-status')!.textContent).toBe('Closes in 11d');
-        expect(byTestId('poll-mark')!.textContent).toBe(' · Better matches between offers and needs ✓');
+        // The mark on its own line: the answer (which gives way), then the ✓ (which never does).
+        expect(byTestId('poll-mark')!.textContent).toBe('Better matches between offers and needs ✓');
+        const [answer, tick] = Array.from(byTestId('poll-mark')!.children);
+        expect([answer.textContent, styleOf(answer).flexShrink, answer.getAttribute('data-lines')]).toEqual(['Better matches between offers and needs', 1, '1']);
+        expect([tick.textContent, styleOf(tick).flexShrink, tick.getAttribute('data-lines')]).toEqual([' ✓', 0, '1']);
         expect(byTestId('poll-badge')!.textContent).toBe('🗳️ POLL');
         expect(row.getAttribute('aria-label')).toBe('Poll: What would make trading on BeanPool easier for you?, Closes in 11d, Better matches between offers and needs ✓');
         // The box's compact row, its 32 dp picture, the one chip.
@@ -158,7 +162,7 @@ describe('a poll in the compact view is a compact row that opens its page', () =
     it('a closed poll says Closed, and the chosen answer of an open vote still shows', async () => {
         await mount(createElement(PollCard, { post: poll({ status: 'completed', userVotedOptionId: 'o2' }), currentPubkey: ME, viewMode: 'compact', onOpen: () => {} }));
         expect(byTestId('poll-status')!.textContent).toBe('Closed');
-        expect(byTestId('poll-mark')!.textContent).toBe(' · More events ✓');
+        expect(byTestId('poll-mark')!.textContent).toBe('More events ✓');
     });
 
     it('the poll card on the box: the shell, padding 12, the box\'s chips (POLL plum, the status quiet), the question 16/900', async () => {

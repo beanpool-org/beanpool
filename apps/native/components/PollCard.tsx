@@ -62,6 +62,9 @@ export interface PollVoteRecord {
     createdAt: string;
 }
 
+/** Where the compact row splits its mark's one key (`{label} ✓`) round the answer: a character no answer holds. */
+const MARK_SPLIT = '\u0001';
+
 /** Lines kept as word() elsewhere, shown here in the member's language. */
 const LINES = { informal: INFORMAL_POLL_NOTE };
 
@@ -91,7 +94,7 @@ interface PollCardProps {
 }
 
 export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode = 'list', onOpen, onOpenProfile }: PollCardProps) {
-    const { colors, theme } = useTheme();
+    const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     // The style box (components/market-card-shell.ts): the card's shell, its chips and the compact row.
     const shell = useCardShell();
@@ -283,6 +286,10 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
         const chosen = sealed ? undefined : options.find(o => o.id === userVotedOptionId);
         const chosenText = chosen ? (chosen.other ? pollOtherLines.other() : chosen.text) : null;
         const rowMark = chosenText ? t('{label} ✓', { label: chosenText }) : null;
+        // The mark on a line of its own: the answer gives way ("Better matches…") and the ✓ stays. The one key, split where the
+        // answer goes, so each language keeps its own order; a key that cannot be split is drawn whole.
+        const markPieces = chosenText ? t('{label} ✓', { label: MARK_SPLIT }).split(MARK_SPLIT) : [];
+        const [markBefore, markAfter] = markPieces.length === 2 ? markPieces : [null, null];
         const status = formatTimeRemaining();
         // 📌 PINNED whole, in its chip's ink, then ' · ' (the separator every line on a card uses).
         const pinWord = pinned ? t('📌 PINNED') : null;
@@ -299,11 +306,18 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                 </View>
                 <View style={shell.compactText}>
                     <Text style={shell.compactTitle} numberOfLines={1}>{livePost.title}</Text>
-                    <Text testID="poll-row-line" style={shell.compactLine} numberOfLines={2}>
+                    <Text testID="poll-compact-line" style={shell.compactLine} numberOfLines={1}>
                         {!!pinWord && <Text testID="pinned-chip" style={shell.compactPinned}>{pinWord} · </Text>}
-                        <Text testID="poll-status">{status}</Text>
-                        {!!rowMark && <Text testID="poll-mark" style={shell.compactMark}> · {rowMark}</Text>}
+                        <Text testID="poll-status" style={shell.compactLine}>{status}</Text>
                     </Text>
+                    {!!rowMark && (markBefore === null ? (
+                        <Text testID="poll-mark" style={[shell.compactLine, shell.compactMark]} numberOfLines={1}>{rowMark}</Text>
+                    ) : (
+                        <View testID="poll-mark" style={shell.compactMarkRow}>
+                            <Text style={[shell.compactLine, shell.compactMark, shell.compactGiveWay]} numberOfLines={1}>{markBefore}{chosenText}</Text>
+                            {!!markAfter && <Text style={[shell.compactLine, shell.compactMark, shell.compactKeep]} numberOfLines={1}>{markAfter}</Text>}
+                        </View>
+                    ))}
                 </View>
                 <View style={shell.compactEnd}>
                     <CardChip shell={shell} role="poll" label={t('🗳️ POLL')} testID="poll-badge" />
@@ -325,7 +339,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
     );
 
     return (
-        <View style={[shell.card, styles.card]} testID="poll-card">
+        <View style={[shell.card, styles.card, viewMode === 'grid' && styles.gridRowGap]} testID="poll-card">
             {/* Header: Badge, Status, Remaining Time */}
             <View style={styles.headerRow} testID="poll-header">
                 {/* The chip row, from the box: 📌 PINNED, POLL (plum), and its quiet status (Closes in, Closed). */}
@@ -629,6 +643,8 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         // The card's shell is the box's (shell.card: corners 14, the 1 dp border, the card ground, the one shadow, 8 under it);
         // the poll's words sit 12 in, as every card's do.
         card: { padding: MARKET_CARD_SHELL.textPadding },
+        // In the grid a poll is a row of the lattice: the gutter under it, as under every row of tiles (16, not the list's 8).
+        gridRowGap: { marginBottom: MARKET_CARD_SHELL.gap.grid },
         // The compact row's tile: the poll's own plum, the ballot box in it.
         pollTile: { backgroundColor: colors.market.poll.bg, justifyContent: 'center', alignItems: 'center' },
         pollTileEmoji: { fontSize: 16 },

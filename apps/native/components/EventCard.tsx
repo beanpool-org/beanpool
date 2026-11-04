@@ -268,11 +268,11 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                 </View>
                 <View style={shell.compactText}>
                     <Text style={shell.compactTitle} numberOfLines={1}>{post.title}</Text>
-                    <Text testID="event-when" style={[shell.compactLine, styles.compactWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{rowWhen}</Text>
+                    <Text testID="event-when" style={[shell.compactLine, styles.compactWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={lineThree ? 1 : 2}>{rowWhen}</Text>
                     {lineThree && (
                         <Text style={shell.compactLine} numberOfLines={1} testID="event-row-place">
                             {!!pinWord && <Text testID="pinned-chip" style={shell.compactPinned}>{pinWord} · </Text>}
-                            {!!stateWord && <Text testID="event-state-chip" style={badge === 'UPDATED' ? shell.compactMark : styles.compactDanger}>{stateWord} · </Text>}
+                            {!!stateWord && <Text testID="event-state-chip" style={badge === 'UPDATED' ? shell.compactMark : shell.compactDanger}>{stateWord} · </Text>}
                             {!!lock && '🔒 '}
                             {rowPlace}
                         </Text>
@@ -358,8 +358,6 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         line: { marginBottom: 2 },
         // The compact row's when: the event's ink, the row's size, bold enough to be the row's loud line after the title.
         compactWhen: { color: colors.tile.event.ink, fontWeight: '700' },
-        // CANCELLED / ENDED in line 3: the danger chip's ink, the chip's weight.
-        compactDanger: { color: colors.feedback.danger.fg, fontWeight: '800' },
         // The mark at the row's end: right-aligned, as a listing's price is.
         compactEndMark: { marginTop: 0, textAlign: 'right' },
     });

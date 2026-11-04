@@ -2088,5 +2088,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} в іншій спільноті · Купити чи взяти це тут не можна.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} у {community} · Ви не можете купити чи взяти це, доки {community} не прийме вас.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 Оглянутися в глобальній спільноті"
+  "🌍 Look around the global community": "🌍 Оглянутися в глобальній спільноті",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Журі, до якого вас обрали, чекає на вашу відповідь. Дайте відповідь протягом доби, інакше ваше місце перейде до наступного обраного учасника.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "Журі, у якому ви берете участь, завершується приблизно за добу. Відкрийте BeanPool, щоб проголосувати.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "Учасник, про якого вирішує ваше журі, відповів щодо цього питання. Відкрийте BeanPool, щоб прочитати відповідь.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "Вас обрали до журі вашої спільноти, і його голосування завершиться менш ніж за два дні. Відкрийте BeanPool, щоб взяти участь або поступитися місцем.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "Вас обрали до журі вашої спільноти. Відкрийте BeanPool протягом трьох днів, щоб взяти участь або поступитися місцем."
 }

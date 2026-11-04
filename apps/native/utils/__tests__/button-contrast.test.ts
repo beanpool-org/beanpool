@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as ts from 'typescript';
 import { scanSource, scanTree, parseColour, formatReport, topOpaqueFiles, type ContrastReport } from '../button-contrast';
 
 /**
@@ -758,9 +759,66 @@ describe('the box\'s text-metrics helper is not an unread style', () => {
     });
 });
 
+/**
+ * What the scanner takes on trust about the style box's chip. `<CardChip role="offer" />` is measured from the module's
+ * `chipTones(colors)` (utils/button-contrast.ts chipAlts), not from what `CardChip` draws, so the two are tied here: the chip
+ * draws `shell.tones[role]`, its ground is `tone.bg` and its ink is `tone.fg` (each the last style of its element, so nothing
+ * paints over it, and no other colour in the body), `makeCardShell` exposes `tones: chipTones(colors)` and nothing else under
+ * that name, and `useCardShell` builds the box from the theme's own `colors`. Reads the module's source; returns what is not so
+ * in words, and [] when the module is as the scanner reads it.
+ */
+function chipDrawProblems(source: string): string[] {
+    const sf = ts.createSourceFile('market-card-shell.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const norm = (n: ts.Node) => n.getText(sf).replace(/\s+/g, ' ').trim();
+    const fn = (name: string) => sf.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s) && s.name?.text === name);
+    const within = (root: ts.Node): ts.Node[] => {
+        const all: ts.Node[] = [];
+        const walk = (n: ts.Node): void => { all.push(n); ts.forEachChild(n, walk); };
+        walk(root);
+        return all;
+    };
+    const problems: string[] = [];
+
+    const chip = fn('CardChip');
+    if (!chip?.body) problems.push('CardChip is no longer a function declaration with a body');
+    else {
+        const nodes = within(chip.body);
+        const tones = nodes.filter(ts.isVariableDeclaration).map(norm);
+        if (tones.join() !== 'tone = shell.tones[role]') problems.push(`CardChip must take its colours from one \`const tone = shell.tones[role]\`, and has: ${tones.join(' ; ') || 'nothing'}`);
+        const paints = nodes.filter((n): n is ts.PropertyAssignment => ts.isPropertyAssignment(n) && /colou?r|background/i.test(n.name.getText(sf)));
+        const drawn = paints.map(norm);
+        if (drawn.join() !== 'backgroundColor: tone.bg,color: tone.fg') problems.push(`CardChip must draw its ground as tone.bg and its ink as tone.fg, and nothing else in colour; it draws: ${drawn.join(' ; ') || 'no colour'}`);
+        // Each colour is the one property of an object that is the last style in its element's array, so nothing paints over it.
+        for (const p of paints) {
+            const obj = p.parent, list = obj.parent;
+            if (obj.properties.length !== 1 || !ts.isArrayLiteralExpression(list) || list.elements[list.elements.length - 1] !== obj) problems.push(`CardChip's \`${norm(p)}\` must be the only property of the last style in its element's style array`);
+        }
+        // A spread could bring in a colour the scanner does not read; a colour named by shorthand (`{ color }`) is one it does not read either. (`{ testID }` is fine.)
+        if (nodes.some((n) => ts.isSpreadAssignment(n) || (ts.isShorthandPropertyAssignment(n) && /colou?r|background/i.test(n.name.text)))) problems.push('CardChip must not spread a style object or name a colour by shorthand (it could carry a colour the scanner does not read)');
+        const fixed = nodes.filter(ts.isStringLiteralLike).map((l) => l.text).filter((t) => /^(#|rgb|hsl)|^(white|black|transparent)$/i.test(t));
+        if (fixed.length) problems.push(`CardChip must not name a fixed colour: ${fixed.join(', ')}`);
+    }
+
+    const make = fn('makeCardShell');
+    if (!make?.body) problems.push('makeCardShell is no longer a function declaration with a body');
+    else {
+        const param = make.parameters[0]?.name.getText(sf);
+        const returns = make.body.statements.filter(ts.isReturnStatement);
+        const expr = returns.length === 1 ? returns[0].expression : undefined;
+        const shape = expr && ts.isObjectLiteralExpression(expr) ? expr.properties.map(norm).join(' ; ') : '';
+        if (param !== 'colors' || shape !== '...styles ; tones: chipTones(colors)') problems.push(`makeCardShell(${param ?? ''}) must return \`{ ...styles, tones: chipTones(colors) }\` with \`colors\` its own parameter, and returns: ${expr ? norm(expr) : 'no single object'}`);
+    }
+
+    const use = fn('useCardShell');
+    const useReturn = use?.body?.statements.filter(ts.isReturnStatement);
+    const built = useReturn?.length === 1 ? useReturn[0].expression : undefined;
+    if (!built || norm(built) !== 'useStyles(({ colors }) => makeCardShell(colors))') problems.push(`useCardShell must build the box from the theme's own colours, \`useStyles(({ colors }) => makeCardShell(colors))\`, and returns: ${built ? norm(built) : 'no single expression'}`);
+    return problems;
+}
+
 // The real module (components/market-card-shell.ts) read by the scanner: the shapes above are the ones it is written in. A change
-// to the module that the scanner can no longer follow (a chip role in a shape it cannot read, a colour in `cardType`) fails here
-// with a name, before the whole-tree check only goes quieter.
+// to the module that the scanner can no longer follow (a chip role in a shape it cannot read, a colour in `cardType`, a chip that
+// stops drawing its role's tone) fails here with a name, before the whole-tree check only goes quieter.
 describe('the shipped style box can be read by the scanner', () => {
     const MODULE = 'components/market-card-shell.ts';
     const source = readFileSync(join(__dirname, '../../components/market-card-shell.ts'), 'utf8');
@@ -805,5 +863,29 @@ describe('the shipped style box can be read by the scanner', () => {
         const body = /export function cardType[\s\S]*?\n}\n/.exec(source)![0];
         expect(body).toContain('fontSize');
         expect(body).not.toMatch(/colou?r/i);
+    });
+
+    // The chip is measured from `chipTones`, so what `CardChip` draws and what `makeCardShell` exposes must be that same thing.
+    it('CardChip draws its role\'s tone (ground tone.bg, ink tone.fg) and makeCardShell exposes tones: chipTones(colors)', () => {
+        expect(chipDrawProblems(source)).toEqual([]);
+    });
+
+    // Edited copies of the real module. The first three are the review's (#2890): before this pin the scanner measured every one of
+    // them as ten good chips with no finding. Each must now be reported, by what is wrong.
+    it.each([
+        ['the ink drawn in the ground colour', 'color: tone.fg', 'color: tone.bg', /draw its ground as tone\.bg and its ink as tone\.fg/],
+        ['a fixed white ink', 'color: tone.fg', "color: '#ffffff'", /draw its ground as tone\.bg and its ink as tone\.fg/],
+        ['makeCardShell exposing a different tones', 'tones: chipTones(colors) }', 'tones: { ...chipTones(colors), offer: { bg: colors.surface.card, fg: colors.surface.card } } }', /makeCardShell\(colors\) must return/],
+        ['the ground and the ink swapped', 'backgroundColor: tone.bg', 'backgroundColor: tone.fg', /draw its ground as tone\.bg/],
+        ['the chip reading one fixed role', 'const tone = shell.tones[role]', 'const tone = shell.tones.offer', /one `const tone = shell\.tones\[role\]`/],
+        ['a second colour painted over the ink', 'style: [shell.chipText, { color: tone.fg }]', "style: [{ color: tone.fg }, shell.chipText, { opacity: 1 }]", /last style in its element/],
+        ['a spread bringing in a style the scanner does not read', '{ backgroundColor: tone.bg }', '{ ...tone, backgroundColor: tone.bg }', /spread a style object/],
+        ['an ink named by shorthand', '{ color: tone.fg }', '{ color }', /name a colour by shorthand/],
+        ['the box built from another set of colours', 'makeCardShell(colors))', 'makeCardShell(lightColors))', /useCardShell must build the box/],
+    ])('%s is reported', (_name, from, to, expected) => {
+        expect(source.split(from).length, `"${from}" must be in the module exactly once, for this edited copy to be the one meant`).toBe(2);
+        const problems = chipDrawProblems(source.replace(from, to));
+        expect(problems.length).toBeGreaterThan(0);
+        expect(problems.join('\n')).toMatch(expected);
     });
 });

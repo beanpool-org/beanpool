@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CURRENT_ZONE_IDS, eventPlaceTimeText, eventWhenParts, offsetMinutesOf, zoneLabelFor } from '../event-when.js';
+import { CURRENT_ZONE_IDS, eventPlaceTimeText, eventTileWhen, eventWhenParts, offsetMinutesOf, zoneLabelFor } from '../event-when.js';
 
 const line = (p: ReturnType<typeof eventWhenParts>) => p ? `${p.first}${p.sep}${p.second}` : null;
 
@@ -56,6 +56,58 @@ describe('eventWhenParts — every §4 string at a fixed device zone', () => {
         const p = eventWhenParts({ startAt: lagos.startAt, endAt: lagos.endAt, deviceStart: '2026-10-17T15:50', deviceEnd: '2026-10-17T17:50' });
         expect(line(p)).toBe('SAT 17 OCT · 15:50–17:50');
         expect(p!.note).toBeNull();
+    });
+});
+
+// The Market grid tile's date row and time row (DESIGN-market-grid-sizes-fable.md §2.2), each short enough to stay whole.
+describe('eventTileWhen — the grid tile\'s two rows', () => {
+    // Byron's twilight market, Sat 7 Nov 2026 16:00–21:00 in NSW on daylight time (UTC+11) = 05:00Z–10:00Z.
+    const byron = {
+        startAt: '2026-11-07T05:00:00.000Z', endAt: '2026-11-07T10:00:00.000Z',
+        startLocal: '2026-11-07T16:00', endLocal: '2026-11-07T21:00', tz: 'Australia/Sydney', online: false,
+    };
+
+    it('in person, the reader in the place\'s clock: the place\'s date and its span, nothing to label', () => {
+        expect(eventTileWhen({ ...byron, deviceStart: '2026-11-07T16:00', deviceEnd: '2026-11-07T21:00' }))
+            .toEqual({ date: 'SAT 7 NOV', time: '16:00–21:00', yours: false });
+    });
+
+    it('in person, a reader in Queensland (an hour behind): the reader\'s own clock, marked as theirs, never the place\'s bare 16:00', () => {
+        const rows = eventTileWhen({ ...byron, deviceStart: '2026-11-07T15:00', deviceEnd: '2026-11-07T20:00' });
+        expect(rows).toEqual({ date: 'SAT 7 NOV', time: '15:00–20:00', yours: true });
+        // The card's own line still leads with the place's clock and notes the reader's: the two agree on the instant.
+        expect(eventWhenParts({ ...byron, deviceStart: '2026-11-07T15:00', deviceEnd: '2026-11-07T20:00' })!.note).toBe('Sydney time · 15:00 your time');
+    });
+
+    it('in person, a reader whose date differs (Lagos read in Sydney): the reader\'s own date and time', () => {
+        expect(eventTileWhen({ ...lagos, deviceStart: '2026-10-18T06:50', deviceEnd: '2026-10-18T08:50' }))
+            .toEqual({ date: 'SUN 18 OCT', time: '6:50–8:50', yours: true });
+    });
+
+    it('an event that ends on a later date: the start\'s date, then its start time (the end is on the page)', () => {
+        const twoDay = {
+            startAt: '2026-11-05T23:26:00.000Z', endAt: '2026-11-07T01:26:00.000Z',
+            startLocal: '2026-11-06T10:26', endLocal: '2026-11-07T12:26', tz: 'Australia/Sydney', online: false,
+        };
+        expect(eventTileWhen({ ...twoDay, deviceStart: '2026-11-06T10:26', deviceEnd: '2026-11-07T12:26' }))
+            .toEqual({ date: 'FRI 6 NOV', time: '10:26', yours: false });
+        // A reader in Queensland: their own start, marked as theirs.
+        expect(eventTileWhen({ ...twoDay, deviceStart: '2026-11-06T09:26', deviceEnd: '2026-11-07T11:26' }))
+            .toEqual({ date: 'FRI 6 NOV', time: '9:26', yours: true });
+        // The reader's span crosses midnight where the place's does not: still the start alone.
+        expect(eventTileWhen({ ...byron, deviceStart: '2026-11-07T23:00', deviceEnd: '2026-11-08T04:00' }))
+            .toEqual({ date: 'SAT 7 NOV', time: '23:00', yours: true });
+    });
+
+    it('online: the reader\'s own clock with "your time" in the row, as the card\'s line; nothing more to label', () => {
+        expect(eventTileWhen({ ...byron, online: true, deviceStart: '2026-11-07T05:00', deviceEnd: '2026-11-07T10:00' }))
+            .toEqual({ date: 'SAT 7 NOV', time: '5:00–10:00 your time', yours: false });
+    });
+
+    it('a node that sends no local clock: the device\'s rows, as the card; an unreadable start: null', () => {
+        expect(eventTileWhen({ startAt: lagos.startAt, endAt: lagos.endAt, deviceStart: '2026-10-17T15:50', deviceEnd: '2026-10-17T17:50' }))
+            .toEqual({ date: 'SAT 17 OCT', time: '15:50–17:50', yours: false });
+        expect(eventTileWhen({ deviceStart: 'not a clock' })).toBeNull();
     });
 });
 

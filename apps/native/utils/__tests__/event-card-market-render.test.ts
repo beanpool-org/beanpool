@@ -261,6 +261,9 @@ describe('the shell is the Offer card\'s, from the style box', () => {
 // own mark at the end, where a listing's price sits), then the text block market.tsx hands it, the listing tiles' own: the
 // date, the time, the title and the place, one line each. The counts and the host's line are the page's in the grid.
 describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark on the photo", () => {
+    // Tomorrow, 10:26 to 14:26 on this phone's clock: a plain same-day span whatever time the test runs at.
+    const at = (h: number, m: number) => { const d = new Date(Date.now() + DAY); d.setHours(h, m, 0, 0); return d.toISOString(); };
+    const SAME_DAY = { ...MARKET, eventStartAt: at(10, 26), eventEndAt: at(14, 26) };
     const pinned = { ...MARKET, pinnedUntil: new Date(Date.now() + 2 * DAY).toISOString(), pinnedAt: new Date(Date.now() - 60_000).toISOString() };
     async function showTile(post: any, viewer: string | null = ME, scale = 1.3) {
         const block = gridTextBlock(scale);
@@ -283,19 +286,97 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
     });
 
     it('the text block is the listing tiles\' own at the font scale it is given, and its rows are the date, the time, the title and the place', async () => {
-        const block = await showTile(MARKET);
+        // A plain same-day span (fixed hours, so the test never depends on the time of day it runs at).
+        const block = await showTile(SAME_DAY);
         expect(styleOf(blockEl())).toEqual(block.block);
         const rows = Array.from(blockEl().children);
         expect(rows).toHaveLength(4);
         for (const r of rows) expect(styleOf(r)).toEqual(block.row);
-        const parts = eventWhen(MARKET)!;
-        expect(rows.map(r => r.textContent)).toEqual([parts.first, parts.second, MARKET.title, '📍 Butler Street Reserve']);
+        const parts = eventWhen(SAME_DAY)!;
+        expect(parts.second).toBe('10:26–14:26');
+        expect(rows.map(r => r.textContent)).toEqual([parts.first, '10:26–14:26', MARKET.title, '📍 Butler Street Reserve']);
+        expect(byTestId('event-your-time')).toBeNull();
         for (const r of rows) expect(r.firstElementChild?.getAttribute('data-lines')).toBe('1');
         // The date and the time: the loud line, 14/800 on 18, in the event's ink; the title 14/700; the place 14/500.
         expect(styleOf(byTestId('event-when'))).toMatchObject({ fontSize: 14, fontWeight: '800', lineHeight: 18, color: lightColors.tile.event.ink });
         expect(styleOf(byTestId('event-time'))).toMatchObject({ fontSize: 14, fontWeight: '800', lineHeight: 18, color: lightColors.tile.event.ink });
         expect(styleOf(rows[2].firstElementChild)).toMatchObject({ fontSize: 14, fontWeight: '700', lineHeight: 18, color: lightColors.text.body });
         expect(styleOf(rows[3].firstElementChild)).toMatchObject({ fontSize: 14, fontWeight: '500', lineHeight: 18, color: lightColors.text.secondary });
+    });
+
+    // DESIGN-event-times §4 on the tile: a member never reads the place's clock as their own. A Byron event (NSW, on daylight
+    // time in November) from 16:00 to 21:00, read on a Gold Coast phone (Queensland, an hour behind).
+    describe('a reader whose clock is not the place\'s', () => {
+        const savedTz = process.env.TZ;
+        beforeEach(() => { process.env.TZ = 'Australia/Brisbane'; });
+        afterEach(() => { if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz; });
+        const BYRON: any = {
+            ...MARKET, title: 'Byron Bay Twilight Market', eventPlaceName: 'Railway Park',
+            eventStartAt: '2026-11-07T05:00:00.000Z', eventEndAt: '2026-11-07T10:00:00.000Z',
+            eventStartLocal: '2026-11-07T16:00', eventEndLocal: '2026-11-07T21:00', eventTz: 'Australia/Sydney', eventOnline: false,
+        };
+
+        it('a Queensland reader on a NSW daylight-time event: the reader\'s own time, labelled "your time"; never the place\'s bare 16:00', async () => {
+            // The list card's own note, for the same event and phone: the two must agree.
+            expect(eventWhen(BYRON)!.note).toBe('Sydney time · 15:00 your time');
+            await showTile(BYRON);
+            const rows = Array.from(blockEl().children);
+            expect(rows).toHaveLength(4);
+            expect(rows.map(r => r.textContent)).toEqual(['SAT 7 NOV', '15:00–20:00', 'Byron Bay Twilight Market', '🕒 your time · 📍 Railway Park']);
+            expect(host.textContent).not.toContain('16:00');
+            expect(host.textContent).not.toContain('21:00');
+            // The label opens the last row, whole (the place gives way after it), in the event's ink beside the place's grey.
+            const yours = byTestId('event-your-time')!;
+            expect(rows[3].firstElementChild?.firstElementChild).toBe(yours);
+            expect(rows[3].firstElementChild?.getAttribute('data-lines')).toBe('1');
+            expect(styleOf(yours)).toMatchObject({ color: lightColors.tile.event.ink, fontWeight: '700' });
+            // The label speaks the reader's clock too, with "your time".
+            expect(card().getAttribute('aria-label')).toBe('Event: Byron Bay Twilight Market, SAT 7 NOV · 15:00–20:00 your time');
+            // The lattice is untouched: four rows of the listing's height, in the listing's block.
+            const block = gridTextBlock(1.3);
+            expect(styleOf(blockEl())).toEqual(block.block);
+            for (const r of rows) expect(styleOf(r)).toEqual(block.row);
+        });
+
+        it('dark: the label keeps the event\'s ink of the dark theme', async () => {
+            scheme.now = 'dark';
+            await showTile(BYRON);
+            expect(styleOf(byTestId('event-your-time'))).toMatchObject({ color: darkColors.tile.event.ink });
+        });
+
+        it('no place to name: the last row is the label alone', async () => {
+            await showTile({ ...BYRON, eventPlaceName: null });
+            expect(Array.from(blockEl().children)[3].textContent).toBe('🕒 your time');
+        });
+
+        it('the reader in the place\'s own zone (Byron read in Byron): the place\'s time, nothing to label', async () => {
+            process.env.TZ = 'Australia/Sydney';
+            await showTile(BYRON);
+            expect(Array.from(blockEl().children).map(r => r.textContent)).toEqual(['SAT 7 NOV', '16:00–21:00', 'Byron Bay Twilight Market', '📍 Railway Park']);
+            expect(byTestId('event-your-time')).toBeNull();
+        });
+
+        it('an event that ends the next day: the date row, then the start time row, each whole; the end is on the page', async () => {
+            await showTile({
+                ...BYRON, title: 'Seed swap weekend',
+                eventStartAt: '2026-11-06T00:26:00.000Z', eventEndAt: '2026-11-07T02:26:00.000Z',
+                eventStartLocal: '2026-11-06T10:26', eventEndLocal: '2026-11-07T12:26', eventTz: 'Australia/Brisbane',
+            });
+            const rows = Array.from(blockEl().children);
+            expect(rows.map(r => r.textContent)).toEqual(['FRI 6 NOV', '10:26', 'Seed swap weekend', '📍 Railway Park']);
+            for (const r of rows.slice(0, 2)) expect(r.firstElementChild?.getAttribute('data-lines')).toBe('1');
+            // The label keeps the whole span for a screen reader.
+            expect(card().getAttribute('aria-label')).toBe('Event: Seed swap weekend, FRI 6 NOV 10:26 – SAT 7 NOV 12:26');
+        });
+
+        it('an event that ends the next day, read across the zone line: the reader\'s own start, labelled', async () => {
+            await showTile({
+                ...BYRON, eventStartAt: '2026-11-05T23:26:00.000Z', eventEndAt: '2026-11-07T01:26:00.000Z',
+                eventStartLocal: '2026-11-06T10:26', eventEndLocal: '2026-11-07T12:26',
+            });
+            const rows = Array.from(blockEl().children);
+            expect(rows.map(r => r.textContent)).toEqual(['FRI 6 NOV', '9:26', 'Byron Bay Twilight Market', '🕒 your time · 📍 Railway Park']);
+        });
     });
 
     it('an online event says so on its last row; an event with no place leaves the row blank, the block the same', async () => {

@@ -194,6 +194,44 @@ export function eventWhenParts(input: EventWhenInput): EventWhenParts | null {
 }
 
 /**
+ * The Market grid tile's two when rows (DESIGN-market-grid-sizes-fable.md §2.2): the date, then the time, each short enough
+ * to stay whole in half a 320 dp row at 1.3x text. Read from the same clocks as eventWhenParts, one rule more each:
+ *   - an event that ends on a later date shows its start ("FRI 6 NOV" / "10:26"): the end is on the event's page;
+ *   - in person, when the reader's clock differs from the place's, both rows are the READER's own clock and `yours` is set:
+ *     a labelled time ("15:00–20:00 your time") cannot fit the row, so the tile carries the "your time" label elsewhere, and a
+ *     member never reads the place's clock as their own (DESIGN-event-times §4);
+ *   - online, the reader's own clock with "your time" in the time row, as the card's line has it.
+ * Null when the device start is unreadable.
+ */
+export interface EventTileWhen {
+    date: string;
+    time: string;
+    /** The rows are the reader's own clock and do not say so: the tile labels them "your time". */
+    yours: boolean;
+}
+
+export function eventTileWhen(input: EventWhenInput): EventTileWhen | null {
+    const deviceStart = input.deviceStart;
+    if (!parseLocal(deviceStart)) return null;
+    const deviceEnd = input.deviceEnd && parseLocal(input.deviceEnd) ? input.deviceEnd : null;
+    const placeStart = input.startLocal && parseLocal(input.startLocal) ? input.startLocal : null;
+    const placeEnd = input.endLocal && parseLocal(input.endLocal) ? input.endLocal : null;
+    const rows = (start: string, end: string | null) => ({
+        date: dayOf(start),
+        time: end && sameDate(start, end) ? `${timeOf(start)}–${timeOf(end)}` : timeOf(start),
+    });
+
+    if (input.online) {
+        const own = rows(deviceStart, deviceEnd);
+        return { date: own.date, time: t('{time} your time', { time: own.time }), yours: false };
+    }
+    // The same test as eventWhenParts: a place clock with a zone, and the reader's start differs from it.
+    if (!placeStart || !input.tz) return { ...rows(deviceStart, deviceEnd), yours: false };
+    if (placeStart === deviceStart) return { ...rows(placeStart, placeEnd), yours: false };
+    return { ...rows(deviceStart, deviceEnd), yours: true };
+}
+
+/**
  * The place's start in a push or share line: "Sat 20:50 Lagos time". Its weekday is the place's, read from the stored
  * clock, so it is right wherever the phone or the node stands. Null when the node holds no local clock.
  */

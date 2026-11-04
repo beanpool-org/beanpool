@@ -27,6 +27,12 @@
  *   Byron Bay Twilight Market                         the title, one line
  *   📍 Railway Park · 3 km                             the place, one line
  *
+ * The date and the time each stay whole in half a 320 dp row at 1.3x text (core eventTileWhen): an event that ends on a later
+ * date shows its start ("FRI 6 NOV" / "10:26"; the end is on the page). When the reader's clock differs from the place's (a
+ * Byron event read on a Gold Coast phone), both rows are the reader's own clock, and the last row opens with "🕒 your time"
+ * before the place (DESIGN-event-times §4: a member never reads the place's clock as their own). "15:00–20:00 your time"
+ * cannot fit the time row at 320 dp and 1.3x (205 dp of text in 110), nor can "15:00 your time" (122 to 140 dp).
+ *
  * The counts and "You're hosting this event" are on the event's page in the grid; the list card keeps them.
  */
 
@@ -39,7 +45,7 @@ import { CardChip, gridTextBlock, useCardShell } from './market-card-shell';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { isPostPinned } from '../utils/pins';
 import {
-    formatEventWhenFor, eventWhen, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventBadge, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, eventTileWhenFor, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventBadge, formatRsvpCounts,
     formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus,
 } from '../utils/events';
 
@@ -103,16 +109,24 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
 
     if (viewMode === 'grid') {
         // The tile's mark is the member's own answer, on the photo where a listing's price sits; a host's line and the counts
-        // are the page's (§2.2). The date and the time each take a row: the when's two pieces, kept whole.
+        // are the page's (§2.2). The date and the time each take a row, each kept whole (core eventTileWhen).
         const tileMark = hosting ? null : answer;
-        const parts = eventWhen(post);
-        const time = parts?.second || (repeats ? `↻ ${repeats}` : '');
+        const tileWhen = eventTileWhenFor(post);
+        const time = tileWhen?.time || (repeats ? `↻ ${repeats}` : '');
+        // The rows are the reader's own clock: the last row says so first, whole, and the place gives way after it.
+        const yourTime = tileWhen?.yours ? t('{time} your time', { time: '🕒' }) : null;
+        const place = placeLine ? `${isOnlineEvent(post) ? '💻' : '📍'} ${placeLine}` : '';
+        // The label speaks the when the tile shows: the reader's own clock, with "your time", when the rows are theirs.
+        const spoken = tileWhen?.spoken ?? when;
+        const tileLabel = badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when: spoken })
+            : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when: spoken })
+            : t('Event: {title}, {when}', { title: post.title, when: spoken });
         return (
             <Pressable
                 style={[shell.card, shell.gridTile]}
                 onPress={() => router.push(`/post/${post.id}`)}
                 accessibilityRole="button"
-                accessibilityLabel={tileMark ? `${label}, ${tileMark}` : label}
+                accessibilityLabel={tileMark ? `${tileLabel}, ${tileMark}` : tileLabel}
                 testID={`event-card-${post.id}`}
             >
                 <View style={shell.gridImageWrapper}>
@@ -142,7 +156,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                 </View>
                 <View style={gridBlock.block} testID="grid-text-block">
                     <View style={gridBlock.row}>
-                        <Text testID="event-when" style={[shell.gridWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{parts?.first ?? ''}</Text>
+                        <Text testID="event-when" style={[shell.gridWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{tileWhen?.date ?? ''}</Text>
                     </View>
                     <View style={gridBlock.row}>
                         <Text testID="event-time" style={[shell.gridWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{time}</Text>
@@ -151,7 +165,13 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                         <Text style={shell.gridSecond} numberOfLines={1}>{post.title}</Text>
                     </View>
                     <View style={gridBlock.row} testID="grid-last-row">
-                        {!!placeLine && <Text style={shell.gridLine} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
+                        {(!!yourTime || !!place) && (
+                            <Text style={shell.gridLine} numberOfLines={1}>
+                                {!!yourTime && <Text testID="event-your-time" style={styles.yourTime}>{yourTime}</Text>}
+                                {!!yourTime && !!place && ' · '}
+                                {place}
+                            </Text>
+                        )}
                     </View>
                 </View>
             </Pressable>
@@ -220,5 +240,7 @@ const makeStyles = ({ colors }: ThemeContextType) =>
             marginBottom: 2,
         },
         repeats: { fontSize: 13, fontWeight: '700', color: colors.accent.primary, marginBottom: 2 },
+        // The grid tile's "🕒 your time": in the event's ink, with the date and the time it labels.
+        yourTime: { color: colors.tile.event.ink, fontWeight: '700' },
         line: { marginBottom: 2 },
     });

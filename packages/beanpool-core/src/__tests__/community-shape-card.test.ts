@@ -3,6 +3,7 @@ import {
     communityShapeLines,
     communityShapeSummary,
     isOldNodeWithoutShape,
+    shapeFeaturesOf,
     COMMUNITY_SHAPE_CARD_WORDS,
     type CommunityShapeFeatures,
 } from '../community-shape-card.js';
@@ -262,5 +263,33 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             };
             expect(communityShapeSummary(f)).toBe('How it works: anyone joins · Beans off · votes off · requests to join off');
         });
+    });
+});
+
+describe('shapeFeaturesOf: who decides a removal, from beside a member\'s features (removal jury J3)', () => {
+    // What GET /api/community/me and GET /api/home say to a member (server config/features-for.ts): the node's own features,
+    // and the rule beside them, never in them.
+    const FEATURES = { beans: true, decisions: true, door: 'members' as const };
+
+    it('puts one of the three rules beside the features where the sheet reads it, and the sheet says it', () => {
+        for (const rule of ['automatic', 'everyone', 'jury'] as const) {
+            expect(shapeFeaturesOf({ features: FEATURES, removalDecider: rule })).toEqual({ ...FEATURES, removalDecider: rule });
+        }
+        expect(communityShapeLines(shapeFeaturesOf({ features: FEATURES, removalDecider: 'jury' }))).toContain(
+            '**Removals:** decided by a jury drawn at random; while fewer than 36 members could serve on one, by everyone who can vote');
+    });
+
+    it('a read with no rule, or one that is no rule, is the features alone: no Removals line', () => {
+        for (const answer of [{ features: FEATURES }, { features: FEATURES, removalDecider: 'sometimes' }, { features: FEATURES, removalDecider: true }]) {
+            expect(shapeFeaturesOf(answer)).toEqual(FEATURES);
+            expect(communityShapeLines(shapeFeaturesOf(answer)).join('\n')).not.toMatch(/Removals/);
+        }
+    });
+
+    it('no features, no set: an older node, or no answer yet', () => {
+        expect(shapeFeaturesOf(null)).toBeUndefined();
+        expect(shapeFeaturesOf(undefined)).toBeUndefined();
+        expect(shapeFeaturesOf({ removalDecider: 'jury' })).toBeUndefined();
+        expect(shapeFeaturesOf({ features: null, removalDecider: 'jury' })).toBeUndefined();
     });
 });

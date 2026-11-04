@@ -88,7 +88,8 @@ import { pageWithOwnWithheld, withheldConversationOwnedBy } from '../engine/with
 import { getGroupThreadMessages } from '../engine/group-thread.js';
 import { getEnterpriseThreadMessages } from '../engine/enterprise-thread.js';
 import { getChatMutesFor } from '../engine/chat-mutes.js';
-import { featuresFor } from '../config/features-for.js';
+import { featuresFor, removalDeciderFor } from '../config/features-for.js';
+import type { RemovalDecider } from '../config/removal-decider.js';
 import { getNodeProfile, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
 import { getDoor, type Door } from '../config/door.js';
 import { getLocalConfig } from '../config/local-config.js';
@@ -372,6 +373,11 @@ export interface HomeAnswer {
     generatedAt: string;
     profile: NodeProfile;
     features: NodeFeatures & { door: Door };
+    /**
+     * Who decides a removal (config/features-for.ts removalDeciderFor), to a reader who reads as a member: beside `features`,
+     * never in them, as GET /api/community/me says it. "How this community works" draws it (slice J3).
+     */
+    removalDecider?: RemovalDecider;
     /** The visitors' Home (§5.3): a reader who doesn't read as a member, on a node that shows them the listings. */
     welcome?: true;
     me: HomeMe | null;
@@ -1462,10 +1468,12 @@ export function buildHome(reader: HomeReader): HomeBuilt {
             standing: member ? 'member' : 'suspended',
         };
     }
+    const removalRule = removalDeciderFor(me);
     const body: HomeAnswer = {
         generatedAt: iso(now),
         profile: getNodeProfile(),
         features: { ...features, door },
+        ...(removalRule ? { removalDecider: removalRule } : {}),
         // The visitors' Join card: for a reader with no account here only, never a suspended member (`me.standing`).
         ...(c.guestView && !own ? { welcome: true as const } : {}),
         me: meBlock,

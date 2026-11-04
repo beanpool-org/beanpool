@@ -66,7 +66,7 @@ import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
 import { getMarketplaceTransactions, getUnreadByConversation } from '../../utils/db';
 import { composeTargetFor } from '../../utils/compose-options';
-import { inviteAskNoticeHere, toolHomeCardType, readToolsSettings } from '@beanpool/core';
+import { inviteAskNoticeHere, toolHomeCardType, readToolsSettings, shapeFeaturesOf } from '@beanpool/core';
 import { toolOfHomeCard } from '../../tools/index';
 import { ToolHomeBody } from '../../tools/frame';
 import { YourToolsBody } from '../../components/home/YourToolsBody';
@@ -1405,7 +1405,8 @@ export default function HomeScreen() {
                 <NewPollModal visible={pollModal} onClose={() => setPollModal(false)} onSuccess={() => void refresh('again')} />
                 <NewEventModal visible={eventModal} onClose={() => setEventModal(false)} onSuccess={() => void refresh('again')} />
                 <CommunityShapeSheet
-                    features={answer?.features}
+                    // The features, and who decides a removal, which a member's Home says beside them (removal jury J3).
+                    features={shapeFeaturesOf(answer)}
                     visible={shapeSheetOpen}
                     onClose={() => setShapeSheetOpen(false)}
                 />

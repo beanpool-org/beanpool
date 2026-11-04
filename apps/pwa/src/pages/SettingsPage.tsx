@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { AREA_STEP_WORDS, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, t, tn } from '@beanpool/core';
+import { AREA_STEP_WORDS, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, t, tn } from '@beanpool/core';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
@@ -271,9 +271,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         let cancelled = false;
         getCommunityMe()
             .then((me) => {
-                if (!cancelled && me?.features && typeof me.features === 'object') {
-                    setMemberFeatures(me.features as Record<string, unknown>);
-                }
+                // The features, and who decides a removal, which a member's answer says beside them (removal jury J3).
+                const features = shapeFeaturesOf(me);
+                if (!cancelled && features) setMemberFeatures(features);
             })
             .catch(() => {});
         return () => { cancelled = true; };

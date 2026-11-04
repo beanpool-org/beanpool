@@ -10,12 +10,12 @@
  * Decided once per case, at the pause, from that day's pool, and recorded on the vote (`params.decider`), so changing this,
  * or the community crossing the line, changes nothing about a vote already open.
  *
- * ## The default, for now
+ * ## The default
  *
- * The design's default is `automatic`. Until the apps can show a jury (slice J3: the juror's buttons, the turnout line,
- * Check the draw), the default is `everyone`, so nothing changes for a community that never chose: J1 and J2 ship behind
- * this setting, and J3 turns the default to `automatic`. A choice an owner makes is always stored, even `everyone`, so
- * that change of default never overrides one.
+ * `automatic`, the design's (§6), since slice J3: the apps show a jury (the juror's Serve and Step aside, the turnout line,
+ * the two closed lists, Check the draw), so a community that never chose has a jury decide once 100 could serve, and
+ * everyone until then. J1 and J2 shipped behind `everyone`. A choice an owner makes is always stored, even the default,
+ * so an owner who chose `everyone` before J3 keeps it: the change of default never overrides a choice.
  *
  * ## What travels
  *
@@ -29,8 +29,8 @@ import { db } from '../db/db.js';
 export type RemovalDecider = 'automatic' | 'everyone' | 'jury';
 
 export const REMOVAL_DECIDER_KEY = 'removal_decider';
-/** Until slice J3 (see the header): `everyone`, so nothing changes for a community that never chose. */
-export const DEFAULT_REMOVAL_DECIDER: RemovalDecider = 'everyone';
+/** The design's default (§6), since slice J3 (see the header): a jury once 100 could serve, everyone until then. */
+export const DEFAULT_REMOVAL_DECIDER: RemovalDecider = 'automatic';
 
 export function isRemovalDecider(v: unknown): v is RemovalDecider {
     return v === 'automatic' || v === 'everyone' || v === 'jury';

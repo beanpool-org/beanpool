@@ -158,6 +158,7 @@ async function main() {
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
     const { readShape } = await import('./config/community-shape.js');
     const { readCommunitySettings } = await import('./config/community-settings.js');
+    const { setRemovalDecider } = await import('./config/removal-decider.js');
 
     await initTls();
     se.initStateEngine();
@@ -256,29 +257,52 @@ async function main() {
         return out;
     };
 
-    // ── 1. Behind the setting ───────────────────────────────────────────────────────────────────────────────────────
-    console.log('1. Behind the setting: no choice made, everyone decides, even at 150');
+    // ── 1. No choice made: Automatic (J3 turned the default from Everyone) ──────────────────────────────────────────
+    console.log('1. No choice made: Automatic, the default since J3, so at 151 a jury decides');
     const shape0 = readShape().settings.removalDecider;
-    assert(shape0.configured === 'everyone' && shape0.value === 'everyone' && shape0.source === 'default' && shape0.lock === null && shape0.poolSize === 151,
-        `How this community works reads Who decides a removal: everyone, the default for now, no lock, 151 could serve, FrozenFay among them (${JSON.stringify(shape0)})`);
-    const plain = nextSubject();
-    const plainVote = pauseOf(plain);
-    assert(paramsOf(plainVote).decider === 'everyone' && !('jury' in paramsOf(plainVote)), `the pause's vote says everyone decides it (${JSON.stringify(paramsOf(plainVote).decider)})`);
-    assert(rollOf(plainVote).length === 0 && poolRowOf(plainVote) === undefined, 'no roll and no pool are kept for it');
-    assert(de.tallyDecision(plainVote).decider === undefined && de.tallyDecision(plainVote).quorumRequired >= 3, "its tally is today's: no jury in it");
-    de.adminLiftSuspension(plain.pk, ada.pk);
-    // An owner choosing Everyone while Everyone is still the default: kept as a row all the same (review of #2793), so J3's
-    // change of default leaves this community on Everyone. Quietly: no rule changed, so no log line and no notice.
+    assert(shape0.configured === 'automatic' && shape0.value === 'automatic' && shape0.source === 'default' && shape0.lock === null && shape0.poolSize === 151,
+        `How this community works reads Who decides a removal: Automatic, the default, no lock, 151 could serve, FrozenFay among them (${JSON.stringify(shape0)})`);
+    // A member's read of the community says the rule, for "How this community works" on the phone and the web, beside its
+    // features and never in them (config/features-for.ts removalDeciderFor); a read that isn't a member's says nothing of it.
+    const meRead = await signed('GET', '/api/community/me', gen);
+    assert(meRead.status === 200 && meRead.body?.removalDecider === 'automatic' && !('removalDecider' in (meRead.body?.features ?? {})),
+        `a member's /api/community/me says who decides a removal beside its features: automatic (${meRead.status} ${JSON.stringify(meRead.body?.removalDecider)}, in features: ${JSON.stringify(meRead.body?.features?.removalDecider)})`);
+    const { featuresFor, removalDeciderFor } = await import('./config/features-for.js');
+    assert(removalDeciderFor(null) === undefined && removalDeciderFor(keypair('NotAMember').pk) === undefined,
+        'and a read that is no member\'s carries no rule');
+    assert(![null, keypair('NotAMember').pk, gen.pk].some((who) => 'removalDecider' in featuresFor(who)), 'and no reader\'s features carry it, a member\'s included');
+    const byDefault = nextSubject();
+    const autoVote = pauseOf(byDefault);
+    assert(paramsOf(autoVote).decider === 'jury' && paramsOf(autoVote).jury?.size === 12 && paramsOf(autoVote).jury?.poolSize === 150,
+        `with no choice made, the pause's vote says a jury of 12 decides it, from 150 who could serve (${JSON.stringify({ decider: paramsOf(autoVote).decider, jury: paramsOf(autoVote).jury })})`);
+    assert(rollOf(autoVote).filter(r => r.status === 'on').length === 12 && poolRowOf(autoVote) !== undefined, 'its roll of 12 and its pool are kept');
+    assert(de.tallyDecision(autoVote).decider === 'jury' && de.tallyDecision(autoVote).quorumRequired === 9, "its tally is the jury's: 9 of 12 must vote");
+    de.adminLiftSuspension(byDefault.pk, ada.pk);
+    // An owner choosing Automatic while Automatic is the default: kept as a row all the same (review of #2793). Quietly: no
+    // rule changed, so no log line and no notice.
     const countOf = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
     const logRowsBefore = countOf('SELECT COUNT(*) AS c FROM community_settings_log');
     const noticesBefore0 = countOf('SELECT COUNT(*) AS c FROM moderation_notices');
-    const asDefault = await setDecider('everyone');
+    const asDefault = await setDecider('automatic');
     const asRow = readShape().settings.removalDecider;
-    assert(asDefault.status === 200 && asDefault.body?.told === 'nobody' && asRow.configured === 'everyone' && asRow.source === 'owner'
-        && readCommunitySettings().nodeConfig.removal_decider === 'everyone',
-        `an owner choosing Everyone on the default keeps it as a row: 200, source owner (${asDefault.status} ${JSON.stringify(asRow)})`);
+    assert(asDefault.status === 200 && asDefault.body?.told === 'nobody' && asRow.configured === 'automatic' && asRow.source === 'owner'
+        && readCommunitySettings().nodeConfig.removal_decider === 'automatic',
+        `an owner choosing Automatic on the default keeps it as a row: 200, source owner (${asDefault.status} ${JSON.stringify(asRow)})`);
     assert(countOf('SELECT COUNT(*) AS c FROM community_settings_log') === logRowsBefore && countOf('SELECT COUNT(*) AS c FROM moderation_notices') === noticesBefore0,
         'and quietly: no owner log line, nothing told to members');
+    // A community whose owner chose Everyone before J3 kept it as a row (J1's quiet write, as above): the change of default
+    // leaves it on Everyone. Written as that row was, with no log line, so section 2 starts from Everyone as it always did.
+    setRemovalDecider('everyone');
+    const keptEveryone = readShape().settings.removalDecider;
+    assert(keptEveryone.configured === 'everyone' && keptEveryone.value === 'everyone' && keptEveryone.source === 'owner',
+        `an owner's Everyone from before J3 still reads Everyone: the new default overrides no choice (${JSON.stringify(keptEveryone)})`);
+    // And a pause there is everyone's to decide, at 151, as before J3 (later sections use it as the vote no jury decides).
+    const plain = nextSubject();
+    const plainVote = pauseOf(plain);
+    assert(paramsOf(plainVote).decider === 'everyone' && !('jury' in paramsOf(plainVote)), `under it the pause's vote says everyone decides it (${JSON.stringify(paramsOf(plainVote).decider)})`);
+    assert(rollOf(plainVote).length === 0 && poolRowOf(plainVote) === undefined, 'no roll and no pool are kept for it');
+    assert(de.tallyDecision(plainVote).decider === undefined && de.tallyDecision(plainVote).quorumRequired >= 3, "its tally is today's: no jury in it");
+    de.adminLiftSuspension(plain.pk, ada.pk);
 
     // ── 2. Who decides a removal ────────────────────────────────────────────────────────────────────────────────────
     console.log('\n2. Who decides a removal: the owners set it; A jury is locked while fewer than 36 could serve');
@@ -791,7 +815,12 @@ async function main() {
     };
     const branchLine = async (who: Id) => (await needsCount(who, '&lands=branch-vote')) - (await needsCount(who, ''));
     const jurorsB = bSeated.map(k => byKey.get(k)!);
-    const lines = [jurorsB[0] ? await branchLine(jurorsB[0]) : -1, await branchLine(notSeated), await branchLine(inviter)];
+    // Asked as a juror who reads as a member. The pool keeps a member paused by nothing but their own open vote (J1; J2a
+    // call 1), as section 7 left vic, wil and xia, so the draw can seat one; and Home asks no paused member to vote on
+    // anything, since a paused member reads what a non-member reads (readsAsMember; test-home's suspended member). The
+    // juror first by key was one of them in 3 runs of 50: [0,0,0].
+    const askedJuror = jurorsB.find(j => statusOf(j) === 'active');
+    const lines = [askedJuror ? await branchLine(askedJuror) : -1, await branchLine(notSeated), await branchLine(inviter)];
     assert(JSON.stringify(lines) === '[1,0,0]', `Home asks a juror to vote on the branch, never a member not seated nor one passed over (${JSON.stringify(lines)})`);
     // The accounts' balances and debts go to those who may vote on it: the jury, and nobody else (decisionForReader).
     const branchCardOf = async (who: Id) => { fresh(); return signed('GET', `/api/commons/decisions/${branchVote}?draws=branch`, who); };
@@ -1008,7 +1037,9 @@ async function main() {
     // §5.1: a juror and Sue re-keyed while it is open. The roll, the votes and the vote's subject move to the new keys; the
     // pool and the key the vote was drawn for don't, and the closed lists say what each entry was drawn as.
     const sueSeated = rollOf(sueAgain).filter(r => r.status === 'on').map(r => byKey.get(r.k)!).filter(j => j && statusOf(j) === 'active');
-    const moving = sueSeated.find(j => j !== frozenJuror)!;
+    // Never Ada or Gwen, whose keys the rest of the suite signs with (Gus's case below leaves them out the same way). Gwen
+    // paused this one, so Ada can be seated on it; re-keyed, her old key paused nobody after (1 run of 110: Cal's case).
+    const moving = sueSeated.find(j => j !== frozenJuror && j !== ada && j !== gen)!;
     const votedBefore = [de.castDecisionVote(sueAgain, frozenJuror.pk, true), de.castDecisionVote(sueAgain, moving.pk, true)];
     const rekey = (who: Id): Id => {
         const next = keypair(who.callsign);
@@ -1043,7 +1074,19 @@ async function main() {
     const openJuries = () => (db.prepare("SELECT id FROM decisions WHERE status = 'open' AND json_valid(params) AND json_extract(params, '$.decider') = 'jury'")
         .all() as Array<{ id: string }>).map(r => r.id);
     for (const id of openJuries()) closeNow(id);
+    // And the votes everyone decides that sections 7 and 10 left open. Each keeps its members paused and in every pool
+    // (paused by nothing but their own vote), and with them in it a case whose first 30 of the draw are all active
+    // (plainCase) was sometimes not to be found: 3 runs of 50 threw at Gus's case below.
+    for (const { id } of db.prepare("SELECT id FROM decisions WHERE status = 'open' AND effect = 'remove_member'").all() as Array<{ id: string }>) closeNow(id);
     const memberStatus = (k: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(k) as { status: string } | undefined)?.status;
+    /**
+     * Whether a removal vote here ever named this member: its subject, or on a branch's list. A case is brought only against
+     * one no vote has named: after a vote Ada brought ended without removing them, the cool-down refuses her pause for 90
+     * days, and a member paused here outside subjectWhere (Dee's juror, the account deep in a branch) is still among those
+     * subjectWhere offers (1 run of 50 threw at Ivy's case below).
+     */
+    const everNamed = (k: string) => !!db.prepare(`SELECT 1 FROM members m WHERE m.public_key = ? AND EXISTS (
+        SELECT 1 FROM decisions d WHERE d.effect = 'remove_member' AND ${namesSql('d')})`).get(k);
     const tokenOf = (k: string) => byKey.get(k)?.token ?? `no token for ${k.slice(0, 8)}`;
     /** A member's phones besides the one seedMember gave them (a juror's French phone, below). */
     const morePhones = new Map<string, string[]>();
@@ -1052,17 +1095,17 @@ async function main() {
     const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every(x => b.has(x));
     const seatedOf = (id: string) => rollOf(id).filter(r => r.status === 'on').map(r => r.k);
     /**
-     * A case whose first 30 of the draw are active members seeded here, with phones this suite knows (none re-keyed since,
-     * none paused: `age` moves one case's times and not the rest of the world's, so a pause made a minute ago would read as
-     * made after a seat it moved two days back).
+     * A case against a member no vote has named (everNamed), whose first 30 of the draw are active members seeded here, with
+     * phones this suite knows (none re-keyed since, none paused: `age` moves one case's times and not the rest of the
+     * world's, so a pause made a minute ago would read as made after a seat it moved two days back).
      */
     const plainCase = () => subjectWhere(c => {
-        if (memberStatus(c.pk) !== 'active') return false;
+        if (memberStatus(c.pk) !== 'active' || everNamed(c.pk)) return false;
         const o = juryOrder(de.removalJuryPool(today, [c.pk]), c.pk, today).order;
         return o.slice(0, 30).every(k => byKey.has(k) && memberStatus(k) === 'active');
     });
     /** A case `who` is among the first 10 of the draw of, so they are seated (nothing links them to its member). Not aged. */
-    const caseSeating = (who: Id) => subjectWhere(c => memberStatus(c.pk) === 'active'
+    const caseSeating = (who: Id) => subjectWhere(c => memberStatus(c.pk) === 'active' && !everNamed(c.pk)
         && juryOrder(de.removalJuryPool(today, [c.pk]), c.pk, today).order.slice(0, 10).includes(who.pk));
     /** Time travel: the whole case, its seats with it, as if it had all happened `ms` earlier. */
     const rollColumns = new Set((db.prepare("SELECT name FROM pragma_table_info('decision_electors')").all() as Array<{ name: string }>).map(c => c.name));

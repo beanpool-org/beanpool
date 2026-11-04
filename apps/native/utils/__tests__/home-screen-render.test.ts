@@ -1662,6 +1662,17 @@ describe('Home\'s "How this community works": the floor and the rule, from what 
         expect(document.querySelector('[data-testid="community-shape-sheet"]')?.textContent)
             .toContain("(the known floor)The admins can see a confirmed member's balance if they owe more than half their credit line, or are in debit and haven't made a sale for 60 days. Each look is logged.");
     });
+
+    it('who decides a removal, from beside the features a member\'s Home says (removal jury J3)', async () => {
+        const a = localMember();
+        node.answer = { ...a, features: { ...a.features, door: 'members', knocks: true, decisions: true }, removalDecider: 'jury' };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const summary = document.querySelector('[data-testid="home-community-shape-summary"]') as HTMLElement;
+        expect(summary).toBeTruthy();
+        await act(async () => { summary.click(); });
+        expect(document.querySelector('[data-testid="community-shape-sheet"]')?.textContent).toContain('decided by a jury drawn at random; while fewer than 36 members could serve on one, by everyone who can vote');
+    });
 });
 
 describe('the global node\'s Home (H4): Find your community on top, the global First steps, a count of who joined, Near you by distance', () => {

@@ -41,6 +41,8 @@ const post: MarketplacePost = {
 };
 const CLOSED = { door: 'admins', shareOutside: false, inviteAsks: true };
 const tick = () => act(async () => { await new Promise(r => setTimeout(r, 30)); });
+/** The page shows one Share button; the Ask is an item of the menu it opens (DESIGN-detail-pages-fable.md §2.5, slice DW2). */
+const openShare = () => fireEvent.click(screen.getByTestId('share-button'));
 const community = (f: Record<string, unknown>) => vi.mocked(features.useCommunityInfo).mockReturnValue({ profile: 'local', features: f } as any);
 
 beforeEach(() => {
@@ -55,6 +57,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         community(CLOSED);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
         await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        openShare();
         await waitFor(() => expect(screen.getByTestId('share-ask-admin-button')).toBeInTheDocument());
         expect(screen.getByTestId('share-members-note')).toHaveTextContent('This link opens for members only, and only admins invite here.');
         expect(screen.getByTestId('share-ask-admin-button')).toHaveTextContent('Ask an admin to invite someone');
@@ -83,6 +86,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
         vi.mocked(asks.askAnAdmin).mockResolvedValueOnce({ ok: false, message: 'You have 3 asks waiting. Take one back, or wait for an answer.' });
         await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        openShare();
         await waitFor(() => expect(screen.getByTestId('share-ask-admin-button')).toBeInTheDocument());
         fireEvent.click(screen.getByTestId('share-ask-admin-button'));
         fireEvent.change(screen.getByTestId('invite-ask-first-name'), { target: { value: 'Sam' } });
@@ -97,6 +101,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         community({ ...CLOSED, shareOutside: true, knocks: true });
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
         await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        openShare();
         await waitFor(() => expect(screen.getByTestId('share-ask-admin-button')).toBeInTheDocument());
         expect(screen.getByTestId('share-outside-button')).toBeInTheDocument();
         expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
@@ -107,6 +112,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue('admin');
         vi.mocked(api.request).mockResolvedValue({ role: 'admin' });
         await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        openShare();
         await waitFor(() => expect(screen.getByTestId('invite-and-share-button')).toBeInTheDocument());
         await tick();
         expect(screen.queryByTestId('share-ask-admin-button')).toBeNull();
@@ -116,6 +122,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         community({ ...CLOSED, inviteAsks: false });
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
         await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        openShare();
         await waitFor(() => expect(screen.getByTestId('share-members-note')).toHaveTextContent('only admins invite here'));
         await tick();
         expect(screen.queryByTestId('share-ask-admin-button')).toBeNull();
@@ -126,6 +133,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         community(CLOSED);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(undefined);
         await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        openShare();
         await tick();
         expect(screen.queryByTestId('share-members-note')).toBeNull();
         expect(screen.queryByTestId('share-ask-admin-button')).toBeNull();
@@ -135,7 +143,10 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         community(CLOSED);
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
         await act(async () => { render(<SharePostButtons post={post} isMember={false} />); });
+        openShare();
         await tick();
+        // Read open: the menu is there (Share with members), and the Ask is not in it.
+        expect(screen.getByTestId('share-members-button')).toBeInTheDocument();
         expect(screen.queryByTestId('share-ask-admin-button')).toBeNull();
     });
 
@@ -143,6 +154,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         community({ door: 'members', shareOutside: false, inviteAsks: true });
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
         await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        openShare();
         await waitFor(() => expect(screen.getByTestId('invite-and-share-button')).toBeInTheDocument());
         expect(screen.queryByTestId('share-ask-admin-button')).toBeNull();
     });
@@ -151,6 +163,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         community({ door: 'members', shareOutside: true, knocks: true, inviteAsks: true });
         vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
         await act(async () => { render(<SharePostButtons post={post} isMember />); });
+        openShare();
         const note = screen.getByTestId('share-outside-line');
         expect(note).toHaveTextContent('Anyone with the link can read this listing for 7 days, without names or faces, then ask to join. You can stop it any time.');
         expect(screen.queryByTestId('share-outside-privacy')).toBeNull();
@@ -165,6 +178,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
             eventStartAt: new Date(Date.now() + 86400000).toISOString(), eventEndAt: new Date(Date.now() + 90000000).toISOString(),
         } as any;
         await act(async () => { render(<EventDetail post={event} identity={{ publicKey: 'pk-me', privateKey: 'sk', callsign: 'Ana' } as any} />); });
+        fireEvent.click(screen.getByTestId('event-share'));
         await waitFor(() => expect(screen.getByTestId('share-ask-admin-button')).toBeInTheDocument());
         expect(screen.getByTestId('event-share-members-note')).toHaveTextContent('only admins invite here');
         fireEvent.click(screen.getByTestId('share-ask-admin-button'));

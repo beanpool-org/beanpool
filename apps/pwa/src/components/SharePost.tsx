@@ -7,9 +7,13 @@
  *
  * Each hands the link to the browser's own share sheet where there is one, and copies it where there is not, and says
  * which. A refusal says the node's own words, and nothing is copied: never a false success.
+ *
+ * The page shows ONE button, 🔗 Share (DESIGN-detail-pages-fable.md §2.5, slice DW2), which opens a small menu in the page's
+ * flow (components/ShareMenu.tsx) with the ways this member has here, each with the sentence that says what it does, read
+ * before the tap that shares. What a way leaves behind (a note, a link to copy by hand, the invite panel) shows under the row.
  */
-import { useEffect, useState } from 'react';
-import { INVITE_ASK_WORDS, PEEK_WORDS as W, shareSays, t, type WordKey } from '@beanpool/core';
+import { useEffect, useState, type ReactNode } from 'react';
+import { INVITE_ASK_WORDS, PEEK_WORDS as W, shareSays, t, type ShareSaysKind, type WordKey } from '@beanpool/core';
 import type { MarketplacePost } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
 import { useShareRole } from '../lib/use-share-role';
@@ -17,13 +21,18 @@ import { eventLink } from '../lib/event-extras';
 import { makePeekLink } from '../lib/peek';
 import { handOver } from '../lib/hand-over';
 import { loadIdentity } from '../lib/identity';
-import { InviteAndShareButton } from './InviteAndShare';
+import { useInviteAndShare } from './InviteAndShare';
 import { AskSheet } from './InviteAsks';
 import { nodeOrigin } from './EventExtras';
+import { MenuChoices, useInFlowMenu, type MenuChoice, type SharePart } from './ShareMenu';
 
-const BUTTON = 'flex-1 min-w-[8rem] min-h-[48px] px-3 rounded-xl border text-sm font-bold bg-transparent cursor-pointer break-words '
-    + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info focus-visible:ring-offset-1 '
-    + 'border-bp-ink-info text-bp-ink-info disabled:opacity-60 disabled:cursor-not-allowed';
+/** The quiet, neutral outline (DESIGN-detail-pages-fable.md §2.2): the page's own words on the card ground, no colour of its own. */
+export const QUIET_BUTTON = 'min-h-[48px] px-3 rounded-xl border text-sm font-bold bg-white dark:bg-nature-900 cursor-pointer break-words '
+    + 'border-nature-300 dark:border-nature-700 text-nature-900 dark:text-white '
+    + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-600 dark:focus-visible:ring-nature-300 focus-visible:ring-offset-1 '
+    + 'disabled:opacity-60 disabled:cursor-not-allowed';
+
+const RETRY = `flex-1 min-w-[8rem] ${QUIET_BUTTON}`;
 
 /**
  * Whether a post may be offered for sharing outside: one everyone here sees, on the board, and not an event that has
@@ -40,23 +49,23 @@ export function shareableOutside(
 }
 
 /**
- * "Share outside the community", with the line that says what it does, and what became of the tap.
+ * "Share outside the community": its choice in the Share menu, with the line that says what it does, and what became of
+ * the tap. `offered` is the community's say and this post's (`shareableOutside`); not offered, no part at all.
  *
  * The node makes the link before it is handed over, so a hand-over that fails (no share sheet and no clipboard, or a
  * browser that refuses either once the tap has waited on the node: Safari's share() and clipboard need the tap itself)
  * leaves a live link, seven days and one of the member's 50. It is never lost: it is shown to copy by hand, and Try
- * again (or the button again) hands the same link over inside that tap, with no wait before it; no second link is made.
- * A share sheet the member closed leaves one too: it is kept the same way, unshown, for the next tap.
+ * again (or the choice again) hands the same link over inside that tap, with no wait before it; no second link is made.
+ * A share sheet the member closed leaves one too: it is kept the same way, unshown, for the next tap. The kept link lives
+ * here, not in the menu, so closing the menu loses nothing.
  */
-export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
-    const info = useCommunityInfo();
+function useShareOutside(post: MarketplacePost, offered: boolean, line: WordKey | null): SharePart | null {
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
-    // The link made but not handed over, for the post it was made for (the same button may be drawn for another post
+    // The link made but not handed over, for the post it was made for (the same part may be drawn for another post
     // next): `failed`, shown to copy by hand; or the share sheet was closed, kept unshown for the next tap.
     const [kept, setKept] = useState<{ postId: string; link: string; failed: boolean } | null>(null);
-    const says = shareSays(info?.features, undefined, post.type === 'event' ? 'event' : 'listing');
-    if (!says.showShareOutside || !shareableOutside(post)) return null;
+    if (!offered) return null;
     const keptLink = kept?.postId === post.id ? kept.link : null;
     const shownLink = kept?.postId === post.id && kept.failed ? kept.link : null;
 
@@ -89,90 +98,150 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
         }
     };
 
-    return (
-        <div data-testid="share-outside" className="flex flex-col gap-1">
-            <button type="button" data-testid="share-outside-button" onClick={share} disabled={busy} className={BUTTON}>
-                {t(W.shareOutside)}
-            </button>
-            {/* ONE note before the tap: how long anyone with the link can read it, no names or faces, that it can be stopped, and
-                (where joining is on) that they can then ask to join. */}
-            {says.outsideLine && <p data-testid="share-outside-line" className="m-0 text-xs text-text-secondary break-words">{t(says.outsideLine)}</p>}
-            {note && (
-                <p role="status" data-testid="share-outside-note" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
-                    {note.text}
-                </p>
-            )}
-            {shownLink && (
-                <div className="flex flex-wrap gap-2 items-center">
-                    <input type="text" readOnly value={shownLink} data-testid="share-outside-link" aria-label={t('The link to share')}
-                        onFocus={e => e.currentTarget.select()}
-                        className="flex-1 min-w-0 basis-48 min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-950 dark:text-white text-sm" />
-                    <button type="button" data-testid="share-outside-retry" onClick={share} disabled={busy} className={BUTTON}>
-                        {t('Try again')}
-                    </button>
-                </div>
-            )}
-        </div>
-    );
+    return {
+        // ONE note before the tap: how long anyone with the link can read it, no names or faces, that it can be stopped, and
+        // (where joining is on) that they can then ask to join.
+        choice: { key: 'outside', testId: 'share-outside-button', label: t(W.shareOutside), line: line && t(line), lineTestId: 'share-outside-line', disabled: busy, onSelect: () => { void share(); } },
+        after: (note || shownLink) && (
+            <div data-testid="share-outside" className="flex flex-col gap-1">
+                {note && (
+                    <p role="status" data-testid="share-outside-note" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
+                        {note.text}
+                    </p>
+                )}
+                {shownLink && (
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <input type="text" readOnly value={shownLink} data-testid="share-outside-link" aria-label={t('The link to share')}
+                            onFocus={e => e.currentTarget.select()}
+                            className="flex-1 min-w-0 basis-48 min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-950 dark:text-white text-sm" />
+                        <button type="button" data-testid="share-outside-retry" onClick={() => { void share(); }} disabled={busy} className={RETRY}>
+                            {t('Try again')}
+                        </button>
+                    </div>
+                )}
+            </div>
+        ),
+    };
 }
 
 /**
- * "Ask an admin to invite someone", under the line "only admins invite here" (core shareSays showAskAdmin). It opens the ONE ask
- * form People → Invites uses (components/InviteAsks.tsx AskSheet). Drawn only for someone with a key here (a guest has none).
- * Once the node has taken the ask the member is told so.
+ * "Ask an admin to invite someone", under the line "only admins invite here" (core shareSays showAskAdmin). Its choice in the
+ * Share menu opens the ONE ask form People → Invites uses (components/InviteAsks.tsx AskSheet). Offered only to someone with a
+ * key here (a guest has none). Once the node has taken the ask the member is told so, under the row.
  */
-export function AskAdminButton() {
+function useAskAdmin(offered: boolean): SharePart | null {
     const [hasKey, setHasKey] = useState(false);
     const [open, setOpen] = useState(false);
     const [sent, setSent] = useState(false);
     useEffect(() => {
+        if (!offered) return;
         let cancelled = false;
         loadIdentity().then(id => { if (!cancelled) setHasKey(!!id); }).catch(() => { if (!cancelled) setHasKey(false); });
         return () => { cancelled = true; };
-    }, []);
-    if (!hasKey) return null;
-    return (
-        <div data-testid="share-ask-admin" className="flex flex-col gap-1">
-            <button type="button" data-testid="share-ask-admin-button" onClick={() => { setSent(false); setOpen(true); }} className={BUTTON}>
-                {t(INVITE_ASK_WORDS.button)}
-            </button>
-            {sent && <p role="status" data-testid="share-ask-admin-note" className="m-0 text-sm font-semibold text-bp-ink-accent break-words">{t(INVITE_ASK_WORDS.waiting)}</p>}
-            {open && <AskSheet onClose={() => setOpen(false)} onSent={() => { setOpen(false); setSent(true); }} />}
-        </div>
-    );
+    }, [offered]);
+    if (!offered || !hasKey) return null;
+    return {
+        choice: { key: 'ask', testId: 'share-ask-admin-button', label: t(INVITE_ASK_WORDS.button), onSelect: () => { setSent(false); setOpen(true); } },
+        after: (sent || open) && (
+            <div data-testid="share-ask-admin" className="flex flex-col gap-1">
+                {sent && <p role="status" data-testid="share-ask-admin-note" className="m-0 text-sm font-semibold text-bp-ink-accent break-words">{t(INVITE_ASK_WORDS.waiting)}</p>}
+                {open && <AskSheet onClose={() => setOpen(false)} onSent={() => { setOpen(false); setSent(true); }} />}
+            </div>
+        ),
+    };
 }
 
-/** A listing's two shares: the members' link, and outside where the community allows it. */
-export function SharePostButtons({ post, isMember }: { post: MarketplacePost; isMember?: boolean | null }) {
+interface ShareOptions {
+    kind: ShareSaysKind;
+    /** Invite and share is a member's: a guest here, or one not yet known to be a member, is not offered it. (Omitted means a member.) */
+    isMember?: boolean | null;
+    /** The page's row decides how the button looks and what it is called in a test. */
+    triggerClassName: string;
+    triggerTestId: string;
+    /** The sentence under Share with members keeps the name each page gave it. */
+    membersLineTestId: string;
+    /** What Share with members hands over, where the page has its own words for it (an event's title, when and place); it says what became of the tap itself. */
+    shareWithMembers?: () => Promise<void> | void;
+}
+
+/**
+ * The ONE Share button and its menu (DESIGN-detail-pages-fable.md §2.5, slice DW2), for a listing and for an event. The
+ * button opens the menu in the page's flow; the menu holds the ways this member has here, in this order, each with the
+ * sentence that says what it does (core shareSays, as before, and the same rows):
+ *   1. Share with members (always: a menu of one is a plain confirmation, and the same door everywhere);
+ *   2. Share outside the community, where the community allows it and this post may be;
+ *   3. Invite and share, where this member may invite (its panel opens under the row);
+ *   4. Ask an admin to invite someone, where only admins invite and this member is none (never beside 3).
+ * Choosing one closes the menu; what it leaves (a note, a link to copy by hand, a panel) shows under the row. Nothing is made
+ * until a choice is tapped: opening the menu is not sharing.
+ *
+ * The button, the open menu and what follows are returned apart, because the event page puts its button in a row with Add to
+ * calendar and its menus under that row.
+ */
+export function useShare(post: MarketplacePost, opts: ShareOptions): { trigger: ReactNode; menu: ReactNode; after: ReactNode } {
     const info = useCommunityInfo();
     const role = useShareRole(info?.features);
-    const says = shareSays(info?.features, role, post.type === 'event' ? 'event' : 'listing');
-    // Invite and share is a member's: a guest here, or one not yet known to be a member, is not offered it. (Omitted means a member.)
-    const showInvite = says.showInviteButton && isMember !== false && isMember !== null;
-    // Where only admins invite and this member is none: the same member-only gate, then "Ask an admin to invite someone".
-    const showAsk = says.showAskAdmin && isMember !== false && isMember !== null;
+    const says = shareSays(info?.features, role, opts.kind);
+    const member = opts.isMember !== false && opts.isMember !== null;
+    const menu = useInFlowMenu();
     const [note, setNote] = useState<string | null>(null);
     const shareWithMembers = async () => {
         const how = await handOver(post.title, eventLink(nodeOrigin(), post.id));
         setNote(how === 'copied' ? t('Link copied.') : how === 'failed' ? t('Could not copy the link.') : null);
     };
+    const outside = useShareOutside(post, says.showShareOutside && shareableOutside(post), says.outsideLine);
+    // ONE invite action (share-one-flow): Invite and share, where this member may invite and the line does not say only
+    // admins do. Where only admins invite and this member is none, the line stands and one more choice, "Ask an admin to
+    // invite someone", opens the ask form of People → Invites (#2775). Never both.
+    const invite = useInviteAndShare(post, says.showInviteButton && member);
+    const ask = useAskAdmin(says.showAskAdmin && member);
+
+    // A choice closes the menu and then does its work, in the same tap: a share sheet may only be opened by the tap itself.
+    const pick = (part: SharePart, returnFocus = true): MenuChoice => ({ ...part.choice, onSelect: () => { menu.close(returnFocus); part.choice.onSelect(); } });
+    const choices: MenuChoice[] = [{
+        key: 'members', testId: 'share-members-button', label: t(W.shareWithMembers), line: says.membersLine && t(says.membersLine), lineTestId: opts.membersLineTestId,
+        onSelect: () => { menu.close(); void (opts.shareWithMembers ?? shareWithMembers)(); },
+    }];
+    if (outside) choices.push(pick(outside));
+    if (invite) choices.push(pick(invite));
+    // The ask form is a dialog that takes the focus itself.
+    if (ask) choices.push(pick(ask, false));
+
+    // The node is making a link: the menu has closed, so the button shows that something is under way.
+    const busy = outside?.choice.disabled === true;
+    return {
+        trigger: (
+            <button ref={menu.buttonRef} type="button" data-testid={opts.triggerTestId} onClick={menu.toggle} aria-expanded={menu.open} aria-haspopup="menu"
+                aria-busy={busy || undefined} className={`${opts.triggerClassName}${busy ? ' opacity-60' : ''}`}>
+                <span aria-hidden="true">🔗 </span>{t('Share')}
+            </button>
+        ),
+        menu: menu.open && <MenuChoices menu={menu} label={t('Share')} choices={choices} />,
+        after: (
+            <>
+                {note && <p role="status" data-testid="share-members-result" className="m-0 text-sm font-semibold text-bp-ink-accent break-words">{note}</p>}
+                {outside?.after}
+                {invite?.after}
+                {ask?.after}
+            </>
+        ),
+    };
+}
+
+/** A listing's Share: one button, and the menu of the ways this member has here. */
+export function SharePostButtons({ post, isMember }: { post: MarketplacePost; isMember?: boolean | null }) {
+    const share = useShare(post, {
+        kind: post.type === 'event' ? 'event' : 'listing',
+        isMember,
+        triggerClassName: `w-full ${QUIET_BUTTON}`,
+        triggerTestId: 'share-button',
+        membersLineTestId: 'share-members-note',
+    });
     return (
         <div data-testid="share-post" className="flex flex-col gap-2 mt-4">
-            <button type="button" data-testid="share-members-button" onClick={shareWithMembers} className={BUTTON}>
-                {t(W.shareWithMembers)}
-            </button>
-            {says.membersLine && (
-                <p data-testid="share-members-note" className="m-0 text-xs text-text-secondary break-words">
-                    {t(says.membersLine)}
-                </p>
-            )}
-            {note && <p role="status" className="m-0 text-sm font-semibold text-bp-ink-accent break-words">{note}</p>}
-            {says.showShareOutside && <ShareOutsideButton post={post} />}
-            {/* ONE invite action (share-one-flow): Invite and share, where this member may invite and the line above does not
-                say only admins do. Where only admins invite and this member is none, the line stands and one more button,
-                "Ask an admin to invite someone", opens the ask form of People → Invites (#2775). Never both. */}
-            {showInvite && <InviteAndShareButton post={post} />}
-            {showAsk && <AskAdminButton />}
+            {share.trigger}
+            {share.menu}
+            {share.after}
         </div>
     );
 }

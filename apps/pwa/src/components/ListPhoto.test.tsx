@@ -209,6 +209,21 @@ describe('ListPhoto: a lazy photo off screen is never stepped down until it is i
         expect(src()).toBe(PHOTO);
     });
 
+    it('a new <img> is out of view until its own observer says so (a card that gave up in view, then a new URL off screen)', () => {
+        vi.useFakeTimers();
+        const PHOTO_2 = '/api/marketplace/posts/p1/photos/0?v=18&k=KEY9';
+        const { container, rerender } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" loading="lazy" />);
+        inView(true);
+        for (let i = 0; i < 3; i++) fireEvent.error(container.querySelector('img')!);
+        expect(container.querySelector('img')).toBeNull();
+        rerender(<ListPhoto photo={PHOTO_2} fallback={fallback} alt="" loading="lazy" />);
+        after(LIST_PHOTO_WAIT_MS * 3);
+        expect(container.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO_2}&size=thumb2`);
+        inView(true);
+        after(LIST_PHOTO_WAIT_MS);
+        expect(container.querySelector('img')?.getAttribute('src')).toBe(`${PHOTO_2}&size=thumb2&retry=1`);
+    });
+
     it('an eager photo is not watched: the browser asks for it at once, so its wait starts at once', () => {
         vi.useFakeTimers();
         const { container } = render(<ListPhoto photo={PHOTO} fallback={fallback} alt="" />);

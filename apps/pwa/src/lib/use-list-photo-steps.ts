@@ -31,16 +31,19 @@ export function useListPhotoSteps(photo: string | null | undefined, resolve?: (u
     const drawn = !!shown && drawnUrl === shown;
 
     // A lazy <img>: whether it is in view now, and the address it was in view with (the one the browser has asked for).
-    // Without IntersectionObserver the browser has no lazy loading either, and asks for every <img> at once.
+    // In view belongs to the <img> it was seen for: a new one (a new URL after the card had given up) is out of view until
+    // its own observer says otherwise. Without IntersectionObserver the browser has no lazy loading either, and asks for
+    // every <img> at once.
     const watch = lazy && typeof IntersectionObserver !== 'undefined';
     const [node, setNode] = useState<HTMLImageElement | null>(null);
-    const [inView, setInView] = useState(false);
+    const [view, setView] = useState<{ node: HTMLImageElement; on: boolean } | null>(null);
+    const inView = !!node && view?.node === node && view.on;
     const [seenSrc, setSeenSrc] = useState<string | null>(null);
     useEffect(() => {
         if (!watch || !node) return;
         const io = new IntersectionObserver((entries) => {
             const last = entries[entries.length - 1];
-            if (last) setInView(last.isIntersecting);
+            if (last) setView({ node, on: last.isIntersecting });
         });
         io.observe(node);
         return () => io.disconnect();

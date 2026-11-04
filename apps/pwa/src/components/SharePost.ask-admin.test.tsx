@@ -114,7 +114,8 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         fireEvent.change(screen.getByTestId('invite-ask-how-known'), { target: { value: 'the bakery' } });
         fireEvent.submit(screen.getByTestId('invite-ask-sheet').querySelector('form')!);
         await waitFor(() => expect(screen.queryByTestId('invite-ask-sheet')).toBeNull());
-        expect(document.activeElement).toBe(screen.getByTestId('share-button'));
+        // The menu puts focus back on the next animation frame (ShareMenu.tsx requestAnimationFrame): wait for it.
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('share-button')));
     });
 
     it('on an event the same: focus goes back to the event\'s Share button', async () => {
@@ -133,7 +134,7 @@ describe('Ask an admin to invite someone, in the share sheet (web)', () => {
         await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('invite-ask-first-name')));
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(screen.queryByTestId('invite-ask-sheet')).toBeNull();
-        expect(document.activeElement).toBe(screen.getByTestId('event-share'));
+        await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('event-share')));
     });
 
     it('a refusal stays in the sheet, in the node\'s words, and nothing is claimed as sent', async () => {

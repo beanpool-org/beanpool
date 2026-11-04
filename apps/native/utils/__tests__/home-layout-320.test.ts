@@ -19,12 +19,14 @@ vi.mock('react-native', () => ({
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: 'Icon' }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
-import { lightColors } from '../../constants/colors';
+import { darkColors, lightColors } from '../../constants/colors';
+import { contrastRatio } from '../readable-color';
+import { QUIET_OPACITY } from '../../components/home/quiet';
 import { POST_CATEGORIES } from '../../constants/categories';
 import { MAX_FONT_SCALE } from '../../constants/responsive';
 import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, homeStyles } from '../../components/home/HomeParts';
 import { sheetStyles } from '../../components/home/sheet-parts';
-import { st as arrangeStyles } from '../../components/home/ArrangeParts';
+import { STRIP_NAME_BASIS_DP, st as arrangeStyles } from '../../components/home/ArrangeParts';
 import { ADD_CARD_DOT_DP, ADD_CARD_DOT_GAP_DP, ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
 import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
 import { ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest } from '@beanpool/core';
@@ -217,14 +219,55 @@ describe('Arrange at 320dp × 1.3 (DESIGN-home-layout-fable.md §3.2)', () => {
         expect(s.arrowFirst.marginRight).toBe(0);
     });
 
-    it('the one line, the bar and the not-on-your-account line keep their longest word; Settings… and Remove wrap whole, each a 48dp target', () => {
-        for (const line of ['Nothing to show now', TIPS_ALL_SEEN, SKY_NO_PLACE_LINE, ...HOME_CARD_TYPES.map(t => t.line)]) {
-            expect(longestWord(line, num(a.line.fontSize)), line).toBeLessThan(CARD_INNER);
-        }
-        for (const line of [ARRANGE_WORDS.bar, NOT_ON_ACCOUNT_LINE]) expect(longestWord(line, num(a.barText.fontSize)), line).toBeLessThan(CARD_INNER);
-        expect(a.words.flexWrap).toBe('wrap');
-        expect(num(a.word.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
-        expect(num(a.word.minWidth)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+    it('the bar and the not-on-your-account line keep their longest word, beside the screen\'s own gutters', () => {
+        const inner = SCREEN - 2 * num(a.bar.paddingHorizontal);
+        for (const line of [ARRANGE_WORDS.bar, NOT_ON_ACCOUNT_LINE]) expect(longestWord(line, num(a.barText.fontSize)), line).toBeLessThan(inner);
+        // The gap under the bar is padding, so the bar's measured height (what the view moves down by) is the whole of what it adds.
+        expect(a.bar.marginBottom).toBeUndefined();
+        expect(num(a.bar.paddingBottom)).toBeGreaterThan(0);
+    });
+
+    describe('the strip of cards with nothing to show (DESIGN-home-arrange-in-place-fable.md §2.4)', () => {
+        const STRIP = SCREEN - 2 * num(a.strip.marginHorizontal);
+        const settings = Math.max(HOME_TARGET_DP, textWidth('Settings…', num(a.wordText.fontSize)));
+        const remove = Math.max(HOME_TARGET_DP, textWidth('Remove', num(a.wordText.fontSize)));
+        const pair = settings + num(a.words.columnGap) + remove;
+        const savedSearchNames = ['organic free range eggs', 'x'.repeat(40)].map(q => cardRowName({ type: 'search', settings: { q, kind: 'need' } }));
+
+        it('Settings… and Remove are 48dp targets that wrap whole, never shrink; the pair always fits the strip, under the name where it can\'t sit beside it', () => {
+            expect(a.words.flexWrap).toBe('wrap');
+            expect(a.words.flexShrink).toBe(0);
+            expect(num(a.word.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+            expect(num(a.word.minWidth)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+            expect(pair).toBeLessThan(STRIP);
+            // The row wraps the pair under the name rather than squeeze either: the name asks for its basis, the pair keeps its size.
+            expect(a.stripRow.flexWrap).toBe('wrap');
+            expect(num(a.stripName.flexBasis)).toBe(STRIP_NAME_BASIS_DP);
+            expect(a.stripName.flexShrink).toBe(1);
+        });
+
+        it('a card\'s name keeps its longest word: beside Remove alone on one row, and (whole) under it when Settings… is there too', () => {
+            for (const name of [...CARD_NAMES, 'Needs · ' + 'x'.repeat(8)]) {
+                const w = longestWord(name, num(a.stripNameText.fontSize));
+                expect(w, name).toBeLessThan(STRIP_NAME_BASIS_DP);
+                // Beside Remove only, where the type has no settings: the name keeps its basis.
+                expect(STRIP_NAME_BASIS_DP + num(a.stripRow.columnGap) + remove, name).toBeLessThan(STRIP);
+            }
+            // With Settings… as well the pair goes under the name, which then has the strip's whole width.
+            expect(STRIP_NAME_BASIS_DP + num(a.stripRow.columnGap) + pair).toBeGreaterThan(STRIP);
+            // A saved search's name leads with its kind, so its first line shows it however long the words; they wrap, none clipped.
+            for (const name of savedSearchNames) {
+                expect(name.startsWith('Needs · '), name).toBe(true);
+                expect(textWidth('Needs · ', num(a.stripNameText.fontSize))).toBeLessThan(STRIP);
+            }
+            expect(num(a.stripNameText.fontSize)).toBeGreaterThanOrEqual(15);
+        });
+
+        it('the heading and what a card would say keep their longest word; the heading stays', () => {
+            expect(longestWord('Nothing to show now', num(a.stripHeading.fontSize))).toBeLessThan(STRIP);
+            for (const line of [TIPS_ALL_SEEN, SKY_NO_PLACE_LINE]) expect(longestWord(line, num(a.stripNote.fontSize)), line).toBeLessThan(STRIP);
+            expect(read('components/home/ArrangeParts.tsx')).toMatch(/<Text style=\{\[st\.stripHeading, \{ color: colors\.text\.secondary \}\]\} accessibilityRole="header"/);
+        });
     });
 
     it('＋ Add a card and Reset to defaults fit whole on 48dp targets, and Done is the floating button\'s box, never stepping aside', () => {
@@ -234,17 +277,41 @@ describe('Arrange at 320dp × 1.3 (DESIGN-home-layout-fable.md §3.2)', () => {
         expect(textWidth('＋ Add a card', num(a.wordText.fontSize))).toBeLessThan(inner);
         expect(textWidth('Reset to defaults', num(a.resetText.fontSize))).toBeLessThan(inner);
         expect(home).toMatch(/style=\{\[st\.fab, \{ backgroundColor: colors\.action\.fab \}\]\} onPress=\{endArrange\} testID="home-arrange-done"/);
-        expect(home).toMatch(/\{folded \? \(\s*\/\/ Done takes the floating button's place/);
+        expect(home).toMatch(/\{arrangeOn \? \(\s*\/\/ Done takes the floating button's place/);
         expect(parts).toMatch(/style=\{\(\{ pressed \}\) => \[s\.menuButton, dir === 'up' && s\.arrowFirst/);
     });
 
-    it('eight folded cards fit under one and a half screens at 320 x 569: the short list a thumb can reach', () => {
-        const lineHeight = num(a.line.lineHeight) * FONT_SCALE;
-        const linesOf = (line: string) => Math.ceil(textWidth(line, num(a.line.fontSize)) / CARD_INNER);
-        const eight = ['steps', 'tips', 'events', 'market', 'pulse', 'beans', 'decide', 'groups'].map(id => HOME_CARD_TYPES.find(t => t.id === id)!);
-        const chrome = HOME_TARGET_DP + num(s.captionFolded.marginBottom) + num(s.cardFolded.paddingBottom) + num(s.cardFolded.marginBottom) + 2 * num(s.card.borderWidth) + num(s.captionRow.marginTop) + num(s.card.paddingTop);
-        const total = eight.reduce((sum, t) => sum + chrome + linesOf(t.line) * lineHeight, 0);
-        expect(total).toBeLessThan(569 * 1.5);
+    it('a card\'s dimmed inside stays readable in both themes: its body, its secondary lines and its links keep 3:1 on the card (measured in e2e/arrange-320.mjs)', () => {
+        // The design said 55 %; at 320dp the secondary lines and links read at 2.55:1 (light) and 2.81:1 (dark) there.
+        expect(QUIET_OPACITY).toBeGreaterThanOrEqual(0.6);
+        expect(QUIET_OPACITY).toBeLessThan(1);
+        const blend = (fg: string, bg: string, a: number) => '#' + [1, 3, 5].map(i => Math.round(parseInt(fg.slice(i, i + 2), 16) * a + parseInt(bg.slice(i, i + 2), 16) * (1 - a)).toString(16).padStart(2, '0')).join('');
+        for (const [theme, colors] of [['light', lightColors], ['dark', darkColors]] as const) {
+            for (const [what, fg] of [['body', colors.text.body], ['secondary', colors.text.secondary], ['link', colors.text.link]] as const) {
+                expect(contrastRatio(blend(fg, colors.surface.card, QUIET_OPACITY), colors.surface.card), `${theme} ${what}`).toBeGreaterThanOrEqual(3);
+            }
+        }
+        // And it is dimmed: a quiet card is visibly not a live one.
+        expect(contrastRatio(blend(lightColors.text.body, lightColors.surface.card, QUIET_OPACITY), lightColors.surface.card)).toBeLessThan(contrastRatio(lightColors.text.body, lightColors.surface.card));
+    });
+
+    it('Arrange adds only the bar and the strip to Home\'s height: a card is drawn exactly as on Home, and its band keeps its height', () => {
+        // The fold is gone: no folded card or caption style, and a card's own style does not depend on Arrange.
+        expect(s.cardFolded).toBeUndefined();
+        expect(s.captionFolded).toBeUndefined();
+        expect(parts).toMatch(/<View style=\{\[s\.card, accent && s\.cardAccent\]\} testID=\{testID\}>/);
+        expect(parts).not.toMatch(/arrange && s\./);
+        // The band: the two arrows are the same 48dp boxes "Tune" and the "…" are, in the same row, so the band's height does not change.
+        expect(parts).toMatch(/style=\{\(\{ pressed \}\) => \[s\.menuButton, dir === 'up' && s\.arrowFirst, pressed && s\.pressed\]\}/);
+        expect(num(s.menuButton.height)).toBe(HOME_TARGET_DP);
+        expect(num(s.captionRow.minHeight)).toBe(HOME_TARGET_DP);
+        // What it does add, at 320 x 569 with text at 1.3x: the bar (two of its lines at the very most, its gap) and a strip of
+        // four cards (a heading; each row its name on two lines and the pair under it), well inside one and a half screens.
+        const bar = Math.ceil(textWidth(ARRANGE_WORDS.bar, num(a.barText.fontSize)) / (SCREEN - 2 * num(a.bar.paddingHorizontal))) * num(a.barText.lineHeight) * FONT_SCALE + num(a.bar.paddingBottom);
+        const row = 2 * num(a.stripNameText.lineHeight) * FONT_SCALE + 2 * 8 + HOME_TARGET_DP;
+        const strip = (num(a.stripHeading.lineHeight) * FONT_SCALE + num(a.stripHeading.paddingBottom)) + 4 * row + num(a.strip.marginBottom);
+        expect(bar + strip).toBeLessThan(569 * 1.5);
+        expect(bar).toBeLessThan(0.25 * 569);
     });
 });
 

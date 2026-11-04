@@ -815,7 +815,12 @@ async function main() {
     };
     const branchLine = async (who: Id) => (await needsCount(who, '&lands=branch-vote')) - (await needsCount(who, ''));
     const jurorsB = bSeated.map(k => byKey.get(k)!);
-    const lines = [jurorsB[0] ? await branchLine(jurorsB[0]) : -1, await branchLine(notSeated), await branchLine(inviter)];
+    // Asked as a juror who reads as a member. The pool keeps a member paused by nothing but their own open vote (J1; J2a
+    // call 1), as section 7 left vic, wil and xia, so the draw can seat one; and Home asks no paused member to vote on
+    // anything, since a paused member reads what a non-member reads (readsAsMember; test-home's suspended member). The
+    // juror first by key was one of them in 3 runs of 50: [0,0,0].
+    const askedJuror = jurorsB.find(j => statusOf(j) === 'active');
+    const lines = [askedJuror ? await branchLine(askedJuror) : -1, await branchLine(notSeated), await branchLine(inviter)];
     assert(JSON.stringify(lines) === '[1,0,0]', `Home asks a juror to vote on the branch, never a member not seated nor one passed over (${JSON.stringify(lines)})`);
     // The accounts' balances and debts go to those who may vote on it: the jury, and nobody else (decisionForReader).
     const branchCardOf = async (who: Id) => { fresh(); return signed('GET', `/api/commons/decisions/${branchVote}?draws=branch`, who); };
@@ -1032,7 +1037,9 @@ async function main() {
     // §5.1: a juror and Sue re-keyed while it is open. The roll, the votes and the vote's subject move to the new keys; the
     // pool and the key the vote was drawn for don't, and the closed lists say what each entry was drawn as.
     const sueSeated = rollOf(sueAgain).filter(r => r.status === 'on').map(r => byKey.get(r.k)!).filter(j => j && statusOf(j) === 'active');
-    const moving = sueSeated.find(j => j !== frozenJuror)!;
+    // Never Ada or Gwen, whose keys the rest of the suite signs with (Gus's case below leaves them out the same way). Gwen
+    // paused this one, so Ada can be seated on it; re-keyed, her old key paused nobody after (1 run of 110: Cal's case).
+    const moving = sueSeated.find(j => j !== frozenJuror && j !== ada && j !== gen)!;
     const votedBefore = [de.castDecisionVote(sueAgain, frozenJuror.pk, true), de.castDecisionVote(sueAgain, moving.pk, true)];
     const rekey = (who: Id): Id => {
         const next = keypair(who.callsign);
@@ -1067,7 +1074,19 @@ async function main() {
     const openJuries = () => (db.prepare("SELECT id FROM decisions WHERE status = 'open' AND json_valid(params) AND json_extract(params, '$.decider') = 'jury'")
         .all() as Array<{ id: string }>).map(r => r.id);
     for (const id of openJuries()) closeNow(id);
+    // And the votes everyone decides that sections 7 and 10 left open. Each keeps its members paused and in every pool
+    // (paused by nothing but their own vote), and with them in it a case whose first 30 of the draw are all active
+    // (plainCase) was sometimes not to be found: 3 runs of 50 threw at Gus's case below.
+    for (const { id } of db.prepare("SELECT id FROM decisions WHERE status = 'open' AND effect = 'remove_member'").all() as Array<{ id: string }>) closeNow(id);
     const memberStatus = (k: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(k) as { status: string } | undefined)?.status;
+    /**
+     * Whether a removal vote here ever named this member: its subject, or on a branch's list. A case is brought only against
+     * one no vote has named: after a vote Ada brought ended without removing them, the cool-down refuses her pause for 90
+     * days, and a member paused here outside subjectWhere (Dee's juror, the account deep in a branch) is still among those
+     * subjectWhere offers (1 run of 50 threw at Ivy's case below).
+     */
+    const everNamed = (k: string) => !!db.prepare(`SELECT 1 FROM members m WHERE m.public_key = ? AND EXISTS (
+        SELECT 1 FROM decisions d WHERE d.effect = 'remove_member' AND ${namesSql('d')})`).get(k);
     const tokenOf = (k: string) => byKey.get(k)?.token ?? `no token for ${k.slice(0, 8)}`;
     /** A member's phones besides the one seedMember gave them (a juror's French phone, below). */
     const morePhones = new Map<string, string[]>();
@@ -1076,17 +1095,17 @@ async function main() {
     const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every(x => b.has(x));
     const seatedOf = (id: string) => rollOf(id).filter(r => r.status === 'on').map(r => r.k);
     /**
-     * A case whose first 30 of the draw are active members seeded here, with phones this suite knows (none re-keyed since,
-     * none paused: `age` moves one case's times and not the rest of the world's, so a pause made a minute ago would read as
-     * made after a seat it moved two days back).
+     * A case against a member no vote has named (everNamed), whose first 30 of the draw are active members seeded here, with
+     * phones this suite knows (none re-keyed since, none paused: `age` moves one case's times and not the rest of the
+     * world's, so a pause made a minute ago would read as made after a seat it moved two days back).
      */
     const plainCase = () => subjectWhere(c => {
-        if (memberStatus(c.pk) !== 'active') return false;
+        if (memberStatus(c.pk) !== 'active' || everNamed(c.pk)) return false;
         const o = juryOrder(de.removalJuryPool(today, [c.pk]), c.pk, today).order;
         return o.slice(0, 30).every(k => byKey.has(k) && memberStatus(k) === 'active');
     });
     /** A case `who` is among the first 10 of the draw of, so they are seated (nothing links them to its member). Not aged. */
-    const caseSeating = (who: Id) => subjectWhere(c => memberStatus(c.pk) === 'active'
+    const caseSeating = (who: Id) => subjectWhere(c => memberStatus(c.pk) === 'active' && !everNamed(c.pk)
         && juryOrder(de.removalJuryPool(today, [c.pk]), c.pk, today).order.slice(0, 10).includes(who.pk));
     /** Time travel: the whole case, its seats with it, as if it had all happened `ms` earlier. */
     const rollColumns = new Set((db.prepare("SELECT name FROM pragma_table_info('decision_electors')").all() as Array<{ name: string }>).map(c => c.name));

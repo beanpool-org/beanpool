@@ -54,6 +54,19 @@ describe('ListPhoto', () => {
         expect(queryByTestId('the-tile')).toBeNull();
     });
 
+    it('a resolve that refuses what it would draw (null) draws the fallback, never the refused URL, at every step', () => {
+        const refuse = () => null;
+        const { container, queryByTestId, unmount } = render(<ListPhoto photo={PHOTO} resolve={refuse} fallback={fallback} alt="" />);
+        expect(container.querySelector('img')).toBeNull();
+        expect(queryByTestId('the-tile')).toBeInTheDocument();
+        unmount();
+        // It refuses only the small copy: that is the first thing drawn, so the tile shows and the photo's own URL is not tried.
+        const refuseSmall = (url: string) => (url.includes('size=thumb2') ? null : url);
+        const second = render(<ListPhoto photo={PHOTO} resolve={refuseSmall} fallback={fallback} alt="" />);
+        expect(second.container.querySelector('img')).toBeNull();
+        expect(second.queryByTestId('the-tile')).toBeInTheDocument();
+    });
+
     it('resolve turns what it draws into the address the page loads, while the steps follow the photo it was given', () => {
         const resolve = (url: string) => `https://node.example${url}`;
         const { container } = render(<ListPhoto photo={PHOTO} resolve={resolve} fallback={fallback} alt="" />);

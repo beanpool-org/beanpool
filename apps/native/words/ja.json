@@ -6621,7 +6621,7 @@
   "{name} · {lifecycle}": "{name} · {lifecycle}",
   "{name} · {role}\u0004a keeper's name and their part": "{name} · {role}",
   "{name}'s reply": "{name}さんの返信",
-  "{name}, group, convenor": "{name}、グループ、世話役",
+  "{name}, group, convenor": "{name}、グループ、まとめ役",
   "{name}, {role}": "{name}、{role}",
   "{name}. Opens the enterprise.": "{name}。事業体を開く。",
   "{name}. Opens the project.": "{name}。プロジェクトを開く。",

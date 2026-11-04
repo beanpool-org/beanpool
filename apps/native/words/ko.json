@@ -6621,7 +6621,7 @@
   "{name} · {lifecycle}": "{name} · {lifecycle}",
   "{name} · {role}\u0004a keeper's name and their part": "{name} · {role}",
   "{name}'s reply": "{name}님의 답글",
-  "{name}, group, convenor": "{name}, 그룹, 모임지기",
+  "{name}, group, convenor": "{name}, 그룹, 주최자",
   "{name}, {role}": "{name}, {role}",
   "{name}. Opens the enterprise.": "{name}. 기업 열기.",
   "{name}. Opens the project.": "{name}. 프로젝트 열기.",

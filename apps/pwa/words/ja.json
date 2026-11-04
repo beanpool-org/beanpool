@@ -4110,7 +4110,7 @@
   "This browser couldn't check whether this chat is locked just now. Nothing was sent; try again in a moment.": "このブラウザは、このチャットがロックされているかどうかをいま確認できませんでした。何も送信されていません。しばらくしてからもう一度お試しください。",
   "This browser couldn't check who is in this group just now. Nothing was sent; try again in a moment.": "このブラウザは、このグループにだれがいるかをいま確認できませんでした。何も送信されていません。しばらくしてからもう一度お試しください。",
   "This browser doesn't hold your 12 recovery words, so it can't send your account this way. On your phone, restore with your social sign-in or your community instead.": "このブラウザには12個の復元用の単語がないため、この方法ではアカウントを送れません。代わりにスマートフォンで、ソーシャルサインインかコミュニティで復元してください。",
-  "This browser has no 12 words. Unless you have them written down, or a phone with this account, losing this browser could lose your account: an admin can only move your Beans and name to a new key.": "このブラウザには12個の単語がありません。書き留めていない、またはこのアカウントが入ったスマートフォンがない場合、このブラウザをなくすとアカウントを失うことがあります：管理者ができるのは、豆と名前を新しい鍵へ移すことだけです。",
+  "This browser has no 12 words. Unless you have them written down, or a phone with this account, losing this browser could lose your account: an admin can only move your Beans and name to a new key.": "このブラウザには12個の単語がありません。書き留めておらず、このアカウントが入ったスマートフォンもない場合、このブラウザをなくすとアカウントを失うことがあります：管理者ができるのは、豆と名前を新しい鍵へ移すことだけです。",
   "This chat holds private messages, so it stays a direct message. Nothing was sent; send it again here.": "このチャットには非公開メッセージが含まれるため、ダイレクトメッセージのままです。何も送信されていません。ここでもう一度送信してください。",
   "This chat's key hasn't reached this browser yet. Another member's app hands it over when they next open the chat.": "このチャットの鍵はまだこのブラウザに届いていません。ほかのメンバーが次にチャットを開いたとき、そのメンバーのアプリが渡します。",
   "This code has run out. Make a new one.": "このコードは期限が切れました。新しいコードを作ってください。",

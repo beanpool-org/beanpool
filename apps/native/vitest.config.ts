@@ -26,6 +26,10 @@ export default defineConfig({
             // A native view that doesn't load outside a device. Every door screen imports the check's sheet, so every test
             // that renders one would have to mock it; door-check-sheet-render.test.ts mocks it for what it checks.
             'react-native-webview': fileURLToPath(new URL('./utils/__tests__/webview-stub.ts', import.meta.url).href),
+            // Home's carried band (components/home/ArrangeGhost.tsx) and its lift's tick (useArrangeDrag.ts): native modules that
+            // don't load outside a device, imported by Home, which a dozen tests render. A test can still mock either itself.
+            'react-native-reanimated': fileURLToPath(new URL('./utils/__tests__/reanimated-stub.ts', import.meta.url).href),
+            'expo-haptics': fileURLToPath(new URL('./utils/__tests__/haptics-stub.ts', import.meta.url).href),
         },
     },
     test: {

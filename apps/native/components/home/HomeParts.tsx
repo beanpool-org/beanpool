@@ -1,9 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Text, Pressable, StyleSheet, type GestureResponderEvent, type StyleProp, type ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ARRANGE_WORDS, t, type CardHue } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { QUIET_OPACITY, quietWrapperProps } from './quiet';
+import { ARRANGE_HOLD_MS } from '../../utils/arrange-drag';
 
 /**
  * The pieces every Home card is made of (design §9 card anatomy, §10 accessibility): a caption that is a heading, an
@@ -75,6 +76,31 @@ export interface ArrangeBand {
 /** Holding a band this long enters Arrange. */
 export const HOLD_MS = 500;
 
+/** A hold's handler: the press as it fired, for where the finger is (the drag, DESIGN-home-arrange-in-place-fable.md §2.2). */
+export type OnHold = (e: GestureResponderEvent) => void;
+
+/**
+ * In Arrange, the whole of a card that moves is its handle (§2.2): this lies under the card's band and over its quiet
+ * inside, which no touch reaches, so a finger held still on the inside for ARRANGE_HOLD_MS lifts the card. A finger that
+ * moves first is scrolling: the Pressable lets the list take the touch and nothing is lifted. Nothing for TalkBack or a
+ * keyboard to land on (the arrows are their way). TalkBack can still pass a long press through to it (measured on the
+ * emulator: its explore hold and its double tap and hold both reached the hold), so the drag refuses to lift while a
+ * screen reader is on (useArrangeDrag.ts `lift`).
+ */
+export function HoldSurface({ id, onLift }: { id: string; onLift: OnHold }) {
+    return (
+        <Pressable
+            onLongPress={onLift}
+            delayLongPress={ARRANGE_HOLD_MS}
+            accessible={false}
+            focusable={false}
+            importantForAccessibility="no"
+            style={StyleSheet.absoluteFill}
+            testID={`home-hold-${id}`}
+        />
+    );
+}
+
 /**
  * A card's ↑ ↓ in Arrange, or "Stays here" on the fixed two and a pinned Find: the same two 48dp targets "Tune" and the "…"
  * take outside it, so a band keeps its height. One place, for every card with a band (and the one that gets a band only here).
@@ -113,27 +139,32 @@ export function ArrangeControls({ id, ink, colors, arrange }: { id: string; ink:
  * A band for a card that has none on Home (the "one way back" card draws its own frame): the caption and the arrows, across
  * the top of that frame, as every other card's band has them in Arrange.
  */
-export function ArrangeBandRow({ id, caption, hue, colors, arrange, style }: {
+export function ArrangeBandRow({ id, caption, hue, colors, arrange, style, onLift }: {
     id: string;
     caption: string;
     hue: CardHue;
     colors: AppColors;
     arrange: ArrangeBand;
     style?: StyleProp<ViewStyle>;
+    /** The card can be dragged: a hold on the band lifts it, and a hold on the quiet inside under it (HoldSurface, drawn first). */
+    onLift?: OnHold;
 }) {
     const s = homeStyles(colors);
     const { tint, ink } = colors.card[hue];
     return (
-        <View style={[s.captionRow, { backgroundColor: tint }, style]} testID={`card-band-${id}`}>
-            <Text style={[s.caption, { color: ink }]} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
-                {caption}
-            </Text>
-            <ArrangeControls id={id} ink={ink} colors={colors} arrange={arrange} />
-        </View>
+        <>
+            {onLift ? <HoldSurface id={id} onLift={onLift} /> : null}
+            <Pressable onLongPress={onLift} delayLongPress={ARRANGE_HOLD_MS} accessible={false} focusable={false} style={[s.captionRow, { backgroundColor: tint }, style]} testID={`card-band-${id}`}>
+                <Text style={[s.caption, { color: ink }]} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
+                    {caption}
+                </Text>
+                <ArrangeControls id={id} ink={ink} colors={colors} arrange={arrange} />
+            </Pressable>
+        </>
     );
 }
 
-export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent, hue, onHold, arrange, quiet }: {
+export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent, hue, onHold, arrange, quiet, onLift }: {
     /** For the floating button's band: the caption's own targets (the "…", "Tune") report where they rest. */
     id: string;
     caption: string;
@@ -152,21 +183,28 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
     accent?: boolean;
     /** The card's hue from brand-colours (S1). */
     hue?: CardHue;
-    /** Holding the band enters Arrange; absent where it doesn't (a visitor's Home, Getting started). */
-    onHold?: () => void;
+    /**
+     * Holding the band enters Arrange; absent where it doesn't (a visitor's Home, Getting started). The press goes with it:
+     * a finger still down carries the card on as a drag (§2.2).
+     */
+    onHold?: OnHold;
     /** In Arrange: the band's arrows (or "Stays here") stand in for "Tune" and the "…"; `children` is the card as Home draws it. */
     arrange?: ArrangeBand;
     /** In Arrange: the card's inside is dimmed and quiet, so a tap on it does nothing until Done. */
     quiet?: boolean;
+    /** In Arrange, on a card that moves: a hold anywhere on it but its arrows lifts it (ARRANGE_HOLD_MS). */
+    onLift?: OnHold;
 }) {
     const s = homeStyles(colors);
     const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
     const { tint, ink } = colors.card[cardHue];
     return (
         <View style={[s.card, accent && s.cardAccent]} testID={testID}>
+            {/* First, so the band (and its arrows) lie over it; the quiet inside lets every touch through to it. */}
+            {arrange && onLift ? <HoldSurface id={id} onLift={onLift} /> : null}
             <Pressable
-                onLongPress={arrange ? undefined : onHold}
-                delayLongPress={HOLD_MS}
+                onLongPress={arrange ? onLift : onHold}
+                delayLongPress={arrange ? ARRANGE_HOLD_MS : HOLD_MS}
                 // No target of its own for TalkBack or a keyboard: the caption stays a heading, and "…" → Arrange is their way in.
                 accessible={false}
                 focusable={false}

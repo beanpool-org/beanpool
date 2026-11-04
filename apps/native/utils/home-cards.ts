@@ -28,7 +28,7 @@ import {
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine,
-    copyFromLine, eventCopyOf, type ShownFromLine,
+    copyFromLine, eventCopyOf, type ShownFromLine, reorderIds,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -551,6 +551,25 @@ export function moveCard(
 }
 
 /**
+ * A drag's drop in Arrange (DESIGN-home-arrange-in-place-fable.md §2.3, slice A4): the card to place `to` among the cards of
+ * `among` that move and stand on the list (the place `placeLifted` counts in), saved as the same list an arrow makes, in
+ * the slots those cards already hold. Every other card keeps its place. Null when it would not move.
+ */
+export function moveCardTo(
+    layout: HomeLayout | null, id: string, to: number, among: readonly HomeCardInstance[], now: number, pinned: readonly HomeCardId[] = [],
+): HomeLayout | null {
+    const list = listOf(layout);
+    const movable = among.filter(c => canMoveCard(c.type, pinned) && list.some(l => l.id === c.id));
+    if (!movable.some(c => c.id === id) || to < 0 || to >= movable.length) return null;
+    const placed = reorderIds(movable, movable.map(c => c.id), id, to);
+    if (placed.every((c, k) => c.id === movable[k].id)) return null;
+    const slots = movable.map(c => list.findIndex(l => l.id === c.id)).sort((x, y) => x - y);
+    const cards = [...list];
+    slots.forEach((slot, k) => { cards[slot] = list.find(l => l.id === placed[k].id)!; });
+    return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: at(now) };
+}
+
+/**
  * Reset to defaults: the starter set (§1.3; DESIGN-getting-started-fable.md §1: Getting started is a newcomer's, never a
  * reset's — a Home reset after the tour would otherwise be empty). A schedule's dismissal (the `safety` card) is not a layout choice: kept.
  * A card of a type this build doesn't know (a newer app's) is kept too, at the end: Reset is this app's defaults, not a
@@ -583,7 +602,7 @@ export function fewerCardsNews(account: HomeLayout | null, phone: HomeLayout | n
 // Lines kept here and shown through t() where they are drawn (app/(tabs)/index.tsx, components/home).
 export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
 /** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or hold a card to arrange.');
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom. Hold a card to drag it, or use the arrows.');
 /** A saved search's kinds, as its settings sheet offers them (CARD-FRAME §4). */
 export const SEARCH_KIND_CHIPS: ReadonlyArray<{ kind: HomeSearchKind; label: WordKey }> = [
     { kind: 'any', label: word('Both') }, { kind: 'offer', label: word('Offers') }, { kind: 'need', label: word('Needs') },

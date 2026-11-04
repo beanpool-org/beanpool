@@ -468,6 +468,18 @@ export function eventBadge(post: any): 'CANCELLED' | 'UPDATED' | null {
     return null;
 }
 
+/**
+ * The state chip a Market card wears (EventCard: the list card, the tile, the compact row), as the web's card has it
+ * (apps/pwa EventCard eventStateOf): CANCELLED first, then ENDED (over, and not cancelled), then UPDATED. The Market's feed
+ * leaves an ended event out (isEventInFeed), but a pin, a map pop-up or a list read before it ended can still hold one, and
+ * then the card says so rather than read as on. eventBadge stays as it is for the page and the map's pin line.
+ */
+export function eventCardState(post: any, nowMs: number = Date.now()): 'CANCELLED' | 'ENDED' | 'UPDATED' | null {
+    const badge = eventBadge(post);
+    if (badge === 'CANCELLED') return badge;
+    return isEventEnded(post, nowMs) ? 'ENDED' : badge;
+}
+
 export interface RsvpCounts {
     going: number;
     interested: number;

@@ -71,13 +71,15 @@ export async function launch() {
  * One page showing the Market grid. `width` is the viewport, `dark` picks the theme (both the emulated colour
  * scheme and the stored Settings choice), `textScale` is the 1.3x font setting, and `posts` is the feed to answer
  * with (fixtures.POSTS unless a caller wants the poll somewhere else), and `communityInfo` is what /api/community/info says
- * (absent: answered 404, as a node older than the switch does, so no example cards). Returns once the feed has drawn.
+ * (absent: answered 404, as a node older than the switch does, so no example cards). `timezoneId` is the reader's zone (absent:
+ * this machine's). Returns once the feed has drawn.
  */
-export async function openMarket(browser, origin, { width, height = 1200, dark = false, textScale = 1, posts, storage = {}, communityInfo } = {}) {
+export async function openMarket(browser, origin, { width, height = 1200, dark = false, textScale = 1, posts, storage = {}, communityInfo, timezoneId } = {}) {
     const context = await browser.newContext({
         viewport: { width, height },
         colorScheme: dark ? 'dark' : 'light',
         reducedMotion: 'reduce',
+        ...(timezoneId ? { timezoneId } : {}),
     });
 
     // The app is LIGHT by default whatever the device is set to (useTheme, #930 and the day after): dark only

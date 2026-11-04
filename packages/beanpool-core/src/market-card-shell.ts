@@ -56,6 +56,15 @@ export const MARKET_CARD_SHELL = {
     },
     /** A compact row's padding: 10 above and below, 12 either side (what the phone's compact row has today). */
     compactPadding: { vertical: 10, horizontal: 12 },
+    /**
+     * A compact row's spacing (slice C1; the phone's listing row's numbers): 10 after the picture, 8 between the words and the
+     * end (the price and the chip), 4 between the things at the end, 1 above each short line under the title. The end takes 45
+     * percent of the row at most, so a long mark wraps there instead of squeezing the title.
+     */
+    compactGap: { picture: 10, text: 8, end: 4, line: 1 },
+    compactEndMaxPercent: 45,
+    /** A compact row's shadow: lighter than a card's, a list of rows (what the phone's compact row has today). */
+    compactShadow: { offsetY: 1, opacity: 0.02, blur: 1, elevation: 1 },
     /** The two variants; no other band (the event's purple band is gone). */
     variant: {
         /** An Elder's card: a left border in `trust.star`. */

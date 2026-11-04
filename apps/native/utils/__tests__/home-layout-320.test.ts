@@ -222,7 +222,7 @@ describe('Arrange at 320dp × 1.3 (DESIGN-home-layout-fable.md §3.2)', () => {
 
     it('the bar and the not-on-your-account line keep their longest word, beside the screen\'s own gutters', () => {
         const inner = SCREEN - 2 * num(a.bar.paddingHorizontal);
-        for (const line of [ARRANGE_WORDS.bar, NOT_ON_ACCOUNT_LINE]) expect(longestWord(line, num(a.barText.fontSize)), line).toBeLessThan(inner);
+        for (const line of [ARRANGE_WORDS.barDrag, NOT_ON_ACCOUNT_LINE]) expect(longestWord(line, num(a.barText.fontSize)), line).toBeLessThan(inner);
         // The gap under the bar is padding, so the bar's measured height (what the view moves down by) is the whole of what it adds.
         expect(a.bar.marginBottom).toBeUndefined();
         expect(num(a.bar.paddingBottom)).toBeGreaterThan(0);
@@ -306,9 +306,9 @@ describe('Arrange at 320dp × 1.3 (DESIGN-home-layout-fable.md §3.2)', () => {
         expect(parts).toMatch(/style=\{\(\{ pressed \}\) => \[s\.menuButton, dir === 'up' && s\.arrowFirst, pressed && s\.pressed\]\}/);
         expect(num(s.menuButton.height)).toBe(HOME_TARGET_DP);
         expect(num(s.captionRow.minHeight)).toBe(HOME_TARGET_DP);
-        // What it does add, at 320 x 569 with text at 1.3x: the bar (two of its lines at the very most, its gap) and a strip of
+        // What it does add, at 320 x 569 with text at 1.3x: the bar (its lines, the drag's words since A4, and its gap) and a strip of
         // four cards (a heading; each row its name on two lines and the pair under it), well inside one and a half screens.
-        const bar = Math.ceil(textWidth(ARRANGE_WORDS.bar, num(a.barText.fontSize)) / (SCREEN - 2 * num(a.bar.paddingHorizontal))) * num(a.barText.lineHeight) * FONT_SCALE + num(a.bar.paddingBottom);
+        const bar = Math.ceil(textWidth(ARRANGE_WORDS.barDrag, num(a.barText.fontSize)) / (SCREEN - 2 * num(a.bar.paddingHorizontal))) * num(a.barText.lineHeight) * FONT_SCALE + num(a.bar.paddingBottom);
         const row = 2 * num(a.stripNameText.lineHeight) * FONT_SCALE + 2 * 8 + HOME_TARGET_DP;
         const strip = (num(a.stripHeading.lineHeight) * FONT_SCALE + num(a.stripHeading.paddingBottom)) + 4 * row + num(a.strip.marginBottom);
         expect(bar + strip).toBeLessThan(569 * 1.5);

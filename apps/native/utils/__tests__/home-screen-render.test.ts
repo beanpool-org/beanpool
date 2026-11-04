@@ -23,6 +23,8 @@ const back = vi.hoisted(() => ({ press: null as null | (() => boolean), add: vi.
 const hooks = vi.hoisted(() => ({
     handlers: new Map<string, { onLayout?: (e: unknown) => void; onScroll?: (e: unknown) => void }>(),
     scrollTo: vi.fn(),
+    /** Every PanResponder Home made (one per card wrapper, the drag's), as configured: a test finds the lifted card's by its capture. */
+    pans: [] as Array<Record<string, (...a: any[]) => any>>,
 }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', summary: 'region' };
@@ -30,7 +32,8 @@ vi.mock('react-native', () => {
         const { children, onPress, accessibilityLabel, accessibilityRole, testID, numberOfLines, accessibilityState, disabled, value, onValueChange, onChangeText, accessible } = props;
         const attrs: Record<string, unknown> = {};
         if (onPress && !disabled) attrs.onClick = () => onPress();
-        if (props.onLongPress) attrs.onDoubleClick = () => props.onLongPress();
+        // A long press, with where the finger is (a drag reads it): the double click's own place, on the page.
+        if (props.onLongPress) attrs.onDoubleClick = (e: MouseEvent) => props.onLongPress({ nativeEvent: { pageX: e?.clientX ?? 0, pageY: e?.clientY ?? 0, locationX: 0, locationY: 0 } });
         if (onValueChange) attrs.onClick = () => onValueChange(!value);
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
@@ -45,6 +48,12 @@ vi.mock('react-native', () => {
         // What Arrange's quiet is made of: no touch reaches the view, and TalkBack skips what is under it (Android's flag; iOS's is aria-hidden above).
         if (props.pointerEvents) attrs['data-pointer-events'] = props.pointerEvents;
         if (props.importantForAccessibility) attrs['data-ifa'] = props.importantForAccessibility;
+        // The list's own scrolling, off while a card is carried (the drag).
+        if (props.scrollEnabled === false) attrs['data-scroll'] = 'off';
+        // Android's pull-to-refresh wraps the list and takes a downward drag from the top unless it is off too (#2895 review).
+        if (props.refreshControl) attrs['data-refresh'] = props.refreshControl.props.enabled === false ? 'off' : 'on';
+        // The finger leaving the screen, which every view under it hears (a hold let go without moving).
+        if (props.onTouchEnd) attrs.onTouchEnd = () => props.onTouchEnd();
         if (testID && (props.onLayout || props.onScroll)) hooks.handlers.set(testID, { onLayout: props.onLayout, onScroll: props.onScroll });
         if (testID === 'card-settings-sheet' || /^card-band-|^add-card-.*-dot$|^home-quiet-/.test(testID ?? '')) attrs['data-style'] = JSON.stringify(Object.assign({}, ...[props.style].flat(3).filter(Boolean)));
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
@@ -63,11 +72,16 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
         BackHandler: { addEventListener: back.add },
         LayoutAnimation: { configureNext: vi.fn(), create: vi.fn() },
-        AccessibilityInfo: { isReduceMotionEnabled: vi.fn(async () => true), announceForAccessibility: vi.fn(), sendAccessibilityEvent: vi.fn() },
+        AccessibilityInfo: {
+            isReduceMotionEnabled: vi.fn(async () => true), announceForAccessibility: vi.fn(), sendAccessibilityEvent: vi.fn(),
+            // TalkBack, off unless a test turns it on (the drag never lifts a card while it is on).
+            isScreenReaderEnabled: vi.fn(async () => false), addEventListener: vi.fn(() => ({ remove: vi.fn() })),
+        },
         AppState: { currentState: 'active', addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
         DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
         Alert: { alert: vi.fn() },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
+        PanResponder: { create: (config: Record<string, (...a: any[]) => any>) => { hooks.pans.push(config); return { panHandlers: {} }; } },
     };
 });
 const nav = vi.hoisted(() => ({
@@ -260,6 +274,7 @@ beforeEach(async () => {
     nav.params = {};
     hooks.handlers.clear();
     hooks.scrollTo.mockClear();
+    hooks.pans.length = 0;
     Object.values(nav.router).forEach(f => f.mockClear());
     keyboard.height = 0;
     keyboard.isVisible = false;
@@ -1385,8 +1400,9 @@ describe('Arrange', () => {
         expect(has('home-card-events-menu')).toBe(false);
         expect(has('home-add-post')).toBe(false);
         expect(byLabel('Done arranging Home')).not.toBeNull();
-        expect(document.querySelector('[data-testid="home-arrange-bar"]')!.textContent).toBe("Arrange Home: use the arrows. Done when you're happy.");
-        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Arrange Home. Use the arrows on each card.');
+        // The phone can drag (slice A4): it promises the hold as the web does (§2.9).
+        expect(document.querySelector('[data-testid="home-arrange-bar"]')!.textContent).toBe("Arrange Home: hold a card to drag it, or use the arrows. Done when you're happy.");
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Arrange Home. Hold a card to drag it, or use the arrows on each card.');
         // Every card's inside is quiet: no touch reaches it, TalkBack and VoiceOver skip it, and it is dimmed. The band is not inside it.
         expect(quiets().map(q => q.getAttribute('data-testid')!.replace('home-quiet-', ''))).toEqual(before);
         for (const q of quiets()) {
@@ -1423,13 +1439,16 @@ describe('Arrange', () => {
                 for (const e of Array.from(card.querySelectorAll('*'))) {
                     if (e.closest('[data-testid^="card-band-"]')) continue;
                     if ((e.getAttribute('data-testid') ?? '').startsWith('home-quiet-')) continue;
+                    // Arrange's hold surface (the drag's handle, slice A4) is Arrange's own, as the band's arrows are: not the inside.
+                    if ((e.getAttribute('data-testid') ?? '').startsWith('home-hold-')) continue;
                     out.push(e);
                 }
             }
             return out;
         };
-        // The one wrapper each card's inside sits in (the card's second child, after its band): the same element in all three states.
-        const wrapperOf = (id: string) => document.querySelector(`[data-testid="home-card-${id}"]`)!.children[1];
+        // The one wrapper each card's inside sits in (the card's child right after its band; in Arrange the hold surface comes
+        // before the band, slice A4): the same element in all three states.
+        const wrapperOf = (id: string) => document.querySelector(`[data-testid="home-card-${id}"] > [data-testid^="card-band-"] + *`)!;
         const wrappers = cards().map(wrapperOf);
         expect(wrappers.every(w => w && !w.hasAttribute('data-testid'))).toBe(true);
         const atHome = insides();
@@ -1748,6 +1767,214 @@ describe('Arrange', () => {
         for (const key of homeKeys()) mem.store.delete(key);
         await render();
         expect(cards()).toEqual(order);
+    });
+
+    // ── The drag (DESIGN-home-arrange-in-place-fable.md §2.2, §2.3, §5 slice A4) ──────────────────────────────────────────
+    // Nothing here draws a frame: each card's wrapper is laid out by hand (one under the other, as the phone's one column
+    // is), a hold is the mock's long press at a place on the page, and the moves are the lifted card's PanResponder's.
+    describe('the drag (slice A4)', () => {
+        const CARD_DP = 150;
+        const slots = () => Array.from(document.querySelectorAll('[data-testid^="home-slot-"]')).map(e => e.getAttribute('data-testid')!.replace('home-slot-', ''));
+        const layOut = async () => {
+            const ids = slots();
+            await act(async () => {
+                ids.forEach((id, k) => hooks.handlers.get(`home-slot-${id}`)!.onLayout!({ nativeEvent: { layout: { x: 0, y: k * CARD_DP, width: 320, height: CARD_DP } } }));
+            });
+            return ids;
+        };
+        const at = (ids: string[], id: string, dy = CARD_DP / 2) => ids.indexOf(id) * CARD_DP + dy;
+        const hold = async (testId: string, y: number) => {
+            await act(async () => { document.querySelector(`[data-testid="${testId}"]`)!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: y })); });
+        };
+        /** The PanResponder of the card that is lifted: the only one that asks for the moving finger. */
+        const pan = () => {
+            const mine = hooks.pans.filter(p => p.onMoveShouldSetPanResponderCapture());
+            expect(mine).toHaveLength(1);
+            return mine[0];
+        };
+        const move = async (y: number) => { await act(async () => { const p = pan(); p.onPanResponderGrant(); p.onPanResponderMove({}, { moveX: 100, moveY: y }); }); };
+        const release = async () => { await act(async () => { pan().onPanResponderRelease(); }); await settle(); };
+        // The list's scrolling AND its pull-to-refresh: both off while a card is carried, both on otherwise.
+        const scrollOff = () => {
+            const list = document.querySelector('[data-testid="home-scroll"]')!;
+            expect(list.getAttribute('data-refresh')).toBe(list.getAttribute('data-scroll') === 'off' ? 'off' : 'on');
+            return list.getAttribute('data-scroll') === 'off';
+        };
+        const savedOrder = () => (JSON.parse(sent().at(-1)!.body).preferences['home.layout'].cards as Array<{ id: string }>).map(c => c.id);
+        const movableIds = () => cards().filter(id => !has(`home-arrange-${id}-stays`));
+        const unmount = () => { act(() => root?.unmount()); root = null; host?.remove(); hooks.pans.length = 0; };
+
+        it('nothing takes the finger until a hold lifts a card: taps, arrows and a swipe stay where they are, and no band is carried', async () => {
+            await render();
+            await open();
+            await layOut();
+            expect(hooks.pans.length).toBeGreaterThan(3);
+            expect(hooks.pans.every(p => p.onStartShouldSetPanResponder() === false)).toBe(true);
+            expect(hooks.pans.every(p => p.onMoveShouldSetPanResponderCapture() === false)).toBe(true);
+            expect(has('home-arrange-ghost')).toBe(false);
+            expect(scrollOff()).toBe(false);
+            // A hold surface on every card that moves, none on a card that stays, and none TalkBack can land on.
+            for (const id of movableIds()) expect(document.querySelector(`[data-testid="home-hold-${id}"]`)?.getAttribute('data-ifa'), id).toBe('no');
+            for (const id of cards().filter(i => has(`home-arrange-${i}-stays`))) expect(has(`home-hold-${id}`), id).toBe(false);
+        });
+
+        it('hold → lift → move → drop: card 4 carried above card 1 is drawn there as it moves, saved in that order once, and said; the band is carried only while it is held', async () => {
+            await render();
+            await open();
+            const ids = await layOut();
+            const movable = movableIds();
+            const [first, , , fourth] = movable;
+            const posts = sent().length;
+            await hold(`home-hold-${fourth}`, at(ids, fourth));
+            // Lifted: the list stops scrolling, the band is in the finger, the card is dimmed and ringed where it stands.
+            expect(has('home-arrange-ghost')).toBe(true);
+            expect(document.querySelector('[data-testid="home-arrange-ghost"]')!.getAttribute('aria-hidden')).toBe('true');
+            expect(has(`home-lifted-${fourth}`)).toBe(true);
+            expect(scrollOff()).toBe(true);
+            expect(slots()).toEqual(ids);
+            // Over card 1: the card is laid out in card 1's place and card 1 moves down (the preview).
+            await move(at(ids, first, 10));
+            const preview = cards();
+            expect(preview.indexOf(fourth)).toBe(preview.indexOf(first) - 1);
+            expect(movableIds().slice(0, 2)).toEqual([fourth, first]);
+            expect(sent().length).toBe(posts);
+            await release();
+            // Saved once, as the preview showed; the band goes (reduced motion here: at once); the list scrolls again.
+            expect(sent().length).toBe(posts + 1);
+            // (The community card is last and fixed: the saved list doesn't name it.)
+            expect(savedOrder().filter(id => preview.includes(id))).toEqual(preview.filter(id => savedOrder().includes(id)));
+            expect(savedOrder().indexOf(fourth)).toBeLessThan(savedOrder().indexOf(first));
+            expect(cards()).toEqual(preview);
+            expect(has('home-arrange-ghost')).toBe(false);
+            expect(has(`home-lifted-${fourth}`)).toBe(false);
+            expect(scrollOff()).toBe(false);
+            expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(expect.stringMatching(/ moved to 1 of \d+$/));
+            expect(has('home-arrange-bar')).toBe(true);
+        });
+
+        it('the band held on Home opens Arrange with its card already lifted; let go without moving, Arrange stays open with nothing lifted and nothing saved', async () => {
+            await render();
+            const ids = await layOut();
+            const movable = cards().filter(id => document.querySelector(`[data-testid="home-card-${id}-menu"]`));
+            const card = movable[1];
+            const posts = sent().length;
+            await hold(`card-band-${card}`, at(ids, card, 20));
+            expect(has('home-arrange-bar')).toBe(true);
+            expect(has('home-arrange-ghost')).toBe(true);
+            expect(has(`home-lifted-${card}`)).toBe(true);
+            expect(scrollOff()).toBe(true);
+            // The finger leaves the screen: the wrapper never took the touch.
+            await act(async () => { document.querySelector(`[data-testid="home-slot-${card}"]`)!.dispatchEvent(new Event('touchend', { bubbles: true })); });
+            await settle();
+            expect(has('home-arrange-bar')).toBe(true);
+            expect(has('home-arrange-ghost')).toBe(false);
+            expect(has(`home-lifted-${card}`)).toBe(false);
+            expect(scrollOff()).toBe(false);
+            expect(sent().length).toBe(posts);
+            await done();
+        });
+
+        it('Back puts a carried card back and saves nothing, with Arrange still open; the next Back is Done', async () => {
+            await render();
+            back.add.mockClear();
+            await open();
+            const ids = await layOut();
+            const [first, second] = movableIds();
+            const before = cards();
+            const posts = sent().length;
+            await hold(`home-hold-${second}`, at(ids, second));
+            await move(at(ids, first, 5));
+            expect(cards()).not.toEqual(before);
+            const onBack = back.add.mock.calls.at(-1)!.at(1) as unknown as () => boolean;
+            await act(async () => { expect(onBack()).toBe(true); });
+            expect(cards()).toEqual(before);
+            expect(has('home-arrange-ghost')).toBe(false);
+            expect(scrollOff()).toBe(false);
+            expect(has('home-arrange-bar')).toBe(true);
+            expect(sent().length).toBe(posts);
+            await act(async () => { expect(onBack()).toBe(true); });
+            expect(has('home-arrange-bar')).toBe(false);
+        });
+
+        it('leaving Home, the app going to the background, and the screen going away put a carried card back and save nothing', async () => {
+            for (const how of ['blur', 'background', 'unmount'] as const) {
+                await render();
+                await open();
+                const ids = await layOut();
+                const [first, second] = movableIds();
+                const posts = sent().length;
+                await hold(`home-hold-${second}`, at(ids, second));
+                await move(at(ids, first, 5));
+                expect(scrollOff(), how).toBe(true);
+                if (how === 'blur') await act(async () => { nav.blur?.(); });
+                if (how === 'background') {
+                    const onChange = vi.mocked(AppState.addEventListener).mock.calls.filter(c => c[0] === 'change').at(-1)![1] as (s: string) => void;
+                    await act(async () => { onChange('background'); });
+                }
+                if (how === 'unmount') unmount();
+                await settle();
+                expect(sent().length, how).toBe(posts);
+                if (how !== 'unmount') {
+                    expect(has('home-arrange-ghost'), how).toBe(false);
+                    expect(scrollOff(), how).toBe(false);
+                    unmount();
+                }
+            }
+        });
+
+        it('TalkBack on: a hold never lifts a card (the arrows are its way)', async () => {
+            vi.mocked(AccessibilityInfo.isScreenReaderEnabled).mockResolvedValue(true);
+            try {
+                await render();
+                await open();
+                const ids = await layOut();
+                const [first] = movableIds();
+                await hold(`home-hold-${first}`, at(ids, first));
+                expect(has('home-arrange-ghost')).toBe(false);
+                expect(scrollOff()).toBe(false);
+                expect(hooks.pans.every(p => p.onMoveShouldSetPanResponderCapture() === false)).toBe(true);
+            } finally {
+                vi.mocked(AccessibilityInfo.isScreenReaderEnabled).mockResolvedValue(false);
+            }
+        });
+
+        it('reduced motion: no reflow animation and the band goes at once; with motion: a 150 ms slide at each change of place and the band settles in 120 ms; the same list saved either way', async () => {
+            const { LayoutAnimation } = await import('react-native');
+            const lists: string[][] = [];
+            for (const calm of [true, false]) {
+                vi.mocked(AccessibilityInfo.isReduceMotionEnabled).mockResolvedValue(calm);
+                try {
+                    await render();
+                    await open();
+                    const ids = await layOut();
+                    const [first, , third] = movableIds();
+                    vi.mocked(LayoutAnimation.configureNext).mockClear();
+                    vi.mocked(LayoutAnimation.create).mockClear();
+                    await hold(`home-hold-${third}`, at(ids, third));
+                    await move(at(ids, first, 5));
+                    await release();
+                    lists.push(savedOrder());
+                    if (calm) {
+                        expect(LayoutAnimation.configureNext).not.toHaveBeenCalled();
+                        expect(has('home-arrange-ghost')).toBe(false);
+                    } else {
+                        expect(LayoutAnimation.create).toHaveBeenCalledWith(150, 'easeInEaseOut', 'opacity');
+                        expect(LayoutAnimation.configureNext).toHaveBeenCalled();
+                        expect(has('home-arrange-ghost')).toBe(true);
+                        await act(async () => { await new Promise(r => setTimeout(r, 160)); });
+                        expect(has('home-arrange-ghost')).toBe(false);
+                    }
+                } finally {
+                    vi.mocked(AccessibilityInfo.isReduceMotionEnabled).mockResolvedValue(true);
+                    unmount();
+                    // The second phone starts from the same list (the first one's drop is not on it).
+                    for (const key of homeKeys()) mem.store.delete(key);
+                    node.answer = localMember();
+                }
+            }
+            expect(lists).toHaveLength(2);
+            expect(lists[1]).toEqual(lists[0]);
+        });
     });
 });
 

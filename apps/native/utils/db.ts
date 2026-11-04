@@ -1248,10 +1248,19 @@ export async function getPost(id: string) {
         row.author_energy_cycled = row.author_energy_cycled ?? 0;
         row.pinnedUntil = row.pinned_until || row.pinnedUntil || undefined;
         row.pinnedAt = row.pinned_at || row.pinnedAt || undefined;
+        if (row.type === 'poll') {
+            // This phone's own answer, as the Market's list reads it (getPosts), so the poll's page (app/post/[id].tsx, slice C1)
+            // ticks the answer the compact row's mark names.
+            try {
+                const me = (await loadIdentity())?.publicKey;
+                const vote = me ? await database.getFirstAsync<any>('SELECT option_id FROM poll_votes WHERE post_id = ? AND voter_pubkey = ?', [id, me]) : null;
+                if (vote?.option_id) row.userVotedOptionId = vote.option_id;
+            } catch { }
+        }
 
         if (typeof row.photos === 'string') {
-            try { 
-                row.photos = JSON.parse(row.photos); 
+            try {
+                row.photos = JSON.parse(row.photos);
                 if (Array.isArray(row.photos)) {
                     row.photos = row.photos.map((p: string) => p && p.startsWith('/') ? `${anchorUrl}${p}` : p);
                 }

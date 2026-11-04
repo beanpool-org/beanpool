@@ -51,6 +51,9 @@ const weightOf = ({ weight }: CardType) => String(weight) as TextStyle['fontWeig
 const LIST = MARKET_CARD_TYPE.list;
 const PAGE = MARKET_CARD_TYPE.page;
 const GRID = MARKET_CARD_TYPE.grid;
+const COMPACT = MARKET_CARD_TYPE.compact;
+const COMPACT_PHOTO = SHELL.photo.compact;
+const COMPACT_GAP = SHELL.compactGap;
 const SLOT = SHELL.photo.list.width;
 const GRID_PHOTO = SHELL.photo.grid;
 const POP_UP = SHELL.popUp;
@@ -232,6 +235,53 @@ export function makeCardShell(colors: Colors) {
         gridPriceText: { fontSize: GRID.price.size, fontWeight: weightOf(GRID.price), color: colors.text.inverse },
         /** A quiet pill's words: 📌 PINNED, an event's CANCELLED / UPDATED. */
         gridPinText: { fontSize: PILL.quiet.size, fontWeight: weightOf(PILL.quiet), color: colors.text.inverse },
+        /**
+         * The compact row (§1.3, slice C1), the same for every kind (a listing, an event, a poll): a row of the card's corners,
+         * border and ground, 10 above and below and 12 either side, the 32 dp picture, the words, and the chip at the end. One
+         * row height: the title one line, a short line or two under it, nothing that wraps the row taller than that. The row
+         * keeps the lighter shadow the compact view has always had (a list of rows, not of cards), in the platform's own shadow
+         * colour (black, as the card's).
+         */
+        compactRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.surface.card,
+            borderRadius: SHELL.radius,
+            borderWidth: SHELL.borderWidth,
+            borderColor: colors.border.default,
+            paddingVertical: SHELL.compactPadding.vertical,
+            paddingHorizontal: SHELL.compactPadding.horizontal,
+            marginBottom: SHELL.gap.compact,
+            shadowOffset: { width: 0, height: SHELL.compactShadow.offsetY },
+            shadowOpacity: SHELL.compactShadow.opacity,
+            shadowRadius: SHELL.compactShadow.blur,
+            elevation: SHELL.compactShadow.elevation,
+        },
+        /** Its picture: 32 square, corners 8, 10 before the words; the photo or the tile fills it (no percentage height). */
+        compactPicture: { width: COMPACT_PHOTO.size, height: COMPACT_PHOTO.size, borderRadius: COMPACT_PHOTO.radius, overflow: 'hidden', marginRight: COMPACT_GAP.picture },
+        compactImage: { width: COMPACT_PHOTO.size, height: COMPACT_PHOTO.size },
+        /** The words between the picture and the chip: they give way, the chip never does. */
+        compactText: { flex: 1, minWidth: 0, marginRight: COMPACT_GAP.text, justifyContent: 'center' },
+        /** The title: 14/800, one line. */
+        compactTitle: { fontSize: COMPACT.title.size, fontWeight: weightOf(COMPACT.title), color: colors.text.body },
+        /** `by {name}`, an event's when, a poll's status, the place: 11/500 secondary. */
+        compactLine: { fontSize: COMPACT.line.size, fontWeight: weightOf(COMPACT.line), color: colors.text.secondary, marginTop: COMPACT_GAP.line },
+        /**
+         * The words inside a compact line, each the line's own size (written out, so a Text inside a Text is never drawn at a
+         * default size): the mark (Going ✓, a poll's chosen answer ✓) bold in the event's ink; 📌 PINNED in the pinned chip's
+         * ink; an event's CANCELLED / ENDED in the danger chip's; its UPDATED is the mark's violet.
+         */
+        compactMark: { fontSize: COMPACT.line.size, fontWeight: weightOf(LIST.mark), color: colors.tile.event.ink },
+        compactPinned: { fontSize: COMPACT.line.size, fontWeight: weightOf(MARKET_CHIP.type), color: colors.accent.primary },
+        compactDanger: { fontSize: COMPACT.line.size, fontWeight: weightOf(MARKET_CHIP.type), color: colors.feedback.danger.fg },
+        /** A poll's mark on its own line: the answer gives way, the ✓ after it never does. */
+        compactMarkRow: { flexDirection: 'row', alignItems: 'baseline', minWidth: 0 },
+        compactGiveWay: { flexShrink: 1, minWidth: 0 },
+        compactKeep: { flexShrink: 0 },
+        /** The end of the row: a listing's price above its chip, an event's state chip under its EVENT. */
+        compactEnd: { alignItems: 'flex-end', justifyContent: 'center', gap: COMPACT_GAP.end, flexShrink: 0, maxWidth: `${SHELL.compactEndMaxPercent}%` },
+        /** A listing's price there: 14/900. */
+        compactPrice: { fontSize: COMPACT.price.size, fontWeight: weightOf(COMPACT.price), color: colors.text.body },
     });
     return { ...styles, tones: chipTones(colors) };
 }

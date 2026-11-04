@@ -46,6 +46,8 @@ vi.mock('react-native', () => {
         DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
         Alert: { alert: vi.fn() },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
+        // Home's card wrappers take a lifted card's touch (the drag, components/home/useArrangeDrag.ts); nothing is lifted here.
+        PanResponder: { create: () => ({ panHandlers: {} }) },
     };
 });
 

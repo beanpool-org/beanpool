@@ -14,6 +14,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { EXAMPLES_UNTIL, EXAMPLE_LISTINGS, EXAMPLES_HEADING, exampleLabel, showExampleListings } from '../lib/example-listings';
+import { ExampleListings } from '../components/ExampleListings';
 
 vi.mock('../lib/avatar', () => ({ resolveAvatarUrl: vi.fn((url) => url) }));
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}) }));
@@ -254,6 +255,62 @@ describe('a visitor to the global lobby', () => {
     });
 });
 
+describe('the example cards follow the column they sit in (review on #2866)', () => {
+    // The list and the compact view are a phone-width column, 672 px at most, on any window (style box V1). `lg:grid-cols-4`
+    // follows the WINDOW, so on a laptop it put four example cards, 147 px each, into that column. The class strings are what
+    // jsdom can see; e2e/market-view-column-shots.mjs measures the cards in Chromium.
+    beforeEach(() => { localStorage.clear(); });
+
+    const exampleGrid = () => screen.getByTestId('example-listings').querySelector('ul') as HTMLElement;
+    const gridColumns = (el: HTMLElement) => el.className.split(/\s+/).filter(c => /grid-cols-/.test(c));
+    const viewColumn = () => screen.getByTestId('market-view-column');
+    const maxWidth = (el: HTMLElement) => el.className.split(/\s+/).filter(c => /^max-w-/.test(c));
+
+    it('the component: by default one, two from sm and four from lg (the page\'s width); narrow drops the four', () => {
+        const { unmount } = render(<ExampleListings narrow={false} />);
+        expect(gridColumns(exampleGrid())).toEqual(['grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-4']);
+        unmount();
+        render(<ExampleListings narrow />);
+        expect(gridColumns(exampleGrid())).toEqual(['grid-cols-1', 'sm:grid-cols-2']);
+        expect(within(screen.getByTestId('example-listings')).getAllByTestId('example-card')).toHaveLength(EXAMPLE_LISTINGS.length);
+    });
+
+    it.each([0, EXAMPLES_UNTIL - 3])('grid view (the default), %i real listings: the cards keep one, two and four columns, in the max-w-7xl column', async (n) => {
+        await renderMember(GLOBAL_INFO, listings(n));
+        expect(maxWidth(viewColumn())).toEqual(['max-w-7xl']);
+        expect(viewColumn().contains(screen.getByTestId('example-listings'))).toBe(true);
+        expect(gridColumns(exampleGrid())).toEqual(['grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-4']);
+    });
+
+    for (const mode of ['list', 'compact'] as const) {
+        it.each([0, EXAMPLES_UNTIL - 3])(`${mode} view, %i real listings: the cards never take four columns, in the max-w-2xl column`, async (n) => {
+            localStorage.setItem('marketplace_view_mode', mode);
+            await renderMember(GLOBAL_INFO, listings(n));
+            expect(maxWidth(viewColumn())).toEqual(['max-w-2xl']);
+            expect(viewColumn().contains(screen.getByTestId('example-listings'))).toBe(true);
+            expect(exampleCards()).toHaveLength(EXAMPLE_LISTINGS.length);
+            expect(gridColumns(exampleGrid())).toEqual(['grid-cols-1', 'sm:grid-cols-2']);
+            // No window-width class of any size above sm lays the cards out inside the column.
+            expect(exampleGrid().className).not.toMatch(/(?:^|\s)(?:md|lg|xl|2xl):/);
+        });
+    }
+
+    it('a visitor always sees the grid, so a stored list view neither narrows the column nor the cards', async () => {
+        localStorage.setItem('marketplace_view_mode', 'list');
+        await renderVisitor(GLOBAL_INFO, []);
+        expect(maxWidth(viewColumn())).toEqual(['max-w-7xl']);
+        expect(gridColumns(exampleGrid())).toEqual(['grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-4']);
+    });
+
+    it('a visitor\'s three-column feed is not squeezed into the phone-width column by a stored compact view', async () => {
+        localStorage.setItem('marketplace_view_mode', 'compact');
+        await renderVisitor(GLOBAL_INFO, listings(EXAMPLES_UNTIL));
+        expect(maxWidth(viewColumn())).toEqual(['max-w-7xl']);
+        expect(viewColumn().contains(screen.getByTestId('visitor-list'))).toBe(true);
+        expect(screen.getByTestId('visitor-list').className).toMatch(/\blg:grid-cols-3\b/);
+    });
+});
+
 describe('the examples stay on the Market', () => {
     it('only the Market draws them: the Map, search and every count read the node\'s posts, which never hold one', () => {
         const src = path.resolve(__dirname, '..');
@@ -280,7 +337,8 @@ describe('the examples stay on the Market', () => {
         expect(home).toMatch(/const examples = m\.examples && /);
         // And the Market draws them outside its posts: the component takes no post and hands nothing back.
         const component = fs.readFileSync(path.join(src, 'components/ExampleListings.tsx'), 'utf8');
-        expect(component).toMatch(/export function ExampleListings\(\)/);
+        // The one thing it is told is which column it sits in; still no post in, nothing handed back.
+        expect(component).toMatch(/export function ExampleListings\(\{ narrow = false \}: \{ narrow\?: boolean \}\)/);
         expect(component).not.toMatch(/onClick|href=|onKeyDown|tabIndex|setSelectedPost|MarketplacePost/);
     });
 });

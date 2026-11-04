@@ -320,6 +320,17 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 const NEW_SINCE_WORDS = { line: NEW_SINCE_LINE };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
+/**
+ * The page's column by view (style box V1, DESIGN-card-style-box-fable.md §4): the grid uses the width (2 to 5 columns); the
+ * list and the compact view are a phone-width column, 672 px at most, centred beside the sidebar, so a card never stretches
+ * across a wide window. The search row, the filters, the headings and the cards all sit in this one column. Tailwind reads
+ * these as literal classes. The detail pages keep their own `max-w-3xl` column.
+ */
+const VIEW_COLUMN: Record<'grid' | 'list' | 'compact', string> = {
+    grid: 'max-w-7xl',
+    list: 'max-w-2xl',
+    compact: 'max-w-2xl',
+};
 
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor, openFilter, onFilterOpened }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
@@ -576,6 +587,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } catch {}
         return 'grid';
     });
+    // The view whose column the page draws in. A visitor's feed is always the grid (1, 2 or 3 columns), whatever view this browser
+    // stored, so a stored `list` must not squeeze it into the phone-width column (review note on #2866). `narrowColumn`: the
+    // column is 672 px at most, so what lays out by the WINDOW (the example cards' four columns) is told to follow the column.
+    const columnMode: 'grid' | 'list' | 'compact' = isVisitor ? 'grid' : viewMode;
+    const narrowColumn = columnMode !== 'grid';
     const [showFilters, setShowFilters] = useState(false);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
@@ -3498,7 +3514,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // =================== LIST VIEW ===================
     return (
-        <div className="px-3 md:px-6 pt-4 pb-24 max-w-7xl mx-auto w-full">
+        <div data-testid="market-view-column" className={`px-3 md:px-6 pt-4 pb-24 ${VIEW_COLUMN[columnMode]} mx-auto w-full`}>
             {/* Radius Picker Full Screen */}
             {showRadiusPicker && (
                 <Suspense fallback={<div className="flex-1 flex items-center justify-center">{t('Loading Location Services...')}</div>}>
@@ -3965,7 +3981,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const seenEligible = !visitor && !narrowed && searchResults === null && near?.from !== 'setting';
                 if (seenEligible) newestOnScreen.current = newestListed(unpinnedFiltered, orderNow) ?? newestOnScreen.current;
                 const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: fillPending ? FILL_BELOW : filtered.length + fillRows.length })
-                    ? <ExampleListings />
+                    ? <ExampleListings narrow={narrowColumn} />
                     : null;
 
                 if (visitor) {

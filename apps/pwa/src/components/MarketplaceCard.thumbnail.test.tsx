@@ -8,7 +8,7 @@ import { act, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LIST_PHOTO_QUEUED_MS } from '@beanpool/core';
 import { MarketplaceCard } from './MarketplaceCard';
-import { CHIP, CHIP_SENTENCE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, chip, listCard } from './market-card-shell';
+import { LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, chip, listCard } from './market-card-shell';
 import type { MarketplacePost } from '../lib/marketplace';
 
 const PHOTOS = ['/api/marketplace/posts/p1/photos/0?v=17&k=KEY0', '/api/marketplace/posts/p1/photos/1?v=17&k=KEY1'];

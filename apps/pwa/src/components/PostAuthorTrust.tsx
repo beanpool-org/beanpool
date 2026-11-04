@@ -125,11 +125,12 @@ export function PostAuthorTrust({ callsign, energyCycled = 0, rating, mode = 'fu
         );
     }
 
-    // Full mode (list cards)
+    // Full mode (list cards). It wraps: at 320 px with 1.3x text the stars and the count are wider than what is left beside
+    // the avatar, tier and name, and a row that cannot wrap runs them past the card's edge, where the card clips them.
     return (
         <>
             <div
-                className={`flex items-center gap-1.5 ${isInteractive ? 'cursor-pointer hover:opacity-80' : ''} ${focusRing} ${className}`}
+                className={`flex flex-wrap items-center gap-1.5 min-w-0 ${isInteractive ? 'cursor-pointer hover:opacity-80' : ''} ${focusRing} ${className}`}
                 onClick={handleClick}
                 {...interactiveProps}
             >

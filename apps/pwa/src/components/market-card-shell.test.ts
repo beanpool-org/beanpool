@@ -84,9 +84,12 @@ describe('the web style box holds core\'s numbers', () => {
         const elder = classes(listCard({ elder: true })).find(c => /^border-l-\[\d+px\]$/.test(c));
         expect(Number(elder?.match(/\d+/)?.[0])).toBe(MARKET_CARD_SHELL.variant.elderBorderLeft);
         expect(classes(listCard({ pulse: true }))).toContain(`border-${MARKET_CARD_SHELL.variant.pulseBorder}`);
-        // One ground per card: the Pulse tile's, or the card token, never both.
-        expect(listCard({ pulse: true })).not.toContain('--bg-card');
-        expect(listCard()).toContain('bg-[var(--bg-card)]');
+        // Every list card, Pulse too, is on the card ground (the who-line's nature-600 is 4.37:1 on the Pulse tint, under AA),
+        // and has one ground class only; a Pulse card has one border colour only.
+        for (const card of [listCard(), listCard({ elder: true }), listCard({ pulse: true })]) {
+            expect(classes(card).filter(c => c.startsWith('bg-'))).toEqual(['bg-[var(--bg-card)]']);
+        }
+        expect(classes(listCard({ pulse: true })).filter(c => /^border-(nature|amber)-/.test(c))).toEqual(['border-amber-400/80']);
     });
 
     it.each([['one-line', CHIP], ['sentence', CHIP_SENTENCE]])('the %s chip: 10/800, 6 across, 2 down, corners 6', (_, c) => {

@@ -22,15 +22,18 @@ const BORDER = 'border-nature-200 dark:border-nature-800';
 /** The one card ground: the web's own card token (white; #2a322a in dark), the ground core's contrast test proves inks on. */
 const GROUND = 'bg-[var(--bg-card)]';
 
-/** Daily Pulse: a 2 px warning border on the Pulse tile's ground (§1.1 variants). */
-const PULSE = 'border-2 border-amber-400/80 dark:border-amber-500/70 bg-bp-tile-pulse-tint shadow-[0_4px_20px_rgba(245,158,11,0.15)]';
+/**
+ * Daily Pulse: a 2 px warning border (§1.1 variants), on the card's own ground. Not the Pulse tile's tint the design names:
+ * the who-line's name (nature-600, #647664) measures 4.37:1 on #fef3c7, under AA, and the card ground keeps it at 4.87.
+ */
+const PULSE = 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.15)]';
 
 /** An Elder's card: a 3 px gold left border (§1.1 variants). */
 const ELDER = 'border-l-[3px] border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]';
 
-/** The list card's outer box. A Pulse card has its own ground and border; an Elder's adds its left border. */
+/** The list card's outer box. A Pulse card has its own border; an Elder's adds its left border. */
 export function listCard({ pulse = false, elder = false }: { pulse?: boolean; elder?: boolean } = {}): string {
-    if (pulse) return `${LIST_FRAME} ${PULSE}`;
+    if (pulse) return `${LIST_FRAME} ${GROUND} ${PULSE}`;
     return `${LIST_FRAME} ${BORDER} ${GROUND}${elder ? ` ${ELDER}` : ''}`;
 }
 

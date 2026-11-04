@@ -297,7 +297,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 <div className={LIST_TEXT}>
                     <div className="flex justify-between items-start gap-2 min-w-0">
                         {/* Wraps, so at 320 px / 130% a chip drops to a second line rather than past the card edge. */}
-                        <div className="flex flex-wrap gap-1 items-center min-w-0">
+                        <div data-testid="listing-list-chips" className="flex flex-wrap gap-1 items-center min-w-0">
                             {isPulse ? (
                                 <span className={chip('warn')}>{upperCase(t('🗞️ Daily Pulse'))}</span>
                             ) : (
@@ -308,7 +308,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             )}
                             {isOwnPost && <span className={chip('info')}>{upperCase(t('👤 You'))}</span>}
                             {categoryConfig && (
-                                <span className={chip('quiet')}>{categoryConfig.emoji} {t(categoryConfig.label)}</span>
+                                <span className={chip('quiet')}>{categoryConfig.emoji} <span>{t(categoryConfig.label)}</span></span>
                             )}
                             {post.repeatable && <span className={chip('quiet')}>{t('↻ RECURRING')}</span>}
                             {/* #108: on the card, not just the detail view — the point of the flag is

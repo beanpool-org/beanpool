@@ -1261,6 +1261,8 @@ async function main(): Promise<void> {
             'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
                 params: { to: alice.pk, amount: 1 } },
             'POST /api/enterprise/:treasury/decisions/:id/vote': { support: true },
+            // A removal juror's answer to their seat (slice J2b): past the body check to who may answer.
+            'POST /api/commons/decisions/:id/jury/answer': { answer: 'step_aside' },
             // A chat group's vote: removing Alice from the group, and a yes on a vote.
             'POST /api/groups/:id/decisions': { title: 'Sentinel removal', description: 'A sentinel removal of Alice.', effect: 'remove_group_member',
                 subject: alice.pk },
@@ -1283,7 +1285,7 @@ async function main(): Promise<void> {
             'GET /api/blocks', 'POST /api/blocks', 'POST /api/blocks/clear', 'POST /api/blocks/remove',
             'POST /api/channels/mine', 'GET /api/channels/options',
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
-            'GET /api/commons/decisions/:id/jury',
+            'GET /api/commons/decisions/:id/jury', 'POST /api/commons/decisions/:id/jury/answer',
             'POST /api/commons/decisions/:id/vote', 'POST /api/commons/decisions/:id/reply', 'POST /api/commons/decisions/:id/report',
             'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
             'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',

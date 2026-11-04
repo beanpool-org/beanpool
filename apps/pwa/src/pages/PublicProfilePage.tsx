@@ -846,23 +846,19 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         <div className="flex flex-col gap-3">
                                             {activePosts.map((p, i) => {
                                                 let coverImage: string | null = null;
-                                                let postPhotos: string[] = [];
                                                  if (p.photos) {
                                                      try { 
                                                          const raw = p.photos as unknown;
                                                          if (Array.isArray(raw)) {
-                                                             postPhotos = raw;
                                                              if (raw.length > 0) coverImage = raw[0];
                                                          } else if (typeof raw === 'string') {
                                                              if (raw.startsWith('[')) {
                                                                  const parsed = JSON.parse(raw);
                                                                  if (Array.isArray(parsed) && parsed.length > 0) {
-                                                                     postPhotos = parsed;
                                                                      coverImage = parsed[0];
                                                                  }
                                                              } else if (raw.trim() !== '') {
                                                                  coverImage = raw;
-                                                                 postPhotos = [raw];
                                                              }
                                                          }
                                                      } catch {}
@@ -886,36 +882,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                     >
                                                         <div className="flex gap-3">
                                                             {coverImage ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setLightboxState({
-                                                                            isOpen: true,
-                                                                            photos: postPhotos.length > 0 ? postPhotos : [coverImage!],
-                                                                            initialIndex: 0,
-                                                                            title: p.title,
-                                                                            triggerElement: e.currentTarget,
-                                                                        });
-                                                                    }}
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                                            e.stopPropagation();
-                                                                            e.preventDefault();
-                                                                            setLightboxState({
-                                                                                isOpen: true,
-                                                                                photos: postPhotos.length > 0 ? postPhotos : [coverImage!],
-                                                                                initialIndex: 0,
-                                                                                title: p.title,
-                                                                                triggerElement: e.currentTarget as HTMLElement,
-                                                                            });
-                                                                        }
-                                                                    }}
-                                                                    aria-label={t('View enlarged photo: {title}', { title: p.title })}
-                                                                    className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
-                                                                >
-                                                                    <img src={listPhotoUrl(coverImage)} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
-                                                                </button>
+                                                                // The photo is part of the card: a tap on it opens the post (Marty's standing rule, small
+                                                                // cards open the item); the enlarge lives on the post's own page.
+                                                                <div className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
+                                                                    <img src={listPhotoUrl(coverImage)} alt="" className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
+                                                                </div>
                                                             ) : (
                                                                 <div className="w-14 h-14 rounded-lg bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-2xl opacity-50">
                                                                     📦

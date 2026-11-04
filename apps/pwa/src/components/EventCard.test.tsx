@@ -256,7 +256,7 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
     });
 
     // Decision 3: the photo lives inside the tap target that opens the event. It must not become a second one —
-    // an offer card's photo opens a lightbox, and a second target here would put two answers under one thumb.
+    // an offer card's photo is part of that card (it opens the listing, 4 Nov), and a second target here would put two answers under one thumb.
     it('is inside the card’s one tap target, not a second one', () => {
         renderAt320(<EventCard post={withPhoto} identity={identity} onOpen={() => {}} />);
         const card = screen.getByTestId('event-card');

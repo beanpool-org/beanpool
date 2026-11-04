@@ -52,7 +52,6 @@ import { onSyncActivity } from '../lib/sync';
 import {
     onLivePostChange, registerLivePostTie, heldPostTie, applyLivePostChange, liveChangeMark, replayLiveChanges, postFitsList,
 } from '../lib/live-posts';
-import { ImageLightbox } from '../components/ImageLightbox';
 import { MapCalendar, CARD_STOPS_AT_CALENDAR_CLASS, CHIPS_STOP_AT_CALENDAR_CLASS, calendarPanelWidth } from '../components/MapCalendar';
 import { ScrollHintRow } from '../components/ScrollHintRow';
 import { MapStackList } from '../components/MapStackList';
@@ -468,28 +467,21 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     useEffect(() => {
         if (stackKeys && !stackOpen && pinsFromPosts) setStackList(stackDropped);
     }, [stackKeys, stackOpen, pinsFromPosts]);
-    const [lightboxState, setLightboxState] = useState<{
-        isOpen: boolean;
-        photos: string[];
-        initialIndex: number;
-        title?: string;
-        triggerElement?: HTMLElement | null;
-    } | null>(null);
-    // A post over the map, the composer or a photo wins: the list neither opens nor closes under them.
+    // A post over the map or the composer wins: the list neither opens nor closes under them. (No card here opens a photo
+    // any more: a card's photo is part of the card and opens the item, whose own page has the enlarge.)
     const stackBlocked = useRef(false);
-    stackBlocked.current = covered || showNewPost || pinDropMode || !!lightboxState?.isOpen;
+    stackBlocked.current = covered || showNewPost || pinDropMode;
     const previewRef = useRef(previewPost);
     previewRef.current = previewPost;
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const [inactiveEnterpriseKeys, setInactiveEnterpriseKeys] = useState<Set<string>>(new Set());
     const [enterprises, setEnterprises] = useState<EnterpriseMapPin[]>([]);
 
-    // Keyboard accessibility: Escape closes preview card or stack list (defers to lightbox if open)
+    // Keyboard accessibility: Escape closes preview card or stack list
     useEffect(() => {
         if ((!previewPost && !stackOpen) || covered) return;
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
             if (e.key === 'Escape') {
-                if (lightboxState?.isOpen) return;
                 e.preventDefault();
                 e.stopPropagation();
                 setPreviewPost(null);
@@ -498,7 +490,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [previewPost, stackOpen, lightboxState?.isOpen, covered]);
+    }, [previewPost, stackOpen, covered]);
 
     // A pin's card takes the list's place.
     useEffect(() => {
@@ -2659,7 +2651,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             <div data-testid="map-preview-card" className={previewWrapClass} style={covered ? { display: 'none' } : undefined}>
                 {/* A tap anywhere on the card opens the listing, the owner's name included (Marty, 4 Nov): the name is shown, not
                     pressed. The View Details button is the same door for the keyboard and a screen reader, described by the title.
-                    The ✕ and the photo's enlarge button are the other controls and do not open it. */}
+                    The ✕ is the one other control and does not open it; the photo is part of the card. */}
                 <div
                     data-testid="map-preview-tap"
                     onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
@@ -2673,23 +2665,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         ✕
                     </button>
                     {previewPost.photos && previewPost.photos.length > 0 ? (
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setLightboxState({
-                                    isOpen: true,
-                                    photos: previewPost.photos!,
-                                    initialIndex: 0,
-                                    title: previewPost.title,
-                                    triggerElement: e.currentTarget,
-                                });
-                            }}
-                            aria-label={t('View enlarged photo: {title}', { title: previewPost.title })}
-                            className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
-                        >
+                        // The photo is part of the card: a tap on it opens the listing (Marty's standing rule); the enlarge lives
+                        // on the listing's own page.
+                        <div className="w-[90px] h-[90px] rounded-2xl overflow-hidden shrink-0">
                             <img src={listPhotoUrl(previewPost.photos[0])} alt="" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
-                        </button>
+                        </div>
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">
                             <span className="text-4xl">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>
@@ -3694,16 +3674,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 setShowPricingGuide(false);
             }}
         />
-        {lightboxState?.isOpen && (
-            <ImageLightbox
-                isOpen={lightboxState.isOpen}
-                photos={lightboxState.photos}
-                initialIndex={lightboxState.initialIndex}
-                title={lightboxState.title}
-                triggerElement={lightboxState.triggerElement}
-                onClose={() => setLightboxState(null)}
-            />
-        )}
     </>
     );
 }

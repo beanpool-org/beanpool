@@ -91,6 +91,20 @@ describe('the Market: a small card opens its item, not its owner', () => {
         expect(onOpenProfile).not.toHaveBeenCalled();
     });
 
+    it.each(['grid', 'list'] as const)('%s view: the photo is part of the card; a press on it opens the listing, and it holds no enlarge button', async (mode) => {
+        localStorage.setItem('marketplace_view_mode', mode);
+        stubNode([{ ...course, photos: ['/api/marketplace/posts/offer-course/photos/0?v=1&k=KEY0'] }]);
+        render(<MarketplacePage identity={identity} isMember={true} transactions={[]} onRefreshTransactions={() => {}} onOpenProfile={() => {}} />);
+        const card = await screen.findByRole('button', { name: 'Open listing: Pottery course' });
+        // One accessible element per card: nothing inside it is a button, the photo included.
+        expect(within(card).queryAllByRole('button')).toEqual([]);
+        expect(screen.queryByRole('button', { name: /View enlarged photo/ })).toBeNull();
+        const photo = within(card).getByAltText('Pottery course');
+        expect(photo.closest('button')).toBeNull();
+        fireEvent.click(photo);
+        await screen.findByRole('heading', { name: /Pottery course/ });
+    });
+
     it.each(['grid', 'list'] as const)('%s view: the card\'s owner is shown with nothing to press to reach a profile', async (mode) => {
         localStorage.setItem('marketplace_view_mode', mode);
         stubNode([course]);

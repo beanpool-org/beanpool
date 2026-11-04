@@ -1,7 +1,8 @@
 /**
  * A Market card draws its listing's small copy (`size=thumb2`, @beanpool/core listPhotoUrl), never the 800 px photo: a
  * page of 20 cards was 20 full photos on prepaid data (Marty, board, 9 Oct). Opening the photo (the lightbox, the
- * detail) still gets the photos' own URLs, keys and all.
+ * detail) still gets the photos' own URLs, keys and all. A card's photo is part of the card (4 Nov): it opens the listing,
+ * never a photo viewer of its own.
  */
 import { fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -22,12 +23,17 @@ describe('MarketplaceCard photo', () => {
         expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2`);
     });
 
-    it.each(['grid', 'list'] as const)('opening the %s card\'s photo gets the photos\' own URLs', (viewMode) => {
-        const onPhotoClick = vi.fn();
-        const { getByLabelText } = render(<MarketplaceCard post={post} viewMode={viewMode} onPhotoClick={onPhotoClick} />);
-        fireEvent.click(getByLabelText(`View enlarged photo: ${post.title}`));
-        expect(onPhotoClick).toHaveBeenCalledTimes(1);
-        expect(onPhotoClick.mock.calls[0][0]).toEqual(PHOTOS);
+    // Marty, 4 Nov: "from small cards you should be able to click anywhere on the card and have the card come up". The photo is
+    // part of the card, so a press on it reaches the card (which opens the listing); the enlarge lives on the listing's own page.
+    it.each(['grid', 'list'] as const)('the %s card\'s photo is part of the card: no enlarge button, and a press on it reaches the card', (viewMode) => {
+        const onCard = vi.fn();
+        const { container, queryByLabelText, queryAllByRole } = render(<div onClick={onCard}><MarketplaceCard post={post} viewMode={viewMode} /></div>);
+        expect(queryByLabelText(`View enlarged photo: ${post.title}`)).toBeNull();
+        expect(queryAllByRole('button')).toEqual([]);
+        const img = container.querySelector(`img[alt="${post.title}"]`)!;
+        expect(img.closest('button')).toBeNull();
+        fireEvent.click(img);
+        expect(onCard).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -83,14 +89,14 @@ describe('MarketplaceCard picture ladder: banner before tile', () => {
         expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2`);
     });
 
-    it.each(['grid', 'list'] as const)('the %s card does not render a zoom button or trigger onPhotoClick for enterprise banner fallback', (viewMode) => {
-        const onPhotoClick = vi.fn();
-        const { queryByLabelText, container } = render(<MarketplaceCard post={postWithBannerOnly} viewMode={viewMode} onPhotoClick={onPhotoClick} />);
+    it.each(['grid', 'list'] as const)('the %s card does not render a zoom button for the enterprise banner fallback; a press on it reaches the card', (viewMode) => {
+        const onCard = vi.fn();
+        const { queryByLabelText, container } = render(<div onClick={onCard}><MarketplaceCard post={postWithBannerOnly} viewMode={viewMode} /></div>);
         expect(queryByLabelText(`View enlarged photo: ${postWithBannerOnly.title}`)).toBeNull();
         const img = container.querySelector(`img[alt="${postWithBannerOnly.title}"]`);
         expect(img).not.toBeNull();
         fireEvent.click(img!);
-        expect(onPhotoClick).not.toHaveBeenCalled();
+        expect(onCard).toHaveBeenCalledTimes(1);
     });
 });
 

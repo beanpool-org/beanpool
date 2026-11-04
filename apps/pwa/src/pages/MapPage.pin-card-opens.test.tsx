@@ -3,8 +3,9 @@
  * able to click anywhere on the card and have the card come up and then be able to click on the profile pic from there").
  *
  * The map's pin card is one. The owner's name is shown, and a press on it, or on any bare part of the card, opens the listing.
- * The ✕ and the photo's enlarge button are the card's own other controls and do not. The View Details button stays the door for
- * the keyboard and a screen reader, described by the title.
+ * The ✕ is the card's one other control and does not; the photo is part of the card, so a press on it opens the listing too (the
+ * enlarge lives on the listing's own page, as on the phone). The View Details button stays the door for the keyboard and a
+ * screen reader, described by the title.
  *
  * Its own file, with the leaflet stand-in MapPage.test.tsx uses: that file stubs the global fetch in its later blocks and leaves
  * it stubbed, which this card does not want to inherit.
@@ -149,6 +150,20 @@ describe("MapPage: the pin card opens its listing from anywhere on it", () => {
         const onNavigate = vi.fn();
         const { card } = await openPinCard(onNavigate);
         fireEvent.click(within(card).getByTestId('map-preview-tap'));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-eggs');
+    });
+
+    it("the photo is part of the card: a press on it opens the listing, and the card holds no enlarge button (4 Nov, small cards open the item)", async () => {
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([{ ...post, photos: ['/api/marketplace/posts/post-eggs/photos/0?v=1&k=KEY0'] }] as any);
+        const onNavigate = vi.fn();
+        const { card } = await openPinCard(onNavigate);
+        const img = card.querySelector('img');
+        expect(img).not.toBeNull();
+        // One element opens the item and one closes the card: no third control for the photo.
+        expect(within(card).getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close preview', 'View Details']);
+        expect(img!.closest('button')).toBeNull();
+        fireEvent.click(img!);
+        expect(onNavigate).toHaveBeenCalledTimes(1);
         expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-eggs');
     });
 

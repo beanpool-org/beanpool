@@ -52,7 +52,7 @@ vi.mock('../db', () => ({ rsvpEvent: vi.fn(), refreshPostForPhoto: vi.fn() }));
 vi.mock('../photo-refresh', () => ({ refreshListingAfterPhotoError: () => false }));
 
 import { EventCard } from '../../components/EventCard';
-import { eventWhen, formatEventWhenFor } from '../events';
+import { distanceKm, eventWhen, formatDistance, formatEventWhenFor } from '../events';
 import { gridTextBlock } from '../../components/market-card-shell';
 import { darkColors, lightColors } from '../../constants/colors';
 import * as db from '../db';
@@ -265,10 +265,10 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
     const at = (h: number, m: number) => { const d = new Date(Date.now() + DAY); d.setHours(h, m, 0, 0); return d.toISOString(); };
     const SAME_DAY = { ...MARKET, eventStartAt: at(10, 26), eventEndAt: at(14, 26) };
     const pinned = { ...MARKET, pinnedUntil: new Date(Date.now() + 2 * DAY).toISOString(), pinnedAt: new Date(Date.now() - 60_000).toISOString() };
-    async function showTile(post: any, viewer: string | null = ME, scale = 1.3) {
+    async function showTile(post: any, viewer: string | null = ME, scale = 1.3, myLocation: { lat: number; lng: number } | null = null) {
         const block = gridTextBlock(scale);
         await act(async () => {
-            root.render(createElement(EventCard, { post, currentPubkey: viewer, viewMode: 'grid', fontScale: scale }) as unknown as Parameters<Root['render']>[0]);
+            root.render(createElement(EventCard, { post, currentPubkey: viewer, viewMode: 'grid', fontScale: scale, myLocation }) as unknown as Parameters<Root['render']>[0]);
             await new Promise((r) => setTimeout(r, 0));
         });
         return block;
@@ -291,7 +291,10 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
         expect(styleOf(blockEl())).toEqual(block.block);
         const rows = Array.from(blockEl().children);
         expect(rows).toHaveLength(4);
-        for (const r of rows) expect(styleOf(r)).toEqual(block.row);
+        // Rows 1, 3 and 4 the listing's row; row 2 the time row (call 4), the same height.
+        for (const r of [rows[0], rows[2], rows[3]]) expect(styleOf(r)).toEqual(block.row);
+        expect(styleOf(rows[1])).toEqual(block.timeRow);
+        expect(block.timeRow.height).toBe(block.row.height);
         const parts = eventWhen(SAME_DAY)!;
         expect(parts.second).toBe('10:26–14:26');
         expect(rows.map(r => r.textContent)).toEqual([parts.first, '10:26–14:26', MARKET.title, '📍 Butler Street Reserve']);
@@ -322,7 +325,7 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
             await showTile(BYRON);
             const rows = Array.from(blockEl().children);
             expect(rows).toHaveLength(4);
-            expect(rows.map(r => Array.from(r.children).map(c => c.textContent))).toEqual([['SAT 7 NOV'], ['15:00–20:00'], ['Byron Bay Twilight Market'], ['🕒 your time', '📍 Railway Park']]);
+            expect(rows.map(r => Array.from(r.children).map(c => c.textContent))).toEqual([['SAT 7 NOV'], ['15:00', '–20:00'], ['Byron Bay Twilight Market'], ['🕒 your time', '📍 Railway Park']]);
             expect(host.textContent).not.toContain('16:00');
             expect(host.textContent).not.toContain('21:00');
             // The label opens the last row as its own line, never shrunk for the place (one truncating line would put its "…"
@@ -339,7 +342,9 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
             expect(card().getAttribute('aria-label')).toBe('Event: Byron Bay Twilight Market, SAT 7 NOV · 15:00–20:00 your time');
             // The lattice is untouched: four rows of the listing's height (the last laid out as a listing's), in its block.
             expect(styleOf(blockEl())).toEqual(block.block);
-            for (const r of rows.slice(0, 3)) expect(styleOf(r)).toEqual(block.row);
+            for (const r of [rows[0], rows[2]]) expect(styleOf(r)).toEqual(block.row);
+            expect(styleOf(rows[1])).toEqual(block.timeRow);
+            expect(styleOf(rows[1]).height).toBe(block.row.height);
             expect(styleOf(rows[3]).height).toBe(block.row.height);
         });
 
@@ -375,6 +380,24 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
             expect(card().getAttribute('aria-label')).toBe('Event: Seed swap weekend, FRI 6 NOV 10:26 – SAT 7 NOV 12:26');
         });
 
+        // DESIGN-grid-event-rows call 3: every clock on the tile is the reader's own, so an online event's row 2 is the bare
+        // span; "your time" would label nothing there. The tile's label keeps it, as the list card's line does.
+        it('(c) an online event: row 2 the reader\'s own span, "your time" in no row; the label in the tile\'s name; row 4 Online', async () => {
+            const ONLINE = { ...BYRON, title: 'Seed library call', eventPlaceName: null, eventOnline: true, event_online: 1 };
+            await showTile(ONLINE);
+            const rows = Array.from(blockEl().children);
+            expect(rows.map(r => Array.from(r.children).map(c => c.textContent))).toEqual([['SAT 7 NOV'], ['15:00', '–20:00'], ['Seed library call'], ['💻 Online']]);
+            expect(blockEl().textContent).not.toContain('your time');
+            expect(card().textContent).not.toContain('your time');
+            expect(byTestId('event-your-time')).toBeNull();
+            expect(card().getAttribute('aria-label')).toBe('Event: Seed library call, SAT 7 NOV · 15:00–20:00 your time');
+            // Read on the host's own clock too: the bare span, no label in any row.
+            process.env.TZ = 'Australia/Sydney';
+            await showTile(ONLINE);
+            expect(Array.from(blockEl().children).map(r => r.textContent)).toEqual(['SAT 7 NOV', '16:00–21:00', 'Seed library call', '💻 Online']);
+            expect(card().textContent).not.toContain('your time');
+        });
+
         it('an event that ends the next day, read across the zone line: the reader\'s own start, labelled', async () => {
             await showTile({
                 ...BYRON, eventStartAt: '2026-11-05T23:26:00.000Z', eventEndAt: '2026-11-07T01:26:00.000Z',
@@ -384,6 +407,114 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
             expect(rows.map(r => r.textContent)).toEqual(['FRI 6 NOV', '9:26', 'Byron Bay Twilight Market', '🕒 your time📍 Railway Park']);
             expect(byTestId('event-your-time')?.textContent).toBe('🕒 your time');
         });
+    });
+
+    // DESIGN-grid-event-rows call 1: the lock is a 🔒 glyph pill on the photo's foot, after CANCELLED / UPDATED and before the
+    // mark; its name is the whole sentence. Row 4 keeps the place.
+    it.each(['light', 'dark'] as const)('(a) %s: a group-only event has a 🔒 pill on the foot named with the whole sentence; row 4 still the place', async (which) => {
+        scheme.now = which;
+        const colors = which === 'dark' ? darkColors : lightColors;
+        // A group-only post is never pinned (pinLive: a pin is for everyone), so the foot reads UPDATED · 🔒 · the mark.
+        const GROUP = { ...SAME_DAY, eventState: 'updated', myRsvp: 'going', audienceScope: 'group', targetGroupId: 'g-1', targetGroupName: 'Byron Bay Community Gardeners' };
+        await showTile(GROUP);
+        const foot = footRow();
+        expect(Array.from(foot.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-state-chip', 'event-group-chip', 'event-mark']);
+        const pill = byTestId('event-group-chip')!;
+        expect(pill.textContent).toBe('🔒');
+        expect(pill.getAttribute('aria-label')).toBe('🔒 Only Byron Bay Community Gardeners can see this');
+        // The quiet pill: shell.gridBadge and shell.gridPinText, as UPDATED beside it (and 📌 PINNED on a public event).
+        expect(styleOf(pill)).toEqual(styleOf(byTestId('event-state-chip')));
+        expect(styleOf(pill.firstElementChild)).toEqual(styleOf(byTestId('event-state-chip')!.firstElementChild));
+        expect(styleOf(pill)).toMatchObject({ backgroundColor: colors.overlay.scrim, borderColor: colors.overlay.scrimEdge, borderRadius: 8 });
+        expect(styleOf(pill.firstElementChild)).toMatchObject({ fontSize: 10, fontWeight: '700', color: colors.text.inverse });
+        // Row 4 is the place, unchanged; the sentence is in no row.
+        const rows = Array.from(blockEl().children);
+        expect(rows).toHaveLength(4);
+        expect(rows[3].textContent).toBe('📍 Butler Street Reserve');
+        expect(blockEl().textContent).not.toContain('Only');
+        // A screen reader hears it on the tile, which is the one thing it reads (a button's name is its own).
+        expect(card().getAttribute('aria-label')).toBe(`Event: ${MARKET.title}, ${formatEventWhenFor(SAME_DAY)}, updated, 🔒 Only Byron Bay Community Gardeners can see this, Going ✓`);
+        // No group name: "Group", as the list card and a listing read it. No lock: no pill.
+        await showTile({ ...SAME_DAY, targetGroupId: 'g-1' });
+        expect(byTestId('event-group-chip')?.getAttribute('aria-label')).toBe('🔒 Only Group can see this');
+        await showTile(SAME_DAY);
+        expect(byTestId('event-group-chip')).toBeNull();
+    });
+
+    // DESIGN-grid-event-rows call 2: a copy on global says where it is from in row 4, in the place's stead, with the distance.
+    it('(b) a copy on global: row 4 is "from {community} · {distance}", no place name and no pin glyph', async () => {
+        const HERE = { lat: -28.64, lng: 153.61 };
+        const COPY = {
+            ...SAME_DAY, eventPlaceName: 'Heritage Park', lat: -28.53, lng: 153.5,
+            shownCopy: true, shownFrom: { host: 'mullum.example', postId: 'ev-1', name: 'Mullumbimby', url: 'https://mullum.example', door: 'ask' },
+        };
+        const km = formatDistance(distanceKm(HERE.lat, HERE.lng, COPY.lat, COPY.lng));
+        expect(km).toMatch(/km$/);
+        await showTile(COPY, ME, 1.3, HERE);
+        const rows = Array.from(blockEl().children);
+        expect(rows).toHaveLength(4);
+        expect(rows[3].textContent).toBe(`from Mullumbimby · ${km}`);
+        expect(card().textContent).not.toContain('Heritage Park');
+        expect(rows[3].textContent).not.toContain('📍');
+        // No distance known: the community alone.
+        await showTile(COPY);
+        expect(Array.from(blockEl().children)[3].textContent).toBe('from Mullumbimby');
+        // A copy that names no community (an unreadable cached column): the place line, as before.
+        await showTile({ ...SAME_DAY, eventPlaceName: 'Heritage Park', shown_from: 'not json' });
+        expect(Array.from(blockEl().children)[3].textContent).toBe('📍 Heritage Park');
+    });
+
+    // DESIGN-grid-event-rows call 4: the span is two whole pieces in a row that wraps and clips (gridBlock.timeRow), so a row
+    // with no room for the end drops it whole (market-card-height-layout.test.ts lays it out).
+    it('(d) the time row is two Texts, the start and then the end with its dash, each whole and one line; a lone start is one', async () => {
+        const block = await showTile(SAME_DAY);
+        const row = byTestId('event-time-row')!;
+        expect(styleOf(row)).toEqual(block.timeRow);
+        expect(block.timeRow).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', alignContent: 'flex-start', overflow: 'hidden', height: block.row.height });
+        const pieces = Array.from(row.children);
+        expect(pieces.map(x => x.tagName)).toEqual(['SPAN', 'SPAN']);
+        expect(pieces.map(x => x.textContent)).toEqual(['10:26', '–14:26']);
+        expect(pieces[0].textContent).not.toMatch(/[–-]/);
+        for (const x of pieces) {
+            expect(x.getAttribute('data-lines')).toBe('1');
+            expect(styleOf(x)).toMatchObject({ fontSize: 14, fontWeight: '800', lineHeight: 18, color: lightColors.tile.event.ink, flexShrink: 0 });
+        }
+        // Cancelled: both pieces struck through.
+        await showTile({ ...SAME_DAY, eventState: 'cancelled' });
+        for (const id of ['event-time', 'event-time-end']) expect(styleOf(byTestId(id))).toMatchObject({ textDecorationLine: 'line-through' });
+        // A start with no end of its own: the phone's default end, still a span; an event that ends the next day: one piece.
+        const twoDay = { ...SAME_DAY, eventEndAt: new Date(new Date(SAME_DAY.eventStartAt).getTime() + DAY).toISOString() };
+        await showTile(twoDay);
+        expect(Array.from(byTestId('event-time-row')!.children).map(x => x.textContent)).toEqual(['10:26']);
+        expect(byTestId('event-time-end')).toBeNull();
+    });
+
+    // #2879: the map's pin card (MapPreviewCard) is this card with `popUp`, and it is always the list card. The props refuse
+    // `popUp` beside `viewMode: 'grid'` (the type check below), and a pin card handed both anyway still draws the list card.
+    it('a pin card (popUp) is the list card, never the grid tile, whatever it is handed', async () => {
+        // @ts-expect-error the grid tile is never the map's pin card: `popUp` is the list card's alone
+        const both: Parameters<typeof EventCard>[0] = { post: MARKET, viewMode: 'grid', fontScale: 1.3, popUp: { onOpen: () => {} } };
+        expect(both.viewMode).toBe('grid');
+        const onOpen = vi.fn();
+        await act(async () => {
+            root.render(createElement(EventCard, { post: MARKET, currentPubkey: ME, viewMode: 'grid', fontScale: 1.3, popUp: { onOpen } } as any) as unknown as Parameters<Root['render']>[0]);
+            await new Promise((r) => setTimeout(r, 0));
+        });
+        const pin = byTestId('map-preview-open') as HTMLElement;
+        expect(pin).not.toBeNull();
+        expect(byTestId('grid-text-block')).toBeNull();
+        expect(byTestId('grid-badge-row')).toBeNull();
+        expect(styleOf(pin)).toMatchObject({ flexDirection: 'row', padding: 0 });
+        expect(pin.getAttribute('aria-label')).toBe(`Open event: ${MARKET.title}`);
+        await act(async () => { pin.click(); });
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(go.pushes).toEqual([]);
+        // And the map's own card asks for no view at all: it is the list card by default.
+        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'MapPreviewCard.tsx'), 'utf8');
+        const call = src.match(/<EventCard\b[^>]*\/>/g) ?? [];
+        expect(call).toHaveLength(1);
+        expect(call[0]).toContain('popUp=');
+        expect(call[0]).not.toMatch(/viewMode|fontScale/);
     });
 
     it('an online event says so on its last row; an event with no place leaves the row blank, the block the same', async () => {

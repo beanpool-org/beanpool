@@ -749,8 +749,12 @@ describe("an event and the Daily Pulse in the grid are tiles: the listing's shel
         const l = lay(569);
         const bottom = at(l, block).top + l.height(block) - 12;   // inside its 12 dp of padding
         for (const r of Array.from(block.children)) expect(at(l, r).top + l.height(r), r.textContent ?? '').toBeLessThanOrEqual(bottom + 0.01);
+        // One line each: the date, the time's pieces (the start, and the end with its dash on a same-day span), the title, the
+        // place. Whether the span is one day depends on the hour the test runs at (now + 2 days + 5 hours), so count its pieces.
+        const pieces = block.querySelector('[data-testid="event-time-row"]')!.children.length;
+        expect([1, 2]).toContain(pieces);
         const lines = Array.from(block.querySelectorAll('span[data-lines]'));
-        expect(lines.map(x => x.getAttribute('data-lines'))).toEqual(['1', '1', '1', '1']);
+        expect(lines.map(x => x.getAttribute('data-lines'))).toEqual(Array(3 + pieces).fill('1'));
         const right = at(l, ev).left + l.width(ev);
         for (const el of Array.from(ev.querySelectorAll('*'))) expect(at(l, el).left + l.width(el), el.textContent ?? el.tagName).toBeLessThanOrEqual(right + 0.5);
         expect(ev.querySelectorAll('button')).toHaveLength(0);
@@ -878,6 +882,54 @@ describe('the layout check sees the fault it is here for', () => {
         expect(kept.right).toBeLessThanOrEqual(kept.width + 0.5);
         const rigid = rowWith({ flexShrink: 0 });
         expect(rigid.right).toBeGreaterThan(rigid.width + 10);
+    });
+
+    // DESIGN-grid-event-rows-fable.md call 4: an event tile's row 2 is core's two whole pieces ("10:26", "–14:26") in
+    // gridBlock.timeRow, a row one line high that wraps and clips. Built by hand at a tile's inner width at 320 x 1.3 (110 dp)
+    // with pieces wider than it together (the measure's 0.56 em a character: 112 dp): the end piece is laid out whole on the
+    // line under the row's clip, and the row shows the start alone. At 200 dp they share the line. Laid out without the wrap
+    // (the fault), the end piece runs past the row's edge, where it would be cut.
+    it("an event tile's time row: pieces wider than the row put the end piece whole under its clip; at 200 dp one line", async () => {
+        const { gridTextBlock } = await import('../../components/market-card-shell');
+        const b = gridTextBlock(1.3);
+        const span = (text: string) => {
+            const e = document.createElement('span');
+            e.setAttribute('data-style', JSON.stringify({ fontSize: 14, fontWeight: '800', lineHeight: 18, ...b.timePiece }));
+            e.setAttribute('data-lines', '1');
+            e.textContent = text;
+            return e;
+        };
+        const laid = (width: number, rowStyle: Record<string, unknown> = b.timeRow as Record<string, unknown>) => {
+            const start = span('10:26');
+            const end = span('–14:26');
+            const row = div(rowStyle, start, end);
+            const scroll = div({ flexGrow: 1, flexShrink: 1, overflow: 'scroll' }, div({ width }, row));
+            const l = layOut(scroll, { width: WIDTH, height: 569 }, { fontScale: 1.3 });
+            return { row: l.box(row), start: l.box(start), end: l.box(end) };
+        };
+        const ROW = 18 * 1.3;
+        const whole = (text: string) => text.length * 14 * 1.3 * 0.56;
+        const narrow = laid(110);
+        expect(narrow.row.width).toBe(110);
+        expect(narrow.row.height).toBeCloseTo(ROW, 3);
+        expect(narrow.start.width + narrow.end.width).toBeGreaterThan(110);
+        // The start on the row, whole; the end whole too, on the next line, at or below the row's bottom: clipped away.
+        expect(narrow.start).toMatchObject({ left: 0, top: 0 });
+        expect(narrow.start.width).toBeCloseTo(whole('10:26'), 3);
+        expect(narrow.end.left).toBe(0);
+        expect(narrow.end.top).toBeGreaterThanOrEqual(narrow.row.height - 0.01);
+        expect(narrow.end.width).toBeCloseTo(whole('–14:26'), 3);
+        // Room for both: one line, the end straight after the start.
+        const wide = laid(200);
+        expect(wide.row.height).toBeCloseTo(ROW, 3);
+        expect(wide.start.top).toBe(0);
+        expect(wide.end.top).toBe(0);
+        expect(wide.end.left).toBeCloseTo(wide.start.width, 3);
+        expect(wide.end.left + wide.end.width).toBeLessThanOrEqual(200);
+        // The fault the wrap is there for: one line that never wraps puts the end past the row's edge, to be cut there.
+        const rigid = laid(110, { ...(b.timeRow as Record<string, unknown>), flexWrap: 'nowrap' });
+        expect(rigid.end.top).toBe(0);
+        expect(rigid.end.left + rigid.end.width).toBeGreaterThan(110);
     });
 
     it('a percentage-height slot makes a lone card far taller than its own 116 dp', () => {

@@ -18,27 +18,31 @@
  * press that opens the event, where the two big buttons are (EventDetail). A tap anywhere opens the item (#2839).
  *
  * In the grid (slice P3', DESIGN-market-grid-sizes-fable.md §2.2) the event is a tile like the listing beside it, from the same
- * box: the 4:3 photo flush at the top, EVENT at its top-left, the foot row of pills (📌 PINNED, CANCELLED / UPDATED, and your
- * mark at the end, where a listing's price sits), then the listing tiles' four-row text block (gridTextBlock at the font scale
- * market.tsx reads, so the same numbers):
+ * box: the 4:3 photo flush at the top, EVENT at its top-left, the foot row of pills (📌 PINNED, CANCELLED / UPDATED, a group's
+ * 🔒, and your mark at the end, where a listing's price sits), then the listing tiles' four-row text block (gridTextBlock at the
+ * font scale market.tsx reads, so the same numbers):
  *
  *   SAT 7 NOV                                         the date, in the event's ink
- *   16:00–21:00                                       the time (a repeating event with no time: its ↻ rule)
+ *   16:00 –21:00                                      the time in two whole pieces (a repeating event with no time: its ↻ rule)
  *   Byron Bay Twilight Market                         the title, one line
- *   📍 Railway Park · 3 km                             the place, one line
+ *   📍 Railway Park · 3 km                             the place, one line (a copy on global: "from Mullumbimby · 740 km")
  *
  * The date and the time each stay whole in half a 320 dp row at 1.3x text (core eventTileWhen): an event that ends on a later
- * date shows its start ("FRI 6 NOV" / "10:26"; the end is on the page). When the reader's clock differs from the place's (a
- * Byron event read on a Gold Coast phone), both rows are the reader's own clock, and the last row opens with "🕒 your time"
- * before the place (DESIGN-event-times §4: a member never reads the place's clock as their own). "15:00–20:00 your time"
- * cannot fit the time row at 320 dp and 1.3x (188 dp of text in 110, in Android's Roboto), nor can "15:00 your time" (130).
+ * date shows its start ("FRI 6 NOV" / "10:26"; the end is on the page), and a span with no room for its end piece drops it
+ * whole and reads "10:26" (gridBlock.timeRow; DESIGN-grid-event-rows-fable.md call 4). Every clock on the tile is the
+ * reader's own. When it differs from the place's (a Byron event read on a Gold Coast phone), the last row opens with
+ * "🕒 your time" before the place (DESIGN-event-times §4: a member never reads the place's clock as their own).
+ * "15:00–20:00 your time" cannot fit the time row at 320 dp and 1.3x (188 dp of text in 110, in Android's Roboto), nor can
+ * "15:00 your time" (130). Online, row 2 is the bare span and no row says "your time": there is no second clock on the tile
+ * to tell it from (call 3); the tile's label still says it. A group-only event's 🔒 pill is named with the whole sentence,
+ * "🔒 Only {group} can see this", and so is the tile (call 1).
  *
  * The counts and "You're hosting this event" are on the event's page in the grid; the list card keeps them.
  */
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { copyCardLine, eventCopyOf, t, upperCase } from '@beanpool/core';
+import { copyCardLine, copyFromLine, eventCopyOf, t, upperCase } from '@beanpool/core';
 import { router } from 'expo-router';
 import { MARKET_GRID_CROP, MarketCardPicture } from './MarketCardPicture';
 import { CardChip, gridTextBlock, useCardShell } from './market-card-shell';
@@ -134,11 +138,20 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
         // are the page's (§2.2). The date and the time each take a row, each kept whole (core eventTileWhen).
         const tileMark = hosting ? null : answer;
         const tileWhen = eventTileWhenFor(post);
-        const time = tileWhen?.time || (repeats ? `↻ ${repeats}` : '');
+        // Row 2 in core's whole pieces ("10:26", "–14:26"): a row with no room for the end drops it whole (gridBlock.timeRow).
+        // Online too, the bare span: every clock on the tile is the reader's own (DESIGN-grid-event-rows calls 3 and 4). A
+        // repeating event with no readable time keeps its rule as one piece.
+        const timePieces = tileWhen ? tileWhen.timePieces : repeats ? [`↻ ${repeats}`] : [];
         // The rows are the reader's own clock: the last row says so first, whole, and the place gives way after it.
         const yourTime = tileWhen?.yours ? t('{time} your time', { time: '🕒' }) : null;
-        const place = placeLine ? `${isOnlineEvent(post) ? '💻' : '📍'} ${placeLine}` : '';
-        // The label speaks the when the tile shows: the reader's own clock, with "your time", when the rows are theirs.
+        // A copy on global points at its community where the place would be, with the distance after it (call 2); with no
+        // community to name (an unreadable copy), the place line.
+        const place = copy?.from ? [copyFromLine(copy.from), distance].filter(Boolean).join(' · ')
+            : placeLine ? `${isOnlineEvent(post) ? '💻' : '📍'} ${placeLine}` : '';
+        // A group-only event: a 🔒 pill on the photo's foot (call 1), the whole sentence its name and the tile's.
+        const lock = groupOnly ? t('🔒 Only {group} can see this', { group: groupName }) : null;
+        // The label speaks the when the tile shows: the reader's own clock, with "your time", when the rows are theirs; online,
+        // the card's line, which says "your time" though no row does.
         const spoken = tileWhen?.spoken ?? when;
         const tileLabel = badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when: spoken })
             : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when: spoken })
@@ -148,7 +161,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                 style={[shell.card, shell.gridTile]}
                 onPress={() => router.push(`/post/${post.id}`)}
                 accessibilityRole="button"
-                accessibilityLabel={tileMark ? `${tileLabel}, ${tileMark}` : tileLabel}
+                accessibilityLabel={[tileLabel, lock, tileMark].filter(Boolean).join(', ')}
                 testID={`event-card-${post.id}`}
             >
                 <View style={shell.gridImageWrapper}>
@@ -166,6 +179,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                         {pinned && <View style={shell.gridBadge} testID="pinned-chip"><Text style={shell.gridPinText}>{t('📌 PINNED')}</Text></View>}
                         {badge === 'CANCELLED' && <View style={shell.gridBadge} testID="event-state-chip"><Text style={shell.gridPinText}>{t('CANCELLED', undefined, 'event')}</Text></View>}
                         {badge === 'UPDATED' && <View style={shell.gridBadge} testID="event-state-chip"><Text style={shell.gridPinText}>{t('UPDATED', undefined, 'event')}</Text></View>}
+                        {!!lock && <View style={shell.gridBadge} testID="event-group-chip" accessibilityLabel={lock}><Text style={shell.gridPinText}>🔒</Text></View>}
                         {!!tileMark && (
                             <View style={[shell.gridBadge, shell.gridPriceEnd]} testID="event-mark">
                                 <Text style={shell.gridPriceText} numberOfLines={1}>{tileMark}</Text>
@@ -180,8 +194,10 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                     <View style={gridBlock.row}>
                         <Text testID="event-when" style={[shell.gridWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{tileWhen?.date ?? ''}</Text>
                     </View>
-                    <View style={gridBlock.row}>
-                        <Text testID="event-time" style={[shell.gridWhen, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{time}</Text>
+                    <View style={gridBlock.timeRow} testID="event-time-row">
+                        {timePieces.map((piece, i) => (
+                            <Text key={i} testID={i === 0 ? 'event-time' : 'event-time-end'} style={[shell.gridWhen, gridBlock.timePiece, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={1}>{piece}</Text>
+                        ))}
                     </View>
                     <View style={gridBlock.row}>
                         <Text style={shell.gridSecond} numberOfLines={1}>{post.title}</Text>

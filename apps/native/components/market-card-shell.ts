@@ -230,6 +230,14 @@ export function gridTextBlock(fontScale: number) {
         titleBox: { height: 2 * row + rowGap * scale },
         /** Row 3: the author (an 18 dp avatar and a name) or a copy's line, centred in the row. */
         row: { height: row, justifyContent: 'center' },
+        /**
+         * An event tile's row 2, its time (DESIGN-grid-event-rows-fable.md call 4): core's whole pieces ("10:26", "–14:26") in a
+         * row one line high that wraps and clips. Both fit: the span. They do not: the end piece wraps under the clip and the
+         * row reads the start alone, never a cut and never a dangling dash. The layout decides, so no code measures a word.
+         */
+        timeRow: { height: row, flexDirection: 'row', flexWrap: 'wrap', alignContent: 'flex-start', overflow: 'hidden' },
+        /** A piece of the time row: never shrunk, so it is whole on the row or whole on the line under the clip. */
+        timePiece: { flexShrink: 0 },
         /** Row 4: one line that is cut, never wrapped: the distance first, then one chip at most, spaced as a chip row. */
         lastRow: { height: row, flexDirection: 'row', alignItems: 'center', gap: 6, overflow: 'hidden' },
         /** Row 4's distance and its chip: each gives way and is cut at the row's end rather than pushed past it. */

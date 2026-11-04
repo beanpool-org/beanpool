@@ -16,7 +16,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import {
     areCatalogsMachineDraft,
     canonicalLang, capitalFirst, currentLanguage, DATE_WORDS, formatCount, formatDate, formatNumber, inCapitalsOf, isLang, isMachineDraft, isMachineDraftCatalog, LANGS, LANGUAGE_HEADER,
-    normaliseLang, PLURAL_CATEGORIES, PLURAL_RULES, pluralCategory, pluralKey, PSEUDO_LANG, pseudoLocalise, setLanguage, t, timeAgo, tn, upperCase,
+    normaliseLang, PLURAL_CATEGORIES, PLURAL_RULES, pluralCategory, pluralKey, PSEUDO_LANG, pseudoLocalise, pseudoPadLength, setLanguage, t, timeAgo, tn, upperCase,
     withDigits, word,
     wordKey, wordn, wordsFor, type Lang, type UiLang,
 } from '../words.js';
@@ -206,16 +206,19 @@ describe('t and tn', () => {
         expect(isMachineDraft()).toBe(false);
     });
 
-    it('the pseudo-locale pads at least 35 %, accents, brackets, and keeps placeholders whole', () => {
+    it('the pseudo-locale pads a short sentence 40 %, accents, brackets, and keeps placeholders whole', () => {
         const out = pseudoLocalise('Save {name} now');
         expect(out.startsWith('[') && out.endsWith(']')).toBe(true);
         expect(out).toContain('{name}');
         expect(out.replace('{name}', '')).not.toMatch(/[A-Za-z]/);
-        expect(out.length - 2).toBeGreaterThanOrEqual(Math.ceil('Save {name} now'.length * 1.35));
+        // 15 characters, 40 % = 6 tildes: the sentence plus a pad of exactly 6, and the two brackets (the pad's zero-width
+        // breaks, which a 6-tilde pad carries, are not characters a person sees).
+        expect(out.replace(/\u200B/g, '').length - 2).toBe('Save {name} now'.length + 6);
         setLanguage(PSEUDO_LANG);
         expect(t('Save')).toBe('[Ŝāṽé~~]');
         expect(t('Hello {name}', { name: 'Ana' })).toMatch(/^\[Ĥéļļö Ana~+\]$/);
-        expect(tn(3, '{n} new message', '{n} new messages')).toMatch(/^\[3 ñéŵ ɱéššāĝéš~+\]$/);
+        // 16 characters: a pad of 7, which breaks with a zero-width space (see the boundary test below).
+        expect(tn(3, '{n} new message', '{n} new messages')).toMatch(/^\[3 ñéŵ ɱéššāĝéš[\u200B~]+\]$/);
     });
 
     it('a long pseudo-locale pad breaks like words do: never a run a 320 px screen cannot wrap', () => {
@@ -223,12 +226,71 @@ describe('t and tn', () => {
         const out = pseudoLocalise(long);
         const pad = out.slice(out.indexOf('\u200B') + 1, -1);
         expect(out).toContain('.\u200B~');
-        expect(out.replace(/\u200B/g, '').match(/~/g)).toHaveLength(Math.ceil(long.length * 0.35));
+        // 73 characters, over 30: 30 % = 21.9, rounded up to 22 tildes.
+        expect(out.replace(/\u200B/g, '').match(/~/g)).toHaveLength(22);
         expect(pad.split('\u200B').every((w) => w.length <= 5)).toBe(true);
         expect(Math.max(...out.split(/[\s\u200B]/).map((w) => w.length))).toBeLessThanOrEqual(15);
         // Short pads stay one run, as the screens' button checks have always read them.
         expect(pseudoLocalise('Save')).toBe('[Ŝāṽé~~]');
-        expect(pseudoLocalise('{n} new messages')).not.toContain('\u200B');
+        // The boundary: 12 characters pad 5 (one run), 13 pad 6 (the first pad that breaks: a 6-tilde pad glued to a 9-letter
+        // word was a 17-glyph run no real word would be, the web garden's "Warm temperate" zone line).
+        expect(pseudoLocalise('Hello {name}')).not.toContain('\u200B');
+        expect(pseudoLocalise('Hello, {name}!')).toBe('[Ĥéļļö, {name}!\u200B~~~~~\u200B~]');
+        expect(pseudoLocalise('Warm temperate')).toBe('[Ŵāŕɱ ţéɱþéŕāţé\u200B~~~~~\u200B~]');
+    });
+
+    // Slice T4 (translation tooling design §2.5): 40 % on a short sentence, 30 % on a long one.
+    describe('the pseudo-locale pad: 40 % up to 30 characters, 30 % above', () => {
+        const tildes = (s: string) => s.replace(/\u200B/g, '').match(/~/g)?.length ?? 0;
+
+        it('"Save" is 4 letters and gets 2 tildes (40 %)', () => {
+            expect(pseudoLocalise('Save')).toBe('[Ŝāṽé~~]');
+            expect(pseudoPadLength(4)).toBe(2);
+        });
+
+        it('a short sentence grows by 40 % rounded up: 8 letters get 4 tildes, where 35 % gave 3', () => {
+            expect(pseudoLocalise('Settings')).toBe('[Ŝéţţîñĝš~~~~]');
+            expect(tildes(pseudoLocalise('Settings'))).toBe(4);
+            expect([1, 2, 3, 5, 10, 15, 20].map((n) => pseudoPadLength(n))).toEqual([1, 1, 2, 2, 4, 6, 8]);
+        });
+
+        it('a 100-letter sentence gets 30 tildes (30 %), in runs of 5 after a zero-width space', () => {
+            const sentence = `${'abcd '.repeat(19)}abcde`;
+            expect(sentence).toHaveLength(100);
+            const out = pseudoLocalise(sentence);
+            expect(tildes(out)).toBe(30);
+            const runs = out.slice(0, -1).split('\u200B').slice(1);
+            expect(runs).toEqual(Array(6).fill('~~~~~'));
+        });
+
+        it('the step is at 30 → 31 characters: 12 tildes, then 10', () => {
+            expect(tildes(pseudoLocalise('x'.repeat(30)))).toBe(12);
+            expect(tildes(pseudoLocalise('x'.repeat(31)))).toBe(10);
+            expect(pseudoPadLength(30)).toBe(12);
+            expect(pseudoPadLength(31)).toBe(10);
+        });
+
+        it('whole-number arithmetic: the pad never gains a tilde from floating point', () => {
+            // 10 × 40 % and 100 × 30 % are exact, so no rounding up; 11 × 40 % = 4.4 does round up.
+            expect([10, 20, 30, 40, 50, 100, 1000].map((n) => pseudoPadLength(n))).toEqual([4, 8, 12, 12, 15, 30, 300]);
+            expect(pseudoPadLength(11)).toBe(5);
+            expect(pseudoPadLength(0)).toBe(1);
+        });
+
+        it('placeholders and bold marks count towards the length and survive whole', () => {
+            const out = pseudoLocalise('**Hi** {name}');
+            expect(out).toContain('**');
+            expect(out).toContain('{name}');
+            // 13 characters, 40 % = 5.2, rounded up to 6.
+            expect(tildes(out)).toBe(6);
+        });
+
+        it('the same in the device language: t() and tn() in xx use the rule', () => {
+            setLanguage(PSEUDO_LANG);
+            expect(t('Settings')).toBe('[Ŝéţţîñĝš~~~~]');
+            expect(tildes(t('Your identity is yours. It lives on this device, backed by cryptography.'))).toBe(22);
+            expect(tildes(tn(2, '{n} new message', '{n} new messages'))).toBe(7);
+        });
     });
 
     it('normaliseLang maps device tags to the 25 BCP-47 tags, and nothing else', () => {

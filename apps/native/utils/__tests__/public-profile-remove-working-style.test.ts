@@ -40,6 +40,8 @@ vi.mock('react-native', () => {
 const nav = vi.hoisted(() => ({ params: {} as Record<string, string>, router: { push: vi.fn(), replace: vi.fn(), back: vi.fn() } }));
 vi.mock('expo-router', () => ({ router: nav.router, useLocalSearchParams: () => nav.params, ErrorBoundary: () => null, useFocusEffect: (cb: () => void) => { cb(); } }));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+// The profile's listing cards draw through components/ListPhoto, which imports expo-image (a native module this test does not load).
+vi.mock('expo-image', () => ({ Image: () => null }));
 
 const mem = vi.hoisted(() => ({ store: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({

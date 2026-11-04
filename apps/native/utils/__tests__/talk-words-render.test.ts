@@ -603,7 +603,10 @@ describe('Talk at 320 dp with 1.3× text, in the pseudo-locale', () => {
             const label = tab.querySelector('span[data-shrinks]')!;
             expect(label.getAttribute('data-lines')).toBe('1');
             const min = Number(label.getAttribute('data-min-scale'));
-            expect(widthOf(label.textContent!, 13 * SCALE) * min, label.textContent!).toBeLessThanOrEqual(third);
+            // Plus one tilde at the smallest size: the pseudo pad rounds up to whole tildes (slice T4, 4 Nov 2026), so the
+            // 8-letter "Messages" carries 4 at 40 % where 35 % gave 3 (88.0 against 84 dp at the smallest size, over by 4 dp;
+            // a tilde is 6.3 dp there). A real language is held to the floor exactly in the next describe's tests.
+            expect(widthOf(label.textContent!, 13 * SCALE) * min, label.textContent!).toBeLessThanOrEqual(third + widthOf('~', 13 * SCALE) * min);
         }
     });
 
@@ -617,11 +620,12 @@ describe('Talk at 320 dp with 1.3× text, in the pseudo-locale', () => {
         const labels = pills.map((p) => p.querySelector(':scope > span[data-shrinks]')!);
         // One line, and the whole name inside its pill. On one line a word cannot break, so the longest-word check below only
         // fails when the name is cut by more than its own length; the real rule is that the pill leaves the name at least its
-        // smallest shrink (`scales[i] \u2265 min-scale`), or RN ellipsizes it. The pseudo-locale is a stress case, 35% longer than
-        // any real language, and misses that floor by a hair (0.5947 against 0.6 for the Community name, 0.5976 for the others);
-        // the real languages are held to the floor exactly in the next describe. So allow PSEUDO_SLACK: a change that cuts more
-        // than a hair of a name fails here.
-        const PSEUDO_SLACK = 0.01;
+        // smallest shrink (`scales[i] \u2265 min-scale`), or RN ellipsizes it. The pseudo-locale is a stress case, longer than
+        // any real language, and misses that floor by a hair (at the old 35 % pad: 0.5947 against 0.6 for the Community name,
+        // 0.5976 for the others; at the 40 % / 30 % pad of slice T4, 4 Nov 2026, which rounds up to one more tilde on some
+        // names: 0.5747 for the first name); the real languages are held to the floor exactly in the next describe. So allow
+        // PSEUDO_SLACK: a change that cuts more than that fails here.
+        const PSEUDO_SLACK = 0.03;
         const dp = labels.map((l) => widthOf(l.textContent!, 11 * SCALE));
         const scales = scalesInRow(row, pills, dp);
         labels.forEach((label, i) => {

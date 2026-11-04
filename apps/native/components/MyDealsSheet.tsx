@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Modal, FlatList, Image, StyleSheet, Dimensions } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
+import { ListPhoto } from './ListPhoto';
 import { router } from 'expo-router';
 import { getMarketplaceTransactions, getPosts, getMyPosts } from '../utils/db';
 import { ReviewModal } from './ReviewModal';
 import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, listPhotoUrl, t, word, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
@@ -513,13 +513,18 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                     !isCompleted && !isPending && !isRequested && { opacity: 0.5 },
                     isPending && heldTone,
                 ]}>
-                    {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
-                        <ExpoImage source={{ uri: listPhotoUrl(item.coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
-                    ) : (
-                        <View style={[styles.dealThumb, styles.dealThumbFallback]}>
-                            <Text style={{ fontSize: 24, opacity: 0.5 }}>{isBuyer ? '🛒' : '🏷️'}</Text>
-                        </View>
-                    )}
+                    <ListPhoto
+                        photo={item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? item.coverImage : null}
+                        style={styles.dealThumb}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={150}
+                        fallback={(
+                            <View style={[styles.dealThumb, styles.dealThumbFallback]}>
+                                <Text style={{ fontSize: 24, opacity: 0.5 }}>{isBuyer ? '🛒' : '🏷️'}</Text>
+                            </View>
+                        )}
+                    />
                     <View style={{ flex: 1, padding: 12, justifyContent: 'space-between', minHeight: 96 }}>
                         {/* Badge, date and Beans side by side, wrapping where they don't fit (320 dp at 1.3x text): the amount
                             keeps the right edge and never shrinks, so it drops to its own line whole instead of being pushed
@@ -626,13 +631,18 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         return (
             <Pressable accessibilityRole="button" onPress={preview ? openMark : () => { onClose(); router.push(`/post/${item.id}`); }}>
                 <View testID={`deal-card-${item.id}`} style={[styles.dealCard, highlightStyle, item.status === 'paused' && styles.dealCardPaused]}>
-                    {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <ExpoImage source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
-                    ) : (
-                        <View style={[styles.dealThumb, styles.dealThumbFallback]}>
-                            <Text style={{ fontSize: 24, opacity: 0.5 }}>📦</Text>
-                        </View>
-                    )}
+                    <ListPhoto
+                        photo={coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? coverImage : null}
+                        style={styles.dealThumb}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={150}
+                        fallback={(
+                            <View style={[styles.dealThumb, styles.dealThumbFallback]}>
+                                <Text style={{ fontSize: 24, opacity: 0.5 }}>📦</Text>
+                            </View>
+                        )}
+                    />
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center', minHeight: 96 }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

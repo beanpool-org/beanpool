@@ -41,7 +41,8 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
-        Modal: ({ visible, children }: { visible: boolean; children: any }) => (visible ? createElement('div', { 'data-testid': 'modal-choice' }, children) : null),
+        ScrollView: el('div'),
+        Modal:({ visible, children }: { visible: boolean; children: any }) => (visible ? createElement('div', { 'data-testid': 'modal-choice' }, children) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1 },
         Alert: {
             alert: (...args: any[]) => { alertCalls.calls.push(args); },
@@ -412,7 +413,7 @@ describe('the event Share row says what the link does (share-says)', () => {
     const renderShareSheet = async () => {
         await renderComponent();
         await settle();
-        const buttons = [...host.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'));
+        const buttons = Array.from(host.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
         expect(buttons).toEqual(['Share this event', 'Add this event to your calendar']);
         expect(text('share-members-note')).toBeNull();
         expect(text('share-outside-line')).toBeNull();

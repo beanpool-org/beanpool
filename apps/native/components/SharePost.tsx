@@ -143,12 +143,13 @@ export function ShareButton({ post, onShareMembers, accessibilityLabel, style, b
     // Invite and share and the ask are a member's: a guest here, or one the node has not yet recognised, is offered neither.
     const { recognition } = useNodeStatus();
     const says = shareSays(profile?.features, role, post?.type === 'event' ? 'event' : 'listing');
-    const invite = useInviteAndShare(post);
-    const ask = useAskAdmin();
-    const showOutside = says.showShareOutside && shareableOutside(post);
     // ONE invite action (share-one-flow): Invite and share, where this member may invite and the line does not say only admins
     // do. Where only admins invite and this member is none, the line stands and the ask is offered instead (#2775). Never both.
-    const showInvite = says.showInviteButton && recognition === 'member' && invite.offered;
+    // Nothing is read for it where it is not offered.
+    const invite = useInviteAndShare(post, says.showInviteButton && recognition === 'member');
+    const ask = useAskAdmin();
+    const showOutside = says.showShareOutside && shareableOutside(post);
+    const showInvite = invite.offered;
     const showAsk = says.showAskAdmin && recognition === 'member';
 
     const [open, setOpen] = useState(false);

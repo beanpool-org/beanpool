@@ -8,7 +8,7 @@
  * bottom inset under it, items 52 dp tall, and Cancel.
  */
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
@@ -43,6 +43,9 @@ export function ShareSheet({ visible, onClose, onDismiss, items, body, testID = 
                 <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')} />
                 <View style={[styles.card, { paddingBottom: 16 + insets.bottom }]} testID={testID}>
                     <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.3}>{t('Share')}</Text>
+                    {/* The ways scroll when they are taller than the screen (the invite panel with its vouch choice, a long
+                        language at 1.3×, a 569 dp phone); the title and Cancel stay put. */}
+                    <ScrollView style={styles.ways} bounces={false} keyboardShouldPersistTaps="handled" testID={`${testID}-ways`}>
                     {items.map((item) => (
                         <Pressable
                             key={item.key}
@@ -58,6 +61,7 @@ export function ShareSheet({ visible, onClose, onDismiss, items, body, testID = 
                         </Pressable>
                     ))}
                     {body}
+                    </ScrollView>
                     <Pressable onPress={onClose} style={({ pressed }) => [styles.cancel, pressed && styles.itemPressed]} accessibilityRole="button" testID={`${testID}-cancel`}>
                         <Text style={styles.cancelText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Cancel')}</Text>
                     </Pressable>
@@ -69,7 +73,8 @@ export function ShareSheet({ visible, onClose, onDismiss, items, body, testID = 
 
 const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-    card: { backgroundColor: colors.surface.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingHorizontal: 16 },
+    card: { maxHeight: '90%', backgroundColor: colors.surface.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingHorizontal: 16 },
+    ways: { flexGrow: 0, flexShrink: 1 },
     title: { fontSize: 16, fontWeight: '800', color: colors.text.heading, marginBottom: 12, paddingHorizontal: 4 },
     item: {
         minHeight: 52, justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1,

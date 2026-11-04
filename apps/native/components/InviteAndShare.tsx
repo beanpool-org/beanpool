@@ -38,9 +38,10 @@ export interface InviteAndShare {
 
 /**
  * Who is asking, and what the community says of them: read when the Share button is drawn for a post, so the sheet's item is
- * there when it opens. Nothing is asked of a community that takes no invites, and a role only where only admins invite.
+ * there when it opens. Only where `enabled` (core shareSays offers Invite and share to this member, as the old button was only
+ * drawn then): otherwise nothing is read or asked of the node. A role only where only admins invite.
  */
-export function useInviteAndShare(post: { id: string; title: string }): InviteAndShare {
+export function useInviteAndShare(post: { id: string; title: string }, enabled: boolean): InviteAndShare {
     const profile = useNodeProfile();
     const features = profile?.features;
     const adminsOnly = onlyAdminsInvite(features);
@@ -53,6 +54,7 @@ export function useInviteAndShare(post: { id: string; title: string }): InviteAn
     const [note, setNote] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!enabled) return;
         let alive = true;
         (async () => {
             try {
@@ -80,9 +82,9 @@ export function useInviteAndShare(post: { id: string; title: string }): InviteAn
             }
         })();
         return () => { alive = false; };
-    }, [post.id, adminsOnly, vouchHere]);
+    }, [post.id, adminsOnly, vouchHere, enabled]);
 
-    const offered = !!who && offersInviteAndShare({ features, role, guest: who.guest, postId: post.id });
+    const offered = enabled && !!who && offersInviteAndShare({ features, role, guest: who.guest, postId: post.id });
     const offersVouch = offersInviteVouch(features, canVouch);
 
     const make = async (): Promise<boolean> => {

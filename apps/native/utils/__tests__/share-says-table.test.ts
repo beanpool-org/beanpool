@@ -52,7 +52,8 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
-        Modal: ({ visible, children }: { visible: boolean; children?: any }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
+        ScrollView: el('div'),
+        Modal:({ visible, children }: { visible: boolean; children?: any }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         StyleSheet: { create: (s: unknown) => s, absoluteFill: {} },
         Alert: { alert: vi.fn() },
         Share: { share: vi.fn() },
@@ -370,10 +371,9 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-note')).toBeNull();
     });
 
-    /** The ways the sheet offers: its buttons, less Cancel. */
-    const ways = () => [...container.querySelectorAll('[data-testid="share-sheet"] > button')]
-        .map((b) => b.getAttribute('data-testid'))
-        .filter((id) => id !== 'share-sheet-cancel');
+    /** The ways the sheet offers, in order (Cancel sits outside them). */
+    const ways = () => Array.from(container.querySelectorAll('[data-testid="share-sheet-ways"] > button'))
+        .map((b) => b.getAttribute('data-testid'));
 
     it('sharing outside off and invites off: the sheet has one way, Share with members (a sheet of one is the same door)', async () => {
         mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'members', invites: false } };

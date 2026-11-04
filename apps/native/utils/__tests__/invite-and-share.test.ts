@@ -41,7 +41,7 @@ vi.mock('react-native', () => {
     };
     return {
         Platform: { OS: 'android' },
-        View: el('div'), Text: el('span'), Pressable: el('button'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'),
         Modal: ({ visible, children }: { visible: boolean; children?: any }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
         StyleSheet: { create: (s: unknown) => s, absoluteFill: {} },
         Alert: { alert: () => {} },
@@ -137,15 +137,27 @@ describe('who is offered the button', () => {
         ctl.profile = { profile: 'local', features: { door: 'admins' } };
         ctl.role = null;
         await mount();
-        expect(ctl.asked).toContain('role');
+        // The sheet's line already says only admins invite here (the role through the header's cache): Invite and share is
+        // not offered, so it asks the node nothing more.
+        expect(ctl.asked).toEqual([]);
         expect(byId('invite-and-share-button')).toBeNull();
         act(() => root?.unmount()); host?.remove();
         for (const role of ['owner', 'admin']) {
             ctl.role = role;
+            ctl.asked.length = 0;
             await mount();
+            expect(ctl.asked, role).toContain('role');
             expect(byId('invite-and-share-button'), role).toBeTruthy();
             act(() => root?.unmount()); host?.remove();
         }
+    });
+
+    it('where Invite and share is not offered, nothing is read for it: no vouch asked on a community that takes no invites', async () => {
+        ctl.profile = { profile: 'local', features: { door: 'members', invites: false, inviteVouch: true } };
+        ctl.canVouch = true;
+        await mount();
+        expect(byId('invite-and-share-button')).toBeNull();
+        expect(ctl.asked).toEqual([]);
     });
 
     it('the rule, on its own: no post id, no button', () => {

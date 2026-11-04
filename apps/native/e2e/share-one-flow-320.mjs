@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /* global process, console, document, getComputedStyle */
 /**
- * ONE share flow on the phone (share-one-flow): a listing's share sheet (components/SharePost.tsx, the real one, through
- * react-native-web) at the floor (320dp wide, the phone's text at 1.3x), light and dark, for three people:
+ * ONE share flow on the phone (share-one-flow): a listing's ONE Share button and the sheet it opens (components/SharePost.tsx,
+ * components/ShareSheet.tsx, the real ones, through react-native-web; DP2) at the floor (320dp wide, the phone's text at 1.3x),
+ * light and dark, the sheet open, for three people:
  *   - a member where any member may invite: the line, and exactly ONE invite action (Invite and share);
  *   - a member where only admins invite: the line that only admins invite here, no invite action, and ONE more button,
  *     "Ask an admin to invite someone" (none where the node does not take asks);
@@ -114,7 +115,9 @@ if (q.get('lang') === 'ta') setLanguage('ta', [ta]);
 const who = q.get('who') || 'member';
 const onlyAdmins = who === 'admins-only' || who === 'admins-only-no-asks' || who === 'admin';
 globalThis.__features = { shareOutside: who === 'outside', knocks: true, invites: true, inviteAsks: who !== 'admins-only-no-asks', door: onlyAdmins ? 'admins' : 'members' };
-globalThis.__canVouch = false;
+// vouch=1: someone who can vouch, where the community has it (the tallest invite panel).
+if (q.get('vouch') === '1') globalThis.__features.inviteVouch = true;
+globalThis.__canVouch = q.get('vouch') === '1';
 globalThis.__role = who === 'admin' ? 'admin' : null;
 const POST_ID = '3f0c8a8e-1b2c-4d5e-8f90-123456789abc';
 createRoot(document.getElementById('root')).render(
@@ -246,8 +249,15 @@ try {
         for (const [name, who, wantInvites, wantLine, wantAsks] of cases) {
             const tag = `${scheme} · ${name}`;
             await open(`scheme=${scheme}&lang=en&who=${who}`);
-            await page.locator('[data-testid="share-members-button"]').waitFor();
+            // ONE Share button (DP2): nothing but it on the page; its sheet holds the ways and their sentences.
+            await page.locator('[data-testid="share-open-button"]').waitFor();
             await page.waitForTimeout(500);
+            const before = await countInvites();
+            if (before.line || before.outside || before.shareAndInvite || before.asks) problems.push(`${tag}: a way or a sentence shows on the page before Share is tapped`);
+            if (who === 'member') await measure(`${scheme} · the page, sheet closed`);
+            await page.locator('[data-testid="share-open-button"]').click();
+            await page.locator('[data-testid="share-members-button"]').waitFor();
+            await page.waitForTimeout(300);
             const c = await countInvites();
             if (c.shareAndInvite !== wantInvites) problems.push(`${tag}: ${c.shareAndInvite} Invite and share button(s), wanted ${wantInvites}`);
             if (c.asks !== wantAsks) problems.push(`${tag}: ${c.asks} Ask an admin button(s), wanted ${wantAsks}`);
@@ -255,7 +265,28 @@ try {
             if (who === 'outside' && c.outside !== ONE_NOTE) problems.push(`${tag}: the Share outside note is ${JSON.stringify(c.outside)}, wanted the one note`);
             if (c.oldButton) problems.push(`${tag}: the old Invite someone button shows`);
             if (c.line !== wantLine) problems.push(`${tag}: the line is ${JSON.stringify(c.line)}, wanted ${JSON.stringify(wantLine)}`);
-            await measure(tag);
+            await measure(`${tag}, sheet open`);
+            if (who === 'outside') {
+                // Invite and share opens its panel in the sheet, in place of the other ways.
+                await page.locator('[data-testid="invite-and-share-button"]').click();
+                await page.locator('[data-testid="invite-and-share-panel"]').waitFor();
+                if (await page.locator('[data-testid="share-members-button"]').count()) problems.push(`${tag}: the panel shows beside the other ways`);
+                await measure(`${tag}, invite panel`);
+                // The shortest phone at the floor (320 × 569, 16:9), in the longest language: the sheet's top stays on the
+                // screen and the ways scroll under it, never pushed off the top.
+                await page.setViewportSize({ width: WIDTH, height: 569 });
+                for (const lang of ['en', 'ta']) {
+                    await open(`scheme=${scheme}&lang=${lang}&who=outside&vouch=1`);
+                    await page.locator('[data-testid="share-open-button"]').click();
+                    await page.locator('[data-testid="invite-and-share-button"]').click();
+                    await page.locator('[role="radio"]').first().waitFor();
+                    await page.waitForTimeout(400); // the sheet's fade-in, so the shot shows it as a member sees it
+                    const top =await page.evaluate(() => document.querySelector('[data-testid="share-sheet"]').getBoundingClientRect().top);
+                    if (top < 0) problems.push(`${tag} (${lang}, 569 tall): the sheet's top is ${Math.round(top)}px above the screen`);
+                    await measure(`${tag}, invite panel with the vouch, ${lang}, 569 tall`, { minButton: 43.5 });
+                }
+                await page.setViewportSize({ width: WIDTH, height: 640 });
+            }
         }
     }
     for (const e of errors) problems.push(`page error: ${e}`);

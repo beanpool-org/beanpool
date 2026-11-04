@@ -1,5 +1,5 @@
 {
-  "about": "Lights-out (#2822): every POST, PUT, PATCH or DELETE Settings sends as an owner opens the Network tab (where the switch is) and the Backups tab. Recorded from the real tabs by components/modules/hall-reads.test.tsx, which must match it exactly; apps/server/src/test-lights-out.ts section 5 sends each through the node's real guard while the switch is on, and turning it off must still offer Stand down. So each one must be a read the node names (services/lights-out.ts NOT_HALL_WRITES), or a GET.",
+  "about": "Lights-out (#2822): every POST, PUT, PATCH or DELETE Settings sends as an owner opens the Network tab (where the switch is) and the Backups tab. Recorded from the real tabs by components/modules/hall-reads.test.tsx, which must match it exactly; apps/server/src/test-lights-out.ts section 5 sends each through the node's real guard while the switch is on, and turning it off must still offer Stand down. So each one must be a read the node names in services/lights-out.ts NOT_HALL_WRITES; a new read is named there, or sent as a GET instead.",
   "tabs": {
     "network": [
       "POST /api/local/admin/backup-status",

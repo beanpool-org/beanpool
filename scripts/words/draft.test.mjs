@@ -23,7 +23,7 @@ import {
 } from './draft.mjs';
 import { guideBodyHash, loadGuide } from '../../packages/beanpool-guide/src/guide.mjs';
 import { guideSourceHash } from '../../packages/beanpool-guide/src/titles.mjs';
-import { ALL_OR_NONE_GROUPS, cardSentences, groupSentences } from './all-or-none.mjs';
+import { ALL_OR_NONE_GROUPS, cardSentences, groupSentences, WELCOME_DOORS_FILE, WELCOME_SCREEN_FILE } from './all-or-none.mjs';
 import { ROOT, baselineBase, catalogLangs, extractRepo, loadCoreChecks } from './words.mjs';
 
 function makeTempDir(prefix = 'words-draft-test-') {
@@ -1062,7 +1062,12 @@ test('the welcome group is read by the test and by the tool from one source (all
 
     // The test reads them through this module, not through a list of its own.
     const testSource = fs.readFileSync(path.join(ROOT, group.test), 'utf8');
-    assert.match(testSource, /import \{ cardSentences \} from '\.\.\/\.\.\/\.\.\/\.\.\/scripts\/words\/all-or-none\.mjs';/);
+    assert.match(testSource, /import \{ cardSentences, WELCOME_DOORS_FILE, WELCOME_SCREEN_FILE \} from '\.\.\/\.\.\/\.\.\/\.\.\/scripts\/words\/all-or-none\.mjs';/);
     assert.match(testSource, /const keys = cardSentences\(source\);/);
     assert.ok(!/\bonCards\b/.test(testSource), 'the test keeps no copy of the dialog filter');
+    // ...and the two files it reads are the group's, named once in all-or-none.mjs, not written out again in the test.
+    assert.deepEqual([...group.sources], [WELCOME_SCREEN_FILE, WELCOME_DOORS_FILE]);
+    assert.match(testSource, /readFileSync\(path\.resolve\(REPO_ROOT, WELCOME_SCREEN_FILE\), 'utf8'\)/);
+    assert.match(testSource, /readFileSync\(path\.resolve\(REPO_ROOT, WELCOME_DOORS_FILE\), 'utf8'\)/);
+    assert.ok(!/['"`](?:\.\.\/)*(?:apps\/native\/)?(?:app\/welcome|components\/WelcomeDoors)\.tsx['"`]/.test(testSource), 'the test keeps no path list of its own');
 });

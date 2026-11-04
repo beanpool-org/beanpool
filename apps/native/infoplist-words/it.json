@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "BeanPool lo usa per raggiungere il portatile della tua comunità sul Wi-Fi della sala quando internet non funziona."
+  }
+}

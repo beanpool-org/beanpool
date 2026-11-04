@@ -87,7 +87,7 @@ import { currentLanguage, pseudoLocalise, setLanguage, type UiLang } from '@bean
 import { LanguageProvider, useWords, whenLanguagePicked } from '../../components/LanguageProvider';
 import { LanguageRow, LanguageSwitch } from '../../components/LanguagePicker';
 import { LANGUAGE_NAMES, LANGUAGE_PREFERENCE_KEY, languageHeader } from '../language-choice';
-import { cardSentences } from '../../../../scripts/words/all-or-none.mjs';
+import { cardSentences, WELCOME_DOORS_FILE, WELCOME_SCREEN_FILE } from '../../../../scripts/words/all-or-none.mjs';
 import YourAreaScreen from '../../app/your-area';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
@@ -327,8 +327,10 @@ describe('Your area at 320 dp with 1.3× text, in xx, ru, fr, ar (left to right 
 describe('the welcome and join screens\' words at 320 dp with 1.3× text', () => {
     // The home screen's two doors and the lines under them are components/WelcomeDoors.tsx's (DESIGN-global-entry §B.3):
     // its words and lines are the screen's, so they are read with it.
-    const doorsSource = fs.readFileSync(path.resolve(__dirname, '../../components/WelcomeDoors.tsx'), 'utf8');
-    const source = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8') + '\n' + doorsSource;
+    // The two files' paths come from scripts/words/all-or-none.mjs, the one place that lists them (the drafting tool reads the same).
+    const REPO_ROOT = path.resolve(__dirname, '../../../..');
+    const doorsSource = fs.readFileSync(path.resolve(REPO_ROOT, WELCOME_DOORS_FILE), 'utf8');
+    const source = fs.readFileSync(path.resolve(REPO_ROOT, WELCOME_SCREEN_FILE), 'utf8') + '\n' + doorsSource;
     // The home screen's two big buttons: one line in English, a second line for a longer language, shrinking to 0.6 at most.
     const ONE_LINE_BUTTONS = ['🎟️ Join with an invite', '🌍 Explore BeanPool worldwide'];
     // homeContent padding 24 a side, memberBtn paddingHorizontal 12 a side: the label's line.
@@ -359,12 +361,16 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
     const STEP_WIDTH = (FLOOR - 2 * 24 - 2 * 8 - 3 * (12 + 2 * 2)) / 4;
     const ALL_LANGS: UiLang[] = ['xx', ...fs.readdirSync(NATIVE_WORDS).filter((f) => /^[A-Za-z-]+\.json$/.test(f)).map((f) => f.slice(0, -5) as UiLang)];
     // The sentences on the phone's cards: what the phone's own dialogs say is taken out (it draws and wraps those itself).
-    // scripts/words/all-or-none.mjs reads them, and `words:draft` reads the same ones, so a drafting brief never asks for
-    // these in one language alone (this test needs them in every catalog or in none).
+    // scripts/words/all-or-none.mjs reads them, and `words:draft` reads the same ones, so the drafting tool and this test
+    // measure one list of sentences.
     const keys = cardSentences(source);
-    /** The sentences some language's catalog has: the ones the drafting pass has reached. */
-    const draftedKeys = new Set(ALL_LANGS.filter((l) => l !== 'xx').flatMap((l) => Object.keys(catalog(NATIVE_WORDS, l))));
-    const drafted = (key: string) => draftedKeys.has(key);
+    /**
+     * What a member reads in `lang` for `key`: the catalog's translation where it has one, the English (the key) where it has
+     * not: the app's own fallback (design §5: a missing translation is a fallback, never a break). Decided per language, never
+     * from what OTHER languages have: the drafting passes fill the languages in groups, one pass after another, so "some
+     * language has the sentence" says nothing about this one.
+     */
+    const readIn = (lang: UiLang, key: string) => (lang === 'xx' ? inLang(lang, key) : ((catalog(NATIVE_WORDS, lang)[key] as string | undefined) ?? key));
 
     it('the screens\' sentences are through t(), and the two big buttons and Restore are the only lines with a limit (two lines)', () => {
         for (const key of ONE_LINE_BUTTONS) expect(keys).toContain(key);
@@ -407,11 +413,11 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
                 expect(widthOf(widestPiece(label), 18) * 0.6, `a word of "${label}" in ${lang}`).toBeLessThanOrEqual(BUTTON_LINE);
             }
             for (const key of keys) {
-                // A sentence the drafting pass has reached is in every language. One it hasn't reached yet (a sweep's new
-                // sentence: S3j's restore, door and backup steps) shows its English until it has (design §5: a missing
-                // translation is a fallback, never a break), so its English is what is measured.
-                if (lang !== 'xx' && drafted(key)) expect(typeof catalog(NATIVE_WORDS, lang)[key], `"${key}" has a ${lang} translation`).toBe('string');
-                const piece = widestPiece(lang === 'xx' || drafted(key) ? inLang(lang, key) : key);
+                // A sentence this language has is a real string, and that is what is measured. One it has not reached yet
+                // (a sweep's new sentence: S3j's restore, door and backup steps) shows its English until it has, so its
+                // English is what is measured. Which languages have it is each catalog's own, whatever the passes have filled.
+                if (lang !== 'xx' && key in catalog(NATIVE_WORDS, lang)) expect(typeof catalog(NATIVE_WORDS, lang)[key], `"${key}" has a ${lang} translation`).toBe('string');
+                const piece = widestPiece(readIn(lang, key));
                 expect(widthOf(piece, FONT_OF[key] ?? 16), `"${piece}" (${lang}) breaks inside a word on a 320 dp card`).toBeLessThanOrEqual(LINE_OF[key] ?? CARD_LINE);
             }
         }, 60_000);

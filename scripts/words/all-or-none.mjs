@@ -44,6 +44,13 @@ export function cardSentences(src) {
 }
 
 /**
+ * The welcome screens' two source files, repo-relative. The group below and language-switch-render.test.ts both read these,
+ * so the file list is written once: a file added to the screens is added here, and the drafting tool and the test follow.
+ */
+export const WELCOME_SCREEN_FILE = 'apps/native/app/welcome.tsx';
+export const WELCOME_DOORS_FILE = 'apps/native/components/WelcomeDoors.tsx';
+
+/**
  * The groups. `folder`: the words folder whose catalogs hold the group (the rule is per folder: apps/native/words/<lang>.json).
  * `sources`: the files whose sentences make the group, joined with a line break in this order. `sentences`: reads them.
  * `test`: the test that holds the rule, which a brief names so a drafter knows why.
@@ -54,7 +61,7 @@ export const ALL_OR_NONE_GROUPS = Object.freeze([
         // is in every language" (language-switch-render.test.ts, S3j). A sentence it hasn't reached shows its English.
         name: 'welcome screens',
         folder: 'apps/native/words',
-        sources: Object.freeze(['apps/native/app/welcome.tsx', 'apps/native/components/WelcomeDoors.tsx']),
+        sources: Object.freeze([WELCOME_SCREEN_FILE, WELCOME_DOORS_FILE]),
         sentences: cardSentences,
         test: 'apps/native/utils/__tests__/language-switch-render.test.ts',
     }),

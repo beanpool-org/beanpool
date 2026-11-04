@@ -6,20 +6,26 @@
  * (engine/push-notices.ts) and read by their app with GET /api/notices/push/:id. So a suite's checks of who was told what
  * read the details, and every caught message is also held to the fixed words:
  *
- *   - `pushIsGeneric(m)`: its title and text are exactly its kind's, and its data is the notice and nothing else (beside
- *     the one hint old apps act on for an account recovery);
+ *   - `pushIsGeneric(m, words?)`: its title and text are exactly its kind's, in the language the push was sent in (`words`:
+ *     `wordsIn(lang)` for a suite whose phone named a language; English when left out), and its data is the notice and
+ *     nothing else (beside the one hint old apps act on for an account recovery);
  *   - `toldPush(db, m)`: the message with `title`, `body` and `data` read from its notice's details, `kind` its kind, and
  *     `sent` the message exactly as it left.
  */
-import { PUSH_NOTICE_TITLE, isPushNoticeKind, pushNoticeWords } from '@beanpool/core';
+import { PUSH_NOTICE_TITLE, isPushNoticeKind, pushNoticeWords, type Words } from '@beanpool/core';
 
 /** The keys a push's data may have: the notice's, and `kind` for the old apps' recovery tap only. */
 const NOTICE_KEYS = new Set(['bp', 'k', 'i', 't', 'c', 's']);
 
-export function pushIsGeneric(m: any): boolean {
+/**
+ * `words` is the language the push was sent in: the server writes a lock-screen sentence in the phone's language, so a
+ * phone that named Spanish reads Spanish wherever the catalog has it. Still an exact match of the kind's own sentence
+ * (never "any string"); left out, the sentence is the English, as it was.
+ */
+export function pushIsGeneric(m: any, words?: Pick<Words, 't'>): boolean {
     const d = m?.data;
     if (!d || typeof d !== 'object' || d.bp !== 1 || !isPushNoticeKind(d.k)) return false;
-    if (m.title !== PUSH_NOTICE_TITLE || m.body !== pushNoticeWords(d.k).body) return false;
+    if (m.title !== PUSH_NOTICE_TITLE || m.body !== pushNoticeWords(d.k, words).body) return false;
     return Object.keys(d).every(key => NOTICE_KEYS.has(key)
         || (key === 'kind' && d.k === 'account.recovery-started' && d.kind === 'recovery_started'));
 }

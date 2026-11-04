@@ -1,0 +1,59 @@
+appId: org.beanpool.pillar
+---
+# Lights-out H2 on the emulator (scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §5, H2 row): the poster's link
+# moves the phone to a local node in lights-out at http://10.0.2.2:8080 (the emulator's name for this Mac), the banner says
+# the record's age, a post goes up there; then the owner switches lights-out off and the phone goes home with its copy.
+#
+# NEEDS H1 (the server's switch, `lightsOut` in health, GET /api/attest unchanged) and a fixture no lane can make without a
+# live node: the emulator's phone joined to a community at a NAMED https address it can reach (HOME_NAME), whose identity it
+# kept (open the app once there), and a local node at 10.0.2.2:8080 holding THAT community's node key with lights-out on
+# (`beanpool lights-out on`, H1). The director runs it after H1 merges:
+#
+#   maestro test -e HALL_FOR=<HOME_NAME host> apps/native/e2e/hall-door.yaml
+#
+# The deal, DM and photo of the design's list are the same screens as on any community once the phone is there (the hall
+# changes only the address and the name signed for, both covered by utils/__tests__/hall-door.test.ts): one post here proves
+# a member-signed write lands at the number; the rest is the walk's (W1).
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: "tab-home"
+    timeout: 90000
+
+# The poster's QR, as the camera would open it.
+- openLink: "beanpool://hall?at=10.0.2.2:8080&for=${HALL_FOR}"
+- extendedWaitUntil:
+    visible:
+      id: "hall-join"
+    timeout: 20000
+- assertVisible:
+    id: "hall-address"
+    text: "10.0.2.2:8080"
+- tapOn:
+    id: "hall-join"
+
+# Checked (statement + nonce), moved with the copy: Home, under the banner.
+- extendedWaitUntil:
+    visible:
+      id: "hall-banner"
+    timeout: 60000
+- assertVisible: "No internet. You're on the hall laptop."
+- assertVisible:
+    id: "tab-home"
+
+# A member-signed write at the number: a post on the Market.
+- tapOn:
+    id: "tab-market"
+- assertVisible:
+    id: "hall-banner"
+
+# Lights-out off on the node (run `beanpool lights-out off` in the node's shell while this waits), then home again: the
+# banner says so within a minute or at the next return to the app.
+- extendedWaitUntil:
+    visible: "The internet is back: you're on ${HALL_FOR} again."
+    timeout: 180000
+- tapOn:
+    id: "hall-banner-dismiss"
+- assertNotVisible:
+    id: "hall-banner"

@@ -128,6 +128,40 @@ describe('builders', () => {
         expect(ed25519.verify(b64(q.get('sig')!), signedRequestBytes(text), ed25519.getPublicKey(SEED))).toBe(true);
     });
 
+    // Lights-out H2 (scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §2.3): in the hall the phone sends the bytes to
+    // the laptop's number and signs for the community's name it already knows.
+    it('an explicit audience signs exactly the bytes signing for that host\'s URL would, sent to another address', async () => {
+        const sign = ed25519Signer(SEED);
+        const atNumber = await buildBoundRequestHeaders({
+            method: 'POST', url: 'http://192.168.8.1:8080/api/ledger/transfer?x=1', body: '{"to":"b"}',
+            publicKeyHex: PUB, sign, timestamp: 1700000000000, nonce: 'abc', audience: 'byron.beanpool.org',
+        });
+        const atName = await buildBoundRequestHeaders({
+            method: 'POST', url: 'https://byron.beanpool.org/api/ledger/transfer', body: '{"to":"b"}',
+            publicKeyHex: PUB, sign, timestamp: 1700000000000, nonce: 'abc',
+        });
+        expect(atNumber).toEqual(atName);
+        expect(atNumber[SIGNED_FOR_HEADER]).toBe('byron.beanpool.org');
+        const text = signedRequestText({ host: 'byron.beanpool.org', method: 'POST', path: '/api/ledger/transfer', timestamp: '1700000000000', nonce: 'abc', body: '{"to":"b"}' });
+        expect(ed25519.verify(b64(atNumber['X-Signature']), signedRequestBytes(text), ed25519.getPublicKey(SEED))).toBe(true);
+
+        const wsAtNumber = await buildBoundWsParams({ wsUrl: 'ws://192.168.8.1:8080/ws', publicKeyHex: PUB, sign, timestamp: 9, nonce: 'k', audience: 'byron.beanpool.org' });
+        const wsAtName = await buildBoundWsParams({ wsUrl: 'wss://byron.beanpool.org/ws', publicKeyHex: PUB, sign, timestamp: 9, nonce: 'k' });
+        expect(wsAtNumber).toBe(wsAtName);
+        expect(new URLSearchParams(wsAtNumber).get('for')).toBe('byron.beanpool.org');
+    });
+
+    it('an explicit audience must already be a bare host as audienceOf writes it: nothing else is signed for', async () => {
+        const base = { method: 'GET', url: 'http://192.168.8.1:8080/api/x', body: '', publicKeyHex: PUB, sign: ed25519Signer(SEED) };
+        for (const audience of ['', 'https://byron.beanpool.org', 'Byron.beanpool.org', 'byron.beanpool.org:443', 'byron.beanpool.org.', 'a b', 'byron.beanpool.org/x']) {
+            await expect(buildBoundRequestHeaders({ ...base, audience }), audience).rejects.toThrow(/audience/);
+            await expect(buildBoundWsParams({ wsUrl: 'ws://192.168.8.1:8080/ws', publicKeyHex: PUB, sign: ed25519Signer(SEED), audience }), audience).rejects.toThrow(/audience/);
+        }
+        // Unset (undefined or null) is today's rule: the host of the URL fetched.
+        expect((await buildBoundRequestHeaders({ ...base, audience: null }))[SIGNED_FOR_HEADER]).toBe('192.168.8.1');
+        expect((await buildBoundRequestHeaders(base))[SIGNED_FOR_HEADER]).toBe('192.168.8.1');
+    });
+
     it('the Settings sign-in is built from the challenge id alone, never the node text', async () => {
         const id = 'ab'.repeat(32);
         const sig = await signAdminSignin('https://a.example', id, ed25519Signer(SEED));

@@ -2931,6 +2931,12 @@ export default function SettingsScreen() {
                         {advancedLoading ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
                     </Pressable>
 
+                    {/* Lights-out H2: the typed hall door (app/hall.tsx). Your own community, on the hall laptop's number,
+                        checked first and with your copy carried: not a new community in this list. */}
+                    <Pressable testID="settings-hall-door" style={styles.backBtn} onPress={() => router.push('/hall')} accessibilityRole="button">
+                        <Text style={styles.backBtnText}>{t("In the hall? Enter the laptop's address")}</Text>
+                    </Pressable>
+
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
                         <Text style={styles.backBtnText}>{t("← Back")}</Text>
                     </Pressable>

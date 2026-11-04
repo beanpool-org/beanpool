@@ -1189,7 +1189,10 @@ async function main() {
     await signed('POST', `/api/commons/decisions/${calVote}/reply`, cal, { reply: 'And one thing more about what happened that day.' });
     await settle(300);
     assert(sentTo('decision.jury-reply', mark).size === 0, 'a rewrite of the answer pushes nobody again');
-    useCatalogsForTests('fr', null);
+    // The French juror stays on the list below, and the reminders and replacements after this are checked against the
+    // English sentence. So French goes back to a FIXTURE with none of these sentences, never to the real file: the real
+    // French is full now (the machine-drafting passes), and "French is untranslated" must not depend on it.
+    useCatalogsForTests('fr', { core: {}, server: {} });
     // 49 hours on: one reminder, to each juror with no answer, once.
     const noAnswer = seatedOf(calVote).filter(k => k !== calJurors[0].pk && k !== calJurors[1].pk && !calJurors.slice(2, 6).some(j => j.pk === k));
     age(calVote, 49 * HOUR);

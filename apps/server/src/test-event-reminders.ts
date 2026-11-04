@@ -34,6 +34,7 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
+import type { Lang } from '@beanpool/core';
 import { initStateEngine } from './state-engine.js';
 import { useCatalogsForTests, wordsIn } from './member-words.js';
 import { setNodeRole } from './engine/sync.js';
@@ -465,9 +466,12 @@ async function main(): Promise<void> {
 
     // ── 12. In the language on the phone's push-token row ───────────────────────────────────
     console.log('\n--- 12. The reminder in the phone\'s language ---');
-    // The server's catalog as the translation pass will write it (the key is the English); the suite brings its own, since
-    // the catalogs are drafted after merge. Spanish has every reminder sentence; French has none.
+    // The server's catalog as the translation pass will write it (the key is the English); the suite brings its own, so no
+    // real language's file decides this check, whatever the drafting passes have filled. Spanish has every reminder
+    // sentence, and the lock-screen sentence too (core's, as a FIXTURE: `core` is replaced as well, or the real Spanish
+    // file would write it); French has none.
     useCatalogsForTests('es', {
+        core: { "An event you're going to starts soon.": 'Un evento al que vas empieza pronto. (fixture)' },
         server: {
             'Starts in 1 week': 'Empieza en 1 semana',
             'Starts in 1 day': 'Empieza en 1 día',
@@ -484,7 +488,10 @@ async function main(): Promise<void> {
     const frPhone = makeMember('FrPhone');
     const noLangPhone = makeMember('NoLangPhone');
     const twoPhones = makeMember('TwoPhones');
+    // The language each phone named, by token, so a push is held to the words of ITS phone's language.
+    const langOfToken = new Map<string, Lang | null>();
     const setToken = (member: string, token: string, lang: string | null, registeredAt: number | null) => {
+        langOfToken.set(token, lang as Lang | null);
         const id = putPushTokenRow(member, token, 'ios');
         db.prepare('UPDATE push_tokens SET lang = ?, registered_at = ? WHERE public_key = ? AND token_id = ?').run(lang, registeredAt, member, id);
     };
@@ -532,8 +539,12 @@ async function main(): Promise<void> {
         assert(told('ExponentPushToken[two-new]')?.body === `Empieza en 1 día · ${clock}`
             && told('ExponentPushToken[two-old]')?.body === `Empieza en 1 día · ${clock}`,
             'a member with two phones has one notice, in the newest phone\'s language');
-        assert(sent12.every(m => m.kind === 'event.reminder' && pushIsGeneric(m.sent)),
-            'every lock screen is still only its kind\'s fixed words, with no event name');
+        assert(sent12.every(m => m.kind === 'event.reminder' && pushIsGeneric(m.sent, wordsIn(langOfToken.get(m.to) ?? null))),
+            'every lock screen is still only its kind\'s fixed words, in its phone\'s language, with no event name');
+        assert(told('ExponentPushToken[es]')?.sent?.body === 'Un evento al que vas empieza pronto. (fixture)'
+            && told('ExponentPushToken[fr]')?.sent?.body === "An event you're going to starts soon."
+            && told('ExponentPushToken[en]')?.sent?.body === "An event you're going to starts soon.",
+            '...Spanish where the catalog has the lock-screen sentence, the English where it has not (French here, and English)');
         const marked = (db.prepare('SELECT COUNT(*) AS n FROM event_reminders_sent WHERE post_id = ?').get(fiesta.id) as { n: number }).n;
         assert(sentMarks(fiesta.id).every(offset => offset === 1440) && marked === 5,
             '...and each member\'s moment is marked once, however many languages the batch split into');

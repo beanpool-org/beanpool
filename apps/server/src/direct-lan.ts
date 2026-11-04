@@ -20,8 +20,8 @@
  *   - its Host names this machine or the local network: a private or link-local IP literal, a `.local` name or localhost
  *     (host-kinds.ts isLocalNetworkHost). Never a beanpool.org name or any public one, which only the internet's way in
  *     sends, and never a router's `.lan` name either (a name is not a number; the hall's poster gives the number).
- * Fail closed: a source Node can't read, a Host that is missing, repeated or can't be parsed, is not the LAN. Anything else
- * is "not here": each caller answers as it does for a request that isn't from the room.
+ * Fail closed: a source Node can't read, a Host that is missing, not a single value or can't be parsed, is not the LAN.
+ * Anything else is "not here": each caller answers as it does for a request that isn't from the room.
  */
 import fs from 'node:fs';
 import net from 'node:net';

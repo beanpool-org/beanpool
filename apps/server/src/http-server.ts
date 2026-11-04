@@ -90,8 +90,8 @@ export async function startHttpServer(port: number): Promise<number> {
     });
 
     // The hall's poster (routes/lights-out.ts, design §2.6): to the hall Wi-Fi only, straight from it (direct-lan.ts, the
-    // rule /android uses too): a tunnel's or a proxy's request, and the Internet's, get a plain 404 with no hint the page exists. Before the
-    // CF_RECORD_NAME redirect, so a fleet node's hall page is never sent to its public name.
+    // rule /android uses too): a tunnel's or a proxy's request, and the Internet's, get a plain 404 with no hint the page
+    // exists. Before the CF_RECORD_NAME redirect, so a fleet node's hall page is never sent to its public name.
     router.get(HALL_PATH, async (ctx) => {
         if (!isDirectLanContext(ctx)) {
             ctx.status = 404;

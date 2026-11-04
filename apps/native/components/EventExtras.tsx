@@ -22,7 +22,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { useStyles, type ThemeContextType } from '../app/ThemeContext';
+import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
+import { useCardShell } from './market-card-shell';
 
 let _intentLauncher: typeof import('expo-intent-launcher') | null | undefined;
 async function getIntentLauncher(): Promise<typeof import('expo-intent-launcher') | null> {
@@ -41,7 +42,6 @@ import {
     googleCalendarUrl, icsFileName, normaliseReminderOffsets, parseReminderOffsets, type ShareableEvent,
 } from '../utils/event-extras';
 import { t, tn } from '@beanpool/core';
-import { EVENT_ACCENT } from './EventCard';
 import { Sentence } from './Sentence';
 import { ShareButton } from './SharePost';
 import { reminderBeforeWords } from './settings/settings-lines';
@@ -96,9 +96,17 @@ async function anchorOrThrow(): Promise<string> {
     return url;
 }
 
+/**
+ * Two buttons of the event page's quiet row (DESIGN-detail-pages-fable.md §2.4, row 8): 🔗 Share and 📅 Add to calendar,
+ * outlined in the neutral border with the body's words. Colour marks the commit (the answer buttons above); these are not one.
+ * The page owns the row (EventDetail's quiet row, the chat first): these are its items, and wrap in it by whole buttons.
+ */
 export function EventShareAndCalendar({ post }: { post: any }) {
     const insets = useSafeAreaInsets();
     const styles = useStyles(makeStyles);
+    const shell = useCardShell();
+    const btn = [shell.pageButton, styles.btn];
+    const btnText = [shell.pageButtonText, styles.btnText];
     const event = shareableEvent(post);
     // Labelled with the place's zone ("Sat 17 Oct, 20:50 Lagos time"), so it is right wherever it is pasted (§4).
     const when = eventShareWhen(post);
@@ -159,65 +167,66 @@ export function EventShareAndCalendar({ post }: { post: any }) {
     };
 
     return (
-        <View>
-            <View style={styles.row}>
-                {/* ONE Share (DESIGN-detail-pages-fable.md §2.5): the members' link, outside the community, Invite and share and
-                    the ask are the sheet's ways, each with its sentence (components/SharePost.tsx ShareButton). */}
-                <ShareButton post={post} onShareMembers={share} accessibilityLabel={t('Share this event')} style={styles.rowItem}
-                    buttonStyle={styles.btn} textStyle={styles.btnText} oneLine />
-                <Pressable onPress={() => setChoiceOpen(true)} style={[styles.rowItem, styles.btn]} accessibilityRole="button" accessibilityLabel={t('Add this event to your calendar')}>
-                    <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📅 Add to calendar')}</Text>
+        <>
+            {/* ONE Share (DESIGN-detail-pages-fable.md §2.5): the members' link, outside the community, Invite and share and
+                the ask are the sheet's ways, each with its sentence (components/SharePost.tsx ShareButton). */}
+            <ShareButton post={post} onShareMembers={share} accessibilityLabel={t('Share this event')} style={styles.rowItem}
+                buttonStyle={btn} textStyle={btnText} oneLine />
+            {/* The calendar's choice sheet rides with its button: a Modal takes no room in the row. */}
+            <View style={styles.rowItem}>
+                <Pressable onPress={() => setChoiceOpen(true)} style={btn} accessibilityRole="button" accessibilityLabel={t('Add this event to your calendar')}>
+                    <Text style={btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📅 Add to calendar')}</Text>
                 </Pressable>
-            </View>
 
-            <Modal
-                visible={choiceOpen}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setChoiceOpen(false)}
-                statusBarTranslucent
-            >
-                <View style={styles.sheetBackdrop}>
-                    <Pressable
-                        style={StyleSheet.absoluteFill}
-                        onPress={() => setChoiceOpen(false)}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('Close calendar choices')}
-                    />
-                    <View style={[styles.sheetCard, { paddingBottom: 16 + insets.bottom }]}>
-                        <Text style={styles.sheetTitle} accessibilityRole="header">{t('Add to calendar')}</Text>
+                <Modal
+                    visible={choiceOpen}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setChoiceOpen(false)}
+                    statusBarTranslucent
+                >
+                    <View style={styles.sheetBackdrop}>
                         <Pressable
-                            onPress={addCalendarFile}
-                            style={({ pressed }) => [styles.sheetItem, pressed && styles.sheetItemPressed]}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Calendar file (.ics) for any calendar app')}
-                            testID="event-add-calendar-file"
-                        >
-                            <Text style={styles.sheetItemText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Calendar file (.ics)')}</Text>
-                            <Text style={styles.sheetItemSubtext} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('For any calendar app')}</Text>
-                        </Pressable>
-                        <Pressable
-                            onPress={addGoogleCalendar}
-                            style={({ pressed }) => [styles.sheetItem, pressed && styles.sheetItemPressed]}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Google Calendar')}
-                            testID="event-add-google-calendar"
-                        >
-                            <Text style={styles.sheetItemText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Google Calendar')}</Text>
-                        </Pressable>
-                        <Pressable
+                            style={StyleSheet.absoluteFill}
                             onPress={() => setChoiceOpen(false)}
-                            style={({ pressed }) => [styles.sheetCancelBtn, pressed && styles.sheetItemPressed]}
                             accessibilityRole="button"
-                            accessibilityLabel={t('Cancel')}
-                            testID="event-add-calendar-cancel"
-                        >
-                            <Text style={styles.sheetCancelText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Cancel')}</Text>
-                        </Pressable>
+                            accessibilityLabel={t('Close calendar choices')}
+                        />
+                        <View style={[styles.sheetCard, { paddingBottom: 16 + insets.bottom }]}>
+                            <Text style={styles.sheetTitle} accessibilityRole="header">{t('Add to calendar')}</Text>
+                            <Pressable
+                                onPress={addCalendarFile}
+                                style={({ pressed }) => [styles.sheetItem, pressed && styles.sheetItemPressed]}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Calendar file (.ics) for any calendar app')}
+                                testID="event-add-calendar-file"
+                            >
+                                <Text style={styles.sheetItemText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Calendar file (.ics)')}</Text>
+                                <Text style={styles.sheetItemSubtext} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('For any calendar app')}</Text>
+                            </Pressable>
+                            <Pressable
+                                onPress={addGoogleCalendar}
+                                style={({ pressed }) => [styles.sheetItem, pressed && styles.sheetItemPressed]}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Google Calendar')}
+                                testID="event-add-google-calendar"
+                            >
+                                <Text style={styles.sheetItemText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Google Calendar')}</Text>
+                            </Pressable>
+                            <Pressable
+                                onPress={() => setChoiceOpen(false)}
+                                style={({ pressed }) => [styles.sheetCancelBtn, pressed && styles.sheetItemPressed]}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Cancel')}
+                                testID="event-add-calendar-cancel"
+                            >
+                                <Text style={styles.sheetCancelText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Cancel')}</Text>
+                            </Pressable>
+                        </View>
                     </View>
-                </View>
-            </Modal>
-        </View>
+                </Modal>
+            </View>
+        </>
     );
 }
 
@@ -240,6 +249,9 @@ interface ReminderProps {
  */
 export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) {
     const styles = useStyles(makeStyles);
+    const { colors } = useTheme();
+    // A box on the page (the style box's page box): the line is its own label.
+    const shell = useCardShell();
     const [supported, setSupported] = useState(true);
     const [defaults, setDefaults] = useState<number[]>(DEFAULT_REMINDER_OFFSETS);
     const [offsets, setOffsets] = useState<number[] | null>(null);
@@ -296,7 +308,7 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
     };
 
     return (
-        <View style={styles.reminderBox}>
+        <View style={[shell.pageBox, styles.reminderBox]} testID="event-reminder-box">
             <View style={styles.reminderHeadRow}>
                 <Text style={styles.reminderLine} numberOfLines={3}>
                     <Sentence text={t('⏰ Remind me: {choice}')} parts={{ choice: <Text style={styles.reminderChoice}>{reminderChoiceWords(offsets, defaults)}</Text> }} />
@@ -341,7 +353,7 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
                         accessibilityLabel={saving ? t('Saving reminder for this event...') : t('Save for this event')}
                         accessibilityState={{ busy: saving, disabled: saving }}
                     >
-                        {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Save for this event')}</Text>}
+                        {saving ? <ActivityIndicator size="small" color={colors.event.on} /> : <Text style={styles.saveBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Save for this event')}</Text>}
                     </Pressable>
                     {offsets !== null && (
                         <Pressable
@@ -362,39 +374,35 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
 
 const makeStyles = ({ colors }: ThemeContextType) =>
     StyleSheet.create({
-        // From the top: a note under Share (an ask taken) never stretches Add to calendar beside it.
-        row: { flexDirection: 'row', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'flex-start' },
+        // An item of the page's quiet row (EventDetail), which lines its items up from the top: a note under Share (an ask taken) never
+        // stretches Add to calendar beside it.
         rowItem: { flexGrow: 1, flexBasis: 130 },
-        btn: {
-            minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT,
-            alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, backgroundColor: colors.surface.card,
-        },
-        btnText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
-        reminderBox: {
-            borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, backgroundColor: colors.surface.card,
-            paddingHorizontal: 12, paddingVertical: 8, marginBottom: 14,
-        },
+        // The quiet outline (§2.7): the strong border, the card ground, the body's words. The page button's height and corners.
+        btn: { borderWidth: 1.5, borderColor: colors.border.strong, paddingHorizontal: 8, backgroundColor: colors.surface.card },
+        btnText: { color: colors.text.body },
+        // The page box pads 12 all round; the line's own button (48 tall) holds the head row's height.
+        reminderBox: { paddingVertical: 4, marginBottom: 16 },
         reminderHeadRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
         reminderLine: { flex: 1, flexBasis: 150, fontSize: 14, color: colors.text.body },
         reminderChoice: { fontWeight: '800', color: colors.text.heading },
         reminderHint: { fontSize: 13, color: colors.text.secondary, marginTop: 8 },
         smallBtn: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 8, flexShrink: 0 },
-        smallBtnText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
+        smallBtnText: { fontSize: 14, fontWeight: '700', color: colors.event.ink },
         tickRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48 },
         tickBox: {
-            width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: EVENT_ACCENT,
+            width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.event.ink,
             alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         },
-        tickBoxOn: { backgroundColor: EVENT_ACCENT },
-        tickMark: { color: '#fff', fontSize: 14, fontWeight: '900', lineHeight: 16 },
+        tickBoxOn: { backgroundColor: colors.event.fill, borderColor: colors.event.fill },
+        tickMark: { color: colors.event.on, fontSize: 14, fontWeight: '900', lineHeight: 16 },
         tickLabel: { flex: 1, fontSize: 15, color: colors.text.body },
         saveBtn: {
-            minHeight: 48, borderRadius: 12, backgroundColor: EVENT_ACCENT, alignItems: 'center',
+            minHeight: 48, borderRadius: 12, backgroundColor: colors.event.fill, alignItems: 'center',
             justifyContent: 'center', marginTop: 8, paddingHorizontal: 12,
         },
-        saveBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
+        saveBtnText: { fontSize: 15, fontWeight: '800', color: colors.event.on },
         resetBtn: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-        resetBtnText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
+        resetBtnText: { fontSize: 15, fontWeight: '700', color: colors.event.ink },
         sheetBackdrop: {
             flex: 1,
             backgroundColor: 'rgba(0,0,0,0.45)',
@@ -449,6 +457,6 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         sheetCancelText: {
             fontSize: 15,
             fontWeight: '700',
-            color: EVENT_ACCENT,
+            color: colors.event.ink,
         },
     });

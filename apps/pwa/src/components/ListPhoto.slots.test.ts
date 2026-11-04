@@ -33,12 +33,17 @@ function slotOf(text: string, at: number): string | null {
     return before.slice(-8000).slice(last.index);
 }
 
-/** `className={NAME}` for one of the style box's class strings, written out as that string; anything else as it is. */
+/**
+ * `className={NAME}` for one of the style box's class strings, written out as that string; and a template that names
+ * one (`className={`block ${GRID_PHOTO}`}`, the event's grid tile) with each `${NAME}` written out the same; anything
+ * else as it is.
+ */
 function resolved(slot: string): string {
-    return slot.replace(/className=\{([A-Z_]+)\}/g, (whole, name: string) => {
-        const value = (box as Record<string, unknown>)[name];
-        return typeof value === 'string' ? `className="${value}"` : whole;
-    });
+    const value = (name: string) => (box as Record<string, unknown>)[name];
+    return slot
+        .replace(/className=\{([A-Z_]+)\}/g, (whole, name: string) => (typeof value(name) === 'string' ? `className="${value(name)}"` : whole))
+        .replace(/className=\{`([^`]*)`\}/g, (whole, body: string) =>
+            `className={\`${body.replace(/\$\{([A-Z_]+)\}/g, (w, name: string) => (typeof value(name) === 'string' ? String(value(name)) : w))}\`}`);
 }
 
 const uses = sources(SRC).flatMap((file) => {

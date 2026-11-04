@@ -57,7 +57,7 @@ export function eventTileWhenFor(post: EventTimeFields): EventTileWhen | null {
 }
 
 /**
- * The Market's compact row's when, one line (slice C1; the phone's eventTileWhenFor `spoken`): "SAT 7 NOV · 16:00–21:00". Its
+ * The Market's compact row's when, as one string (slice C1; the phone's eventTileWhenFor `spoken`): "SAT 7 NOV · 16:00–21:00". Its
  * clock is the viewer's own, as the tile's: where that differs from the place's (a Byron 16:00 read in Queensland) the row
  * reads "SAT 7 NOV · 15:00–20:00 your time" rather than the place's clock with a note it has no room for; online, the
  * viewer's own clock, "your time", as every card says it. '' without a readable start.

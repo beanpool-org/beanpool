@@ -307,7 +307,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* In the grid two lines at most, so the poll fits its 2 x 2 square (DESIGN-market-grid-sizes-fable.md §2.3); the
                 whole of it is on the poll's page. */}
             {livePost.description && (
-                <p data-testid="poll-description" className={`text-[13px] text-nature-600 dark:text-nature-300 mb-3 whitespace-pre-wrap leading-relaxed${isGrid ? ' line-clamp-2' : ''}`}>
+                <p data-testid="poll-description" className={`text-[13px] text-nature-600 dark:text-nature-400 mb-3 whitespace-pre-wrap leading-relaxed${isGrid ? ' line-clamp-2' : ''}`}>
                     {livePost.description}
                 </p>
             )}

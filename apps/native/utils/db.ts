@@ -7593,23 +7593,29 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     // a portable photo still sitting in this community's row (an offline pick). There is no session pick on this
     // path — it runs with no screen in front of it. The parked copy, and the change it waits in, retire only
     // after a verified 2xx: every `return false` below leaves them for the next retry.
+    // A copy the member asked for from another community (Profile S4) is all that waits here: it sends the name and the photo
+    // kept for it and nothing of this community's row, whose bio and contact may be older than the community's own.
+    const copyOnly = pending?.chosenOnly === true;
     const decision = await resolveProfilePublishAvatar({
         parked: pending?.avatar,
-        catchUp: { localRow: profile?.avatar_url },
+        ...(copyOnly ? {} : { catchUp: { localRow: profile?.avatar_url } }),
     });
     const avatar = decision.avatar;
 
     // A name changed here and not yet accepted wins over the row's: a members sync landing first writes the name the
     // node still holds over the row. Once the community has refused the waiting name for good, no name goes (the row
     // may still hold the refused one), and the community keeps the name it holds (#2461 review r4368601839).
-    const callsign = pending?.callsign || (pending?.refusedCallsign !== undefined ? undefined : profile?.callsign || identity.callsign);
+    // A copy that carries no name leaves the community's name as it is.
+    const callsign = copyOnly
+        ? pending?.callsign
+        : pending?.callsign || (pending?.refusedCallsign !== undefined ? undefined : profile?.callsign || identity.callsign);
     // Profile S2-W: bio and contact belong to this community alone; no fallback to phone-wide canonical across communities.
-    const bio = profile?.bio ?? '';
-    const contactValue = profile?.contact_value ?? null;
-    const contactVisibility = profile?.contact_visibility ?? undefined;
+    const bio = copyOnly ? '' : profile?.bio ?? '';
+    const contactValue = copyOnly ? null : profile?.contact_value ?? null;
+    const contactVisibility = copyOnly ? undefined : profile?.contact_visibility ?? undefined;
     // What waits for this community, or a device copy newer than its row: never its own row sent back, and never to a
-    // community that doesn't say this key is a member (utils/working-style.ts).
-    const publicArchetype = await archetypeToSend(anchorUrl, identity, profile?.archetype);
+    // community that doesn't say this key is a member (utils/working-style.ts). A copy sends none.
+    const publicArchetype = copyOnly ? null : await archetypeToSend(anchorUrl, identity, profile?.archetype);
 
     // The bail-out used to be `if (!avatar)`, from when a picture was the only thing this
     // published. It now carries bio, contact and archetype too, so keying it on the avatar
@@ -7687,8 +7693,9 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
         // community's, and this one's profile stays out of it. This community's next members sync brings it home.
         if (!(await stillOnCommunity(anchorUrl))) return true;
         // Mirror what was just published into THIS node's local DB when it was
-        // missing, so local reads and the marketplace pre-check see it at once.
-        if (!profile?.avatar_url || publicArchetype) {
+        // missing, so local reads and the marketplace pre-check see it at once. A copied photo goes in over the one the row
+        // holds (a node's own URL for the photo that was here): it is the member's new photo here.
+        if (!profile?.avatar_url || publicArchetype || (copyOnly && avatar)) {
             try {
                 await updateMemberProfile(identity.publicKey, {
                     callsign: rowCallsign ?? profile?.callsign ?? identity.callsign,

@@ -61,6 +61,7 @@ export * from './owner-unlock.js';
 export * from './avatar-url.js';
 export * from './avatar-presets.js';
 export * from './last-photo-offer.js';
+export * from './profile-copy.js';
 export * from './picture-crop.js';
 export * from './list-photo-url.js';
 export * from './release-line-trade.js';

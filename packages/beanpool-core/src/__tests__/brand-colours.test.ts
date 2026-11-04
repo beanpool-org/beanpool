@@ -54,7 +54,7 @@ describe('brand colours are readable in both themes', () => {
 
     it('covers every role, in both themes', () => {
         const roles = new Set(pairs.map((p) => p.role));
-        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'sage', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'chip.poll', 'chip.quiet', 'chip.info', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'info', 'neutral', 'ink.info', 'deal.held', 'deal.released', 'deal.cancelled']) {
+        for (const role of ['cta', 'commit', 'event', 'action', 'danger', 'gold', 'accent', 'sage', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'chip.poll', 'chip.quiet', 'chip.info', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'ink.event', 'info', 'neutral', 'ink.info', 'deal.held', 'deal.released', 'deal.cancelled']) {
             expect(roles, role).toContain(role);
         }
         // fills: on/fill + on/hover; chips: ink/tint; tiles: ink/tint; cards: ink/tint; inks: one per ground of that theme (a web-only ink, the web's grounds).
@@ -298,6 +298,44 @@ describe('CSS for the web app and the manager', () => {
         expect(bp['cta-fill']).toBe('var(--bp-cta-fill)');
         expect(bp['chip-warn-tint']).toBe('var(--bp-chip-warn-tint)');
         expect(Object.keys(bp).length).toBe(brandColourLeaves().length);
+    });
+});
+
+describe('the event violet (detail pages D0, DESIGN-detail-pages-fable.md §2.7)', () => {
+    it('is one deep violet fill under white words in both themes, pressing deeper', () => {
+        expect(BRAND_COLOURS.event.fill).toEqual({ light: '#6d28d9', dark: '#6d28d9' });
+        expect(BRAND_COLOURS.event.hover).toEqual({ light: '#5b21b6', dark: '#5b21b6' });
+        expect(BRAND_COLOURS.event.on).toEqual({ light: '#ffffff', dark: '#ffffff' });
+        expect(contrastRatio('#ffffff', BRAND_COLOURS.event.fill.light)).toBeGreaterThanOrEqual(7);
+        expect(contrastRatio('#ffffff', BRAND_COLOURS.event.hover.light)).toBeGreaterThan(contrastRatio('#ffffff', BRAND_COLOURS.event.fill.light));
+    });
+
+    it("ink.event is the event tile's own ink: violet-800 in light, violet-300 in dark", () => {
+        expect(BRAND_COLOURS.ink.event).toEqual({ light: '#5b21b6', dark: '#c4b5fd' });
+        expect(BRAND_COLOURS.ink.event).toEqual(BRAND_COLOURS.tile.event.ink);
+    });
+
+    it('ink.event reads 4.5:1 or more on every ground both apps draw a page or card on, in both themes', () => {
+        const mine = brandContrastPairs().filter((p) => p.role === 'ink.event');
+        for (const theme of ['light', 'dark'] as const) {
+            expect(mine.filter((p) => p.theme === theme).map((p) => p.ground), theme).toEqual([...INK_GROUNDS[theme]]);
+        }
+        for (const p of mine) expect(p.ratio, `${p.theme} ${p.ink} on ${p.ground}`).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('event.on is judged on the fill and on the pressed fill', () => {
+        const mine = brandContrastPairs().filter((p) => p.role === 'event');
+        expect(mine.map((p) => `${p.theme} ${p.pair}`).sort()).toEqual(['dark on / fill', 'dark on / hover', 'light on / fill', 'light on / hover']);
+        for (const p of mine) expect(p.ratio, `${p.theme} ${p.pair}`).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('the web gets bp-event-fill / -hover / -on and bp-ink-event, and no other event name', () => {
+        const names = Object.keys(brandTailwindColours().bp).filter((n) => n.startsWith('event') || n === 'ink-event').sort();
+        expect(names).toEqual(['event-fill', 'event-hover', 'event-on', 'ink-event']);
+        expect(brandCssVariableMap('light')['--bp-event-fill']).toBe('#6d28d9');
+        expect(brandCssVariableMap('dark')['--bp-event-fill']).toBe('#6d28d9');
+        expect(brandCssVariableMap('light')['--bp-ink-event']).toBe('#5b21b6');
+        expect(brandCssVariableMap('dark')['--bp-ink-event']).toBe('#c4b5fd');
     });
 });
 

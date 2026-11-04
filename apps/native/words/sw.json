@@ -6983,5 +6983,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "Kuingia hakuwezi kukaguliwa katika {community} kwa sasa, kwa hivyo hakuna kilichoongezwa. Tafadhali jaribu tena baadaye.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "Kuingia kwa {provider} hakukubaliwi katika {community}. Unaweza kujaribu njia nyingine.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "Haikuweza kufikia {community} kwa sasa, kwa hivyo hakuna kilichoongezwa. Angalia muunganisho wako kisha ujaribu tena.",
-  "HOSTED BY": "IMEANDALIWA NA"
+  "HOSTED BY": "IMEANDALIWA NA",
+  "Open event: {title}": "Fungua tukio: {title}",
+  "Open listing: {title}": "Fungua tangazo: {title}"
 }

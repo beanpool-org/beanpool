@@ -34,7 +34,7 @@ import { emitAppEvent, CONVERSATION_READ_LOCALLY_EVENT } from './app-events';
 import { HIDDEN_AUTHOR, postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
+import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, POLL_NEXT_START_PATH, pollNextStartMs, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -2712,6 +2712,21 @@ export async function isOwnerHere(): Promise<boolean> {
         .catch(() => { ownerHereRead = null; return false; });
     ownerHereRead = { anchor, owner };
     return owner;
+}
+
+/**
+ * When the node says this member's next poll can start (a member starts one a week, engine/poll-week.ts), asked before the poll
+ * form opens: the time in ms, or null when they may start one now, when the node is one from before the rule, or when it cannot
+ * be asked (offline). It gates nothing: the node checks again at Create.
+ */
+export async function getPollNextStart(): Promise<number | null> {
+    try {
+        const res = await signedGet(POLL_NEXT_START_PATH);
+        if (!res.ok) return null;
+        return pollNextStartMs(await res.json().catch(() => null));
+    } catch {
+        return null;
+    }
 }
 
 export async function getPollOtherAnswers(postId: string): Promise<PollOtherRead> {

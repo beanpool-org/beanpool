@@ -81,6 +81,7 @@ async function main() {
     const { initStateEngine, exportSyncState, tickDecisions } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
+    const { aWeekPasses } = await import('./post-test-helper.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { closeExpiredPolls } = await import('./engine/posts.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
@@ -125,6 +126,7 @@ async function main() {
     const pollWithLine = async (maker: Id, extra: Record<string, unknown> = {}): Promise<Poll> => {
         // A member has one open poll and a node five: each poll here closes the ones before it, which are done with.
         db.prepare("UPDATE posts SET status = 'completed' WHERE type = 'poll' AND status = 'active'").run();
+        aWeekPasses(db); // and a week on: a member starts one a week (engine/poll-week.ts, test-poll-week.ts), which is not what is held here
         const made = await post('/api/marketplace/posts', {
             type: 'poll', category: 'community', title: `What is missing? ${crypto.randomBytes(3).toString('hex')}`, description: '', authorPublicKey: maker.pubKeyHex,
             pollOptions: [{ id: 'opt_1', text: 'Buses' }, { id: 'opt_2', text: 'Beans' }], durationDays: 7, pollOther: true, pollOpenVote: true, ...extra,

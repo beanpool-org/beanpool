@@ -6983,5 +6983,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community} এই মুহূর্তে সাইন-ইন পরীক্ষা করতে পারছে না, তাই কিছুই যোগ করা হয়নি। দয়া করে পরে আবার চেষ্টা করুন।",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} {provider} সাইন-ইন গ্রহণ করে না। আপনি অন্য একটি চেষ্টা করতে পারেন।",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "এই মুহূর্তে {community}-এ পৌঁছানো যাচ্ছে না, তাই কিছুই যোগ করা হয়নি। আপনার সংযোগ পরীক্ষা করুন এবং আবার চেষ্টা করুন।",
-  "HOSTED BY": "আয়োজক"
+  "HOSTED BY": "আয়োজক",
+  "Open event: {title}": "ইভেন্ট খুলুন: {title}",
+  "Open listing: {title}": "তালিকা খুলুন: {title}"
 }

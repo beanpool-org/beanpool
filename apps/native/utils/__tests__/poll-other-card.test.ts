@@ -29,6 +29,8 @@ vi.mock('../../app/ThemeContext', () => ({
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 vi.mock('../../components/showcase/LocalCommunityMark', () => ({ LocalCommunityMark: () => null }));
 vi.mock('../db', () => ({
+    // The poll form asks when this member may start their next poll (poll-once-a-week): null = now.
+    getPollNextStart: async () => null,
     votePoll: vi.fn(), closePoll: vi.fn(), isOwnerHere: vi.fn(), createPost: vi.fn(),
     getPollOtherAnswers: vi.fn(), reportPollOtherAnswer: vi.fn(), removePollOtherAnswer: vi.fn(),
 }));

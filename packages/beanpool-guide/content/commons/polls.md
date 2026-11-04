@@ -31,7 +31,7 @@ While a poll is open it says nothing about this. If it did, someone checking the
 
 In the web app the type is **🗳️ Poll**, the notes are **Background / Context**, the option button is **+ Add option** and the last button is **🗳️ Create Poll**. On the web Map, tap the round **+**.
 
-You can have one poll open at a time, and a community can have 5 open at once. You need credit that is not frozen to start a poll, but a freeze does not stop you answering one. An owner or admin can have as many open as the owners' **Owner and admin limit** allows (100 unless an owner changes it), within the community's 5.
+You can have one poll open at a time, and you can start one poll for the whole community a week. The week runs from when you started your last community poll, whether it is still open, closed or taken down, so taking a poll down does not let you start another sooner. If you can't start one yet, the poll form tells you the day your next one can start. A poll for one of your groups is not held to the week, so you can still start one while you wait: in the web app, pick **Group** above the form. Votes on removing someone and Decisions are not polls, so the week does not hold them. A community can have 5 open at once. You need credit that is not frozen to start a poll, but a freeze does not stop you answering one. An owner or admin can have as many open as the owners' **Owner and admin limit** allows (100 unless an owner changes it), within the community's 5, and they are not held to the week.
 
 ## Finding and answering polls
 

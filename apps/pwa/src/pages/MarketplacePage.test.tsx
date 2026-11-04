@@ -473,18 +473,21 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         await screen.findByText('Bicycle Repair');
     };
 
-    it('does not stretch a tile, or its cell, to the height of the row', async () => {
+    // G2 (DESIGN-market-grid-sizes-fable.md §0.3, §2.2) replaces #1092's rule. #1092 kept every tile at its own height and
+    // shrank its cell with `self-start`, so a click or the focus ring never covered blank cell space; the price was a grid of
+    // four tile sizes with blank under every short one (Marty, 4 Nov). Now the cell IS the card: the grid stretches the
+    // cell to its row and the tile fills the cell, so there is still no blank space around a card, and a row's tiles are one
+    // height. jsdom does no layout: the heights are measured in e2e/market-grid-shots.mjs, which fails on a `self-start`.
+    it('makes the cell the card: the cell stretches to its row and the tile fills the cell', async () => {
         await openGrid();
         for (const title of ['Bicycle Repair', 'Chainsaw']) {
             // Anchor: this really is the tile's own root, not some wrapper.
             expect(tileOf(title).className).toContain('flex flex-col');
-            expect(tileOf(title).className).not.toMatch(/(^|\s)h-full(\s|$)/);
-            expect(cellOf(title).className).not.toMatch(/(^|\s)h-full(\s|$)/);
-            // Dropping `h-full` is only half of it. The cell IS the grid item, and a grid with no `items-*`
-            // stretches its items to the row, so the cell stayed row-tall while the tile shrank — and the cell
-            // is what carries the click and the focus ring. `self-start` is what actually shrinks the cell.
-            // jsdom does no layout, so the height itself is measured in e2e/market-grid-shots.mjs.
-            expect(cellOf(title).className).toMatch(/(^|\s)self-start(\s|$)/);
+            expect(tileOf(title).className).toMatch(/(^|\s)h-full(\s|$)/);
+            expect(cellOf(title).className).toMatch(/(^|\s)h-full(\s|$)/);
+            expect(cellOf(title).className).not.toMatch(/(^|\s)self-(start|end|center)(\s|$)/);
+            // The cell's focus ring follows the card's corners.
+            expect(cellOf(title).className).toContain('rounded-[14px]');
         }
     });
 
@@ -506,10 +509,11 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         }
     });
 
-    it('gives the poll two of the columns at every width, and lays its answers out in two from md up', async () => {
+    it('gives the poll the whole row at two and three columns, a 2 x 2 square from four, and its answers in two from md up', async () => {
         await openGrid();
-        // At 320 px with 1.3x text one column of two clipped "Other": the whole row on a phone, two columns from md up.
-        expect(pollCard().parentElement!.className.split(/\s+/)).toContain('col-span-2');
+        // At 320 px with 1.3x text one column of two clipped "Other": the whole row on a phone and at three columns (nothing
+        // beside it), two columns and two rows from lg up (G2, DESIGN-market-grid-sizes-fable.md §2.3).
+        expect(pollCard().parentElement!.className.split(/\s+/)).toEqual(['h-full', 'col-span-2', 'md:col-span-3', 'lg:col-span-2', 'lg:row-span-2']);
         expect(pollOptions().className).toContain('md:grid-cols-2');
     });
 

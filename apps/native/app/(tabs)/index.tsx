@@ -28,10 +28,10 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
 import { goToNeedsTarget } from '../../components/NeedsYouIcons';
 import { useManageNode } from '../../components/useManageNode';
-import { FabBandContext, HomeCard, HomeButton, homeStyles, type FabBand } from '../../components/home/HomeParts';
+import { ArrangeBandRow, FabBandContext, HomeCard, HomeButton, HOME_CARD_PADDING_DP, homeStyles, type ArrangeBand, type FabBand } from '../../components/home/HomeParts';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
-import { ArrangeAddTile, ArrangeBar, ArrangeReset, FoldedLine } from '../../components/home/ArrangeParts';
+import { ArrangeAddTile, ArrangeBar, ArrangeReset, ArrangeStrip, type StripRow } from '../../components/home/ArrangeParts';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
@@ -46,7 +46,7 @@ import {
     MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardLine, cardOnNode, cardRowName,
+    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, isHomeDoorbellFor,
     effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
@@ -88,9 +88,12 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
  *   from before the frame refuses the new shape: the cards stay on the phone, "not on your account yet", and are sent
  *   again at each landing (§2.3). A member's only: a visitor (a key with no account on the global node, which answers
  *   with its public cards) gets none of it, no hint, and no layout is ever sent for one.
- * - **Arrange** (DESIGN-home-layout-fable.md §3.2): one way to move a card, on the card. Holding a band, "…" → Arrange or
- *   Arrange › folds the cards to their bands and one line, with ↑ ↓ on each; every move is saved as it is made, through
- *   `moveCard`, so Done (in the floating button's place, or Back) only unfolds them.
+ * - **Arrange** (DESIGN-home-arrange-in-place-fable.md §2.1, §2.4; slice A3): Home itself, not another view. Holding a band,
+ *   "…" → Arrange or Arrange › leaves every drawn card full size in its own place; the only changes are a bar at the top,
+ *   ↑ ↓ on each band in place of Tune and "…", the cards' insides gone quiet (dimmed, no taps, hidden from TalkBack) and,
+ *   under the last card, a strip for the cards with nothing to show (Settings… and Remove, no arrows: they keep their saved
+ *   place). Every move is saved as it is made, through `moveCard` among the drawn cards, so Done (in the floating button's
+ *   place, or Back) only gives the insides back. No drag yet: that is slice A4, and the bar's words say arrows until it lands.
  * - **The one-time reveal** (~300 ms, skipped when the phone asks for less motion) and its one-line hint (§6.2).
  * - **Where only the community's admins invite** (`door: 'admins'`), Grow your community and First steps' invite line are
  *   an owner's or admin's alone (PR #1483 review 4166559683): the role is the header's ten-minute copy
@@ -115,8 +118,10 @@ const LINES = {
 };
 
 const REVEAL_MS = 300;
-/** The fold, and a moved card's slide (DESIGN-home-layout-fable.md §3.2). None with reduced motion. */
-const FOLD_MS = 200;
+/** A moved card's slide when an arrow swaps it with its neighbour. None with reduced motion. Entering and leaving Arrange have none. */
+const SLIDE_MS = 200;
+/** How long after a change of layout the cards have settled: what is measured, scrolled to or handed focus waits this much. */
+const SETTLE_MS = 50;
 
 /**
  * The account's list is known again: the phone's list is no longer marked as made while it wasn't (pickLayout), and the
@@ -195,7 +200,7 @@ export default function HomeScreen() {
     const [local, setLocal] = useState<LocalNeeds | null>(null);
     const [menuFor, setMenuFor] = useState<HomeCardInstance | null>(null);
     const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
-    // Arrange (DESIGN-home-layout-fable.md §3.2): the cards are folded and carry their arrows.
+    // Arrange (DESIGN-home-arrange-in-place-fable.md): Home itself, its cards carrying their arrows and gone quiet.
     const [arranging, setArranging] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
@@ -301,32 +306,31 @@ export default function HomeScreen() {
         if (!r) { r = React.createRef<View | null>(); arrowRefs.current.set(key, r); }
         return r;
     };
-    const foldMotion = useRef(false);
-    useEffect(() => { void AccessibilityInfo.isReduceMotionEnabled().then(calm => { foldMotion.current = !calm; }).catch(() => {}); }, []);
-    const fold = useCallback(() => {
-        if (foldMotion.current) LayoutAnimation.configureNext(LayoutAnimation.create(FOLD_MS, 'easeInEaseOut', 'opacity'));
+    const slideMotion = useRef(false);
+    useEffect(() => { void AccessibilityInfo.isReduceMotionEnabled().then(calm => { slideMotion.current = !calm; }).catch(() => {}); }, []);
+    const slide = useCallback(() => {
+        if (slideMotion.current) LayoutAnimation.configureNext(LayoutAnimation.create(SLIDE_MS, 'easeInEaseOut', 'opacity'));
     }, []);
+    // Arrange is Home itself (§2.1): the bar goes in above the cards, which move down by its height and nothing else. Set when
+    // Arrange opens; the bar's first measure then moves the view down with them, so the card the member was looking at stays
+    // where it was on the screen (and is never pushed off the bottom of it).
+    const keepPlace = useRef(false);
     const startArrange = useCallback((from?: string) => {
         arrangeFrom.current = from ?? null;
-        fold();
+        keepPlace.current = true;
         setArranging(true);
         AccessibilityInfo.announceForAccessibility(t(ARRANGE_WORDS.opened));
-        // The cards are folded by then: the card it came from stays in view, else the list's top with the bar.
-        setTimeout(() => {
-            const y = from ? cardY.current.get(from) : undefined;
-            scrollRef.current?.scrollTo({ y: y === undefined ? 0 : Math.max(0, listY.current + y - 8), animated: true });
-        }, FOLD_MS + 50);
-    }, [fold]);
+    }, []);
     const endArrange = useCallback(() => {
         const id = arrangeFrom.current;
-        fold();
+        keepPlace.current = false;
         setArranging(false);
-        // After the unfold: TalkBack lands on what opened Arrange rather than the top of the screen.
+        // After the insides come back: TalkBack lands on what opened Arrange rather than the top of the screen.
         setTimeout(() => {
             const target = (id ? menuRefs.current.get(id)?.current : null) ?? arrangeLink.current;
             if (target) AccessibilityInfo.sendAccessibilityEvent?.(target, 'focus');
-        }, FOLD_MS + 50);
-    }, [fold]);
+        }, SETTLE_MS);
+    }, []);
     useEffect(() => {
         if (!arranging) return;
         // Android's Back is Done too.
@@ -356,6 +360,12 @@ export default function HomeScreen() {
         scrollY.current = e.nativeEvent.contentOffset.y;
         updateFab();
     }, [updateFab]);
+    // The bar's height with its gap, once, when Arrange opens (startArrange): a view scrolled down moves down with the cards.
+    const onArrangeBar = useCallback((dp: number) => {
+        if (!keepPlace.current) return;
+        keepPlace.current = false;
+        if (scrollY.current > 0) scrollRef.current?.scrollTo({ y: scrollY.current + dp, animated: false });
+    }, []);
 
     // ── The reveal and the hint (§6.2): once per account, never again ──
     const reveal = useRef(new Animated.Value(1)).current;
@@ -928,9 +938,11 @@ export default function HomeScreen() {
     const ordered = cardOrder(shown, pins);
     const tailor = canTailor(answer);
     const menuCard = tailor ? menuFor : null;
-    // In Arrange the list is the folded cards, drawn or not; null: Home as usual.
-    const folded = arranging && tailor && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins) : null;
-    const movable = (folded ?? []).filter(c => canMoveCard(c.type, pins));
+    // Arrange (DESIGN-home-arrange-in-place-fable.md §2): Home itself. The drawn cards move; the rest of the list that this node
+    // can show, with nothing to show now, are the strip's rows and keep their saved places.
+    const arrangeOn = arranging && tailor && !!answer;
+    const movable = arrangeOn ? drawn.filter(c => canMoveCard(c.type, pins)) : [];
+    const idle = arrangeOn && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins).filter(c => !drawn.some(d => d.id === c.id)) : [];
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
     const picker = answer && tailor && addOpen ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
 
@@ -1004,7 +1016,7 @@ export default function HomeScreen() {
     /** ↑ or ↓ in Arrange: saved at once through `moveCard`; the place is said, and focus stays on the arrow or its twin. */
     const moveInArrange = (c: HomeCardInstance, dir: 'up' | 'down') => {
         const at = movable.findIndex(m => m.id === c.id) + (dir === 'up' ? -1 : 1);
-        fold();
+        slide();
         changeLayout(moveCard(layoutRef.current, c.id, dir, movable, Date.now(), pins));
         AccessibilityInfo.announceForAccessibility(arrangeMovedLine(cardLabelName(c, answer?.profile), at + 1, movable.length));
         const end = dir === 'up' ? at === 0 : at === movable.length - 1;
@@ -1016,41 +1028,51 @@ export default function HomeScreen() {
             if (y === undefined) return;
             const top = listY.current + y;
             if (top < scrollY.current || top > scrollY.current + winH - 200) scrollRef.current?.scrollTo({ y: Math.max(0, top - winH / 3), animated: true });
-        }, FOLD_MS + 50);
+        }, SLIDE_MS + SETTLE_MS);
     };
 
-    /** A card in Arrange: its band with ↑ ↓ or Stays here, and one line. Its body isn't drawn, so nothing else is read. */
-    const foldedCard = (c: HomeCardInstance): React.ReactNode => {
-        if (!answer) return null;
-        const isDrawn = drawn.some(d => d.id === c.id);
+    /**
+     * A drawn card's band in Arrange: ↑ ↓ among the drawn cards that move, or Stays here on the fixed two and a pinned Find.
+     * Undefined outside Arrange. The label is the screen reader's name for the card (a saved search by its words).
+     */
+    const arrangeBandFor = (c: HomeCardInstance): ArrangeBand | undefined => {
+        if (!arrangeOn || !answer) return undefined;
         const at = movable.findIndex(m => m.id === c.id);
         const label = cardLabelName(c, answer.profile);
-        const hasAccent = c.type === 'needs' && needsEntries.some(e => e.accent);
-        const line = isDrawn ? cardLine(c.type) : c.type === 'tips' && tipsAllSeen ? t(LINES.tipsAllSeen) : c.type === 'sky' ? t(LINES.skyNoPlace) : t('Nothing to show now');
-        return (
-            <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
-                <HomeCard
-                    id={c.id}
-                    caption={c.type === 'search' ? cardRowName(c, answer.profile) : cardCaption(c.type, answer)}
-                    colors={colors}
-                    testID={`home-card-${c.id}`}
-                    accent={hasAccent}
-                    hue={c.type === 'needs' ? (hasAccent ? 'amber' : 'sage') : homeCardHue(c)}
-                    arrange={at < 0
-                        ? { label, stays: true }
-                        : { label, canUp: at > 0, canDown: at < movable.length - 1, onMove: dir => moveInArrange(c, dir), upRef: arrowRef(`${c.id}:up`), downRef: arrowRef(`${c.id}:down`) }}
-                >
-                    <FoldedLine
-                        id={c.id}
-                        text={line}
-                        colors={colors}
-                        settings={!isDrawn && homeCardType(c.type)?.readSettings && c.type !== 'tools' ? { a11y: t('Settings for {card}', { card: label }), onPress: () => openSettings(c) } : undefined}
-                        remove={!isDrawn ? { a11y: t('Remove {card} from Home', { card: label }), onPress: () => onRemoveCard(c) } : undefined}
-                    />
-                </HomeCard>
-            </View>
-        );
+        return at < 0
+            ? { label, stays: true }
+            : { label, canUp: at > 0, canDown: at < movable.length - 1, onMove: dir => moveInArrange(c, dir), upRef: arrowRef(`${c.id}:up`), downRef: arrowRef(`${c.id}:down`) };
     };
+
+    // The strip's Remove buttons, so focus can move to the row that takes a removed row's place (or the tile, with none left).
+    const removeRefs = useRef(new Map<string, React.RefObject<View | null>>());
+    const removeRef = (id: string) => {
+        let r = removeRefs.current.get(id);
+        if (!r) { r = React.createRef<View | null>(); removeRefs.current.set(id, r); }
+        return r;
+    };
+    const addTileRef = useRef<View | null>(null);
+    /** Remove on a strip row: saved and said as Remove is anywhere, then focus goes to the nearest control. */
+    const removeFromStrip = (c: HomeCardInstance) => {
+        const at = idle.findIndex(r => r.id === c.id);
+        const next = idle[at + 1] ?? idle[at - 1];
+        onRemoveCard(c);
+        setTimeout(() => {
+            const target = (next ? removeRefs.current.get(next.id)?.current : null) ?? addTileRef.current;
+            if (target) AccessibilityInfo.sendAccessibilityEvent?.(target, 'focus');
+        }, SETTLE_MS);
+    };
+    /** The cards with nothing to show now, as the strip lists them: what each says, and the two things a member can do with it. */
+    const stripRows: StripRow[] = answer ? idle.map(c => {
+        const label = cardLabelName(c, answer.profile);
+        return {
+            id: c.id,
+            name: cardRowName(c, answer.profile),
+            note: c.type === 'tips' && tipsAllSeen ? t(LINES.tipsAllSeen) : c.type === 'sky' ? t(LINES.skyNoPlace) : undefined,
+            settings: homeCardType(c.type)?.readSettings && c.type !== 'tools' ? { a11y: t('Settings for {card}', { card: label }), onPress: () => openSettings(c) } : undefined,
+            remove: { a11y: t('Remove {card} from Home', { card: label }), onPress: () => removeFromStrip(c), ref: removeRef(c.id) },
+        };
+    }) : [];
 
     const card = (inst: HomeCardInstance): React.ReactNode => {
         if (!answer) return null;
@@ -1060,8 +1082,10 @@ export default function HomeScreen() {
         // Getting started has no "…": Skip is its remove.
         const menu = tailor && type !== 'start' && canRemoveCard(type, pins) ? () => setMenuFor(inst) : undefined;
         const hue: CardHue = type === 'needs' ? (needsEntries.some(e => e.accent) ? 'amber' : 'sage') : homeCardHue(inst);
+        // In Arrange the card is the one Home draws, full size and in its place: its band carries the arrows, its inside is quiet.
+        const arrange = arrangeBandFor(inst);
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean; hue?: CardHue }) => (
-            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent} hue={extra?.hue ?? hue} onHold={tailor && type !== 'start' ? () => startArrange(id) : undefined}>
+            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent} hue={extra?.hue ?? hue} onHold={tailor && type !== 'start' ? () => startArrange(id) : undefined} arrange={arrange} quiet={!!arrange}>
                 {body}
             </HomeCard>
         );
@@ -1081,6 +1105,8 @@ export default function HomeScreen() {
                         onDismiss={at => changeLayout(dismissSafety(layoutRef.current, at))}
                         onUp={setSafetyUp}
                         onActionsAt={at => band.report('safety:actions', at)}
+                        // It has no band on Home; in Arrange it gets one across the top of its own frame, and goes quiet under it.
+                        band={arrange && drawn.some(d => d.id === id) ? <ArrangeBandRow id={id} caption={caption} hue={hue} colors={colors} arrange={arrange} style={{ marginTop: -HOME_CARD_PADDING_DP }} /> : undefined}
                     />
                 );
             case 'find': {
@@ -1307,16 +1333,10 @@ export default function HomeScreen() {
                         </Text>
                     )}
                     {empty}
+                    {/* Above the cards, not among them: the cards' places inside the list (`cardY`) are the same as on Home. */}
+                    {arrangeOn && <ArrangeBar colors={colors} notOnAccount={notOnAccount ? t(LINES.notOnAccount) : null} onHeight={onArrangeBar} />}
                     <Animated.View onLayout={e => { listY.current = e.nativeEvent.layout.y; }} style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
-                        {folded ? (
-                            <>
-                                <ArrangeBar colors={colors} notOnAccount={notOnAccount ? t(LINES.notOnAccount) : null} />
-                                {folded.filter(c => c.type !== 'community').map(foldedCard)}
-                                <ArrangeAddTile colors={colors} onPress={() => setAddOpen(true)} />
-                                {folded.filter(c => c.type === 'community').map(foldedCard)}
-                                <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />
-                            </>
-                        ) : list.map(c => (
+                        {(arrangeOn ? list.filter(c => c.type !== 'community') : list).map(c => (
                             <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
                                 {card(c)}
                                 {hint && tailor && c.id === firstDrawn?.id && (
@@ -1335,14 +1355,26 @@ export default function HomeScreen() {
                                         </Pressable>
                                     </View>
                                 )}
-                                {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} />}
+                                {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
                             </View>
                         ))}
-                        {!folded && beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} />}
+                        {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
+                        {arrangeOn && (
+                            <>
+                                <ArrangeStrip rows={stripRows} colors={colors} />
+                                <ArrangeAddTile colors={colors} onPress={() => setAddOpen(true)} tileRef={addTileRef} />
+                                {list.filter(c => c.type === 'community').map(c => (
+                                    <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
+                                        {card(c)}
+                                    </View>
+                                ))}
+                                <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />
+                            </>
+                        )}
                     </Animated.View>
                 </ScrollView>
 
-                {folded ? (
+                {arrangeOn ? (
                     // Done takes the floating button's place, and never steps aside: it is the way out.
                     <Pressable accessibilityRole="button" accessibilityLabel={t(ARRANGE_WORDS.done)} style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={endArrange} testID="home-arrange-done">
                         <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('Done')}</Text>

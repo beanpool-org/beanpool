@@ -20,7 +20,8 @@ import { LocalCommunityMark } from './LocalCommunityMark';
 /** The card put away: per community, on this device only (a per-viewer convenience). */
 export const beansCardKey = (nodeUrl: string) => `beanpool_showcase_card:${nodeUrl.trim().replace(/\/+$/, '').toLowerCase()}:beans`;
 
-export function YourBeansPreviewCard({ colors }: { colors: AppColors }) {
+/** `quiet`: Home is in Arrange, where this card (no card of the member's list, so no arrows) stays put and its inside waits for Done. */
+export function YourBeansPreviewCard({ colors, quiet }: { colors: AppColors; quiet?: boolean }) {
     const s = homeStyles(colors);
     // `undefined` until this phone's record for the community is read.
     const [hidden, setHidden] = useState<boolean | undefined>(undefined);
@@ -45,7 +46,7 @@ export function YourBeansPreviewCard({ colors }: { colors: AppColors }) {
         if (key) AsyncStorage.setItem(key, '1').catch(() => {});
     };
     return (
-        <HomeCard id="beans-preview" caption={t('Your Beans')} colors={colors} testID="home-card-beans-preview"
+        <HomeCard id="beans-preview" caption={t('Your Beans')} colors={colors} testID="home-card-beans-preview" quiet={quiet}
             right={<LocalCommunityMark variant="pill" feature="beans" />}>
             <Text style={s.note}>{t(LOCAL_COMMUNITY_LINES.yourBeansCard)}</Text>
             <HomeRow colors={colors} text={t(LOCAL_COMMUNITY_LINES.yourBeansLink)} a11y={t('See an example ledger')}

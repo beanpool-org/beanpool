@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet, type StyleProp, type ViewStyle } fro
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ARRANGE_WORDS, t, type CardHue } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
+import { QUIET_OPACITY, quietProps } from './quiet';
 
 /**
  * The pieces every Home card is made of (design §9 card anatomy, §10 accessibility): a caption that is a heading, an
@@ -74,7 +75,65 @@ export interface ArrangeBand {
 /** Holding a band this long enters Arrange. */
 export const HOLD_MS = 500;
 
-export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent, hue, onHold, arrange }: {
+/**
+ * A card's ↑ ↓ in Arrange, or "Stays here" on the fixed two and a pinned Find: the same two 48dp targets "Tune" and the "…"
+ * take outside it, so a band keeps its height. One place, for every card with a band (and the one that gets a band only here).
+ */
+export function ArrangeControls({ id, ink, colors, arrange }: { id: string; ink: string; colors: AppColors; arrange: ArrangeBand }) {
+    const s = homeStyles(colors);
+    const arrow = (dir: 'up' | 'down', on: boolean, ref: React.RefObject<View | null> | undefined, a11y: string) => (
+        <Pressable
+            ref={ref}
+            disabled={!on}
+            onPress={() => arrange.onMove?.(dir)}
+            style={({ pressed }) => [s.menuButton, dir === 'up' && s.arrowFirst, pressed && s.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={a11y}
+            accessibilityState={{ disabled: !on }}
+            testID={`home-arrange-${id}-${dir}`}
+        >
+            <MaterialCommunityIcons name={dir === 'up' ? 'arrow-up' : 'arrow-down'} size={22} color={ink} style={on ? undefined : s.arrowOff} />
+        </Pressable>
+    );
+    return (
+        <View style={s.captionTargets}>
+            {arrange.stays ? (
+                <Text style={[s.stays, { color: ink }]} maxFontSizeMultiplier={CAPTION_MAX_SCALE} testID={`home-arrange-${id}-stays`}>{t(ARRANGE_WORDS.stays)}</Text>
+            ) : (
+                <>
+                    {arrow('up', !!arrange.canUp, arrange.upRef, t('Move {card} up', { card: arrange.label }))}
+                    {arrow('down', !!arrange.canDown, arrange.downRef, t('Move {card} down', { card: arrange.label }))}
+                </>
+            )}
+        </View>
+    );
+}
+
+/**
+ * A band for a card that has none on Home (the "one way back" card draws its own frame): the caption and the arrows, across
+ * the top of that frame, as every other card's band has them in Arrange.
+ */
+export function ArrangeBandRow({ id, caption, hue, colors, arrange, style }: {
+    id: string;
+    caption: string;
+    hue: CardHue;
+    colors: AppColors;
+    arrange: ArrangeBand;
+    style?: StyleProp<ViewStyle>;
+}) {
+    const s = homeStyles(colors);
+    const { tint, ink } = colors.card[hue];
+    return (
+        <View style={[s.captionRow, { backgroundColor: tint }, style]} testID={`card-band-${id}`}>
+            <Text style={[s.caption, { color: ink }]} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
+                {caption}
+            </Text>
+            <ArrangeControls id={id} ink={ink} colors={colors} arrange={arrange} />
+        </View>
+    );
+}
+
+export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, right, children, testID, accent, hue, onHold, arrange, quiet }: {
     /** For the floating button's band: the caption's own targets (the "…", "Tune") report where they rest. */
     id: string;
     caption: string;
@@ -95,35 +154,23 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
     hue?: CardHue;
     /** Holding the band enters Arrange; absent where it doesn't (a visitor's Home, Getting started). */
     onHold?: () => void;
-    /** In Arrange: the band's controls stand in for "Tune" and the "…", and `children` is the card's one line. */
+    /** In Arrange: the band's arrows (or "Stays here") stand in for "Tune" and the "…"; `children` is the card as Home draws it. */
     arrange?: ArrangeBand;
+    /** In Arrange: the card's inside is dimmed and quiet, so a tap on it does nothing until Done. */
+    quiet?: boolean;
 }) {
     const s = homeStyles(colors);
     const cardHue: CardHue = hue ?? (accent ? 'amber' : 'sage');
     const { tint, ink } = colors.card[cardHue];
-    const arrow = (dir: 'up' | 'down', on: boolean, ref: React.RefObject<View | null> | undefined, a11y: string) => (
-        <Pressable
-            ref={ref}
-            disabled={!on}
-            onPress={() => arrange?.onMove?.(dir)}
-            style={({ pressed }) => [s.menuButton, dir === 'up' && s.arrowFirst, pressed && s.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel={a11y}
-            accessibilityState={{ disabled: !on }}
-            testID={`home-arrange-${id}-${dir}`}
-        >
-            <MaterialCommunityIcons name={dir === 'up' ? 'arrow-up' : 'arrow-down'} size={22} color={ink} style={on ? undefined : s.arrowOff} />
-        </Pressable>
-    );
     return (
-        <View style={[s.card, accent && s.cardAccent, arrange && s.cardFolded]} testID={testID}>
+        <View style={[s.card, accent && s.cardAccent]} testID={testID}>
             <Pressable
                 onLongPress={arrange ? undefined : onHold}
                 delayLongPress={HOLD_MS}
                 // No target of its own for TalkBack or a keyboard: the caption stays a heading, and "…" → Arrange is their way in.
                 accessible={false}
                 focusable={false}
-                style={[s.captionRow, arrange && s.captionFolded, { backgroundColor: tint }]}
+                style={[s.captionRow, { backgroundColor: tint }]}
                 testID={`card-band-${id}`}
             >
                 {/* Drawn in capitals; read in its own words (a screen reader can spell an all-caps word out). */}
@@ -131,20 +178,12 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
                     {caption}
                 </Text>
                 {arrange ? (
-                    <View style={s.captionTargets}>
-                        {arrange.stays ? (
-                            <Text style={[s.stays, { color: ink }]} maxFontSizeMultiplier={CAPTION_MAX_SCALE} testID={`home-arrange-${id}-stays`}>{t(ARRANGE_WORDS.stays)}</Text>
-                        ) : (
-                            <>
-                                {arrow('up', !!arrange.canUp, arrange.upRef, t('Move {card} up', { card: arrange.label }))}
-                                {arrow('down', !!arrange.canDown, arrange.downRef, t('Move {card} down', { card: arrange.label }))}
-                            </>
-                        )}
-                    </View>
+                    <ArrangeControls id={id} ink={ink} colors={colors} arrange={arrange} />
                 ) : (right || onMenu) && (
                     // The "…" sits at the card's right edge, where "+ ADD POST" floats: it steps aside for it too.
                     <FabAware id={`${id}:caption`} style={s.captionTargets}>
-                        {right}
+                        {/* A quiet card with no arrows (the Beans example) keeps what its band carries, but untouchable. */}
+                        {quiet && right ? <View {...quietProps} style={s.quietBand}>{right}</View> : right}
                         {onMenu && (
                             <Pressable
                                 ref={menuRef}
@@ -160,7 +199,7 @@ export function HomeCard({ id, caption, menuLabel, colors, onMenu, menuRef, righ
                     </FabAware>
                 )}
             </Pressable>
-            {children}
+            {quiet ? <View {...quietProps} style={s.quiet} testID={`home-quiet-${id}`}>{children}</View> : children}
         </View>
     );
 }
@@ -290,9 +329,9 @@ function make(colors: AppColors) {
         },
         captionTargets: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
         menuButton: { width: HOME_TARGET_DP, height: HOME_TARGET_DP, marginRight: -12, alignItems: 'center', justifyContent: 'center', borderRadius: HOME_TARGET_DP / 2, flexShrink: 0 },
-        // Folded, a card is its band and a line, and eight of them nearly fit a small screen.
-        cardFolded: { marginBottom: 6, paddingBottom: 4 },
-        captionFolded: { marginBottom: 2 },
+        // In Arrange a card's inside is dimmed (QUIET_OPACITY), and its taps and its words go quiet until Done.
+        quiet: { opacity: QUIET_OPACITY },
+        quietBand: { flexDirection: 'row', alignItems: 'center' },
         // Only the last arrow reaches into the card's edge, as the "…" does.
         arrowFirst: { marginRight: 0 },
         arrowOff: { opacity: 0.4 },

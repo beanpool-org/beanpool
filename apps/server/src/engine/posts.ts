@@ -27,6 +27,7 @@ import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type Photo
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { assertFreeTags, assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
 import { ownerAdminLimit } from './owner-admin-limit.js';
+import { assertPollStartRoom } from './poll-week.js';
 import { copyRsvpRefusal, type CopyColumns } from './event-copy.js';
 import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
@@ -793,7 +794,11 @@ export function createPost(
         // An owner or admin acting (a keeper for an enterprise, by their own role) is held to the owners' "Owner and admin
         // limit" in place of a member's 1 active poll and 5 upcoming events (engine/owner-admin-limit.ts), read now.
         const ownersLimit = type === 'poll' || type === 'event' ? ownerAdminLimit(options?.createdBy ?? authorPublicKey) : null;
-        if (type === 'poll') assertActivePollRoom(authorPublicKey, ownersLimit);
+        // One open at a time (assertActivePollRoom, any audience), then one started a week for the whole community
+        // (assertPollStartRoom, engine/poll-week.ts; a poll for a group or for one person is not held to it): a member who closes
+        // or removes theirs has not made room for another community poll until the week is up. This is the one door every new
+        // poll comes through, the apps' route and an owner's assistant alike; resumePost puts back the same poll, not a new one.
+        if (type === 'poll') { assertActivePollRoom(authorPublicKey, ownersLimit); assertPollStartRoom(authorPublicKey, ownersLimit, audienceScope, now); }
 
         if (type === 'event') {
             // Upcoming cap (§2.2). Three separate pools: a group's events count against the group, and

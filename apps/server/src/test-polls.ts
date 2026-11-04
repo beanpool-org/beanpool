@@ -9,7 +9,8 @@
  *    - Category forced to 'community', lat/lng null, credits 0, photos empty.
  *    - Trade routes (request, accept, approve, complete) reject polls.
  *    - Search queries exclude polls unless explicitly requested.
- * 3. Rate limits: 1 active poll per member, 5 active polls per node.
+ * 3. Rate limits: 1 active poll per member, 5 active polls per node. (One started a week per member: test-poll-week.ts; here a
+ *    week passes where a member needs a second poll, aWeekPasses.)
  * 4. Franchise rules: Active members only; credit-frozen members cannot create a poll but do vote (a freeze moves no vote).
  * 5. Re-voting overwrites choice rather than duplicating.
  * 6. Immutability: Question and options cannot be edited once votes exist.
@@ -21,6 +22,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import { db, initSchema } from './db/db.js';
+import { aWeekPasses } from './post-test-helper.js';
 import {
     createPost,
     getPosts,
@@ -331,7 +333,8 @@ async function main() {
     assert(pollInFeed?.status === 'completed', 'Feed shows poll as completed');
     assert(pollInFeed?.totalVotes === 1, 'Feed shows final vote count');
 
-    // Alice can now create a new poll since her previous one is completed
+    // Alice can now create a new poll since her previous one is completed, a week on (a member starts one a week, test-poll-week.ts)
+    aWeekPasses(db, 'pub-alice');
     const aliceNewPoll = createPost('poll', 'community', 'Alice Second Poll (After Close)', '', 0, 'fixed', 'pub-alice', undefined, undefined, undefined, false, undefined, false, {
         pollOptions: [{ id: '1', text: 'Option A' }, { id: '2', text: 'Option B' }]
     });

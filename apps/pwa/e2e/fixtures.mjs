@@ -115,10 +115,14 @@ export const IDENTITY = {
 
 /**
  * Every /api path the page asks for, answered from `posts` — the list above unless a caller hands over another
- * order of it (see postsWithPollAt). Anything not named here is answered 404,
+ * order of it (see postsWithPollAt), and `extras.communityInfo` where a picture wants the node to say something about itself.
+ * Anything not named here is answered 404,
  * which the page already treats as "this node is older than that route" and hides quietly.
  */
-export function mockResponse(pathname, search, posts = POSTS) {
+export function mockResponse(pathname, search, posts = POSTS, extras = {}) {
+    // Only when a picture asks for it (openMarket's `communityInfo`): what the node says about itself, such as the global
+    // community's `features.exampleListings`. Otherwise it is answered 404, as an older node would, and the page draws no examples.
+    if (pathname === '/api/community/info' && extras.communityInfo) return extras.communityInfo;
     if (pathname === '/api/marketplace/posts') {
         const params = new URLSearchParams(search);
         const id = params.get('id');

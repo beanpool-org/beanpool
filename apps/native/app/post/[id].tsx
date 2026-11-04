@@ -962,7 +962,7 @@ export default function PostDetailModal() {
                         informal={pollsInformal(nodeProfile)}
                         decisionsPreview={showcaseMode('decisions', reader.node, reader.reader) === 'preview'}
                         pinsOn={pinsOn}
-                        onOpenProfile={({ publicKey, callsign }) => router.push({ pathname: '/public-profile', params: { publicKey, callsign } })}
+                        onOpenProfile={(who) => router.push({ pathname: '/public-profile', params: { publicKey: who.publicKey, callsign: who.callsign } })}
                     />
                 </ScrollView>
             </View>

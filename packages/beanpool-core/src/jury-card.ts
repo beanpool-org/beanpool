@@ -183,15 +183,21 @@ export function jurorStepAsideQuestion(): string {
     return t('Step aside from this jury? Your seat goes to the next member drawn, and nobody is told why.');
 }
 
-/** A closed jury's result (design §9), or null where the card's other lines say what happened (halted, blocked, void). */
+/**
+ * A closed jury's result (design §9), or null where the card's other lines say what happened (halted, void). What the jury
+ * voted, whatever came after: a removal a vote to reinstate cancelled in its grace window (failed, its tally passed), or
+ * one no vote carries out on a member who holds a server role (blocked), still reads as the jury voting to remove, beside
+ * the card's own line on what happened next.
+ */
 export function juryOutcomeLine(
     decision: { status: string },
-    tally: { quorumMet?: boolean; yesWeight?: number; totalVoters?: number } & { turnout?: Partial<JuryTurnout> | null },
+    tally: { quorumMet?: boolean; yesWeight?: number; totalVoters?: number; passed?: boolean } & { turnout?: Partial<JuryTurnout> | null },
     name: string,
 ): string | null {
     const turnout = juryTurnoutOf(tally);
     const size = turnout?.size ?? 0;
-    if (decision.status === 'execution_pending_grace' || decision.status === 'executed' || decision.status === 'passed') {
+    if (decision.status === 'open' || decision.status === 'admin_halted') return null;
+    if (tally.passed === true || decision.status === 'execution_pending_grace' || decision.status === 'executed' || decision.status === 'passed') {
         return tn(tally.yesWeight ?? 0, 'The jury voted to remove {name} ({n} of {size}).', 'The jury voted to remove {name} ({n} of {size}).', { name, size });
     }
     if (decision.status !== 'failed' && decision.status !== 'unresolved') return null;

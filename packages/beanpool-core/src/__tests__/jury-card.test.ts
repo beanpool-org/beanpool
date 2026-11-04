@@ -146,6 +146,12 @@ describe('the jury card', () => {
         expect(juryOutcomeLine({ status: 'failed' }, { quorumMet: true, yesWeight: 5, turnout }, 'Dave')).toBe('The jury kept Dave.');
         expect(juryOutcomeLine({ status: 'failed' }, { quorumMet: false, yesWeight: 5, turnout: { ...turnout, voted: 7 } }, 'Dave')).toBe('7 of 12 jurors voted, too few to decide. Dave is back.');
         expect(juryOutcomeLine({ status: 'admin_halted' }, { quorumMet: false, turnout }, 'Dave')).toBeNull();
+        // A jury that voted to remove, whose removal a vote to reinstate then cancelled in the grace window: the jury still
+        // voted to remove (the card's other line says it was cancelled), never "kept".
+        expect(juryOutcomeLine({ status: 'failed' }, { quorumMet: true, yesWeight: 9, passed: true, turnout }, 'Dave')).toBe('The jury voted to remove Dave (9 of 12).');
+        // So does one that passed on a member holding a server role, which no vote removes (blocked).
+        expect(juryOutcomeLine({ status: 'execution_blocked' }, { quorumMet: true, yesWeight: 9, passed: true, turnout }, 'Dave')).toBe('The jury voted to remove Dave (9 of 12).');
+        expect(juryOutcomeLine({ status: 'admin_halted' }, { quorumMet: true, yesWeight: 9, passed: true, turnout }, 'Dave')).toBeNull();
     });
 
     it('names who voted and who did not serve after close, and never why', () => {

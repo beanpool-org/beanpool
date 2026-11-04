@@ -29,12 +29,12 @@
  * The counts and "You're hosting this event" are on the event's page in the grid; the list card keeps them.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { copyCardLine, eventCopyOf, t, upperCase } from '@beanpool/core';
 import { router } from 'expo-router';
 import { MARKET_GRID_CROP, MarketCardPicture } from './MarketCardPicture';
-import { CardChip, useCardShell, type GridTextBlock } from './market-card-shell';
+import { CardChip, gridTextBlock, useCardShell } from './market-card-shell';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { isPostPinned } from '../utils/pins';
 import {
@@ -46,20 +46,22 @@ import {
 export const EVENT_ACCENT = '#7c3aed';
 
 /**
- * The Market's view decides the card's size: the list card, or in the grid a tile that takes the grid's own text block (the
- * one market.tsx draws its listing tiles with), so the two cannot differ. Compact is the list card until slice C1.
+ * The Market's view decides the card's size: the list card, or in the grid a tile whose text block is the listing tiles' own,
+ * built by the same function at the phone's font scale market.tsx reads (gridTextBlock(fontScale)), so the two cannot differ.
+ * Compact is the list card until slice C1.
  */
 type EventCardProps = {
     post: any;
     currentPubkey?: string | null;
     myLocation?: { lat: number; lng: number } | null;
-} & ({ viewMode?: 'list' | 'compact'; gridBlock?: undefined } | { viewMode: 'grid'; gridBlock: GridTextBlock });
+} & ({ viewMode?: 'list' | 'compact'; fontScale?: undefined } | { viewMode: 'grid'; fontScale: number });
 
 const count = (n: unknown): number => Number(n ?? 0) || 0;
 
-export function EventCard({ post, currentPubkey, myLocation, viewMode, gridBlock }: EventCardProps) {
+export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale }: EventCardProps) {
     const shell = useCardShell();
     const styles = useStyles(makeStyles);
+    const gridBlock = useMemo(() => gridTextBlock(fontScale ?? 1), [fontScale]);
 
     // The place's clock first; the reader's own on a second line only when it differs; online, the reader's with "your time"
     // (DESIGN-event-times §4).

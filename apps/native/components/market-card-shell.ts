@@ -45,6 +45,9 @@ export function chipTones(colors: Colors): Record<CardChipRole, { bg: string; fg
     };
 }
 
+/** A piece of type's weight as a Text style's. */
+const weightOf = ({ weight }: CardType) => String(weight) as TextStyle['fontWeight'];
+
 const LIST = MARKET_CARD_TYPE.list;
 const GRID = MARKET_CARD_TYPE.grid;
 const SLOT = SHELL.photo.list.width;
@@ -113,13 +116,15 @@ export function makeCardShell(colors: Colors) {
         gridCell: { flex: 1, minWidth: 0 },
         gridTile: { flex: 1, marginBottom: 0 },
         /** Rows 1 and 2 of the four: the title, two lines at most. */
-        gridTitle: { ...cardType(GRID.loud), color: colors.text.body },
+        //   The grid tile's words are written out from core's type (not spread from cardType) so the phone's contrast scan
+        //   (utils/button-contrast.ts) reads each style whole: a spread of a call is a style it cannot read. Same numbers.
+        gridTitle: { fontSize: GRID.loud.size, fontWeight: weightOf(GRID.loud), lineHeight: GRID.loud.line, color: colors.text.body },
         /** Row 3 on a copy (its price there, in words) and row 4's distance: one line each. */
-        gridLine: { ...cardType(GRID.place), color: colors.text.secondary },
+        gridLine: { fontSize: GRID.place.size, fontWeight: weightOf(GRID.place), lineHeight: GRID.place.line, color: colors.text.secondary },
         /** An event tile's rows 1 and 2: the date, then the time, the loud line in the event's ink, one row each. */
-        gridWhen: { ...cardType(GRID.loud), color: colors.tile.event.ink },
+        gridWhen: { fontSize: GRID.loud.size, fontWeight: weightOf(GRID.loud), lineHeight: GRID.loud.line, color: colors.tile.event.ink },
         /** An event tile's row 3: its title, one line. */
-        gridSecond: { ...cardType(GRID.second), color: colors.text.body },
+        gridSecond: { fontSize: GRID.second.size, fontWeight: weightOf(GRID.second), lineHeight: GRID.second.line, color: colors.text.body },
         /**
          * The tile's photo and what sits on it, the same for every kind (slice P3': an event and the Daily Pulse are listing
          * tiles too). The picture is 4:3 at the tile's width, flush under its top corners (the card's own overflow rounds
@@ -149,9 +154,9 @@ export function makeCardShell(colors: Colors) {
          * The loud pill's words: a price, or your mark ("Going ✓"). White on the scrim: the event's violet ink would read
          * 1.0 to 1.8 : 1 on the light theme's scrim (slice P3' measured it), white reads 9.1 : 1 at the least.
          */
-        gridPriceText: { ...cardType(GRID.price), color: colors.text.inverse },
+        gridPriceText: { fontSize: GRID.price.size, fontWeight: weightOf(GRID.price), color: colors.text.inverse },
         /** A quiet pill's words: 📌 PINNED, an event's CANCELLED / UPDATED. */
-        gridPinText: { ...cardType(PILL.quiet), color: colors.text.inverse },
+        gridPinText: { fontSize: PILL.quiet.size, fontWeight: weightOf(PILL.quiet), color: colors.text.inverse },
     });
     return { ...styles, tones: chipTones(colors) };
 }

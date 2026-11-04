@@ -1726,10 +1726,10 @@ export default function MarketScreen() {
 
         if (item.type === 'event') {
             const eventWhere = { post: item, currentPubkey: identity?.publicKey, myLocation: market.circle ? market.circle.area : myLocation };
-            // In the grid an event is a tile like the listing beside it (slice P3'), with the very text block the listing tiles
-            // use, so its four rows are theirs at every width and text size.
+            // In the grid an event is a tile like the listing beside it (slice P3'): its text block is the listing tiles' own,
+            // built at this phone's font scale, so its four rows are theirs at every width and text size.
             return viewMode === 'grid'
-                ? <EventCard {...eventWhere} viewMode="grid" gridBlock={gridBlock} />
+                ? <EventCard {...eventWhere} viewMode="grid" fontScale={fontScale} />
                 : <EventCard {...eventWhere} viewMode={viewMode} />;
         }
 

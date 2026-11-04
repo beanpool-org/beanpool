@@ -52,7 +52,8 @@ vi.mock('../db', () => ({ rsvpEvent: vi.fn(), refreshPostForPhoto: vi.fn() }));
 vi.mock('../photo-refresh', () => ({ refreshListingAfterPhotoError: () => false }));
 
 import { EventCard } from '../../components/EventCard';
-import { formatEventWhenFor } from '../events';
+import { eventWhen, formatEventWhenFor } from '../events';
+import { gridTextBlock } from '../../components/market-card-shell';
 import { darkColors, lightColors } from '../../constants/colors';
 import * as db from '../db';
 
@@ -252,5 +253,128 @@ describe('the shell is the Offer card\'s, from the style box', () => {
         expect(src).not.toMatch(/borderRadius:\s*\d/);
         expect(src).not.toMatch(/borderLeftWidth/);
         expect(src).not.toMatch(/rsvpEvent|Alert\.alert|ActivityIndicator/);
+    });
+});
+
+// Slice P3' (DESIGN-market-grid-sizes-fable.md §2.2): in the grid the event is a tile like the listing beside it. The 4:3
+// photo, EVENT (the one chip) at its top-left, the foot row of scrim pills (📌 PINNED, CANCELLED / UPDATED, and the member's
+// own mark at the end, where a listing's price sits), then the text block market.tsx hands it, the listing tiles' own: the
+// date, the time, the title and the place, one line each. The counts and the host's line are the page's in the grid.
+describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark on the photo", () => {
+    const pinned = { ...MARKET, pinnedUntil: new Date(Date.now() + 2 * DAY).toISOString(), pinnedAt: new Date(Date.now() - 60_000).toISOString() };
+    async function showTile(post: any, viewer: string | null = ME, scale = 1.3) {
+        const block = gridTextBlock(scale);
+        await act(async () => {
+            root.render(createElement(EventCard, { post, currentPubkey: viewer, viewMode: 'grid', fontScale: scale }) as unknown as Parameters<Root['render']>[0]);
+            await new Promise((r) => setTimeout(r, 0));
+        });
+        return block;
+    }
+    const blockEl = () => byTestId('grid-text-block') as HTMLElement;
+    const footRow = () => byTestId('grid-badge-row') as HTMLElement;
+
+    it('one press, the tile, that opens the event; the tile fills its cell; no button inside it', async () => {
+        await showTile({ ...MARKET, myRsvp: 'going', goingCount: 3, interestedCount: 1 });
+        expect(Array.from(host.querySelectorAll('[role=button]'))).toEqual([card()]);
+        expect(styleOf(card())).toMatchObject({ flex: 1, marginBottom: 0, borderRadius: MARKET_CARD_SHELL.radius, overflow: 'hidden' });
+        await act(async () => { (byTestId('event-when') as HTMLElement).click(); });
+        expect(go.pushes).toEqual(['/post/ev-farmers']);
+        expect(db.rsvpEvent).not.toHaveBeenCalled();
+    });
+
+    it('the text block is the listing tiles\' own at the font scale it is given, and its rows are the date, the time, the title and the place', async () => {
+        const block = await showTile(MARKET);
+        expect(styleOf(blockEl())).toEqual(block.block);
+        const rows = Array.from(blockEl().children);
+        expect(rows).toHaveLength(4);
+        for (const r of rows) expect(styleOf(r)).toEqual(block.row);
+        const parts = eventWhen(MARKET)!;
+        expect(rows.map(r => r.textContent)).toEqual([parts.first, parts.second, MARKET.title, '📍 Butler Street Reserve']);
+        for (const r of rows) expect(r.firstElementChild?.getAttribute('data-lines')).toBe('1');
+        // The date and the time: the loud line, 14/800 on 18, in the event's ink; the title 14/700; the place 14/500.
+        expect(styleOf(byTestId('event-when'))).toMatchObject({ fontSize: 14, fontWeight: '800', lineHeight: 18, color: lightColors.tile.event.ink });
+        expect(styleOf(byTestId('event-time'))).toMatchObject({ fontSize: 14, fontWeight: '800', lineHeight: 18, color: lightColors.tile.event.ink });
+        expect(styleOf(rows[2].firstElementChild)).toMatchObject({ fontSize: 14, fontWeight: '700', lineHeight: 18, color: lightColors.text.body });
+        expect(styleOf(rows[3].firstElementChild)).toMatchObject({ fontSize: 14, fontWeight: '500', lineHeight: 18, color: lightColors.text.secondary });
+    });
+
+    it('an online event says so on its last row; an event with no place leaves the row blank, the block the same', async () => {
+        await showTile({ ...MARKET, eventPlaceName: null, eventOnline: true, event_online: 1 });
+        expect(Array.from(blockEl().children)[3].textContent).toBe('💻 Online');
+        await showTile({ ...MARKET, eventPlaceName: null });
+        const rows = Array.from(blockEl().children);
+        expect(rows).toHaveLength(4);
+        expect(rows[3].textContent).toBe('');
+    });
+
+    it.each(['light', 'dark'] as const)('%s: the picture is the 4:3 frame with EVENT, the one chip, at its top-left', async (which) => {
+        scheme.now = which;
+        const colors = which === 'dark' ? darkColors : lightColors;
+        await showTile(MARKET);
+        const frame = blockEl().previousElementSibling!;
+        expect(styleOf(frame)).toEqual({ position: 'relative', width: '100%', aspectRatio: 4 / 3 });
+        expect(frame.querySelector('img')?.getAttribute('data-src')).toContain('/api/marketplace/posts/ev-farmers/photos/0');
+        const chip = byTestId('event-type-chip')!;
+        expect(frame.contains(chip)).toBe(true);
+        expect(styleOf(chip.parentElement)).toEqual({ position: 'absolute', top: 8, left: 8 });
+        expect(styleOf(chip)).toMatchObject({ backgroundColor: colors.tile.event.tint, borderRadius: MARKET_CHIP.radius, paddingHorizontal: MARKET_CHIP.paddingHorizontal, paddingVertical: MARKET_CHIP.paddingVertical });
+        expect(styleOf(chip.firstElementChild)).toMatchObject({ fontSize: 10, fontWeight: '800', color: colors.tile.event.ink });
+        expect(chip.textContent).toBe('EVENT');
+    });
+
+    it.each(['light', 'dark'] as const)('%s: the member\'s mark is the loud pill at the foot\'s end, white on the scrim; 📌 PINNED a quiet pill before it', async (which) => {
+        scheme.now = which;
+        const colors = which === 'dark' ? darkColors : lightColors;
+        await showTile({ ...pinned, myRsvp: 'going', goingCount: 3, interestedCount: 1 });
+        const foot = footRow();
+        expect(Array.from(foot.children).map(c => c.textContent)).toEqual(['📌 PINNED', 'Going ✓']);
+        const mark = byTestId('event-mark')!;
+        expect(styleOf(mark)).toMatchObject({ backgroundColor: colors.overlay.scrim, borderColor: colors.overlay.scrimEdge, borderRadius: 8, marginLeft: 'auto' });
+        expect(styleOf(mark.firstElementChild)).toMatchObject({ fontSize: 13, fontWeight: '700', color: colors.text.inverse });
+        expect(mark.firstElementChild?.getAttribute('data-lines')).toBe('1');
+        const pin = byTestId('pinned-chip')!;
+        expect(styleOf(pin)).toMatchObject({ backgroundColor: colors.overlay.scrim, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 });
+        expect(styleOf(pin.firstElementChild)).toMatchObject({ fontSize: 10, fontWeight: '700', color: colors.text.inverse });
+        // The counts are the page's in the grid; the label says what the tile shows.
+        expect(byTestId('event-counts')).toBeNull();
+        expect(host.textContent).not.toContain('going ·');
+        expect(card().getAttribute('aria-label')).toBe(`Event: ${MARKET.title}, ${formatEventWhenFor(MARKET)}, Going ✓`);
+    });
+
+    it('"Interested ✓" for an interested member; nothing on the photo\'s foot while nobody has answered', async () => {
+        await showTile({ ...MARKET, myRsvp: 'interested', interestedCount: 1 });
+        expect(byTestId('event-mark')?.textContent).toBe('Interested ✓');
+        await showTile({ ...MARKET, goingCount: 4, interestedCount: 2 });
+        expect(footRow().children).toHaveLength(0);
+        expect(card().getAttribute('aria-label')).toBe(`Event: ${MARKET.title}, ${formatEventWhenFor(MARKET)}`);
+    });
+
+    it('the host: no mark and no hosting line on the tile (the page says it), and still no button', async () => {
+        await showTile({ ...MARKET, myRsvp: 'going', goingCount: 5, interestedCount: 2 }, HOST);
+        expect(byTestId('event-mark')).toBeNull();
+        expect(host.textContent).not.toContain("You're hosting this event");
+        expect(Array.from(host.querySelectorAll('[role=button]'))).toEqual([card()]);
+    });
+
+    it('CANCELLED is a quiet pill on the photo and the date and time are struck through; UPDATED a quiet pill', async () => {
+        await showTile({ ...MARKET, eventState: 'cancelled' });
+        expect(byTestId('event-state-chip')?.textContent).toBe('CANCELLED');
+        expect(footRow().contains(byTestId('event-state-chip'))).toBe(true);
+        for (const id of ['event-when', 'event-time']) expect(styleOf(byTestId(id))).toMatchObject({ textDecorationLine: 'line-through', color: lightColors.text.secondary });
+        expect(card().getAttribute('aria-label')).toBe(`Event: ${MARKET.title}, ${formatEventWhenFor(MARKET)}, cancelled`);
+        await showTile({ ...MARKET, eventState: 'updated' });
+        expect(byTestId('event-state-chip')?.textContent).toBe('UPDATED');
+        expect(styleOf(byTestId('event-when')).textDecorationLine).toBeUndefined();
+    });
+
+    it('outside the grid the list card is unchanged: list and compact draw it (the compact row is slice C1)', async () => {
+        for (const viewMode of ['list', 'compact'] as const) {
+            await act(async () => {
+                root.render(createElement(EventCard, { post: MARKET, currentPubkey: ME, viewMode }) as unknown as Parameters<Root['render']>[0]);
+                await new Promise((r) => setTimeout(r, 0));
+            });
+            expect(byTestId('grid-text-block'), viewMode).toBeNull();
+            expect(styleOf(card()), viewMode).toMatchObject({ flexDirection: 'row', padding: 0 });
+        }
     });
 });

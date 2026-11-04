@@ -25,7 +25,10 @@
  * grid's first cell with its 📌 PINNED pill, the first stream card is beside it in the same row, and no card is drawn twice.
  * The lattice (PG2, §2.2, §2.5): the local case holds a poll too; every Offer / Need tile is half the row less the gutter, the
  * tiles of a row are one height, each tile's text block is four rows (24 + (4 x 18 + 3 x 4) x 1.3 = 133.2 dp), and the poll is
- * a row of its own at the list's width. An event in the grid is still the list card until P3': its height is printed, not held.
+ * a row of its own at the list's width. An event is a tile on the lattice too (P3'): held to the same width, row height and text
+ * block as the Offer / Need tiles, with its date and time rows, no button inside it and its mark ("Going ✓") whole on the photo;
+ * the counts are the page's in the grid. The local case's Repair Café has counts and no answer; the global case holds the
+ * member's own event (no mark: the host's line is the page's) and one they are going to.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -370,9 +373,9 @@ for (const scheme of ['light', 'dark']) {
                         cut: ['event-mark', 'event-counts'].filter(id => { const e = card.querySelector(`[data-testid="${id}"]`); return e && (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1); }),
                         buttons: card.querySelectorAll('[role="button"]').length, text: card.innerText.split('\n').filter(Boolean) };
                 }),
-                // The grid's tiles (an Offer / Need / Pulse tile is its own button, market-card-<id>), each with its text block;
-                // the poll; the events (still the list card until P3').
-                tiles: Array.from(document.querySelectorAll('[data-testid^="market-card-"]')).map(card => {
+                // The grid's tiles (an Offer / Need / Pulse tile is its own button, market-card-<id>; an event's, event-card-<id>,
+                // since P3'), each with its text block; the poll.
+                tiles: Array.from(document.querySelectorAll('[data-testid^="market-card-"], [data-testid^="event-card-"]')).map(card => {
                     const r = card.getBoundingClientRect();
                     const block = card.querySelector('[data-testid="grid-text-block"]');
                     const b = block ? block.getBoundingClientRect() : null;
@@ -382,7 +385,15 @@ for (const scheme of ['light', 'dark']) {
                         title: (card.innerText || '').split('\n').filter(Boolean).slice(-3).join(' / ').slice(0, 40) };
                 }),
                 polls: Array.from(document.querySelectorAll('[data-testid="poll-card"]')).map(p => { const r = p.getBoundingClientRect(); return { left: r.left, width: r.width, top: r.top, bottom: r.bottom }; }),
-                eventTiles: Array.from(document.querySelectorAll('[data-testid^="event-card-"]')).map(e => { const r = e.getBoundingClientRect(); return { id: e.getAttribute('data-testid'), top: r.top, height: r.height, width: r.width }; }),
+                // An event tile (P3'): its rows, any button inside it, its mark whole, and no counts.
+                eventTiles: Array.from(document.querySelectorAll('[data-testid^="event-card-"]')).map(e => {
+                    const block = e.querySelector('[data-testid="grid-text-block"]');
+                    const mark = e.querySelector('[data-testid="event-mark"]');
+                    return { id: e.getAttribute('data-testid'), rows: block ? Array.from(block.children).map(r => r.innerText) : null,
+                        buttons: e.querySelectorAll('[role="button"]').length, mark: mark ? mark.innerText : null,
+                        markCut: mark ? Array.from(mark.querySelectorAll('*')).some(x => x.scrollWidth > x.clientWidth + 1) : false,
+                        counts: !!e.querySelector('[data-testid="event-counts"]') };
+                }),
                 // Each title's card (its nearest button) and where the member sees it: for the grid's first-cells check.
                 cards: TITLES.map(title => {
                     const leaves = Array.from(document.querySelectorAll('#root *')).filter(e => e.children.length === 0 && (e.textContent || '').includes(title));
@@ -429,10 +440,19 @@ for (const scheme of ['light', 'dark']) {
                 const hs = r.tiles.map(t => t.height);
                 if (Math.max(...hs) - Math.min(...hs) > 0.5) fail(`a row's tiles differ in height: ${r.tiles.map(t => `${t.id} ${t.height}`).join(', ')}`);
             }
-            const lone = rows.filter(r => r.tiles.length === 1 && !result.eventTiles.some(e => Math.abs(e.top - r.top) < 1));
-            console.log('  tiles:', result.tiles.map(t => `${t.id.replace('market-card-', '')} ${Math.round(t.height * 10) / 10}`).join(', '),
-                '| rows', rows.length, '| events (list card until P3\')', result.eventTiles.map(e => `${e.id} ${Math.round(e.height)}`).join(', ') || 'none');
+            const lone = rows.filter(r => r.tiles.length === 1);
+            console.log('  tiles:', result.tiles.map(t => `${t.id.replace('market-card-', '')} ${Math.round(t.height * 10) / 10}`).join(', '), '| rows', rows.length);
             if (lone.length > 1) fail(`${lone.length} rows hold a lone tile; only the last may`);
+            // The events (P3'): tiles on the lattice (held above with the rest), four rows each, no button inside, the mark whole.
+            if ((which === 'local' || which === 'global') && !result.eventTiles.length) fail('no event tile drawn');
+            for (const e of result.eventTiles) {
+                if (!e.rows || e.rows.length !== 4) fail(`${e.id}: its text block holds ${e.rows && e.rows.length} rows, not 4`);
+                if (e.buttons) fail(`${e.id}: ${e.buttons} button(s) inside the tile`);
+                if (e.markCut) fail(`${e.id}: its mark "${e.mark}" is cut`);
+                if (e.counts) fail(`${e.id}: the counts are drawn on the tile`);
+            }
+            console.log('  events:', result.eventTiles.map(e => `${e.id} [${(e.rows || []).join(' | ')}]${e.mark ? ` mark ${e.mark}` : ''}`).join(' || '));
+            if (which === 'global' && !result.eventTiles.some(e => e.mark === 'Going ✓')) fail('the event the member is going to shows no "Going ✓" on its tile');
             if (which === 'local') {
                 if (result.polls.length !== 1) fail(`expected one poll, found ${result.polls.length}`);
                 for (const p of result.polls) {

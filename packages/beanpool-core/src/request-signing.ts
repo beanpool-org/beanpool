@@ -369,11 +369,33 @@ export interface BoundRequestInput {
     timestamp?: number;
     /** Defaults to 16 random bytes in hex. */
     nonce?: string;
+    /**
+     * The host to sign for instead of the URL's ({@link explicitAudience}): only the phone's own saved community name
+     * while it is on the hall laptop's number (lights-out, apps/native utils/hall.ts). Never a host a node named.
+     */
+    audience?: string | null;
 }
 
-/** The signed-request headers for a fetch of `url`, in format 2. Throws when the URL has no host to sign for. */
+/**
+ * The host a request is signed for when the caller names one (lights-out: the bytes go to the hall laptop's number, the
+ * signature is for the community's own name, scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §2.3). It must
+ * already be a bare host exactly as {@link audienceOf} writes one (lower case, no scheme, port, path or trailing dot), so
+ * the bytes are the same as signing for that host's URL. Throws for anything else: a caller that got here with a URL or
+ * an odd spelling has read the audience from somewhere it shouldn't. Null when none is named (the URL's host is used).
+ */
+export function explicitAudience(audience: string | null | undefined): string | null {
+    if (audience === undefined || audience === null) return null;
+    const host = typeof audience === 'string' && !/[/:@?#\\\s]/.test(audience) ? audienceOf(audience) : null;
+    if (!host || host !== audience) throw new Error(`Cannot sign for audience ${JSON.stringify(audience)}: not a bare host name`);
+    return host;
+}
+
+/**
+ * The signed-request headers for a fetch of `url`, in format 2: signed for `url`'s host, or for `audience` when one is
+ * named (the path is still `url`'s). Throws when there is no host to sign for.
+ */
 export async function buildBoundRequestHeaders(input: BoundRequestInput): Promise<Record<string, string>> {
-    const host = audienceOf(input.url);
+    const host = explicitAudience(input.audience) ?? audienceOf(input.url);
     if (!host) throw new Error(`Cannot sign a request for ${JSON.stringify(input.url)}: it names no host`);
     const timestamp = String(input.timestamp ?? Date.now());
     const nonce = input.nonce ?? freshNonce();
@@ -397,11 +419,13 @@ export interface BoundWsInput {
     sign: Signer;
     timestamp?: number;
     nonce?: string;
+    /** As {@link BoundRequestInput.audience}: the host signed for instead of the socket URL's. */
+    audience?: string | null;
 }
 
 /** The `/ws` connect params in format 2, as an `&`-joinable fragment. Throws when the URL has no host. */
 export async function buildBoundWsParams(input: BoundWsInput): Promise<string> {
-    const host = audienceOf(input.wsUrl);
+    const host = explicitAudience(input.audience) ?? audienceOf(input.wsUrl);
     if (!host) throw new Error(`Cannot sign a socket for ${JSON.stringify(input.wsUrl)}: it names no host`);
     const timestamp = String(input.timestamp ?? Date.now());
     const nonce = input.nonce ?? freshNonce();

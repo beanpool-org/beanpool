@@ -1,0 +1,5 @@
+{
+  "ios": {
+    "NSLocalNetworkUsageDescription": "Ginagamit ito ng BeanPool para maabot ang laptop ng inyong komunidad sa Wi-Fi ng bulwagan kapag walang internet."
+  }
+}

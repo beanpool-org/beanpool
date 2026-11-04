@@ -292,19 +292,8 @@ export default function MarketScreen() {
             shadowOpacity: 0.25,
             shadowRadius: 10,
         },
-        gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: 4 / 3 },
-        gridImage: { width: '100%', height: '100%' },
-        gridFallback: { backgroundColor: colors.surface.subtle, justifyContent: 'center', alignItems: 'center' },
-        gridFallbackEmoji: { fontSize: 32, opacity: 0.3 },
-        gridBadgeRow: { position: 'absolute', left: 8, right: 8, bottom: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', gap: 4 },
-        gridBadge: { backgroundColor: colors.overlay.scrim, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.overlay.scrimEdge, maxWidth: '100%' },
-        gridPriceEnd: { marginLeft: 'auto' },
-        gridPriceText: { color: colors.text.inverse, fontSize: 13, fontWeight: 'bold' },
-        gridTypeBadge: { position: 'absolute', top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-        badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-        badgeOffer: { backgroundColor: colors.market.offer.bg, borderWidth: 0 },
-        badgeNeed: { backgroundColor: colors.market.need.bg, borderWidth: 0 },
-        badgeText: { fontSize: 11, fontWeight: '800', color: colors.market.offer.fg, letterSpacing: 0.5 },
+        // The grid tile's photo, its type chip and its foot row of pills are the style box's (shell.gridImageWrapper and the
+        // rest, components/market-card-shell.ts), shared with the event tile (EventCard, slice P3').
         price: { fontSize: 16, fontWeight: '800', color: colors.text.body },
         fab: { position: 'absolute', bottom: 32, right: 24, backgroundColor: colors.action.fab, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 8, zIndex: 100 },
         compactRow: {
@@ -1736,13 +1725,12 @@ export default function MarketScreen() {
         }
 
         if (item.type === 'event') {
-            return (
-                <EventCard
-                    post={item}
-                    currentPubkey={identity?.publicKey}
-                    myLocation={market.circle ? market.circle.area : myLocation}
-                />
-            );
+            const eventWhere = { post: item, currentPubkey: identity?.publicKey, myLocation: market.circle ? market.circle.area : myLocation };
+            // In the grid an event is a tile like the listing beside it (slice P3'): its text block is the listing tiles' own,
+            // built at this phone's font scale, so its four rows are theirs at every width and text size.
+            return viewMode === 'grid'
+                ? <EventCard {...eventWhere} viewMode="grid" fontScale={fontScale} />
+                : <EventCard {...eventWhere} viewMode={viewMode} />;
         }
 
         if (item.type === 'poll') {
@@ -1798,7 +1786,7 @@ export default function MarketScreen() {
                     accessibilityLabel={openLabel}
                     testID={`market-card-${item.id}`}
                 >
-                    <View style={styles.gridImageWrapper}>
+                    <View style={shell.gridImageWrapper}>
                         <MarketCardPicture
                             postId={item.id}
                             cover={coverImage}
@@ -1808,94 +1796,96 @@ export default function MarketScreen() {
                             size="grid"
                             contentPosition={MARKET_GRID_CROP}
                             accessibilityLabel={item.title}
-                            imageStyle={styles.gridImage}
+                            imageStyle={shell.gridImage}
                         />
                         {/* One row along the photo's foot, the badges at its start and the price at its end. It wraps,
                             growing upwards: RECURRING and YOU in a longer language (or at 320dp and 1.3x) stack instead
                             of overlapping each other or the price, as fixed offsets did. */}
-                        <View style={styles.gridBadgeRow} testID="grid-badge-row">
-                        {isPulse && (
-                            <View style={[
-                                styles.gridBadge,
-                                {
-                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
-                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
-                                    borderWidth: 1,
-                                }
-                            ]}>
-                                <Text style={[styles.gridPriceText, { color: colors.feedback.warning.fg, fontWeight: '900' }]}>{t('🗞️ PULSE')}</Text>
-                            </View>
-                        )}
+                        <View style={shell.gridBadgeRow} testID="grid-badge-row">
                         {!isPulse && (() => {
                             if (item.status === 'pending') {
                                 return (
-                                    <View style={[styles.gridBadge, { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid }]}>
-                                        <Text style={[styles.gridPriceText, { color: colors.text.onGold, fontWeight: '900' }]}>{t('⏳ PENDING')}</Text>
+                                    <View style={[shell.gridBadge, { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid }]}>
+                                        <Text style={[shell.gridPriceText, { color: colors.text.onGold, fontWeight: '900' }]}>{t('⏳ PENDING')}</Text>
                                     </View>
                                 );
                             }
                             if (isOwn) {
                                 return (
-                                    <View style={[styles.gridBadge, { backgroundColor: '#2563eb' }]}>
-                                        <Text style={styles.gridPriceText}>{t('👤 YOU')}</Text>
+                                    <View style={[shell.gridBadge, { backgroundColor: '#2563eb' }]}>
+                                        <Text style={shell.gridPriceText}>{t('👤 YOU')}</Text>
                                     </View>
                                 );
                             }
                             return null;
                         })()}
                         {isPostPinned(item, Date.now()) && (
-                            <View style={[styles.gridBadge, { backgroundColor: colors.overlay.scrim, borderColor: colors.overlay.scrimEdge }]} testID="pinned-chip">
-                                <Text style={[styles.gridPriceText, { fontSize: 10, fontWeight: '700' }]}>{t('📌 PINNED')}</Text>
+                            <View style={shell.gridBadge} testID="pinned-chip">
+                                <Text style={shell.gridPinText}>{t('📌 PINNED')}</Text>
                             </View>
                         )}
                         {dealChip && (
-                            <View testID="card-deal-chip" style={[styles.gridBadge, dealChip === 'in-trust'
+                            <View testID="card-deal-chip" style={[shell.gridBadge, dealChip === 'in-trust'
                                 ? { backgroundColor: colors.feedback.success.solid, borderColor: colors.feedback.success.solid }
                                 : { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid }]}>
-                                <Text style={[styles.gridPriceText, { color: dealChip === 'in-trust' ? colors.text.onBrand : colors.text.onGold, fontWeight: '900' }]}>{listingChipWords(dealChip)}</Text>
+                                <Text style={[shell.gridPriceText, { color: dealChip === 'in-trust' ? colors.text.onBrand : colors.text.onGold, fontWeight: '900' }]}>{listingChipWords(dealChip)}</Text>
                             </View>
                         )}
                         {!isPulse && showsBeans && !copy && (
-                            <View style={[styles.gridBadge, styles.gridPriceEnd]}>
+                            <View style={[shell.gridBadge, shell.gridPriceEnd]}>
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                    style={styles.gridPriceText}
+                                    style={shell.gridPriceText}
                                     asView={true}
                                 />
                             </View>
                         )}
                         </View>
                         {!isPulse && (
-                            <View style={[styles.gridTypeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                                <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{typeBadge(item.type)}</Text>
+                            <View style={shell.gridTypeSlot}>
+                                <CardChip shell={shell} role={item.type === 'offer' ? 'offer' : 'need'} label={typeBadge(item.type)} testID="grid-type-chip" />
                             </View>
                         )}
                     </View>
                     {/* The text block is always four rows, whatever the tile holds (DESIGN-market-grid-sizes-fable.md §2.2): the
                         title's two, the author (or a copy's line), and one last line that is cut, never wrapped: the distance,
                         then one chip at most, the group's lock before RECURRING (a deal is on the photo). What a tile has no
-                        room for is on the page it opens. */}
+                        room for is on the page it opens. The Daily Pulse (slice P3'): its title's two, its 🗞️ PULSE pill where an
+                        author would be (moved off the photo: the one place the tile says what it is), and one line of its news. */}
                     <View style={gridBlock.block} testID="grid-text-block">
                         <View style={gridBlock.titleBox}>
                             <Text style={shell.gridTitle} numberOfLines={2}>
                                 {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                             </Text>
                         </View>
-                        <View style={gridBlock.row}>
-                            {copy
-                                ? <Text style={shell.gridLine} numberOfLines={1} testID="listing-copy-line">{copyPriceLine(copy)}</Text>
-                                : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
-                        </View>
-                        <View style={gridBlock.lastRow} testID="grid-last-row">
-                            {gridDistance ? (
-                                <Text testID="card-distance" style={[shell.gridLine, gridBlock.lastRowPiece]} numberOfLines={1}>{t('📍 {distance}', { distance: gridDistance })}</Text>
-                            ) : null}
-                            {groupScopeBadgeText ? (
-                                <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" /></View>
-                            ) : !!item.repeatable && !isOwn && item.status !== 'pending' ? (
-                                <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} /></View>
-                            ) : null}
-                        </View>
+                        {isPulse ? (
+                            <>
+                                <View style={gridBlock.lastRow}>
+                                    <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="warn" label={t('🗞️ PULSE')} testID="pulse-chip" /></View>
+                                </View>
+                                <View style={gridBlock.row} testID="grid-last-row">
+                                    {item.description ? <Text style={shell.gridLine} numberOfLines={1} testID="pulse-line">{item.description}</Text> : null}
+                                </View>
+                            </>
+                        ) : (
+                            <>
+                                <View style={gridBlock.row}>
+                                    {copy
+                                        ? <Text style={shell.gridLine} numberOfLines={1} testID="listing-copy-line">{copyPriceLine(copy)}</Text>
+                                        : <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={showsBeans && item.authorFoundingNeeded} showTier={showsBeans} navigable={false} />}
+                                </View>
+                                <View style={gridBlock.lastRow} testID="grid-last-row">
+                                    {gridDistance ? (
+                                        <Text testID="card-distance" style={[shell.gridLine, gridBlock.lastRowPiece]} numberOfLines={1}>{t('📍 {distance}', { distance: gridDistance })}</Text>
+                                    ) : null}
+                                    {groupScopeBadgeText ? (
+                                        <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" /></View>
+                                    ) : !!item.repeatable && !isOwn && item.status !== 'pending' ? (
+                                        <View style={gridBlock.lastRowPiece}><CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} /></View>
+                                    ) : null}
+                                </View>
+                            </>
+                        )}
                     </View>
                 </Pressable>
             );

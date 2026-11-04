@@ -3517,22 +3517,109 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
         } finally { copyTooBig.on = false; }
     });
 
-    it('copy_other_address: refused with the address in the §5 words, nothing kept; Start afresh still works', async () => {
+    // §5.6 (b) of DESIGN-names-list-web-fable.md (slice S0b): the copy belongs to the community, not to an address. Byron
+    // answers to mullum and byron for good; an admin's phone that moves from one to the other keeps its own record.
+    const BYRON = 'https://byron.beanpool.org';
+    const copyNames = (node: FakeNode, me: BeanPoolIdentity) => node.copies!.get(ownerKey(node, me))!.header.split('\n')[2];
+    const putNames = () => sentAs('PUT', '/api/names/copy').map((x) => JSON.parse(x.body).header.split('\n')[2]);
+
+    it('M5: a copy saved under mullum restores under byron, with the words, and the next save names byron', async () => {
         const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
-        const pin = namesPinForNextCopy((await pinOf(ada))!);
-        const c = makeNamesCopy({ pin, address: 'https://elsewhere.example.org', me: ada });
-        node.copies!.set(ownerKey(node, ada), { header: c.header, signature: c.signature, box: c.box, seq: c.seq, headN: c.headN, headId: c.headId, savedAt: c.savedAt, digest: c.boxDigest });
+        expect(copyNames(node, ada)).toBe(COMMUNITY);
+        // Ada's phone now uses the byron name: it keeps no record for that address, so it restores from the node's copy.
+        expect(await readNamesPinFrom(STORE, ada.publicKey, BYRON)).toBeNull();
+        const r = await openNamesList(BYRON, ada, STORE);
+        expect(r.ok ? 'ok' : `${r.code}: ${r.message}`).toBe('ok');
+        if (!r.ok) return;
+        expect(r.value.plan.kind).toBe('ready');
+        expect(named(r.value)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        expect(r.value.notices).toContain(NAMES_COPY.copyOtherAddress(COMMUNITY, BYRON));
+        expect(NAMES_COPY.copyOtherAddress(COMMUNITY, BYRON)).toBe(
+            `Your names-list record was saved from ${COMMUNITY}. This device uses ${BYRON} for the same community, so it has taken the record as it is.`);
+        expect(r.value.notices.filter((w) => w.startsWith('Restored your names-list record from the server')).length).toBe(1);
+        expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
+        // Said once: the next open on byron doesn't say it again.
+        const second = await openNamesList(BYRON, ada, STORE);
+        expect(second.ok ? 'ok' : second.code).toBe('ok');
+        expect(second.ok && second.value.notices.includes(NAMES_COPY.copyOtherAddress(COMMUNITY, BYRON))).toBe(false);
+        // The next save, on byron: Bea joins, Ada checks her and sends her the keys; the copy goes first and names byron.
+        const bea = await admin('Bea');
+        node.admins.push(role(bea));
+        expect((await checkEachOther(STORE, ada, BYRON, node.stateFor(ada.publicKey), namesKeyQr(bea.publicKey))).ok).toBe(true);
+        expect((await checkEachOther(STORE, bea, COMMUNITY, node.stateFor(bea.publicKey), namesKeyQr(ada.publicKey))).ok).toBe(true);
+        sent = [];
+        const s = await sendKeysAgain(BYRON, ada, STORE, bea.publicKey);
+        expect(s.ok ? 'ok' : s.code).toBe('ok');
+        expect(putNames()).toEqual([BYRON]);
+        expect(copyNames(node, ada)).toBe(BYRON);
+        expect(sentAs('POST', '/api/names/shares').length).toBeGreaterThan(0);
+        // A wiped phone on byron restores it with nothing to say about addresses; one still on mullum is told byron saved it.
         wipe(ada);
-        const r = await openNamesList(COMMUNITY, ada, STORE);
-        expect(r.ok).toBe(false);
-        if (r.ok) return;
-        expect(r.code).toBe('copy_other_address');
-        expect(r.message).toBe(NAMES_COPY.copyOtherAddress('https://elsewhere.example.org'));
-        expect(COPY_REFUSED_CODES).toContain(r.code);
-        expect(await pinOf(ada)).toBeNull();
+        const onByron = await openNamesList(BYRON, ada, STORE);
+        expect(onByron.ok ? 'ok' : onByron.code).toBe('ok');
+        expect(onByron.ok && onByron.value.notices.some((w) => w.startsWith('Your names-list record was saved from'))).toBe(false);
+        expect((await readNamesPinFrom(STORE, ada.publicKey, BYRON))!.trusted).toContain(bea.publicKey);
+        wipe(ada);
+        expect((await open(ada)).notices).toContain(NAMES_COPY.copyOtherAddress(BYRON, COMMUNITY));
+    });
+
+    it('M5: a newer copy another device of this account saved under mullum is merged on byron, said with the address, never refused', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        // Two devices of Ada's: one on mullum, one on byron holding the same record.
+        expect(await writeNamesPinTo(STORE, ada.publicKey, BYRON, (await pinOf(ada))!)).toBe(true);
+        // On mullum, Ada checks Bea and sends her the keys: the node's copy is newer, and names mullum.
+        const bea = await admin('Bea');
+        node.admins.push(role(bea));
+        await meet(node, ada, bea);
+        expect((await sendKeysAgain(COMMUNITY, ada, STORE, bea.publicKey)).ok).toBe(true);
+        const newer = node.copies!.get(ownerKey(node, ada))!;
+        expect(copyNames(node, ada)).toBe(COMMUNITY);
+        expect((await readNamesPinFrom(STORE, ada.publicKey, BYRON))!.copy.seq).toBeLessThan(newer.seq);
+        sent = [];
+        const r = await openNamesList(BYRON, ada, STORE);
+        expect(r.ok ? 'ok' : `${r.code}: ${r.message}`).toBe('ok');
+        if (!r.ok) return;
+        const merged = (await readNamesPinFrom(STORE, ada.publicKey, BYRON))!;
+        expect(merged.trusted).toContain(bea.publicKey);
+        expect(merged.copy.seq).toBeGreaterThanOrEqual(newer.seq);
+        // The merge says it as the S0 ruling words it (copyNewer is gone: DESIGN-names-list-merge-rule-fable.md §4).
+        expect(r.value.notices).toContain(NAMES_COPY.secondDevice);
+        expect(r.value.notices).toContain(NAMES_COPY.copyOtherAddress(COMMUNITY, BYRON));
+        expect(r.value.notices).not.toContain(NAMES_COPY.copyNotSaved);
+        // The byron device then saves past it, under its own address.
+        expect(putNames()).toEqual([BYRON]);
+        expect(node.copies!.get(ownerKey(node, ada))!.seq).toBeGreaterThan(newer.seq);
+    });
+
+    it('M6: a copy of another community id is still refused, under this address or another; nothing kept; Start afresh offered', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        for (const address of [COMMUNITY, BYRON]) {
+            const c = makeNamesCopy({ pin: namesPinForNextCopy(emptyNamesPin('ffffffffffffffff', ada.publicKey)), address, me: ada });
+            node.copies!.set(ownerKey(node, ada), { header: c.header, signature: c.signature, box: c.box, seq: c.seq, headN: c.headN, headId: c.headId, savedAt: c.savedAt, digest: c.boxDigest });
+            wipe(ada);
+            const r = await openNamesList(COMMUNITY, ada, STORE);
+            expect(r.ok).toBe(false);
+            if (r.ok) return;
+            expect(r.code).toBe('copy_bad');
+            expect(r.message).toBe(NAMES_COPY.copyBad);
+            expect(COPY_REFUSED_CODES).toContain(r.code);
+            expect(await pinOf(ada)).toBeNull();
+            expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+        }
         const fresh = await startAfreshOnThisPhone(COMMUNITY, ada, STORE);
         expect(fresh.ok).toBe(true);
-        expect(node.copies!.get(ownerKey(node, ada))!.seq).toBeGreaterThan(c.seq);
+    });
+
+    it('Start afresh is not offered for a copy saved under another address: it is no refusal', () => {
+        expect(COPY_REFUSED_CODES).not.toContain('copy_other_address');
+        expect([...COPY_REFUSED_CODES].sort()).toEqual(['copy_bad', 'copy_stale']);
+        // The screen offers it only on a refused copy's code.
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toContain("setCopyRefused(COPY_REFUSED_CODES.includes(result.code ?? ''));");
+        expect(screen.match(/btn\(COPY\.startAfresh, startAfresh, 'danger'\)/g)).toHaveLength(1);
+        expect(screen).toContain("{copyRefused ? <View style={styles.buttonRow}>{btn(COPY.startAfresh, startAfresh, 'danger')}</View> : null}");
+        expect(screen).not.toContain('copy_other_address');
+        expect(fs.readFileSync(path.join(__dirname, '../names-list.ts'), 'utf8')).not.toContain('copy_other_address');
     });
 
     it('Send the keys again after a check: the copy is saved before the share, so the node\'s copy covers it and a wiped phone restores', async () => {
@@ -3565,6 +3652,8 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
             if (!r.ok) return;
             expect(r.value.plan.kind).toBe('ready');
             expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
+            // One address typed two ways is one address: nothing is said about another (§5.6 (b)).
+            expect(r.value.notices.some((w) => w.startsWith('Your names-list record was saved from'))).toBe(false);
         });
     }
 

@@ -430,8 +430,9 @@ async function copyFirst(anchor: string, identity: BeanPoolIdentity, store: Name
  * limit, asked as it goes out (Sign Out's, which shrinks to its deadline); the request limit otherwise.
  */
 /**
- * The address a copy is sealed to and checked against, at save, restore and merge alike: `communityAddress`, with the
- * scheme and host in lower case and a default port dropped, so one community typed two ways is one address.
+ * The address a copy is sealed to at save, and compared with at restore and merge (a copy saved under another of the
+ * community's addresses is taken and said, never refused: §5.6 (b)): `communityAddress`, with the scheme and host in lower
+ * case and a default port dropped, so one community typed two ways is one address and says nothing.
  */
 function copyAddress(anchor: string): string | null {
     const a = communityAddress(anchor);
@@ -503,19 +504,20 @@ async function restoreFromCopy(anchor: string, identity: BeanPoolIdentity, store
         return got.status === 0 ? { ...got, code: got.code ?? 'copy_unreachable', message: NAMES_COPY.copyUnreachable } : got;
     }
     const address = copyAddress(anchor) ?? anchor;
+    // A copy saved under another of the community's addresses is this account's own record, and is taken (design
+    // DESIGN-names-list-web-fable.md §5.6 (b)); the next save names this phone's address. Another community's is refused.
     const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address });
-    if (!r.ok) {
-        return r.reason === 'other_address'
-            ? copyFailure('copy_other_address', NAMES_COPY.copyOtherAddress(r.address))
-            : copyFailure('copy_bad', NAMES_COPY.copyBad);
-    }
+    if (!r.ok) return copyFailure('copy_bad', NAMES_COPY.copyBad);
     const checked = checkNamesCopyAgainst(r.pin, r.copy, state, mine);
     if (!checked.ok) return copyFailure('copy_stale', NAMES_COPY.copyStale(r.copy.savedAt));
     if (!(await writeNamesPinTo(store, identity.publicKey, anchor, r.pin))) return NOT_KEPT;
     await keepCopied(store, identity.publicKey, anchor, { seq: r.copy.seq, part: copiedPart(r.pin), digest: r.copy.boxDigest });
     // Said once, by the next open that says the kept words (kept on the phone, so also across an app restart).
     const head = r.pin.chain[r.pin.chain.length - 1];
-    if (head) await keepUnsaid(store, identity.publicKey, anchor, [NAMES_COPY.copyRestored(r.copy.savedAt, head.n, namesListKeyCode(head.id))]);
+    await keepUnsaid(store, identity.publicKey, anchor, [
+        ...(head ? [NAMES_COPY.copyRestored(r.copy.savedAt, head.n, namesListKeyCode(head.id))] : []),
+        ...(r.otherAddress ? [NAMES_COPY.copyOtherAddress(r.otherAddress, address)] : []),
+    ]);
     return { ok: true, value: r.pin };
 }
 
@@ -524,25 +526,32 @@ export { mergeNamesPins };
 
 /**
  * This phone has a pin and the node holds a newer copy of this key's (another phone signed in as this admin and saved
- * after this one): fetched, checked (§2) and merged ({@link mergeNamesPins}), kept, and said once. Any failure keeps
- * this phone's pin as it is (never rolled back); the copy then waits (`copy_newer`) and no shares go.
+ * after this one): fetched, checked (§2) and merged ({@link mergeNamesPins}), kept, and said once. A copy that device
+ * saved under another of the community's addresses is merged the same, and the address said (§5.6 (b)). Any failure
+ * keeps this phone's pin as it is (never rolled back); the copy then waits (`copy_newer`) and no shares go.
  */
 async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, state: NamesState, local: NamesPin, limitMs?: number): Promise<NamesPin> {
     const got = await getCopy(anchor, identity, limitMs);
     if (!got.ok) return local;
-    const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address: copyAddress(anchor) ?? anchor });
+    const address = copyAddress(anchor) ?? anchor;
+    const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address });
     if (!r.ok || r.copy.seq <= local.copy.seq || state.myCopy?.seq !== r.copy.seq) return local;
     const merged = mergeNamesPins(local, r.pin);
     if (!(await writeNamesPinTo(store, identity.publicKey, anchor, merged.pin))) return local;
-    // Said once by the next open: the merge, then each key one record trusted that stands removed here (ruling §4).
+    // Said once by the next open: the merge, then each key one record trusted that stands removed here (ruling §4), and
+    // the address a copy was saved under when it was the community's other one (§5.6 (b)).
     await keepUnsaid(store, identity.publicKey, anchor, [
         NAMES_COPY.secondDevice, ...merged.recheck.map((k) => NAMES_COPY.checkAgainOtherDevice(callsignIn(state, k))),
+        ...(r.otherAddress ? [NAMES_COPY.copyOtherAddress(r.otherAddress, address)] : []),
     ]);
     return merged.pin;
 }
 
-/** The codes of a refused copy, on which the screen offers "Start afresh on this phone" (asked first). */
-export const COPY_REFUSED_CODES = ['copy_bad', 'copy_stale', 'copy_other_address'];
+/**
+ * The codes of a refused copy, on which the screen offers "Start afresh on this phone" (asked first). A copy saved under
+ * another of the community's addresses is no refusal (§5.6 (b)): it is taken, so Start afresh is never offered for it.
+ */
+export const COPY_REFUSED_CODES = ['copy_bad', 'copy_stale'];
 
 /**
  * A names pin whose copy the node didn't confirm at Sign Out; `onlyKey`: the list's key N when no other admin may hold it.
@@ -1672,7 +1681,8 @@ export const NAMES_COPY = {
     copyUnreachable: 'Couldn’t reach the server for your names-list record. Nothing was changed. Try again.',
     copyBad: 'The copy of your names-list record on the server didn’t check out: it wasn’t saved by this account, or it was changed. Nothing was read.',
     copyStale: (savedAt: string) => `The copy of your names-list record on the server is older than what this account has already done (saved ${shortDate(savedAt)}). Whoever runs the server may have put an old copy back. Nothing was read.`,
-    copyOtherAddress: (address: string) => `This record was saved for ${address}, not this community.`,
+    // DESIGN-names-list-web-fable.md §5.7, exact: a copy saved under another of the community's addresses, taken (§5.6 (b)).
+    copyOtherAddress: (savedFrom: string, here: string) => `Your names-list record was saved from ${savedFrom}. This device uses ${here} for the same community, so it has taken the record as it is.`,
     copyTooBig: 'Your names-list record is too big to keep a copy on the server. Keep this phone signed in, or save the names as a PDF.',
     copyNotSaved: 'The server didn’t keep a copy of your names-list record just now, so no keys were sent. The next open tries again.',
     // Two devices, one key (DESIGN-names-list-merge-rule-fable.md §4): a newer record from another device was merged.

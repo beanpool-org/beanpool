@@ -309,6 +309,13 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         expect(byTestId('poll-card')!.closest('[data-testid="market-grid-row"]')).toBeNull();
         expect(host.textContent).toContain('Where should the market go?');
         expect(host.querySelectorAll('[data-testid="grid-text-block"]').length).toBeGreaterThan(0);
+        // The event (P3'): a tile in a row like the listings, with their four-row block; its date, time, place and chip are
+        // words through t(), held by the check below with the rest.
+        const eventTile = byTestId('event-card-p-event')!;
+        expect(eventTile.closest('[data-testid="market-grid-row"]')).not.toBeNull();
+        expect(eventTile.querySelector('[data-testid="grid-text-block"]')?.children).toHaveLength(4);
+        expect(eventTile.textContent).toContain('Repair café');
+        expect(eventTile.textContent).toContain('Scout hall');
         expect(bypassing()).toEqual([]);
         await click(host.querySelector(`[aria-label="${pseudoLocalise('Compact view')}"]`), 'the view toggle, again');
         expect(host.querySelector('[data-testid="category-tile"]')).not.toBeNull();

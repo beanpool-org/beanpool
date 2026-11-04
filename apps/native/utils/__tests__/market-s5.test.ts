@@ -83,8 +83,16 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
     });
 
     it('grid card picture wrapper has 4:3 aspect ratio (aspectRatio: 4 / 3), not square (market-card-43)', () => {
-        expect(marketSrc).toMatch(/gridImageWrapper:\s*\{[^}]*aspectRatio:\s*4\s*\/\s*3[^}]*\}/);
-        expect(marketSrc).not.toMatch(/gridImageWrapper:\s*\{[^}]*aspectRatio:\s*1[, \t\r\n\}]/);
+        // The frame is the style box's since P3' (components/market-card-shell.ts), so the event tile draws the listing's own:
+        // core's 4 by 3, read in the box, and both tiles draw their picture in it.
+        expect(MARKET_CARD_SHELL.photo.grid.aspectWidth / MARKET_CARD_SHELL.photo.grid.aspectHeight).toBe(4 / 3);
+        expect(shellSrc).toMatch(/gridImageWrapper:\s*\{[^}]*aspectRatio:\s*GRID_PHOTO\.aspectWidth\s*\/\s*GRID_PHOTO\.aspectHeight[^}]*\}/);
+        expect(shellSrc).toContain('const GRID_PHOTO = SHELL.photo.grid;');
+        for (const src of [marketSrc, source('components/EventCard.tsx')]) {
+            expect(src).toContain('<View style={shell.gridImageWrapper}>');
+            expect(src).not.toMatch(/gridImageWrapper:\s*\{/);
+        }
+        expect(shellSrc).not.toMatch(/gridImageWrapper:\s*\{[^}]*aspectRatio:\s*1[, \t\r\n\}]/);
     });
 
     it('only the grid card anchors its crop towards the top third; the 32 and 80 dp thumbnails stay centred, as on the web (market-card-43)', () => {

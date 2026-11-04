@@ -211,7 +211,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
 /** Placeholders read back as a number (and given to t() as one, so the language writes its digits). */
 const NUMBER_PLACES = new Set(['n', 'm', 'count', 'seconds', 'hours']);
 /** Placeholders read back as one unbroken token: a status, a code, an address. */
-const TOKEN_PLACES = new Set(['status', 'code', 'host', 'other_host']);
+const TOKEN_PLACES = new Set(['status', 'code', 'host', 'other_host', 'address', 'this_address']);
 /** What a lower layer writes when it has no name: read back inside a sentence, it would be English in another language. */
 const NO_NAME = new Set(['an admin', 'this person', 'this member', 'the entry', 'this entry', 'this community', 'your community', 'This sign-in', 'Your sign-in']);
 
@@ -261,6 +261,8 @@ const FILLED: readonly WordKey[] = [
     word('{who}’s key was removed on one of your devices and checked on another, and this device can’t tell which came last, so the removal stands here. If {who} is an admin, check their code here once.'),
     word('The list has a new key without {who}: their key had been removed on a key history this device isn’t on.'),
     word('The server offers an older key history (up to key {n}) than this phone has (key {m}). A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; entries written since the copy are gone and must be typed again from your paper copy.'),
+    // NAMES_COPY.copyOtherAddress: a copy saved under another of the community's addresses, taken (DESIGN-names-list-web-fable.md §5.6 (b)).
+    word('Your names-list record was saved from {address}. This device uses {this_address} for the same community, so it has taken the record as it is.'),
     // core names-list-crypto.ts normaliseNamesEntryText: a name or a note over NAMES_LIMITS.
     word('Keep the name to {n} characters.'),
     word('Keep the note to {n} characters.'),

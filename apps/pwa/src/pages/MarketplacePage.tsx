@@ -7,7 +7,7 @@
  */
 
 import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
-import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, openListingLabel, type PostType } from '../lib/marketplace';
 import { AuthorCard } from '../components/AuthorCard';
 import { useCoversScreen } from '../lib/screen-cover';
 import { nodeRefusal } from '../lib/node-refusal';
@@ -168,27 +168,6 @@ function explainTradeError(err: unknown): string {
         return t('🌴 Holiday mode is on — turn it off in Settings before trading.');
     }
     return raw.replace(/^[A-Z_]+:\s*/, '');
-}
-
-/**
- * A listing tile's screen-reader name: "Open listing: <title>", with " (from byron)" for a listing pulled from another
- * community (#143 step 4).
- *
- * The community is needed because the tile's `aria-label` REPLACES its children for a screen reader, so the 🌐 badge
- * inside `MarketplaceCard` is announced to nobody (review finding). Which community a listing comes from is not
- * decoration here — it decides who the buyer's beans are owed to.
- *
- * Same trimming as the visible badge, and one definition would be better than two; the badge's copy lives
- * inside `MarketplaceCard` and hoisting it is a wider change than this PR should make.
- */
-function openListingLabel(post: any): string {
-    const title = post?.title ?? '';
-    const remote = post?._remoteNode ?? post?.originNode;
-    const name = formatNodeName(remote, post?._remoteCallsign);
-    if (!name) return t('Open listing: {title}', { title });
-    return name.startsWith('peer (')
-        ? t('Open listing: {title} from {community}', { title, community: name })
-        : t('Open listing: {title} (from {community})', { title, community: name });
 }
 
 /** How long ago a listing was posted (the phone's post/[id].tsx getTimeAgo, the same words). */

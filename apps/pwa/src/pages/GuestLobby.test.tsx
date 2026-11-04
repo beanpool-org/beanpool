@@ -416,7 +416,9 @@ describe('a visitor with no key on the global node', () => {
         expect(within(card).getByTestId('map-preview-title')).toHaveTextContent('Sourdough loaves');
         expect(within(card).getByTestId('map-preview-near')).toHaveTextContent('near here');
         expect(card).not.toHaveTextContent(/0B|Elder|hidden|Anonymous/);
-        fireEvent.click(within(card).getByRole('button', { name: 'View Details' }));
+        // The card is the one door (M1: no View button), named by the listing.
+        expect(within(card).queryByRole('button', { name: /View/ })).toBeNull();
+        fireEvent.click(within(card).getByRole('button', { name: 'Open listing: Sourdough loaves' }));
         expect(await screen.findByTestId('visitor-detail')).toHaveTextContent('Sourdough loaves');
     });
 

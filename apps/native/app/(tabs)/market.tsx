@@ -543,20 +543,24 @@ export default function MarketScreen() {
     // "Your events" under ★ For You: the signer's own upcoming RSVPs (decision 1). Its own read, only while
     // that pill is chosen. Empty on anything that goes wrong — a node without the route answers 404, and a
     // community that does not have the feature should show no row rather than an error about it (decision 7).
+    // Read on choosing the pill AND each time the Market comes back into view on it: the event's page is the only place to
+    // answer (the card has no buttons; EventDetail is the one caller of rsvpEvent), and that page is a sheet (post/[id]) over
+    // the Market, which stays mounted under it. The page emits nothing when an answer changes; closing the sheet focuses the
+    // Market again, as does coming back from any other tab, so the rows never keep a mark the member has just changed there
+    // beside a For You copy of the same event that shows the new one (the deciding review of #2874). A read that lands after
+    // the Market has lost focus or left the pill is dropped: the next visit reads again.
     const [myEvents, setMyEvents] = useState<MyEvent[]>([]);
-    const loadMyEvents = useCallback(async () => {
-        if (!identity?.publicKey) return;
-        try {
-            setMyEvents(await fetchMyEvents());
-        } catch (e) {
-            setMyEvents([]);
-            if (!isRouteMissing(e)) console.warn('[Market] Could not read your events:', e);
-        }
-    }, [identity?.publicKey]);
-    useEffect(() => {
-        if (filter !== 'for-you') return;
-        loadMyEvents();
-    }, [filter, loadMyEvents]);
+    useFocusEffect(useCallback(() => {
+        if (filter !== 'for-you' || !identity?.publicKey) return;
+        let live = true;
+        fetchMyEvents()
+            .then(rows => { if (live) setMyEvents(rows); })
+            .catch(e => {
+                if (live) setMyEvents([]);
+                if (!isRouteMissing(e)) console.warn('[Market] Could not read your events:', e);
+            });
+        return () => { live = false; };
+    }, [filter, identity?.publicKey]));
 
     // Fresh listings banner dismissal. The banner is the list's first row, so it scrolls away with it.
     const [dismissedFresh, setDismissedFresh] = useState<string | null>(null);

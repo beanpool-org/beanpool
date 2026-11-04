@@ -98,6 +98,12 @@ matches the file.
 | `chip.accent.tint` | `#eef1ee` | `#384038` |
 | `chip.accent.ink` | `#5b6b5b` | `#c0ccc0` |
 | `chip.accent.border` | `#dce3dc` | `#434e43` |
+| `chip.poll.tint` | `#fae8ff` | `#4a044e` |
+| `chip.poll.ink` | `#86198f` | `#f0abfc` |
+| `chip.quiet.tint` | `#eef1ee` | `#434e43` |
+| `chip.quiet.ink` | `#526052` | `#c0ccc0` |
+| `chip.info.tint` | `#dbeafe` | `#172554` |
+| `chip.info.ink` | `#1e40af` | `#93c5fd` |
 | `deal.held.tint` | `#d1fae5` | `#022c22` |
 | `deal.held.ink` | `#065f46` | `#6ee7b7` |
 | `deal.held.border` | `#10b981` | `#34d399` |
@@ -201,6 +207,9 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `sage` | the sage accent as a button with words (web: + Create Group, + Propose, + Propose Decision, Submit Decision) | 4.86 / hover 6.66 | same |
 | `chip.ok` / `need` / `warn` / `danger` | verified tick and Offer (`ok`), Need, counts | 6.78 / 6.38 / 6.37 / 5.30 | 9.94 / 5.56 / 10.39 / 8.51 |
 | `chip.accent` | a selected sage chip, the accent's pale ground | 4.99 | 6.45 |
+| `chip.poll` | the Market's POLL chip: the `card.plum` pair, so a poll and an event (`tile.event`, violet) are two hues (card style box, Marty 4 Nov 2026) | 7.08 | 8.41 |
+| `chip.quiet` | the grey chip that carries no news: RECURRING, a category, a group's lock, "Closes in {n}d", Closed (amber keeps meaning money or caution) | 5.85 | 5.25 |
+| `chip.info` | the blue 👤 YOU chip: the `tile.services` pair | 7.15 | 8.15 |
 | `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`, drawn from the plain rgba variable `--bp-deal-<name>-wash`: no color-mix, which old Android WebViews drop), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |
 | `tile.<cat>` | category tiles: listings, events, Pulse; sticker outline and word in ink on tint | 6.31 – 12.08 | 6.31 – 11.19 |
 | `card.<hue>` | card caption bands: caption words, "Tune" and "…" in ink on tint | 5.0 – 8.1 | 6.3 – 11.2 |
@@ -228,7 +237,8 @@ five colour lines of `map.tsx` at the roles on 14 Oct: the Reach chooser and cat
   `@beanpool/core` and builds its tokens from them. A fill under words uses `brand.fill` / `text.onBrand`,
   `accent.fill` / `text.onAccent` (charcoal in dark), `feedback.danger.solid`, `action.fab`; words and icons use `brand.primary`,
   `accent.primary`, `feedback.*.fg` (`feedback.warning.fg` is `ink.warning`). The Offer and Need chips
-  (`market.offer`, `market.need`) are `chip.ok` and `chip.need`. One token can no longer serve as both, because no single dark value reads as
+  (`market.offer`, `market.need`) are `chip.ok` and `chip.need`; the POLL chip (`market.poll`) is `chip.poll`, and the quiet and
+  YOU chips (`chip.quiet`, `chip.info`, each `{ fg, bg }`) are the roles of the same names. One token can no longer serve as both, because no single dark value reads as
   words on the page and under white words.
 - **Manager** (`apps/manager`, dark only): `tailwind.config.js` imports `brandTailwindColours()` into its colours and puts
   `brandCssVariableMap('light')` / `('dark')` under `:root` / `:root.dark` with `addBase` (the same blocks

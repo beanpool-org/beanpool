@@ -378,19 +378,18 @@ function MarketListingItem({
                 data-testid={testId}
                 className="w-full min-h-[44px] p-2 text-left bg-transparent border border-border-primary hover:bg-bg-hover rounded-xl cursor-pointer flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-                <ListPhoto
-                    photo={photo}
-                    alt=""
-                    loading={photo ? nextImageLoading() : undefined}
-                    decoding="async"
-                    className="w-full h-24 rounded-lg object-cover bg-bg-hover mb-2"
-                    style={{ objectPosition: '50% 33%' }}
-                    fallback={(
-                        <div className="w-full h-24 rounded-lg overflow-hidden mb-2">
-                            <CategoryTile category={item.category} size="grid" />
-                        </div>
-                    )}
-                />
+                {/* The photo's slot: `relative`, so a photo still loading stays inside it (components/ListPhoto.tsx). */}
+                <div data-testid="home-photo-slot" className="relative w-full h-24 rounded-lg overflow-hidden mb-2 shrink-0">
+                    <ListPhoto
+                        photo={photo}
+                        alt=""
+                        loading={photo ? nextImageLoading() : undefined}
+                        decoding="async"
+                        className="w-full h-full object-cover bg-bg-hover"
+                        style={{ objectPosition: '50% 33%' }}
+                        fallback={<CategoryTile category={item.category} size="grid" />}
+                    />
+                </div>
                 <div className="min-w-0 flex-1">
                     <div className="mb-1">
                         <span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>
@@ -417,18 +416,16 @@ function MarketListingItem({
             testId={testId}
             label={label}
         >
-            <ListPhoto
-                photo={photo}
-                alt=""
-                loading={photo ? nextImageLoading() : undefined}
-                decoding="async"
-                className="shrink-0 w-12 h-12 rounded-lg object-cover bg-bg-hover"
-                fallback={(
-                    <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden">
-                        <CategoryTile category={item.category} size="thumb" />
-                    </div>
-                )}
-            />
+            <span data-testid="home-photo-slot" className="relative shrink-0 w-12 h-12 rounded-lg overflow-hidden">
+                <ListPhoto
+                    photo={photo}
+                    alt=""
+                    loading={photo ? nextImageLoading() : undefined}
+                    decoding="async"
+                    className="w-full h-full object-cover bg-bg-hover"
+                    fallback={<CategoryTile category={item.category} size="thumb" />}
+                />
+            </span>
             <span className="min-w-0 flex-1">
                 <span className="block break-words">
                     <span className={`text-[0.65rem] font-extrabold mr-1 ${kind === 'NEED' ? 'text-orange-800 dark:text-orange-300' : 'text-blue-800 dark:text-blue-300'}`}>

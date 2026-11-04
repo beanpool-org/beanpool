@@ -8,7 +8,7 @@
  *   - 1600 px
  * In both light and dark themes, before and after pinning:
  *   - before: unpinned Market feed
- *   - after-feed: Pinned block at top of Market with "📌 PINNED" chip
+ *   - after-feed: the pin as the grid's first cell, with its "📌 PINNED" chip (no Pinned heading in the grid)
  *   - after-detail: Pinned post detail line and "Take the pin off" button
  *   - after-sheet: PinSheet dialog with 1d/3d/7d duration options
  *
@@ -159,7 +159,7 @@ async function main() {
                     await context.close();
                 }
 
-                // 2. AFTER: Pinned Market feed (Pinned block + chip)
+                // 2. AFTER: Pinned Market feed (the grid has no Pinned block: the pin is its first cell, with its chip)
                 {
                     const { context, page } = await openPage(browser, server.origin, {
                         width: vp.width,
@@ -168,7 +168,7 @@ async function main() {
                         textScale: vp.textScale,
                         posts: pinnedPosts,
                     });
-                    await page.waitForSelector('[data-testid="market-pinned-block"]', { timeout: 10_000 });
+                    await page.waitForSelector('[data-testid="market-pinned-tile"]', { timeout: 10_000 });
                     await settle(page);
 
                     const filename = `after-feed-${vp.name}-${theme}.png`;

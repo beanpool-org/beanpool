@@ -36,6 +36,7 @@ import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { EventNextDates } from './EventNextDates';
 import { EventCopyDoor } from './EventCopyDoor';
+import { AuthorCard, useMemberRating } from './AuthorCard';
 import { ShowOnGlobalHostRow } from './ShowOnGlobalRow';
 import { ReportReasonBox } from './ReportReasonBox';
 import { eventLineWords } from './event-lines';
@@ -186,6 +187,11 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
         { text: t('Let them in'), onPress: () => { saveLetIn('everyone', { everyone: true }, true); } },
     ]);
     const hostName = p.authorCallsign || p.author_callsign || (p.author_pubkey || p.authorPublicKey || '').slice(0, 6) || t('Unknown', undefined, 'a host with no name');
+    // The host's box (components/AuthorCard.tsx, the box a listing's "POSTED BY" is): their key, face and ratings. A member's copy of an event has no
+    // host to show, and a visitors' view that hides who posted gives a box that opens nothing.
+    const hostKey: string | undefined = p.authorPublicKey ?? p.author_pubkey;
+    const hostRating = useMemberRating(copy || !hostKey ? null : hostKey);
+    const canOpenHost = !!hostKey && !isHiddenAuthor(hostKey);
     const groupName = p.targetGroupName || p.target_group_name;
     const isGroupOnly = (p.audienceScope || p.audience_scope) === 'group';
     // Photos from the cached row, whose paths getPost has already resolved against the node.
@@ -494,34 +500,26 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 {!!p.description && <Text style={styles.description}>{p.description}</Text>}
                 <PostTagChips tags={p.tags} freeTags={p.freeTags ?? p.free_tags} />
 
-                {(!copy || !!copy.from) && (() => {
-                    const line = (
-                        <Text style={styles.hostLine} numberOfLines={2}>
-                            {copy?.from ? copyFromLine(copy.from)
-                                : isGroupOnly && groupName
-                                ? t('Hosted by {name} · 🔒 only {group} can see this', { name: hostName, group: groupName })
-                                : t('Hosted by {name}', { name: hostName })}
-                        </Text>
-                    );
-                    // The host is the person on this screen: a tap on the line opens their profile (as the web's event page does).
-                    // The small cards that lead here open the event, never the host (Marty, 4 Nov). A copy has no host to open.
-                    const hostKey: string | undefined = p.authorPublicKey ?? p.author_pubkey;
-                    if (copy || !hostKey || isHiddenAuthor(hostKey)) return line;
-                    return (
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={t("View {name}'s profile", { name: hostName })}
-                            testID="event-host-open"
-                            // The line is one text line plus the 14 dp under it, which sits inside the button: short of a 44 dp target for
-                            // thumbs on old phones at 1.3x text. The slop adds the rest without moving anything (pinned in
-                            // event-host-opens-profile-render.test.ts).
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: hostKey, callsign: hostName } })}
-                        >
-                            {line}
-                        </Pressable>
-                    );
-                })()}
+                {/* A copy has no host: the line names where it comes from. Otherwise the host is the same box as a listing's "POSTED BY". */}
+                {copy?.from && (
+                    <Text style={styles.hostLine} numberOfLines={2}>{copyFromLine(copy.from)}</Text>
+                )}
+                {!copy && (
+                    <AuthorCard
+                        label={t('HOSTED BY')}
+                        pubkey={hostKey ?? ''}
+                        callsign={hostName}
+                        avatarUrl={p.author_avatar ?? p.authorAvatarUrl ?? p.author_avatar_url ?? null}
+                        rating={hostRating}
+                        disabled={!canOpenHost}
+                        testID={canOpenHost ? 'event-host-open' : 'event-host-card'}
+                        style={styles.hostCard}
+                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: hostKey, callsign: hostName } })}
+                    />
+                )}
+                {!copy && isGroupOnly && !!groupName && (
+                    <Text style={styles.hostAudience} testID="event-host-audience">{t('🔒 Only {group} can see this.', { group: groupName })}</Text>
+                )}
                 {isHost && !!view && (
                     <ShowOnGlobalHostRow event={view} enabled={onLocalCommunity && !copy && !closed && !online && !isGroupOnly && view.authorPublicKey === identity?.publicKey} />
                 )}
@@ -719,6 +717,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         noteText: { fontSize: 15, color: colors.text.body, lineHeight: 21 },
         description: { fontSize: 15, color: colors.text.body, lineHeight: 22, marginBottom: 14 },
         hostLine: { fontSize: 14, color: colors.text.secondary, marginBottom: 14 },
+        // The host's box sits in the page's own 16 dp padding (the listing's page has none, so its box carries 20 dp of margin).
+        hostCard: { marginHorizontal: 0, marginBottom: 14 },
+        // A group-only event says who can see it, just under the host's box.
+        hostAudience: { fontSize: 14, color: colors.text.secondary, marginTop: -6, marginBottom: 14 },
         hostBox: {
             borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, backgroundColor: colors.surface.card,
             paddingHorizontal: 12, paddingVertical: 4, marginBottom: 14,

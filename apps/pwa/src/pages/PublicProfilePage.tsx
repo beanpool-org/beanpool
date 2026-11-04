@@ -885,9 +885,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             {coverImage ? (
                                                                 // The photo is part of the card: a tap on it opens the post (Marty's standing rule, small
                                                                 // cards open the item); the enlarge lives on the post's own page. A small copy that fails
-                                                                // steps down to the full photo, then the box tile (#2838), never an empty slot. The row
-                                                                // names itself ("View post: ..."), so the picture is decorative.
-                                                                <div className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
+                                                                // is asked once more past every cache, then steps down to the full photo, then the box
+                                                                // tile (#2838, #2853), never an empty slot. The row names itself ("View post: ..."), so
+                                                                // the picture is decorative. `relative`: the photo still loading is held inside this slot
+                                                                // (card-photo-blank).
+                                                                <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                                     <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-2xl opacity-50">📦</span></span>} alt="" className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
                                                                 </div>
                                                             ) : (

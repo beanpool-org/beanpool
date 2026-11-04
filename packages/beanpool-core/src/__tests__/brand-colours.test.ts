@@ -54,7 +54,7 @@ describe('brand colours are readable in both themes', () => {
 
     it('covers every role, in both themes', () => {
         const roles = new Set(pairs.map((p) => p.role));
-        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'sage', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'info', 'neutral', 'ink.info', 'deal.held', 'deal.released', 'deal.cancelled']) {
+        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'sage', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'chip.poll', 'chip.quiet', 'chip.info', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent', 'ink.terra', 'info', 'neutral', 'ink.info', 'deal.held', 'deal.released', 'deal.cancelled']) {
             expect(roles, role).toContain(role);
         }
         // fills: on/fill + on/hover; chips: ink/tint; tiles: ink/tint; cards: ink/tint; inks: one per ground of that theme (a web-only ink, the web's grounds).
@@ -169,6 +169,50 @@ describe('brand colours are readable in both themes', () => {
             expect(BRAND_COLOURS.sage[part].dark, part).toBe(BRAND_COLOURS.sage[part].light);
         }
         expect(contrastRatio(BRAND_COLOURS.sage.fill.dark, WEB_INK_GROUNDS.dark[0])).toBeGreaterThanOrEqual(3);
+    });
+});
+
+describe('the card style box chips (chip.poll, chip.quiet, chip.info)', () => {
+    // DESIGN-card-style-box-fable.md §1.2 (Marty, 4 Nov 2026): the chips the Market's cards drew with raw hex.
+    it('POLL is the card.plum pair, so a poll and an event (tile.event, violet) are two hues', () => {
+        expect(BRAND_COLOURS.chip.poll).toEqual({ tint: BRAND_COLOURS.card.plum.tint, ink: BRAND_COLOURS.card.plum.ink });
+        expect(BRAND_COLOURS.chip.poll.tint).toEqual({ light: '#fae8ff', dark: '#4a044e' });
+        expect(BRAND_COLOURS.chip.poll.ink).toEqual({ light: '#86198f', dark: '#f0abfc' });
+        for (const theme of ['light', 'dark'] as const) {
+            expect(BRAND_COLOURS.chip.poll.tint[theme], theme).not.toBe(BRAND_COLOURS.tile.event.tint[theme]);
+            expect(BRAND_COLOURS.chip.poll.ink[theme], theme).not.toBe(BRAND_COLOURS.tile.event.ink[theme]);
+        }
+    });
+
+    it('the quiet chip is nature-100 under nature-700 in light, nature-800 under nature-300 in dark', () => {
+        expect(BRAND_COLOURS.chip.quiet.tint).toEqual({ light: '#eef1ee', dark: '#434e43' });
+        expect(BRAND_COLOURS.chip.quiet.ink).toEqual({ light: '#526052', dark: '#c0ccc0' });
+    });
+
+    it('YOU is the tile.services blue pair', () => {
+        expect(BRAND_COLOURS.chip.info).toEqual({ tint: BRAND_COLOURS.tile.services.tint, ink: BRAND_COLOURS.tile.services.ink });
+        expect(BRAND_COLOURS.chip.info.tint).toEqual({ light: '#dbeafe', dark: '#172554' });
+        expect(BRAND_COLOURS.chip.info.ink).toEqual({ light: '#1e40af', dark: '#93c5fd' });
+    });
+
+    it.each(['poll', 'quiet', 'info'] as const)('%s reads at 4.5:1 or more, ink on tint, in both themes', (name) => {
+        for (const theme of ['light', 'dark'] as const) {
+            const pair = brandContrastPairs().find((p) => p.theme === theme && p.role === `chip.${name}`);
+            expect(pair, `${theme} chip.${name} is judged`).toBeDefined();
+            expect(pair!.ratio, `${theme} chip.${name}`).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+
+    it('reach the web as CSS variables and Tailwind names (bp-chip-poll-*, bp-chip-quiet-*, bp-chip-info-*)', () => {
+        const { bp } = brandTailwindColours();
+        for (const name of ['poll', 'quiet', 'info']) {
+            for (const part of ['tint', 'ink']) {
+                expect(bp[`chip-${name}-${part}`], `chip-${name}-${part}`).toBe(`var(--bp-chip-${name}-${part})`);
+            }
+        }
+        expect(brandCssVariableMap('light')['--bp-chip-poll-ink']).toBe('#86198f');
+        expect(brandCssVariableMap('dark')['--bp-chip-quiet-tint']).toBe('#434e43');
+        expect(brandCssVariableMap('dark')['--bp-chip-info-ink']).toBe('#93c5fd');
     });
 });
 

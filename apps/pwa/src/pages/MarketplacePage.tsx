@@ -8,7 +8,7 @@
 
 import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
-import { MemberAvatar } from '../components/MemberAvatar';
+import { AuthorCard } from '../components/AuthorCard';
 import { useCoversScreen } from '../lib/screen-cover';
 import { nodeRefusal } from '../lib/node-refusal';
 import { MarketplaceCard } from '../components/MarketplaceCard';
@@ -2113,58 +2113,29 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 </div>
 
-                {/* Author section */}
-                <div className="bg-white dark:bg-nature-950 rounded-2xl border border-nature-200 dark:border-nature-800 p-4 shadow-sm mb-4">
-                    <p className="text-[0.65rem] text-nature-400 dark:text-nature-400 font-bold uppercase tracking-widest mb-3">
-                        {t('Posted by')}
-                    </p>
-                    <button 
-                        onClick={() => { if (onOpenProfile) onOpenProfile(selectedPost.authorPublicKey); }}
-                        className="flex items-start gap-4 text-left w-full hover:bg-oat-50/50 dark:hover:bg-black/20 p-2 -ml-2 rounded-xl transition-colors"
-                    >
-                        {/* Avatar */}
-                        {loadingProfile ? (
-                            <div className="w-14 h-14 rounded-full bg-nature-100 dark:bg-nature-800 animate-pulse shrink-0" />
-                        ) : (
-                            <MemberAvatar avatarUrl={authorProfile?.avatar} pubkey={selectedPost.authorPublicKey} callsign={selectedPost.authorCallsign} size={56} className="border-2 border-white shadow-sm" />
+                {/* Author section: components/AuthorCard.tsx, the one box an event's "Hosted by" is too. */}
+                <AuthorCard
+                    label={t('Posted by')}
+                    pubkey={selectedPost.authorPublicKey}
+                    callsign={selectedPost.authorCallsign}
+                    avatarUrl={authorProfile?.avatar}
+                    loadingAvatar={loadingProfile}
+                    ratings={authorAvgRating}
+                    onOpen={() => { if (onOpenProfile) onOpenProfile(selectedPost.authorPublicKey); }}
+                    className="mb-4"
+                    details={<>
+                        {authorProfile?.bio && (
+                            <p dir="auto" className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
+                                {authorProfile.bio}
+                            </p>
                         )}
-                        <div className="flex-1 min-w-0">
-                            <p className="font-bold text-lg text-nature-950 dark:text-white mb-0.5 truncate flex items-center gap-1.5">
-                                <span className="text-base text-amber-600">🤝</span> {selectedPost.authorCallsign}
+                        {authorProfile?.contact && authorProfile.contact.visibility !== 'hidden' && (
+                            <p className="text-xs text-nature-500 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block border border-nature-100 dark:border-nature-800">
+                                📧 {authorProfile.contact.value}
                             </p>
-                            {/* Star rating */}
-                            <p className="text-amber-500 text-sm mb-1.5 flex items-center flex-wrap gap-1">
-                                {'★'.repeat(Math.round(authorAvgRating.average))}{'☆'.repeat(5 - Math.round(authorAvgRating.average))}
-                                <span className="text-nature-500 text-xs ml-1 font-medium">
-                                    {authorAvgRating.count > 0 ? (
-                                        <>
-                                            {t('{average} ({n})', { average: formatNumber(authorAvgRating.average, 1), n: authorAvgRating.count })}
-                                            {authorAvgRating.asProvider && authorAvgRating.asProvider.count > 0 && (
-                                                <span className="ml-2 text-[0.65rem] bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-amber-700 dark:text-amber-300">
-                                                    📤 {formatNumber(authorAvgRating.asProvider.average, 1)}
-                                                </span>
-                                            )}
-                                            {authorAvgRating.asReceiver && authorAvgRating.asReceiver.count > 0 && (
-                                                <span className="ml-1 text-[0.65rem] bg-indigo-50 px-1.5 py-0.5 rounded text-indigo-700">
-                                                    📥 {formatNumber(authorAvgRating.asReceiver.average, 1)}
-                                                </span>
-                                            )}
-                                        </>
-                                    ) : t('No ratings yet')}
-                                </span>
-                            </p>
-                            {authorProfile?.bio && (
-                                <p dir="auto" className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
-                                    {authorProfile.bio}
-                                </p>
-                            )}
-                            {authorProfile?.contact && authorProfile.contact.visibility !== 'hidden' && (
-                                <p className="text-xs text-nature-500 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block border border-nature-100 dark:border-nature-800">
-                                    📧 {authorProfile.contact.value}
-                                </p>
-                            )}
-                        </div>
-                    </button>
+                        )}
+                    </>}
+                >
                     {selectedPost.shopId && (
                         <div className="mt-2 pt-2 border-t border-nature-100 dark:border-nature-800">
                             <button
@@ -2185,7 +2156,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             {t(PLACE_WORDS.roughPlace, { name: selectedPost.authorCallsign })}
                         </p>
                     )}
-                </div>
+                </AuthorCard>
 
                  {/* Share with members, and outside the community where it allows it (front doors S6). */}
                  <SharePostButtons post={selectedPost} isMember={isMember} />

@@ -538,7 +538,7 @@ describe('Every door lands on the enterprise page', () => {
             [path.join('app', 'post', '[id].tsx')]: 3,
             [path.join('app', 'chat', '[id].tsx')]: 2,
             // The map's small cards open the item and never its owner (4 Nov), so the map is no longer a door. An event's own screen
-            // is: "Hosted by {name}" opens the host, as the web's event page does.
+            // is: the host's box ("HOSTED BY", components/AuthorCard.tsx) opens the host, as a listing's "POSTED BY" does.
             [path.join('components', 'EventDetail.tsx')]: 1,
             // The full Community Pulse list: a row about a member opens them.
             [path.join('app', '(tabs)', 'market.tsx')]: 1,

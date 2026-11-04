@@ -1972,5 +1972,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} sa ibang komunidad · Hindi mo ito mabibili o makukuha rito.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} sa {community} · Hindi mo ito mabibili o makukuha hangga't hindi ka tinatanggap ng {community}.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 Mag-ikot sa pandaigdigang komunidad"
+  "🌍 Look around the global community": "🌍 Mag-ikot sa pandaigdigang komunidad",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Naghihintay ng sagot mo ang hurado kung saan ka napili. Sumagot sa loob ng isang araw, o mapupunta ang upuan mo sa susunod na miyembrong mapipili.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "Magsasara sa loob ng halos isang araw ang hurado na kinabibilangan mo. Buksan ang BeanPool para bumoto.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "Sumagot na sa kaso ang miyembrong pinagpapasyahan ng iyong hurado. Buksan ang BeanPool para basahin ito.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "Napili ka para sa isang hurado sa iyong komunidad, at magsasara ang botohan nito sa loob ng wala pang dalawang araw. Buksan ang BeanPool para maglingkod o umatras.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "Napili ka para sa isang hurado sa iyong komunidad. Buksan ang BeanPool sa loob ng tatlong araw para maglingkod o umatras."
 }

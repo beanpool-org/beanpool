@@ -133,7 +133,7 @@ describe('post-pinning-market (slice 2 pure rules and logic)', () => {
             { id: 'reg1', type: 'offer', status: 'active', active: 1, created_at: '2026-11-03T05:00:00Z' },
         ];
 
-        const filterCtx = { blockedUsers: [] as string[], favCategories: [] as string[] };
+        const filterCtx = { blockedUsers: [] as string[], favCategories: [] as string[], nowMs: now };
         const stateOf = (over: Partial<MarketFilterState> = {}): MarketFilterState => ({
             type: 'all', category: 'all', eventWindow: 'all', trust: 'all', beansOnly: false, radiusKm: null, center: null, groupId: 'all', ...over,
         });

@@ -1035,12 +1035,11 @@ export interface NamesCopy extends NamesCopyClaim {
 
 /**
  * Why a copy is refused (design §5's words): `bad_copy` (signature, box, shape, another account or community, a pin that
- * disagrees with its header), `other_address` (saved for another address), `stale_copy` (fails a §3 cross-check). The
- * `detail` names the check.
+ * disagrees with its header), `stale_copy` (fails a §3 cross-check). The `detail` names the check. A copy saved under
+ * another of the community's addresses is no refusal (DESIGN-names-list-web-fable.md §5.6 (b)): see {@link restoreNamesCopy}.
  */
 export type NamesCopyRefusal =
     | { ok: false; reason: 'bad_copy'; detail: 'shape' | 'version' | 'signature' | 'box' | 'digest' | 'not_mine' | 'other_community' | 'pin' | 'head' | 'seq' }
-    | { ok: false; reason: 'other_address'; detail: 'other_address'; address: string }
     | { ok: false; reason: 'stale_copy'; detail: 'own_statement' | 'own_share_head' | 'own_share_key' | 'own_share_trust' | 'node_seq' };
 
 /** The bytes a copy's owner signs, as text (lines joined by `\n`, no trailing newline). */
@@ -1110,13 +1109,20 @@ export function readNamesCopy(raw: unknown): { ok: true; copy: NamesCopy } | Ext
 
 /**
  * A wiped phone's restore (design §2, in its order): the copy read ({@link readNamesCopy}); its owner this phone's key;
- * its community the state's and its address this phone's own; the box opened with `me`'s key; the payload's `v` 1; the pin
- * read with {@link readNamesPin} (every chain link re-verified); its community, head n and head id the header's; and its
- * `copy.seq` the header's. Then the phone runs {@link checkNamesCopyAgainst}. Any failure is a refusal, never a partial pin.
+ * its community the state's; the box opened with `me`'s key, under the address the copy names; the payload's `v` 1; the
+ * pin read with {@link readNamesPin} (every chain link re-verified); its community, head n and head id the header's; and
+ * its `copy.seq` the header's. Then the phone runs {@link checkNamesCopyAgainst}. Any failure is a refusal, never a partial
+ * pin.
+ *
+ * The copy belongs to the community, not to an address (DESIGN-names-list-web-fable.md §5.6 (b)): a node may answer to
+ * two names (Byron: mullum and byron), an IP and a LAN address, and only this account's own devices can make a copy (it is
+ * signed by `me` and sealed to `me`), so a copy for this community saved under another address is this admin's own record.
+ * It is taken, and `otherAddress` names the address it was saved under, for the device to say once; it is absent when the
+ * copy names `ctx.address` (this device's). The address stays in the signed header and the box's associated data.
  */
 export function restoreNamesCopy(
     raw: unknown, ctx: { me: NamesSigner; communityId: string; address: string },
-): { ok: true; pin: NamesPin; copy: NamesCopy } | Exclude<NamesCopyRefusal, { reason: 'stale_copy' }> {
+): { ok: true; pin: NamesPin; copy: NamesCopy; otherAddress?: string } | Exclude<NamesCopyRefusal, { reason: 'stale_copy' }> {
     const read = readNamesCopy(raw);
     if (!read.ok) return read;
     const { copy } = read;
@@ -1124,7 +1130,6 @@ export function restoreNamesCopy(
     const me = lower(ctx.me.publicKey);
     if (copy.owner !== me) return bad('not_mine');
     if (copy.communityId !== ctx.communityId) return bad('other_community');
-    if (copy.address !== ctx.address) return { ok: false, reason: 'other_address', detail: 'other_address', address: copy.address };
     let text: string;
     try {
         text = openNamesCopy(copy.box, ctx.me.privateKey, { communityId: copy.communityId, address: copy.address, owner: copy.owner, seq: copy.seq });
@@ -1139,7 +1144,7 @@ export function restoreNamesCopy(
     const head = headOf(pin);
     if ((head?.n ?? 0) !== copy.headN || (head?.id ?? null) !== copy.headId) return bad('head');
     if (pin.copy.seq !== copy.seq) return bad('seq');
-    return { ok: true, pin: { ...pin, seen: [] }, copy };
+    return { ok: true, pin: { ...pin, seen: [] }, copy, ...(copy.address !== ctx.address ? { otherAddress: copy.address } : {}) };
 }
 
 /**

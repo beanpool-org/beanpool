@@ -8,7 +8,7 @@
  *      clean (light and dark); a tap on an interest reorders the Market card in place and saves on the account; Add a
  *      card is a real dialog (axe clean in both themes, and a saved search's settings sheet too), and Your Beans added
  *      from it by keyboard goes first, under Needs you, read at once, kept on the account (another browser, a reload);
- *      "…" Remove takes a card away with one save and gives focus to the nearest card left; Arrange folds the cards where
+ *      "…" Remove takes a card away with one save and gives focus to the nearest card left; Arrange keeps the cards where
  *      they stand (axe clean, Escape gives focus back), and its Reset to defaults gives back the newcomer's list;
  *      with the node unreachable the kept answer is drawn and the page says so; Sign Out (Device
  *      Only) leaves no cached Home in the browser; the Tips card after First steps on tip 1, Next by keyboard draws the
@@ -31,9 +31,13 @@
  *   6. the delete at a community the web app was pointed at (two nodes, P and X): a Remove and a doorbell in tabs that
  *      heard nothing put nothing of her Home at X back under X, and file nothing of P's under X; both read P afresh.
  *
- *   7. Arrange at 320 px with 1.3x text, 768, 1280 and 1600, in both themes (DESIGN-home-layout-fable.md, slice L2): no two
- *      cards overlap and no gap opens, folded or after Done; Tab walks the member's order; Done stays on screen; a band
- *      held enters; a move survives a reload. `HOME_ONLY=arrangeAcross`, and the pictures for its PR.
+ *   7. Arrange at 320 px with 1.3x text, 768, 1280 and 1600, in both themes (DESIGN-home-arrange-in-place-fable.md, slice A1):
+ *      Arrange is Home itself, so every card Home draws is in the same box in Arrange (±4 px, from the grid's corner), the
+ *      strip of the cards with nothing to show, the tile and the community card stand after them, every body is quiet and a
+ *      real click on a row reaches nothing; no two cards overlap and no gap opens, in Arrange or after Done; Tab walks the
+ *      member's order (a quiet body has no stop); Done stays on screen; a band held enters; a move survives a reload.
+ *      `HOME_ONLY=arrangeAcross`, `HOME_ARRANGE_WIDTHS=320,1000,1280` and `HOME_ARRANGE_THEMES=light` narrow it, and the pictures
+ *      for its PR (HOME_SHOTS).
  *
  *   8. Drag in Arrange (slice L3): a band dragged with the mouse and with a finger, motion on and reduced, at 1280 and 360 px:
  *      card 5 above card 2 saves the same list an arrow does (read back from the node), a reload holds it, the arrows still
@@ -546,7 +550,7 @@ async function localMember(browser, root) {
         check(focusAfter === 'home-card-community home-arrange-open', `focus goes to the nearest card left (the community card's Arrange), never <body> (${focusAfter})`);
         check((await page.getByTestId('home-live').innerText()).trim() === 'Coming up removed. Add a card brings it back.', 'and the page says, politely, where the card went');
 
-        // Arrange: the cards fold where they stand, in her order, with their arrows; no dialog, no list of switches.
+        // Arrange: the cards stay where they stand, in her order, with their arrows; no dialog, no list of switches.
         const arrange = page.getByTestId('home-arrange-open');
         await arrange.scrollIntoViewIfNeeded();
         await arrange.focus();
@@ -557,10 +561,18 @@ async function localMember(browser, root) {
         await touchTargets(page, '[data-testid="home-page"]', 'Arrange');
         await axeClean(page, '[data-testid="home-page"]', 'Arrange (light)');
         await shot(page, '3-member-arrange', { window: true });
-        const editRows = () => page.locator('[data-testid^="home-arrange-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid').replace('home-arrange-line-', '')).filter((id) => id !== 'needs' && id !== 'community'));
-        const rows = await editRows();
+        // The cards Home draws, in the grid's order, and after them the strip's rows (the cards with nothing to show), each in the saved order.
+        const editRows = async () => {
+            const read = await page.evaluate(() => {
+                const ids = (selector, prefix) => Array.from(document.querySelectorAll(selector)).map((e) => e.dataset.testid.replace(prefix, ''));
+                return { drawn: ids('[data-testid="home-grid"] > [data-testid^="home-card-"]', 'home-card-'), strip: ids('[data-testid^="home-arrange-strip-row-"]', 'home-arrange-strip-row-') };
+            });
+            const movable = (list) => list.filter((id) => id !== 'needs' && id !== 'community');
+            return { drawn: movable(read.drawn), strip: movable(read.strip), all: movable([...read.drawn, ...read.strip]) };
+        };
+        const rows = (await editRows()).all;
         check(rows[0] === 'beans' && !rows.includes('events') && !(await page.getByRole('dialog').count()),
-            `Arrange folds the cards on Home in her order, Your Beans first, and it is no dialog (${rows.join(' · ')})`);
+            `Arrange keeps the cards on Home in her order, Your Beans first, and it is no dialog (${rows.join(' · ')})`);
         // Reset to defaults: the newcomer's list again (core's defaultCards), saved, and Home read again with it.
         const resetAt = net.mark();
         const reset = layoutPost();
@@ -568,10 +580,12 @@ async function localMember(browser, root) {
         await reset;
         await wait(1_500);
         const newcomer = defaultHomeLayout().cards.map((c) => c.id);
-        const resetRows = await editRows();
-        check(JSON.stringify(resetRows) === JSON.stringify(newcomer.filter((id) => resetRows.includes(id))) && resetRows.length >= newcomer.length - 2
+        const resetEdit = await editRows();
+        const resetRows = resetEdit.all;
+        const inNewcomerOrder = (list) => JSON.stringify(list) === JSON.stringify(newcomer.filter((id) => list.includes(id)));
+        check(inNewcomerOrder(resetEdit.drawn) && inNewcomerOrder(resetEdit.strip) && resetRows.length >= newcomer.length - 2
             && ['steps', 'tips', 'market', 'events'].every((id) => resetRows.includes(id)) && !resetRows.includes('beans'),
-            `Reset to defaults: the newcomer's list (${resetRows.join(' · ')}; core: ${newcomer.join(' · ')})`);
+            `Reset to defaults: the newcomer's list, the cards drawn and the strip each in its order (${resetEdit.drawn.join(' · ')} | strip ${resetEdit.strip.join(' · ') || 'none'}; core: ${newcomer.join(' · ')})`);
         const resetReads = net.since(resetAt).filter((r) => r.path === '/api/home');
         check(resetReads.length === 1, `and Home is read again once (${resetReads.map((r) => `${r.status} cards=${new URLSearchParams(r.search).get('cards')}`).join('; ') || 'no read'})`);
         await page.keyboard.press('Escape');
@@ -1248,6 +1262,56 @@ async function globalNode(browser, root) {
     }
 }
 
+/** Every child of the grid by its testid: its box from the grid's own top-left corner, so a page that scrolls or a bar added above it moves nothing. */
+async function gridBoxes(page) {
+    return page.evaluate(() => {
+        const grid = document.querySelector('[data-testid="home-grid"]');
+        const g = grid.getBoundingClientRect();
+        return {
+            columns: Number(document.querySelector('[data-testid="home-page"]').dataset.columns),
+            boxes: Object.fromEntries(Array.from(grid.children).map((el) => {
+                const r = el.getBoundingClientRect();
+                return [el.dataset.testid, { x: r.left - g.left, y: r.top - g.top, w: r.width, h: r.height }];
+            })),
+        };
+    });
+}
+
+/**
+ * Whether Arrange left every card Home draws where Home had it (the community card, which stands after Arrange's strip and tile, is
+ * left out). Two or more columns have cells: every box within 4 px. One column has none, so the same order, widths and gaps, and a
+ * card may be taller only by a band title that wraps one more line beside two arrows than beside a "…" (320 px × 1.3 text).
+ */
+function sameCards(home, arrange) {
+    const ids = Object.keys(home.boxes).filter((id) => id !== 'home-card-community');
+    const moved = [];
+    let worst = 0;
+    let taller = 0;
+    ids.forEach((id, i) => {
+        const was = home.boxes[id];
+        const now = arrange.boxes[id];
+        if (!now) { moved.push(`${id} gone`); return; }
+        if (home.columns > 1) {
+            const d = Math.max(Math.abs(now.x - was.x), Math.abs(now.y - was.y), Math.abs(now.w - was.w), Math.abs(now.h - was.h));
+            worst = Math.max(worst, d);
+            if (d > 4) moved.push(`${id} ${Math.round(d)} px (${Math.round(was.y)}→${Math.round(now.y)}, h ${Math.round(was.h)}→${Math.round(now.h)})`);
+            return;
+        }
+        const grow = now.h - was.h;
+        const prev = i ? ids[i - 1] : null;
+        const gapWas = prev ? was.y - (home.boxes[prev].y + home.boxes[prev].h) : 0;
+        const gapNow = prev && arrange.boxes[prev] ? now.y - (arrange.boxes[prev].y + arrange.boxes[prev].h) : 0;
+        if (grow > 1) { taller++; worst = Math.max(worst, grow); }
+        if (Math.abs(now.x - was.x) > 1 || Math.abs(now.w - was.w) > 1 || grow > 8 || grow < -1 || Math.abs(gapNow - gapWas) > 1) {
+            moved.push(`${id} (x ${Math.round(was.x)}→${Math.round(now.x)}, w ${Math.round(was.w)}→${Math.round(now.w)}, h ${Math.round(was.h)}→${Math.round(now.h)}, gap ${Math.round(gapWas)}→${Math.round(gapNow)})`);
+        }
+    });
+    const how = home.columns > 1
+        ? `${ids.length} boxes within ${Math.round(worst * 10) / 10} px of Home's`
+        : `${ids.length} cards in Home's order, widths and gaps${taller ? `, ${taller} taller by a wrapped band line (at most ${Math.round(worst * 10) / 10} px)` : ''}`;
+    return { ok: moved.length === 0, how, moved };
+}
+
 /** No two cards in the grid overlap; in a column, each card starts within 20 px of the one above it (16 + 4 of rounding). */
 async function packedRight(page, where) {
     const { kids, columns } = await page.evaluate(() => ({
@@ -1274,8 +1338,12 @@ async function arrangeAcross(browser, root) {
     const before = process.env.HOME_BEFORE === '1';
     fs.mkdirSync(SHOTS_DIR, { recursive: true });
     console.log(`\nArrange at each width and in both themes${before ? ' (what main draws, for the pictures)' : ''}:`);
-    for (const dark of [false, true]) {
-        for (const [width, height, large] of [[320, 720, true], [768, 900, false], [1280, 900, false], [1600, 1000, false]]) {
+    // Each run is minutes long: HOME_ARRANGE_THEMES (light, dark) and HOME_ARRANGE_WIDTHS (320, 768, 1280, 1600) take part of it.
+    const themes = (process.env.HOME_ARRANGE_THEMES || 'light,dark').split(',').map((s) => s.trim());
+    // 1000 is the two-column width (the sidebar takes 256 px of it); 320 and 768 are one column, 1280 and 1600 three.
+    const widths = (process.env.HOME_ARRANGE_WIDTHS || '320,768,1000,1280,1600').split(',').map((s) => Number(s.trim()));
+    for (const dark of [false, true].filter((d) => themes.includes(d ? 'dark' : 'light'))) {
+        for (const [width, height, large] of [[320, 720, true], [768, 900, false], [1000, 900, false], [1280, 900, false], [1600, 1000, false]].filter(([w]) => widths.includes(w))) {
             // A node each: these reloads would reach the node's own limit on reads from one address.
             const ana = memberIdentity('Ana');
             const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }]);
@@ -1313,6 +1381,13 @@ async function arrangeAcross(browser, root) {
                     continue;
                 }
                 await packedRight(page, `Home at ${tag}`);
+                const homeBoxes = await gridBoxes(page);
+                // Every element drawn in a card's body on Home, kept by reference: Arrange and Done must not unmount and mount
+                // them again (A1 review, 4 Nov: a body that was another element in Arrange did, and a card whose body fetches
+                // drew a shorter loading box, so cards packed after it could change cell).
+                await page.evaluate(() => { window.__homeBodies = Array.from(document.querySelectorAll('section[data-testid^="home-card-"] *')).filter((el) => !el.closest('[data-testid^="card-band-"]')); });
+                const replaced = () => page.evaluate(() => window.__homeBodies.filter((el) => !el.isConnected).map((el) => `${el.tagName.toLowerCase()}${el.dataset.testid ? `[${el.dataset.testid}]` : ''}`));
+                const bodiesDrawn = await page.evaluate(() => window.__homeBodies.length);
                 // The hold: half a second on a band, with no button under the pointer.
                 // In the middle of the window: the tab bar stands over the bottom of the page at 320 px.
                 await page.getByTestId('card-band-tips').evaluate((el) => el.scrollIntoView({ block: 'center' }));
@@ -1334,9 +1409,54 @@ async function arrangeAcross(browser, root) {
                 await noSideScroll(page, `Arrange at ${tag}`);
                 await touchTargets(page, '[data-testid="home-page"]', `Arrange at ${tag}`);
                 await axeClean(page, '[data-testid="home-page"]', `Arrange at ${tag}`);
+                // Slice A1 (DESIGN-home-arrange-in-place-fable.md §2.1): Arrange is Home itself. Every card Home draws is where it
+                // was, in the same box (±4 px, for a band that wraps differently at 320 px x 1.3), measured from the grid's corner.
+                const arrange = await gridBoxes(page);
+                const arrangeBoxes = arrange.boxes;
+                const same = sameCards(homeBoxes, arrange);
+                check(same.ok, `${tag}: entering Arrange moves no card Home draws: ${same.how}${same.moved.length ? ` (${same.moved.join('; ')})` : ''}`);
+                const goneInArrange = await replaced();
+                check(bodiesDrawn > 20 && goneInArrange.length === 0, `${tag}: entering Arrange unmounts nothing in any card's body (${bodiesDrawn} elements kept${goneInArrange.length ? `, but ${goneInArrange.length} replaced: ${goneInArrange.slice(0, 6).join(' ')}` : ''})`);
+                const strip = arrangeBoxes['home-arrange-strip'];
+                const tile = arrangeBoxes['home-arrange-tile'];
+                const community = arrangeBoxes['home-card-community'];
+                const deepest = Math.max(...Object.entries(arrangeBoxes).filter(([id]) => !['home-arrange-strip', 'home-arrange-tile', 'home-card-community'].includes(id)).map(([, b]) => b.y + b.h));
+                check(!!strip && !!tile && !!community && strip.y >= deepest - 1 && tile.y >= strip.y + strip.h - 1 && community.y >= tile.y + tile.h - 1,
+                    `${tag}: the strip, the tile and the community card stand after every drawn card, in that order, each a full row (strip ${Math.round(strip?.w ?? 0)} px wide)`);
+                // The bodies are quiet: dimmed, inert, hidden from a screen reader, and a real click on a row reaches nothing.
+                const quiet = await page.evaluate(() => Array.from(document.querySelectorAll('[data-quiet]')).map((el) => ({
+                    id: el.dataset.testid, opacity: getComputedStyle(el).opacity, events: getComputedStyle(el).pointerEvents, hidden: el.getAttribute('aria-hidden'), inert: el.inert,
+                })));
+                const drawn = Object.keys(arrangeBoxes).filter((id) => id.startsWith('home-card-')).length;
+                check(quiet.length === drawn && quiet.every((q) => q.opacity === '0.55' && q.events === 'none' && q.hidden === 'true' && q.inert === true),
+                    `${tag}: all ${drawn} bodies are quiet (opacity 0.55, no pointer events, aria-hidden, inert)${quiet.length === drawn ? '' : `, but ${quiet.length} are`}`);
+                const row = await page.evaluate(() => {
+                    const item = document.querySelector('[data-testid="card-body-market"] button, [data-testid="card-body-market"] a');
+                    if (!item) return null;
+                    item.scrollIntoView({ block: 'center' });
+                    const r = item.getBoundingClientRect();
+                    return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 20) };
+                });
+                if (row) {
+                    await wait(200);
+                    const url = page.url();
+                    const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-quiet]') != null, row);
+                    await page.mouse.click(row.x, row.y);
+                    await wait(400);
+                    check(!hit && page.url() === url && (await barEl.count()) === 1, `${tag}: a click on a row of a quiet card lands on the card, not the row: Arrange stays open and the page does not move on`);
+                }
+                await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 0));
+                await wait(200);
                 await pic('arrange');
-                // Tab walks the bar, the cards in her order, Add a card and Reset, with nothing skipped.
-                const inOrder = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="home-arrange-bar"] button, [data-testid="home-grid"] button:not([disabled]), [data-testid="home-arrange-reset"]')).map((b) => b.dataset.testid));
+                if (await page.getByTestId('home-arrange-strip').count()) {
+                    await page.getByTestId('home-arrange-strip').evaluate((el) => el.scrollIntoView({ block: 'center' }));
+                    await wait(200);
+                    await pic('arrange-strip');
+                    await page.evaluate(() => document.querySelector('main')?.scrollTo(0, 0));
+                    await wait(200);
+                }
+                // Tab walks the bar, the cards in her order, Add a card and Reset, with nothing skipped (an inert body has nothing to stop at).
+                const inOrder = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="home-arrange-bar"] button, [data-testid="home-grid"] button:not([disabled]), [data-testid="home-arrange-reset"]')).filter((b) => !b.closest('[inert]')).map((b) => b.dataset.testid));
                 await page.getByTestId('home-arrange-done').focus();
                 const walked = [await page.evaluate(() => document.activeElement?.dataset.testid)];
                 for (let i = 1; i < inOrder.length; i++) {
@@ -1371,6 +1491,8 @@ async function arrangeAcross(browser, root) {
                 await barEl.waitFor({ state: 'detached' });
                 await wait(300);
                 await packedRight(page, `Home after Done at ${tag}`);
+                const goneAfterDone = await replaced();
+                check(goneAfterDone.length === 0, `${tag}: Done unmounts nothing in any card's body either (${bodiesDrawn} elements kept${goneAfterDone.length ? `, but ${goneAfterDone.length} replaced: ${goneAfterDone.slice(0, 6).join(' ')}` : ''})`);
                 await open();
                 await page.getByTestId('home-arrange-open').evaluate((el) => el.scrollIntoView({ block: 'center' }));
                 await page.getByTestId('home-arrange-open').click();
@@ -1513,7 +1635,9 @@ async function dragAcross(browser, root) {
     // 1. Card 5 above card 2, saved as an arrow's list, with the mouse and a finger, motion on and reduced, wide and narrow.
     // DRAG_PARTS=1,2 runs only those parts (each is minutes long).
     const part = (n) => !process.env.DRAG_PARTS || process.env.DRAG_PARTS.split(',').includes(n);
-    for (const [width, height] of part('1') ? [[1280, 900], [360, 640]] : []) {
+    // In Arrange the cards are the cards Home draws, so at one column card 5's band stands a few screens below card 2's: the narrow
+    // window is 360 px wide and tall enough for both (the page scrolling under a held card is part 2's).
+    for (const [width, height] of part('1') ? [[1280, 900], [360, 2600]] : []) {
         for (const mode of ['mouse', 'touch']) {
             for (const calm of [true, false]) {
                 const tag = `${mode}, ${calm ? 'reduced motion' : 'motion on'}, ${width} px`;
@@ -1581,7 +1705,9 @@ async function dragAcross(browser, root) {
     }
     // 2. What cancels, what is a tap, and what can't be lifted or passed (the mouse, motion on).
     if (part('2')) {
-        const h = await openArranged(browser, root, { mode: 'mouse', calm: false, width: 1280, height: 900 });
+        // Tall enough that the last card's lower half is no nearer the window's edge than the 80 px where the page scrolls (full cards
+        // are taller than the folded bands the drops below were first aimed at).
+        const h = await openArranged(browser, root, { mode: 'mouse', calm: false, width: 1280, height: 1500 });
         const { page, node, d, ana } = h;
         try {
             const was = await movableOrder(page);
@@ -1720,7 +1846,9 @@ async function dragAcross(browser, root) {
     }
     // 4. Mid-drag at each width and in both themes: no overlap, no sideways scroll, axe clean; the pictures.
     for (const dark of part('4') ? [false, true] : []) {
-        for (const [width, height, large] of [[320, 720, true], [768, 900, false], [1280, 900, false], [1600, 1000, false]]) {
+        // 320 px with 1.3x text, and 768 (the sidebar leaves one column), are one column of full cards, each a screen or so tall:
+        // the window is tall enough for two bands.
+        for (const [width, height, large] of [[320, 2200, true], [768, 2200, false], [1280, 900, false], [1600, 1000, false]]) {
             const tag = `${width}-${dark ? 'dark' : 'light'}`;
             const h = await openArranged(browser, root, { mode: 'mouse', calm: false, width, height, large, dark });
             const { page, node, d } = h;

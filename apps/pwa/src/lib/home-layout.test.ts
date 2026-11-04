@@ -14,7 +14,7 @@ import {
     moveCard, moveCardTo, ownMarkedSave, packHome, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, settleHeights, type HomeLayoutV2, type PackHeight, type PackableCard,
 } from './home-layout';
-import { arrangeCards, cardLine, reorderAmong } from './home-layout';
+import { arrangeCards, cardLine, reorderAmong, reorderIds } from './home-layout';
 
 const NOW = Date.UTC(2026, 9, 2, 4, 0, 0);
 const H = 3_600_000;
@@ -132,6 +132,24 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
         expect(live('needs', 2)).toEqual(cards.map(c => c.id));
         expect(live('find', 0)).toEqual(cards.map(c => c.id));
         expect(live('community', 0)).toEqual(cards.map(c => c.id));
+    });
+
+    it('reorderIds (Arrange in place, A1): the preview moves among exactly the cards named, and reorderAmong is that with the types that can move', () => {
+        const cards = [{ id: 'needs', type: 'needs' }, { id: 'a', type: 'market' }, { id: 'idle', type: 'decide' }, { id: 'b', type: 'events' }, { id: 'c', type: 'notices' }, { id: 'community', type: 'community' }];
+        // `idle` is on the list but not drawn, so it is no slot of the drag: `to` counts among a, b and c, and its place never changes.
+        const among = ['a', 'b', 'c'];
+        const live = (id: string, to: number) => reorderIds(cards, among, id, to).map(c => c.id);
+        expect(live('c', 0)).toEqual(['needs', 'c', 'idle', 'a', 'b', 'community']);
+        expect(live('a', 2)).toEqual(['needs', 'b', 'idle', 'c', 'a', 'community']);
+        // A card that is not among them (the one with nothing to show, a fixed card) is no card to lift.
+        expect(live('idle', 0)).toEqual(cards.map(c => c.id));
+        expect(live('needs', 1)).toEqual(cards.map(c => c.id));
+        // Every card the types allow to move is the same call: what reorderAmong has always done.
+        for (const id of ['a', 'idle', 'b', 'c']) {
+            for (const to of [0, 1, 2, 3]) {
+                expect(reorderAmong(cards, id, to).map(c => c.id), `${id} to ${to}`).toEqual(reorderIds(cards, ['a', 'idle', 'b', 'c'], id, to).map(c => c.id));
+            }
+        }
     });
 
     it('reset: the newcomer\'s list; a schedule\'s dismissal and a newer app\'s card are kept', () => {

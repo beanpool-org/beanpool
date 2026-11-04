@@ -348,7 +348,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </span>
                     </div>
 
-                    <h3 dir="auto" data-testid="listing-list-title" className={`m-0 truncate ${LIST_TYPE.loud} ${CARD_INK.title}`}>
+                    {/* Two lines at most, as the event's when (DESIGN-card-style-box-fable.md §1.3): one line made "A dozen eg…" at 320 x 1.3. */}
+                    <h3 dir="auto" data-testid="listing-list-title" className={`m-0 break-words line-clamp-2 ${LIST_TYPE.loud} ${CARD_INK.title}`}>
                         {post.title}
                     </h3>
 

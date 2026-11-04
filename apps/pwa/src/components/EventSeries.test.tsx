@@ -55,13 +55,14 @@ function at320(ui: React.ReactElement) {
 }
 
 /**
- * The detail, then its Next dates opened: the page draws them compact (the first date and "and 2 more", one button), and one tap
- * opens the list with the host's controls, as the phone's page does (DESIGN-detail-pages-frame-fable.md §1.6).
+ * The detail, then its Next dates opened: the page draws them compact, behind the repeat rule ("↻ Every Friday · Next dates", one
+ * button, DESIGN-web-dates-stop-fable.md §1), and one tap opens the list with the host's controls (DESIGN-detail-pages-frame-fable.md §1.6).
  */
 function detailAt320(ui: React.ReactElement) {
     const view = at320(ui);
     const open = screen.getAllByTestId('event-next-dates-open');
     expect(open, 'the next dates, compact').toHaveLength(1);
+    expect(open[0].textContent, 'the opener is the rule and "Next dates"').toMatch(/^↻ Every Friday.* · Next dates$/);
     expect(screen.queryAllByTestId('event-next-date')).toHaveLength(0);
     fireEvent.click(open[0]);
     return view;
@@ -380,7 +381,7 @@ describe('the detail: Next dates', () => {
     });
 
     it('a one-off has no Next dates', () => {
-                at320(<EventDetail post={{ ...series, eventRepeat: undefined, eventNextDates: undefined }} identity={identity} />);
+        at320(<EventDetail post={{ ...series, eventRepeat: undefined, eventNextDates: undefined }} identity={identity} />);
         expect(screen.queryByTestId('event-next-dates')).not.toBeInTheDocument();
     });
 });

@@ -11,11 +11,17 @@
  *
  * `compact` (the event page, DESIGN-detail-pages-frame-fable.md §1.6, as the phone's page has it since #2880): the heading, the
  * first date and "and 5 more" as one 48 px button that opens the list, where the host's controls are.
+ *
+ * `repeatCaption` (the event page, DESIGN-web-dates-stop-fable.md §1–2): the repeat rule is the door to the dates, in the
+ * caption's slot under the when. Compact, one 48 px button "↻ Every third Saturday · Next dates" (no date, no "and 5 more");
+ * opened, or with one date, the caption is the list's visible heading and "Next dates" its name; with no dates from the node
+ * (an older node, a list read), the caption alone. So the page draws the caption once, in one place, whatever the node sent.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { repeatRefusalText, seriesBackOnLine, seriesCancelledLine, seriesDateLabel, seriesDatesShown, seriesPassedDateEndMs, t, tn } from '@beanpool/core';
 import { setEventDateCancelled, type MarketplacePost } from '../lib/api';
+import { PAGE_INK } from './market-card-shell';
 
 interface Props {
     post: MarketplacePost;
@@ -29,14 +35,22 @@ interface Props {
      * between the title and Going and push the answer down by about 60 px at 320 px and 130% text.
      */
     compact?: boolean;
+    /**
+     * The repeat rule's caption (eventRepeatCaption), from the event page, which then leaves it out of the when: the rule
+     * opens the dates, and heads them once open. Without it the component draws as it always has, for any other caller.
+     */
+    repeatCaption?: string;
 }
 
 /** The longest a timer may wait (setTimeout's limit); a later end is checked again then. */
 const MAX_WAIT_MS = 2_147_483_647;
 
+/** The repeat caption's own type, as the when draws it on the card (EventWhen): text-sm, bold, snug, in the event ink. */
+const CAPTION = `min-w-0 break-words text-sm font-bold leading-snug ${PAGE_INK.event}`;
+
 const LINK = 'inline-flex items-center min-h-[44px] bg-transparent border-0 p-0 text-sm font-bold underline cursor-pointer disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-sm';
 
-export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, compact = false }: Props) {
+export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, compact = false, repeatCaption }: Props) {
     // Compact, the rest waits for a tap; once opened it stays open, so the host's line and controls stay where they acted.
     const [open, setOpen] = useState(!compact);
     // Opened by a tap: the button it replaces is gone, so the reader is taken to the list it opened rather than the page's top.
@@ -56,7 +70,10 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
         return () => clearTimeout(id);
     }, [passedEnd, tick]);
     const dates = seriesDatesShown(post.eventNextDates, current, Date.now());
-    if (!post.eventRepeat || dates.length === 0) return null;
+    if (!post.eventRepeat) return null;
+    const caption = repeatCaption ? <><span aria-hidden="true">↻ </span>{repeatCaption}</> : null;
+    // No dates from the node (an older node, a list read): the rule alone, where it always is, so the slot is never empty.
+    if (dates.length === 0) return caption ? <p data-testid="event-repeat-caption" className={`m-0 w-full ${CAPTION}`}>{caption}</p> : null;
 
     const change = async (date: string, cancel: boolean, thenMove = false) => {
         if (busy) return;
@@ -75,6 +92,25 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
             setBusy(null);
         }
     };
+
+    // Compact, with the rule: "↻ Every third Saturday · Next dates", one button, the rule in its own type and the link's
+    // words after it; it wraps whole (two lines at 320 px and 130% text, one at 100%). Its name is the words it shows (WCAG
+    // 2.5.3), the ↻ left out; the spaces between the parts are for that name, a flex row draws none.
+    if (!open && dates.length > 1 && caption) {
+        return (
+            <button
+                type="button"
+                data-testid="event-next-dates-open"
+                aria-expanded={false}
+                onClick={() => { setOpen(true); setTapped(true); }}
+                className="w-full min-w-0 min-h-[48px] flex flex-wrap items-center content-center gap-x-1.5 gap-y-0 text-left bg-transparent border-0 p-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-event rounded"
+            >
+                <span data-testid="event-repeat-caption" className={CAPTION}>{caption}</span>{' '}
+                <span className={`text-sm font-bold ${PAGE_INK.secondary}`}>·</span>{' '}
+                <span className="whitespace-nowrap text-sm font-bold underline underline-offset-2 text-bp-ink-event">{t('Next dates')}</span>
+            </button>
+        );
+    }
 
     // Compact: the heading, the first date and how many more, one button that opens the list. One date has no more to open.
     if (!open && dates.length > 1) {
@@ -98,8 +134,11 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
     }
 
     return (
-        <section ref={listRef} tabIndex={-1} data-testid="event-next-dates" className="min-w-0 flex flex-col gap-1 focus:outline-none">
-            <h4 className="m-0 text-xs font-bold text-nature-700 dark:text-nature-300 uppercase tracking-wider">{t('Next dates')}</h4>
+        <section ref={listRef} tabIndex={-1} data-testid="event-next-dates" aria-label={caption ? t('Next dates') : undefined} className="min-w-0 flex flex-col gap-1 focus:outline-none">
+            {/* With the rule, the rule heads the list (it opened it), and "Next dates" is the section's name. */}
+            {caption
+                ? <h4 data-testid="event-repeat-caption" className={`m-0 ${CAPTION}`}>{caption}</h4>
+                : <h4 className="m-0 text-xs font-bold text-nature-700 dark:text-nature-300 uppercase tracking-wider">{t('Next dates')}</h4>}
             {line && <p data-testid="event-date-cancelled-line" role="status" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{line}</p>}
             <ul className={`m-0 p-0 list-none ${isHost ? 'flex flex-col gap-1' : 'flex flex-wrap gap-x-3 gap-y-1'}`}>
                 {dates.map(d => {

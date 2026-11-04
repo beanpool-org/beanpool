@@ -546,6 +546,25 @@ describe("The event's photo on the card (Damo, 2026-09-23)", () => {
     });
 });
 
+describe('the ↻ repeat line stays on the card and the list (EventWhen\'s repeatLine, on by default)', () => {
+    // The event page draws the rule as the door to its next dates (DESIGN-web-dates-stop-fable.md §1); every other caller
+    // of the when keeps the line under it, as before.
+    const weekly = { ...baseEvent, eventRepeat: { freq: 'weekly', interval: 1, byDay: 'SA', time: '09:00', minutes: 180 } };
+    it('the grid card and the list card each draw the caption once, right under the when, with no door to the dates', () => {
+        for (const viewMode of [undefined, 'list'] as const) {
+            const { container, unmount } = renderAt320(<EventCard post={weekly} identity={identity} viewMode={viewMode} />);
+            const captions = container.querySelectorAll('[data-testid="event-repeat-caption"]');
+            expect(captions, viewMode ?? 'grid').toHaveLength(1);
+            expect(captions[0].textContent).toBe('↻ Every Saturday');
+            expect(captions[0].className.split(/\s+/)).toEqual(expect.arrayContaining(['text-sm', 'font-bold', 'leading-snug']));
+            const when = container.querySelector('[data-testid="event-when"]')!;
+            expect(!!(when.compareDocumentPosition(captions[0]) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+            expect(container.querySelector('[data-testid="event-next-dates-open"]')).toBeNull();
+            unmount();
+        }
+    });
+});
+
 describe('EventDetail', () => {
     beforeEach(() => {
         vi.mocked(api.rsvpEvent).mockReset();

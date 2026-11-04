@@ -1,8 +1,8 @@
 /**
  * The web's event page on the style box (DESIGN-detail-pages-fable.md §2, slice DW1; Marty, 4 Nov 2026: "All Fable's picks"):
  * one column at 320 px with 130% text, the parts in §2.1's order as DESIGN-detail-pages-frame-fable.md §1.6 amends it (the
- * chips, the when, the title, the next dates compact, the place, the answer, the photo, the quiet row, the boxes, the
- * description, the host, Report), the photo 4:3 and opening whole, the counts only above zero, the event violet from core's
+ * chips, the when, the repeat rule as the door to the next dates (DESIGN-web-dates-stop-fable.md §1), the title, the place,
+ * the answer, the photo, the quiet row, the boxes, the description, the host, Report), the photo 4:3 and opening whole, the counts only above zero, the event violet from core's
  * roles, and Report, which the web's event page never had.
  *
  * jsdom does no layout, so the 320 px contract is held as EventCard.test.tsx holds it: by the classes, and by the order of the
@@ -14,6 +14,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { seriesDateLabel } from '@beanpool/core';
 import { EventDetail } from './EventCard';
+import { eventRepeatCaption } from '../lib/events';
 import { BOX_LABEL, EVENT_ANSWER, PAGE_BOX, PAGE_BUTTON, chip } from './market-card-shell';
 import * as api from '../lib/api';
 
@@ -54,6 +55,17 @@ function renderAt320(ui: React.ReactElement) {
     return render(<div style={{ width: 320 }}>{ui}</div>);
 }
 
+/** The Mullum market repeating every third Saturday: six dates from the node, none cancelled. */
+const NEXT = ['2030-11-21', '2030-12-12', '2031-01-02', '2031-01-23', '2031-02-13', '2031-03-06'];
+const repeating = (extra: any = {}) => ({
+    ...market, eventStartLocal: '2030-11-21T08:00', eventEndLocal: '2030-11-21T14:00', eventTz: 'Australia/Sydney',
+    eventRepeat: { freq: 'weekly', interval: 3, byDay: 'SA', time: '08:00', minutes: 360 },
+    eventNextDates: NEXT.map(date => ({ date, startLocal: `${date}T08:00`, startAt: new Date(`${date}T08:00`).toISOString(), cancelled: false })),
+    ...extra,
+});
+/** Its rule, as core says it ("Every 3 weeks on Saturday" in English). */
+const RULE = eventRepeatCaption(repeating());
+
 /** Is `a` before `b` in the document? */
 const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
@@ -64,10 +76,12 @@ beforeEach(() => { vi.mocked(api.reportAbuse).mockClear(); });
 afterEach(() => { document.documentElement.style.fontSize = ''; });
 
 describe('the event page at 320 px, 130% text: the parts in the design\'s order', () => {
-    it('the chips, the when, the title, the place, Going, the photo, Share, the description, Hosted by, Report', () => {
-        renderAt320(<EventDetail post={market} identity={identity} onShowOnMap={() => {}} onOpenProfile={() => {}} />);
+    it('the chips, the when, the rule\'s door to the dates, the title, the place, Going, the photo, Share, the description, Hosted by, Report', () => {
+        renderAt320(<EventDetail post={repeating()} identity={identity} onShowOnMap={() => {}} onOpenProfile={() => {}} />);
         const chips = screen.getByTestId('event-chips');
         const when = screen.getByRole('heading', { level: 2 });
+        // The how-it-repeats line is the opener now, in the caption's slot: the when, how it repeats, then what and where.
+        const opener = screen.getByTestId('event-next-dates-open');
         const title = screen.getByRole('heading', { level: 3 });
         const place = screen.getByTestId('event-place');
         const photo = screen.getByTestId('event-photo-open');
@@ -77,7 +91,7 @@ describe('the event page at 320 px, 130% text: the parts in the design\'s order'
         const host = screen.getByTestId('event-host-open');
         const report = screen.getByTestId('event-report');
         // The answer before the photo (DESIGN-detail-pages-frame-fable.md §1.6): the words, the answer, then the picture and the story.
-        const order = [chips, when, title, place, going, photo, share, description, host, report];
+        const order = [chips, when, opener, title, place, going, photo, share, description, host, report];
         for (let i = 1; i < order.length; i++) expect(before(order[i - 1], order[i]), `part ${i} after part ${i - 1}`).toBe(true);
         // The place moved up to the loud lines, with Show on map as a link-like button on its row.
         expect(within(place).getByRole('button', { name: 'Show on map' })).toBeInTheDocument();
@@ -85,10 +99,13 @@ describe('the event page at 320 px, 130% text: the parts in the design\'s order'
     });
 
     it('Going is the first button after the title block: nothing to press between the title and the answer but the place\'s link', () => {
-        renderAt320(<EventDetail post={market} identity={identity} onShowOnMap={() => {}} />);
-        const head = screen.getByTestId('event-head');
-        const buttons = screen.getAllByRole('button').filter(b => !head.contains(b));
-        expect(buttons.map(b => b.getAttribute('data-testid') ?? b.textContent).slice(0, 3)).toEqual(['Going', 'Interested', 'event-photo-open']);
+        renderAt320(<EventDetail post={repeating()} identity={identity} onShowOnMap={() => {}} />);
+        const title = screen.getByRole('heading', { level: 3 });
+        // The dates' opener is above the title now, with the when (DESIGN-web-dates-stop-fable.md §1).
+        expect(before(screen.getByTestId('event-next-dates-open'), title)).toBe(true);
+        const after = screen.getAllByRole('button').filter(b => before(title, b));
+        expect(after.map(b => b.getAttribute('data-testid') ?? b.textContent).slice(0, 4)).toEqual(['Show on map', 'Going', 'Interested', 'event-photo-open']);
+        expect(within(screen.getByTestId('event-place')).getByRole('button', { name: 'Show on map' })).toBe(after[0]);
     });
 
     it('the loud lines are the page\'s type, in core\'s event ink: when 18/900, title 20/800; no outer card', () => {
@@ -110,31 +127,75 @@ describe('the event page at 320 px, 130% text: the parts in the design\'s order'
     });
 });
 
-describe('the next dates, compact: the first date and how many more, one button that opens the list (as the phone\'s page, #2880)', () => {
-    /** The Mullum market repeating every third Saturday: six dates from the node, none cancelled. */
-    const NEXT = ['2030-11-21', '2030-12-12', '2031-01-02', '2031-01-23', '2031-02-13', '2031-03-06'];
-    const repeating = (extra: any = {}) => ({
-        ...market, eventStartLocal: '2030-11-21T08:00', eventEndLocal: '2030-11-21T14:00', eventTz: 'Australia/Sydney',
-        eventRepeat: { freq: 'weekly', interval: 3, byDay: 'SA', time: '08:00', minutes: 360 },
-        eventNextDates: NEXT.map(date => ({ date, startLocal: `${date}T08:00`, startAt: new Date(`${date}T08:00`).toISOString(), cancelled: false })),
-        ...extra,
-    });
-
-    it('one 48 px button in the loud lines, before Going: "Next dates", the first date and "and 5 more"; a tap opens all six', async () => {
+describe('the next dates: the repeat rule is the door, "↻ rule · Next dates", one button in the caption\'s slot (DESIGN-web-dates-stop-fable.md §1–2)', () => {
+    it('one 48 px button under the when, before the title and Going: the rule and "Next dates", no date and no "and 5 more"; a tap opens all six', async () => {
         renderAt320(<EventDetail post={repeating()} identity={identity} onShowOnMap={() => {}} />);
         const head = screen.getByTestId('event-head');
+        const when = screen.getByRole('heading', { level: 2 });
         const open = within(head).getAllByTestId('event-next-dates-open');
         expect(open).toHaveLength(1);
         expect(open[0].tagName).toBe('BUTTON');
         expect(open[0]).toHaveAttribute('aria-expanded', 'false');
-        expect(open[0].className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', 'min-h-[48px]']));
-        expect(open[0].textContent).toBe(`Next dates${seriesDateLabel(NEXT[0])}and 5 more`);
+        expect(open[0].className.split(/\s+/)).toEqual(expect.arrayContaining(['w-full', 'min-h-[48px]', 'flex-wrap']));
+        expect(RULE).not.toBe('');
+        expect(open[0].textContent).toBe(`↻ ${RULE} · Next dates`);
+        expect(open[0].textContent).not.toContain(seriesDateLabel(NEXT[0]));
+        expect(open[0].textContent).not.toMatch(/more/);
+        // Its name is the words it shows (WCAG 2.5.3), the ↻ left out.
+        expect(open[0]).toHaveAccessibleName(`${RULE} · Next dates`);
+        // The rule in the caption's own type and ink, "Next dates" as the link's words.
+        const rule = within(open[0]).getByTestId('event-repeat-caption');
+        expect(rule.className.split(/\s+/)).toEqual(expect.arrayContaining(['text-sm', 'font-bold', 'leading-snug', 'text-bp-ink-event']));
+        expect(rule.querySelector('[aria-hidden="true"]')!.textContent).toBe('↻ ');
+        const link = within(open[0]).getByText('Next dates');
+        expect(link.className.split(/\s+/)).toEqual(expect.arrayContaining(['text-sm', 'font-bold', 'underline', 'underline-offset-2', 'text-bp-ink-event']));
+        expect(within(open[0]).getByText('·').className.split(/\s+/)).toEqual(expect.arrayContaining(['text-nature-700', 'dark:text-nature-300']));
+        // The rule once on the page, and not in the when any more.
+        expect(screen.getAllByTestId('event-repeat-caption')).toHaveLength(1);
+        expect(when.contains(rule)).toBe(false);
+        expect(before(when, open[0]) && before(open[0], screen.getByRole('heading', { level: 3 }))).toBe(true);
         expect(screen.queryAllByTestId('event-next-date')).toHaveLength(0);
         expect(before(open[0], screen.getByRole('button', { name: 'Going' }))).toBe(true);
 
         await userEvent.click(open[0]);
         const list = within(head).getByTestId('event-next-dates');
         expect(within(list).getAllByTestId('event-next-date').map(d => d.textContent)).toEqual(NEXT.map(seriesDateLabel));
+        expect(screen.queryByTestId('event-next-dates-open')).toBeNull();
+        // Opened: the rule is the list's visible heading, "Next dates" its name, and the rule is still drawn once.
+        expect(screen.getByRole('region', { name: 'Next dates' })).toBe(list);
+        const heading = within(list).getByRole('heading', { level: 4 });
+        expect(heading.textContent).toBe(`↻ ${RULE}`);
+        expect(heading).toBe(within(list).getByTestId('event-repeat-caption'));
+        expect(within(list).queryByText('Next dates')).toBeNull();
+        expect(screen.getAllByTestId('event-repeat-caption')).toHaveLength(1);
+        // The tap takes the reader to the list it opened.
+        expect(document.activeElement).toBe(list);
+    });
+
+    it('a repeating event with no dates from the node (an older node, a list read): the rule once, in the same slot, and nothing to open', () => {
+        renderAt320(<EventDetail post={repeating({ eventNextDates: undefined })} identity={identity} />);
+        const captions = screen.getAllByTestId('event-repeat-caption');
+        expect(captions).toHaveLength(1);
+        expect(captions[0].textContent).toBe(`↻ ${RULE}`);
+        const when = screen.getByRole('heading', { level: 2 });
+        expect(when.contains(captions[0])).toBe(false);
+        expect(before(when, captions[0]) && before(captions[0], screen.getByRole('heading', { level: 3 }))).toBe(true);
+        expect(screen.queryByTestId('event-next-dates-open')).toBeNull();
+        expect(screen.queryByTestId('event-next-dates')).toBeNull();
+    });
+
+    it('one date: the list, headed by the rule, named "Next dates"', () => {
+        renderAt320(<EventDetail post={repeating({ eventNextDates: repeating().eventNextDates.slice(0, 1) })} identity={identity} />);
+        expect(screen.queryByTestId('event-next-dates-open')).toBeNull();
+        const list = screen.getByRole('region', { name: 'Next dates' });
+        expect(within(list).getByRole('heading', { level: 4 }).textContent).toBe(`↻ ${RULE}`);
+        expect(within(list).getAllByTestId('event-next-date').map(d => d.textContent)).toEqual([seriesDateLabel(NEXT[0])]);
+        expect(screen.getAllByTestId('event-repeat-caption')).toHaveLength(1);
+    });
+
+    it('a one-off: no rule and no door', () => {
+        renderAt320(<EventDetail post={market} identity={identity} />);
+        expect(screen.queryByTestId('event-repeat-caption')).toBeNull();
         expect(screen.queryByTestId('event-next-dates-open')).toBeNull();
     });
 
@@ -251,6 +312,19 @@ describe('the photo: 4:3, and a click shows it whole (Marty\'s pick 2)', () => {
         expect(within(viewer).getByRole('button', { name: 'Go to photo 2 of 2' })).toBeInTheDocument();
         await userEvent.click(within(viewer).getByRole('button', { name: 'Close photo viewer' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    it('16 from the photo, or the tile, to the quiet row at 320 (DESIGN-detail-pages-frame-fable.md §3; the review of #2891 at EventCard.tsx:735)', () => {
+        // jsdom draws nothing, so the 16 is held by its parts: the column's gap-3 (12) and the 4 px under the photo or the tile.
+        // The harness (e2e/event-card-shots.mjs --detail) measures it with bounding rects in Chromium and fails it off 16.
+        const { unmount } = renderAt320(<EventDetail post={market} identity={identity} />);
+        expect(screen.getByTestId('event-detail').className.split(/\s+/)).toContain('gap-3');
+        // From 768 px the photo spans its own column's three rows, so the margin is the phone's only.
+        expect(screen.getByTestId('event-photo').className.split(/\s+/)).toEqual(expect.arrayContaining(['mb-1', 'md:mb-0']));
+        expect(before(screen.getByTestId('event-photo'), screen.getByTestId('event-body'))).toBe(true);
+        unmount();
+        renderAt320(<EventDetail post={{ ...market, photos: [] }} identity={identity} />);
+        expect(screen.getByTestId('event-tile-banner').className.split(/\s+/)).toContain('mb-1');
     });
 
     it('with no photo, the event\'s tile, 3:1, inside the column, and nothing to open', () => {

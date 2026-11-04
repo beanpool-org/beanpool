@@ -955,28 +955,64 @@ export interface NamesMerged {
 }
 
 /**
- * Two phones with one key (design §3 "higher seq", §5 "Merging"): `local` is this phone's pin, `other` the newer copy
- * another phone saved. `other` is kept when its chain extends this phone's (same links, as far or further); otherwise
- * this phone's pin is. Either way the rings are united (restricted to the kept pin's chain and `abandoned`, as
- * `readNamesPin` holds), and the copy number is the higher one, so the next copy is numbered past both. `seen` stays
- * this phone's. Never a pin numbered lower than either.
+ * Two devices with one key (DESIGN-names-list-merge-rule-fable.md §2, which re-rules the web design's §5.6 (a)): `local`
+ * is this device's pin, `other` the newer copy another device of this admin saved. Pure.
+ *
+ * - **The chain.** `other` is kept when its chain extends this device's (same links, as far or further); otherwise this
+ *   device's pin is. The other record's links off the kept chain (a fork) join `abandoned`, exactly as statements this
+ *   device Followed away from: the walk never takes an abandoned statement, and the fork's statements were never
+ *   candidates while the kept chain stands (ruling §2.4), so the chain a sync produces is unchanged. They join so that
+ *   every drop names a known statement (`readNamesPin`), a later restore's cross-check finds what this key made there,
+ *   and their keys stay in the ring.
+ * - **Checks and removals made on either device count.** A key dropped on either record stays dropped unless the drop is
+ *   *lifted*: its statement S is on the dropping record's own chain (so no later drop of the key there) and the record
+ *   that trusts the key took S itself (S on its chain or abandoned), so its trust is a human act after S (a check, or a
+ *   trusted header at or after S). Otherwise the order can't be told from the records and the drop wins (§2.3).
+ *   `trusted` is both records' trust less every drop; `manualDrops` the union. `took` and `lifted` read the two records
+ *   as they came in.
+ * - **`recheck`**: the keys one record trusted that stand dropped here, for the admin to check once on this device.
+ *
+ * The rings are united (restricted to the kept chain and `abandoned`), the copy number is the higher one, so the next
+ * copy is numbered past both, and `seen` stays this device's. Nothing is sent: a drop at a fork or abandoned statement is
+ * standing, so this device makes its own key without that admin before it writes ({@link syncNames}).
  */
 export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesMerged {
+    const me = local.me;
     const extends_ = other.chain.length >= local.chain.length && local.chain.every((l, i) => other.chain[i]?.id === l.id);
     const kept = extends_ ? other : local;
     const left = extends_ ? local : other;
-    // A statement either phone of this key abandoned stays abandoned (and its key in the ring). The other side's links off
-    // the kept chain (a fork) are NOT made abandoned here: that would change what the walk takes (names-list-trust.ts).
     const keptIds = new Set(kept.chain.map((l) => l.id));
-    const abandoned = [...new Set([...kept.abandoned, ...left.abandoned])].filter((id) => !keptIds.has(id));
-    const onKept = new Set([...keptIds, ...abandoned]);
+    const fork = left.chain.map((l) => l.id).filter((id) => !keptIds.has(id));
+    const abandoned = [...new Set([...kept.abandoned, ...left.abandoned, ...fork])].filter((id) => !keptIds.has(id));
+    const known = new Set([...keptIds, ...abandoned]);
+
+    const onChain = (r: NamesPin, id: string) => r.chain.some((l) => l.id === id);
+    const took = (r: NamesPin, id: string) => onChain(r, id) || r.abandoned.includes(id);
+    // r dropped k at S, S is r's latest drop of k (on its own chain), and s trusts k and took S: s's trust is later.
+    const lifted = (r: NamesPin, s: NamesPin, k: string) => onChain(r, r.dropped[k]) && s.trusted.includes(k) && took(s, r.dropped[k]);
+
+    const dropped: Record<string, string> = {};
+    for (const [r, s] of [[kept, left], [left, kept]] as const) {
+        for (const [k, at] of Object.entries(r.dropped)) {
+            if (k === me || k in dropped) continue;
+            if (!lifted(r, s, k)) dropped[k] = at;
+        }
+    }
+    const both = [...new Set([...kept.trusted, ...left.trusted])];
+    const trusted = [...new Set([...both, me])].filter((k) => !(k in dropped)).sort();
+    const recheck = both.filter((k) => k in dropped).sort();
+    const manualDrops = [...new Set([...kept.manualDrops, ...left.manualDrops])].filter((k) => k !== me).sort();
+
     const ring: Record<string, string> = {};
-    for (const [id, key] of [...Object.entries(other.ring), ...Object.entries(local.ring)]) if (onKept.has(id) && !ring[id]) ring[id] = key;
-    // This phone's pending key: into the ring when its statement landed on the kept chain, else still pending.
+    for (const [id, key] of [...Object.entries(other.ring), ...Object.entries(local.ring)]) if (known.has(id) && !ring[id]) ring[id] = key;
+    // This device's pending key: into the ring when its statement is known to the merged record, else still pending.
     let pending = kept.pending;
-    if (local.pending && onKept.has(local.pending.id)) ring[local.pending.id] ??= local.pending.key;
+    if (local.pending && known.has(local.pending.id)) ring[local.pending.id] ??= local.pending.key;
     else if (local.pending) pending = local.pending;
-    return { pin: { ...kept, abandoned, ring, pending, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } }, recheck: [] };
+    return {
+        pin: { ...kept, trusted, dropped, abandoned, ring, pending, manualDrops, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } },
+        recheck,
+    };
 }
 
 // ── Checking a key in person ─────────────────────────────────────────────────────────────────

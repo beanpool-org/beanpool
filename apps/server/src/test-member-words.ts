@@ -46,7 +46,7 @@ import { fileURLToPath } from 'node:url';
 import Koa from 'koa';
 import ts from 'typescript';
 import { setMemberPhoto } from '@beanpool/engine';
-import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, pluralKey, wordKey } from '@beanpool/core';
+import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, formatDate, pluralKey, wordKey } from '@beanpool/core';
 import { memberWordsOnTheWayOut, requestLanguage, useCatalogsForTests, wordsIn } from './member-words.js';
 import { scrubServerFaults, SERVER_FAULT_TEXT } from './routes/member-error-text.js';
 
@@ -66,6 +66,7 @@ const FR: Record<string, unknown> = {
     'You have {n} active trade in progress.|You have {n} active trades in progress.': { one: 'Vous avez {n} échange en cours.', other: 'Vous avez {n} échanges en cours.' },
     'You hold {held} Beans: you can pay the Commons only what you hold.': 'Vous avez {held} Beans : vous ne pouvez payer aux Communs que ce que vous avez.',
     'Only {who} can remove this': 'Seul {who} peut retirer ceci',
+    'You can wait until {date}.': 'Vous pouvez attendre jusqu’au {date}.',
     'Only a convenor can do that': 'Seul un animateur peut faire cela',
     'Post another Offer to spend deeper.': 'Publiez une autre Offre pour aller plus loin.',
     'The lead cannot be removed. The lead can hand the lead over.': 'Le responsable ne peut pas être retiré. Il peut passer la main.',
@@ -114,6 +115,10 @@ async function testWayOut(): Promise<void> {
             '/api/decimal': [400, { error: 'You hold 2.5 Beans: you can pay the Commons only what you hold.' }],
             '/api/cents': [400, { error: 'You hold 12.50 Beans: you can pay the Commons only what you hold.' }],
             '/api/odd-value': [400, { error: 'Only Ann (a.k.a. [x]+?) can remove this' }],
+            '/api/day': [400, { error: 'You can wait until 11 Nov 2026.' }],
+            '/api/day-single': [400, { error: 'You can wait until 3 Dec 2026.' }],
+            '/api/no-day': [400, { error: 'You can wait until 31 Feb 2026.' }],
+            '/api/iso-day': [400, { error: 'You can wait until 2026-11-11.' }],
             '/api/no-fit': [400, { error: 'A post can have at most photos' }],
             '/api/coded-sentence': [403, { error: 'UNAUTHORIZED: Only a convenor can do that' }],
             '/api/floor': [400, { error: 'FLOOR_LOCKED:1:2:200:500: Post another Offer to spend deeper.' }],
@@ -207,6 +212,19 @@ async function testWayOut(): Promise<void> {
             `with the decimals it was written with (${cents.body?.error})`);
         const odd = await get('/api/odd-value', 'fr');
         assert(odd.body?.error === 'Seul Ann (a.k.a. [x]+?) peut retirer ceci', `a value with a pattern's own characters in it is kept as it was (${odd.body?.error})`);
+        // A calendar day a sentence names as English writes it ("11 Nov 2026", the UTC day) is written the language's way.
+        const frDay = (y: number, m: number, d: number) => formatDate(new Date(Date.UTC(y, m - 1, d)), 'day-month-year', { utc: true, lang: 'fr' });
+        const day = await get('/api/day', 'fr');
+        assert(day.body?.error === `Vous pouvez attendre jusqu’au ${frDay(2026, 11, 11)}.` && frDay(2026, 11, 11) !== '11 Nov 2026',
+            `a day in the English way is written in French, ${frDay(2026, 11, 11)} (${day.body?.error})`);
+        const dayOne = await get('/api/day-single', 'fr');
+        assert(dayOne.body?.error === `Vous pouvez attendre jusqu’au ${frDay(2026, 12, 3)}.`, `a one-digit day too (${dayOne.body?.error})`);
+        const noDay = await get('/api/no-day', 'fr');
+        assert(noDay.body?.error === 'Vous pouvez attendre jusqu’au 31 Feb 2026.', `a day that is no day stays as it came (${noDay.body?.error})`);
+        const isoDay = await get('/api/iso-day', 'fr');
+        assert(isoDay.body?.error === 'Vous pouvez attendre jusqu’au 2026-11-11.', `and a date written another way is left as it was, as before (${isoDay.body?.error})`);
+        const enDay = await get('/api/day', 'en');
+        assert(enDay.body?.error === 'You can wait until 11 Nov 2026.', `English is the sentence as written (${enDay.body?.error})`);
         const noFit = await get('/api/no-fit', 'fr');
         assert(noFit.body?.error === 'A post can have at most photos', 'a sentence that fits no sentence of the catalog stays English');
         const codeFirst = await get('/api/coded-sentence', 'fr');

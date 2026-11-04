@@ -24,7 +24,7 @@
  * Not a new start: resumePost putting back up a poll its author paused. It is the same poll, with its own start.
  */
 
-import { wordsFor } from '@beanpool/core';
+import { formatDate, wordsFor } from '@beanpool/core';
 import { db } from '../db/db.js';
 
 const { t: tr } = wordsFor('en');
@@ -54,10 +54,11 @@ export function memberNextPollStartAt(authorPublicKey: string, ownersLimit: numb
 
 /**
  * Refuses a member's poll started inside the week of their last. Owners and admins pass. The date in the refusal is the UTC
- * day (a node has no time zone of its own, docs/events-on-the-map.md §2.5), written the language's way on its way out
- * (member-words.ts valueIn); the apps say it before the form opens, in the member's own calendar (poll-week in both apps).
+ * day (a node has no time zone of its own, docs/events-on-the-map.md §2.5) written as English writes it, "11 Nov 2026", which
+ * the way out (member-words.ts valueIn) writes again in the request's language; the apps say it before the form opens, in the
+ * member's own calendar (@beanpool/core poll-week).
  */
 export function assertPollStartRoom(authorPublicKey: string, ownersLimit: number | null, nowMs: number = Date.now()): void {
     const next = memberNextPollStartAt(authorPublicKey, ownersLimit, nowMs);
-    if (next) throw new Error(tr('You can start one poll a week. Your next one can start on {date}.', { date: next.slice(0, 10) }));
+    if (next) throw new Error(tr('You can start one poll a week. Your next one can start on {date}.', { date: formatDate(new Date(next), 'day-month-year', { utc: true, lang: 'en' }) }));
 }

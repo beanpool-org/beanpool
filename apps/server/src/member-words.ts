@@ -153,19 +153,22 @@ function sentenceTemplates(catalog: Catalog | null): SentenceTemplate[] {
     return out.sort((a, b) => b.fixed - a.fixed);
 }
 
+const ENGLISH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 /**
  * A value read back out of the English, as the language writes it: a plain number in its own decimal mark and digits,
- * with the decimals it was written with ("12.50" stays two places); a calendar day a sentence names as 2026-11-10 (a
- * node has no time zone, so it is the UTC day) in the language's own date, "10 Nov 2026" in English; anything else as it came.
+ * with the decimals it was written with ("12.50" stays two places); a calendar day a sentence names the way English writes
+ * one, "11 Nov 2026" (formatDate's 'day-month-year' in en, UTC: a node has no time zone), in the language's own date;
+ * anything else as it came.
  */
 function valueIn(words: Words, text: string): string {
     const number = /^-?(?:0|[1-9]\d*)(?:\.(\d+))?$/.exec(text);
     if (number) return words.formatNumber(Number(text), number[1]?.length ?? 0);
-    const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    const day = /^(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{4})$/.exec(text);
     if (day) {
-        const at = new Date(Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3])));
-        // A day that is no day (2026-13-45) stays as it came.
-        if (at.toISOString().slice(0, 10) === text) return words.formatDate(at, 'day-month-year', { utc: true });
+        const at = new Date(Date.UTC(Number(day[3]), ENGLISH_MONTHS.indexOf(day[2]), Number(day[1])));
+        // A day that is no day ("31 Feb 2026") stays as it came.
+        if (at.getUTCDate() === Number(day[1]) && at.getUTCFullYear() === Number(day[3])) return words.formatDate(at, 'day-month-year', { utc: true });
     }
     return text;
 }

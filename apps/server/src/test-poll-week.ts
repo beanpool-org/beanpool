@@ -19,7 +19,7 @@
  *   5. The route the apps ask (GET /api/marketplace/polls/next-start): nothing for a member who may start one now, the date
  *      after a poll, nothing for an owner or an admin, a refusal for a request with no signature, never cached.
  *   6. The refusal on the way out, through the route that creates a poll: in English as written, and with X-Language: fr in
- *      French with the day written the French way (core's date tables), not as 2026-11-11.
+ *      French with the day written the French way (core's date tables), not as 11 Nov 2026.
  *
  * An owner's assistant makes its polls through this same door as the owner: test-mcp-owner-polls section 12c.
  *
@@ -74,8 +74,9 @@ const startedAt = (id: string): string => (db.prepare('SELECT created_at FROM po
 /** The poll was started `ms` ago (its start and nothing else moves). */
 const startedAgo = (id: string, ms: number): void => { db.prepare('UPDATE posts SET created_at = ? WHERE id = ?').run(new Date(Date.now() - ms).toISOString(), id); };
 const status = (id: string): { status: string; active: number } => db.prepare('SELECT status, active FROM posts WHERE id = ?').get(id) as { status: string; active: number };
-const WEEK = /^You can start one poll a week\. Your next one can start on (\d{4}-\d{2}-\d{2})\.$/;
-const dayOf = (iso: string): string => iso.slice(0, 10);
+const WEEK = /^You can start one poll a week\. Your next one can start on (\d{1,2} [A-Z][a-z]{2} \d{4})\.$/;
+/** The day of an instant as the node writes it into the sentence: English, the UTC day. */
+const dayOf = (iso: string, lang: 'en' | 'fr' = 'en'): string => formatDate(new Date(iso), 'day-month-year', { utc: true, lang });
 
 let BASE = '';
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
@@ -228,12 +229,13 @@ async function main(): Promise<void> {
     const cyPoll = newPoll(cy.pub);
     closePoll(cyPoll.id, cy.pub);
     const body = { type: 'poll', category: 'community', title: 'Again?', description: '', authorPublicKey: cy.pub, pollOptions: [{ id: 'a', text: 'Yes' }, { id: 'b', text: 'No' }], durationDays: 7 };
-    const day = dayOf(new Date(Date.parse(startedAt(cyPoll.id)) + POLL_START_WINDOW_MS).toISOString());
+    const due = new Date(Date.parse(startedAt(cyPoll.id)) + POLL_START_WINDOW_MS).toISOString();
+    const day = dayOf(due);
     const english = await post('/api/marketplace/posts', body, cy);
     assert(english.status === 400 && english.body?.error === `You can start one poll a week. Your next one can start on ${day}.`, `in English: the sentence as written (${english.status} ${JSON.stringify(english.body)})`);
     const french = await post('/api/marketplace/posts', body, cy, { [LANGUAGE_HEADER]: 'fr' });
-    const frDate = formatDate(new Date(`${day}T00:00:00Z`), 'day-month-year', { utc: true, lang: 'fr' });
-    assert(french.status === 400 && typeof french.body?.error === 'string' && french.body.error.includes(frDate) && !french.body.error.includes(day),
+    const frDate = dayOf(due, 'fr');
+    assert(french.status === 400 && typeof french.body?.error === 'string' && french.body.error.includes(frDate) && !french.body.error.includes(day) && frDate !== day,
         `with X-Language: fr, in French with the day the French way, ${frDate}, not ${day} (${french.body?.error})`);
     assert(french.body?.error !== english.body?.error && !/^You can start/.test(french.body?.error ?? ''), 'and the sentence is French');
 

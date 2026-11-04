@@ -131,7 +131,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 /** The numbers a member's read says beside the switches: the floor and the rule's two lines, kept and carried together. */
 const NUMBER_KEYS = ['knownFloor', 'debtLinePct', 'quietDays'] as const;
 
-const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | typeof NUMBER_KEYS[number]>> = [
+const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | 'removalDecider' | typeof NUMBER_KEYS[number]>> = [
     'pins',
     'pollOther',
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
@@ -231,6 +231,8 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
             if (typeof f[key] === 'number') features[key] = f[key] as number;
         }
         if (DOORS.includes(f.door as NodeDoor)) features.door = f.door as NodeDoor;
+        // Who decides a removal, in a member's read (slice J3): one of the three rules, or nothing.
+        if (f.removalDecider === 'automatic' || f.removalDecider === 'everyone' || f.removalDecider === 'jury') features.removalDecider = f.removalDecider;
         const n = f.nearbyListings as { radiusKm?: unknown; max?: unknown } | undefined;
         if (n && typeof n === 'object' && typeof n.radiusKm === 'number' && n.radiusKm > 0 && typeof n.max === 'number' && n.max > 0) {
             features.nearbyListings = { radiusKm: n.radiusKm, max: n.max };

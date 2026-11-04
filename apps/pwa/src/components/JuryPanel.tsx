@@ -118,10 +118,10 @@ export function JuryPanel({ decision, open, me, name, voteButtons, onRefresh }: 
             )}
 
             {loadFailed && (
-                <p className="text-xs text-amber-300">
-                    {t("Couldn't load the jury.")}{' '}
+                <div className="flex flex-wrap items-center gap-x-2 text-xs text-amber-300">
+                    <span>{t("Couldn't load the jury.")}</span>
                     <button type="button" onClick={() => void load()} className="underline font-bold min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded">{t('Try again')}</button>
-                </p>
+                </div>
             )}
             {error && <p className="text-xs text-red-300" role="alert">{error}</p>}
 

@@ -108,9 +108,12 @@ export function JuryPanel({ decision, open, me, name, voteButtons, onRefresh }: 
             )}
 
             {loadFailed && (
-                <Pressable accessibilityRole="button" style={s.link} onPress={() => void load()}>
-                    <Text style={s.warn}>{t("Couldn't load the jury.")} <Text style={s.linkText}>{t('Try again')}</Text></Text>
-                </Pressable>
+                <View style={s.row}>
+                    <Text style={s.warn}>{t("Couldn't load the jury.")}</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('Try again')} style={s.link} onPress={() => void load()}>
+                        <Text style={s.linkText}>{t('Try again')}</Text>
+                    </Pressable>
+                </View>
             )}
 
             {!!jury && (

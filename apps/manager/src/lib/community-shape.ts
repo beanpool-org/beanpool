@@ -505,10 +505,10 @@ export function getConsequenceSentence(
             const pool = s.removalDecider?.poolSize ?? 0;
             const rule = String(targetValue);
             const everyoneToday = rule === 'everyone' || (rule === 'automatic' && pool < 100) || (rule === 'jury' && pool < 36);
-            const today = everyoneToday
-                ? t('Today everyone who can vote would decide one ({n} could serve on a jury).')
-                : t('Today a jury of 12 would decide one ({n} could serve on a jury).');
-            return `${t('The next removal is decided this way; a vote already open keeps its rule. Every member is told.')} ${today.replace('{n}', pool.toLocaleString('en'))}`;
+            return (everyoneToday
+                ? t('The next removal is decided this way; a vote already open keeps its rule. Every member is told. Today everyone who can vote would decide one ({n} could serve on a jury).')
+                : t('The next removal is decided this way; a vote already open keeps its rule. Every member is told. Today a jury of 12 would decide one ({n} could serve on a jury).')
+            ).replace('{n}', pool.toLocaleString('en'));
         }
         case 'probation':
             return targetValue === true

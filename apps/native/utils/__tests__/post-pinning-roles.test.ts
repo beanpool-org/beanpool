@@ -95,7 +95,7 @@ describe('marketPins: the pinned block, one rule for the screen and this test', 
     const state = (over: Partial<MarketFilterState> = {}): MarketFilterState => ({
         type: 'all', category: 'all', eventWindow: 'all', trust: 'all', beansOnly: false, radiusKm: null, center: null, groupId: 'all', ...over,
     });
-    const ctx = { blockedUsers: [] as string[], favCategories: [] as string[] };
+    const ctx = { blockedUsers: [] as string[], favCategories: [] as string[], nowMs: now };
     const run = (over: Partial<MarketFilterState> = {}, o: { narrowed?: boolean; filtered?: any[]; visible?: (p: any) => boolean } = {}) =>
         marketPins<any>({
             basePosts: posts, filtered: o.filtered ?? posts, narrowed: o.narrowed ?? false, now,

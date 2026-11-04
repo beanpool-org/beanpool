@@ -274,9 +274,11 @@ export const lightColors = {
         info: { fg: palette.blue600, bg: palette.blue50, border: palette.blue500, solid: brandLight.info.fill },
     },
 
-    // The event violet as words: Going / Interested, UPDATED, You're hosting. components/EventCard.tsx's EVENT_ACCENT
-    // stays the fill and the border.
-    event: { ink: palette.violet600 },
+    // The event violet, from core's `event` fill role and `ink.event` (docs/brand-colours.md). `ink`: words and outlines (when,
+    // Going / Interested, UPDATED, You're hosting), violet-800, 7.8:1 or more on every page and card. `fill` + `on`: the chosen
+    // answer, Edit event, Let in ✓ (violet-700 under white, 7.1:1); `pressed`: its pressed fill. components/EventCard.tsx's
+    // EVENT_ACCENT stays the raw violet the map pin and the event pages draw until their slices move to these.
+    event: { ink: brandLight.ink.event, fill: brandLight.event.fill, pressed: brandLight.event.hover, on: brandLight.event.on },
 
     // Discrete actions
     action: {
@@ -422,8 +424,9 @@ export const darkColors = {
         info: { fg: palette.blue400, bg: palette.indigo950, border: palette.blue600, solid: brandDark.info.fill },
     },
 
-    // violet-300, 8.16:1 on the lifted card (the fill's violet-600 was 3.05 as words).
-    event: { ink: palette.violet300 },
+    // violet-300 as words, 8.16:1 on the lifted card (the fill's violet-600 was 3.05 as words). The fill is the same deep violet-700
+    // under white words as in light, as `brand.fill` is one deep green in both sets.
+    event: { ink: brandDark.ink.event, fill: brandDark.event.fill, pressed: brandDark.event.hover, on: brandDark.event.on },
 
     // Discrete actions
     action: {

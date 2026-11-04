@@ -6730,5 +6730,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community} tidak dapat memeriksa akun masuk saat ini, jadi tidak ada yang ditambahkan. Silakan coba lagi nanti.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} tidak menerima akun masuk {provider}. Kamu bisa mencoba yang lain.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "Tidak dapat menjangkau {community} saat ini, jadi tidak ada yang ditambahkan. Periksa koneksimu dan coba lagi.",
-  "HOSTED BY": "DISELENGGARAKAN OLEH"
+  "HOSTED BY": "DISELENGGARAKAN OLEH",
+  "Open event: {title}": "Buka acara: {title}",
+  "Open listing: {title}": "Buka listing: {title}"
 }

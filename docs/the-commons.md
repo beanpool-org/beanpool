@@ -624,7 +624,7 @@ tap-to-vote button. That placement *is* the feature — a governance tab that pe
 to visit will not build a habit, and the feed already has their attention.
 
 **Noise is handled socially, not financially.** A poll nobody cares about gets ignored and scrolls
-away. Rate limits (1 open poll per member, 5 open per node) are enough. No bond — charging a member
+away. Rate limits (1 open poll per member, one community poll started a week, 5 open per node) are enough. The week counts only polls shown to the whole community: a poll for a group or for one person takes no one else's place on the Market. Votes on removing a member, Decisions and the like are not polls. No bond — charging a member
 beans because their neighbours were apathetic punishes the wrong person, which is the same unfairness
 we rejected for enterprise default.
 

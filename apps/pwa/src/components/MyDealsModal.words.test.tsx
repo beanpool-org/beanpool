@@ -1,7 +1,8 @@
 /**
  * Your deals in the member's language (words S3, web sweep W1): every tab (In Progress, My Posts, History and its
  * filters), each tab's empty state, a deal's status badge, its date (core's formatDate, as the phone's MyDealsSheet),
- * "Bought from / Sold to {who}" as ONE sentence with the name bold inside it, the photo buttons and the Beans sign.
+ * "Bought from / Sold to {who}" as ONE sentence with the name bold inside it, the row names ("View deal", "View post")
+ * and the Beans sign.
  * Listing titles and names are the members' own, shown as written.
  *
  * Preview (a node where escrow is off): the card's own words are checked; the local-community marker, its sheet and
@@ -71,7 +72,9 @@ describe('Your deals in the pseudo-locale', () => {
         fireEvent.click(screen.getByRole('button', { name: new RegExp(xx('My Posts').replace(/[[\]~]/g, '.')) }));
         expect(screen.getAllByText(xx('🟢 Active'))).toHaveLength(2);
         expect(screen.getByText(xx('need'))).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: xx('View enlarged photo: {title}').replace('{title}', 'Help moving a couch') })).toBeInTheDocument();
+        // The row names itself for the post (its photo is part of it, with no enlarge button of its own).
+        expect(screen.getByTestId('deal-card-p-couch').getAttribute('aria-label')).toBe(xx('View post: {title}').replace('{title}', 'Help moving a couch'));
+        expect(within(screen.getByTestId('deal-card-p-couch')).queryAllByRole('button')).toEqual([]);
         expect(bypassing(document.body, { others })).toEqual([]);
 
         // History, all three filters: completed (with Leave Review), cancelled, rejected.
@@ -130,7 +133,8 @@ describe('Your deals in the pseudo-locale', () => {
         expect(screen.getByText('- 20')).toBeInTheDocument();
         expect(screen.getAllByAltText('B').length).toBeGreaterThan(0);
         expect(screen.getByAltText('Cover')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'View enlarged photo: Bike tune-up' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'View deal: Bike tune-up' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /View enlarged photo/ })).toBeNull();
         fireEvent.click(screen.getByRole('button', { name: /My Posts/ }));
         expect(screen.getByText('need')).toBeInTheDocument();
         expect(screen.getByTestId('deal-card-p-couch').getAttribute('aria-label')).toBe('View post: Help moving a couch');

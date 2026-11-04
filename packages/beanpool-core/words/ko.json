@@ -1914,5 +1914,10 @@
   "{price} in another community · You can't buy or take this here.": "다른 커뮤니티에서 {price} · 여기서는 사거나 받을 수 없어요.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{community}에서 {price} · {community}이(가) 환영해 줄 때까지 사거나 받을 수 없어요.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 글로벌 커뮤니티 둘러보기"
+  "🌍 Look around the global community": "🌍 글로벌 커뮤니티 둘러보기",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "뽑힌 배심단이 내 답변을 기다리고 있어요. 하루 안에 답하지 않으면 내 자리는 다음에 뽑힌 멤버에게 넘어가요.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "내가 속한 배심단이 약 하루 뒤에 마감돼요. BeanPool을 열어 투표하세요.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "내 배심단이 판단하고 있는 멤버가 이 건에 답했어요. BeanPool을 열어 읽어 보세요.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "내 커뮤니티의 배심단에 뽑혔고, 투표는 2일도 안 남아서 마감돼요. BeanPool을 열어 맡거나 사양하세요.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "내 커뮤니티의 배심단에 뽑혔어요. 3일 안에 BeanPool을 열어 맡거나 사양하세요."
 }

@@ -1,7 +1,9 @@
 /**
  * Your deals modal: tabbed overview of in-progress (escrow) and completed deals.
- * Accessible: focus trap and Escape to close; the tabs, filters, photos, a deal card that opens something and its
- * Leave Review all work from the keyboard. On a local node the modal is exactly as before the preview came
+ * Accessible: focus trap and Escape to close; the tabs, filters, a deal card that opens something and its
+ * Leave Review all work from the keyboard. A card's photo is part of the card (Marty, 4 Nov 2026: a tap anywhere on a
+ * small card opens the item): a press on it does what a press on the card does, and the enlarge lives on the item's
+ * own page. On a local node the modal is exactly as before the preview came
  * (it still sits under the bottom nav at 320 px, an old bug kept out of this change).
  *
  * In preview (on a node where escrow is off, scratch/global-node/DESIGN-global-showcase-fable.md §1 row 3):
@@ -10,9 +12,8 @@
  * and no member deal or balance is read.
  */
 
-import { useState, useEffect, useRef, useMemo, type KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import type { MarketplacePost, MarketplaceTransaction } from '../lib/api';
-import { ImageLightbox } from './ImageLightbox';
 import { dealsNeedingMe, openDeals, dealStep, dealStateWords, formatDate, formatNumber, t, word, type WordKey } from '@beanpool/core';
 import { ListPhoto } from './ListPhoto';
 import { LocalCommunityAction, LocalCommunityStrip, LocalCommunitySheet, type LocalCommunityWays } from './LocalCommunityMark';
@@ -81,13 +82,6 @@ export function MyDealsModal({
 }: Props) {
     const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>(initialTab);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
-    const [lightboxState, setLightboxState] = useState<{
-        isOpen: boolean;
-        photos: string[];
-        initialIndex: number;
-        title?: string;
-        triggerElement?: HTMLElement | null;
-    } | null>(null);
 
     // The card's sheet: read by the key handler through a ref, so opening it does not re-run the focus effect
     // (which would pull focus back to Close Your deals behind the sheet). Closing it gives focus back to the card.
@@ -105,23 +99,6 @@ export function MyDealsModal({
 
     const modalRef = useRef<HTMLDivElement>(null);
     const closeBtnRef = useRef<HTMLButtonElement>(null);
-    const lightboxOpenRef = useRef(false);
-    lightboxOpenRef.current = !!lightboxState?.isOpen;
-
-    const openLightbox = (photos: string[], title?: string, triggerElement?: HTMLElement | null) =>
-        setLightboxState({ isOpen: true, photos, initialIndex: 0, title, triggerElement });
-
-    // Both deal cards are themselves keyboard-activatable and call preventDefault() on
-    // Enter/Space, which suppresses the synthetic click on any nested button. So a photo
-    // button has to handle the key itself AND stop the event reaching the card — otherwise
-    // a keyboard user asking to enlarge the photo gets navigated away to the post instead.
-    const photoKeyDown = (photos: string[], title?: string) => (e: KeyboardEvent) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.stopPropagation();
-            e.preventDefault();
-            openLightbox(photos, title, e.currentTarget as HTMLElement);
-        }
-    };
 
     // Accessibility: Focus trap & Escape key handling for MyDealsModal
     useEffect(() => {
@@ -136,8 +113,8 @@ export function MyDealsModal({
         }, 30);
 
         const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-            // If the lightbox or a sheet (card's sheet or a marker's sheet) is open, its own trap and Escape listener take precedence
-            if (lightboxOpenRef.current || sheetShownRef.current || document.querySelector(MARKER_SHEET)) return;
+            // If a sheet (card's sheet or a marker's sheet) is open, its own trap and Escape listener take precedence
+            if (sheetShownRef.current || document.querySelector(MARKER_SHEET)) return;
 
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -430,18 +407,9 @@ export function MyDealsModal({
                                             >
                                                 <div className="flex gap-3 mb-2">
                                                     {item.coverImage ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                openLightbox([item.coverImage!], item.postTitle, e.currentTarget);
-                                                            }}
-                                                            onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
-                                                            aria-label={t('View enlarged photo: {title}', { title: item.postTitle })}
-                                                            className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                                                        >
+                                                        <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                             <ListPhoto photo={item.coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span></span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
-                                                        </button>
+                                                        </div>
                                                     ) : (
                                                         <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                                                             <span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span>
@@ -534,18 +502,9 @@ export function MyDealsModal({
                                         >
                                             <div className="flex gap-3 mb-2">
                                                 {item.coverImage ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            openLightbox([item.coverImage!], item.postTitle, e.currentTarget);
-                                                        }}
-                                                        onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
-                                                        aria-label={t('View enlarged photo: {title}', { title: item.postTitle })}
-                                                        className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                                                    >
+                                                    <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                         <ListPhoto photo={item.coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl text-nature-600 dark:text-nature-300" aria-hidden="true">{isBuyer ? '🛒' : '🏷️'}</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
-                                                    </button>
+                                                    </div>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                                                         <span className="text-xl text-nature-600 dark:text-nature-300">{isBuyer ? '🛒' : '🏷️'}</span>
@@ -667,18 +626,9 @@ export function MyDealsModal({
                                         >
                                             <div className="flex gap-4">
                                                 {coverImage ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            openLightbox(item.photos || [coverImage], item.title, e.currentTarget);
-                                                        }}
-                                                        onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
-                                                        aria-label={t('View enlarged photo: {title}', { title: item.title })}
-                                                        className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                                                    >
+                                                    <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                         <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-xl opacity-50">📦</span></span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
-                                                    </button>
+                                                    </div>
                                                 ) : (
                                                     <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                                                         <span className="text-xl opacity-50">📦</span>
@@ -750,18 +700,9 @@ export function MyDealsModal({
                                     >
                                         <div className="flex gap-4">
                                             {coverImage ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        openLightbox(item.photos || [coverImage], item.title, e.currentTarget);
-                                                    }}
-                                                    onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
-                                                    aria-label={t('View enlarged photo: {title}', { title: item.title })}
-                                                    className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                                                >
+                                                <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0">
                                                     <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl text-nature-600 dark:text-nature-300" aria-hidden="true">📦</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
-                                                </button>
+                                                </div>
                                             ) : (
                                                 <div className="w-14 h-14 rounded-xl bg-nature-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                                                     <span className="text-xl text-nature-600 dark:text-nature-300">📦</span>
@@ -799,16 +740,6 @@ export function MyDealsModal({
                 </div>
             </div>
             </div>
-            {lightboxState?.isOpen && (
-                <ImageLightbox
-                    isOpen={lightboxState.isOpen}
-                    photos={lightboxState.photos}
-                    initialIndex={lightboxState.initialIndex}
-                    title={lightboxState.title}
-                    triggerElement={lightboxState.triggerElement}
-                    onClose={() => setLightboxState(null)}
-                />
-            )}
             {sheetShown === 'sheet' && (
                 <LocalCommunitySheet
                     feature="escrow"

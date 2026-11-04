@@ -58,6 +58,7 @@ vi.mock('../db', () => ({
 }));
 vi.mock('../haptics', () => ({ hapticTick: () => {} }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
+vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
 vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
 

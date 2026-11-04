@@ -2629,7 +2629,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     >
                         <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-300">✕</span>
                     </button>
-                    <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
+                    <div className="relative w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                         <ListPhoto
                             photo={previewPost.photos?.[0]}
                             fallback={<span className="text-3xl" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
@@ -2671,9 +2671,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                     </button>
                     {previewPost.photos && previewPost.photos.length > 0 ? (
                         // The photo is part of the card: a tap on it opens the listing (Marty's standing rule); the enlarge lives
-                        // on the listing's own page. A small copy that fails steps down to the full photo, then the category tile
-                        // (#2838), never an empty slot.
-                        <div className="w-[90px] h-[90px] rounded-2xl overflow-hidden shrink-0">
+                        // on the listing's own page. A small copy that fails is asked once more past every cache, then steps down to
+                        // the full photo, then the category tile (#2838, #2853), never an empty slot. `relative`: the photo still
+                        // loading is held inside this slot (card-photo-blank).
+                        <div className="relative w-[90px] h-[90px] rounded-2xl overflow-hidden shrink-0">
                             <ListPhoto
                                 photo={previewPost.photos[0]}
                                 fallback={<span className="w-full h-full flex items-center justify-center text-4xl bg-gray-100 dark:bg-nature-800" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}

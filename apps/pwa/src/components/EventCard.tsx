@@ -33,7 +33,7 @@ import { EventCopyDoor } from './EventCopyDoor';
 import { ShowOnGlobalHostRow } from './ShowOnGlobalRow';
 import { visitorDistanceText } from '../lib/visitor-lobby';
 import { useCommunityInfo } from '../lib/features';
-import { Sentence } from './Sentence';
+import { AuthorCard, useMemberRatings } from './AuthorCard';
 import { CategoryTile } from './CategoryTile';
 import { PostTagChips } from './PostTagChips';
 
@@ -488,6 +488,8 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     const going = (p.eventRsvps ?? []).filter(r => r.status === 'going');
     const interested = (p.eventRsvps ?? []).filter(r => r.status === 'interested');
     const hostName = p.authorCallsign || p.authorPublicKey.slice(0, 8);
+    // The host's box (components/AuthorCard.tsx, the box a listing's "Posted by" is): their ratings. A member's copy has no host to show.
+    const hostRatings = useMemberRatings(copy ? null : p.authorPublicKey);
     const openMembership = (useCommunityInfo()?.features as { openMembership?: boolean } | undefined)?.openMembership === true;
     // Where the host lets people in (DESIGN-global-member-privacy-fable.md §2.3): before Going, waiting, or let in.
     const letInState = eventLetInState(p, isHost);
@@ -614,24 +616,23 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {onOpenTag && <PostTagChips tags={p.tags} freeTags={p.freeTags} onPick={onOpenTag} onPickFree={onOpenFreeTag} />}
 
                 {copy?.from && <p data-testid="event-copy-from" className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300 break-words">{copyFromLine(copy.from)}</p>}
-                {!copy && <p className="m-0 text-sm text-nature-600 dark:text-nature-400 min-w-0">
-                    {/* One sentence with the host's name (a button) and the group's in it: the order is the language's. */}
-                    <Sentence
-                        text={p.audienceScope === 'group' && p.targetGroupName ? t('Hosted by {host} · for {group} only') : t('Hosted by {host}')}
-                        parts={{
-                            host: (
-                                <button
-                                    type="button"
-                                    onClick={() => onOpenProfile?.(p.authorPublicKey)}
-                                    className="inline-flex items-center min-h-[48px] max-w-full bg-transparent border-0 p-0 font-bold text-left text-nature-900 dark:text-white underline decoration-dotted cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 rounded-sm"
-                                >
-                                    {hostName}
-                                </button>
-                            ),
-                            group: p.targetGroupName ?? '',
-                        }}
+                {!copy && (
+                    <AuthorCard
+                        label={t('Hosted by')}
+                        pubkey={p.authorPublicKey}
+                        callsign={hostName}
+                        avatarUrl={p.authorAvatarUrl}
+                        ratings={hostRatings}
+                        onOpen={() => onOpenProfile?.(p.authorPublicKey)}
+                        testId="event-host-open"
                     />
-                </p>}
+                )}
+                {/* A group-only event says who can see it, just under the host's box. */}
+                {!copy && p.audienceScope === 'group' && !!p.targetGroupName && (
+                    <p data-testid="event-host-audience" className="m-0 -mt-1 text-sm text-nature-600 dark:text-nature-400 break-words">
+                        {t('🔒 Only {group} can see this', { group: p.targetGroupName })}
+                    </p>
+                )}
 
                 {!copy && countsLine(p) && (
                     <p className="m-0 text-sm font-semibold text-nature-700 dark:text-nature-300">

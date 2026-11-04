@@ -1914,5 +1914,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} di komunitas lain · Kamu tidak bisa membeli atau mengambil ini di sini.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} di {community} · Kamu tidak bisa membeli atau mengambil ini sampai {community} menyambutmu.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 Lihat-lihat komunitas global"
+  "🌍 Look around the global community": "🌍 Lihat-lihat komunitas global",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Juri tempat kamu terpilih menunggu jawabanmu. Jawab dalam sehari, atau kursimu beralih ke anggota berikutnya yang terpilih.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "Juri tempatmu bertugas berakhir dalam sekitar sehari. Buka BeanPool untuk memberi suara.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "Anggota yang sedang diputuskan oleh jurimu telah menjawab kasusnya. Buka BeanPool untuk membacanya.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "Kamu terpilih untuk juri di komunitasmu, dan pemungutan suaranya berakhir dalam kurang dari 2 hari. Buka BeanPool untuk bertugas atau mundur.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "Kamu terpilih untuk juri di komunitasmu. Buka BeanPool dalam 3 hari untuk bertugas atau mundur."
 }

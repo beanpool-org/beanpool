@@ -7,10 +7,15 @@
  * default language (`language` in its /api/community/info), else English. A stored value that is not one of the 25
  * (a stale or hand-edited one) counts as no choice: it never breaks a screen (onboarding-no-hard-gates).
  *
+ * The pseudo-locale (`xx`, translation tooling design §2.5, slice T4) is a 26th choice in a DEVELOPMENT build only: a
+ * "Pseudo (test)" row under Settings → Language, to see every screen padded 40 % / 30 % on a real phone. A release build
+ * (`__DEV__` false, which Metro folds into the bundle) neither lists it nor honours a stored `xx` left by a development
+ * build on the same phone, so a member can never be in it.
+ *
  * Pure: the provider (components/LanguageProvider.tsx) reads the phone's tags and the stored value and hands them in.
  */
 
-import { LANGS, LANGUAGE_HEADER, currentLanguage, isLang, normaliseLang, type Lang } from '@beanpool/core';
+import { LANGS, LANGUAGE_HEADER, PSEUDO_LANG, currentLanguage, isLang, normaliseLang, type Lang, type UiLang } from '@beanpool/core';
 
 /** Where this phone keeps the member's choice. Absent: follow the phone. */
 export const LANGUAGE_PREFERENCE_KEY = 'beanpool_language';
@@ -24,9 +29,25 @@ export interface LanguageInputs {
     nodeDefault?: string | null;
 }
 
-/** The member's stored choice when it is one of the 25; anything else is no choice. */
-export function storedChoice(stored: string | null | undefined): Lang | null {
-    return isLang(stored) ? stored : null;
+let devBuildForTests: boolean | null = null;
+
+/** Tests only: act as a development (true) or a release (false) build; null: the bundle's own `__DEV__`. */
+export function setDevBuildForTests(dev: boolean | null): void {
+    devBuildForTests = dev;
+}
+
+/** Whether this is a development build: Metro's `__DEV__`, which a release bundle has as the constant false. */
+export function isDevBuild(): boolean {
+    return devBuildForTests ?? __DEV__;
+}
+
+/** The pseudo-locale's row in the picker: what a developer reads, never translated, never in a release build. */
+export const PSEUDO_ROW_NAME = 'Pseudo (test)';
+
+/** The member's stored choice when it is one of the 25 (or `xx` in a development build); anything else is no choice. */
+export function storedChoice(stored: string | null | undefined): UiLang | null {
+    if (isLang(stored)) return stored;
+    return stored === PSEUDO_LANG && isDevBuild() ? PSEUDO_LANG : null;
 }
 
 /** The language to write in, with no choice made by the member: the phone's, then the community's, then English. */
@@ -39,7 +60,7 @@ export function defaultLanguage({ deviceTags = [], nodeDefault }: Omit<LanguageI
 }
 
 /** The language to write in: the member's choice, else {@link defaultLanguage}. */
-export function chooseLanguage(inputs: LanguageInputs): Lang {
+export function chooseLanguage(inputs: LanguageInputs): UiLang {
     return storedChoice(inputs.stored) ?? defaultLanguage(inputs);
 }
 
@@ -77,6 +98,11 @@ export const LANGUAGE_NAMES: Readonly<Record<Lang, string>> = Object.freeze({
 
 /** The picker's rows: every language, in LANGS' order. */
 export const LANGUAGE_OPTIONS: readonly { value: Lang; name: string }[] = Object.freeze(LANGS.map((value) => ({ value, name: LANGUAGE_NAMES[value] })));
+
+/** The rows the picker draws: the 25, and last "Pseudo (test)" in a development build only. */
+export function languagePickerRows(): readonly { value: UiLang; name: string }[] {
+    return isDevBuild() ? [...LANGUAGE_OPTIONS, { value: PSEUDO_LANG, name: PSEUDO_ROW_NAME }] : LANGUAGE_OPTIONS;
+}
 
 /**
  * The language this phone writes in, for a node (Marty's call M6): `X-Language: ru` on a signed request, `lang` on the

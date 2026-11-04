@@ -190,7 +190,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     onChange={handleAvatarUpload}
                     className="hidden"
                 />
-                <div className="flex justify-center gap-3 mt-4">
+                <div className="flex flex-wrap justify-center gap-3 mt-4">
                     <button
                         onClick={() => cameraInputRef.current?.click()}
                         className="bg-white dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl px-4 py-2 text-nature-700 dark:text-nature-200 text-xs font-bold cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-700 shadow-sm transition-all"

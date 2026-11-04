@@ -152,6 +152,34 @@ test('scanAppWords accurately counts missing, stale (0), and orphaned keys with 
     }
 });
 
+test('scanAppWords: a key core already has is not missing in an app catalog (the apps load core\'s catalog with their own)', async () => {
+    const tmp = makeTempDir();
+    try {
+        const catalogDefs = [
+            { name: 'core', folder: 'packages/beanpool-core/words' },
+            { name: 'native', folder: 'apps/native/words' },
+            { name: 'pwa', folder: 'apps/pwa/words' },
+        ];
+        for (const def of catalogDefs) fs.mkdirSync(path.join(tmp, def.folder), { recursive: true });
+        fs.writeFileSync(path.join(tmp, 'packages/beanpool-core/words/es.json'), JSON.stringify({ _meta: { language: 'es' }, 'Your deals': 'Tus tratos' }));
+        fs.writeFileSync(path.join(tmp, 'apps/native/words/es.json'), JSON.stringify({ _meta: { language: 'es' } }));
+        // The web app has no file for Spanish at all yet: core's sentence is still translated for it.
+        const calls = (name, texts) => ({ name, words: catalogDefs.find((d) => d.name === name).folder, calls: texts.map((text, i) => ({ fn: 't', text, at: `${name}/a.ts:${i + 1}` })) });
+        const extracted = [calls('core', ['Your deals']), calls('native', ['Your deals', 'Step aside']), calls('pwa', ['Your deals', 'Step aside'])];
+        const result = await scanAppWords({ root: tmp, catalogDefs, langs: ['es'], extracted });
+        assert.deepEqual(result.es.byCatalog.core.missingKeys.map((k) => k.key), []);
+        assert.deepEqual(result.es.byCatalog.native.missingKeys.map((k) => k.key), ['Step aside']);
+        assert.deepEqual(result.es.byCatalog.pwa.missingKeys.map((k) => k.key), ['Step aside']);
+        assert.equal(result.es.missing, 2);
+        // When core does not have the key, it stays missing in the app.
+        fs.writeFileSync(path.join(tmp, 'packages/beanpool-core/words/es.json'), JSON.stringify({ _meta: { language: 'es' } }));
+        const gone = await scanAppWords({ root: tmp, catalogDefs, langs: ['es'], extracted: [calls('core', []), calls('native', ['Your deals'])] });
+        assert.deepEqual(gone.es.byCatalog.native.missingKeys.map((k) => k.key), ['Your deals']);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
 test('guide titles: a key whose English changed is stale; missing lines are missing', () => {
     const tmp = makeTempDir();
     try {

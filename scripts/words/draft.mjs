@@ -88,9 +88,23 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
         }
     }
 
+    // The apps load core's catalog of a language together with their own (wordsFor in core's words.ts), so a key core
+    // already has is translated for them: "Your deals" is core's shared sentence, and an app catalog must not repeat it
+    // (apps/native/utils/__tests__/your-deals-words.test.ts). Counting it missing there would never end.
+    const coreDef = catalogDefs.find((d) => d.name === 'core');
+    const readCoreCatalog = (lang) => {
+        if (!coreDef) return null;
+        try {
+            return JSON.parse(fs.readFileSync(path.join(root, coreDef.folder, `${lang}.json`), 'utf8'));
+        } catch {
+            return null;
+        }
+    };
+
     const result = {};
     for (const lang of targetLangs) {
         result[lang] = { missing: 0, stale: 0, orphaned: 0, byCatalog: {}, items: [] };
+        const coreCatalog = readCoreCatalog(lang);
         for (const def of catalogDefs) {
             const folderData = byFolder.get(def.folder);
             const sourceKeys = folderData?.keys ?? new Set();
@@ -112,6 +126,7 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
             if (catalog === null) {
                 // Whole file missing
                 for (const key of [...sourceKeys].sort()) {
+                    if (def.name !== 'core' && coreCatalog && Object.hasOwn(coreCatalog, key) && key !== '_meta') continue;
                     const item = {
                         catalog: def.name,
                         folder: def.folder,
@@ -126,6 +141,7 @@ export async function scanAppWords({ root = ROOT, catalogDefs = APP_CATALOG_DEFS
             } else {
                 for (const key of [...sourceKeys].sort()) {
                     if (!Object.hasOwn(catalog, key)) {
+                        if (def.name !== 'core' && coreCatalog && Object.hasOwn(coreCatalog, key) && key !== '_meta') continue;
                         const item = {
                             catalog: def.name,
                             folder: def.folder,

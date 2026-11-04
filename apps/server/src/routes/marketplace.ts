@@ -39,6 +39,8 @@ import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
 import { PollOtherError, readPollOtherAnswers, removePollOtherAnswer, reportPollOtherAnswer } from '../engine/poll-other.js';
+import { memberNextPollStartAt } from '../engine/poll-week.js';
+import { ownerAdminLimit } from '../engine/owner-admin-limit.js';
 import { noteNewReport } from '../services/alerts.js';
 import { logger } from '../logger.js';
 import { DEAL_OPEN_CODE, LEND_ASK_FIRST_CODE, LISTING_COPY_CODE, POST_GONE_CODE, TRANSACTION_GONE_CODE } from '../engine/escrow.js';
@@ -1125,6 +1127,22 @@ router.post('/api/marketplace/posts/:id/other-answers/:answerId/remove', async (
     } catch (e: any) {
         pollOtherRefused(ctx, e, word('Failed to remove the typed answer'));
     }
+});
+
+/**
+ * When the signer may next start a poll (engine/poll-week.ts), asked by both apps before they open the poll form so a
+ * member who may not yet is told the date before typing a word: `{ nextAt }`, an ISO time, or null when they may now. Null
+ * for an owner or admin too, whose limit is the Settings one. The signer's own answer, never another member's, so never cached.
+ */
+router.get('/api/marketplace/polls/next-start', async (ctx) => {
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('Authentication required') };
+        return;
+    }
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { nextAt: memberNextPollStartAt(actor, ownerAdminLimit(actor)) };
 });
 
 router.post('/api/marketplace/polls/vote', async (ctx) => {

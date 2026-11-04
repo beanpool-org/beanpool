@@ -87,6 +87,7 @@ async function capture(fn: () => unknown | Promise<unknown>): Promise<string[]> 
 
 async function main() {
     const { db, initSchema } = await import('./db/db.js');
+    const { aWeekPasses } = await import('./post-test-helper.js');
     const { mirrorNodeProfileAtBoot, profileLimits, setSwitchOverride } = await import('./config/node-profile.js');
     const { setNodeRole } = await import('./config/node-role.js');
     const { getImageStore } = await import('./storage/image-store.js');
@@ -355,6 +356,8 @@ async function main() {
     const votesNow = (db.prepare('SELECT COUNT(*) AS n FROM poll_votes WHERE post_id = ?').get(asked.id) as { n: number }).n;
     assert(lateVote.status >= 400 && votesNow === 1, `a vote in its week is refused, so no count moves once where they came from shows (${lateVote.status}, ${votesNow} vote)`);
     const openPolls = (db.prepare("SELECT COUNT(*) AS n FROM posts WHERE type = 'poll' AND status = 'active'").get() as { n: number }).n;
+    // A week on from its maker's start: the member's week between polls (engine/poll-week.ts, test-poll-week.ts) is not what is held here.
+    aWeekPasses(db, maker.pubKeyHex);
     const next = se.createPost('poll', 'general', 'And the next question', 'Next', 0, 'fixed', maker.pubKeyHex, HERE.lat, HERE.lng, [], false, undefined, false,
         { pollOptions: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }], durationDays: 3, allowNoPhoto: true } as any);
     assert(!!next && openPolls < 5, `a closed poll in its week holds back neither its maker's next poll (one open each) nor the community's five (${openPolls} open before it)`);

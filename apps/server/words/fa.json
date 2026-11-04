@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -962,5 +962,6 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "سابقه تا {when} است. معاملاتی که از آن زمان روی سرور قدیمی انجام شده‌اند اینجا نیستند.",
   "The record is the one this laptop holds.": "سابقه همان است که در این لپ‌تاپ نگهداری می‌شود.",
   "This laptop's key ends in {key}. Compare it with the poster.": "کلید این لپ‌تاپ به {key} ختم می‌شود. آن را با پوستر مقایسه کنید.",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "حالت پرواز را روشن کنید و سپس Wi-Fi را دوباره روشن کنید."
+  "Turn on airplane mode, then turn Wi-Fi back on.": "حالت پرواز را روشن کنید و سپس Wi-Fi را دوباره روشن کنید.",
+  "You can start one poll a week. Your next one can start on {date}.": "هر هفته فقط می‌توانید یک نظرسنجی شروع کنید. نظرسنجی بعدی شما از {date} می‌تواند شروع شود."
 }

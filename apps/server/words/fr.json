@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-a app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the 20 lights-out hall sentences main added after the branch began, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, GD: the door on a copy); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-a app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, the 20 lights-out hall sentences main added after the branch began, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English.",
@@ -962,5 +962,6 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "Le registre date du {when}. Les échanges faits depuis sur l'ancien serveur n'y figurent pas.",
   "The record is the one this laptop holds.": "Le registre est celui que détient cet ordinateur.",
   "This laptop's key ends in {key}. Compare it with the poster.": "La clé de cet ordinateur se termine par {key}. Comparez-la avec l'affiche.",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "Activez le mode avion, puis réactivez le Wi-Fi."
+  "Turn on airplane mode, then turn Wi-Fi back on.": "Activez le mode avion, puis réactivez le Wi-Fi.",
+  "You can start one poll a week. Your next one can start on {date}.": "Vous pouvez lancer un sondage par semaine. Le prochain pourra commencer le {date}."
 }

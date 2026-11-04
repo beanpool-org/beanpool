@@ -155,11 +155,19 @@ function sentenceTemplates(catalog: Catalog | null): SentenceTemplate[] {
 
 /**
  * A value read back out of the English, as the language writes it: a plain number in its own decimal mark and digits,
- * with the decimals it was written with ("12.50" stays two places), anything else as it came.
+ * with the decimals it was written with ("12.50" stays two places); a calendar day a sentence names as 2026-11-10 (a
+ * node has no time zone, so it is the UTC day) in the language's own date, "10 Nov 2026" in English; anything else as it came.
  */
 function valueIn(words: Words, text: string): string {
     const number = /^-?(?:0|[1-9]\d*)(?:\.(\d+))?$/.exec(text);
-    return number ? words.formatNumber(Number(text), number[1]?.length ?? 0) : text;
+    if (number) return words.formatNumber(Number(text), number[1]?.length ?? 0);
+    const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (day) {
+        const at = new Date(Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3])));
+        // A day that is no day (2026-13-45) stays as it came.
+        if (at.toISOString().slice(0, 10) === text) return words.formatDate(at, 'day-month-year', { utc: true });
+    }
+    return text;
 }
 
 /** One sentence of a refusal in `words`' language: as a whole sentence, or as one with values in it. */

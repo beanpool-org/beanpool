@@ -2,9 +2,9 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed)",
     "reviewed": false,
-    "updated": "2026-11-03",
+    "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
     "review": "machine"
   },
@@ -955,5 +955,6 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "Catatan per {when}. Transaksi yang dibuat sejak saat itu di server lama tidak ada di sini.",
   "The record is the one this laptop holds.": "Catatan ini adalah yang disimpan laptop ini.",
   "This laptop's key ends in {key}. Compare it with the poster.": "Kunci laptop ini berakhir dengan {key}. Bandingkan dengan poster.",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "Aktifkan mode pesawat, lalu nyalakan Wi-Fi kembali."
+  "Turn on airplane mode, then turn Wi-Fi back on.": "Aktifkan mode pesawat, lalu nyalakan Wi-Fi kembali.",
+  "You can start one poll a week. Your next one can start on {date}.": "Kamu hanya dapat memulai satu jajak pendapat per minggu. Jajak pendapat berikutnya bisa dimulai pada {date}."
 }

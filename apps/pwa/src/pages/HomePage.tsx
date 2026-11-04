@@ -2416,7 +2416,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                     {band
                                         ? <div className="flex justify-end -mb-2"><ArrangeControls id={card.id} band={band} /></div>
                                         : common.menu && <div className="flex justify-end -mb-2"><CardMenu title={title} {...common.menu} /></div>}
-                                    <CardBody id={card.id} quiet={inArrange}>{oneWayBack}</CardBody>
+                                    <CardBody id={card.id} quiet={inArrange} lifted={band?.lifted}>{oneWayBack}</CardBody>
                                 </PackedBlock>
                             );
                         }} />

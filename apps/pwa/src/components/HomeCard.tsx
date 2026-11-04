@@ -135,8 +135,11 @@ export const HOLD_MS = 500;
 /** A finger that travels this far is scrolling, not holding. */
 const HOLD_SLOP_PX = 10;
 
-/** The card in the air, in Arrange (A2): dimmed to 40 % where it will land, with a dashed ring in its ink. */
-export const liftedStyle = (ink: string): React.CSSProperties => ({ opacity: 0.4, outline: `2px dashed ${ink}`, outlineOffset: 2 });
+/**
+ * The card in the air, in Arrange (A2): where it will land, with a dashed ring in its ink; its body dims to 40 % (`CardBody`
+ * `lifted`). The band keeps its full colours: a heading at 40 % fails contrast (axe, 2.1:1 in light and 2.5:1 in dark).
+ */
+export const liftedStyle = (ink: string): React.CSSProperties => ({ outline: `2px dashed ${ink}`, outlineOffset: 2 });
 
 /**
  * A press held on the band, never one that starts on a button or a link in it. The pointer is still down when the hold
@@ -184,14 +187,14 @@ function useHold(onHold?: (press: HeldPress) => void) {
  * out of Tab. On Home it carries nothing at all. It adds no padding, margin or box of its own, quiet or not: a drawn card
  * keeps its height, and keeps its cell.
  */
-export function CardBody({ id, quiet, children }: { id: string; quiet?: boolean; children: ReactNode }) {
+export function CardBody({ id, quiet, lifted, children }: { id: string; quiet?: boolean; lifted?: boolean; children: ReactNode }) {
     return (
         <div
             data-testid={quiet ? `card-body-${id}` : undefined}
             data-quiet={quiet ? 'true' : undefined}
             aria-hidden={quiet ? 'true' : undefined}
             inert={quiet ? true : undefined}
-            style={quiet ? { opacity: 0.55, pointerEvents: 'none' } : undefined}
+            style={quiet ? { opacity: lifted ? 0.4 : 0.55, pointerEvents: 'none' } : undefined}
         >
             {children}
         </div>
@@ -340,7 +343,7 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style,
                         )}
                     </div>
                 </div>
-                <CardBody id={id} quiet={quiet}>{children}</CardBody>
+                <CardBody id={id} quiet={quiet} lifted={arrange?.lifted}>{children}</CardBody>
             </section>
         </CardContainerContext.Provider>
     );

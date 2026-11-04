@@ -1684,8 +1684,8 @@ async function dragAcross(browser, root) {
                     check(await isLifted(page, src), `${tag}: the card taken by its body lifts, dimmed in its place with a dashed ring`);
                     const g = await ghostBox(page);
                     check(holds(g, { x: p.x + 12, y: p.y + 12 }, 4) && g.height >= 46 && g.height <= 80, `${tag}: its band is under the pointer, ${g ? Math.round(g.height) : 0} px tall`);
-                    const lifted = await page.evaluate((id) => { const s = getComputedStyle(document.querySelector(`[data-testid="home-card-${id}"]`)); return { opacity: s.opacity, outline: s.outlineStyle, transform: s.transform }; }, src);
-                    check(lifted.opacity === '0.4' && lifted.outline === 'dashed' && lifted.transform === 'none', `${tag}: the card itself stays in the grid at 40 % with a dashed ring, never moved by a transform (${JSON.stringify(lifted)})`);
+                    const lifted = await page.evaluate((id) => { const s = getComputedStyle(document.querySelector(`[data-testid="home-card-${id}"]`)); return { body: getComputedStyle(document.querySelector(`[data-testid="card-body-${id}"]`)).opacity, outline: s.outlineStyle, transform: s.transform }; }, src);
+                    check(lifted.body === '0.4' && lifted.outline === 'dashed' && lifted.transform === 'none', `${tag}: the card itself stays in the grid, its body at 40 % and a dashed ring, never moved by a transform (${JSON.stringify(lifted)})`);
                     await carryTo(page, d, dst, 'top');
                     await wait(calm ? 150 : 450);
                     const afterDst = await boxOf(page, `home-card-${dst}`);

@@ -115,7 +115,10 @@ describe('a Market card in the pseudo-locale', () => {
         expect(screen.getByText('2.5')).toBeInTheDocument();
         expect(screen.getByText('/mo')).toBeInTheDocument();
         expect(screen.getByText('/day')).toBeInTheDocument();
-        expect(screen.getAllByText('offer').length).toBeGreaterThan(0);
+        // The compact row's type chip is the box's one chip now (C1), its capitals from core's upperCase() as the list card's and
+        // the tile's (W2, G2), not the lowercase key under a CSS `uppercase` rule.
+        expect(screen.getAllByText('OFFER').length).toBeGreaterThan(0);
+        expect(screen.queryByText('offer')).toBeNull();
         expect(screen.getAllByAltText('B').length).toBeGreaterThan(0);
         expect(screen.getByAltText('Sourdough loaf')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /enlarged/ })).toBeNull();

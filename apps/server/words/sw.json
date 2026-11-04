@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ Handaki la jina lililoachiliwa limesimama. Seva hii bado inajibu kwenye {addresses}.",
   "🫘 A project you backed changed its end date": "🫘 Mradi ulioufadhili umebadilisha tarehe yake ya mwisho",
   "🫘 Pledges went back to their backers": "🫘 Ahadi zimerudishwa kwa wafadhili",
-  "🫘 Your pledge came back": "🫘 Ahadi yako imerudi"
+  "🫘 Your pledge came back": "🫘 Ahadi yako imerudi",
+  "Answer serve or step_aside.": "Jibu serve au step_aside.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "Umepiga kura, kwa hivyo unahudumu kwenye baraza hili la wanachama. Unaweza kubadilisha kura yako hadi itakapofungwa."
 }

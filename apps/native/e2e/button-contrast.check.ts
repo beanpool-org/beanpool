@@ -25,7 +25,10 @@ const MIN_PAIRS_MEASURED = 4300;
 // local table (`styles`, `s`, `chat`, whatever it is called) the scanner could not find (the report prints both lists).
 // Either number rising is a screen going dark: teach utils/button-contrast.ts the new shape, or, if it truly cannot be read,
 // raise the number here in the same change so a reviewer sees it. The style ceiling has the same margin it had before (about 60).
-const MAX_UNREAD_STYLES = 1870; // 1,812 measured 31 Oct on main f9fbbfd8 (market fill, Pulse rows, tags, listing doors added 32), + the same ~60 margin
+// 5 Nov: 1,866 on main 1de57237 and 1,878 with DP1 (#2880: AuthorCard +2, EventExtras +4, EventDetail +6). The rise since 31 Oct is the
+// style box: `shell.*` comes from a table built in components/market-card-shell.ts, which the scanner cannot follow yet. Teaching it
+// that table is lane contrast-shell-tables; until then the ceiling sits 2 over DP1, so the next screen moved onto the box trips it.
+const MAX_UNREAD_STYLES = 1880;
 const MAX_UNREAD_TABLE_FILES = 43; // 43 on main f9fbbfd8 (31 Oct): #2604's first-account screens (FindCommunityBody, WaitingToJoin) changed since 42 was pinned
 
 describe('the phone\'s buttons and labels reach 4.5:1 in light and in dark', () => {

@@ -3589,7 +3589,7 @@
   "A number of days from 1 to 365.": "1부터 365까지의 일수.",
   "A pay-back code is 32 letters and digits, as the admin shared it. Leave it empty to pay without one.": "변제 코드는 관리자가 공유한 32자리 영숫자예요. 코드 없이 지급하려면 비워두세요.",
   "A sign-in with Google, Apple or Facebook only lifts the limits on new 12-words accounts. We keep only a scrambled reference to it, never your email or name from there. This community keeps no copies of members' accounts, so your 12 words are your way back.": "Google, Apple 또는 Facebook 로그인은 12개 단어로 만든 새 계정의 제한만 풀어 줘요. 그것에 대해서는 뒤섞어 변환한 참조만 보관하고, 거기 있는 이메일이나 이름은 절대 보관하지 않아요. 이 커뮤니티는 멤버 계정의 사본을 보관하지 않으므로, 내 12개 단어가 돌아오는 길이에요.",
-  "A vote on removing a member opens only when an admin pauses them. To ask for one, report them with Report Member on their profile.": "멤버 해임 투표는 관리자가 그 멤버를 일시 중지할 때만 열려요. 요청하려면 그 멤버의 프로필에서 “멤버 신고”로 신고하세요.",
+  "A vote on removing a member opens only when an admin pauses them. To ask for one, report them with Report Member on their profile.": "멤버 제명 투표는 관리자가 그 멤버를 일시 중지할 때만 열려요. 요청하려면 그 멤버의 프로필에서 “멤버 신고”로 신고하세요.",
   "About": "소개",
   "About\u0004an enterprise's own words about itself": "소개",
   "About your shop": "내 가게 소개",
@@ -4240,7 +4240,6 @@
   "Your community’s server didn’t answer, so this payment may have gone through. Press Try again: the same payment is never paid twice. If you change it or leave this page, check your Ledger before you pay again.": "커뮤니티의 서버가 응답하지 않아서 이 결제가 처리되었을 수 있어요. “다시 시도”를 누르세요: 같은 결제가 두 번 지급되는 일은 없어요. 바꾸거나 이 페이지를 떠났다면 다시 결제하기 전에 장부를 확인하세요.",
   "Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.": "커뮤니티 서버에서 사유를 밝히지 않고 지급을 거부하여 아무것도 결제되지 않았어요. 1분 후에 다시 시도해 주세요.",
   "Your credit opens with a first trade.": "첫 거래를 마치면 신용 한도가 생겨요.",
-  "Your deals": "내 거래",
   "Your deals in progress ›": "진행 중인 내 거래 ›",
   "Your enterprise": "내 사업",
   "Your first message goes to {name} as a request. You can write more once they accept.": "첫 메시지는 요청으로 {name}님에게 가요. 수락하면 더 쓸 수 있어요.",
@@ -4332,7 +4331,7 @@
   "{names} and {n} more joined this week.|{names} and {n} more joined this week.": {
     "other": "{names}님 외 {n}명이 이번 주에 가입했어요."
   },
-  "{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.": "{name}님은 이 커뮤니티의 서버를 운영하는 역할을 맡고 있고, 커뮤니티 투표로는 소유자나 관리자를 해임할 수 없어요: 이 투표가 어떻게 결정되든 끝나면 {name}님은 돌아와요.",
+  "{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.": "{name}님은 이 커뮤니티의 서버를 운영하는 역할을 맡고 있고, 커뮤니티 투표로는 소유자나 관리자를 제명할 수 없어요: 이 투표가 어떻게 결정되든 끝나면 {name}님은 돌아와요.",
   "{name} isn't in the list of communities yet. Try again in an hour, or ask one of its members for an invite.": "{name}은(는) 아직 커뮤니티 목록에 없어요. 한 시간 뒤에 다시 시도하거나 멤버에게 초대를 부탁하세요.",
   "{name} joined this week.": "{name}님이 이번 주에 가입했어요.",
   "{name} said yes. Join now.": "{name}님이 승인했어요. 지금 가입하세요.",

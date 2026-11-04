@@ -4240,7 +4240,6 @@
   "Your community’s server didn’t answer, so this payment may have gone through. Press Try again: the same payment is never paid twice. If you change it or leave this page, check your Ledger before you pay again.": "你社区的服务器没有应答，所以这笔付款可能已经成功。请点按“重试”：同一笔付款绝不会被支付两次。如果你修改了它或离开了这个页面，再次付款之前请先查看你的账本。",
   "Your community’s server turned this payment away without saying why, so nothing was paid. Try again in a minute.": "你社区的服务器拒绝了此笔付款且未说明原因，因此未扣付任何款项。请稍后再试。",
   "Your credit opens with a first trade.": "完成首笔交易即可开启信用额度。",
-  "Your deals": "你的交易",
   "Your deals in progress ›": "你正在进行的交易 ›",
   "Your enterprise": "你的企业",
   "Your first message goes to {name} as a request. You can write more once they accept.": "你的第一条消息会作为请求发送给 {name}。对方接受后，你可以继续写更多。",

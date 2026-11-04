@@ -5,9 +5,10 @@
  */
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { JURY_LINE, JURY_MIN_POOL, juryRuleFor } from '@beanpool/core';
 import { EverydayRuleRows } from './EverydayRuleRows';
 import { adminTallyLine } from '../../lib/node-client';
-import type { Shape } from '../../lib/community-shape';
+import { REMOVAL_DECIDER_CHOICES, type Shape } from '../../lib/community-shape';
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
@@ -83,7 +84,29 @@ describe('Who decides a removal, in the rules the server applies', () => {
             fireEvent.click(screen.getByRole('radio', { name: choice }));
             expect(screen.getByTestId('shape-consequence')).toHaveTextContent('Today a jury of 18 would decide one (1,200 could serve on a jury).');
             expect(screen.getByTestId('shape-consequence')).not.toHaveTextContent(/jury of 12/);
+            // The choice's own words above it say the same 18 (review of e5b05475): never "A jury of 12" alone over "a jury of 18".
+            expect(screen.getByRole('radio', { name: choice }).closest('label')).toHaveTextContent(`(${juryRuleFor(1200).size} from 1,000)`);
         }
+    });
+
+    it("every figure the choices name is the server's: the jury core's juryRuleFor seats, below 1,000 and from it, and the two lines", () => {
+        const below = juryRuleFor(999).size, from = juryRuleFor(1000).size;
+        // The draw seats a bigger jury from 1,000 (design §5), so a choice that names a jury names both sizes.
+        expect(from).toBeGreaterThan(below);
+        const words = (rule: string) => REMOVAL_DECIDER_CHOICES.find((c) => c.rule === rule)!.words;
+        const naming = REMOVAL_DECIDER_CHOICES.filter((c) => /\bjury\b/i.test(c.words)).map((c) => c.rule);
+        expect(naming).toEqual(['automatic', 'jury']);
+        for (const rule of naming) {
+            expect(words(rule)).toContain(`A jury of ${below} members, drawn at random`);
+            expect(words(rule)).toContain(`(${from} from 1,000)`);
+        }
+        // The pool each rule needs before a jury decides (server config/removal-decider.ts deciderFor).
+        expect(words('automatic')).toContain(`once ${JURY_LINE} could serve on one`);
+        expect(words('jury')).toContain(`from ${JURY_MIN_POOL} who could serve on one`);
+        expect(words('jury')).toContain(`Fewer than ${JURY_MIN_POOL}, and everyone decides.`);
+        // And no figure besides these, in any choice.
+        const allowed = new Set([below, from, JURY_LINE, JURY_MIN_POOL].map(String).concat('1,000'));
+        for (const c of REMOVAL_DECIDER_CHOICES) expect((c.words.match(/\d{1,3}(?:,\d{3})+|\d+/g) ?? []).filter((f) => !allowed.has(f))).toEqual([]);
     });
 
     it("the rules card's Changes lines name the rule as the row does, never the raw value", async () => {

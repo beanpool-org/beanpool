@@ -189,7 +189,9 @@ export const RECOVERY_COPIES_CHOICES: ReadonlyArray<{ rule: RecoveryCopies; name
 
 /**
  * Who decides a removal, the three rules as an owner chooses them (DESIGN-removal-jury-fable.md §6, §9's manager row). Every
- * choice is kept as written; a vote already open keeps the rule it opened under.
+ * choice is kept as written; a vote already open keeps the rule it opened under. Each figure is the server's: the jury core
+ * juryRuleFor seats (12, or 18 from 1,000 who could serve, §5) and the pool each rule needs (JURY_LINE, JURY_MIN_POOL), which
+ * EverydayRuleRows.removal.test.tsx holds them to.
  */
 export const REMOVAL_DECIDER_CHOICES: ReadonlyArray<{ rule: RemovalDecider; name: string; words: string }> = [
     {
@@ -205,7 +207,7 @@ export const REMOVAL_DECIDER_CHOICES: ReadonlyArray<{ rule: RemovalDecider; name
     {
         rule: 'jury',
         name: 'A jury',
-        words: 'A jury of 12 members, drawn at random, from 36 who could serve on one. Fewer than that, and everyone decides.',
+        words: 'A jury of 12 members, drawn at random, from 36 who could serve on one (18 from 1,000). Fewer than 36, and everyone decides.',
     },
 ];
 

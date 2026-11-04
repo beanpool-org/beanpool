@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
 import { Image, type ImageContentPosition } from 'expo-image';
-import { listPhotoUrl } from '@beanpool/core';
+import { listPhotoUrl, nextListPhotoUrl } from '@beanpool/core';
 import { CategoryTile, type CategoryTileKind, type CategoryTileSize } from './CategoryTile';
 import { refreshListingAfterPhotoError } from '../utils/photo-refresh';
 
@@ -11,10 +11,14 @@ export const MARKET_GRID_CROP: ImageContentPosition = { top: '33%', left: '50%' 
 /**
  * A Market card's picture (Pictures S6, DESIGN-pictures-fable §3.1), as utils/market-card-picture.ts chose it: `picture`
  * the listing's own first photo (`cover`) or else its enterprise's shop banner, and the CategoryTile when it has neither.
- * A photo of its own that will not load has its listing read again (refreshListingAfterPhotoError), as it always did. A
- * banner that will not load draws the tile instead, never an empty slot (review of #2565, finding 8): a weak connection,
- * or a URL from before the enterprise changed it. The URL that failed is kept, not a flag, so a new banner the next sync
- * brings is tried.
+ *
+ * A picture that will not load steps down, each step once, and never leaves an empty slot (review of #2565, finding 8;
+ * card-photo-retry, Marty 4 Nov 2026: a card on global missed its photo in the list and showed it when opened): a listing
+ * photo's small copy (`size=thumb2`) gives way to the photo's own URL, which the detail screen draws, and that gives way
+ * to the tile (@beanpool/core nextListPhotoUrl). A banner has no small copy, so it goes straight to the tile: a weak
+ * connection, or a URL from before the enterprise changed it. A photo of its own that fails also has its listing read
+ * again (refreshListingAfterPhotoError), as it always did. The URL that failed is kept beside its step, not a flag, so a
+ * new URL the next sync brings starts again from its small copy.
  *
  * The grid's 4:3 frame passes MARKET_GRID_CROP, so upright photos anchor towards the top third so heads/jar tops stay in (market-card-43).
  *
@@ -34,18 +38,23 @@ export function MarketCardPicture({ postId, cover, picture, category, kind, size
     tileBox?: StyleProp<ViewStyle>;
     contentPosition?: ImageContentPosition;
 }) {
-    const [failed, setFailed] = useState<string | null>(null);
-    if (picture && picture !== failed) {
+    // The step this `picture` has come down to: the URL now drawn, or null for the tile. Set only after a failure.
+    const [steppedDown, setSteppedDown] = useState<{ photo: string; shown: string | null } | null>(null);
+    const shown = !picture ? null : steppedDown?.photo === picture ? steppedDown.shown : listPhotoUrl(picture);
+    if (picture && shown) {
         return (
             <Image
-                source={{ uri: listPhotoUrl(picture) }}
+                source={{ uri: shown }}
                 style={imageStyle}
                 accessibilityLabel={accessibilityLabel}
                 contentFit="cover"
                 contentPosition={contentPosition}
                 cachePolicy="memory-disk"
                 transition={150}
-                onError={() => (cover ? refreshListingAfterPhotoError(postId, cover) : setFailed(picture))}
+                onError={() => {
+                    if (cover) refreshListingAfterPhotoError(postId, cover);
+                    setSteppedDown({ photo: picture, shown: nextListPhotoUrl(picture, shown) });
+                }}
             />
         );
     }

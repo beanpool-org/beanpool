@@ -4,8 +4,8 @@
  * of #2565, finding 8): app/(tabs)/market.tsx rendered for real in each of its three views, and Home's Market row
  * (components/home/HomeCardBodies.tsx MarketBody). A banner fails when the connection is weak, or when the phone holds a
  * URL from before the enterprise replaced or took it down (its key is bound to the photo as it is now). A listing's own
- * photo that fails is healed as before: its listing is read again (utils/photo-refresh.ts), and the tile does not take
- * its place. React Native's host components are plain tags; expo-image's Image is an <img> that carries its URL and its
+ * photo that fails is healed as before: its listing is read again (utils/photo-refresh.ts), and it draws the photo's own
+ * URL before the tile takes its place (card-photo-retry). React Native's host components are plain tags; expo-image's Image is an <img> that carries its URL and its
  * onError, so the test makes it fail as a phone does. The node is the net-spy stand-in for utils/db (market-words-render).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -230,13 +230,17 @@ describe("the Market's cards: a banner that will not load gives way to the tile"
         expect(tileOf(cardOf('Sourdough from the bakery'))).not.toBeNull();
         expect(healed.calls).toEqual([]);
 
-        // A listing's own photo that will not load is healed by its own URL, and stays a picture, as before.
+        // A listing's own photo that will not load is healed by its own URL, then draws the photo's own URL (the small copy
+        // failed, the detail screen's photo may not), and only when that fails too does the tile take its place.
         const jam = pictureOf(cardOf('Plum jam jars'));
         expect(jam?.getAttribute('data-src')).toBe(`${JAM_PHOTO}&size=thumb2`);
         await failToLoad(jam);
         expect(healed.calls).toEqual([['p-jam', JAM_PHOTO]]);
-        expect(pictureOf(cardOf('Plum jam jars'))).not.toBeNull();
+        expect(pictureOf(cardOf('Plum jam jars'))?.getAttribute('data-src')).toBe(JAM_PHOTO);
         expect(tileOf(cardOf('Plum jam jars'))).toBeNull();
+        await failToLoad(pictureOf(cardOf('Plum jam jars')));
+        expect(pictureOf(cardOf('Plum jam jars'))).toBeNull();
+        expect(tileOf(cardOf('Plum jam jars'))).not.toBeNull();
 
         // And a listing with neither draws its tile.
         expect(pictureOf(cardOf('Borrow a long ladder'))).toBeNull();
@@ -265,5 +269,18 @@ describe("Home's Market row: a banner that will not load gives way to the tile",
         await show(body([{ ...items[0], bannerUrl: '/api/shops/shop-1/photo?v=ref2&k=Zz' }, items[1]]));
         expect(row('h-bread').querySelector('img[data-src]')?.getAttribute('data-src')).toBe(`${NODE}/api/shops/shop-1/photo?v=ref2&k=Zz`);
         expect(row('h-tools').querySelector('[data-testid="category-tile"]')).not.toBeNull();
+    });
+
+    it("steps a listing's own photo down: the small copy, then the photo's own URL, then the tile", async () => {
+        const photoUrl = '/api/marketplace/posts/h-jam/photos/0?v=1&k=Kk';
+        await show(body([{ id: 'h-jam', type: 'offer', title: 'Plum jam jars', category: 'food', credits: 3, photoUrl }]));
+        const picture = () => row('h-jam').querySelector<HTMLImageElement>('img[data-src]');
+        expect(picture()?.getAttribute('data-src')).toBe(`${NODE}${photoUrl}&size=thumb2`);
+        await failToLoad(picture());
+        expect(picture()?.getAttribute('data-src')).toBe(`${NODE}${photoUrl}`);
+        expect(row('h-jam').querySelector('[data-testid="category-tile"]')).toBeNull();
+        await failToLoad(picture());
+        expect(picture()).toBeNull();
+        expect(row('h-jam').querySelector('[data-testid="category-tile"]')).not.toBeNull();
     });
 });

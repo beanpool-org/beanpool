@@ -16,3 +16,16 @@ export function listPhotoUrl<T extends string | null | undefined>(url: T): T {
     const tail = hash < 0 ? '' : url.slice(hash);
     return `${base}${base.includes('?') ? '&' : '?'}size=thumb2${tail}` as T;
 }
+
+/**
+ * What a list card draws next when the picture it showed would not load: a listing photo's small copy gives way to the
+ * photo's own URL (the same URL without `size=thumb2`), and that gives way to nothing (null), where the card draws its
+ * category tile and never an empty slot. `photo` is the URL the listing carries; `failed` is the URL the card was drawing.
+ *
+ * Each step happens once: the photo's own URL has no step after it, and a URL that has no small copy (a banner, an
+ * avatar, a `data:` photo, a URL that already names a size) goes straight to null, so a card cannot loop. A card holds
+ * the URL it gave up on beside the `photo` it was for, so a new URL a later read brings starts the steps again.
+ */
+export function nextListPhotoUrl(photo: string, failed: string | null | undefined): string | null {
+    return failed === listPhotoUrl(photo) && failed !== photo ? photo : null;
+}

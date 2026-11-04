@@ -26,6 +26,19 @@ export const JURY_MIN_POOL = 36;
 /** A member serves only once they joined at least this many days before the snapshot (§2): fresh invites can't pack it. */
 export const JURY_SERVE_AFTER_DAYS = 30;
 
+/**
+ * Seating (§4; DESIGN-removal-jury-j2-calls-fable.md call 2 point 3, slice J2b). Every juror is asked, when seated, to
+ * answer within JURY_ANSWER_HOURS: Serve (then vote) or Step aside. A vote is an answer too. One who gives none is
+ * `silent`, and the next member of the draw is seated in their place.
+ */
+export const JURY_ANSWER_HOURS = 72;
+/** A seated juror who hasn't answered is reminded once, this many hours after being seated (§4). */
+export const JURY_REMINDER_HOURS = 48;
+/** Every seated juror who hasn't voted is reminded once, when the vote has been open this many days (§4: "on day 6"). */
+export const JURY_LAST_DAY_AFTER_DAYS = 6;
+/** A juror seated with less than this many hours of the vote left is told so (§4). Nothing extends the vote's 7 days. */
+export const JURY_LATE_SEAT_HOURS = 48;
+
 export interface JuryRule {
     /** Jurors seated. */
     size: number;

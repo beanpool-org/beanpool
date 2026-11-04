@@ -1,0 +1,256 @@
+// @vitest-environment jsdom
+/**
+ * The Market's event card on the style box (DESIGN-market-event-cards-fable.md §2, slice P2; DESIGN-card-style-box-fable.md
+ * §1): the same list card as an Offer, one press that opens the event, and no Going / Interested buttons on it (Marty, 4 Nov:
+ * they live on the event's page; the card shows the member's own answer as a mark). Counts show only once someone has
+ * answered; the host reads that they are hosting; the 📌 PINNED chip is in the chip row, never in the date's line.
+ *
+ * The real EventCard and the real style box (components/market-card-shell.ts), each host's style kept so the colours and the
+ * chip's numbers can be read back, in both themes.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { act, createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { MARKET_CARD_SHELL, MARKET_CHIP } from '@beanpool/core';
+
+(globalThis as any).__DEV__ = false;
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock('react-native', () => {
+    const el = (tag: string) => (props: Record<string, any>) => {
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID, style, numberOfLines } = props;
+        const attrs: Record<string, unknown> = {};
+        if (onPress) attrs.onClick = () => onPress();
+        if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (accessibilityRole === 'button') attrs.role = 'button';
+        if (testID) attrs['data-testid'] = testID;
+        if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
+        attrs['data-style'] = JSON.stringify(Object.assign({}, ...[style].flat(6).filter((x: unknown) => x && typeof x === 'object')));
+        return createElement(tag, attrs, children);
+    };
+    return {
+        Platform: { OS: 'android', select: (o: any) => o.android ?? o.default },
+        View: el('div'), Text: el('span'), Pressable: el('div'), ScrollView: el('div'),
+        StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => s },
+        Alert: { alert: vi.fn() },
+        DeviceEventEmitter: { addListener: () => ({ remove() {} }), emit: vi.fn() },
+    };
+});
+// The picture as a phone draws it: mounted, with its URL; the tile holds the slot until it has drawn.
+vi.mock('expo-image', () => ({ Image: ({ source }: { source?: { uri?: string } }) => createElement('img', { 'data-src': source?.uri }) }));
+const go = vi.hoisted(() => ({ pushes: [] as unknown[] }));
+vi.mock('expo-router', () => ({ router: { push: (to: unknown) => { go.pushes.push(to); }, back: vi.fn(), replace: vi.fn() } }));
+const scheme = vi.hoisted(() => ({ now: 'light' as 'light' | 'dark' }));
+vi.mock('../../app/ThemeContext', async () => {
+    const m: any = await import('../../constants/colors');
+    const pick = () => ({ theme: scheme.now, colors: scheme.now === 'dark' ? m.darkColors : m.lightColors });
+    return { useTheme: () => pick(), useStyles: (f: any) => f(pick()) };
+});
+vi.mock('../db', () => ({ rsvpEvent: vi.fn(), refreshPostForPhoto: vi.fn() }));
+vi.mock('../photo-refresh', () => ({ refreshListingAfterPhotoError: () => false }));
+
+import { EventCard } from '../../components/EventCard';
+import { formatEventWhenFor } from '../events';
+import { darkColors, lightColors } from '../../constants/colors';
+import * as db from '../db';
+
+const ME = 'me'.repeat(32);
+const HOST = 'host'.repeat(16);
+const DAY = 86_400_000;
+/** Byron's Thursday market, from Marty's shot: a place, a photo, nobody's answer yet. */
+const MARKET: any = {
+    id: 'ev-farmers', type: 'event', status: 'active', title: 'Byron Bay Farmers Market — Weekly Thursday',
+    author_pubkey: HOST, authorCallsign: 'Byron Markets',
+    eventStartAt: new Date(Date.now() + DAY).toISOString(), eventEndAt: new Date(Date.now() + DAY + 4 * 3_600_000).toISOString(),
+    eventPlaceName: 'Butler Street Reserve', photos: ['https://byron.example/api/marketplace/posts/ev-farmers/photos/0?v=1'],
+    goingCount: 0, interestedCount: 0, myRsvp: null,
+};
+
+let root: Root;
+let host: HTMLDivElement;
+beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    scheme.now = 'light';
+    go.pushes.length = 0;
+});
+afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+});
+
+async function show(post: any, viewer: string | null = ME) {
+    await act(async () => {
+        root.render(createElement(EventCard, { post, currentPubkey: viewer }) as unknown as Parameters<Root['render']>[0]);
+        await new Promise((r) => setTimeout(r, 0));
+    });
+}
+const card = () => host.querySelector('[data-testid="event-card-ev-farmers"]') as HTMLElement;
+const styleOf = (el: Element | null) => JSON.parse(el?.getAttribute('data-style') ?? '{}');
+const byTestId = (id: string) => host.querySelector(`[data-testid="${id}"]`);
+
+describe('the event card is one press that opens the event, with no button inside it', () => {
+    it('one button, the card; a press anywhere opens the event', async () => {
+        await show(MARKET);
+        const buttons = Array.from(host.querySelectorAll('[role=button]'));
+        expect(buttons).toEqual([card()]);
+        expect(host.textContent).not.toContain('Interested');
+        await act(async () => { (host.querySelector('[data-testid="event-when"]') as HTMLElement).click(); });
+        expect(go.pushes).toEqual(['/post/ev-farmers']);
+    });
+
+    it('a member who has answered: the card never answers for them, it shows their mark', async () => {
+        await show({ ...MARKET, myRsvp: 'going', goingCount: 3, interestedCount: 1 });
+        expect(Array.from(host.querySelectorAll('[role=button]'))).toEqual([card()]);
+        await act(async () => { card().click(); });
+        expect(db.rsvpEvent).not.toHaveBeenCalled();
+    });
+});
+
+describe('the status line: the mark, the counts above zero, the host', () => {
+    it('"Going ✓" from myRsvp, in the event ink, and in the card\'s label', async () => {
+        await show({ ...MARKET, myRsvp: 'going', goingCount: 3, interestedCount: 1 });
+        const mark = byTestId('event-mark');
+        expect(mark?.textContent).toBe('Going ✓');
+        expect(styleOf(mark).color).toBe(lightColors.tile.event.ink);
+        expect(styleOf(mark)).toMatchObject({ fontSize: 13, fontWeight: '700' });
+        // The mark is the line: no counts beside it.
+        expect(byTestId('event-counts')).toBeNull();
+        const when = formatEventWhenFor(MARKET);
+        expect(card().getAttribute('aria-label')).toBe(`Event: ${MARKET.title}, ${when}, Going ✓`);
+    });
+
+    it('"Interested ✓" from myRsvp', async () => {
+        await show({ ...MARKET, myRsvp: 'interested', goingCount: 0, interestedCount: 1 });
+        expect(byTestId('event-mark')?.textContent).toBe('Interested ✓');
+    });
+
+    it('nobody\'s answer and someone has answered: "3 going · 1 interested"', async () => {
+        await show({ ...MARKET, goingCount: 3, interestedCount: 1 });
+        expect(byTestId('event-mark')).toBeNull();
+        expect(byTestId('event-counts')?.textContent).toContain('3 going · 1 interested');
+        expect(card().getAttribute('aria-label')).toBe(`Event: ${MARKET.title}, ${formatEventWhenFor(MARKET)}`);
+    });
+
+    it('nobody has answered (0 / 0): no counts line, no mark, nothing at all', async () => {
+        await show(MARKET);
+        expect(byTestId('event-counts')).toBeNull();
+        expect(byTestId('event-mark')).toBeNull();
+        expect(host.textContent).not.toContain('0 going');
+    });
+
+    it('a row that carries no counts ("Your events"): nothing', async () => {
+        const { goingCount: _g, interestedCount: _i, ...noCounts } = MARKET;
+        await show(noCounts);
+        expect(host.textContent).not.toContain('going');
+    });
+
+    it('the host reads that they are hosting, in the mark\'s place, and never a button', async () => {
+        await show({ ...MARKET, goingCount: 5, interestedCount: 2 }, HOST);
+        expect(byTestId('event-mark')?.textContent).toBe("You're hosting this event");
+        expect(Array.from(host.querySelectorAll('[role=button]'))).toEqual([card()]);
+    });
+});
+
+describe('the chip row, and the when kept whole', () => {
+    const pinned = { ...MARKET, pinnedUntil: new Date(Date.now() + 2 * DAY).toISOString(), pinnedAt: new Date(Date.now() - 60_000).toISOString() };
+
+    it('EVENT first, then 📌 PINNED, both in the chip row; the when is its own line with nothing else in it', async () => {
+        await show(pinned);
+        const type = byTestId('event-type-chip')!;
+        const pin = byTestId('pinned-chip')!;
+        expect(type.textContent).toBe('EVENT');
+        expect(pin.textContent).toBe('📌 PINNED');
+        expect(type.parentElement).toBe(pin.parentElement);
+        expect(Array.from(type.parentElement!.children).indexOf(type)).toBe(0);
+        const when = byTestId('event-when')!;
+        expect(when.textContent).toBe(formatEventWhenFor(pinned));
+        expect(when.children).toHaveLength(0);
+        expect(when.contains(pin)).toBe(false);
+        expect(when.getAttribute('data-lines')).toBe('2');
+        // The loud line: 16/900, in the event's ink.
+        expect(styleOf(when)).toMatchObject({ fontSize: 16, fontWeight: '900', color: lightColors.tile.event.ink });
+    });
+
+    it.each(['light', 'dark'] as const)('%s: every chip is the one chip (10/800, 6 x 2, corners 6) in its role\'s colours', async (which) => {
+        scheme.now = which;
+        const colors = which === 'dark' ? darkColors : lightColors;
+        const check = (id: string, tone: { bg: string; fg: string }) => {
+            const chip = byTestId(id)!;
+            expect(chip, id).not.toBeNull();
+            expect(styleOf(chip), id).toMatchObject({
+                backgroundColor: tone.bg, borderRadius: MARKET_CHIP.radius,
+                paddingHorizontal: MARKET_CHIP.paddingHorizontal, paddingVertical: MARKET_CHIP.paddingVertical, flexShrink: 0,
+            });
+            const words = chip.firstElementChild!;
+            expect(styleOf(words), id).toMatchObject({ fontSize: 10, fontWeight: '800', color: tone.fg });
+            expect(words.getAttribute('data-lines'), id).toBe('1');
+        };
+        await show(pinned);
+        check('event-type-chip', { bg: colors.tile.event.tint, fg: colors.tile.event.ink });
+        check('pinned-chip', { bg: colors.accent.tint, fg: colors.accent.primary });
+        // A cancelled event is no longer pinned (utils/pins): its state chip is the danger chip.
+        await show({ ...MARKET, eventState: 'cancelled' });
+        check('event-state-chip', { bg: colors.feedback.danger.bg, fg: colors.feedback.danger.fg });
+        expect(byTestId('event-state-chip')?.textContent).toBe('CANCELLED');
+    });
+
+    it('a group-only event says who can see it in a quiet chip that wraps, never cut; with no group name, "Group", as a listing does', async () => {
+        await show({ ...MARKET, audienceScope: 'group', targetGroupId: 'g-1', targetGroupName: 'Byron Bay Community Gardeners' });
+        const chip = byTestId('event-group-chip');
+        expect(chip?.textContent).toBe('🔒 Only Byron Bay Community Gardeners can see this');
+        expect(styleOf(chip).backgroundColor).toBe(lightColors.chip.quiet.bg);
+        expect(chip?.firstElementChild?.getAttribute('data-lines')).toBeNull();
+        await show({ ...MARKET, targetGroupId: 'g-1' });
+        expect(byTestId('event-group-chip')?.textContent).toBe('🔒 Only Group can see this');
+        await show(MARKET);
+        expect(byTestId('event-group-chip')).toBeNull();
+    });
+
+    it('UPDATED is the event chip', async () => {
+        await show({ ...MARKET, eventState: 'updated' });
+        const chip = byTestId('event-state-chip');
+        expect(chip?.textContent).toBe('UPDATED');
+        expect(styleOf(chip).backgroundColor).toBe(lightColors.tile.event.tint);
+        expect(styleOf(chip?.firstElementChild ?? null).color).toBe(lightColors.tile.event.ink);
+    });
+});
+
+describe('the shell is the Offer card\'s, from the style box', () => {
+    it.each(['light', 'dark'] as const)('%s: corners 14, a 1 dp border in border.default, the card ground, no purple band', async (which) => {
+        scheme.now = which;
+        const colors = which === 'dark' ? darkColors : lightColors;
+        await show(MARKET);
+        const s = styleOf(card());
+        expect(s).toMatchObject({
+            borderRadius: MARKET_CARD_SHELL.radius, borderWidth: MARKET_CARD_SHELL.borderWidth, borderColor: colors.border.default,
+            backgroundColor: colors.surface.card, overflow: 'hidden', marginBottom: MARKET_CARD_SHELL.gap.list, flexDirection: 'row', padding: 0,
+        });
+        expect(s.borderLeftWidth).toBeUndefined();
+        expect(s.borderLeftColor).toBeUndefined();
+    });
+
+    it('the picture is the list slot (80 wide, stretched, under the left corners); the event tile holds it until the photo draws', async () => {
+        await show(MARKET);
+        const slot = card().firstElementChild!;
+        expect(styleOf(slot)).toMatchObject({ width: 80, minHeight: 80, alignSelf: 'stretch', borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' });
+        expect(slot.querySelector('[data-testid="category-tile"]')).not.toBeNull();
+        expect(slot.textContent).toContain('📅');
+        const img = card().querySelector('img');
+        expect(img?.getAttribute('data-src')).toContain('/api/marketplace/posts/ev-farmers/photos/0');
+        // The text column: 12 all round.
+        expect(styleOf(card().lastElementChild)).toMatchObject({ flex: 1, padding: 12 });
+    });
+
+    it('the card writes no colour, radius or band of its own (the source)', () => {
+        const src = fs.readFileSync(path.join(__dirname, '..', '..', 'components', 'EventCard.tsx'), 'utf8');
+        // EVENT_ACCENT stays exported for the map pin and the page; nothing else on the card is a hex.
+        expect(src.replace("export const EVENT_ACCENT = '#7c3aed';", '')).not.toMatch(/['"`]#[0-9a-fA-F]{3,8}['"`]/);
+        expect(src).not.toMatch(/borderRadius:\s*\d/);
+        expect(src).not.toMatch(/borderLeftWidth/);
+        expect(src).not.toMatch(/rsvpEvent|Alert\.alert|ActivityIndicator/);
+    });
+});

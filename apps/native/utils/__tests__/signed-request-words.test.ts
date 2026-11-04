@@ -169,7 +169,7 @@ describe('the screens that show them pass the message through the table (read fr
         expect(settings).toContain("e?.message ? signedRequestWords(e.message) : t('Your community could not save that.')");
     });
 
-    it("the wrong-community screen, the address-follow card, an event's card and its next dates, and Talk's mute", () => {
+    it("the wrong-community screen, the address-follow card, an event's page and its next dates, and Talk's mute", () => {
         const mismatch = source('app/node-mismatch.tsx');
         expect(mismatch).toContain("e?.message ? settingsLineWords(e.message) : t('Could not switch to that community.')");
         expect(mismatch).toContain("e?.message ? settingsLineWords(e.message) : t(\"That invite doesn't look right.\")");
@@ -177,7 +177,8 @@ describe('the screens that show them pass the message through the table (read fr
         expect(source('components/AddressFollowCard.tsx')).toContain('(e instanceof Error && e.message) ? settingsLineWords(e.message)');
         // The fallback card's move is the follow card's (DNS robustness S3): its failure is worded the same way.
         expect(source('components/AddressFallbackCard.tsx')).toContain('(e instanceof Error && e.message) ? settingsLineWords(e.message)');
-        expect(source('components/EventCard.tsx')).toContain('err?.message ? eventLineWords(err.message)');
+        // The RSVP is the event page's now (style box P2: the mark on the card, Going / Interested on the page), worded there.
+        expect(source('components/EventDetail.tsx')).toContain("Alert.alert(t('RSVP not saved'), err?.message ? eventLineWords(err.message)");
         expect(source('components/EventNextDates.tsx')).toContain('setProblem(eventLineWords(repeatRefusalText(e?.message))');
         expect(source('components/GroupChatView.tsx')).toContain("e?.message ? signedRequestWords(e.message) : t('Could not reach the node.')");
         // The event chat's load error is worded where it is drawn, so the waiting line (already the member's) passes through.

@@ -31,6 +31,7 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
 import { MARKET_GRID_CROP, MarketCardPicture } from '../../components/MarketCardPicture';
+import { CardChip, useCardShell } from '../../components/market-card-shell';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
@@ -193,6 +194,8 @@ export default function MarketScreen() {
         return () => setHelpContext(null);
     }, [filter]));
     
+    // The style box (components/market-card-shell.ts): the list card's shell, its picture slot and its chips, shared with EventCard.
+    const shell = useCardShell();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },
         listContent: { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 100 },
@@ -540,20 +543,24 @@ export default function MarketScreen() {
     // "Your events" under ★ For You: the signer's own upcoming RSVPs (decision 1). Its own read, only while
     // that pill is chosen. Empty on anything that goes wrong — a node without the route answers 404, and a
     // community that does not have the feature should show no row rather than an error about it (decision 7).
+    // Read on choosing the pill AND each time the Market comes back into view on it: the event's page is the only place to
+    // answer (the card has no buttons; EventDetail is the one caller of rsvpEvent), and that page is a sheet (post/[id]) over
+    // the Market, which stays mounted under it. The page emits nothing when an answer changes; closing the sheet focuses the
+    // Market again, as does coming back from any other tab, so the rows never keep a mark the member has just changed there
+    // beside a For You copy of the same event that shows the new one (the deciding review of #2874). A read that lands after
+    // the Market has lost focus or left the pill is dropped: the next visit reads again.
     const [myEvents, setMyEvents] = useState<MyEvent[]>([]);
-    const loadMyEvents = useCallback(async () => {
-        if (!identity?.publicKey) return;
-        try {
-            setMyEvents(await fetchMyEvents());
-        } catch (e) {
-            setMyEvents([]);
-            if (!isRouteMissing(e)) console.warn('[Market] Could not read your events:', e);
-        }
-    }, [identity?.publicKey]);
-    useEffect(() => {
-        if (filter !== 'for-you') return;
-        loadMyEvents();
-    }, [filter, loadMyEvents]);
+    useFocusEffect(useCallback(() => {
+        if (filter !== 'for-you' || !identity?.publicKey) return;
+        let live = true;
+        fetchMyEvents()
+            .then(rows => { if (live) setMyEvents(rows); })
+            .catch(e => {
+                if (live) setMyEvents([]);
+                if (!isRouteMissing(e)) console.warn('[Market] Could not read your events:', e);
+            });
+        return () => { live = false; };
+    }, [filter, identity?.publicKey]));
 
     // Fresh listings banner dismissal. The banner is the list's first row, so it scrolls away with it.
     const [dismissedFresh, setDismissedFresh] = useState<string | null>(null);
@@ -1730,7 +1737,6 @@ export default function MarketScreen() {
                     post={item}
                     currentPubkey={identity?.publicKey}
                     myLocation={market.circle ? market.circle.area : myLocation}
-                    onRsvpChanged={() => { loadPosts(); if (filter === 'for-you') loadMyEvents(); }}
                 />
             );
         }
@@ -1962,9 +1968,10 @@ export default function MarketScreen() {
                 testID={`market-card-${item.id}`}
                 onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
             >
-                <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
+                <View style={[shell.card, shell.list, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
                     {/* The slot is 80 dp wide and as tall as the text beside it (at least 80): stretched by the row. Never a
-                        percentage height, which Yoga reads against the whole list and made a lone card fill the screen. */}
+                        percentage height, which Yoga reads against the whole list and made a lone card fill the screen. The
+                        shell, the slot and the chips are the style box's (components/market-card-shell.ts), as the event's are. */}
                     <MarketCardPicture
                         postId={item.id}
                         cover={coverImage}
@@ -1972,69 +1979,22 @@ export default function MarketScreen() {
                         category={item.category}
                         kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
                         size="thumb"
-                        imageStyle={{ width: 80, minHeight: 80, alignSelf: 'stretch', borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}
-                        tileBox={{ width: 80, minHeight: 80, alignSelf: 'stretch', borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}
+                        imageStyle={shell.listPhoto}
+                        tileBox={shell.listPhotoBox}
                     />
-                    <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
+                    <View style={shell.listText}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-                                {!isPulse && (
-                                    <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
-                                        <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{typeBadge(item.type)}</Text>
-                                    </View>
-                                )}
-                                {isPulse && (
-                                    <View style={{
-                                        backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
-                                        paddingHorizontal: 6,
-                                        paddingVertical: 2,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b'
-                                    }}>
-                                        <Text style={{
-                                            fontSize: 10,
-                                            fontWeight: '800',
-                                            color: colors.feedback.warning.fg
-                                        }}>{t('🗞️ DAILY PULSE')}</Text>
-                                    </View>
-                                )}
-                                {isOwn && (
-                                    <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>{t('👤 YOU')}</Text>
-                                    </View>
-                                )}
-                                {isPostPinned(item, Date.now()) && (
-                                    <View testID="pinned-chip" style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('📌 PINNED')}</Text>
-                                    </View>
-                                )}
-                                {dealChip && (
-                                    <View testID="card-deal-chip" style={{ backgroundColor: dealChip === 'in-trust' ? colors.feedback.success.bg : colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: dealChip === 'in-trust' ? colors.feedback.success.border : colors.feedback.warning.border }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: dealChip === 'in-trust' ? colors.feedback.success.fg : colors.feedback.warning.fg }}>{listingChipWords(dealChip)}</Text>
-                                    </View>
-                                )}
-                                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.secondary }}>
-                                    {catEmoji} {catLabel}
-                                </Text>
-                                {!!item.repeatable && (
-                                    <View style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>{t('↻ RECURRING')}</Text>
-                                    </View>
-                                )}
+                            <View style={[shell.chipRow, { flex: 1 }]}>
+                                {!isPulse && <CardChip shell={shell} role={item.type === 'offer' ? 'offer' : 'need'} label={typeBadge(item.type)} />}
+                                {isPulse && <CardChip shell={shell} role="warn" label={t('🗞️ DAILY PULSE')} />}
+                                {isOwn && <CardChip shell={shell} role="info" label={t('👤 YOU')} />}
+                                {isPostPinned(item, Date.now()) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
+                                {dealChip && <CardChip shell={shell} role={dealChip === 'in-trust' ? 'ok' : 'warn'} label={listingChipWords(dealChip)} testID="card-deal-chip" />}
+                                <CardChip shell={shell} role="quiet" label={catEmoji + ' ' + catLabel} />
+                                {!!item.repeatable && <CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} />}
                                 {/* #108: on the card, not just the detail view */}
-                                {item.cash_also_needed === 1 && (
-                                    <View style={{ backgroundColor: colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.warning.border }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.feedback.warning.fg }}>{t('💸 CASH TOO')}</Text>
-                                    </View>
-                                )}
-                                {groupScopeBadgeText && (
-                                    <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.brand.primary }}>
-                                            {groupScopeBadgeText}
-                                        </Text>
-                                    </View>
-                                )}
+                                {item.cash_also_needed === 1 && <CardChip shell={shell} role="warn" label={t('💸 CASH TOO')} />}
+                                {groupScopeBadgeText && <CardChip shell={shell} role="quiet" label={groupScopeBadgeText} testID="card-group-chip" wrap />}
                             </View>
                             {!isPulse && showsBeans && !copy && (
                                 <CurrencyDisplay

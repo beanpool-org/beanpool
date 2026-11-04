@@ -1,58 +1,50 @@
 /**
- * EventCard — an event in the Market feed (docs/events-on-the-map.md §3 "Card", slice 3).
+ * EventCard — an event in the Market feed, on the same card as an Offer or a Need (DESIGN-market-event-cards-fable.md §2,
+ * slice P2; DESIGN-card-style-box-fable.md §1: "one card, three sizes, every kind, both apps").
  *
- * Date and time first and largest; title; place name and distance; Going / Interested counts; the two RSVP
- * buttons with my status on the filled one. CANCELLED or UPDATED is a badge on the first line. The host is on
- * the detail screen, not here. Holds at 320dp with 1.3× text: every row truncates, the buttons share the
- * width and keep a 48dp target.
+ * The list card's shell from the style box (components/market-card-shell.ts): corners 14, a 1 dp border, the card ground,
+ * the picture flush under the card's left corners and the card's full height, 12 dp of text padding. The card takes its own
+ * height from its lines (Marty, 4 Nov: "the big card doesnt need to conform to the same size"). Then:
  *
- * An event with a photo shows it, as the offer cards beside it do — the host put it there, and a feed of
- * pictures with one blank tile among them reads as the event being the lesser thing.
+ *   EVENT · 📌 PINNED · CANCELLED / UPDATED · 🔒 group   the chip row, as on every card; the date keeps its whole line
+ *   THU 5 NOV · 7:00–11:00                            the when, the loud line, in the event's ink, two lines at most
+ *   the reader's own clock, ↻ the repeat rule           as before
+ *   Byron Bay Farmers Market                          the title, two lines
+ *   📍 Butler Street Reserve · 22 km                    the place, one line
+ *   Going ✓                                           the member's own answer; the host's "You're hosting this event";
+ *                                                     else the counts, only when someone has answered; else nothing
+ *
+ * No button on the card (Marty, 4 Nov: Going / Interested on the event's page, the mark on the card): the whole card is one
+ * press that opens the event, where the two big buttons are (EventDetail). A tap anywhere opens the item (#2839).
  */
 
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
-import { copyCardLine, eventCopyOf, t } from '@beanpool/core';
+import React from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { copyCardLine, eventCopyOf, t, upperCase } from '@beanpool/core';
 import { router } from 'expo-router';
-import { CategoryTile } from './CategoryTile';
-import { ListPhoto } from './ListPhoto';
-import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
-import { rsvpEvent } from '../utils/db';
+import { MarketCardPicture } from './MarketCardPicture';
+import { CardChip, useCardShell } from './market-card-shell';
+import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { isPostPinned } from '../utils/pins';
-import { hapticTick } from '../utils/haptics';
 import {
-    formatEventWhenFor, eventWhen, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
-    formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus, type RsvpCounts,
+    formatEventWhenFor, eventWhen, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventBadge, formatRsvpCounts,
+    formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus,
 } from '../utils/events';
-import { eventLineWords } from './event-lines';
 
+/** The event violet of the map's pin and the page's buttons (map.tsx, EventDetail, EventExtras); the card no longer draws it. */
 export const EVENT_ACCENT = '#7c3aed';
 
 interface EventCardProps {
     post: any;
     currentPubkey?: string | null;
     myLocation?: { lat: number; lng: number } | null;
-    onRsvpChanged?: () => void;
 }
 
-function countsOf(post: any): RsvpCounts {
-    return {
-        going: Number(post.goingCount ?? post.event_going_count ?? 0) || 0,
-        interested: Number(post.interestedCount ?? post.event_interested_count ?? 0) || 0,
-        mine: (post.myRsvp ?? null) as EventRsvpStatus | null,
-    };
-}
+const count = (n: unknown): number => Number(n ?? 0) || 0;
 
-export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: EventCardProps) {
-    const { colors } = useTheme();
+export function EventCard({ post, currentPubkey, myLocation }: EventCardProps) {
+    const shell = useCardShell();
     const styles = useStyles(makeStyles);
-    const [counts, setCounts] = useState<RsvpCounts>(() => countsOf(post));
-    const [pending, setPending] = useState<EventRsvpStatus | null>(null);
-
-    useEffect(() => {
-        if (!pending) setCounts(countsOf(post));
-        // Re-sync from the post only when its counts or my RSVP change, not on every render of a new post object.
-    }, [post.id, post.goingCount, post.interestedCount, post.event_going_count, post.event_interested_count, post.myRsvp]);
 
     // The place's clock first; the reader's own on a second line only when it differs; online, the reader's with "your time"
     // (DESIGN-event-times §4).
@@ -61,270 +53,96 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
     // A repeating event: still only its next date, and the rule under it (DESIGN-event-times §4, §8).
     const repeats = eventRepeatCaption(post);
     const badge = eventBadge(post);
-    const closed = eventStateOf(post) === 'cancelled' || isEventEnded(post);
     const distance = myLocation && post.lat != null && post.lng != null
         ? formatDistance(distanceKm(myLocation.lat, myLocation.lng, post.lat, post.lng))
         : null;
     const placeLine = eventPlaceLine(post, distance);
     const photo = eventCoverPhoto(post);
-    // A member's copy, on the global community: where it is from in place of the counts, and nothing to answer here.
+    // A member's copy, on the global community: where it is from, and nothing to answer here.
     const copy = eventCopyOf(post);
-    // "Your events" is built from /api/events/mine, which carries no counts — and "0 going" on an event the
-    // viewer is going to is not a smaller truth, it is a wrong one. A row that does not know keeps quiet.
-    const countsKnown = post.goingCount != null || post.interestedCount != null
-        || post.event_going_count != null || post.event_interested_count != null;
+    // A group-only event says who can see it, read as the listing card beside it reads it (market.tsx).
+    const groupOnly = post.audience_scope === 'group' || post.audienceScope === 'group' || !!post.target_group_id || !!post.targetGroupId;
+    const groupName = post.target_group_name || post.targetGroupName || t('Group');
 
-    const handleRsvp = async (tapped: EventRsvpStatus) => {
-        const next = nextRsvp(counts.mine, tapped);
-        if (pending || (closed && next !== null)) return;
-        if (!currentPubkey) {
-            Alert.alert(t('Sign in to RSVP'), t('Set up your member identity to tell the host you are coming.'));
-            return;
-        }
-        const before = counts;
-        hapticTick();
-        setCounts(applyRsvp(counts, next));
-        setPending(tapped);
-        try {
-            const res = await rsvpEvent(post.id, next);
-            if (res?.post) {
-                setCounts(countsOf(res.post));
-            } else if (res?.success) {
-                setCounts(c => applyRsvp(c, null));
-            }
-            onRsvpChanged?.();
-        } catch (err: any) {
-            setCounts(before);
-            Alert.alert(t('RSVP not saved'), err?.message ? eventLineWords(err.message) : t('Could not reach the node. Try again when you have signal.'));
-        } finally {
-            setPending(null);
-        }
-    };
+    // One status line. The member's own answer is the mark, the selected button's own words on the page ("Going ✓"); the host
+    // reads that they are hosting; anyone else sees the counts once someone has answered, and nothing while nobody has
+    // ("0 going · 0 interested" on eight cards reads as a dead community). "Your events" rows carry no counts: none shown.
+    const mine = (post.myRsvp ?? null) as EventRsvpStatus | null;
+    const going = count(post.goingCount ?? post.event_going_count);
+    const interested = count(post.interestedCount ?? post.event_interested_count);
+    const hosting = isOwnEvent(post, currentPubkey);
+    const mark = hosting ? t("You're hosting this event")
+        : copy ? null
+        : mine === 'going' ? t('{label} ✓', { label: t('Going') })
+        : mine === 'interested' ? t('{label} ✓', { label: t('Interested') })
+        : null;
+    const counts = !mark && !copy && (going > 0 || interested > 0) ? formatRsvpCounts(going, interested) : null;
 
-    const rsvpButton = (status: EventRsvpStatus, label: string) => {
-        const selected = counts.mine === status;
-        const disabled = (closed && !selected) || !!pending;
-        return (
-            <Pressable
-                onPress={() => handleRsvp(status)}
-                disabled={disabled}
-                style={[styles.rsvpBtn, selected && styles.rsvpBtnSelected, disabled && styles.rsvpBtnDisabled]}
-                accessibilityRole="button"
-                accessibilityLabel={selected ? t('{label}, selected. Tap to clear', { label }) : label}
-                accessibilityState={{ selected, disabled, busy: pending === status }}
-            >
-                {/*
-                  * The label stays in the layout while the RSVP is in flight, hidden under the spinner rather
-                  * than replaced by it. The buttons size to their own labels now, so a spinner-only child would
-                  * shrink the button to spinner width the moment it is tapped: a stacked row would re-flow onto
-                  * one line under the finger, and back again when the save lands.
-                  */}
-                <Text
-                    style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]}
-                    numberOfLines={1}
-                    maxFontSizeMultiplier={1.3}
-                >
-                    {selected ? t('{label} ✓', { label }) : label}
-                </Text>
-                {pending === status && (
-                    <View style={styles.rsvpSpinner} pointerEvents="none">
-                        <ActivityIndicator size="small" color={selected ? '#fff' : colors.event.ink} />
-                    </View>
-                )}
-            </Pressable>
-        );
-    };
+    const label = badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when })
+        : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when })
+        : t('Event: {title}, {when}', { title: post.title, when });
 
     return (
         <Pressable
-            style={styles.card}
+            style={[shell.card, shell.list]}
             onPress={() => router.push(`/post/${post.id}`)}
             accessibilityRole="button"
-            accessibilityLabel={badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when })
-                : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when })
-                : t('Event: {title}, {when}', { title: post.title, when })}
+            accessibilityLabel={mark ? `${label}, ${mark}` : label}
+            testID={`event-card-${post.id}`}
         >
             {/*
-              * The host's photo, the same size, crop and cache policy the offer card beside it uses in the list
-              * (market.tsx list view): an 80dp square on the left, with the lines beside it. It sits inside the
-              * card's own Pressable and has no onPress of its own, so it never becomes a second tap target.
-              * Without a photo the card is exactly the stack it has always been.
+              * The host's photo in the list card's slot, exactly as the Offer card beside it draws its own (market.tsx list
+              * view): 80 wide, flush under the left corners, the card's height. MarketCardPicture holds the slot with the
+              * event tile until the photo has drawn, and steps down to it when the photo will not load: never an empty slot.
+              * It has no press of its own, so it never becomes a second tap target.
               */}
-            <View style={styles.photoRow}>
-                <ListPhoto
-                    photo={photo}
-                    style={styles.photo}
-                    accessibilityLabel={post.title}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={150}
-                    fallback={(
-                        <View style={[styles.photo, { overflow: 'hidden' }]}>
-                            <CategoryTile kind="event" size="thumb" />
-                        </View>
-                    )}
-                />
-                <View style={styles.photoRowText}>
-                    <View style={styles.whenRow}>
-                        {isPostPinned(post) && (
-                            <View testID="pinned-chip" style={[styles.badge, { backgroundColor: colors.surface.subtle, borderColor: colors.border.default }]}>
-                                <Text style={[styles.badgeText, { color: colors.text.heading, fontSize: 10, fontWeight: '700' }]} numberOfLines={1}>{t('📌 PINNED')}</Text>
-                            </View>
-                        )}
-                        {badge && (
-                            <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
-                                <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : colors.event.ink }]} numberOfLines={1}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>
-                            </View>
-                        )}
-                        <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
-                    </View>
-                    {!!timeNote && <Text style={styles.timeNote} numberOfLines={2}>{timeNote}</Text>}
-                    {!!repeats && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {repeats}</Text>}
-                    <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
-                    {!!placeLine && <Text style={styles.meta} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
-                    {copy?.from && <Text style={styles.meta} numberOfLines={2} testID="event-copy-line">{copyCardLine(copy.from)}</Text>}
-                    {countsKnown && !copy && <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
+            <MarketCardPicture
+                postId={post.id}
+                cover={photo}
+                picture={photo}
+                kind="event"
+                size="thumb"
+                accessibilityLabel={post.title}
+                imageStyle={shell.listPhoto}
+                tileBox={shell.listPhotoBox}
+            />
+            <View style={shell.listText}>
+                <View style={[shell.chipRow, styles.chipRow]}>
+                    <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
+                    {isPostPinned(post) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
+                    {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}
+                    {badge === 'UPDATED' && <CardChip shell={shell} role="event" label={t('UPDATED', undefined, 'event')} testID="event-state-chip" />}
+                    {groupOnly && <CardChip shell={shell} role="quiet" label={t('🔒 Only {group} can see this', { group: groupName })} testID="event-group-chip" wrap />}
                 </View>
+                <Text testID="event-when" style={[shell.loud, styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
+                {!!timeNote && <Text style={styles.timeNote} numberOfLines={2}>{timeNote}</Text>}
+                {!!repeats && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {repeats}</Text>}
+                <Text style={[shell.second, styles.line]} numberOfLines={2}>{post.title}</Text>
+                {!!placeLine && <Text style={[shell.place, styles.line]} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
+                {copy?.from && <Text style={[shell.place, styles.line]} numberOfLines={2} testID="event-copy-line">{copyCardLine(copy.from)}</Text>}
+                {/* Two lines at most, never cut: beside the picture, at 320 dp and 1.3x text, "You're hosting this event" and
+                    "4 going · 2 interested" each need a second line (market-order-320.mjs measures it). */}
+                {!!mark && <Text testID="event-mark" style={shell.mark} numberOfLines={2}>{mark}</Text>}
+                {!!counts && <Text testID="event-counts" style={shell.place} numberOfLines={2}>👥 {counts}</Text>}
             </View>
-            {/* The host is running it: no Going / Interested on their own event (round 2, B4). */}
-            {isOwnEvent(post, currentPubkey) ? (
-                <Text style={styles.hosting} numberOfLines={1}>{t("You're hosting this event")}</Text>
-            ) : copy ? null : (
-                <View style={styles.rsvpRow}>
-                    {rsvpButton('going', t('Going'))}
-                    {rsvpButton('interested', t('Interested'))}
-                </View>
-            )}
         </Pressable>
     );
 }
 
-const makeStyles = ({ colors, theme }: ThemeContextType) =>
+const makeStyles = ({ colors }: ThemeContextType) =>
     StyleSheet.create({
-        card: {
-            backgroundColor: colors.surface.card,
-            borderRadius: 16,
-            padding: 14,
-            marginBottom: 14,
-            borderWidth: 1,
-            borderLeftWidth: 4,
-            borderColor: theme === 'dark' ? '#374151' : '#e5e7eb',
-            borderLeftColor: EVENT_ACCENT,
-        },
-        whenRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            marginBottom: 4,
-        },
-        // Only used when there is a photo. The RSVP row stays outside it, keeping the card's full width, so at
-        // 320dp with 1.3× text the buttons are never squeezed into the column beside the picture.
-        photoRow: {
-            flexDirection: 'row',
-            alignItems: 'flex-start',
-            gap: 12,
-        },
-        photoRowText: {
-            flex: 1,
-            minWidth: 0,
-        },
-        photo: {
-            width: 80,
-            height: 80,
-            borderRadius: 14,
-            flexShrink: 0,
-            backgroundColor: colors.surface.subtle,
-        },
-        when: {
-            flex: 1,
-            fontSize: 17,
-            fontWeight: '800',
-            color: colors.text.heading,
-        },
-        timeNote: {
-            fontSize: 13,
-            color: colors.text.secondary,
-            marginBottom: 4,
-        },
-        repeats: { fontSize: 13, fontWeight: '700', color: colors.accent.primary, marginBottom: 4 },
-        hosting: { fontSize: 14, fontWeight: '700', color: colors.event.ink, marginTop: 8 },
+        chipRow: { marginBottom: 4 },
+        // The when is the card's loud line, in the event's ink (the EVENT chip's own), the date and time kept whole.
+        when: { color: colors.tile.event.ink, marginBottom: 2 },
         whenCancelled: {
             textDecorationLine: 'line-through',
             color: colors.text.secondary,
         },
-        badge: {
-            flexShrink: 0,
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 6,
-            borderWidth: 1,
-        },
-        badgeUpdated: {
-            backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.2)' : '#f5f3ff',
-            borderColor: theme === 'dark' ? '#6d28d9' : '#ddd6fe',
-        },
-        badgeText: {
-            fontSize: 11,
-            fontWeight: '800',
-            letterSpacing: 0.5,
-        },
-        title: {
-            fontSize: 15,
-            fontWeight: '700',
-            color: colors.text.body,
-            marginBottom: 4,
-        },
-        meta: {
+        timeNote: {
             fontSize: 13,
             color: colors.text.secondary,
             marginBottom: 2,
         },
-        // The label is never cut: RN won't break inside a word, but `flex: 1` with numberOfLines={1} ellipsized
-        // it ("Intereste…") once the row was narrower than the text — at 320dp with 130% text there are only
-        // ~111dp of text space per button and "Interested ✓" wants ~120. So each button sizes to its own label
-        // and only grows to share the row, and the row wraps: Interested takes a full-width row of its own.
-        // (The web card had the same cause with a worse symptom — see EventCard.tsx in apps/pwa.)
-        rsvpRow: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 8,
-            marginTop: 10,
-        },
-        rsvpBtn: {
-            flexGrow: 1,
-            flexBasis: 'auto',
-            flexShrink: 0,
-            minHeight: 48,
-            borderRadius: 12,
-            borderWidth: 1.5,
-            borderColor: EVENT_ACCENT,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 6,
-            backgroundColor: colors.surface.card,
-        },
-        rsvpBtnSelected: {
-            backgroundColor: EVENT_ACCENT,
-        },
-        rsvpBtnDisabled: {
-            opacity: 0.5,
-        },
-        // The words in the event ink (violet-300 in dark: the fill's violet-600 was 3.05:1 on the card); EVENT_ACCENT stays the
-        // border and the selected fill.
-        rsvpText: {
-            fontSize: 14,
-            fontWeight: '700',
-            color: colors.event.ink,
-        },
-        rsvpTextBusy: {
-            opacity: 0,
-        },
-        rsvpSpinner: {
-            ...StyleSheet.absoluteFillObject,
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        rsvpTextSelected: {
-            color: '#fff',
-        },
+        repeats: { fontSize: 13, fontWeight: '700', color: colors.accent.primary, marginBottom: 2 },
+        line: { marginBottom: 2 },
     });

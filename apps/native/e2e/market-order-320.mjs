@@ -123,7 +123,9 @@ const OVERRIDES = {
     },
     'components/MarketCardPicture': {
         MARKET_GRID_CROP: `1`,
-        MarketCardPicture: `({ category, size }) => React.createElement(RN.View, { style: { width: size === 'thumb' ? 32 : '100%', height: size === 'thumb' ? 32 : 120, backgroundColor: globalThis.__theme.colors.surface.subtle, borderRadius: 8 } })`,
+        // A thumbnail is drawn in the slot the card gives it (the list card's 80 dp slot, stretched to the card; compact's 32 dp
+        // box), as the real picture is; the grid's stays a 120 dp block.
+        MarketCardPicture: `({ size, imageStyle, tileBox }) => React.createElement(RN.View, { style: [size === 'thumb' ? (tileBox || imageStyle) : { width: '100%', height: 120, borderRadius: 8 }, { backgroundColor: globalThis.__theme.colors.surface.subtle }] })`,
     },
     'components/CurrencyDisplay': { CurrencyDisplay: `({ amount }) => React.createElement(RN.Text, null, amount + ' Beans')` },
     'components/PollCard': { PollCard: `({ post }) => React.createElement(RN.View, { style: { padding: 12, marginHorizontal: 16, marginBottom: 12, borderWidth: 1, borderColor: globalThis.__theme.colors.border.default, borderRadius: 12 } }, React.createElement(RN.Text, { style: { fontWeight: '800', color: globalThis.__theme.colors.text.heading } }, '🗳️ ' + post.title))` },
@@ -236,6 +238,11 @@ if (c === 'local') {
         post('b', 'Lift to Lismore Thursday', { type: 'need', category: 'transport', created_at: ago(20), author_callsign: 'Mo' }),
         post('ev', 'Repair Café', { type: 'event', category: 'events', created_at: ago(60 * 24 * 35), author_callsign: 'Civic Hall',
             event_start_at: ahead(60 * 23), event_end_at: ahead(60 * 25), event_state: 'scheduled', event_going_count: 4, event_interested_count: 2 }),
+        // The style box P2: an event pinned, with Byron's longest title, in the list's Pinned block (the grid's one-pin case keeps one).
+        ...(${JSON.stringify(VIEW)} === 'list' ? [post('evpin', 'Byron Bay Twilight Market - Every Saturday', { type: 'event', category: 'events',
+            created_at: ago(60 * 24 * 20), pinned_until: ahead(60 * 48), pinned_at: ago(30), author_callsign: 'Byron Markets',
+            event_start_at: ahead(60 * 50), event_end_at: ahead(60 * 55), event_state: 'scheduled', event_place_name: 'Railway Park, Jonson Street',
+            myRsvp: 'going', event_going_count: 12, event_interested_count: 5 })] : []),
         post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana' }),
         post('y', 'Someone to mind two goats', { type: 'need', category: 'pets', created_at: ago(60 * 26), author_callsign: 'Mo' }),
     ];
@@ -263,7 +270,11 @@ if (c === 'local') {
     globalThis.__posts = [
         post('g1', 'Sourdough starter', { created_at: ago(10), lat: -28.58, lng: 153.5, author_callsign: 'Lee', credits: 0 }),
         post('g2', 'Mutual credit 101, online', { type: 'event', category: 'events', created_at: ago(60 * 24 * 12), lat: null, lng: null, author_callsign: 'Ana',
+            author_pubkey: 'my-own-member-key',
             event_start_at: ahead(60 * 20), event_end_at: ahead(60 * 22), event_state: 'scheduled', credits: 0 }),
+        post('g6', 'Byron Bay Farmers Market — Weekly Thursday', { type: 'event', category: 'events', created_at: ago(60 * 3), lat: -28.66, lng: 153.6,
+            author_callsign: 'Byron Markets', event_start_at: ahead(60 * 30), event_end_at: ahead(60 * 34), event_state: 'scheduled',
+            event_place_name: 'Butler Street Reserve', myRsvp: 'going', credits: 0 }),
         post('g3', 'Proofread a grant', { type: 'need', category: 'education', created_at: ago(60 * 5), lat: -27.47, lng: 153.03, author_callsign: 'Kai', credits: 0 }),
         post('g4', 'Surplus pumpkins', { created_at: ago(60 * 26), lat: -28.2, lng: 153.4, author_callsign: 'Pat', credits: 0 }),
         post('g5', 'Melbourne bike (beyond 250 km)', { created_at: ago(30), lat: -37.81, lng: 144.96, author_callsign: 'Far', credits: 0 }),
@@ -339,6 +350,16 @@ for (const scheme of ['light', 'dark']) {
                 pinnedHeaders: document.querySelectorAll('[data-testid="pinned-section-header"]').length,
                 pinnedBlocks: document.querySelectorAll('[data-testid="market-pinned-block"]').length,
                 pinnedChips: document.querySelectorAll('[data-testid="pinned-chip"]').length,
+                eventCards: Array.from(document.querySelectorAll('[data-testid^="event-card-"]')).map(card => {
+                    const r = card.getBoundingClientRect();
+                    const slot = card.firstElementChild.getBoundingClientRect();
+                    const when = card.querySelector('[data-testid="event-when"]');
+                    return { id: card.getAttribute('data-testid'), left: r.left, right: r.right, height: r.height, slotLeft: slot.left, slotWidth: slot.width,
+                        slotHeight: slot.height, chipInWhen: when ? when.querySelectorAll('[data-testid]').length : -1,
+                        // The status line (the mark, the host's line, the counts) is never cut at 320dp and 1.3x.
+                        cut: ['event-mark', 'event-counts'].filter(id => { const e = card.querySelector(`[data-testid="${id}"]`); return e && (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1); }),
+                        buttons: card.querySelectorAll('[role="button"]').length, text: card.innerText.split('\n').filter(Boolean) };
+                }),
                 // Each title's card (its nearest button) and where the member sees it: for the grid's first-cells check.
                 cards: TITLES.map(title => {
                     const leaves = Array.from(document.querySelectorAll('#root *')).filter(e => e.children.length === 0 && (e.textContent || '').includes(title));
@@ -351,6 +372,20 @@ for (const scheme of ['light', 'dark']) {
         }, [WIDTH, ['Bike pump to share', 'Lemons, a bucket', 'Lift to Lismore Thursday', 'Repair Café', 'Firewood, split', 'Someone to mind two goats']]);
         if (process.env.DEBUG_TEXT) console.log(JSON.stringify(result.text.slice(0, 600)), await page.evaluate(() => Array.from(document.querySelectorAll('#root *')).filter(e => e.scrollHeight > 0 && getComputedStyle(e).overflowY !== 'visible').map(e => e.tagName + ':' + e.clientHeight + '/' + e.scrollHeight + ':' + e.children.length).join(' ')));
         if (result.sideways) fail('sideways scroll');
+        if (VIEW === 'list') {
+            // The local and global cases hold two events each; the New since cases none.
+            if ((which === 'local' || which === 'global') && result.eventCards.length !== 2) fail(`${result.eventCards.length} event card(s) drawn, not 2`);
+            for (const e of result.eventCards) {
+                if (Math.abs(e.slotLeft - (e.left + 1)) > 0.5 || Math.abs(e.slotWidth - 80) > 0.5) fail(`${e.id}: the picture is at ${e.slotLeft} x ${e.slotWidth}, not flush (${e.left + 1}) and 80 wide`);
+                if (Math.abs(e.slotHeight - (e.height - 2)) > 0.5) fail(`${e.id}: the picture is ${e.slotHeight} tall, not the card's ${e.height - 2}`);
+                if (e.chipInWhen !== 0) fail(`${e.id}: the when line holds ${e.chipInWhen} chip(s)`);
+                if (e.buttons) fail(`${e.id}: ${e.buttons} button(s) inside the card`);
+                if (e.cut.length) fail(`${e.id}: its ${e.cut.join(', ')} line is cut`);
+                if (e.text.some(l => /^Going$|^Interested$/.test(l))) fail(`${e.id}: a Going / Interested button's words are on the card`);
+                if (e.text.some(l => /^👥 0 going · 0 interested$/.test(l))) fail(`${e.id}: zero counts drawn`);
+            }
+            console.log('  events:', result.eventCards.map(e => `${e.id} ${Math.round(e.height)} dp [${e.text.join(' | ')}]`).join(' || '));
+        }
         if (result.past) fail(`${result.past} element(s) drawn past the ${WIDTH}dp edge, in: ${result.pastIn.map(s => `"${s}"`).join(', ')}`);
         for (const gone of ['UPCOMING EVENTS', 'NEAREST FIRST']) if (result.text.includes(gone)) fail(`heading still drawn: ${gone}`);
         if (which !== 'newsince' && which !== 'newsince-day' && result.sinceCount) fail(`the New since line is drawn where there is no stamp: ${result.sinceCount}`);

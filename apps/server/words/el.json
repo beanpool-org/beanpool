@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ Η σήραγγα του ελευθερωμένου ονόματος σταμάτησε. Αυτός ο διακομιστής εξακολουθεί να απαντά στις διευθύνσεις {addresses}.",
   "🫘 A project you backed changed its end date": "🫘 Ένα έργο που υποστηρίξατε άλλαξε την ημερομηνία λήξης του",
   "🫘 Pledges went back to their backers": "🫘 Οι δεσμεύσεις επέστρεψαν στους υποστηρικτές τους",
-  "🫘 Your pledge came back": "🫘 Η δέσμευσή σας επέστρεψε"
+  "🫘 Your pledge came back": "🫘 Η δέσμευσή σας επέστρεψε",
+  "Answer serve or step_aside.": "Απαντήστε serve ή step_aside.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "Έχετε ψηφίσει, άρα συμμετέχετε σε αυτή την κριτική επιτροπή. Μπορείτε να αλλάξετε την ψήφο σας μέχρι να κλείσει η ψηφοφορία."
 }

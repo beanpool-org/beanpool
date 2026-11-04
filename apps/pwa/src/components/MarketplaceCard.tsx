@@ -12,10 +12,11 @@
 import { type CSSProperties, type ReactNode } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { copyPriceLine, eventCopyOf, formatNumber, listingChipWords, pinLive, t, type ListingChip } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, formatNumber, listingChipWords, pinLive, t, upperCase, type ListingChip } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 import { styleUntilDrawn, useListPhotoSteps } from '../lib/use-list-photo-steps';
+import { CARD_INK, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, listCard } from './market-card-shell';
 
 /** The grid's 4:3 frame anchors upright photos towards the top third (market-card-43). */
 const GRID_CROP: CSSProperties = { objectPosition: '50% 33%' };
@@ -100,14 +101,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // What is drawn now: null is the tile.
     const displayImage = pictureSteps.shown;
     /** The picture in its box: the tile until it has drawn, the photo after. */
-    const cardPicture = (tile: ReactNode, imgStyle?: CSSProperties) => (
+    const cardPicture = (tile: ReactNode, imgStyle?: CSSProperties, imgClass = 'w-full h-full object-cover') => (
         <>
             {pictureSteps.drawn ? null : tile}
             <img
                 src={displayImage ?? undefined}
                 alt={post.title}
                 aria-hidden={pictureSteps.drawn ? undefined : true}
-                className="w-full h-full object-cover"
+                className={imgClass}
                 style={styleUntilDrawn(imgStyle, pictureSteps.drawn)}
                 onLoad={pictureSteps.onLoad}
                 onError={pictureSteps.onError}
@@ -155,9 +156,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const isPaused = post.status === 'paused';
     const pausedPill = isPaused ? (
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent">{t('⏸ Paused')}</span>
-    ) : null;
-    const youPill = isOwnPost ? (
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300/50">{t('👤 You')}</span>
     ) : null;
     const dealPill = dealChip ? (
         <span
@@ -277,82 +275,70 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     }
 
     if (!isGrid) {
-        // Horizontal List View
+        // The list card, on the Market's style box (components/market-card-shell.ts, DESIGN-card-style-box-fable.md §1, W2):
+        // the photo flush under the card's left corners and the card's full height, the text beside it with 12 of padding,
+        // the chips the one chip in the box's order (type · PINNED · YOU · category · RECURRING · CASH TOO · PAUSED · group ·
+        // deal) with the price at the row's end, the title, who, and how far. The card takes the height its lines need.
+        const tileKind = isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing');
         return (
-            <div 
-                className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-sm cursor-pointer transition-all duration-300 hover:shadow-md flex flex-row gap-4 h-full w-full relative overflow-hidden ${elderStyleList}`}
+            <div
+                data-testid="listing-list-card"
+                className={`${listCard({ pulse: isPulse, elder: elderCard })} cursor-pointer transition-shadow duration-300 hover:shadow-md`}
             >
-                {/* Left Thumbnail (80px) */}
-                <div className="w-20 h-20 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
+                {/* The picture: the first thing in the card, so the card's own corners round it. */}
+                <div data-testid="listing-list-photo" className={LIST_PHOTO}>
                     {displayImage ? (
-                        cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />)
+                        cardPicture(<div className={LIST_PHOTO_FILL}><CategoryTile category={post.category} kind={tileKind} size="thumb" /></div>, undefined, `${LIST_PHOTO_FILL} object-cover`)
                     ) : (
-                        <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
+                        <div className={LIST_PHOTO_FILL}><CategoryTile category={post.category} kind={tileKind} size="thumb" /></div>
                     )}
                 </div>
-                
-                {/* Right Content */}
-                <div className="flex-1 flex flex-col justify-center min-w-0">
-                    <div className="flex justify-between items-center mb-1">
-                        {/* Wraps, so at 320 px / 130% the distance tag drops to a second line rather than past the card edge. */}
-                        <div className="flex flex-wrap gap-x-2 gap-y-1 items-center min-w-0">
-                            {pinnedChip}
-                            {!isPulse && (
-                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                    post.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                                    : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
-                                }`}>
-                                    {typeWords(post.type)}
-                                </span>
+
+                <div className={LIST_TEXT}>
+                    <div className="flex justify-between items-start gap-2 min-w-0">
+                        {/* Wraps, so at 320 px / 130% a chip drops to a second line rather than past the card edge. */}
+                        <div className="flex flex-wrap gap-1 items-center min-w-0">
+                            {isPulse ? (
+                                <span className={chip('warn')}>{upperCase(t('🗞️ Daily Pulse'))}</span>
+                            ) : (
+                                <span className={chip(post.type === 'offer' ? 'offer' : 'need')}>{upperCase(typeWords(post.type))}</span>
                             )}
-                            {pulsePill}
-                            {youPill}
-                            {dealPill}
-                            {pausedPill}
+                            {isPinned && (
+                                <span data-testid="card-pinned-chip" className={chip('pinned')}>{t('📌 PINNED')}</span>
+                            )}
+                            {isOwnPost && <span className={chip('info')}>{upperCase(t('👤 You'))}</span>}
                             {categoryConfig && (
-                                <span className="text-[10px] font-black text-nature-500 dark:text-nature-400 flex items-center gap-1">
-                                    <span>{categoryConfig.emoji}</span>
-                                    <span>{t(categoryConfig.label)}</span>
-                                </span>
+                                <span className={chip('quiet')}>{categoryConfig.emoji} {t(categoryConfig.label)}</span>
                             )}
-                            {distanceTag}
-                            {post.repeatable && (
-                                <span className={`text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink`}>
-                                    {t('↻ RECURRING')}
-                                </span>
-                            )}
+                            {post.repeatable && <span className={chip('quiet')}>{t('↻ RECURRING')}</span>}
                             {/* #108: on the card, not just the detail view — the point of the flag is
                                 that nobody discovers a cash requirement in paragraph three. */}
                             {post.cashAlsoNeeded && (
-                                <span
-                                    className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-need-tint text-bp-chip-need-ink"
-                                    title={t('Cash also needed for fuel or materials — agreed in chat')}
-                                >
+                                <span className={chip('warn')} title={t('Cash also needed for fuel or materials — agreed in chat')}>
                                     {t('💸 CASH TOO')}
                                 </span>
                             )}
-                            {groupScopeBadge && (
-                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
-                                    {groupScopeBadge}
+                            {isPaused && <span className={chip('warn')}>{upperCase(t('⏸ Paused'))}</span>}
+                            {groupScopeBadge && <span className={chip('quiet', true)}>{groupScopeBadge}</span>}
+                            {dealChip && (
+                                <span data-testid="card-deal-chip" className={chip(dealChip === 'in-trust' ? 'ok' : 'warn')}>
+                                    {upperCase(listingChipWords(dealChip))}
                                 </span>
                             )}
                         </div>
-                        
-                        {/* Compact Price Header */}
+
                         {showPrice && (
-                            <div className="flex items-center">
-                                <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                    {priceAmount(post.credits)}
-                                    <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                                    <span className="text-[10px] text-nature-500 dark:text-nature-400 ml-0.5">
-                                        {priceUnit(post.priceType)}
-                                    </span>
+                            <span className={`shrink-0 flex flex-row items-center flex-nowrap ${LIST_TYPE.price} ${CARD_INK.title}`}>
+                                {priceAmount(post.credits)}
+                                <img src="/assets/bean.png" className="mx-0.5" style={{ width: `${LIST_BEAN_PX}px`, height: `${LIST_BEAN_PX}px`, flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                <span className={`${LIST_TYPE.priceUnit} ${CARD_INK.secondary}`}>
+                                    {priceUnit(post.priceType)}
                                 </span>
-                            </div>
+                            </span>
                         )}
                     </div>
 
-                    <h3 dir="auto" className="font-bold text-md text-nature-950 dark:text-white truncate mb-1">
+                    <h3 dir="auto" className={`m-0 truncate ${LIST_TYPE.loud} ${CARD_INK.title}`}>
                         {post.title}
                     </h3>
 
@@ -366,8 +352,16 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         showTier={!beansMarked}
                         isFounding={!beansMarked && !!post.authorFoundingNeeded}
                     />}
+
+                    {/* How far, as the node measured it (S5): its own line under who, as on the phone; nothing without a number. */}
+                    {typeof distanceKm === 'number' && Number.isFinite(distanceKm) && (
+                        <span data-testid="card-distance" className={`flex items-center gap-1 min-w-0 truncate ${LIST_TYPE.distance} ${CARD_INK.secondary}`}>
+                            <span aria-hidden="true">📍</span>
+                            <span className="truncate">{distanceWords(distanceKm)}</span>
+                        </span>
+                    )}
                 </div>
-                
+
                 {/* Node Overlays - Top Right floating if remote */}
                 {nodeBadge && (
                     <div className="absolute top-2 right-2 font-bold bg-indigo-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5">

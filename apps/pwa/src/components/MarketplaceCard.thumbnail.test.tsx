@@ -8,6 +8,7 @@ import { act, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LIST_PHOTO_QUEUED_MS } from '@beanpool/core';
 import { MarketplaceCard } from './MarketplaceCard';
+import { CHIP, CHIP_SENTENCE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, chip, listCard } from './market-card-shell';
 import type { MarketplacePost } from '../lib/marketplace';
 
 const PHOTOS = ['/api/marketplace/posts/p1/photos/0?v=17&k=KEY0', '/api/marketplace/posts/p1/photos/1?v=17&k=KEY1'];
@@ -35,6 +36,71 @@ describe('MarketplaceCard photo', () => {
         expect(img.closest('button')).toBeNull();
         fireEvent.click(img);
         expect(onCard).toHaveBeenCalledTimes(1);
+    });
+});
+
+// W2 of the style box (DESIGN-card-style-box-fable.md §1.1; DESIGN-market-event-cards-fable.md §3 W2): the list card's
+// photo is flush, as on the phone: the first thing in the card, no padding box around it, 80 wide and the card's full height.
+describe('MarketplaceCard list card on the style box', () => {
+    it.each([['a photo', post], ['no photo', { ...post, photos: [] } as unknown as MarketplacePost]])('with %s, the picture is the card\'s first child, with no padding box around it', (_, p) => {
+        const { getByTestId } = render(<MarketplaceCard post={p} viewMode="list" />);
+        const card = getByTestId('listing-list-card');
+        const slot = getByTestId('listing-list-photo');
+        expect(card.firstElementChild).toBe(slot);
+        expect(card.className.startsWith(listCard())).toBe(true);
+        // Nothing pads the card itself or the slot: the text column carries the 12 of padding.
+        expect(card.className).not.toMatch(/(^|\s)(p|px|py|pl)-\d/);
+        expect(slot.className).toBe(LIST_PHOTO);
+        expect(slot.nextElementSibling?.className).toBe(LIST_TEXT);
+        // The tile (and the photo once drawn) cover the slot.
+        expect(slot.firstElementChild?.className).toBe(LIST_PHOTO_FILL);
+        // No fixed height: the card takes the height its lines need, and the slot stretches to it (Marty, 4 Nov 2026).
+        for (const el of [card, slot]) expect(el.className).not.toMatch(/(^|\s)h-\d/);
+    });
+
+    it('the photo, once drawn, covers the slot', () => {
+        const { container } = render(<MarketplaceCard post={post} viewMode="list" />);
+        const img = container.querySelector(`img[alt="${post.title}"]`)!;
+        fireEvent.load(img);
+        expect(img.className).toBe(`${LIST_PHOTO_FILL} object-cover`);
+        expect(img.parentElement?.getAttribute('data-testid')).toBe('listing-list-photo');
+    });
+
+    it('the chips are the one chip, capitals from the words, in the box\'s order; no raw violet, blue or nature-950', () => {
+        // Every chip a listing can wear but the pin (a paused or group-only post is never pinned, @beanpool/core pinLive).
+        const busy = {
+            ...post, repeatable: true, cashAlsoNeeded: true, status: 'paused', audienceScope: 'group', targetGroupName: 'Gardeners',
+        } as unknown as MarketplacePost;
+        const { container, getByTestId, unmount } = render(<MarketplaceCard post={busy} viewMode="list" isOwnPost dealChip="asked" />);
+        const row = getByTestId('listing-list-card').querySelector('.flex-wrap')!;
+        const chips = Array.from(row.children) as HTMLElement[];
+        expect(chips.map(c => c.textContent)).toEqual([
+            'OFFER', '👤 YOU', '🥕 Food & Produce', '↻ RECURRING', '💸 CASH TOO', '⏸ PAUSED', '🔒 Only Gardeners can see this', '✋ ASKED',
+        ]);
+        expect(chips.map(c => c.className)).toEqual([
+            chip('offer'), chip('info'), chip('quiet'), chip('quiet'), chip('warn'), chip('warn'), chip('quiet', true), chip('warn'),
+        ]);
+        expect(chips[7].getAttribute('data-testid')).toBe('card-deal-chip');
+        for (const c of chips) expect(c.className).not.toMatch(/(^|\s)uppercase(\s|$)/);
+        const all = Array.from(container.querySelectorAll('[class]')).map(e => e.getAttribute('class')).join(' ');
+        expect(all).not.toMatch(/violet-|blue-|nature-950/);
+        unmount();
+
+        // A pinned listing: the pin straight after the type, in the accent chip.
+        const pinned = { ...post, pinnedAt: new Date().toISOString(), pinnedUntil: new Date(Date.now() + 86_400_000).toISOString() } as unknown as MarketplacePost;
+        const again = render(<MarketplaceCard post={pinned} viewMode="list" />);
+        const pinRow = Array.from(again.getByTestId('listing-list-card').querySelector('.flex-wrap')!.children) as HTMLElement[];
+        expect(pinRow.map(c => c.textContent)).toEqual(['OFFER', '📌 PINNED', '🥕 Food & Produce']);
+        expect(pinRow[1].className).toBe(chip('pinned'));
+        expect(pinRow[1].getAttribute('data-testid')).toBe('card-pinned-chip');
+    });
+
+    it('how far is its own line under who, not a chip', () => {
+        const { getByTestId } = render(<MarketplaceCard post={post} viewMode="list" distanceKm={2.4} />);
+        const distance = getByTestId('card-distance');
+        expect(distance.textContent).toBe('📍2.4 km');
+        expect(distance.closest('.flex-wrap')).toBeNull();
+        expect(distance.parentElement?.className).toBe(LIST_TEXT);
     });
 });
 

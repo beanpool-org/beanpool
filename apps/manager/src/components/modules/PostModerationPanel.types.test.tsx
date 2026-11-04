@@ -2,6 +2,8 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { AssistantTakedownsPanel } from './AssistantTakedownsPanel';
+import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
 import { PostModerationPanel, heldTakedowns, takenDownWords, putBackWords, chipClassFor, isCopy, type PostModerationItem } from './PostModerationPanel';
 
 /**
@@ -132,6 +134,21 @@ describe('The "taken down" line', () => {
         expect(buttons).toEqual(['Put back', '🗑️Delete']);
     });
 
+    it('a post taken down with a Child safety report open says a report holds it, in the words "Taken down by assistants" uses', async () => {
+        const call = { ...CALL, posts: [{ id: 'p-down', title: 'Cheap watches', author: 'Sam Spam', type: 'offer', state: 'hidden', leftFor: null, childSafetyOpen: true }] };
+        serve({ body: { takedowns: [call] } });
+        render(<PostModerationPanel posts={POSTS} activeNode={NODE} onRefresh={vi.fn()} viewer={OWNER} />);
+        const line = await within(row('Cheap watches')).findByTestId('post-taken-down');
+        expect(line.textContent).toBe(`Taken down by Spam sweeper: hidden now, because ${CHILD_SAFETY_OPEN}. It is not removed for good until a person decides.`);
+        expect(line.textContent).not.toMatch(/removed for good on|unless put back/);
+        // The card on the same page words the same post with the same phrase.
+        cleanup();
+        serve({ body: { canActOnMany: true, takedowns: [call] } });
+        render(<AssistantTakedownsPanel activeNode={NODE} viewer={OWNER} />);
+        fireEvent.click(await screen.findByText('Show its posts'));
+        expect(screen.getByText(new RegExp(`Hidden: ${CHILD_SAFETY_OPEN}`))).toBeTruthy();
+    });
+
     it('a post left hidden says why, and one put back or already final has no line', async () => {
         serve({ body: { takedowns: [CALL] } });
         render(<PostModerationPanel posts={POSTS} activeNode={NODE} onRefresh={vi.fn()} viewer={OWNER} />);
@@ -223,12 +240,39 @@ describe('heldTakedowns, takenDownWords, putBackWords', () => {
 
     it('words a hide by its state and its date, and does not promise a date it does not have', () => {
         const now = Date.parse('2026-11-04T00:00:00.000Z');
-        const base = { grantName: 'Helper', finalAfter: FINAL, state: 'hidden' as const, leftFor: null };
+        const base = { grantName: 'Helper', finalAfter: FINAL, state: 'hidden' as const, leftFor: null, childSafetyOpen: false };
         expect(takenDownWords(base, now)).toMatch(/^Taken down by Helper: hidden now, and removed for good on .+ unless put back\.$/);
         expect(takenDownWords({ ...base, finalAfter: '2026-11-03T00:00:00.000Z' }, now)).toBe('Taken down by Helper: hidden now, and due to be removed for good.');
         expect(takenDownWords({ ...base, finalAfter: '' }, now)).toBe('Taken down by Helper: hidden now, and removed for good after 7 days unless put back.');
         expect(takenDownWords({ ...base, state: 'left_hidden', leftFor: 'child_safety' }, now)).toBe('Taken down by Helper: left hidden, because a Child safety report is open. It is not removed for good until a person decides.');
         expect(takenDownWords({ ...base, state: 'left_hidden' }, now)).toBe('Taken down by Helper: left hidden. It is not removed for good until a person decides.');
+    });
+
+    it('carries childSafetyOpen from the server, only when it is true', () => {
+        const held = heldTakedowns([{ ...CALL, posts: [
+            { id: 'p-cs', state: 'hidden', childSafetyOpen: true },
+            { id: 'p-no', state: 'hidden', childSafetyOpen: false },
+            { id: 'p-odd', state: 'hidden', childSafetyOpen: 'yes' },
+            { id: 'p-none', state: 'hidden' },
+            { id: 'p-both', state: 'left_hidden', leftFor: 'deal', childSafetyOpen: true },
+        ] }]);
+        expect(['p-cs', 'p-no', 'p-odd', 'p-none', 'p-both'].map((id) => held.get(id)?.childSafetyOpen)).toEqual([true, false, false, false, true]);
+    });
+
+    it('a post still only hidden, with a Child safety report open, is never promised a day it goes for good', () => {
+        const now = Date.parse('2026-11-04T00:00:00.000Z');
+        const csHidden = { grantName: 'Helper', finalAfter: FINAL, state: 'hidden' as const, leftFor: null, childSafetyOpen: true };
+        const line = takenDownWords(csHidden, now);
+        expect(line).toBe(`Taken down by Helper: hidden now, because ${CHILD_SAFETY_OPEN}. It is not removed for good until a person decides.`);
+        expect(line).not.toMatch(/removed for good on|due to be removed|after 7 days|unless put back/);
+        // The same on the day the 7 days are up, and with no date at all: the sweep skips it either way.
+        expect(takenDownWords({ ...csHidden, finalAfter: '2026-11-03T00:00:00.000Z' }, now)).toBe(line);
+        expect(takenDownWords({ ...csHidden, finalAfter: '' }, now)).toBe(line);
+        // Left hidden for a Child safety report says it in the same words, and a deal as well says both.
+        expect(takenDownWords({ ...csHidden, state: 'left_hidden', leftFor: 'child_safety' }, now))
+            .toBe(`Taken down by Helper: left hidden, because ${CHILD_SAFETY_OPEN}. It is not removed for good until a person decides.`);
+        expect(takenDownWords({ ...csHidden, state: 'left_hidden', leftFor: 'deal' }, now))
+            .toBe(`Taken down by Helper: left hidden, because a deal is in escrow, and ${CHILD_SAFETY_OPEN}. It is not removed for good until a person decides.`);
     });
 
     it('puts back in the same words "Taken down by assistants" uses, and tells a post that stays hidden or has gone', () => {

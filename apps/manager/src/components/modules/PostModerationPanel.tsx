@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { getTfaSessionToken, deleteNodePost, resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
 import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
@@ -81,12 +82,14 @@ export const chipClassFor = (type: unknown) => TYPE_CHIPS[typeof type === 'strin
 
 const TAKEDOWNS = '/api/local/admin/agent/takedowns';
 
-/** What the posts screen needs of a takedown: the assistant, when it goes for good, and whether it was left hidden and why. */
+/** What the posts screen needs of a takedown: the assistant, when it goes for good, whether it was left hidden and why, and whether a Child safety report holds it. */
 export interface HeldTakedown {
     grantName: string;
     finalAfter: string;
     state: 'hidden' | 'left_hidden';
     leftFor: 'deal' | 'child_safety' | null;
+    /** A Child safety report is open on it, on any day of the hold: the sweep skips it, so it is never removed for good by itself. */
+    childSafetyOpen: boolean;
 }
 
 /**
@@ -101,13 +104,14 @@ export function heldTakedowns(takedowns: unknown): Map<string, HeldTakedown> {
         const { grantName, finalAfter, posts } = call as { grantName?: unknown; finalAfter?: unknown; posts?: unknown };
         if (!Array.isArray(posts)) continue;
         for (const p of posts) {
-            const post = p as { id?: unknown; state?: unknown; leftFor?: unknown } | null;
+            const post = p as { id?: unknown; state?: unknown; leftFor?: unknown; childSafetyOpen?: unknown } | null;
             if (!post || typeof post.id !== 'string' || (post.state !== 'hidden' && post.state !== 'left_hidden') || held.has(post.id)) continue;
             held.set(post.id, {
                 grantName: typeof grantName === 'string' && grantName ? grantName : 'an assistant',
                 finalAfter: typeof finalAfter === 'string' ? finalAfter : '',
                 state: post.state,
                 leftFor: post.leftFor === 'deal' || post.leftFor === 'child_safety' ? post.leftFor : null,
+                childSafetyOpen: post.childSafetyOpen === true,
             });
         }
     }
@@ -119,11 +123,17 @@ const day = (iso: string) => {
     return Number.isFinite(t) ? new Date(t).toLocaleDateString(undefined, { dateStyle: 'medium' }) : '';
 };
 
-/** The line on a taken-down post's row: who, that it is hidden now, and when it goes for good unless put back. */
+/**
+ * The line on a taken-down post's row: who, that it is hidden now, and when it goes for good unless put back. A post a deal or a Child
+ * safety report holds is never removed on a day: it says why, and that a person decides (a Child safety report open on a post still
+ * only hidden is the same, from the first day, as the card "Taken down by assistants" says).
+ */
 export function takenDownWords(h: HeldTakedown, now: number = Date.now()): string {
-    if (h.state === 'left_hidden') {
-        const why = h.leftFor === 'deal' ? ', because a deal is in escrow' : h.leftFor === 'child_safety' ? ', because a Child safety report is open' : '';
-        return `Taken down by ${h.grantName}: left hidden${why}. It is not removed for good until a person decides.`;
+    const childSafety = h.childSafetyOpen || (h.state === 'left_hidden' && h.leftFor === 'child_safety');
+    if (h.state === 'left_hidden' || childSafety) {
+        const reasons = [h.state === 'left_hidden' && h.leftFor === 'deal' ? 'a deal is in escrow' : '', childSafety ? CHILD_SAFETY_OPEN : ''].filter(Boolean);
+        const why = reasons.length ? `, because ${reasons.join(', and ')}` : '';
+        return `Taken down by ${h.grantName}: ${h.state === 'left_hidden' ? 'left hidden' : 'hidden now'}${why}. It is not removed for good until a person decides.`;
     }
     const final = Date.parse(h.finalAfter);
     if (!Number.isFinite(final)) return `Taken down by ${h.grantName}: hidden now, and removed for good after 7 days unless put back.`;

@@ -6,6 +6,7 @@ import type { RolesViewer } from './NodeRolesPanel';
 import { useInPageConfirm } from '../common/InPageConfirm';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
+import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
 
 /**
  * "Taken down by assistants" (scratch/fable-design/DESIGN-mcp-moderation-fable.md §3.13; the server is apps/server
@@ -67,8 +68,8 @@ const childSafetyOpen = (p: PostLine) => isHeld(p) && p.childSafetyOpen === true
 const leftForDeal = (p: PostLine) => p.state === 'left_hidden' && p.leftFor !== 'child_safety';
 const stateWords = (p: PostLine) => {
     if (!childSafetyOpen(p)) return STATE_WORDS[p.state];
-    if (leftForDeal(p)) return `${STATE_WORDS.left_hidden}, and a Child safety report is open`;
-    return `${p.state === 'hidden' ? 'Hidden' : 'Left hidden'}: a Child safety report is open`;
+    if (leftForDeal(p)) return `${STATE_WORDS.left_hidden}, and ${CHILD_SAFETY_OPEN}`;
+    return `${p.state === 'hidden' ? 'Hidden' : 'Left hidden'}: ${CHILD_SAFETY_OPEN}`;
 };
 const DEAL_WARNING = 'It has a deal in escrow: removing it refunds the buyer, as any removal does.';
 const CHILD_SAFETY_WARNING = 'A Child safety report on it is still open, for a person to read. Removing the post closes that report and tells whoever filed it.';

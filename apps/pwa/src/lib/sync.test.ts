@@ -18,8 +18,10 @@ import {
     onSyncActivity,
     onSyncChange,
     onSocketOpen,
+    onSystemAnnouncement,
     resetSyncForTest,
     getWatchdogArmedForTest,
+    deferredSyncPendingForTest,
     PONG_TIMEOUT_MS,
     HEARTBEAT_INTERVAL_MS,
 } from './sync';
@@ -795,6 +797,108 @@ describe('PWA WebSocket Pong Watchdog', () => {
         socket.onmessage({ data: JSON.stringify({ type: 'new_post' }) });
         await vi.advanceTimersByTimeAsync(150);
         expect(read).toHaveBeenCalledTimes(1);
+    });
+
+    // Capacity fix 2 (scratch/capacity-1104/REPORT.md, bottleneck 2): an open group made or changed, someone else's card or
+    // a removed account went to every open tab at once, and each refreshed every open view (the Market's area listings
+    // among them) at once. The refresh it still owes waits a random 0-5 minutes, one for a burst, as on the phone.
+    describe('wide doorbells (@beanpool/core isWideDoorbell)', () => {
+        const OTHER = 'f'.repeat(64);
+        const group = { id: 'g1', name: 'Seed swap', joinPolicy: 'open', memberCount: 1 };
+        const WIDE: Array<[string, Record<string, unknown>]> = [
+            ['group_created', { type: 'group_created', group }],
+            ['group_updated', { type: 'group_updated', group }],
+            ['profile_updated naming another member', { type: 'profile_updated', publicKey: OTHER }],
+            ['user_pruned naming another member', { type: 'user_pruned', publicKey: OTHER }],
+        ];
+
+        async function memberSocket(): Promise<{ socket: any; read: ReturnType<typeof vi.fn> }> {
+            vi.mocked(loadIdentity).mockResolvedValueOnce(MEMBER);
+            const read = vi.fn();
+            onSyncActivity(read);
+            const socket = await openSocket();
+            read.mockClear();
+            return { socket, read };
+        }
+
+        for (const [name, event] of WIDE) {
+            it(`${name}: no refresh now, one within 5 minutes`, async () => {
+                const { socket, read } = await memberSocket();
+                socket.onmessage({ data: JSON.stringify(event) });
+                await vi.advanceTimersByTimeAsync(2_500);
+                expect(read).not.toHaveBeenCalled();
+                expect(deferredSyncPendingForTest()).toBe(true);
+                await vi.advanceTimersByTimeAsync(300_000);
+                expect(read).toHaveBeenCalledTimes(1);
+                expect(deferredSyncPendingForTest()).toBe(false);
+            });
+        }
+
+        it('system_announcement is shown at once and refreshes nothing, as before', async () => {
+            const shown = vi.fn();
+            onSystemAnnouncement(shown);
+            const { socket, read } = await memberSocket();
+            const event = { type: 'system_announcement', title: 'Hello', body: 'All', severity: 'info' };
+            socket.onmessage({ data: JSON.stringify(event) });
+            expect(shown).toHaveBeenCalledWith(event);
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(read).not.toHaveBeenCalled();
+        });
+
+        it('a burst of wide doorbells owes one refresh, not one each', async () => {
+            const { socket, read } = await memberSocket();
+            for (let i = 0; i < 20; i++) {
+                socket.onmessage({ data: JSON.stringify(WIDE[i % WIDE.length][1]) });
+                await vi.advanceTimersByTimeAsync(5_000);
+            }
+            expect(read).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(read).toHaveBeenCalledTimes(1);
+        });
+
+        it('a refresh that starts after the doorbell takes the deferred one\'s place', async () => {
+            vi.spyOn(Math, 'random').mockReturnValue(0.5);
+            const { socket, read } = await memberSocket();
+            socket.onmessage({ data: JSON.stringify(WIDE[0][1]) });
+            await vi.advanceTimersByTimeAsync(10_000);
+            // Another doorbell (a trade) refreshes every view 10 s later.
+            socket.onmessage({ data: JSON.stringify({ type: 'transaction_completed' }) });
+            await vi.advanceTimersByTimeAsync(150);
+            expect(read).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(read).toHaveBeenCalledTimes(1);
+        });
+
+        it('a change naming this member themself refreshes at once, as before; so does every other doorbell', async () => {
+            const { socket, read } = await memberSocket();
+            socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: MEMBER.publicKey }) });
+            await vi.advanceTimersByTimeAsync(150);
+            expect(read).toHaveBeenCalledTimes(1);
+            expect(deferredSyncPendingForTest()).toBe(false);
+            await vi.advanceTimersByTimeAsync(2_500);
+            socket.onmessage({ data: JSON.stringify({ type: 'member_joined' }) });
+            await vi.advanceTimersByTimeAsync(150);
+            expect(read).toHaveBeenCalledTimes(2);
+        });
+
+        it("a visitor's wide doorbell keeps the visitor's own pacing", async () => {
+            const read = vi.fn();
+            onSyncActivity(read);
+            const socket = await openSocket();
+            read.mockClear();
+            socket.onmessage({ data: JSON.stringify({ type: 'group_created', group }) });
+            expect(deferredSyncPendingForTest()).toBe(false);
+            await vi.advanceTimersByTimeAsync(20_000);
+            expect(read).toHaveBeenCalledTimes(1);
+        });
+
+        it('the socket being replaced drops the refresh still owed: the new one opens with a refresh of its own', async () => {
+            const { socket } = await memberSocket();
+            socket.onmessage({ data: JSON.stringify(WIDE[3][1]) });
+            expect(deferredSyncPendingForTest()).toBe(true);
+            reconnectToAnchor();
+            expect(deferredSyncPendingForTest()).toBe(false);
+        });
     });
 
     it('a visitor who joins is a member from the signed socket on: a doorbell the lobby held reads nothing later, and the member\'s are not paced', async () => {

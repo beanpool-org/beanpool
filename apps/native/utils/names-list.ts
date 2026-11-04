@@ -36,7 +36,7 @@ import {
     readNamesKeyCheck, namesKeyQr, namesKeyCode, syncNames, readNamesPin, emptyNamesPin, checkNamesKeyInPerson, removeNamesKey,
     makeNamesGenerationFor, namesSharesToSend, namesReplay, namesRingKeys, namesKeyLabel, readNamesGeneration,
     sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode, readNamesShare, namesSeenAfterRead, namesSelfClaim,
-    namesPinForNextCopy, makeNamesCopy, restoreNamesCopy, checkNamesCopyAgainst, type NamesCopy,
+    namesPinForNextCopy, makeNamesCopy, restoreNamesCopy, checkNamesCopyAgainst, mergeNamesPins, type NamesCopy,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesNotice, type NamesServerState, type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
@@ -451,7 +451,8 @@ async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: Names
     const mine = state.myCopy;
     if (last && mine && last.seq === pin.copy.seq && last.part === part && mine.seq === last.seq && mine.digest === last.digest) return { ok: true, pin, mine };
     // A newer copy on the node is another phone's (design §3, "higher seq"): never written over before stage 3b's merge.
-    if (state.myCopy && state.myCopy.seq > pin.copy.seq) return copyFailure('copy_newer', NAMES_COPY.copyNewer);
+    // No copy was saved and nothing sent: the next open merges that copy and tries again (ruling §4).
+    if (state.myCopy && state.myCopy.seq > pin.copy.seq) return copyFailure('copy_newer', NAMES_COPY.copyNotSaved);
     if ((copiesPausedUntil.get(label) ?? 0) > Date.now()) return copyFailure('too_many_copies', NAMES_COPY.copyNotSaved);
     const address = copyAddress(anchor);
     if (!address) return copyFailure('copy_not_saved', NAMES_COPY.copyNotSaved);
@@ -520,30 +521,8 @@ async function restoreFromCopy(anchor: string, identity: BeanPoolIdentity, store
     return { ok: true, value: r.pin };
 }
 
-/**
- * Two phones with one key (design §3 "higher seq", §5 "Merging"): `local` is this phone's pin, `other` the newer copy
- * another phone saved. `other` is kept when its chain extends this phone's (same links, as far or further); otherwise
- * this phone's pin is. Either way the rings are united (restricted to the kept pin's chain and `abandoned`, as
- * `readNamesPin` holds), and the copy number is the higher one, so the next copy is numbered past both. `seen` stays
- * this phone's. Never a pin numbered lower than either.
- */
-export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesPin {
-    const extends_ = other.chain.length >= local.chain.length && local.chain.every((l, i) => other.chain[i]?.id === l.id);
-    const kept = extends_ ? other : local;
-    const left = extends_ ? local : other;
-    // A statement either phone of this key abandoned stays abandoned (and its key in the ring). The other side's links off
-    // the kept chain (a fork) are NOT made abandoned here: that would change what the walk takes (names-list-trust.ts).
-    const keptIds = new Set(kept.chain.map((l) => l.id));
-    const abandoned = [...new Set([...kept.abandoned, ...left.abandoned])].filter((id) => !keptIds.has(id));
-    const onKept = new Set([...keptIds, ...abandoned]);
-    const ring: Record<string, string> = {};
-    for (const [id, key] of [...Object.entries(other.ring), ...Object.entries(local.ring)]) if (onKept.has(id) && !ring[id]) ring[id] = key;
-    // This phone's pending key: into the ring when its statement landed on the kept chain, else still pending.
-    let pending = kept.pending;
-    if (local.pending && onKept.has(local.pending.id)) ring[local.pending.id] ??= local.pending.key;
-    else if (local.pending) pending = local.pending;
-    return { ...kept, abandoned, ring, pending, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } };
-}
+/** The merge of two records of one key now lives in core (ruling DESIGN-names-list-merge-rule-fable.md §2.2). */
+export { mergeNamesPins };
 
 /**
  * This phone has a pin and the node holds a newer copy of this key's (another phone signed in as this admin and saved
@@ -558,9 +537,14 @@ async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store:
     const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address });
     if (!r.ok || r.copy.seq <= local.copy.seq || state.myCopy?.seq !== r.copy.seq) return local;
     const merged = mergeNamesPins(local, r.pin);
-    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, merged))) return local;
-    await keepUnsaid(store, identity.publicKey, anchor, [NAMES_COPY.copyNewer, ...(r.otherAddress ? [NAMES_COPY.copyOtherAddress(r.otherAddress, address)] : [])]);
-    return merged;
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, merged.pin))) return local;
+    // Said once by the next open: the merge, then each key one record trusted that stands removed here (ruling §4), and
+    // the address a copy was saved under when it was the community's other one (§5.6 (b)).
+    await keepUnsaid(store, identity.publicKey, anchor, [
+        NAMES_COPY.secondDevice, ...merged.recheck.map((k) => NAMES_COPY.checkAgainOtherDevice(callsignIn(state, k))),
+        ...(r.otherAddress ? [NAMES_COPY.copyOtherAddress(r.otherAddress, address)] : []),
+    ]);
+    return merged.pin;
 }
 
 /**
@@ -1701,7 +1685,9 @@ export const NAMES_COPY = {
     copyOtherAddress: (savedFrom: string, here: string) => `Your names-list record was saved from ${savedFrom}. This device uses ${here} for the same community, so it has taken the record as it is.`,
     copyTooBig: 'Your names-list record is too big to keep a copy on the server. Keep this phone signed in, or save the names as a PDF.',
     copyNotSaved: 'The server didn’t keep a copy of your names-list record just now, so no keys were sent. The next open tries again.',
-    copyNewer: 'Another phone signed in as you saved the names list’s record. Use one phone.',
+    // Two devices, one key (DESIGN-names-list-merge-rule-fable.md §4): a newer record from another device was merged.
+    secondDevice: 'Your account opened the names list on another device since this one last did. This device has taken what that one saved: its checks, its removals and its keys.',
+    checkAgainOtherDevice: (who: string) => `${at(who)}’s key was removed on one of your devices and checked on another, and this device can’t tell which came last, so the removal stands here. If ${at(who)} is an admin, check their code here once.`,
     copyRestored: (savedAt: string, n: number, code: string) => `Restored your names-list record from the server, saved ${shortDate(savedAt)}, key ${n} (${code}).`,
     startAfresh: 'Start afresh on this phone',
     // Sign Out with the copy not confirmed (design §5): nothing is blocked.
@@ -1742,7 +1728,7 @@ export const NAMES_COPY = {
     /** A key this phone had removed, carried into the history it took (Addendum 2, ruling 2): the forced drop landed. */
     // Round 14 (:1078): the key that removed them on this phone is on a history it left (the followed one may drop them too,
     // in another statement; rule (a) keeps this phone's own, so it makes its own key).
-    newKeyCarried: (who: string[]) => `The list has a new key without ${both(who)}: this phone had removed their key on a key history it has since left.`,
+    newKeyCarried: (who: string[]) => `The list has a new key without ${both(who)}: their key had been removed on a key history this device isn’t on.`,
     /** The walk dropped a key this phone trusted that the server still lists (Addendum 2, ruling 5). */
     checkAgain: (who: string, n: number) => `Key ${n} removed ${at(who)}’s key. If ${at(who)} is an admin again, check each other’s phones again: `
         + `a check made before this phone took key ${n} doesn’t count past it.`,

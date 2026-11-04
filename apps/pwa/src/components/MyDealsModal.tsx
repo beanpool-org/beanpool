@@ -438,7 +438,7 @@ export function MyDealsModal({
                                                             }}
                                                             onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
                                                             aria-label={t('View enlarged photo: {title}', { title: item.postTitle })}
-                                                            className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                            className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                         >
                                                             <ListPhoto photo={item.coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-xl opacity-50">{isBuyer ? '🛒' : '🏷️'}</span></span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                         </button>
@@ -542,7 +542,7 @@ export function MyDealsModal({
                                                         }}
                                                         onKeyDown={photoKeyDown([item.coverImage!], item.postTitle)}
                                                         aria-label={t('View enlarged photo: {title}', { title: item.postTitle })}
-                                                        className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                        className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                     >
                                                         <ListPhoto photo={item.coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl text-nature-600 dark:text-nature-300" aria-hidden="true">{isBuyer ? '🛒' : '🏷️'}</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                     </button>
@@ -675,7 +675,7 @@ export function MyDealsModal({
                                                         }}
                                                         onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
                                                         aria-label={t('View enlarged photo: {title}', { title: item.title })}
-                                                        className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                        className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                     >
                                                         <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-xl opacity-50">📦</span></span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                     </button>
@@ -758,7 +758,7 @@ export function MyDealsModal({
                                                     }}
                                                     onKeyDown={photoKeyDown(item.photos || [coverImage], item.title)}
                                                     aria-label={t('View enlarged photo: {title}', { title: item.title })}
-                                                    className="w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                                                    className="relative w-14 h-14 rounded-xl overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                                                 >
                                                     <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800 text-xl text-nature-600 dark:text-nature-300" aria-hidden="true">📦</span>} alt={t('Cover', undefined, "a listing's cover photo")} className="w-full h-full object-cover" />
                                                 </button>

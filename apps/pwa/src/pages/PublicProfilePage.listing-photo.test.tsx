@@ -76,12 +76,16 @@ describe("a member's listing rows on their profile: the photo is part of the row
 
     // Both halves together (the sync of #2838 with the small-cards rule): a small copy that fails steps down to the full photo,
     // then to the box tile, never an empty slot; and through every step the row stays one accessible element that opens the post.
-    it('a failed small photo steps down to the full photo, then the box tile, and the row still opens the post', async () => {
+    it('a failed small photo is asked once more past every cache, then steps down to the full photo, then the box tile, and the row still opens the post', async () => {
         rows = [listing(PHOTOS)];
         const onNavigatePost = vi.fn();
         render(<PublicProfilePage identity={me} pubkey="kofi-pubkey" onBack={vi.fn()} onMessage={vi.fn()} onNavigatePost={onNavigatePost} />);
         const row = await screen.findByRole('button', { name: 'View post: Pottery lessons on Sundays' });
         expect(row.querySelector('img')?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2`);
+        // card-photo-blank (#2853): the small copy is asked once more past every cache before the photo's own URL.
+        fireEvent.error(row.querySelector('img')!);
+        expect(row.querySelector('img')?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb2&retry=1`);
+        expect(within(row).queryAllByRole('button')).toEqual([]);
         fireEvent.error(row.querySelector('img')!);
         expect(row.querySelector('img')?.getAttribute('src')).toBe(PHOTOS[0]);
         expect(within(row).queryAllByRole('button')).toEqual([]);

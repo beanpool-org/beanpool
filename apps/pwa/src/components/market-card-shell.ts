@@ -275,6 +275,17 @@ export const COMPACT_TITLE = 'm-0 font-extrabold text-sm text-nature-950 dark:te
 export const COMPACT_LINE = 'block min-w-0 truncate text-[11px] leading-snug';
 
 /**
+ * Two short lines as one block (an event's row: its when, then 📌 PINNED, the state and the place): the words flow on from
+ * the when and the block stops at two lines, the last ending in "…". At 320 px x 1.3 the row's words have ~110 px, where
+ * "SAT 7 NOV · 16:00–18:00" alone is ~175 (measured, market-order-shots.mjs): the date and the time then take a line each,
+ * whole, and the place gives way; in a wider row all of it is one line. Never more than a listing's row and one line.
+ */
+export const COMPACT_LINES = 'min-w-0 text-[11px] leading-snug line-clamp-2 break-words';
+
+/** A piece inside COMPACT_LINES that is never split (the date, the time, 📌 PINNED): whole, or "…" only past the whole width. */
+export const COMPACT_PIECE = 'inline-block max-w-full truncate align-bottom';
+
+/**
  * The words inside a short line that say more than it: 📌 PINNED (the accent), CANCELLED / ENDED (danger), UPDATED and the
  * viewer's mark (the event violet), at the chip's weight. Inks for words on a card (core's `ink` roles), not a chip's.
  */
@@ -292,6 +303,24 @@ export const COMPACT_MARK = 'font-bold text-bp-tile-event-ink';
  * the row at most (core's compactEndMaxPercent), so the title keeps its width.
  */
 export const COMPACT_END = 'flex flex-wrap items-center justify-end gap-x-2 gap-y-1 ml-3 max-w-[45%]';
+
+/*
+ * An event's row, whose when must stay whole (measured at 320 px x 1.3, market-order-shots.mjs: the row's words have ~110 px
+ * there, and "TUE 10 NOV ·" needs ~106). The words win the width and the end gives way to them, down to its chip:
+ *   - COMPACT_LEAD_FIRM / COMPACT_TEXT_FIRM: the lead and the words without `min-w-0`, so they are never narrower than their
+ *     widest whole piece (the date, the time);
+ *   - COMPACT_TITLE_GIVES: the title one line ending in "…" that asks for no width of its own (it may break anywhere, so it
+ *     never sets the column's least width);
+ *   - COMPACT_END_STACK: the mark above EVENT in a column, as wide as its widest piece when there is room, and never narrower
+ *     than the chip. A flex-wrap end (COMPACT_END) keeps its pieces' width side by side even once they have wrapped: it left
+ *     the words ~55 px;
+ *   - COMPACT_MARK_GIVES: the mark's words, one line, giving way ("Interest… ✓") while its ✓ stays whole beside them.
+ */
+export const COMPACT_LEAD_FIRM = 'flex items-center gap-3 flex-1';
+export const COMPACT_TEXT_FIRM = 'flex-1';
+export const COMPACT_TITLE_GIVES = 'm-0 font-extrabold text-sm text-nature-950 dark:text-white line-clamp-1 break-all';
+export const COMPACT_END_STACK = 'flex flex-col items-end justify-center gap-1 ml-3 max-w-[45%]';
+export const COMPACT_MARK_GIVES = 'min-w-0 line-clamp-1 break-all';
 
 /**
  * The poll's card on the box (slice C1; the table's Poll row): the list card's corners, outline, ground and shadow, a column

@@ -25,6 +25,11 @@
  * longer than its row ends in an ellipsis), and the Elder's 3 px gold left border holds in dark as in light. The same
  * list again in Malayalam and German (`?lang=`), whose category words are longer still (`web-local-list-c-yesterday-ml-*`).
  *
+ * C1 (DESIGN-card-style-box-fable.md §2, the compact rows): the same community in the COMPACT view, with a poll the reader has
+ * answered, at 320 px x 1.3 and at 1280 px beside the sidebar (`web-local-compact-*`). Every event and the poll is a compact
+ * row like a listing's: one button; no taller than a listing's row and one line; its picture 32 square; its chip the one chip
+ * (10/800); the event's when whole; the poll's mark its chosen answer ✓; nothing on the poll's row to vote with.
+ *
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
@@ -67,6 +72,18 @@ const PINNED_EVENT = eventPost('ev-pin', 'Byron Bay Twilight Market - Every Satu
 
 const ELDER_TITLE = 'Meditation circle';
 
+// C1, the compact view only: the reader's answer on Repair Cafe, and the pinned event theirs to host (the node sends a host
+// the RSVP list), so the rows carry the longest marks.
+const COMPACT_MARKS = { 'ev-1': { myRsvp: 'interested' }, 'ev-pin': { eventRsvps: [] } };
+
+// C1: a poll the reader has answered, for the compact view only (the list view's checks count its cards without one).
+const POLL = {
+    ...listing('poll-1', 'What would make trading here easier for you?', 'Ana', at(10, 3, 10, 0), { category: 'community' }), type: 'poll',
+    description: 'Tell us what to build next.', userVotedOptionId: 'a', pollOpenVote: false, totalVotes: 5,
+    pollOptions: [{ id: 'a', text: 'Better matches between offers and needs', votes: 3, percentage: 60 }, { id: 'b', text: 'More events', votes: 2, percentage: 40 }],
+    pollClosesAt: new Date(2026, 10, 14, 16, 0).toISOString(),
+};
+
 const LOCAL = [
     listing('ana-1', 'Bike tune-up', 'Ana', at(10, 3, 14, 0)),
     listing('ana-2', 'Firewood, split', 'Ana', at(10, 3, 13, 30)),
@@ -90,15 +107,15 @@ const GLOBAL_POSTS = [
     listing('g-4', 'Spare ladder', 'Bo', at(10, 1, 10, 0), { distanceKm: 3, category: 'tools' }),
 ];
 
-async function open(browser, origin, { dark, global, width = 320, scale = 1.3, sidebar = false, lang = null }) {
+async function open(browser, origin, { dark, global, width = 320, scale = 1.3, sidebar = false, lang = null, view = 'list' }) {
     const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
     await context.addInitScript(([mode, list]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
             localStorage.setItem('beanpool-theme-default-light-v1', 'done');
-            if (list) localStorage.setItem('marketplace_view_mode', 'list');
+            localStorage.setItem('marketplace_view_mode', list);
         } catch { /* a picture of the default theme is still a picture */ }
-    }, [dark ? 'dark' : 'light', true]);
+    }, [dark ? 'dark' : 'light', view]);
     const reads = [];
     await context.route('**/api/**', async (route) => {
         const url = new URL(route.request().url());
@@ -110,7 +127,9 @@ async function open(browser, origin, { dark, global, width = 320, scale = 1.3, s
             if (q.get('author') || q.get('id') || q.get('online')) body = [];
             else {
                 reads.push({ type: q.get('type'), sort: q.get('sort'), lat: q.get('lat') });
-                body = global ? GLOBAL_POSTS : (q.get('type') === 'event' ? LOCAL.filter(p => p.type === 'event') : LOCAL_FEED);
+                body = global ? GLOBAL_POSTS : (q.get('type') === 'event' ? LOCAL.filter(p => p.type === 'event') : view === 'compact' ? [POLL, ...LOCAL_FEED] : LOCAL_FEED);
+                // The compact rows' longest marks: Repair Cafe "Interested ✓", and the pinned event the reader hosts.
+                if (view === 'compact') body = body.map(p => ({ ...p, ...COMPACT_MARKS[p.id] }));
             }
         } else body = mockResponse(url.pathname, url.search, []);
         if (body === undefined) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not Found' }) });
@@ -215,6 +234,71 @@ function checkListCards(cards, { label, dark, maxWidth, photos, scale, count = 9
     check(listings.every(c => c.titleInk === INK.title), `${label}: a listing's title is the page's ink ${INK.title} (${JSON.stringify([...new Set(listings.map(c => c.titleInk))])})`);
 }
 
+/**
+ * Every compact row on the page (C1), measured: its kind, height, width, picture, its chip's type, and for an event its when
+ * (whole or cut) and for a poll its mark and anything on it to press besides the row. Waits for the photos to draw first.
+ */
+async function compactRows(page) {
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('[data-testid="compact-picture"]'))
+        .every(slot => !slot.querySelector('img') || !slot.querySelector('[data-testid="category-tile"]')), null, { timeout: 15_000 }).catch(() => {});
+    return page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="listing-compact-row"], [data-testid="event-compact-row"], [data-testid="poll-compact-row"]')).map((row) => {
+        const r = row.getBoundingClientRect();
+        const kind = row.getAttribute('data-testid').split('-')[0];
+        const pic = row.querySelector('[data-testid="compact-picture"], .w-8.h-8');
+        const chipEl = row.querySelector('[data-testid="compact-type-chip"], [data-testid="event-type-chip"], [data-testid="poll-badge"]');
+        const chipCss = chipEl ? getComputedStyle(chipEl) : null;
+        // The when's whole pieces (the date, the time): each drawn whole, and inside the two lines the block shows.
+        const lines = row.querySelector('[data-testid="event-row-lines"]');
+        const whenPieces = Array.from(row.querySelectorAll('[data-testid="event-when"] > span'));
+        const line = row.querySelector('[data-testid="event-row-lines"], [data-testid="poll-compact-line"]');
+        return {
+            kind,
+            name: (row.querySelector('h3, [data-testid="event-row-title"], [data-testid="poll-row-question"]')?.textContent ?? '').slice(0, 40),
+            height: +r.height.toFixed(2), width: Math.round(r.width), over: row.scrollWidth > row.clientWidth + 1,
+            picture: pic ? `${Math.round(pic.getBoundingClientRect().width)}x${Math.round(pic.getBoundingClientRect().height)} r${getComputedStyle(pic).borderTopLeftRadius}` : null,
+            chip: chipCss ? `${chipCss.fontSize}/${chipCss.fontWeight}` : null,
+            // One short line's height: the line box the row's words are set on (`leading-snug`), as drawn.
+            lineHeight: line ? +parseFloat(getComputedStyle(line).lineHeight).toFixed(2) : null,
+            when: whenPieces.map(p => p.textContent).join(' ') || null,
+            whenWhole: lines ? whenPieces.length > 0 && whenPieces.every(p => p.scrollWidth <= p.clientWidth + 0.5
+                && p.getBoundingClientRect().bottom <= lines.getBoundingClientRect().bottom + 0.5) : null,
+            mark: row.querySelector('[data-testid="event-mark"], [data-testid="poll-mark"]')?.textContent ?? null,
+            controls: row.querySelectorAll('button, input, a, [role="button"], [role="progressbar"]').length,
+            isButton: row.tagName === 'BUTTON' || row.closest('[role="button"]') !== null,
+        };
+    }));
+}
+
+/** C1's checks on what compactRows() measured, at a text `scale`. */
+function checkCompactRows(rows, { label, maxWidth, scale }) {
+    const listings = rows.filter(r => r.kind === 'listing');
+    const events = rows.filter(r => r.kind === 'event');
+    const polls = rows.filter(r => r.kind === 'poll');
+    check(listings.length === 6 && events.length === 3 && polls.length === 1, `${label}: ${listings.length} listing rows, ${events.length} event rows, ${polls.length} poll row`);
+    // "A listing's row": the plainest listing's (the shortest), and "one line": the row's own short line, as drawn.
+    const listingRow = Math.min(...listings.map(r => r.height));
+    const oneLine = Math.max(...rows.filter(r => r.lineHeight !== null).map(r => r.lineHeight));
+    const bound = +(listingRow + oneLine + 0.5).toFixed(2);
+    const tall = [...events, ...polls].filter(r => r.height > bound);
+    check(tall.length === 0, `${label}: every event and poll row is a listing's row (${listingRow}px) and one line (${oneLine}px) at most, ${bound}px (${JSON.stringify([...events, ...polls].map(r => `${r.name}: ${r.height}`))})`);
+    check(rows.every(r => r.width <= maxWidth && !r.over), `${label}: no row wider than ${maxWidth}px or overflowing itself (${[...new Set(rows.map(r => r.width))].join(', ')})`);
+    const px = (n) => `${+(n * scale).toFixed(2)}px`;
+    const pics = [...new Set(rows.map(r => r.picture))];
+    const side = Math.round(32 * scale);
+    check(pics.length === 1 && pics[0] === `${side}x${side} r${px(8)}`, `${label}: every row's picture is 32 square, corners 8, at ${scale}x (${JSON.stringify(pics)})`);
+    const chips = [...new Set(rows.map(r => r.chip))];
+    check(chips.length === 1 && chips[0] === `${px(10)}/800`, `${label}: every row's type chip is the one chip, 10/800 (${JSON.stringify(chips)})`);
+    check([...events, ...polls].every(r => r.isButton && r.controls === 0), `${label}: each event and poll row is one button with nothing else to press on it`);
+    check(events.every(r => r.whenWhole), `${label}: every event row's date and time are whole and shown (${JSON.stringify(events.map(r => [r.when, r.whenWhole]))})`);
+    const garden = events.find(r => r.name.startsWith('Garden day'));
+    check(garden?.mark === 'Going ✓', `${label}: Garden day's row carries my answer, Going ✓ (${garden?.mark})`);
+    const repair = events.find(r => r.name.startsWith('Repair Cafe'));
+    const hosted = events.find(r => r.name.startsWith('Byron Bay'));
+    check(repair?.mark === 'Interested ✓' && hosted?.mark === "You're hosting this event", `${label}: the longest marks, Interested ✓ and You're hosting this event (${repair?.mark}; ${hosted?.mark})`);
+    check(polls[0]?.mark === 'Better matches between offers and needs ✓', `${label}: the poll's row carries my answer ✓ (${polls[0]?.mark})`);
+    return { listingRow, oneLine, bound, events: events.map(r => [r.name, r.height]), poll: polls.map(r => [r.name, r.height]) };
+}
+
 /** The headings and the card titles in page order (a heading is the small uppercase tracking-widest span). */
 const sequence = (page, titles) => page.evaluate((known) => {
     const out = [];
@@ -309,6 +393,26 @@ try {
             }, ELDER_TITLE);
             await page.waitForTimeout(150);
             await page.screenshot({ path: path.join(out, `web-local-list-c-yesterday-${lang}-${theme}.png`) });
+            await context.close();
+        }
+
+        for (const [width, scale, sidebar] of [[320, 1.3, false], [1280, 1, true]]) {
+            // C1: the compact view, at 320 x 1.3 and at 1280 beside the sidebar.
+            const { context, page } = await open(browser, server.origin, { dark, global: false, width, scale, sidebar, view: 'compact' });
+            const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+            check(wide <= width, `${theme} compact ${width}: nothing wider than the window (${wide}px)`);
+            const measured = checkCompactRows(await compactRows(page), { label: `${theme} compact ${width}`, maxWidth: sidebar ? width - SIDEBAR : width, scale });
+            console.log(`     ${theme} compact ${width}: ${JSON.stringify(measured)}`);
+            const tag = width === 320 ? '' : `-${width}`;
+            await page.screenshot({ path: path.join(out, `web-local-compact${tag}-a-${theme}.png`) });
+            if (width === 320) {
+                await page.evaluate(() => {
+                    const el = [...document.querySelectorAll('span.tracking-widest')].find(e => e.textContent.trim() === 'Yesterday');
+                    if (el) window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 200);
+                });
+                await page.waitForTimeout(150);
+                await page.screenshot({ path: path.join(out, `web-local-compact-b-${theme}.png`) });
+            }
             await context.close();
         }
 

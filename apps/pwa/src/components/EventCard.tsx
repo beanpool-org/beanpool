@@ -27,7 +27,7 @@ import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, upperCase, word, p
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventRowWhen, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
+    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventRowWhen, eventRowWhenParts, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
@@ -44,7 +44,8 @@ import { ListPhoto } from './ListPhoto';
 import { ImageLightbox } from './ImageLightbox';
 import { ReportModal } from './ReportModal';
 import {
-    BOX_LABEL, CARD_INK, COMPACT_END, COMPACT_LEAD, COMPACT_LINE, COMPACT_MARK, COMPACT_PICTURE, COMPACT_ROW, COMPACT_TEXT, COMPACT_TITLE, COMPACT_WORD,
+    BOX_LABEL, CARD_INK, COMPACT_END_STACK, COMPACT_LEAD_FIRM, COMPACT_LINES, COMPACT_MARK, COMPACT_MARK_GIVES, COMPACT_PIECE, COMPACT_PICTURE, COMPACT_ROW,
+    COMPACT_TEXT_FIRM, COMPACT_TITLE_GIVES, COMPACT_WORD,
     EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
     GRID_TIME_ROW, GRID_TYPE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE,
     POP_UP_CLOSE_ROOM, chip, gridTile, listCard,
@@ -309,6 +310,9 @@ function EventWhen({ post, className, testId, hostLine = false, repeatLine = tru
 
 const YOUR_TIME = ' your time';
 
+/** Where the compact row splits its mark's one key (`{label} ✓`) round the answer: a character no answer holds. */
+const MARK_SPLIT = '\u0001';
+
 /**
  * Why the host cannot edit, as a member reads it: lib/events.ts's eventEditBlockedReason keeps the English (the map's
  * edit alert shares it), and its two sentences are word() keys here by that English, shown through t(); any other line
@@ -487,12 +491,20 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
         // The compact row (slice C1, DESIGN-card-style-box-fable.md §2; DESIGN-market-event-cards-fable.md §2.4): the listing's
         // row from the style box (market-card-shell.ts COMPACT_*), so an event in the compact view is one row among the
         // listings', a listing's height and one line more at 320 px and 1.3x text (market-order-shots.mjs measures it). The 32 px
-        // picture (the photo, or the event tile until it has drawn), then the title; the when in the viewer's own clock ("your
-        // time" where it differs from the place's, as the tile reads it); then 📌 PINNED, the state and the place, each whole
-        // and in its own ink, the place giving way. As on the phone (#2903), the viewer's mark ("Going ✓", "You're hosting this
-        // event") sits where a listing's price sits, above EVENT: "{when} · {mark}" on one line has no room at 320 x 1.3. The
-        // counts are the page's. The whole row is one button that opens the event.
+        // picture (the photo, or the event tile until it has drawn), then the title; then two lines at most (COMPACT_LINES): the
+        // when in the viewer's own clock ("your time" where it differs from the place's, as the tile reads it), its date and its
+        // time each whole, and on from it 📌 PINNED, the state and the place, each in its own ink, the place giving way. At 320
+        // x 1.3 the date and the time take a line each (the row's words have ~110 px there); wider, it is all one line. As on
+        // the phone (#2903), the viewer's mark ("Going ✓", "You're hosting this event") sits where a listing's price sits,
+        // above EVENT: "{when} · {mark}" has no room in the line. The counts are the page's. The whole row is one button that
+        // opens the event.
         const rowWhen = eventRowWhen(p);
+        const rowParts = eventRowWhenParts(p);
+        // The when's whole pieces, as the list card's EventWhen cuts them: "SAT 7 NOV ·", "16:00–21:00", and "your time" apart.
+        const whenPieces = rowParts ? [
+            `${rowParts.first}${rowParts.sep === ' · ' ? ' ·' : ' –'}`,
+            ...(rowParts.second.endsWith(YOUR_TIME) ? [rowParts.second.slice(0, -YOUR_TIME.length), YOUR_TIME.trim()] : [rowParts.second]),
+        ] : [];
         const state = eventStateOf(p);
         const pinned = pinLive(p as any);
         const lock = p.audienceScope === 'group' || !!p.targetGroupId
@@ -502,10 +514,15 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
         const rowPlace = copy?.from ? [copyFromLine(copy.from), copyDistance].filter(Boolean).join(' · ') : place;
         const glyph = copy?.from ? '' : p.eventOnline ? '🌐 ' : '📍 ';
         const rowMark = hosting ? t("You're hosting this event") : myAnswer;
-        // Line three's pieces, ' · ' between them (the separator every line on a card uses).
+        // The answer's word, and the one key `{label} ✓` split where it goes (each language keeps its own order): the word gives
+        // way at the row's end, the ✓ never does, as on the poll's row. A key that cannot be split, and the host's line (no ✓),
+        // are drawn whole, giving way at their end.
+        const answerWord = !hosting && myAnswer ? (p.myRsvp === 'going' ? t('Going') : t('Interested')) : null;
+        const markPieces = answerWord ? t('{label} ✓', { label: MARK_SPLIT }).split(MARK_SPLIT) : [];
+        // What follows the when, ' · ' before each (the separator every line on a card uses).
         const pieces = [
-            pinned ? <span key="pin" data-testid="event-pinned-chip" className={COMPACT_WORD.pinned}>{t('📌 PINNED')}</span> : null,
-            state ? <span key="state" data-testid="event-state-badge" className={state === 'updated' ? COMPACT_WORD.event : COMPACT_WORD.danger}>{stateWords(state)}</span> : null,
+            pinned ? <span key="pin" data-testid="event-pinned-chip" className={`${COMPACT_PIECE} ${COMPACT_WORD.pinned}`}>{t('📌 PINNED')}</span> : null,
+            state ? <span key="state" data-testid="event-state-badge" className={`${COMPACT_PIECE} ${state === 'updated' ? COMPACT_WORD.event : COMPACT_WORD.danger}`}>{stateWords(state)}</span> : null,
             rowPlace || lock ? (
                 <span key="place">
                     {lock && <span aria-hidden="true">🔒 </span>}
@@ -524,7 +541,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                     aria-label={rowLabel}
                     className={`${COMPACT_ROW} text-start disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500`}
                 >
-                    <span className={COMPACT_LEAD}>
+                    <span className={COMPACT_LEAD_FIRM}>
                         <span data-testid="compact-picture" className={COMPACT_PICTURE}>
                             <ListPhoto
                                 photo={firstPhoto}
@@ -533,19 +550,26 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                                 fallback={<CategoryTile kind="event" size="thumb" />}
                             />
                         </span>
-                        <span className={COMPACT_TEXT}>
-                            <span dir="auto" data-testid="event-row-title" className={`block ${COMPACT_TITLE}`}>{p.title}</span>
-                            <span data-testid="event-when" className={`${COMPACT_LINE} font-bold ${CARD_INK.event}`}>{rowWhen}</span>
-                            {pieces.length > 0 && (
-                                <span data-testid="event-row-place" className={`${COMPACT_LINE} font-medium ${CARD_INK.secondary}`}>
-                                    {pieces.map((piece, i) => <Fragment key={i}>{i > 0 && ' · '}{piece}</Fragment>)}
+                        <span className={COMPACT_TEXT_FIRM}>
+                            <span dir="auto" data-testid="event-row-title" className={COMPACT_TITLE_GIVES}>{p.title}</span>
+                            <span data-testid="event-row-lines" className={`${COMPACT_LINES} font-medium ${CARD_INK.secondary}`}>
+                                <span data-testid="event-when" className={`font-bold ${CARD_INK.event}`}>
+                                    {whenPieces.map((piece, i) => <Fragment key={i}>{i > 0 && ' '}<span className={COMPACT_PIECE}>{piece}</span></Fragment>)}
                                 </span>
-                            )}
+                                {pieces.map((piece, i) => <Fragment key={i}>{(whenPieces.length > 0 || i > 0) && ' · '}{piece}</Fragment>)}
+                            </span>
                         </span>
                     </span>
-                    <span className={COMPACT_END}>
+                    <span className={COMPACT_END_STACK}>
                         {rowMark && (
-                            <span data-testid="event-mark" className={`text-[11px] leading-snug text-end break-words line-clamp-2 ${COMPACT_MARK}`}>{rowMark}</span>
+                            <span data-testid="event-mark" className={`flex items-baseline justify-end max-w-full text-[11px] leading-snug ${COMPACT_MARK}`}>
+                                {markPieces.length === 2 ? (
+                                    <>
+                                        <span className={COMPACT_MARK_GIVES}>{markPieces[0]}{answerWord}</span>
+                                        {markPieces[1] && <span className="shrink-0 whitespace-pre">{markPieces[1]}</span>}
+                                    </>
+                                ) : <span className={COMPACT_MARK_GIVES}>{rowMark}</span>}
+                            </span>
                         )}
                         <span data-testid="event-type-chip" className={chip('event')}>{upperCase(t('EVENT', undefined, 'event category tile label'))}</span>
                     </span>

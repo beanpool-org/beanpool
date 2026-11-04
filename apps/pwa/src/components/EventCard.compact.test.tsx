@@ -4,15 +4,18 @@
  * change"): the 32 px picture, the title, the when in the viewer's own clock, then 📌 PINNED, the state and the place; the
  * viewer's mark where a listing's price sits, above EVENT. One button, no Going / Interested, no counts.
  *
- * jsdom does no layout, so the row's height is held here by its parts (the listing row's frame, a title and at most two short
- * lines, each one line that ends in "…") and measured in Chromium by e2e/market-order-shots.mjs (no taller than a listing's
- * row and one line at 320 px x 1.3).
+ * jsdom does no layout, so the row's height is held here by its parts (the listing row's frame, a one-line title and a block
+ * of two short lines at most, the when's date and time each whole in it) and measured in Chromium by
+ * e2e/market-order-shots.mjs (no taller than a listing's row and one line at 320 px x 1.3, the when whole).
  */
 import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { EventCard } from './EventCard';
 import { MarketplaceCard } from './MarketplaceCard';
-import { CARD_INK, COMPACT_END, COMPACT_LINE, COMPACT_PICTURE, COMPACT_ROW, COMPACT_TITLE, COMPACT_WORD, chip } from './market-card-shell';
+import {
+    CARD_INK, COMPACT_END, COMPACT_END_STACK, COMPACT_LEAD_FIRM, COMPACT_LINES, COMPACT_MARK, COMPACT_MARK_GIVES, COMPACT_PICTURE, COMPACT_PIECE, COMPACT_ROW,
+    COMPACT_TEXT_FIRM, COMPACT_TITLE, COMPACT_TITLE_GIVES, COMPACT_WORD, chip,
+} from './market-card-shell';
 
 vi.mock('../lib/api', async () => ({ ...(await vi.importActual<typeof import('../lib/api')>('../lib/api')), rsvpEvent: vi.fn() }));
 
@@ -45,8 +48,12 @@ describe('the event\'s compact row (C1)', () => {
         const row = screen.getByTestId('event-compact-row');
         expect(has(row, COMPACT_ROW)).toBe(true);
         expect(screen.getByTestId('compact-picture').className).toBe(COMPACT_PICTURE);
-        expect(screen.getByTestId('event-row-title').className).toBe(`block ${COMPACT_TITLE}`);
-        expect(screen.getByTestId('event-type-chip').parentElement!.className).toBe(COMPACT_END);
+        // The title in the listing title's type and ink, one line ending in "…" (COMPACT_TITLE_GIVES: it asks for no width).
+        expect(screen.getByTestId('event-row-title').className).toBe(COMPACT_TITLE_GIVES);
+        const type = (s: string) => s.split(/\s+/).filter(c => /^(font-|text-|dark:text-)/.test(c));
+        expect(type(COMPACT_TITLE_GIVES)).toEqual(type(COMPACT_TITLE));
+        // The end: the mark above EVENT in a column, as wide as its widest piece (COMPACT_END_STACK).
+        expect(screen.getByTestId('event-type-chip').parentElement!.className).toBe(COMPACT_END_STACK);
         // The listing's row, from the same strings.
         render(<MarketplaceCard post={{ ...event, type: 'offer', category: 'tools', photos: [] }} viewMode="compact" />);
         const listing = screen.getByTestId('listing-compact-row');
@@ -56,49 +63,60 @@ describe('the event\'s compact row (C1)', () => {
         expect(listing.querySelector(`[class="${COMPACT_END}"]`)).not.toBeNull();
     });
 
-    it('lays out one row: the title and at most two short lines, each one line that ends in "…"', () => {
+    it('lays out one row: a one-line title and at most two short lines, the when\'s date and time each whole', () => {
         // The fullest row: pinned, updated, a group-only event, a place, and the viewer's answer.
         renderRow({ ...event, ...pinnedAt, eventState: 'updated', myRsvp: 'interested', audienceScope: 'group', targetGroupName: 'Gardeners' });
         const row = screen.getByTestId('event-compact-row');
         // One button, the row; nothing else to press.
         expect(within(row.parentElement!).getAllByRole('button')).toEqual([row]);
         const text = screen.getByTestId('event-row-title').parentElement!;
-        expect(Array.from(text.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-row-title', 'event-when', 'event-row-place']);
-        for (const line of [screen.getByTestId('event-when'), screen.getByTestId('event-row-place')]) {
-            expect(has(line, COMPACT_LINE)).toBe(true);
-            expect(classes(line)).toContain('truncate');
-        }
-        expect(classes(screen.getByTestId('event-row-title'))).toContain('truncate');
-        // The mark at the end, two lines at most, above EVENT.
+        expect(Array.from(text.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-row-title', 'event-row-lines']);
+        const lines = screen.getByTestId('event-row-lines');
+        expect(has(lines, COMPACT_LINES)).toBe(true);
+        expect(classes(lines)).toContain('line-clamp-2');
+        // The date and the time are whole pieces; so are PINNED and the state. Only the place can be cut.
+        expect(Array.from(screen.getByTestId('event-when').children).map(c => [c.textContent, c.className])).toEqual([
+            ['SAT 28 SEP ·', COMPACT_PIECE], ['9:00–12:00', COMPACT_PIECE],
+        ]);
+        expect(has(screen.getByTestId('event-state-badge'), COMPACT_PIECE)).toBe(true);
+        expect(classes(screen.getByTestId('event-row-title'))).toContain('line-clamp-1');
+        // The words keep their widest whole piece: no `min-w-0` on the lead or the words (the end gives way instead).
+        expect(screen.getByTestId('event-row-title').parentElement!.className).toBe(COMPACT_TEXT_FIRM);
+        expect(screen.getByTestId('compact-picture').parentElement!.className).toBe(COMPACT_LEAD_FIRM);
+        // The mark at the end, above EVENT, one line: its word gives way, its ✓ stays whole.
         const mark = screen.getByTestId('event-mark');
         expect(mark.textContent).toBe('Interested ✓');
-        expect(classes(mark)).toContain('line-clamp-2');
+        expect(has(mark, COMPACT_MARK)).toBe(true);
+        expect(Array.from(mark.children).map(c => [c.textContent, c.className])).toEqual([
+            ['Interested', COMPACT_MARK_GIVES], [' ✓', 'shrink-0 whitespace-pre'],
+        ]);
         expect(mark.nextElementSibling).toBe(screen.getByTestId('event-type-chip'));
     });
 
-    it('line two is the when in the event ink; line three is 📌 PINNED, the state and the place, each in its own ink', () => {
+    it('the when in the event ink, then 📌 PINNED, the state and the place, each in its own ink', () => {
         renderRow({ ...event, ...pinnedAt, eventState: 'updated' });
         const when = screen.getByTestId('event-when');
         expect(when.textContent).toBe('SAT 28 SEP · 9:00–12:00');
         expect(has(when, `font-bold ${CARD_INK.event}`)).toBe(true);
-        const place = screen.getByTestId('event-row-place');
-        expect(place.textContent).toBe('📌 PINNED · UPDATED · 📍 Bindarrabi Hall · 2.4 km');
-        expect(within(place).getByTestId('event-pinned-chip').className).toBe(COMPACT_WORD.pinned);
-        expect(within(place).getByTestId('event-state-badge').className).toBe(COMPACT_WORD.event);
+        const lines = screen.getByTestId('event-row-lines');
+        expect(lines.textContent).toBe('SAT 28 SEP · 9:00–12:00 · 📌 PINNED · UPDATED · 📍 Bindarrabi Hall · 2.4 km');
+        expect(has(lines, `font-medium ${CARD_INK.secondary}`)).toBe(true);
+        expect(within(lines).getByTestId('event-pinned-chip').className).toBe(`${COMPACT_PIECE} ${COMPACT_WORD.pinned}`);
+        expect(within(lines).getByTestId('event-state-badge').className).toBe(`${COMPACT_PIECE} ${COMPACT_WORD.event}`);
         // EVENT is the box's one chip, at the row's end.
         expect(screen.getByTestId('event-type-chip').className).toBe(chip('event'));
         expect(screen.getByTestId('event-type-chip').textContent).toBe('EVENT');
     });
 
-    it('CANCELLED and ENDED are the danger ink in line three; the label says the state', () => {
+    it('CANCELLED and ENDED are the danger ink after the when; the label says the state', () => {
         renderRow({ ...event, eventState: 'cancelled' });
         expect(screen.getByTestId('event-state-badge').textContent).toBe('CANCELLED');
-        expect(screen.getByTestId('event-state-badge').className).toBe(COMPACT_WORD.danger);
+        expect(screen.getByTestId('event-state-badge').className).toBe(`${COMPACT_PIECE} ${COMPACT_WORD.danger}`);
         cleanup();
         const past = new Date(2020, 0, 4, 9, 0).getTime();
         renderRow({ ...event, eventStartAt: new Date(past).toISOString(), eventEndAt: new Date(past + 3 * HOUR).toISOString() });
         expect(screen.getByTestId('event-state-badge').textContent).toBe('ENDED');
-        expect(screen.getByTestId('event-state-badge').className).toBe(COMPACT_WORD.danger);
+        expect(screen.getByTestId('event-state-badge').className).toBe(`${COMPACT_PIECE} ${COMPACT_WORD.danger}`);
         expect(screen.getByTestId('event-compact-row').getAttribute('aria-label')).toMatch(/, ENDED$/);
     });
 
@@ -107,6 +125,8 @@ describe('the event\'s compact row (C1)', () => {
         const placeClock = '2030-09-28T10:00';
         renderRow({ ...event, eventStartLocal: placeClock, eventEndLocal: '2030-09-28T13:00', eventTz: 'Pacific/Noumea' });
         expect(screen.getByTestId('event-when').textContent).toBe('SAT 28 SEP · 9:00–12:00 your time');
+        // "your time" is a whole piece of its own, as on the list card.
+        expect(Array.from(screen.getByTestId('event-when').children).map(c => c.textContent)).toEqual(['SAT 28 SEP ·', '9:00–12:00', 'your time']);
     });
 
     it('the mark: Going ✓, Interested ✓ or You\'re hosting this event; nothing else (no counts, no buttons)', () => {
@@ -132,8 +152,8 @@ describe('the event\'s compact row (C1)', () => {
         expect(onOpen).toHaveBeenCalledTimes(1);
     });
 
-    it('an online event reads Online in line three', () => {
+    it('an online event reads Online after its when', () => {
         renderRow({ ...event, eventOnline: true, eventPlaceName: undefined }, { distanceKm: null });
-        expect(screen.getByTestId('event-row-place').textContent).toBe('🌐 Online');
+        expect(screen.getByTestId('event-row-lines').textContent).toMatch(/ · 🌐 Online$/);
     });
 });

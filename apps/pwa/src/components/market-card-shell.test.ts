@@ -11,8 +11,9 @@ import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, type CardType } from '@beanpool/core';
 import {
-    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, COMPACT_END, COMPACT_LEAD, COMPACT_LINE, COMPACT_MARK, COMPACT_PICTURE, COMPACT_POLL_TILE,
-    COMPACT_ROW, COMPACT_TEXT, COMPACT_TITLE, COMPACT_WORD, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
+    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, COMPACT_END, COMPACT_END_STACK, COMPACT_LEAD, COMPACT_LEAD_FIRM, COMPACT_LINE, COMPACT_LINES,
+    COMPACT_MARK, COMPACT_MARK_GIVES, COMPACT_PICTURE, COMPACT_PIECE, COMPACT_POLL_TILE, COMPACT_ROW, COMPACT_TEXT, COMPACT_TEXT_FIRM, COMPACT_TITLE,
+    COMPACT_TITLE_GIVES, COMPACT_WORD, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
     GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
     PAGE_TYPE, POLL_CARD, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
@@ -381,6 +382,16 @@ describe('the compact row and the poll card hold core\'s numbers (C1)', () => {
         expect(radius(COMPACT_PICTURE)).toBe(MARKET_CARD_SHELL.photo.compact.radius);
         expect(classes(COMPACT_PICTURE)).toEqual(expect.arrayContaining(['overflow-hidden', 'shrink-0']));
         expect(classes(COMPACT_END)).toContain(`max-w-[${MARKET_CARD_SHELL.compactEndMaxPercent}%]`);
+        expect(classes(COMPACT_END_STACK)).toContain(`max-w-[${MARKET_CARD_SHELL.compactEndMaxPercent}%]`);
+        // An event's row: the end gives way to the words, which keep their widest whole piece (no min-w-0), and a whole piece is
+        // one line that never breaks; the block of short lines stops at two.
+        expect(classes(COMPACT_LEAD_FIRM)).not.toContain('min-w-0');
+        expect(classes(COMPACT_TEXT_FIRM)).not.toContain('min-w-0');
+        expect(classes(COMPACT_PIECE)).toEqual(expect.arrayContaining(['inline-block', 'truncate', 'max-w-full']));
+        expect(classes(COMPACT_LINES)).toContain('line-clamp-2');
+        // `block` would beat line-clamp's display in the built CSS (measured: the block never stopped at two lines).
+        expect(classes(COMPACT_LINES)).not.toContain('block');
+        expect(typeOf(`${COMPACT_LINES} font-medium`)).toEqual(typeOf(`${COMPACT_LINE} font-medium`));
         // The words give way before the end does; the row is one line of things, side by side.
         expect(classes(COMPACT_LEAD)).toEqual(expect.arrayContaining(['min-w-0', 'flex-1']));
         expect(classes(COMPACT_TEXT)).toEqual(expect.arrayContaining(['min-w-0', 'flex-1']));
@@ -408,7 +419,8 @@ describe('the compact row and the poll card hold core\'s numbers (C1)', () => {
     });
 
     it('every colour on a row or the poll card is core\'s role or the card\'s: no raw violet, purple, blue or indigo', () => {
-        const all = [COMPACT_ROW, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_TEXT, COMPACT_TITLE, COMPACT_LINE, COMPACT_MARK, COMPACT_END,
+        const all = [COMPACT_ROW, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_TEXT, COMPACT_TITLE, COMPACT_LINE, COMPACT_LINES, COMPACT_PIECE, COMPACT_MARK,
+            COMPACT_END, COMPACT_END_STACK, COMPACT_LEAD_FIRM, COMPACT_TEXT_FIRM, COMPACT_TITLE_GIVES, COMPACT_MARK_GIVES,
             COMPACT_POLL_TILE, POLL_CARD, ...Object.values(COMPACT_WORD)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-/);
         expect(COMPACT_POLL_TILE).toContain('bg-bp-chip-poll-tint');

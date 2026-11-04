@@ -63,11 +63,16 @@ export function eventTileWhenFor(post: EventTimeFields): EventTileWhen | null {
  * viewer's own clock, "your time", as every card says it. '' without a readable start.
  */
 export function eventRowWhen(post: EventTimeFields): string {
-    const input = eventWhenInput(post);
-    if (!input) return '';
-    const own = tileWhen(input)?.yours ? whenParts({ ...input, online: true }) : null;
-    const parts = own ?? whenParts(input);
+    const parts = eventRowWhenParts(post);
     return parts ? `${parts.first}${parts.sep}${parts.second}` : '';
+}
+
+/** The same when in its two halves (core's EventWhenParts), for a row that keeps each whole; null without a readable start. */
+export function eventRowWhenParts(post: EventTimeFields): EventWhenParts | null {
+    const input = eventWhenInput(post);
+    if (!input) return null;
+    const own = tileWhen(input)?.yours ? whenParts({ ...input, online: true }) : null;
+    return own ?? whenParts(input);
 }
 
 /** The node's clocks for an event and this browser's rendering of its instant: what core's when functions read. */

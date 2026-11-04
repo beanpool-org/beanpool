@@ -43,7 +43,7 @@ describe('a copy on a card', () => {
         expect(screen.queryByTestId('event-mark')).toBeNull();
         expect(screen.queryByTestId('event-rsvp-row')).toBeNull();
         // The card's label still says whose it is, with its door, as the list card's does.
-        expect(screen.getByRole('button', { name: /^Open event: / })).toHaveAccessibleName('Open event: Street party, from Mullumbimby · Ask to join');
+        expect(screen.getByRole('button', { name: /^Open event: / })).toHaveAccessibleName(/^Open event: Street party, .+, from Mullumbimby · Ask to join$/); // the when is spoken after the title (#2897 review)
         unmount();
 
         // No distance known: the community alone.

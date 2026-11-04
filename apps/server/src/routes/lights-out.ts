@@ -14,7 +14,9 @@
  *                                                               to the community's name (§2.3: format 2 only; the old,
  *                                                               unbound format 1 gets 426, as break-glass does), once (the
  *                                                               nonce).
- *   GET  /hall                          the hall Wi-Fi only     the poster (served by the plain listener, http-server.ts)
+ *   GET  /hall                          the hall Wi-Fi only     the poster (served by the plain listener, http-server.ts), with
+ *                                                               "Get the Android app" when the node holds an APK (H3,
+ *                                                               routes/android.ts showsApkLink)
  *
  * On a standby every switch answers 403: take over first. The answers carry the switch as it stands
  * (services/lights-out.ts LightsOutStatus), with `standDown` when OFF follows a hall nobody wrote in (§3.6 case 2).
@@ -23,7 +25,7 @@
 import Router from '@koa/router';
 import type Koa from 'koa';
 import QRCode from 'qrcode';
-import { brandCssVariableMap, timestampOfSignedText, word, WEB_INK_GROUNDS, type Lang } from '@beanpool/core';
+import { ANDROID_ON_NODE_WORDS, brandCssVariableMap, timestampOfSignedText, word, WEB_INK_GROUNDS, type Lang } from '@beanpool/core';
 import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
 import { FRESH_PROOF_WINDOW_MS } from '../admin-key-auth.js';
 import { isNodeOwner } from '../engine/node-roles.js';
@@ -33,6 +35,7 @@ import { lightsOutStatus, setLightsOut, type LightsOutStatus } from '../services
 import { readNodeIdentity } from '../services/takeover-envelope.js';
 import { wordsIn } from '../member-words.js';
 import { cardLanguage, escapeHtml, RTL } from './community-card.js';
+import { ANDROID_PAGE, showsApkLink } from './android.js';
 import type { RouteDeps } from './types.js';
 
 export const LIGHTS_OUT_ADMIN_PATH = '/api/local/admin/lights-out';
@@ -157,13 +160,6 @@ export function hallDoorLink(address: string | null, forName: string | null, key
     return `beanpool://hall?${q.toString()}`;
 }
 
-/**
- * The slot the APK on the node (H3) fills: "Get the Android app" linking to /android, on the hall Wi-Fi only. Empty until
- * that slice sets it (setHallAndroidLink); H1 builds no APK serving.
- */
-let hallAndroidLink: ((lang: Lang | null) => string) | null = null;
-export function setHallAndroidLink(render: ((lang: Lang | null) => string) | null): void { hallAndroidLink = render; }
-
 function shortKey(): string | null {
     try {
         const id = readNodeIdentity();
@@ -197,8 +193,9 @@ function hallPageColours(): string {
     return `:root{${vars('light')};color-scheme:light dark}\n@media (prefers-color-scheme:dark){:root{${vars('dark')}}}`;
 }
 
-/** The page's HTML. Light and dark from the system's own setting; readable at 320 px and 130% text. */
-export async function renderHallPage(status: LightsOutStatus, lang: Lang | null): Promise<string> {
+/** The page's HTML. Light and dark from the system's own setting; readable at 320 px and 130% text. `androidLink`: show
+ *  "Get the Android app" (the caller decides: routes/android.ts showsApkLink, the same rule as the trust page's link). */
+export async function renderHallPage(status: LightsOutStatus, lang: Lang | null, opts: { androidLink?: boolean } = {}): Promise<string> {
     const w = wordsIn(lang);
     const e = escapeHtml;
     const l = lang ?? 'en';
@@ -221,6 +218,7 @@ ol { padding-inline-start: 1.4rem; margin: 0 0 1rem; }
 li { margin-bottom: 0.5rem; }
 .qr { display: block; width: min(100%, 260px); height: auto; margin: 0 auto 1rem; background: #fff; padding: 8px; border-radius: 8px; }
 a.door { display: block; text-align: center; background: var(--bp-commit-fill); color: var(--bp-commit-on); text-decoration: none; font-weight: 600; padding: 12px 16px; border-radius: 10px; margin: 0 0 1rem; }
+a.door.apk { background: var(--card); color: var(--ink); border: 1px solid var(--bp-chip-accent-border); }
 .small { color: var(--bp-ink-info); font-size: 0.9rem; }
 .card { background: var(--card); border: 1px solid var(--bp-chip-accent-border); border-radius: 12px; padding: 14px; margin-bottom: 1rem; }
 </style>
@@ -238,7 +236,10 @@ a.door { display: block; text-align: center; background: var(--bp-commit-fill); 
     const door = hallDoorLink(status.address, forName, key);
     const qr = door ? await QRCode.toDataURL(door, { width: 260, margin: 1 }) : null;
     const shown = status.address ? status.address.replace(/^http:\/\//, '') : null;
-    const android = hallAndroidLink ? hallAndroidLink(lang) : '';
+    // The APK on the node (H3): an Android phone that has no app yet gets it here, over the hall Wi-Fi.
+    const android = opts.androidLink
+        ? `<a class="door apk" data-hall="android" data-apk="link" href="${e(ANDROID_PAGE)}">${e(w.t(ANDROID_ON_NODE_WORDS.getApp))}</a>`
+        : '';
     return `${head(w.t(HALL_WORDS.title))}
 <h1>${e(w.t(HALL_WORDS.title))}</h1>
 <div class="notice" data-hall="record"><p style="margin:0">${e(w.t(HALL_WORDS.noInternet))}</p>
@@ -252,16 +253,18 @@ ${shown ? `<li>${e(w.t(HALL_WORDS.line4, { address: shown }))}</li>` : ''}
 </ol>
 ${qr ? `<img class="qr" src="${qr}" alt="${e(w.t(HALL_WORDS.line3))}" width="260" height="260">` : ''}
 ${door ? `<a class="door" data-hall="door" href="${e(door)}">${e(w.t(HALL_WORDS.openApp))}</a>` : ''}
-<!-- hall-android-slot: the APK on the node (H3) fills this, on the hall Wi-Fi only -->${android}
+${android}
 <p class="small" data-hall="readable">${e(w.t(HALL_WORDS.readable))}</p>
 ${key ? `<p class="small" data-hall="key">${e(w.t(HALL_WORDS.checkLaptop, { key }))}</p>` : ''}
 </main></body></html>`;
 }
 
-/** The plain listener's GET /hall (http-server.ts): the poster, to the hall Wi-Fi only (the caller checks), never cached. */
+/** The plain listener's GET /hall (http-server.ts): the poster, to the hall Wi-Fi only (the caller checks), never cached.
+ *  The Android link only where the trust page shows one too: straight off the LAN, an APK held, HIDE_APK_LINK not set. */
 export async function serveHallPage(ctx: Koa.Context): Promise<void> {
     ctx.set('Cache-Control', 'no-store');
     ctx.set('X-Robots-Tag', 'noindex');
+    ctx.vary('Accept-Language');
     ctx.type = 'html';
-    ctx.body = await renderHallPage(lightsOutStatus(), cardLanguage(ctx));
+    ctx.body = await renderHallPage(lightsOutStatus(), cardLanguage(ctx), { androidLink: showsApkLink(ctx) });
 }

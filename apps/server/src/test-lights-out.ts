@@ -17,7 +17,12 @@
  *      node: 421. The phone's Manage session and the password with a current code: on/off through Settings' route. "On"
  *      twice is "on";
  *   3. ON: the hall Wi-Fi is served (a page, a write, the socket); the Internet, a tunnel-shaped request and a proxy's are
- *      still redirected; loopback always; /hall shows the lines and the door link; health + info carry `lightsOut`;
+ *      still redirected; loopback always; /hall shows the lines and the door link, and "Get the Android app" (H3) only with
+ *      an APK held and HIDE_APK_LINK unset, in the reader's language, leading to the APK page; health + info carry
+ *      `lightsOut`;
+ *  3b. one direct-LAN rule (direct-lan.ts): /hall, the plain port's hall exemption and /android (H3) let in and refuse the
+ *      same requests, the rows where H1's own copy and H3's differed among them (the Docker gateway, a `.lan` name, four
+ *      proxy headers only H3 named); the rule is defined once in the server's code;
  *   4. §2.7: address changes refused while on (409), allowed again once off;
  *   5. the epoch: a server never restored is not raised; a restored copy is raised once (max(own, file) + 1, since now) and
  *      never again for that restore; one that took over after its restore is not; recordAsOf is the backup's made-at;
@@ -51,6 +56,10 @@ const OWN = 'beans.example.org';
 process.env.BEANPOOL_ADDRESSES = OWN;
 const PASSWORD = 'Lights-Out-Suite-Pw-5521!';
 process.env.ADMIN_PASSWORD ??= PASSWORD;
+// The APK on the node (H3, services/apk-mirror.ts): the image's folder, empty until section 3 puts one there.
+const apkImageDir = `${dataDir}-image-apk`;
+process.env.APK_IMAGE_DIR = apkImageDir;
+delete process.env.HIDE_APK_LINK;
 
 let passed = 0, failed = 0;
 function check(name: string, ok: boolean, detail = '') {
@@ -71,6 +80,12 @@ const { setNodeRole } = await import('./config/node-role.js');
 const { logger } = await import('./logger.js');
 const { runLightsOut } = await import('./lights-out-command.js');
 const { LOCAL_CONFIG_FIELDS } = await import('./engine/replication-manifest.js');
+const lan = await import('./direct-lan.js');
+const gate = await import('./plain-http-gate.js');
+const androidRoute = await import('./routes/android.js');
+const { APK_SIGNING_CERT_SHA256 } = await import('./services/apk-release.js');
+const { wordsIn } = await import('./member-words.js');
+const { escapeHtml } = await import('./routes/community-card.js');
 
 initAdminPassword();
 await tlsMod.initTls();
@@ -133,6 +148,23 @@ const HALL = '192.168.8.1:8080';     // the laptop's number, as the phone types 
 const PUBLIC = '203.0.113.9';
 const BRIDGE = '172.17.0.1';         // Docker's bridge gateway: a host-level tunnel or proxy
 const ADDRESS = `http://${HALL}`;
+// This machine's default gateway, as the container sees it (direct-lan.ts reads /proc/net/route on Linux): the bridge, the
+// same on every machine this suite runs on. Every earlier request from BRIDGE carries a proxy header as well.
+lan._setDefaultGatewaysForTests([BRIDGE]);
+
+/** An APK in the image's folder, as the build leaves it: what servedApk() reads is the manifest and the file's size. */
+function holdApk(): void {
+    fs.mkdirSync(apkImageDir, { recursive: true });
+    const bytes = Buffer.from('a stand-in for the APK: servedApk() reads apk.json and checks the size');
+    const fileName = 'BeanPool-1.2.97-319.apk';
+    fs.writeFileSync(path.join(apkImageDir, fileName), bytes);
+    fs.writeFileSync(path.join(apkImageDir, 'apk.json'), JSON.stringify({
+        version: '1.2.97', versionCode: 319, fileName, size: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+        certSha256: APK_SIGNING_CERT_SHA256, tag: 'android-v1.2.97',
+    }));
+}
+/** A body as the member's browser reads it (the suite's raw reader keeps bytes as latin1). */
+const utf8 = (a: Answer) => Buffer.from(a.body, 'latin1').toString('utf8');
 
 // Members with keys this suite can sign with.
 type Id = { pk: string; seed: Uint8Array; callsign: string };
@@ -315,12 +347,32 @@ console.log('\n3. The switch on: the hall Wi-Fi is served; the Internet and the 
     const door = /href="(beanpool:\/\/hall\?[^"]+)"/.exec(hall.body)?.[1]?.replace(/&amp;/g, '&');
     const q = door ? new URL(door).searchParams : null;
     check('the hall door link names the number and the community\'s name', !!q && q.get('at') === HALL && q.get('for') === OWN, String(door));
-    check('the slot for the Android app link is there (H3 fills it)', hall.body.includes('hall-android-slot'));
+    check('no APK on the node: no "Get the Android app" link on the poster', !hall.body.includes('data-hall="android"') && !hall.body.includes('href="/android"'));
     check('/hall is never cached', /no-store/.test(hall.headers['cache-control'] ?? ''));
     const hallPub = await send(PUBLIC, 'GET', '/hall', HALL);
     check('/hall from the Internet → never the page', !hallPub.body.includes('data-hall'), String(hallPub.status));
     const hallTunnel = await send('127.0.0.1', 'GET', '/hall', OWN, { 'CF-Connecting-IP': PUBLIC });
     check('/hall through the tunnel → never the page', !hallTunnel.body.includes('data-hall'), String(hallTunnel.status));
+
+    // The APK on the node (H3): the poster links to /android where the trust page would (routes/android.ts showsApkLink),
+    // in the reader's language.
+    holdApk();
+    check('an APK is held now', androidRoute.showsApkLink({ req: { socket: { remoteAddress: LAN }, headers: { host: HALL } } }));
+    const frHall = await send(LAN, 'GET', '/hall', HALL, { 'Accept-Language': 'fr' });
+    const getAppFr = wordsIn('fr').t(core.ANDROID_ON_NODE_WORDS.getApp);
+    check('with an APK: the poster links to /android, in French for a French reader', frHall.status === 200 && frHall.body.includes('data-hall="android"')
+        && frHall.body.includes('href="/android"') && getAppFr !== 'Get the Android app' && utf8(frHall).includes(`>${escapeHtml(getAppFr)}</a>`)
+        && frHall.body.includes('lang="fr"'), `${frHall.status} ${getAppFr}`);
+    const enHall = await send(LAN, 'GET', '/hall', HALL);
+    check('… and in English with no language asked', enHall.body.includes('data-hall="android"') && enHall.body.includes('>Get the Android app</a>'));
+    check('… below the door link, never in its place', enHall.body.indexOf('data-hall="door"') >= 0 && enHall.body.indexOf('data-hall="door"') < enHall.body.indexOf('data-hall="android"'));
+    process.env.HIDE_APK_LINK = 'true';
+    const hidden = await send(LAN, 'GET', '/hall', HALL);
+    delete process.env.HIDE_APK_LINK;
+    check('HIDE_APK_LINK=true: no link on the poster (the page itself stays)', hidden.status === 200 && hidden.body.includes('data-hall="lines"') && !hidden.body.includes('data-hall="android"'));
+    const followed = await send(LAN, 'GET', '/android', HALL);
+    check('the link leads to the APK page from the hall Wi-Fi (through the gate, the switch on)', followed.status === 200
+        && followed.body.includes('data-testid="android-on-node"') && followed.body.includes('data-apk="download"'), String(followed.status));
 
     const health = await send(LAN, 'GET', '/api/community/health', HALL);
     const hl = health.json?.lightsOut;
@@ -328,6 +380,68 @@ console.log('\n3. The switch on: the hall Wi-Fi is served; the Internet and the 
         && hl.address === ADDRESS && hl.recordAsOf === null && hl.home === `https://${OWN}` && Object.keys(hl).sort().join() === 'address,home,on,recordAsOf,since', JSON.stringify(hl));
     const info = await send(LAN, 'GET', '/api/community/info', HALL);
     check('info: the same lightsOut', info.status === 200 && JSON.stringify(info.json?.lightsOut) === JSON.stringify(hl), JSON.stringify(info.json?.lightsOut));
+}
+
+// ── 3b. One direct-LAN rule ─────────────────────────────────────────────────────────────────────────────────────
+// The hall (GET /hall and the plain port's exemption, H1) and the APK (/android, H3) let in exactly the same requests:
+// direct-lan.ts is the one rule. Each row goes end to end through the real listener (the poster, a page of the app through
+// the exemption, the web app's /android/link), and to routes/android.ts's own decision and the gate's own (hallMayReach)
+// directly, since on the plain port the gate answers a refused request before the APK route sees it.
+console.log('\n3b. One direct-LAN rule: /hall, the hall exemption and /android answer the same requests');
+{
+    check('the switch is still on (the exemption covers every path)', lo.lightsOutOn());
+    type Row = [name: string, from: string, host: string, headers: Record<string, string>, room: boolean];
+    const rows: Row[] = [
+        ['a phone on the hall Wi-Fi, at the number', LAN, HALL, {}, true],
+        ['the same phone as an IPv4-mapped IPv6 source', `::ffff:${LAN}`, HALL, {}, true],
+        ['an IPv6 unique-local phone naming a .local name', 'fd00::12', 'beanpool.local:8080', {}, true],
+        // Where H1's own copy and H3's differed: H1 let these in, H3 did not. Both refuse them now (the stricter).
+        ['Docker\'s default gateway, no header, naming the number (its port proxy hands the internet on from there)', BRIDGE, HALL, {}, false],
+        ['the same gateway, IPv4-mapped', `::ffff:${BRIDGE}`, HALL, {}, false],
+        ['a router\'s .lan name', LAN, 'laptop.lan:8080', {}, false],
+        ['X-Client-IP', LAN, HALL, { 'X-Client-IP': PUBLIC }, false],
+        ['X-Forwarded-Server', LAN, HALL, { 'X-Forwarded-Server': 'proxy.example.net' }, false],
+        ['X-Original-Forwarded-For', LAN, HALL, { 'X-Original-Forwarded-For': PUBLIC }, false],
+        ['CF-Connecting-IPv6', LAN, HALL, { 'CF-Connecting-IPv6': '2001:db8::7' }, false],
+        // Refused by both before, and still.
+        ['an empty X-Forwarded-For', LAN, HALL, { 'X-Forwarded-For': '' }, false],
+        ['a tunnel from a compose sidecar: Cloudflare\'s headers, the public name', '172.18.0.7', OWN, { 'CF-Connecting-IP': PUBLIC, 'Cf-Ray': '8f00-SYD' }, false],
+        ['a private source naming the public name', LAN, OWN, {}, false],
+        ['a private source naming a public IP', LAN, '203.0.113.50', {}, false],
+        ['a public source naming the number', PUBLIC, HALL, {}, false],
+    ];
+    for (const [name, from, host, headers, room] of rows) {
+        const hallA = await send(from, 'GET', '/hall', host, headers);
+        const gateA = await send(from, 'GET', '/api/version', host, headers);
+        const apkA = await send(from, 'GET', '/android/link', host, headers);
+        const nodeHeaders: Record<string, string> = Object.fromEntries([['host', host], ...Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v])]);
+        const got = {
+            hall: hallA.status === 200 && hallA.body.includes('data-hall='),
+            exemption: gateA.status === 200,
+            apk: apkA.status === 200 && apkA.json?.href === '/android',
+            apkRoute: androidRoute.showsApkLink({ req: { socket: { remoteAddress: from }, headers: nodeHeaders } }),
+            gate: gate.hallMayReach({ remoteAddress: from, host, headers: nodeHeaders, path: '/api/version' }),
+        };
+        check(`${name}: ${room ? 'the room' : 'not the room'} for /hall, the exemption and /android alike`,
+            Object.values(got).every((v) => v === room), `${JSON.stringify(got)} (${hallA.status}/${gateA.status}/${apkA.status})`);
+    }
+    // No second copy can come back unseen: the rule is defined once in the server's code (two were, after #2824).
+    const SRC = path.dirname(fileURLToPath(import.meta.url));
+    const defining: string[] = [];
+    const walk = (dir: string) => {
+        for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
+            const f = path.join(dir, d.name);
+            if (d.isDirectory()) { if (d.name !== 'node_modules') walk(f); continue; }
+            if (!/\.ts$/.test(d.name) || /^test-|\.test\.ts$/.test(d.name)) continue;
+            if (/\bfunction\s+(isDirectLanRequest|isDirectLanContext)\b|\b(isDirectLanRequest|isDirectLanContext)\s*=/.test(fs.readFileSync(f, 'utf8'))) defining.push(path.relative(SRC, f));
+        }
+    };
+    walk(SRC);
+    check('the direct-LAN rule is defined in one file: direct-lan.ts', defining.length === 1 && defining[0] === 'direct-lan.ts', defining.join(', '));
+    // The switch takes only a hall address the rule lets phones in at: the number or a .local name, never a .lan one.
+    check('the switch takes the number and a .local name as the hall address', lo.hallAddressOf('192.168.8.1:8080') === 'http://192.168.8.1:8080'
+        && lo.hallAddressOf('http://laptop.local:8080') === 'http://laptop.local:8080');
+    check('… but not a router\'s .lan name (the rule refuses that Host)', lo.hallAddressOf('http://laptop.lan:8080') === null);
 }
 
 // ── 4. §2.7 ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -627,5 +741,6 @@ console.log('\n8. A second node restores the file made while the switch was on: 
 }
 
 _setPlainConnectionHookForTests(null);
+fs.rmSync(apkImageDir, { recursive: true, force: true });
 console.log(`\n${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);

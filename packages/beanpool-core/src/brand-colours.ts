@@ -160,6 +160,16 @@ export const BRAND_COLOURS = {
         warn: { tint: themed(AMBER_100, AMBER_950), ink: themed(AMBER_800, AMBER_300) },
         danger: { tint: themed(RED_100, RED_950), ink: themed(RED_700, RED_300) },
         accent: { tint: themed(NATURE_100, NATURE_900), ink: themed(SAGE_650, NATURE_300), border: themed(NATURE_200, NATURE_800) },
+        /**
+         * The three chips the Market's cards drew with raw hex until the one style box (DESIGN-card-style-box-fable.md §1.2,
+         * Marty 4 Nov 2026: "make them look like they came out of the same style box"). `poll`: the POLL chip, the `card.plum`
+         * pair, so a poll and an event (`tile.event`, violet) are two hues. `quiet`: the grey chip that carries no news (RECURRING,
+         * a category, a group's lock, "Closes in {n}d", Closed); amber keeps meaning money or caution. `info`: the blue 👤 YOU
+         * chip, the `tile.services` pair.
+         */
+        poll: { tint: themed('#fae8ff', '#4a044e'), ink: themed('#86198f', '#f0abfc') },
+        quiet: { tint: themed(NATURE_100, NATURE_800), ink: themed(NATURE_700, NATURE_300) },
+        info: { tint: themed('#dbeafe', '#172554'), ink: themed('#1e40af', '#93c5fd') },
     },
     /**
      * A trade's lines in a direct message: Beans held in trust, released to the provider, cancelled. Light is the web's

@@ -338,7 +338,7 @@ export const NOT_HALL_WRITES: readonly string[] = [
     'POST /api/local/admin/auth/pairing', 'POST /api/local/admin/auth/pairing/:id/wait',
     'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/approve',
     'POST /api/local/admin/auth/pairing/:id/decline',
-    'POST /api/local/admin/data', 'POST /api/local/admin/health', 'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/logs',
+    'POST /api/local/admin/data', 'POST /api/local/admin/data/members', 'POST /api/local/admin/data/posts', 'POST /api/local/admin/health', 'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/logs',
     'POST /api/local/admin/diagnostics', 'POST /api/local/admin/shutdown-status', 'POST /api/local/admin/ws-connections',
     'POST /api/local/admin/onboarding-funnel', 'POST /api/local/admin/inbox', 'POST /api/local/admin/alerts/status',
     'POST /api/local/admin/backup-status', 'POST /api/local/admin/standby-health',

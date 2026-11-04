@@ -287,7 +287,26 @@ export interface NodeDataPayload {
     circulation?: number;
     commonsBalance?: number;
     enterprises?: unknown[];
+    /** What the screens count (the node's `counts`, or made from a whole list by a node from before the pages). */
+    counts?: NodeDataCounts;
+    /** The cursor of the next members page, or null when every member is held. */
+    membersNext?: string | null;
+    /** How many members the pages hold in all, as the last page read said. */
+    membersTotal?: number;
+    /** The cursor of the next posts page, or null when every post is held. */
+    postsNext?: string | null;
     [key: string]: unknown;
+}
+
+/** The node's counts of what its lists held (POST /api/local/admin/data `counts`). */
+export interface NodeDataCounts {
+    /** Members not pruned, the community's own accounts (treasuries) among them. */
+    members: number;
+    treasuries: number;
+    /** Those who came in through the open door. */
+    doorMembers: number;
+    owners: number;
+    platforms: { ios: number; android: number; web: number; unknown: number };
 }
 
 export function normalizeNodeUrl(rawUrl: string): string {
@@ -1075,28 +1094,145 @@ export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string
 /**
  * The data read fails rather than hang, so Home says it couldn't load, with a Retry, instead of "Loading…" for as long as
  * the browser keeps the socket open (review r4309394025). The node answers within 30 s or it hasn't answered; the rest
- * has 5 minutes, long on purpose: it is every member (~4 MB on a big node), over what can be a slow phone link.
+ * has 5 minutes, long on purpose: a node from before the pages sends every member (~4 MB on a big node), over what can
+ * be a slow phone link.
  */
 export const NODE_DATA_ANSWER_MS = 30_000;
 export const NODE_DATA_ALL_MS = 5 * 60_000;
 
-export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
+/** How many members and posts a page asks for: the first page of each comes with the data, the rest on Load more. */
+export const MEMBERS_PAGE_SIZE = 200;
+export const POSTS_PAGE_SIZE = 100;
+
+async function postNodeRead(nodeUrl: string, apiPath: string, body: Record<string, unknown>, adminPassword?: string, tfaToken?: string): Promise<unknown> {
     const limits = nodeReadLimits(NODE_DATA_ANSWER_MS, NODE_DATA_ALL_MS, {
         answer: "The node didn't answer within 30 seconds",
         all: "The node's data didn't all arrive within 5 minutes",
     });
-    const res = await limits.answer(fetch(endpoint, {
+    const res = await limits.answer(fetch(resolveNodeApiUrl(nodeUrl, apiPath), {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...passwordField(adminPassword) }),
+        body: JSON.stringify({ ...passwordField(adminPassword), ...body }),
         signal: limits.signal,
     }));
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
-    const json = await limits.body(res.json());
-    return normalizeNodeData(json);
+    return limits.body(res.json());
+}
+
+/** One page of the admins' members (POST /api/local/admin/data/members): oldest joined first; `nextCursor` null on the last. */
+export interface MembersPage {
+    members: MemberItem[];
+    profiles: Record<string, unknown>[];
+    memberStats: Record<string, unknown>;
+    nextCursor: string | null;
+    total: number | null;
+}
+
+export async function fetchMembersPage(nodeUrl: string, adminPassword?: string, tfaToken?: string,
+    opts: { cursor?: string | null; q?: string; limit?: number } = {}): Promise<MembersPage> {
+    const json = await postNodeRead(nodeUrl, '/api/local/admin/data/members',
+        { limit: opts.limit ?? MEMBERS_PAGE_SIZE, cursor: opts.cursor ?? null, ...(opts.q ? { q: opts.q } : {}) }, adminPassword, tfaToken) as Record<string, unknown> | null;
+    const rows = normalizeNodeData({ members: json?.members ?? [], profiles: json?.profiles ?? [] });
+    return {
+        members: rows.members ?? [],
+        profiles: rows.profiles ?? [],
+        memberStats: json?.memberStats && typeof json.memberStats === 'object' ? json.memberStats as Record<string, unknown> : {},
+        nextCursor: typeof json?.nextCursor === 'string' ? json.nextCursor : null,
+        total: typeof json?.total === 'number' ? json.total : null,
+    };
+}
+
+/** One page of the admins' posts (POST /api/local/admin/data/posts): newest changed first; `nextCursor` null on the last. */
+export interface PostsPage {
+    posts: unknown[];
+    nextCursor: string | null;
+}
+
+export async function fetchPostsPage(nodeUrl: string, adminPassword?: string, tfaToken?: string,
+    opts: { cursor?: string | null; limit?: number } = {}): Promise<PostsPage> {
+    const json = await postNodeRead(nodeUrl, '/api/local/admin/data/posts',
+        { limit: opts.limit ?? POSTS_PAGE_SIZE, cursor: opts.cursor ?? null }, adminPassword, tfaToken) as Record<string, unknown> | null;
+    return {
+        posts: Array.isArray(json?.posts) ? json.posts : [],
+        nextCursor: typeof json?.nextCursor === 'string' ? json.nextCursor : null,
+    };
+}
+
+/** Every post the node holds, a page at a time from the first: for the one action that needs them all (Prune Stale Posts). */
+export async function fetchAllPosts(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<unknown[]> {
+    const all: unknown[] = [];
+    let cursor: string | null = null;
+    for (let pages = 0; pages < 10_000; pages++) {
+        const page = await fetchPostsPage(nodeUrl, adminPassword, tfaToken, { cursor });
+        all.push(...page.posts);
+        cursor = page.nextCursor;
+        if (!cursor) break;
+    }
+    return all;
+}
+
+/** A members page added below the ones held: a member already held (a page read twice) is kept once. */
+export function withMembersPage(data: NodeDataPayload, page: MembersPage): NodeDataPayload {
+    const held = new Set((data.members ?? []).map((m) => m.publicKey));
+    const heldProfiles = new Set((data.profiles ?? []).map((p) => p.publicKey));
+    return {
+        ...data,
+        members: [...(data.members ?? []), ...page.members.filter((m) => !held.has(m.publicKey))],
+        profiles: [...(data.profiles ?? []), ...page.profiles.filter((p) => !heldProfiles.has(p.publicKey))],
+        memberStats: { ...(data.memberStats ?? {}), ...page.memberStats },
+        membersNext: page.nextCursor,
+        membersTotal: page.total ?? data.membersTotal,
+    };
+}
+
+/** A posts page added below the ones held, each post once. */
+export function withPostsPage(data: NodeDataPayload, page: PostsPage): NodeDataPayload {
+    const held = new Set((data.posts ?? []).map((p) => (p as { id?: unknown })?.id));
+    return {
+        ...data,
+        posts: [...(data.posts ?? []), ...page.posts.filter((p) => !held.has((p as { id?: unknown })?.id))],
+        postsNext: page.nextCursor,
+    };
+}
+
+/** What a node from before the pages never sent: the counts, from its whole list. */
+export function countsFromMembers(members: MemberItem[] | undefined): NodeDataCounts | undefined {
+    if (!Array.isArray(members)) return undefined;
+    const platforms = { ios: 0, android: 0, web: 0, unknown: 0 };
+    for (const m of members) {
+        const p = String(m.platform || '').toLowerCase();
+        if (p === 'ios' || p === 'android') platforms[p]++;
+        else if (p === 'web' || p === 'pwa') platforms.web++;
+        else platforms.unknown++;
+    }
+    return {
+        members: members.length,
+        treasuries: members.filter((m) => m.isTreasury).length,
+        doorMembers: members.filter((m) => String((m as { invitedBy?: unknown }).invitedBy ?? '').startsWith('open:')).length,
+        owners: members.filter((m) => m.nodeRole === 'owner').length,
+        platforms,
+    };
+}
+
+/**
+ * The node's data: its summary (`lists: 'none'`), with the first page of members and of posts, so every screen has the
+ * shape it always read, `counts` for what it counted, and `membersNext` / `postsNext` for Load more. A node from before
+ * the pages ignores `lists` and sends the lists whole: kept as they came, with counts made from them and nothing more to
+ * load.
+ */
+export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
+    const json = await postNodeRead(nodeUrl, '/api/local/admin/data', { lists: 'none' }, adminPassword, tfaToken);
+    const data = normalizeNodeData(json);
+    if (Array.isArray(data.members) || !data.counts) {
+        return { ...data, counts: data.counts ?? countsFromMembers(data.members), membersNext: null, postsNext: null };
+    }
+    const [members, posts] = await Promise.all([
+        fetchMembersPage(nodeUrl, adminPassword, tfaToken),
+        fetchPostsPage(nodeUrl, adminPassword, tfaToken),
+    ]);
+    return withPostsPage(withMembersPage({ ...data, members: [], profiles: [], memberStats: {}, posts: [] }, members), posts);
 }
 
 export interface LogEntry {
@@ -1162,6 +1298,51 @@ export async function pruneNodeUser(
         throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
+}
+
+/**
+ * What pruning a branch would do, as the node works it out over the whole branch: the members it removes, the debts the
+ * Commons pays, the surpluses it takes back, and what the Commons gains or pays overall (net). Not the console's pages of
+ * members, which hold only those read so far (capacity fix 3).
+ */
+export interface BranchPruneFigures {
+    members: number;
+    badDebt: number;
+    surplus: number;
+    net: number;
+}
+
+/**
+ * The node won't prune this branch, so it sends no figures for it: a 400 with its words and a code (`removal_is_the_vote`
+ * where the community votes and the branch is one member: only its vote removes them). Not a read that failed: asking
+ * again gets the same answer.
+ */
+export class BranchPruneRefusedError extends Error {
+    constructor(message: string, readonly code: string) {
+        super(message);
+        this.name = 'BranchPruneRefusedError';
+    }
+}
+
+/** The branch's figures for the prune's confirmation (GET /api/local/admin/branches/:pubkey/prune): owners only, as the prune. */
+export async function fetchBranchPruneFigures(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<BranchPruneFigures> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/branches/${encodeURIComponent(pubkey.trim())}/prune`);
+    const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken) });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 400 && typeof data?.code === 'string' && typeof data?.error === 'string' && data.error.trim()) {
+        throw new BranchPruneRefusedError(data.error, data.code);
+    }
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
+    const figures = { members: data?.members, badDebt: data?.badDebt, surplus: data?.surplus, net: data?.net };
+    if (!Object.values(figures).every((n) => typeof n === 'number' && Number.isFinite(n))) {
+        throw new Error("The node's answer has no figures for this branch");
+    }
+    return figures as BranchPruneFigures;
 }
 
 /** Remove a member and everyone they invited. A branch with an owner in it asks the fresh proof, as pruneNodeUser. */

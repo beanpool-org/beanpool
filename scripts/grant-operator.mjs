@@ -67,24 +67,42 @@ if (positionalArgs.length < minPositional) {
 // A public key (64 hex) is used as given and needs no lookup.
 const isKey = (v) => /^[0-9a-f]{64}$/i.test(v);
 
-async function adminRead(what, method, route) {
+async function adminRead(what, method, route, body = {}, { nullOn404 = false } = {}) {
     let res;
     try {
         res = await fetchNoRedirect(`${NODE_URL}${route}`, {
             method,
             headers: method === 'POST' ? { 'content-type': 'application/json', ...authHeader } : authHeader,
-            ...(method === 'POST' ? { body: '{}' } : {}),
+            ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
         });
     } catch (err) {
         console.error(err?.redirect ? `✗ ${err.message} Nothing was changed.` : `✗ Could not reach ${NODE_URL} to read the ${what}: ${err?.cause?.code || err?.message || err}. Nothing was changed.`);
         process.exit(1);
     }
-    const body = await res.json().catch(() => null);
-    if (!res.ok || !body) {
-        console.error(`✗ Reading the ${what} failed (HTTP ${res.status}): ${body?.error || res.statusText}. Nothing was changed.`);
+    if (nullOn404 && res.status === 404) return null;
+    const answer = await res.json().catch(() => null);
+    if (!res.ok || !answer) {
+        console.error(`✗ Reading the ${what} failed (HTTP ${res.status}): ${answer?.error || res.statusText}. Nothing was changed.`);
         process.exit(1);
     }
-    return body;
+    return answer;
+}
+
+/**
+ * The members whose callsign holds `name`: the node's member pages, searched (POST /api/local/admin/data/members `q`),
+ * every page of the search. A node from before the pages has no such route: its whole member list is read instead.
+ */
+async function membersCalled(name) {
+    const found = [];
+    let cursor = null;
+    for (let pages = 0; pages < 10_000; pages++) {
+        const page = await adminRead('member list', 'POST', '/api/local/admin/data/members', { q: name, limit: 200, cursor }, { nullOn404: pages === 0 });
+        if (!page) return (await adminRead('member list', 'POST', '/api/local/admin/data')).members || [];
+        found.push(...(page.members || []));
+        cursor = page.nextCursor;
+        if (!cursor) break;
+    }
+    return found;
 }
 
 const nameArgs = treasuryArg ? [treasuryArg] : positionalArgs.slice(0, 2);
@@ -134,7 +152,7 @@ if (!isKey(treasuryTarget)) {
 let pubkey = memberTarget;
 let memberCallsign = memberTarget;
 if (!isKey(memberTarget)) {
-    const members = (await adminRead('member list', 'POST', '/api/local/admin/data')).members || [];
+    const members = await membersCalled(memberTarget);
     const v = memberTarget.toLowerCase();
     const matchedMember = onlyMatch('member', memberTarget, members.filter((m) => m.callsign?.toLowerCase() === v));
     pubkey = matchedMember.publicKey;

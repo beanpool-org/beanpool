@@ -1,21 +1,26 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { MemberItem } from './MembersModule';
+import { BranchPruneRefusedError, type BranchPruneFigures } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
 export interface PruneBranchModalProps {
     rootMember: MemberItem | null | undefined;
-    members?: MemberItem[] | null;
-    accounts?: Array<{ publicKey?: string; pubkey?: string; balance?: number | string }> | Record<string, { balance?: number | string }> | null;
+    /**
+     * The branch's figures from the node (lib/node-client fetchBranchPruneFigures): the whole branch the node prunes. Not the
+     * console's members, which hold only the pages read so far (capacity fix 3), so the prune is never confirmed on a part.
+     */
+    loadFigures: (pubkey: string) => Promise<BranchPruneFigures>;
     /** Rejects with FreshProofRequiredError when the branch holds an owner and the node asks an owner's fresh proof. */
     onConfirm: (pubkey: string, code?: string) => Promise<void>;
     onClose: () => void;
 }
 
+const beans = (n: number) => Math.round(n * 100) / 100;
+
 export function PruneBranchModal({
     rootMember,
-    members,
-    accounts,
+    loadFigures,
     onConfirm,
     onClose,
 }: PruneBranchModalProps) {
@@ -33,103 +38,42 @@ export function PruneBranchModal({
             ? rootMember.name.trim()
             : (rootPubkey ? rootPubkey.slice(0, 8) : 'Unknown Root');
 
-    const accountsMap = useMemo(() => {
-        const map = new Map<string, number>();
-        if (Array.isArray(accounts)) {
-            for (const acc of accounts) {
-                if (!acc) continue;
-                const pk = typeof acc.publicKey === 'string' ? acc.publicKey : (typeof acc.pubkey === 'string' ? acc.pubkey : '');
-                if (pk && acc.balance !== undefined) {
-                    const num = Number(acc.balance);
-                    if (!isNaN(num)) map.set(pk, num);
-                }
-            }
-        } else if (accounts && typeof accounts === 'object') {
-            for (const [pk, val] of Object.entries(accounts)) {
-                if (val && typeof val === 'object' && 'balance' in val) {
-                    const num = Number((val as any).balance);
-                    if (!isNaN(num)) map.set(pk, num);
-                } else if (typeof val === 'number') {
-                    map.set(pk, val);
-                }
-            }
-        }
-        return map;
-    }, [accounts]);
-
-    // Compute the subtree of members invited by this branch root
-    const { branchMembers, totalBalance, totalDebtWriteOff, totalCreditConfiscated } = useMemo(() => {
-        if (!rootMember && !rootPubkey) {
-            return { branchMembers: [], totalBalance: 0, totalDebtWriteOff: 0, totalCreditConfiscated: 0 };
-        }
-
-        const safeMembers = Array.isArray(members) ? members : [];
-        const tree = new Map<string, MemberItem[]>();
-
-        safeMembers.forEach((m) => {
-            if (!m || typeof m !== 'object') return;
-            const inv = typeof m.invitedBy === 'string'
-                ? m.invitedBy
-                : (typeof (m as any).invited_by === 'string' ? (m as any).invited_by : 'genesis');
-            const list = tree.get(inv) || [];
-            list.push(m);
-            tree.set(inv, list);
-        });
-
-        const collected: MemberItem[] = [];
-        const visited = new Set<string>();
-
-        if (rootPubkey) {
-            visited.add(rootPubkey);
-        }
-        if (rootMember) {
-            collected.push(rootMember);
-        }
-
-        function walk(pk: string) {
-            const children = tree.get(pk) || [];
-            for (const child of children) {
-                const cPk = typeof child.publicKey === 'string'
-                    ? child.publicKey
-                    : (typeof child.pubkey === 'string' ? child.pubkey : '');
-                if (cPk && !visited.has(cPk)) {
-                    visited.add(cPk);
-                    collected.push(child);
-                    walk(cPk);
-                } else if (!cPk) {
-                    collected.push(child);
-                }
-            }
-        }
-
-        if (rootPubkey) {
-            walk(rootPubkey);
-        }
-
-        let totalDebtWriteOff = 0;
-        let totalCreditConfiscated = 0;
-        let sumBalance = 0;
-
-        collected.forEach((m) => {
-            if (!m || typeof m !== 'object') return;
-            const pk = typeof m.publicKey === 'string' ? m.publicKey : (typeof (m as any).pubkey === 'string' ? (m as any).pubkey : '');
-            let b = pk && accountsMap.has(pk) ? accountsMap.get(pk)! : (m.balance !== undefined ? Number(m.balance) : 0);
-            if (isNaN(b)) b = 0;
-            sumBalance += b;
-            if (b < 0) {
-                totalDebtWriteOff += Math.abs(b);
-            } else if (b > 0) {
-                totalCreditConfiscated += b;
-            }
-        });
-
-        return {
-            branchMembers: collected,
-            totalBalance: Math.round(sumBalance * 100) / 100,
-            totalDebtWriteOff: Math.round(totalDebtWriteOff * 100) / 100,
-            totalCreditConfiscated: Math.round(totalCreditConfiscated * 100) / 100,
-        };
-    }, [rootMember, rootPubkey, members, accountsMap]);
+    // The node's figures for the whole branch. Confirm stays off until they are in: an irreversible prune is never
+    // confirmed on figures the console made up from part of the branch, or on none.
+    const [figures, setFigures] = useState<BranchPruneFigures | null>(null);
+    const [figuresError, setFiguresError] = useState<string | null>(null);
+    // The node's own refusal of this prune (BranchPruneRefusedError), in its words: no figures, and no Try again.
+    const [figuresRefusal, setFiguresRefusal] = useState<string | null>(null);
+    const [attempt, setAttempt] = useState(0);
+    // Read once for the branch and again on Try again, not each time a parent hands a new loader.
+    const loadRef = useRef(loadFigures);
+    loadRef.current = loadFigures;
+    useEffect(() => {
+        if (!rootPubkey) return;
+        let live = true;
+        setFigures(null);
+        setFiguresError(null);
+        setFiguresRefusal(null);
+        // A loader that throws, or answers no figures, is a read that failed: Confirm stays off and the dialog says so.
+        // The node refusing this prune is not a failed read: its words are shown as they are, and Confirm stays off.
+        Promise.resolve().then(() => loadRef.current(rootPubkey)).then(
+            (f) => {
+                if (!live) return;
+                if (f && typeof f.members === 'number') setFigures(f);
+                else setFiguresError("The node's answer has no figures for this branch");
+            },
+            (e: unknown) => {
+                if (!live) return;
+                if (e instanceof BranchPruneRefusedError) setFiguresRefusal(e.message);
+                else setFiguresError(e instanceof Error ? e.message : String(e));
+            },
+        );
+        return () => { live = false; };
+    }, [rootPubkey, attempt]);
+    const retryFigures = useCallback(() => setAttempt((n) => n + 1), []);
+    const figuresLoading = !!rootPubkey && !figures && !figuresError && !figuresRefusal;
+    const shown = (n: number | undefined) => (figures && typeof n === 'number' ? String(beans(n)) : figuresLoading ? '…' : '—');
+    const net = figures ? beans(figures.net) : null;
 
     const isMatch = confirmText.trim() === rootName.trim() && rootName.trim().length > 0;
 
@@ -137,7 +81,7 @@ export function PruneBranchModal({
     const proof = useFreshProof();
 
     const handlePrune = async (code?: string) => {
-        if (!isMatch || isPruning || !rootPubkey) return;
+        if (!isMatch || isPruning || !rootPubkey || !figures) return;
         setIsPruning(true);
         setErrorMessage(null);
         try {
@@ -197,8 +141,12 @@ export function PruneBranchModal({
                     </p>
                 </div>
 
-                {/* Branch Impact Metrics */}
-                <div className="grid grid-cols-2 gap-3 bg-nature-950 p-4 rounded-xl border border-nature-800">
+                {/* Branch Impact Metrics: the node's, for the whole branch */}
+                <div
+                    className="grid grid-cols-2 gap-3 bg-nature-950 p-4 rounded-xl border border-nature-800"
+                    aria-busy={figuresLoading}
+                    data-testid="prune-branch-figures"
+                >
                     <div>
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block">
                             Branch Root
@@ -216,8 +164,8 @@ export function PruneBranchModal({
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-nature-400 block">
                             Members Affected
                         </span>
-                        <span className="text-lg font-black text-amber-400 font-mono block">
-                            {branchMembers.length}
+                        <span className="text-lg font-black text-amber-400 font-mono block" id="prune-members-affected">
+                            {shown(figures?.members)}
                         </span>
                     </div>
                     <div className="col-span-2 pt-2 border-t border-nature-800/60 space-y-1.5">
@@ -226,7 +174,7 @@ export function PruneBranchModal({
                                 Bad Debt to Settle:
                             </span>
                             <span className="font-bold text-red-400 font-mono" id="prune-debt-written-off">
-                                {totalDebtWriteOff} 🫘 bad debt
+                                {shown(figures?.badDebt)} 🫘 bad debt
                             </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
@@ -234,20 +182,44 @@ export function PruneBranchModal({
                                 Surplus Credit to Reclaim:
                             </span>
                             <span className="font-bold text-amber-400 font-mono" id="prune-credit-confiscated">
-                                {totalCreditConfiscated} 🫘 credit
+                                {shown(figures?.surplus)} 🫘 credit
                             </span>
                         </div>
                         <div className="flex items-center justify-between text-xs pt-1 border-t border-nature-800/40">
                             <span className="text-nature-400 font-medium">
                                 Net Commons Pool Impact:
                             </span>
-                            <span className={`text-sm font-black font-mono ${totalCreditConfiscated >= totalDebtWriteOff ? 'text-emerald-400' : 'text-red-400'}`} id="prune-net-impact">
-                                {Math.round((totalCreditConfiscated - totalDebtWriteOff) * 100) / 100 > 0 ? '+' : ''}
-                                {Math.round((totalCreditConfiscated - totalDebtWriteOff) * 100) / 100} 🫘
+                            <span className={`text-sm font-black font-mono ${net === null ? 'text-nature-400' : net >= 0 ? 'text-emerald-400' : 'text-red-400'}`} id="prune-net-impact">
+                                {net !== null && net > 0 ? '+' : ''}
+                                {shown(figures?.net)} 🫘
                             </span>
                         </div>
                     </div>
+                    {figuresLoading && (
+                        <p role="status" className="col-span-2 m-0 text-[11px] text-nature-400" data-testid="prune-figures-loading">
+                            Reading the whole branch from the node…
+                        </p>
+                    )}
                 </div>
+                {figuresRefusal && (
+                    <div role="alert" data-testid="prune-figures-refused" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-xs font-semibold text-red-300">
+                        <p className="m-0 break-words">{figuresRefusal}</p>
+                    </div>
+                )}
+                {figuresError && (
+                    <div role="alert" data-testid="prune-figures-error" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-xs font-semibold text-red-300 space-y-2">
+                        <p className="m-0 break-words">
+                            Couldn't read this branch from the node, so it can't be pruned until its figures are in: {figuresError}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={retryFigures}
+                            className="min-h-[44px] px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white transition-all"
+                        >
+                            Try again
+                        </button>
+                    </div>
+                )}
 
                 <FreshProofBox proof={proof} testId="prune-branch-proof" />
                 {errorMessage && (
@@ -288,7 +260,7 @@ export function PruneBranchModal({
                         type="button"
                         id="confirm-prune-branch-btn"
                         onClick={() => handlePrune()}
-                        disabled={!isMatch || isPruning || !rootPubkey}
+                        disabled={!isMatch || isPruning || !rootPubkey || !figures}
                         className="min-h-[44px] px-5 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover active:scale-[0.99] text-xs font-bold text-bp-danger-on border border-bp-danger-fill shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         {isPruning ? (

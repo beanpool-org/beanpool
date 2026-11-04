@@ -135,10 +135,13 @@ export function HomeScreen({
             ? nodeData.reports.filter((r: NodeReport) => (r.outcome ? r.outcome === 'open' : (r.status === 'pending' || !r.status))).length
             : null);
 
-    const membersCount = members ? members.filter((m: MemberItem) => m && !m.isTreasury).length : null;
+    // The node's counts: `members` holds only the pages read so far (capacity fix 3). A node from before the pages sent
+    // every member, and its counts are made from them (node-client countsFromMembers).
+    const counts = nodeData?.counts;
+    const membersCount = counts ? counts.members - counts.treasuries : (members ? members.filter((m: MemberItem) => m && !m.isTreasury).length : null);
     const enterprisesCount = Array.isArray(nodeData?.enterprises)
         ? nodeData.enterprises.length
-        : (members ? members.filter((m: MemberItem) => m && m.isTreasury).length : null);
+        : (counts ? counts.treasuries : (members ? members.filter((m: MemberItem) => m && m.isTreasury).length : null));
 
     const circulationVolume = (() => {
         if (typeof nodeData?.tradeVolume === 'number') {

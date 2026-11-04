@@ -39,7 +39,9 @@ createRoot(document.getElementById('root')!).render(
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
             {posts.map((post) => (
                 <div key={post.id} className="h-full">
-                    <EventCard post={post} identity={identity} viewMode="grid" distanceKm={2.4} />
+                    {/* rsvpOnCard: the Market's card no longer carries the row (the event's page and the map preview do), and
+                        this script measures the row's wrapping, so it asks for it. */}
+                    <EventCard post={post} identity={identity} viewMode="grid" distanceKm={2.4} rsvpOnCard />
                 </div>
             ))}
         </div>

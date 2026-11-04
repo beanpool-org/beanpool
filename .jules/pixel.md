@@ -225,3 +225,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-02-13 - Add busy and disabled state to join request button in treasury detail
 **Learning:** In community enterprise detail views, the join request button conditionally replaces its text with an ActivityIndicator during submission and disables interaction when busy or when backing pledge exceeds available standing, but lacked `accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}`, leaving screen readers without state feedback.
 **Action:** Supply `accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}` on join request action buttons rendering an ActivityIndicator when busy.
+
+## 2027-02-20 - Add accessibilityLabel and busy state to remove everything button in WaysBackList
+**Learning:** In account protection ways back, the "Remove everything" action button conditionally replaces its text with an ActivityIndicator during removal and disables interaction when busy, but lacked an explicit `accessibilityLabel={t(WAYS_BACK_LINES.removeEverything)}` and `accessibilityState={{ disabled: busy, busy }}`, leaving screen readers without an accessible name or state feedback during async operations.
+**Action:** Always provide explicit `accessibilityLabel` and `accessibilityState={{ disabled: busy, busy }}` on action buttons whose visible text is conditionally replaced by an ActivityIndicator when busy.

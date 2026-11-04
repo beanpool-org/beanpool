@@ -4917,7 +4917,7 @@ describe('What could you offer? (cold start O2): the dialog First steps opens, t
         expect(composer).toHaveBeenCalledTimes(1);
         expect(composer).toHaveBeenCalledWith({
             type: 'offer', title: 'An hour of help', description: 'An extra pair of hands for jobs around the house or yard. Tell me what and when.',
-            category: 'labour', credits: 25, priceType: 'hourly', repeatable: false, cashAlsoNeeded: false,
+            category: 'labour', credits: 25, priceType: 'hourly', repeatable: false, cashAlsoNeeded: false, shop: false,
         });
         expect(nav).not.toHaveBeenCalled();
     });

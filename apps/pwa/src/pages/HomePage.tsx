@@ -3175,7 +3175,9 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                         onPick={(row: StarterRow) => {
                             setStarterOpen(false);
                             const o = row.opening;
-                            const draft = composerDraft('offer', { title: o.title, description: o.description, category: o.category, credits: o.credits ?? undefined, priceType: o.priceType });
+                            // shop: false, as the phone's openStarterOffer: a newcomer's first Offer never opens a shop by itself (MapPage ticks
+                            // "Put this in your shop" for a draft that says nothing, and a member with no shop would get one on Post).
+                            const draft = composerDraft('offer', { title: o.title, description: o.description, category: o.category, credits: o.credits ?? undefined, priceType: o.priceType, shop: false });
                             if (onComposer) onComposer(draft); else onNavigate('map-post');
                         }}
                         onOther={() => { setStarterOpen(false); onNavigate('map-post'); }}

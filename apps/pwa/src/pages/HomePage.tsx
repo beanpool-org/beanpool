@@ -43,6 +43,7 @@ import {
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
     capitalFirst, communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, inviteAskNeedsLine, inviteAskNoticeHere, knockStillAnswerable, t, tn, word,
     communityShapeSummary, type CommunityShapeFeatures,
+    starterSheet, type PricingGuideItem, type StarterRow,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
@@ -99,6 +100,9 @@ import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { ArrangeControls, CardBody, CardMenu, HomeCard, HomeLine, HomeMore, PackedBlock, liftedStyle, packedHeight, useCardContainer, type ArrangeBand } from '../components/HomeCard';
 import { ArrangeStrip, type StripRow } from '../components/ArrangeStrip';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
+import { StarterOffersDialog } from '../components/StarterOffersDialog';
+import { composerDraft, type ComposerDraft } from '../tools/builder';
+import { readPricingGuide } from '../lib/starter-offers';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
@@ -310,6 +314,11 @@ interface Props {
      * 'marketplace' and 'map' only.
      */
     onNavigate: (tab: string, contextId?: string, txId?: string) => void;
+    /**
+     * The composer, opened with an Offer filled in (App's `openComposerFromTool`, the tools' door): a row of "What could you
+     * offer?". Nothing is posted until the member taps Post. Without it the dialog's rows open the blank composer.
+     */
+    onComposer?: (draft: ComposerDraft) => void;
     /** The safety card's "See my 12 words". */
     onSeeWords?: () => void;
     /**
@@ -992,7 +1001,7 @@ function CommunityBody({
     );
 }
 
-export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken, askedCommunity = null, onAskedCommunitySeen }: Props) {
+export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken, askedCommunity = null, onAskedCommunitySeen }: Props) {
     const publicKey = visitor ? null : identity?.publicKey ?? null;
     // The node's info, read once per page load and shared (the app's own read): its rule for members' copies, for the
     // "one way back" card's sign-in words. A visitor's Home asks nothing new.
@@ -1021,6 +1030,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // Arrange (DESIGN-home-arrange-in-place-fable.md §2.1): the cards stay as drawn and carry their arrows.
     const [arranging, setArranging] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
+    // "What could you offer?" (slice O2): First steps' Post your first Offer opens it; the community's price guide is read as it opens.
+    const [starterOpen, setStarterOpen] = useState(false);
+    const [starterGuide, setStarterGuide] = useState<PricingGuideItem[] | null>(null);
+    const starterBeans = answer?.features.beans !== false;
+    const starterStars = interests ?? answer?.me?.interests ?? null;
+    // Made as it opens (the stars and the guide as they are then, in the language then); shut, nothing is made.
+    const starter = useMemo(
+        () => (starterOpen ? starterSheet(starterStars, { beans: starterBeans, guide: starterGuide }) : null),
+        [starterOpen, starterStars, starterBeans, starterGuide],
+    );
+    useEffect(() => {
+        if (!starterOpen) return;
+        let live = true;
+        void readPricingGuide().then((g) => { if (live && g) setStarterGuide(g); });
+        return () => { live = false; };
+    }, [starterOpen]);
     const [shapeModalOpen, setShapeModalOpen] = useState(false);
     // A card's Settings… (from its "…", or Arrange's word on a card with nothing to show).
     const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
@@ -2635,7 +2660,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         document.querySelector('[data-testid="home-card-find"]')?.scrollIntoView({ behavior: 'smooth' });
                     },
                 };
-                const lines = stepLines(a, myInterests).map(l => ({ ...l, go: goes[l.key] }));
+                // The first Offer (and the global community's first post, free or for swap) starts from a dialog of drafts drawn from
+                // what the member starred; a step already done goes to the blank composer as it always did.
+                const firstPostOpens = (key: StepLine['key'], done: boolean) => (key === 'firstOffer' || key === 'firstPost') && !done;
+                const lines = stepLines(a, myInterests).map(l => ({ ...l, go: firstPostOpens(l.key, l.done) ? () => setStarterOpen(true) : goes[l.key] }));
                 const limits = probationSentence(a.me?.probation);
                 return (
                     <HomeCard key={id} {...common}>
@@ -3139,6 +3167,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
                         // Arrange's tile while it is open, else the community card's Add a card.
                         returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-add"], [data-testid="home-add-open"]')} />
+                )}
+                {starter && (
+                    <StarterOffersDialog
+                        sheet={starter}
+                        // A row: the composer with that Offer filled in (nothing is posted); "Something else": the blank one, as this step always opened.
+                        onPick={(row: StarterRow) => {
+                            setStarterOpen(false);
+                            const o = row.opening;
+                            // shop: false, as the phone's openStarterOffer: a newcomer's first Offer never opens a shop by itself (MapPage ticks
+                            // "Put this in your shop" for a draft that says nothing, and a member with no shop would get one on Post).
+                            const draft = composerDraft('offer', { title: o.title, description: o.description, category: o.category, credits: o.credits ?? undefined, priceType: o.priceType, shop: false });
+                            if (onComposer) onComposer(draft); else onNavigate('map-post');
+                        }}
+                        onOther={() => { setStarterOpen(false); onNavigate('map-post'); }}
+                        onClose={() => setStarterOpen(false)}
+                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-card-steps"] button:not([data-testid="home-card-menu"])')} />
                 )}
                 {addSearch && (
                     <CardSettingsDialog

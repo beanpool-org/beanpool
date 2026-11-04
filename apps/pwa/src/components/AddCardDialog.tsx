@@ -24,8 +24,10 @@ import { useDialogFocus } from './dialog-focus';
 const primary = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
 const plain = 'min-w-[44px] min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-800 dark:text-nature-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 
-function Shell({ id, testId, title, children, onClose, dialog }: {
+export function Shell({ id, testId, title, children, onClose, dialog, closeText }: {
     id: string; testId: string; title: string; children: ReactNode; onClose: () => void; dialog: React.RefObject<HTMLDivElement | null>;
+    /** The close button's words: "Done" where the dialog did something, "Cancel" where it only offers (the starter Offers dialog). */
+    closeText?: string;
 }) {
     return (
         // Above everything while it is open, the install banner (InstallPrompt, 1000) included: it is modal.
@@ -35,7 +37,7 @@ function Shell({ id, testId, title, children, onClose, dialog }: {
                 className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0">
                 <div className="flex items-start gap-2 mb-1">
                     <h2 id={id} tabIndex={-1} className="m-0 flex-1 min-w-0 break-words text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">{title}</h2>
-                    <button type="button" data-testid={`${testId}-done`} onClick={onClose} className={plain}>{t('Done')}</button>
+                    <button type="button" data-testid={`${testId}-done`} onClick={onClose} className={plain}>{closeText ?? t('Done')}</button>
                 </div>
                 {children}
             </div>

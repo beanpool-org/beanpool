@@ -4,6 +4,7 @@
  * and handles an old node that says nothing (produces no line).
  */
 import { formatCount, formatDate, t, tn, word } from './words.js';
+import { removalDeciderLine } from './jury-card.js';
 
 export interface CommunityShapeFeatures {
     beans?: boolean;
@@ -23,6 +24,8 @@ export interface CommunityShapeFeatures {
     debtLinePct?: number;
     quietDays?: number;
     showcase?: boolean;
+    /** Who decides a removal (server config/removal-decider.ts): to members, from a node that has the rule (slice J3). */
+    removalDecider?: 'automatic' | 'everyone' | 'jury';
 }
 
 /** A known community's two lines, as the owner set them. */
@@ -213,6 +216,11 @@ export function communityShapeLines(features: CommunityShapeFeatures | null | un
     } else if (features?.decisions === false || features?.openJoin || features?.door === 'open') {
         lines.push(t('**Decisions:** off — the moderators look after this community'));
     }
+
+    // 6b. Who decides a removal, under Decisions while they are on (only from a node that says, to a member)
+    const decisionsOn = features?.decisions === true || (features?.decisions === undefined && !features?.openJoin && features?.door !== 'open');
+    const removals = decisionsOn ? removalDeciderLine(features) : null;
+    if (removals) lines.push(removals);
 
     // 7. Probation (only drawn when on)
     if (features?.probation === true) {

@@ -270,4 +270,17 @@ describe("Home's Market row: a banner that will not load gives way to the tile",
         expect(row('h-bread').querySelector('img[data-src]')?.getAttribute('data-src')).toBe(`${NODE}/api/shops/shop-1/photo?v=ref2&k=Zz`);
         expect(row('h-tools').querySelector('[data-testid="category-tile"]')).not.toBeNull();
     });
+
+    it("steps a listing's own photo down: the small copy, then the photo's own URL, then the tile", async () => {
+        const photoUrl = '/api/marketplace/posts/h-jam/photos/0?v=1&k=Kk';
+        await show(body([{ id: 'h-jam', type: 'offer', title: 'Plum jam jars', category: 'food', credits: 3, photoUrl }]));
+        const picture = () => row('h-jam').querySelector<HTMLImageElement>('img[data-src]');
+        expect(picture()?.getAttribute('data-src')).toBe(`${NODE}${photoUrl}&size=thumb2`);
+        await failToLoad(picture());
+        expect(picture()?.getAttribute('data-src')).toBe(`${NODE}${photoUrl}`);
+        expect(row('h-jam').querySelector('[data-testid="category-tile"]')).toBeNull();
+        await failToLoad(picture());
+        expect(picture()).toBeNull();
+        expect(row('h-jam').querySelector('[data-testid="category-tile"]')).not.toBeNull();
+    });
 });

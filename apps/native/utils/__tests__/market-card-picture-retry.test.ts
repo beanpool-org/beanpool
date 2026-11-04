@@ -59,7 +59,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 const picture = (cover: string | null, pic: string | null = cover) => createElement(MarketCardPicture, {
     postId: 'p-jam', cover, picture: pic, category: 'food', kind: 'listing', size: 'thumb', imageStyle: {},
 });
-const show = async (cover: string | null, pic: string | null = cover) => { await act(async () => { root.render(picture(cover, pic)); }); };
+const show = async (cover: string | null, pic: string | null = cover) => { await act(async () => { root.render(picture(cover, pic) as any); }); };
 const img = () => host.querySelector<HTMLImageElement>('img[data-src]');
 const tile = () => host.querySelector('[data-testid="category-tile"]');
 const fail = async () => { expect(img()).not.toBeNull(); await act(async () => { img()!.dispatchEvent(new Event('error')); }); };

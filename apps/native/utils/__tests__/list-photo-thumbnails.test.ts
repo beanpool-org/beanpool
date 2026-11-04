@@ -19,11 +19,15 @@ const LISTS: [string, string[], RegExp[]][] = [
     // and none draws one itself.
     ['app/(tabs)/market.tsx', ['<MarketCardPicture'], [/uri: (coverImage|picture)\s*}/, /<Image\b/]],
     ['components/MarketCardPicture.tsx', ['listPhotoUrl(picture)', 'nextListPhotoUrl(picture, shown)'], [/uri: (cover|picture)\s*}/]],
-    ['components/home/HomeCardBodies.tsx', ['<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl || p.bannerUrl))}'], [/<Thumb uri=\{onNode\(/]],
-    ['components/EventCard.tsx', ['source={{ uri: listPhotoUrl(photo) }}'], [/uri: photo\s*}/]],
-    ['components/MyDealsSheet.tsx', ['uri: listPhotoUrl(item.coverImage) }}', 'uri: listPhotoUrl(coverImage) }}'], [/uri: (item\.)?coverImage\s*}/]],
-    ['app/public-profile.tsx', ['uri: listPhotoUrl(coverImage) }} style={styles.dealThumb}'], [/uri: coverImage\s*}/]],
-    ['app/(tabs)/chats.tsx', ['uri: listPhotoUrl(item.postPhoto) }}'], [/uri: item\.postPhoto\s*}/]],
+    // Every other small card draws through ListPhoto (the small copy, then the photo's own URL, then the card's fallback;
+    // drawn and failed for real in list-photo-render.test.ts), and none draws a listing photo's URL itself.
+    ['components/ListPhoto.tsx', ['listPhotoUrl(photo)', 'nextListPhotoUrl(photo, shown)'], [/uri: photo\s*}/]],
+    ['components/home/HomeCardBodies.tsx', ['<Thumb uri={onNode(nodeUrl, p.photoUrl || p.bannerUrl)}', '<ListPhoto'], [/listPhotoUrl/, /<Image\b/]],
+    ['components/EventCard.tsx', ['<ListPhoto', 'photo={photo}'], [/uri: photo\s*}/, /<Image\b/]],
+    ['components/MyDealsSheet.tsx', ['<ListPhoto'], [/uri: (item\.)?coverImage\s*}/, /ExpoImage/, /listPhotoUrl/]],
+    ['app/public-profile.tsx', ['<ListPhoto', 'accessibilityLabel={t(\'Listing photo\')}'], [/uri: coverImage\s*}/, /listPhotoUrl/]],
+    ['app/(tabs)/chats.tsx', ['<ListPhoto', 'photo={item.postPhoto}'], [/uri: item\.postPhoto\s*}/, /listPhotoUrl/]],
+    ['components/shopfront/Shopfront.tsx', ['<ListPhoto', 'photo={l.photo}'], [/uri: l\.photo\s*}/, /listPhotoUrl/]],
 ];
 /** The screens that show a listing's photos at their size. */
 const DETAILS = ['app/post/[id].tsx', 'components/PhotoCarousel.tsx', 'components/EventDetail.tsx'];

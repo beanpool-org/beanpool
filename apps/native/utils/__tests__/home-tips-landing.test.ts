@@ -46,6 +46,8 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
         BackHandler: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
         LayoutAnimation: { configureNext: vi.fn(), create: vi.fn() },
+        // Home's card wrappers take a lifted card's touch (the drag, components/home/useArrangeDrag.ts); nothing is lifted here.
+        PanResponder: { create: () => ({ panHandlers: {} }) },
         AccessibilityInfo: { isReduceMotionEnabled: vi.fn(async () => true), announceForAccessibility: vi.fn(), sendAccessibilityEvent: vi.fn() },
         AppState: { currentState: 'active', addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
         DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },

@@ -17,7 +17,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -766,7 +766,7 @@ export function TipsBody({ view, colors, onNext, onReadMore, onDontShow }: {
     const page = slug ? getBundledGuide().guides.find(g => g.slug === slug) : undefined;
     return (
         <>
-            <Text style={{ fontSize: 15, lineHeight: 21, color: colors.text.body }} testID="home-tip-text">{t(view.tip.text)}</Text>
+            <Text style={{ fontSize: 15, lineHeight: 21, color: colors.text.body }} testID="home-tip-text">{tipText(view.tip, true)}</Text>
             <FabAware id="tips:buttons" style={s.buttonRow}>
                 <HomeButton primary colors={colors} text={view.last ? t('Done') : t('Next')} a11y={tipsNextLabel(view)} onPress={onNext} testID="home-tip-next" />
                 {page && slug && (

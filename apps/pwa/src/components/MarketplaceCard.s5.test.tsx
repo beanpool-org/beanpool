@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { MarketplaceCard } from './MarketplaceCard';
 import type { MarketplacePost } from '../lib/marketplace';
+import { GRID_ROW, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, gridChip, gridTile } from './market-card-shell';
 
 const basePost: MarketplacePost = {
     id: 'post-s5-1',
@@ -92,7 +93,9 @@ describe('MarketplaceCard S5 design requirements', () => {
         expect(screen.queryByText('No description provided.')).toBeNull();
     });
 
-    it('Daily Pulse grid card keeps its look with description and DAILY PULSE button', () => {
+    // G2 (DESIGN-market-grid-sizes-fable.md §2.2): the Pulse tile's four rows are its title (two), its pill, and one line of
+    // its news. The DAILY PULSE foot label (a div that looked like a button and was not one) leaves the tile: the pill says it.
+    it('Daily Pulse grid tile: its title, its pill and one line of its news, and no DAILY PULSE foot label', () => {
         const pulsePost = {
             ...basePost,
             authorCallsign: 'Daily Pulse',
@@ -100,10 +103,13 @@ describe('MarketplaceCard S5 design requirements', () => {
             title: 'Daily Pulse 27 Oct',
             description: 'Today in the community',
         } as unknown as MarketplacePost;
-        render(<MarketplaceCard post={pulsePost} viewMode="grid" />);
+        const { getByTestId } = render(<MarketplaceCard post={pulsePost} viewMode="grid" />);
 
-        expect(screen.getByText('DAILY PULSE')).toBeInTheDocument();
-        expect(screen.getByText('Today in the community')).toBeInTheDocument();
+        const block = getByTestId('grid-text-block');
+        const rows = Array.from(block.children) as HTMLElement[];
+        expect(rows.map(r => r.textContent)).toEqual(['Daily Pulse 27 Oct', '🗞️ DAILY PULSE', 'Today in the community']);
+        expect(screen.getByText('Today in the community').className).toContain('truncate');
+        expect(screen.queryByText('DAILY PULSE')).toBeNull();
     });
 
     it('title clamps to two lines in grid mode', () => {
@@ -144,4 +150,66 @@ describe('MarketplaceCard S5 design requirements', () => {
         const badgeRow = container.querySelector('[data-testid="grid-badge-row"]');
         expect(badgeRow?.textContent).not.toContain('RECURRING');
     });
+});
+
+// G2 (DESIGN-market-grid-sizes-fable.md §2.2): the grid tile is a lattice cell. The tile fills its cell; under the photo a
+// fixed block of four rows: the title (two), who, and row 4, one line: how far, then at most one chip by deal › paused ›
+// group lock › RECURRING. 📌 PINNED is on the photo's foot, with the status chip and the price. jsdom does no layout: the
+// heights themselves are measured in e2e/market-grid-shots.mjs.
+describe('MarketplaceCard grid tile on the lattice (G2)', () => {
+    const tile = (el: HTMLElement) => el.querySelector('[data-testid="listing-grid-tile"]') as HTMLElement;
+
+    it('fills its cell, and its text block is the fixed four-row block', () => {
+        const { container, getByTestId } = render(<MarketplaceCard post={basePost} viewMode="grid" distanceKm={2.4} />);
+        expect(tile(container).className.startsWith(gridTile())).toBe(true);
+        expect(tile(container).className).toMatch(/(^|\s)h-full(\s|$)/);
+        const block = getByTestId('grid-text-block');
+        expect(block.className).toBe(GRID_TEXT);
+        const rows = Array.from(block.children) as HTMLElement[];
+        // Rows 1-2 the title (two reserved), row 3 who, row 4 the one line.
+        expect(rows).toHaveLength(3);
+        expect(rows[0].tagName).toBe('H3');
+        expect(rows[0].className.startsWith(GRID_TITLE)).toBe(true);
+        expect(rows[1].className).toBe(GRID_ROW);
+        expect(rows[2].className).toBe(GRID_ROW);
+        expect(rows[2].getAttribute('data-testid')).toBe('grid-row-4');
+        expect(rows[2].textContent).toBe('📍2.4 km');
+    });
+
+    it('row 4 holds how far and at most ONE chip, by deal › paused › group lock › RECURRING', () => {
+        const row4 = (props: Partial<React.ComponentProps<typeof MarketplaceCard>>, extra: Record<string, unknown> = {}) => {
+            const { getByTestId, unmount } = render(<MarketplaceCard post={{ ...basePost, ...extra } as MarketplacePost} viewMode="grid" distanceKm={3} {...props} />);
+            const row = getByTestId('grid-row-4');
+            const out = { text: row.textContent, chips: Array.from(row.children).length - 1, last: row.lastElementChild as HTMLElement };
+            unmount();
+            return out;
+        };
+        const everything = { repeatable: true, status: 'paused', audienceScope: 'group', targetGroupName: 'Gardeners' };
+        const deal = row4({ dealChip: 'in-trust' }, everything);
+        expect(deal.text).toBe('📍3.0 km🤝 IN TRUST');
+        expect(deal.chips).toBe(1);
+        expect(deal.last.getAttribute('data-testid')).toBe('card-deal-chip');
+        expect(deal.last.className).toBe(gridChip('ok'));
+        expect(row4({}, everything).text).toBe('📍3.0 km⏸ PAUSED');
+        expect(row4({}, { ...everything, status: 'active' }).text).toBe('📍3.0 km🔒 Only Gardeners can see this');
+        const recurring = row4({}, { repeatable: true });
+        expect(recurring.text).toBe('📍3.0 km↻ RECURRING');
+        expect(recurring.last.className).toBe(gridChip('quiet'));
+        // Nothing to say: the row is there, blank, so the block keeps its four rows.
+        expect(row4({ distanceKm: null }).text).toBe('');
+    });
+
+    it('📌 PINNED is a scrim pill on the photo\'s foot, after the status chip, before the price; not under the photo', () => {
+        const pinned = {
+            ...basePost, pinnedAt: new Date().toISOString(), pinnedUntil: new Date(Date.now() + 86_400_000).toISOString(),
+        } as unknown as MarketplacePost;
+        const { getByTestId } = render(<MarketplaceCard post={pinned} viewMode="grid" isOwnPost />);
+        const foot = getByTestId('grid-badge-row');
+        const chipEl = getByTestId('card-pinned-chip');
+        expect(chipEl.parentElement).toBe(foot);
+        expect(chipEl.className).toBe(GRID_SCRIM_PILL);
+        expect(Array.from(foot.children).map(c => c.textContent)).toEqual(['👤 YOU', '📌 PINNED', '10']);
+        expect(getByTestId('grid-text-block').textContent).not.toContain('PINNED');
+    });
+
 });

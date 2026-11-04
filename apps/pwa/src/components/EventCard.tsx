@@ -41,7 +41,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { ReportModal } from './ReportModal';
 import {
     BOX_LABEL, CARD_INK, EVENT_ANSWER, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON,
-    PAGE_INK, PAGE_TYPE, chip, listCard,
+    PAGE_INK, PAGE_TYPE, POP_UP_CLOSE_ROOM, chip, listCard,
 } from './market-card-shell';
 
 interface RsvpState {
@@ -137,11 +137,15 @@ function StateBadge({ post, box = false }: { post: MarketplacePost; box?: boolea
  * which keeps its whole line (Marty's Byron screenshot, 4 Nov 2026: the date wrapped to two lines on a pinned card).
  * No chip, no row.
  */
-function EventChips({ post, withType = false, box = false }: { post: MarketplacePost; withType?: boolean; box?: boolean }) {
+function EventChips({ post, withType = false, box = false, endRoom = false }: {
+    post: MarketplacePost; withType?: boolean; box?: boolean;
+    /** The map's pop-up: room at the row's end for the pop-up's ✕. */
+    endRoom?: boolean;
+}) {
     const pinned = pinLive(post as any);
     if (!withType && !pinned && !eventStateOf(post)) return null;
     return (
-        <span data-testid="event-chips" className="flex flex-wrap items-center gap-1 min-w-0 w-full">
+        <span data-testid="event-chips" className={`flex flex-wrap items-center gap-1 min-w-0 w-full${endRoom ? ` ${POP_UP_CLOSE_ROOM}` : ''}`}>
             {withType && (
                 <span data-testid="event-type-chip" className={box ? chip('event') : `${CHIP} bg-bp-tile-event-tint text-bp-tile-event-ink`}>
                     {upperCase(t('EVENT', undefined, 'event category tile label'))}
@@ -232,8 +236,13 @@ function RsvpButtons({ rsvp, page = false }: { rsvp: RsvpState; page?: boolean }
  * Under it, only when the viewer's clock differs from the place's, the second time (DESIGN-event-times §4): "Lagos time ·
  * 15:50 your time", its two halves whole in the same way. The detail adds an online event's host line.
  */
-function EventWhen({ post, className, testId, hostLine = false, repeatClassName = CARD_INK.event }: {
+function EventWhen({ post, className, testId, hostLine = false, repeatLine = true, repeatClassName = CARD_INK.event }: {
     post: MarketplacePost; className: string; testId?: string; hostLine?: boolean;
+    /**
+     * The ↻ repeat line under the when: on (the card and the list); the event page turns it off and draws the rule itself, as
+     * the door to its next dates (EventNextDates' repeatCaption, DESIGN-web-dates-stop-fable.md §1).
+     */
+    repeatLine?: boolean;
     /** The repeat line's colour: the event token on the card (`CARD_INK.event`) and on the page (`PAGE_INK.event`), the same violet. */
     repeatClassName?: string;
 }) {
@@ -273,7 +282,7 @@ function EventWhen({ post, className, testId, hostLine = false, repeatClassName 
                 </span>
             )}
             {/* A repeating event: still only its next date above, and the rule under it (DESIGN-event-times §4, §8). */}
-            {repeats && (
+            {repeatLine && repeats && (
                 <span data-testid="event-repeat-caption" className={`block w-full min-w-0 break-words text-sm font-bold leading-snug ${repeatClassName}`}>
                     <span aria-hidden="true">↻ </span>{repeats}
                 </span>
@@ -357,9 +366,14 @@ interface EventCardProps {
      * distance only from a point the visitor shared, in whole km, since the node places the event at its area's centre.
      */
     visitor?: boolean;
+    /**
+     * The map's pop-up (DESIGN-card-style-box-fable.md §2, slice M1): the list card with the pop-up's ✕ in its top end
+     * corner, which the map draws beside the card. The chip row keeps room for it. List view only.
+     */
+    popUp?: boolean;
 }
 
-export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, rsvpOnCard = false, visitor = false }: EventCardProps) {
+export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, rsvpOnCard = false, visitor = false, popUp = false }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
     const copy = eventCopyOf(p);
@@ -415,7 +429,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                         />
                     </span>
                     <span className={LIST_TEXT}>
-                        <EventChips post={p} withType box />
+                        <EventChips post={p} withType box endRoom={popUp} />
                         <EventWhen post={p} testId="event-when" className={`${LIST_TYPE.loud} ${CARD_INK.event}`} repeatClassName={CARD_INK.event} />
                         <span dir="auto" className={`w-full min-w-0 break-words line-clamp-2 ${LIST_TYPE.second} ${CARD_INK.title}`}>
                             {p.title}
@@ -448,7 +462,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                         )}
                     </span>
                 </button>
-                {/* Only the map's preview asks for the buttons, and it is a grid card; here they keep a row of their own under the card's lines. */}
+                {/* Only the map's pop-up asks for the buttons (and it is this list card); they keep a row of their own under the card's lines. */}
                 {rsvpOnCard && !visitor && !copy && <div className="basis-full px-3 pb-3"><RsvpButtons rsvp={rsvp} /></div>}
                 {rsvpOnCard && rsvp.error && (
                     <p role="alert" className="basis-full m-0 px-3 pb-3 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>
@@ -630,29 +644,38 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
     const chatWaiting = !!onOpenChat && !copy && letInState === 'waiting';
     const chatOpen = !!onOpenChat && !copy && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting'));
 
-    // The page is one column, the parts in DESIGN-detail-pages-fable.md §2.1's order, drawn from the style box
-    // (components/market-card-shell.ts), as the phone's page is: the chips, the loud lines (when, title, place), the photo, the
-    // answer, the quiet row, the boxes, the description, the host, the host's own, Report. No outer card: the column is the
-    // page, and its boxes are the card family's. From 768 px a photo takes the left column and the rest the right, placed by
-    // the grid with the DOM order kept (so Tab reads the chips and the when before the photo), as the listing's page does.
+    // The page is one column, the parts in DESIGN-detail-pages-fable.md §2.1's order as DESIGN-detail-pages-frame-fable.md §1.6
+    // amends it, drawn from the style box (components/market-card-shell.ts), as the phone's page is: the chips, the loud lines
+    // (the when; how it repeats as the door to the next dates, "↻ Every 3 weeks on Saturday · Next dates", in the caption's
+    // slot, DESIGN-web-dates-stop-fable.md §1; the title; the place), the answer, the photo, the quiet row, the boxes, the
+    // description, the host, the host's own, Report. The answer comes before the photo so Going is on the first screen at
+    // 320 px and 130% text, with a photo or without. No outer card: the column is the page, and its boxes are the card family's. From 768 px a photo takes
+    // the left column, spanning the three rows, and the head, the answer and the rest the right, one row each, placed by the
+    // grid with the DOM order kept (so Tab reads the chips, the when and Going before the photo), as the listing's page does.
     return (
         <div
             data-testid="event-detail"
-            className={`w-full min-w-0 flex flex-col gap-3 ${hasPhoto ? 'md:grid md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-6 md:gap-y-3 md:items-start' : ''}`}
+            className={`w-full min-w-0 flex flex-col gap-3 ${hasPhoto ? 'md:grid md:grid-cols-2 md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:gap-y-3 md:items-start' : ''}`}
         >
-            {/* 1 and 4: the chip row, then the loud lines, the card's three in the card's order. */}
+            {/*
+              * 1 and 4: the chip row, then the loud lines in the card's order: the when, how it repeats, the title, the place. On
+              * the page the rule is the door to the next dates (↻ rule · Next dates) and heads them once open, so the when draws
+              * no repeat line of its own here, and a node that sends no dates still gets the rule, in the same place, once.
+              */}
             <div data-testid="event-head" className={`flex flex-col gap-2 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-1' : ''}`}>
                 <EventChips post={p} withType box />
                 <h2 className="m-0 min-w-0 flex flex-col gap-1">
-                    <EventWhen post={p} hostLine className={`${PAGE_TYPE.when} ${PAGE_INK.event}${cancelled ? ' line-through' : ''}`} repeatClassName={PAGE_INK.event} />
+                    <EventWhen post={p} hostLine repeatLine={false} className={`${PAGE_TYPE.when} ${PAGE_INK.event}${cancelled ? ' line-through' : ''}`} />
                 </h2>
-                <h3 dir="auto" className={`m-0 ${PAGE_TYPE.title} text-nature-950 dark:text-white break-words`}>{p.title}</h3>
                 <EventNextDates
                     post={p}
+                    compact
+                    repeatCaption={eventRepeatCaption(p)}
                     isHost={isHost && open}
                     onChanged={(next) => { rsvp.setLivePost(next); onChange?.(next); }}
                     onChangeThisDateOnly={onChangeThisDateOnly}
                 />
+                <h3 dir="auto" className={`m-0 ${PAGE_TYPE.title} text-nature-950 dark:text-white break-words`}>{p.title}</h3>
 
                 {p.eventOnline && (
                     <div data-testid="event-online" className="flex flex-wrap items-center gap-x-3 min-w-0">
@@ -707,11 +730,31 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
             </div>
 
             {/*
-              * 5. The photo: 4:3, the column's width, under the shell's corners; a click shows it whole, uncropped (Marty's
-              * pick 2: the same 800 px photo, nothing stored). No photo: the event's tile, 3:1, inside the column.
+              * 7. The answer: Going / Interested, the host's line, or a copy's door; the counts only once someone has answered.
+              * Before the photo, its own row in the grid. Its 4 px below makes 16 to the photo on the phone, and keeps today's 16
+              * to the quiet row from 768 px, where the row under it is the rest of the page.
+              */}
+            <div data-testid="event-action" className={`flex flex-col gap-1.5 min-w-0 mb-1 ${hasPhoto ? 'md:col-start-2 md:row-start-2' : ''}`}>
+                {copy ? open && !isOwnCopy && <EventCopyDoor copy={copy} /> : <RsvpButtons rsvp={rsvp} page />}
+                {counts && (
+                    <p data-testid="event-counts" className={`m-0 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
+                        <span aria-hidden="true">👥 </span>{counts}
+                    </p>
+                )}
+                {letInLine && open && (
+                    <p data-testid="event-let-in-line" className={`m-0 text-sm ${PAGE_INK.body} break-words`}>{letInLine}</p>
+                )}
+                {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
+            </div>
+
+            {/*
+              * 8. The photo, under the answer: 4:3, the column's width, under the shell's corners; a click shows it whole,
+              * uncropped (Marty's pick 2: the same 800 px photo, nothing stored). No photo: the event's tile, 3:1, inside the column.
+              * Its 4 px below makes 16 to the quiet row on the phone (DESIGN-detail-pages-frame-fable.md §3); from 768 px the photo
+              * spans the three rows of its own column, so none there.
               */}
             {hasPhoto ? (
-                <div data-testid="event-photo" className="min-w-0 md:col-start-1 md:row-start-1 md:row-span-2">
+                <div data-testid="event-photo" className="min-w-0 mb-1 md:mb-0 md:col-start-1 md:row-start-1 md:row-span-3">
                     <button
                         type="button"
                         data-testid="event-photo-open"
@@ -723,7 +766,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     </button>
                 </div>
             ) : (
-                <div data-testid="event-tile-banner" className="w-full aspect-[3/1] rounded-[14px] overflow-hidden">
+                <div data-testid="event-tile-banner" className="w-full aspect-[3/1] mb-1 rounded-[14px] overflow-hidden">
                     <CategoryTile kind="event" size="banner" />
                 </div>
             )}
@@ -738,23 +781,9 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 />
             )}
 
-            <div data-testid="event-body" className={`flex flex-col gap-4 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-2' : ''}`}>
-                {/* 7. The answer: Going / Interested, the host's line, or a copy's door; the counts only once someone has answered. */}
-                <div data-testid="event-action" className="flex flex-col gap-1.5 min-w-0">
-                    {copy ? open && !isOwnCopy && <EventCopyDoor copy={copy} /> : <RsvpButtons rsvp={rsvp} page />}
-                    {counts && (
-                        <p data-testid="event-counts" className={`m-0 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
-                            <span aria-hidden="true">👥 </span>{counts}
-                        </p>
-                    )}
-                    {letInLine && open && (
-                        <p data-testid="event-let-in-line" className={`m-0 text-sm ${PAGE_INK.body} break-words`}>{letInLine}</p>
-                    )}
-                    {rsvp.error && <p role="alert" className="m-0 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>}
-                </div>
-
+            <div data-testid="event-body" className={`flex flex-col gap-4 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-3' : ''}`}>
                 {/*
-                  * 8. The quiet row: the chat (for the host and anyone Going), Share, Add to calendar, in the neutral outline.
+                  * 9. The quiet row: the chat (for the host and anyone Going), Share, Add to calendar, in the neutral outline.
                   * Share and the calendar need no node, so neither depends on its age.
                   */}
                 <EventShareAndCalendar
@@ -782,7 +811,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     ) : undefined}
                 />
 
-                {/* 9. Remind me, and the note for people who are going: boxes. The host has no RSVP, so no reminder (decision 2). */}
+                {/* 10. Remind me, and the note for people who are going: boxes. The host has no RSVP, so no reminder (decision 2). */}
                 {!isHost && !copy && <EventReminder post={p} identity={identity} myRsvp={p.myRsvp ?? null} />}
                 {p.eventPrivateNote ? (
                     <div data-testid="event-private-note" className={PAGE_BOX}>
@@ -795,13 +824,13 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     </p>
                 ) : null}
 
-                {/* 10. The description and the tags: reading comes after the answer (Marty's pick 1). */}
+                {/* 11. The description and the tags: reading comes after the answer (Marty's pick 1). */}
                 {p.description && (
                     <p dir="auto" data-testid="event-description" className={`m-0 ${PAGE_TYPE.description} ${PAGE_INK.body} whitespace-pre-wrap break-words`}>{p.description}</p>
                 )}
                 {onOpenTag && <PostTagChips tags={p.tags} freeTags={p.freeTags} onPick={onOpenTag} onPickFree={onOpenFreeTag} />}
 
-                {/* 11. The person: a copy names where it comes from; otherwise the host is the box a listing's "Posted by" is. */}
+                {/* 12. The person: a copy names where it comes from; otherwise the host is the box a listing's "Posted by" is. */}
                 {copy?.from && <p data-testid="event-copy-from" className={`m-0 text-sm font-semibold ${PAGE_INK.body} break-words`}>{copyFromLine(copy.from)}</p>}
                 {!copy && (
                     <div className="flex flex-col gap-1.5 min-w-0">
@@ -823,7 +852,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     </div>
                 )}
 
-                {/* 12. The host's own: show it on the global community, and who's going with the host's tools. */}
+                {/* 13. The host's own: show it on the global community, and who's going with the host's tools. */}
                 {isHost && (
                     <ShowOnGlobalHostRow post={p} identity={identity} enabled={!copy && open && p.eventOnline !== true && (p.audienceScope ?? 'public') === 'public' && p.authorPublicKey === identity?.publicKey} />
                 )}
@@ -912,7 +941,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                     </div>
                 )}
 
-                {/* 13. Report, last and small, as the listing's page has it: the web's event page had none (DW1). */}
+                {/* 14. Report, last and small, as the listing's page has it: the web's event page had none (DW1). */}
                 {canReport && (
                     <>
                         <button

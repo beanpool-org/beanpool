@@ -9,10 +9,11 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
-import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, type CardType } from '@beanpool/core';
+import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, type CardType } from '@beanpool/core';
 import {
-    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, EVENT_ANSWER, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE,
-    PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE, chip, listCard,
+    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL,
+    GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
+    PAGE_TYPE, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
 
 const classes = (s: string) => s.split(/\s+/).filter(Boolean);
@@ -183,13 +184,109 @@ describe('the web style box holds core\'s numbers', () => {
         expect(LIST_BEAN_PX).toBe(14);
     });
 
+    it('the map pop-up (M1): the card\'s corners and core\'s floating shadow; a ✕ of 44 to tap, 28 to see, kept clear of the first row', () => {
+        expect(radius(POP_UP)).toBe(MARKET_CARD_SHELL.radius);
+        const shadow = classes(POP_UP).find(c => c.startsWith('shadow-['))?.match(/^shadow-\[0_(\d+)px_(\d+)px_rgba\(0,0,0,([\d.]+)\)\]$/);
+        expect(shadow).toBeTruthy();
+        const { offsetY, blur, opacity } = MARKET_CARD_SHELL.floatingShadow;
+        expect([Number(shadow![1]), Number(shadow![2]), Number(shadow![3])]).toEqual([offsetY, blur, opacity]);
+        expect(classes(POP_UP_CLOSE)).toEqual(expect.arrayContaining(['absolute', 'top-0', 'end-0', 'min-w-[44px]', 'min-h-[44px]', 'focus-visible:ring-2']));
+        // Nothing holds the target under 44.
+        expect(classes(POP_UP_CLOSE).filter(c => /^(w|h|max-w|max-h)-/.test(c))).toEqual([]);
+        expect(spacing(POP_UP_CLOSE_DOT, 'w')).toBe(28);
+        expect(spacing(POP_UP_CLOSE_DOT, 'h')).toBe(28);
+        // The circle's near edge is its inset (p-1.5) plus 28 from the card's end; the first row stops at the text's padding
+        // (12) plus the room: the room must reach past the circle.
+        expect(MARKET_CARD_SHELL.textPadding + spacing(POP_UP_CLOSE_ROOM, 'pe')!).toBeGreaterThanOrEqual(spacing(POP_UP_CLOSE, 'p')! + 28);
+        // And down: the circle's foot is its inset plus 28 from the card's top; the line under the first row starts at the
+        // text's padding plus the row's height at least (all in rem, so it holds at 1.3x text), past the circle's foot.
+        expect(MARKET_CARD_SHELL.textPadding + spacing(POP_UP_CLOSE_ROOM, 'min-h')!).toBeGreaterThan(spacing(POP_UP_CLOSE, 'p')! + 28);
+    });
+
     it('every colour is core\'s role or the card token: no raw violet, purple, blue or nature-950', () => {
         const all = [listCard(), listCard({ elder: true }), listCard({ pulse: true }), CHIP, CHIP_SENTENCE, LIST_PHOTO, LIST_TEXT,
+            POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT,
             ...Object.values(CHIP_TONE), ...Object.values(LIST_TYPE), ...Object.values(CARD_INK)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
         for (const tone of Object.values(CHIP_TONE)) expect(tone).toMatch(/^bg-bp-[a-z-]+-tint text-bp-[a-z-]+-ink$/);
         expect(chip('event')).toBe(`${CHIP} ${CHIP_TONE.event}`);
         expect(chip('quiet', true)).toBe(`${CHIP_SENTENCE} ${CHIP_TONE.quiet}`);
+    });
+});
+
+// G2 (DESIGN-market-grid-sizes-fable.md §2.2 to §2.4): the grid tile on the same box, and the lattice's numbers.
+describe('the grid tile holds core\'s numbers', () => {
+    /** A `[N rem]` arbitrary value of one prefix (`h-[7.0625rem]`), in rem. */
+    const rem = (s: string, prefix: string): number | undefined => {
+        for (const c of classes(s)) {
+            const m = c.match(/^([a-z-]+)-\[(\d+(?:\.\d+)?)rem\]$/);
+            if (m && m[1] === prefix) return Number(m[2]);
+        }
+        return undefined;
+    };
+
+    it('the text block is four rows tall, fixed: 1.5rem + 4 x 1.203125rem + 3 x 0.25rem', () => {
+        expect(rem(GRID_TEXT, 'h')).toBe(MARKET_GRID_TEXT_BLOCK_REM);
+        expect(MARKET_GRID_TEXT_BLOCK_REM).toBe(7.0625);
+        // 12 of padding a side, rows 4 apart, never squeezed by the photo, never spilling.
+        expect(spacing(GRID_TEXT, 'p')).toBe(MARKET_CARD_SHELL.textPadding);
+        expect(spacing(GRID_TEXT, 'p')! * 2 / 16).toBe(MARKET_GRID_TEXT_BLOCK.paddingRem);
+        expect(spacing(GRID_TEXT, 'gap')! / 16).toBe(MARKET_GRID_TEXT_BLOCK.rowGapRem);
+        expect(classes(GRID_TEXT)).toEqual(expect.arrayContaining(['flex', 'flex-col', 'shrink-0', 'overflow-hidden']));
+    });
+
+    it('a row is exactly one row tall; the title is two of them, and a row of text is text-sm leading-snug', () => {
+        expect(rem(GRID_ROW, 'h')).toBe(MARKET_GRID_TEXT_BLOCK.rowHeightRem);
+        expect(rem(GRID_TITLE, 'min-h')).toBe(2 * MARKET_GRID_TEXT_BLOCK.rowHeightRem);
+        // text-sm is 0.875rem; leading-snug 1.375 of it: 1.203125rem, the row.
+        expect(0.875 * 1.375).toBe(MARKET_GRID_TEXT_BLOCK.rowHeightRem);
+        expect(classes(GRID_TITLE)).toEqual(expect.arrayContaining(['text-sm', 'leading-snug', 'line-clamp-2']));
+        expect(classes(GRID_ROW)).toEqual(expect.arrayContaining(['overflow-hidden', 'whitespace-nowrap', 'shrink-0']));
+        // The loud line's size and weight are core's (its line is the row's, above, in rem).
+        const { size, weight } = typeOf(GRID_TITLE);
+        expect({ size, weight }).toEqual({ size: MARKET_CARD_TYPE.grid.loud.size, weight: MARKET_CARD_TYPE.grid.loud.weight });
+    });
+
+    it('the tile: the card\'s corners, border and ground, filling its cell; the photo 4:3 and never squeezed', () => {
+        for (const tile of [gridTile(), gridTile({ elder: true }), gridTile({ pulse: true })]) {
+            expect(radius(tile)).toBe(MARKET_CARD_SHELL.radius);
+            expect(classes(tile)).toEqual(expect.arrayContaining(['h-full', 'flex', 'flex-col', 'overflow-hidden']));
+            expect(classes(tile).filter(c => c.startsWith('bg-'))).toEqual(['bg-[var(--bg-card)]']);
+        }
+        expect(classes(gridTile())).toContain('border');
+        expect(classes(gridTile({ elder: true }))).toEqual(expect.arrayContaining(['border-l-[3px]', 'dark:border-l-amber-400']));
+        expect(classes(gridTile({ pulse: true }))).toContain(`border-${MARKET_CARD_SHELL.variant.pulseBorder}`);
+        const { aspectWidth, aspectHeight } = MARKET_CARD_SHELL.photo.grid;
+        expect(classes(GRID_PHOTO)).toEqual(expect.arrayContaining([`aspect-[${aspectWidth}/${aspectHeight}]`, 'shrink-0', 'w-full']));
+    });
+
+    it('the gutter is 16; the poll is the whole row at two and three columns, a 2 x 2 from four', () => {
+        expect(spacing(GRID, 'gap')).toBe(MARKET_CARD_SHELL.gap.grid);
+        expect(classes(GRID)).toEqual(expect.arrayContaining(['grid-flow-row-dense', 'grid-cols-2', 'md:grid-cols-3', 'lg:grid-cols-4', 'xl:grid-cols-5']));
+        expect(classes(GRID_POLL_CELL)).toEqual(['h-full', 'col-span-2', 'md:col-span-3', 'lg:col-span-2', 'lg:row-span-2']);
+    });
+
+    it('the row chip and the scrim pill: the one chip\'s size, padding and corners; the row chip gives way and ends in an ellipsis', () => {
+        for (const c of [GRID_ROW_CHIP, GRID_SCRIM_PILL]) {
+            expect(typeOf(c).size).toBe(MARKET_CHIP.type.size);
+            expect(spacing(c, 'px')).toBe(MARKET_CHIP.paddingHorizontal);
+            expect(spacing(c, 'py')).toBe(MARKET_CHIP.paddingVertical);
+            expect(radius(c)).toBe(MARKET_CHIP.radius);
+            expect(classes(c)).not.toContain('uppercase');
+        }
+        expect(typeOf(GRID_ROW_CHIP).weight).toBe(MARKET_CHIP.type.weight);
+        expect(classes(GRID_ROW_CHIP)).toEqual(expect.arrayContaining(['min-w-0', 'overflow-hidden', 'text-ellipsis', 'whitespace-nowrap']));
+        expect(classes(GRID_ROW_CHIP)).not.toContain('shrink-0');
+        expect(gridChip('quiet')).toBe(`${GRID_ROW_CHIP} ${CHIP_TONE.quiet}`);
+        // The phone's scrim pill: 10/700, white words on the dark scrim.
+        expect(typeOf(GRID_SCRIM_PILL).weight).toBe(700);
+        expect(classes(GRID_SCRIM_PILL)).toEqual(expect.arrayContaining(['bg-nature-900/90', 'text-white']));
+    });
+
+    it('no raw violet, purple, blue or nature-950 in the grid\'s classes', () => {
+        const all = [GRID, GRID_POLL_CELL, gridTile(), gridTile({ elder: true }), gridTile({ pulse: true }), GRID_PHOTO, GRID_TEXT,
+            GRID_TITLE, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL].join(' ');
+        expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
     });
 });
 

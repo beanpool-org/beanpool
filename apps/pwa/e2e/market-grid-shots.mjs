@@ -19,7 +19,8 @@
  *   - the poll is the whole row (one row tall) below 1024 px and a 2 x 2 square from 1024; its own content fits two tile
  *     heights plus the gap (at 1x exactly, +1 px; at 1.3x within one text row), and the two rows it spans are no taller;
  *   - no empty cell that a later one-cell tile could have taken (dense flow back-fills; the feed simply ending is not one);
- *   - the pins are the grid's first items, newest pin first, each once; on screen no stream tile comes before a pinned
+ *   - the pins are the grid's first items and as many as pinned (newest first and each once are MarketplacePage.pins.test.tsx's
+ *     to check, not this script's); on screen no stream tile comes before a pinned
  *     listing or event, and a pinned poll starts no lower than the row after them;
  *   - nothing is wider than the screen.
  * The event tile is not on the lattice until slice W3': it is drawn and named in the output, and left out of the tile
@@ -216,7 +217,7 @@ function check(m, spec, pins) {
             if (empty && later) fail(`${at}row ${r + 1} has ${empty} empty cell(s) and a tile drawn below it`);
         });
     });
-    // Pins: the first items of the first grid, newest first, each once; no stream tile before a pinned listing or event.
+    // Pins: the first items of the first grid, as many as pinned; no stream tile before a pinned listing or event.
     if (pins.length && m.grids.length) {
         const first = m.grids[0].cells;
         const pinned = m.grids.flatMap(g => g.cells.filter(c => c.pinned));

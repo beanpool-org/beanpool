@@ -1,20 +1,21 @@
 /**
  * The event in the Market's compact view is a compact row like a listing's (slice C1, DESIGN-card-style-box-fable.md §2 row
  * "Compact row, event"; DESIGN-market-event-cards-fable.md §2.4; Marty, 4 Nov 2026: "and list view in phone - the events dont
- * change"): the 32 px picture, the title, the when in the viewer's own clock, then 📌 PINNED, the state and the place; the
- * viewer's mark where a listing's price sits, above EVENT. One button, no Going / Interested, no counts.
+ * change"): the 32 px picture, the title with EVENT at the row's end, then the when in the viewer's own clock, 📌 PINNED, the
+ * state and the place, with the viewer's mark at the row's end beside them. One button, no Going / Interested, no counts.
  *
  * jsdom does no layout, so the row's height is held here by its parts (the listing row's frame, a one-line title and a block
- * of two short lines at most, the when's date and time each whole in it) and measured in Chromium by
- * e2e/market-order-shots.mjs (no taller than a listing's row and one line at 320 px x 1.3, the when whole).
+ * of two short lines at most, the when's date and time each whole in it, never narrower than its widest one) and measured in
+ * Chromium by e2e/market-order-shots.mjs (no taller than a listing's row and one line at 320 px x 1.3; every piece of the
+ * when drawn whole, to the sub-pixel, in en, fr, de, ru, es and pt; EVENT and the mark inside the row).
  */
 import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { EventCard } from './EventCard';
 import { MarketplaceCard } from './MarketplaceCard';
 import {
-    CARD_INK, COMPACT_END, COMPACT_END_STACK, COMPACT_LEAD_FIRM, COMPACT_LINES, COMPACT_MARK, COMPACT_MARK_GIVES, COMPACT_PICTURE, COMPACT_PIECE, COMPACT_ROW,
-    COMPACT_TEXT_FIRM, COMPACT_TITLE, COMPACT_TITLE_GIVES, COMPACT_WORD, chip,
+    CARD_INK, COMPACT_END, COMPACT_EVENT_BODY, COMPACT_EVENT_HEAD, COMPACT_EVENT_MARK, COMPACT_EVENT_TEXT, COMPACT_LEAD, COMPACT_LINES, COMPACT_MARK,
+    COMPACT_MARK_GIVES, COMPACT_PICTURE, COMPACT_PIECE, COMPACT_ROW, COMPACT_TITLE, COMPACT_TITLE_GIVES, COMPACT_WORD, chip,
 } from './market-card-shell';
 
 import { addDateWords, setLanguage, t } from '@beanpool/core';
@@ -71,8 +72,11 @@ describe('the event\'s compact row (C1)', () => {
         expect(screen.getByTestId('event-row-title').className).toBe(COMPACT_TITLE_GIVES);
         const type = (s: string) => s.split(/\s+/).filter(c => /^(font-|text-|dark:text-)/.test(c));
         expect(type(COMPACT_TITLE_GIVES)).toEqual(type(COMPACT_TITLE));
-        // The end: the mark above EVENT in a column, as wide as its widest piece (COMPACT_END_STACK).
-        expect(screen.getByTestId('event-type-chip').parentElement!.className).toBe(COMPACT_END_STACK);
+        // The picture and the words are the listing's lead (COMPACT_LEAD). The row's end is EVENT, on the title's line, and the
+        // mark, beside the two short lines (COMPACT_EVENT_HEAD, COMPACT_EVENT_BODY).
+        expect(screen.getByTestId('compact-picture').parentElement!.className).toBe(COMPACT_LEAD);
+        expect(screen.getByTestId('event-type-chip').parentElement).toBe(screen.getByTestId('event-row-head'));
+        expect(screen.getByTestId('event-row-head').lastElementChild).toBe(screen.getByTestId('event-type-chip'));
         // The listing's row, from the same strings.
         render(<MarketplaceCard post={{ ...event, type: 'offer', category: 'tools', photos: [] }} viewMode="compact" />);
         const listing = screen.getByTestId('listing-compact-row');
@@ -88,8 +92,14 @@ describe('the event\'s compact row (C1)', () => {
         const row = screen.getByTestId('event-compact-row');
         // One button, the row; nothing else to press.
         expect(within(row.parentElement!).getAllByRole('button')).toEqual([row]);
-        const text = screen.getByTestId('event-row-title').parentElement!;
-        expect(Array.from(text.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-row-title', 'event-row-lines']);
+        // The words: the title's line (the title, then EVENT) over the two short lines (the when's block, then the mark).
+        const text = screen.getByTestId('event-row-head').parentElement!;
+        expect(text.className).toBe(COMPACT_EVENT_TEXT);
+        expect(Array.from(text.children).map(c => c.getAttribute('data-testid'))).toEqual(['event-row-head', 'event-row-body']);
+        expect(screen.getByTestId('event-row-head').className).toBe(COMPACT_EVENT_HEAD);
+        expect(Array.from(screen.getByTestId('event-row-head').children).map(c => c.getAttribute('data-testid'))).toEqual(['event-row-title', 'event-type-chip']);
+        expect(screen.getByTestId('event-row-body').className).toBe(COMPACT_EVENT_BODY);
+        expect(Array.from(screen.getByTestId('event-row-body').children).map(c => c.getAttribute('data-testid'))).toEqual(['event-row-lines', 'event-mark']);
         const lines = screen.getByTestId('event-row-lines');
         expect(has(lines, COMPACT_LINES)).toBe(true);
         expect(classes(lines)).toContain('line-clamp-2');
@@ -99,18 +109,19 @@ describe('the event\'s compact row (C1)', () => {
         ]);
         expect(has(screen.getByTestId('event-state-badge'), COMPACT_PIECE)).toBe(true);
         expect(classes(screen.getByTestId('event-row-title'))).toContain('line-clamp-1');
-        // The lead and the words start at their widest whole piece and can go narrower (min-w-0): the end gives way first,
-        // down to its chip, and is never pushed out of the row (market-card-shell.ts COMPACT_LEAD_FIRM; measured in Chromium).
-        expect(screen.getByTestId('event-row-title').parentElement!.className).toBe(COMPACT_TEXT_FIRM);
-        expect(screen.getByTestId('compact-picture').parentElement!.className).toBe(COMPACT_LEAD_FIRM);
-        // The mark at the end, above EVENT, one line: its word gives way, its ✓ stays whole.
+        // The when's block is never narrower than its widest whole piece (min-w-min), so the date and the time are drawn whole
+        // and wrap to the second line rather than being cut; the mark takes the room the block leaves (market-card-shell.ts
+        // COMPACT_EVENT_HEAD; measured in Chromium).
+        expect(classes(lines)).toEqual(expect.arrayContaining(['flex-1', 'min-w-min']));
+        expect(classes(lines)).not.toContain('min-w-0');
+        // The mark at the row's end beside the two lines, its words on up to two lines, giving way past them; its ✓ whole.
         const mark = screen.getByTestId('event-mark');
         expect(mark.textContent).toBe('Interested ✓');
-        expect(has(mark, COMPACT_MARK)).toBe(true);
+        expect(has(mark, `${COMPACT_EVENT_MARK} ${COMPACT_MARK}`)).toBe(true);
         expect(Array.from(mark.children).map(c => [c.textContent, c.className])).toEqual([
             ['Interested', COMPACT_MARK_GIVES], [' ✓', 'shrink-0 whitespace-pre'],
         ]);
-        expect(mark.nextElementSibling).toBe(screen.getByTestId('event-type-chip'));
+        expect(mark.previousElementSibling).toBe(lines);
     });
 
     it('the when in the event ink, then 📌 PINNED, the state and the place, each in its own ink', () => {

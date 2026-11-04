@@ -11,9 +11,9 @@ import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
 import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, type CardType } from '@beanpool/core';
 import {
-    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, COMPACT_END, COMPACT_END_STACK, COMPACT_LEAD, COMPACT_LEAD_FIRM, COMPACT_LINE, COMPACT_LINES,
-    COMPACT_MARK, COMPACT_MARK_GIVES, COMPACT_PICTURE, COMPACT_PIECE, COMPACT_POLL_TILE, COMPACT_ROW, COMPACT_TEXT, COMPACT_TEXT_FIRM, COMPACT_TITLE,
-    COMPACT_TITLE_GIVES, COMPACT_WORD, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
+    BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, COMPACT_END, COMPACT_EVENT_BODY, COMPACT_EVENT_HEAD, COMPACT_EVENT_MARK, COMPACT_EVENT_TEXT,
+    COMPACT_LEAD, COMPACT_LINE, COMPACT_LINES, COMPACT_MARK, COMPACT_MARK_GIVES, COMPACT_PICTURE, COMPACT_PIECE, COMPACT_POLL_TILE, COMPACT_ROW,
+    COMPACT_TEXT, COMPACT_TITLE, COMPACT_TITLE_GIVES, COMPACT_WORD, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
     GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
     PAGE_TYPE, POLL_CARD, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
@@ -375,22 +375,31 @@ describe('the page\'s parts hold core\'s numbers too (DESIGN-detail-pages-fable.
 // card. The row's 16 either side and corners 12 are the web listing row's own (kept by the brief: "Listing compact rows
 // unchanged except the chip"); every other number is core's.
 describe('the compact row and the poll card hold core\'s numbers (C1)', () => {
-    it('the row: 10 above and below; the picture 32 square, corners 8; the end 45% of the row at most', () => {
+    it('the row: 10 above and below; the picture 32 square, corners 8; a listing\'s end 45% of the row at most; an event\'s end where it fits', () => {
         expect(spacing(COMPACT_ROW, 'py')).toBe(MARKET_CARD_SHELL.compactPadding.vertical);
         expect(spacing(COMPACT_PICTURE, 'w')).toBe(MARKET_CARD_SHELL.photo.compact.size);
         expect(spacing(COMPACT_PICTURE, 'h')).toBe(MARKET_CARD_SHELL.photo.compact.size);
         expect(radius(COMPACT_PICTURE)).toBe(MARKET_CARD_SHELL.photo.compact.radius);
         expect(classes(COMPACT_PICTURE)).toEqual(expect.arrayContaining(['overflow-hidden', 'shrink-0']));
         expect(classes(COMPACT_END)).toContain(`max-w-[${MARKET_CARD_SHELL.compactEndMaxPercent}%]`);
-        expect(classes(COMPACT_END_STACK)).toContain(`max-w-[${MARKET_CARD_SHELL.compactEndMaxPercent}%]`);
-        // An event's row: the end gives way first (it takes the shortfall, shrink 999 to the lead's 1) and never below its chip
-        // (min-content, which wins over the 45%); the words start at their widest whole piece (w-min) and can then go narrower
-        // (min-w-0), so nothing pushes the end out of the row (the review of #2904: without min-w-0 the words' widest piece did,
-        // and the row's overflow-hidden cut EVENT and the mark in fr, de, ru, es and pt). A whole piece is one line that never
-        // breaks; the block of short lines stops at two.
-        expect(classes(COMPACT_END_STACK)).toEqual(expect.arrayContaining(['min-w-min', 'shrink-[999]']));
-        expect(classes(COMPACT_LEAD_FIRM)).toEqual(expect.arrayContaining(['flex-auto', 'w-min', 'min-w-0']));
-        expect(classes(COMPACT_TEXT_FIRM)).toContain('min-w-0');
+        // An event's row (the director's rule for #2904: the when's pieces whole, wrapping rather than cut; EVENT and the mark
+        // never cut; a listing's row and one line at most). EVENT sits on the title's line, beside a title that gives way and
+        // asks for no width (flex-1, min-w-0, break-all), never shrinking (CHIP's shrink-0); 45% would cut "VERANSTALTUNG".
+        // The when's block beside the mark is never narrower than its widest whole piece (min-w-min, a floor the flex
+        // algorithm freezes at, not a share of a shortfall: the second review measured `shrink-[999]` against 1 still taking
+        // 0.08 px from the words, enough for "16:00–18:…"); the words between the pieces break anywhere they must, so only a
+        // whole piece sets that floor. The mark takes what is left (flex-initial, min-w-0): its words on two lines, then "…".
+        expect(classes(COMPACT_EVENT_HEAD)).toEqual(expect.arrayContaining(['flex', 'items-center', 'min-w-0']));
+        expect(classes(COMPACT_TITLE_GIVES)).toEqual(expect.arrayContaining(['flex-1', 'min-w-0', 'line-clamp-1', 'break-all']));
+        expect(classes(CHIP)).toContain('shrink-0');
+        expect(classes(COMPACT_EVENT_TEXT)).toEqual(expect.arrayContaining(['flex-1', 'min-w-0', 'flex', 'flex-col']));
+        expect(classes(COMPACT_EVENT_BODY)).toEqual(expect.arrayContaining(['flex', 'items-center', 'min-w-0']));
+        expect(classes(COMPACT_LINES)).toEqual(expect.arrayContaining(['flex-1', 'min-w-min', '[overflow-wrap:anywhere]']));
+        expect(classes(COMPACT_LINES)).not.toContain('min-w-0');
+        expect(classes(COMPACT_EVENT_MARK)).toEqual(expect.arrayContaining(['flex-initial', 'min-w-0']));
+        expect(classes(COMPACT_EVENT_MARK).some(c => c.startsWith('max-w-'))).toBe(false);
+        expect(classes(COMPACT_MARK_GIVES)).toEqual(expect.arrayContaining(['min-w-0', 'line-clamp-2', 'break-normal', 'text-ellipsis']));
+        // A whole piece is one line that never breaks; the block of short lines stops at two.
         expect(classes(COMPACT_PIECE)).toEqual(expect.arrayContaining(['inline-block', 'truncate', 'max-w-full']));
         expect(classes(COMPACT_LINES)).toContain('line-clamp-2');
         // `block` would beat line-clamp's display in the built CSS (measured: the block never stopped at two lines).
@@ -424,7 +433,7 @@ describe('the compact row and the poll card hold core\'s numbers (C1)', () => {
 
     it('every colour on a row or the poll card is core\'s role or the card\'s: no raw violet, purple, blue or indigo', () => {
         const all = [COMPACT_ROW, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_TEXT, COMPACT_TITLE, COMPACT_LINE, COMPACT_LINES, COMPACT_PIECE, COMPACT_MARK,
-            COMPACT_END, COMPACT_END_STACK, COMPACT_LEAD_FIRM, COMPACT_TEXT_FIRM, COMPACT_TITLE_GIVES, COMPACT_MARK_GIVES,
+            COMPACT_END, COMPACT_EVENT_TEXT, COMPACT_EVENT_HEAD, COMPACT_EVENT_BODY, COMPACT_EVENT_MARK, COMPACT_TITLE_GIVES, COMPACT_MARK_GIVES,
             COMPACT_POLL_TILE, POLL_CARD, ...Object.values(COMPACT_WORD)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-/);
         expect(COMPACT_POLL_TILE).toContain('bg-bp-chip-poll-tint');

@@ -30,11 +30,12 @@
  * row like a listing's: one button; no taller than a listing's row and one line; its picture 32 square; its chip the one chip
  * (10/800); the event's when whole; the poll's mark its chosen answer ✓; nothing on the poll's row to vote with.
  *
- * compact-kinds (the review of #2904): the compact view at 320 px x 1.3 in en, fr, de, ru, es and pt, the reader in Brisbane,
- * with an event in person, one online, one read in another clock and one over two days, light and dark
- * (`web-compact-kinds-{de,ru}-*`). Fails when an event row overflows itself, or its EVENT chip or its mark is cut or past the
- * row's content edge, or the start's date and time give way while the end still has room to give, or the row is taller than
- * a listing's row and one line. Run it alone: `node e2e/market-order-shots.mjs <out-dir> compact-kinds`.
+ * compact-kinds (the reviews of #2904): the compact view at 320 px x 1.3 in en, fr, de, ru, es and pt, the reader in Brisbane,
+ * with an event in person, one online, one read in another clock, one over two days and a pinned one the reader hosts, light
+ * and dark (`web-compact-kinds-{en,fr,de,ru}-*`). Fails when an event row overflows itself; when its EVENT chip or its mark is
+ * cut or past the row's content edge; when any piece of the when (or 📌 PINNED, or the state) is drawn cut, measured as drawn
+ * to the sub-pixel (its text against its own box, and its box against every box that clips it), in any of the six; or when
+ * the row is taller than a listing's row and one line. Run it alone: `node e2e/market-order-shots.mjs <out-dir> compact-kinds`.
  *
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
@@ -110,8 +111,15 @@ const KIND_EVENTS = [
     kind('k-zone', 'Harbour clean-up', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T17:00', '2026-11-07T19:00', 'Australia/Sydney'),
     // Over two days: "SAT 7 NOV 16:00 –" / "SUN 8 NOV 10:00".
     kind('k-days', 'Overnight working bee', '2026-11-07T06:00:00.000Z', '2026-11-08T00:00:00.000Z', '2026-11-07T16:00', '2026-11-08T10:00', KINDS_ZONE, { myRsvp: 'going' }),
+    // In person on the reader's clock, pinned, and the reader hosts it (the node sends a host the RSVP list): the longest mark,
+    // "You're hosting this event", with no ✓, and 📌 PINNED in the lines. The row the second review of #2904 drew "16:00–18:…".
+    kind('k-hosted', 'Byron Bay Twilight Market', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T16:00', '2026-11-07T18:00', KINDS_ZONE, {
+        myRsvp: null, eventRsvps: [], pinnedAt: at(10, 3, 9, 0), pinnedUntil: new Date(2026, 10, 10, 9, 0).toISOString(),
+    }),
 ];
 const KIND_LANGS = ['en', 'fr', 'de', 'ru', 'es', 'pt'];
+// How far past the row's content edge a chip or a mark may end: a layout unit's worth (1/64 px), not a pixel.
+const EDGE = 0.02;
 
 const LOCAL = [
     listing('ana-1', 'Bike tune-up', 'Ana', at(10, 3, 14, 0)),
@@ -279,10 +287,49 @@ async function compactRows(page) {
         const pic = row.querySelector('[data-testid="compact-picture"], .w-8.h-8');
         const chipEl = row.querySelector('[data-testid="compact-type-chip"], [data-testid="event-type-chip"], [data-testid="poll-badge"]');
         const chipCss = chipEl ? getComputedStyle(chipEl) : null;
-        // The when's whole pieces (the date, the time): each drawn whole, and inside the two lines the block shows.
         const lines = row.querySelector('[data-testid="event-row-lines"]');
         const whenPieces = Array.from(row.querySelectorAll('[data-testid="event-when"] > span[data-piece="whole"]'));
         const line = row.querySelector('[data-testid="event-row-lines"], [data-testid="poll-compact-line"]');
+        // What is drawn, to the sub-pixel (the second review of #2904: scrollWidth and clientWidth are whole pixels, so a piece
+        // 0.08 px short of its text passed as whole while it drew "16:00–18:…"). EPS is a layout unit's worth (1/64 px).
+        const EPS = 0.02;
+        const textWidth = (el) => { const rg = document.createRange(); rg.selectNodeContents(el); return rg.getBoundingClientRect().width; };
+        const insetBox = (el, padding) => {
+            const b = el.getBoundingClientRect();
+            const s = getComputedStyle(el);
+            const px = (side) => parseFloat(s[`border${side}Width`]) + (padding ? parseFloat(s[`padding${side}`]) : 0);
+            return { left: b.left + px('Left'), right: b.right - px('Right'), top: b.top + px('Top'), bottom: b.bottom - px('Bottom') };
+        };
+        // The room inside an element's padding, to the sub-pixel (clientWidth is rounded to a whole pixel).
+        const room = (el) => { const c = insetBox(el, true); return c.right - c.left; };
+        // A piece that is never split (the when's date and time, 📌 PINNED, the state), as drawn: `own`, its text wider than its
+        // box (its own "…") or scrolling; `clipped`, its box partly outside any box that clips it, from its parent up to the
+        // row (the two-line block, the words column, the row, whose content edge counts too); `hidden`, wholly on a line the
+        // block does not show. A piece may be hidden; it may never be drawn in part.
+        const drawn = (el) => {
+            const b = el.getBoundingClientRect();
+            const own = el.scrollWidth > el.clientWidth || textWidth(el) > room(el) + EPS;
+            let clipped = false;
+            let hidden = false;
+            for (let a = el.parentElement; a; a = a.parentElement) {
+                const o = getComputedStyle(a);
+                const clips = o.overflowX !== 'visible' || o.overflowY !== 'visible';
+                if (clips || a === row) {
+                    const c = insetBox(a, a === row);
+                    if (b.top >= c.bottom - EPS || b.bottom <= c.top + EPS) hidden = true;
+                    else if (b.left < c.left - EPS || b.right > c.right + EPS || b.top < c.top - EPS || b.bottom > c.bottom + EPS) clipped = true;
+                }
+                if (a === row) break;
+            }
+            return { text: el.textContent, own, clipped: clipped && !hidden, hidden, shown: !own && !clipped && !hidden };
+        };
+        const linePieces = lines ? Array.from(lines.querySelectorAll('[data-testid="event-when"] > span[data-piece="whole"], [data-testid="event-pinned-chip"], [data-testid="event-state-badge"]')) : [];
+        const overlaps = (x, y) => {
+            if (!x || !y) return false;
+            const a = x.getBoundingClientRect();
+            const b = y.getBoundingClientRect();
+            return Math.min(a.right, b.right) - Math.max(a.left, b.left) > EPS && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > EPS;
+        };
         return {
             kind,
             name: (row.querySelector('h3, [data-testid="event-row-title"], [data-testid="poll-row-question"]')?.textContent ?? '').slice(0, 40),
@@ -292,37 +339,40 @@ async function compactRows(page) {
             // One short line's height: the line box the row's words are set on (`leading-snug`), as drawn.
             lineHeight: line ? +parseFloat(getComputedStyle(line).lineHeight).toFixed(2) : null,
             when: whenPieces.map(p => p.textContent).join(' ') || null,
-            // The start's date and its time (the first two whole pieces) whole and inside the two lines; a piece gives way ("…")
-            // only when it is wider than the words' whole room AND the end has already given way down to its chip. Any later
-            // piece (the end of a two-day event) is whole where it is shown.
+            // The rule (the director's, for #2904): the when shows whole pieces, wrapping to a second line rather than cutting
+            // one. The start's date and its time (the first two whole pieces) are drawn whole and shown; every other piece that
+            // is never split (the end of a two-day event, 📌 PINNED, the state) is drawn whole or sits wholly on the line past
+            // the two the block shows, never drawn in part. No piece gives way, in any language.
+            pieces: linePieces.map(drawn),
             whenWhole: lines ? (() => {
-                const whole = (p) => p.scrollWidth <= p.clientWidth + 0.5;
-                const shown = (p) => p.getBoundingClientRect().bottom <= lines.getBoundingClientRect().bottom + 0.5;
-                const endAtChip = chipEl ? chipEl.parentElement.getBoundingClientRect().width <= chipEl.getBoundingClientRect().width + 1 : false;
-                const mayGiveWay = (p) => p.scrollWidth > lines.clientWidth + 0.5 && endAtChip;
-                const start = whenPieces.slice(0, 2);
-                return start.length === 2 && start.every(p => shown(p) && (whole(p) || mayGiveWay(p)))
-                    && whenPieces.slice(2).every(p => !shown(p) || whole(p) || mayGiveWay(p));
+                const start = whenPieces.slice(0, 2).map(drawn);
+                const rest = linePieces.filter(p => !whenPieces.slice(0, 2).includes(p)).map(drawn);
+                return start.length === 2 && start.every(p => p.shown) && rest.every(p => p.shown || (p.hidden && !p.own));
             })() : null,
-            cut: whenPieces.filter(p => p.scrollWidth > p.clientWidth + 0.5).map(p => p.textContent),
+            cut: linePieces.map(drawn).filter(p => p.own || p.clipped).map(p => `${p.text}${p.own ? ' (its own …)' : ''}${p.clipped ? ' (clipped)' : ''}`),
             mark: row.querySelector('[data-testid="event-mark"], [data-testid="poll-mark"]')?.textContent ?? null,
             ...(() => {
-                // The row's end (the mark above the chip): its right edge measured from the row's content edge (inside the border
-                // and the padding; negative is past it), the chip whole, and the words column ending before the end starts.
+                // The row's end, EVENT and the mark: the chip's and the mark's right edges measured from the row's content edge
+                // (inside the border and the padding; negative is past it); the chip drawn whole, its text inside its own box to
+                // the sub-pixel; the mark shown, its ✓ whole and inside the row; nothing the row holds overlapping the chip or
+                // the mark (the title, the two lines).
                 const css = getComputedStyle(row);
                 const inner = r.right - parseFloat(css.borderRightWidth) - parseFloat(css.paddingRight);
                 const markEl = row.querySelector('[data-testid="event-mark"], [data-testid="poll-mark"]');
                 const mr = markEl?.getBoundingClientRect();
-                const words = row.querySelector('[data-testid="event-row-lines"]')?.parentElement?.getBoundingClientRect();
-                const end = chipEl?.parentElement?.getBoundingClientRect();
+                const tick = markEl ? Array.from(markEl.querySelectorAll('span')).find(s => s.textContent.trim() === '✓') ?? null : null;
+                const title = row.querySelector('[data-testid="event-row-title"]');
                 return {
                     scroll: `${row.scrollWidth}/${row.clientWidth}`,
-                    chipRight: chipEl ? +(inner - chipEl.getBoundingClientRect().right).toFixed(1) : null,
-                    chipWhole: chipEl ? chipEl.scrollWidth <= chipEl.clientWidth + 0.5 : null,
+                    chipRight: chipEl ? +(inner - chipEl.getBoundingClientRect().right).toFixed(2) : null,
+                    chipWhole: chipEl ? drawn(chipEl).shown : null,
                     chipText: chipEl?.textContent ?? null,
-                    markRight: mr ? +(inner - mr.right).toFixed(1) : null,
-                    markShown: mr ? mr.width >= 12 && mr.height > 0 : null,
-                    wordsClear: words && end ? words.right <= end.left + 0.5 : null,
+                    markRight: mr ? +(inner - mr.right).toFixed(2) : null,
+                    markShown: mr ? mr.width >= 12 && mr.height > 0 && !drawn(markEl).clipped && !drawn(markEl).hidden : null,
+                    tickWhole: tick ? drawn(tick).shown : null,
+                    // The mark's words, where they give way at the end of their two lines (its own "…"; the ✓ stays).
+                    markGives: markEl ? Array.from(markEl.children).some(s => s !== tick && (s.scrollHeight > s.clientHeight + 1 || s.scrollWidth > s.clientWidth)) : null,
+                    wordsClear: chipEl ? ![title, lines].some(w => overlaps(w, chipEl) || overlaps(w, markEl)) && !overlaps(chipEl, markEl) : null,
                     lines: lines ? Math.round(lines.getBoundingClientRect().height / parseFloat(getComputedStyle(lines).lineHeight)) : null,
                 };
             })(),
@@ -363,16 +413,18 @@ function checkCompactRows(rows, { label, maxWidth, scale }) {
 }
 
 /**
- * The review of #2904: in a language whose when runs wider than English's, an event's row must still hold its end. Every event
- * row: nothing past the row (scrollWidth), the EVENT chip whole and inside the row's content edge, the mark shown and inside
- * it, the words ending before the end, the date and the time whole, and the row a listing's row and one line at most.
+ * The reviews of #2904: in a language whose when runs wider than English's, an event's row holds its end AND its when. Every
+ * event row: nothing past the row (scrollWidth); the EVENT chip drawn whole (its text to the sub-pixel) and inside the row's
+ * content edge; the mark shown, its ✓ whole, inside that edge; nothing overlapping the chip or the mark; the start's date and
+ * time drawn whole and shown, and no piece that is never split drawn in part (compactRows' `drawn`); the row two short lines
+ * and a listing's row and one line at most.
  */
 function checkCompactEnds(rows, { label }) {
     const events = rows.filter(r => r.kind === 'event');
     check(events.length === KIND_EVENTS.length, `${label}: ${events.length} event rows (${KIND_EVENTS.length})`);
-    const show = (r) => `${r.name}: scroll ${r.scroll}, chip ${r.chipRight}${r.chipWhole ? '' : ' CUT'}, mark ${r.markRight}${r.markShown ? '' : ' GONE'} ${JSON.stringify(r.mark)}, when ${JSON.stringify(r.when)} ${r.whenWhole ? 'whole' : 'CUT'}${r.cut.length ? ` (gives way: ${JSON.stringify(r.cut)})` : ''}, ${r.lines} lines, ${r.height}px`;
+    const show = (r) => `${r.name}: scroll ${r.scroll}, chip ${JSON.stringify(r.chipText)} ${r.chipRight}${r.chipWhole ? '' : ' CUT'}, mark ${r.markRight}${r.markShown ? '' : ' GONE'}${r.tickWhole === false ? ' ✓ CUT' : ''}${r.markGives ? ' (its words give way)' : ''} ${JSON.stringify(r.mark)}, when ${JSON.stringify(r.when)} ${r.whenWhole ? 'whole' : 'CUT'}${r.cut.length ? ` (cut: ${JSON.stringify(r.cut)})` : ''}${r.wordsClear ? '' : ', words OVER the end'}, ${r.lines} lines, ${r.height}px`;
     for (const r of events) {
-        const ok = !r.over && r.chipWhole && r.chipRight >= -0.5 && r.markShown && r.markRight >= -0.5 && r.wordsClear && r.whenWhole;
+        const ok = !r.over && r.chipWhole && r.chipRight >= -EDGE && r.markShown && r.markRight >= -EDGE && r.tickWhole !== false && r.wordsClear && r.whenWhole;
         check(ok, `${label}: ${show(r)}`);
     }
     const listingRow = Math.min(...rows.filter(r => r.kind === 'listing').map(r => r.height));
@@ -528,7 +580,7 @@ try {
 
         for (const lang of run('compact-kinds') ? KIND_LANGS : []) {
             // The review of #2904: the compact view at 320 x 1.3 in six languages, an event of each kind (in person, online, read
-            // in another clock, over two days), the reader in Brisbane. Pictures in de and ru.
+            // in another clock, over two days, pinned and hosted), the reader in Brisbane. Pictures in en, fr, de and ru.
             const feed = [...LOCAL.filter(p => p.type !== 'event'), ...KIND_EVENTS];
             const { context, page } = await open(browser, server.origin, { dark, global: false, lang, view: 'compact', timezoneId: KINDS_ZONE, feed });
             const shown = await page.evaluate(() => document.documentElement.lang);
@@ -536,10 +588,14 @@ try {
             const wide = await page.evaluate(() => document.documentElement.scrollWidth);
             check(wide <= 320, `${theme} kinds ${lang}: nothing wider than the screen (${wide}px)`);
             checkCompactEnds(await compactRows(page), { label: `${theme} kinds ${lang} 320` });
-            if (lang === 'de' || lang === 'ru') {
+            if (['en', 'fr', 'de', 'ru'].includes(lang)) {
                 await page.evaluate(() => document.querySelector('[data-testid="event-compact-row"]')?.scrollIntoView({ block: 'start' }));
                 await page.waitForTimeout(150);
                 await page.screenshot({ path: path.join(out, `web-compact-kinds-${lang}-${theme}.png`) });
+                // The rest of the event rows (in person, online, another clock, two days), under the listings.
+                await page.evaluate(() => [...document.querySelectorAll('[data-testid="event-compact-row"]')].pop()?.scrollIntoView({ block: 'end' }));
+                await page.waitForTimeout(150);
+                await page.screenshot({ path: path.join(out, `web-compact-kinds-${lang}-b-${theme}.png`) });
             }
             await context.close();
         }

@@ -276,13 +276,20 @@ export const COMPACT_LINE = 'block min-w-0 truncate text-[11px] leading-snug';
 
 /**
  * Two short lines as one block (an event's row: its when, then 📌 PINNED, the state and the place): the words flow on from
- * the when and the block stops at two lines, the last ending in "…". At 320 px x 1.3 the row's words have ~110 px, where
- * "SAT 7 NOV · 16:00–18:00" alone is ~175 (measured, market-order-shots.mjs): the date and the time then take a line each,
- * whole, and the place gives way; in a wider row all of it is one line. Never more than a listing's row and one line.
+ * the when and the block stops at two lines, the last ending in "…". Beside the mark (COMPACT_EVENT_BODY) the block takes
+ * the room the mark leaves and never goes narrower than its widest whole piece (`min-w-min`): the date or the time, each
+ * whole, wrapping to a second line rather than cut. The words between the pieces (the place, "your time") break anywhere they
+ * must (`[overflow-wrap:anywhere]`), so only a whole piece sets that width; the pieces themselves never break (nowrap). At
+ * 320 px x 1.3 that is the date and the time a line each, and the place on the line past them; in a wider row all of it is
+ * one line. Never more than a listing's row and one line.
  */
-export const COMPACT_LINES = 'min-w-0 text-[11px] leading-snug line-clamp-2 break-words';
+export const COMPACT_LINES = 'flex-1 min-w-min text-[11px] leading-snug line-clamp-2 [overflow-wrap:anywhere]';
 
-/** A piece inside COMPACT_LINES that is never split (the date, the time, 📌 PINNED): whole, or "…" only past the whole width. */
+/**
+ * A piece inside COMPACT_LINES that is never split (the date, the time, 📌 PINNED, the state): one line, as wide as its words.
+ * The block is never narrower than it, so it is drawn whole; `max-w-full truncate` is only the floor's floor, a piece wider
+ * than the whole row (none is, at 320 px x 1.3 in the six first languages: market-order-shots.mjs compact-kinds).
+ */
 export const COMPACT_PIECE = 'inline-block max-w-full truncate align-bottom';
 
 /**
@@ -305,24 +312,28 @@ export const COMPACT_MARK = 'font-bold text-bp-tile-event-ink';
 export const COMPACT_END = 'flex flex-wrap items-center justify-end gap-x-2 gap-y-1 ml-3 max-w-[45%]';
 
 /*
- * An event's row, whose date and time stay whole wherever the row has room for them, and whose end (the mark above EVENT) is
- * never pushed out of it (measured at 320 px x 1.3 in en, fr, de, ru, es and pt, market-order-shots.mjs compact-kinds: the
- * words have ~110 px there in English, and "SAM. 7 NOV. ·" or "СБ, 7 НОЯБ. ·" need about that). Who gives way, in order:
- *   1. the mark: COMPACT_END_STACK takes the row's whole shortfall first (`shrink-[999]` against the lead's 1), down to its
- *      chip, never narrower (`min-w-min`, which wins over the 45%); its words then end in "…" (COMPACT_MARK_GIVES);
- *   2. then the words: COMPACT_LEAD_FIRM starts as wide as its widest whole piece (`w-min`: the date, the time), grows into
- *      any room left, and can go narrower than that piece (`min-w-0`, with COMPACT_TEXT_FIRM), so a piece wider than the
- *      words' whole room ends in "…" (COMPACT_PIECE) rather than pushing the end past the row's edge.
- *   - COMPACT_TITLE_GIVES: the title one line ending in "…" that asks for no width of its own (it may break anywhere, so it
- *     never sets the column's least width);
- *   - COMPACT_MARK_GIVES: the mark's words, one line, giving way ("Interest… ✓") while its ✓ stays whole beside them.
- * A flex-wrap end (COMPACT_END) keeps its pieces' width side by side even once they have wrapped: it left the words ~55 px.
+ * An event's row (the director's rule for #2904): the when shows whole pieces, wrapping to a second line rather than cutting
+ * one; the end, EVENT and the mark, is never cut; the row is a listing's row and one line at most. Beside the words, the end
+ * cannot keep that rule at 320 px x 1.3: the words and the end share ~172 px there, and EVENT alone is 100 px in French and
+ * 135 in German, where the date is 96 and 90, the time 86 (measured, market-order-shots.mjs compact-kinds). So the end's two
+ * parts sit where each has room, both at the row's end:
+ *   - COMPACT_EVENT_HEAD, the first line: the title, then EVENT. The title gives way (one line ending in "…" that asks for no
+ *     width of its own, COMPACT_TITLE_GIVES); EVENT never does (CHIP's `shrink-0`). The title had the words' width before, so
+ *     it keeps at least what it had.
+ *   - COMPACT_EVENT_BODY, the two short lines: the when's block (COMPACT_LINES, never narrower than its widest whole piece)
+ *     and, 8 apart, the mark, which takes the room the block leaves (COMPACT_EVENT_MARK): its words on up to two lines,
+ *     breaking only between words, a word wider than its room ending in "…", the ✓ whole beside them (COMPACT_MARK_GIVES);
+ *     12 apart left English's "Interested ✓" 1.2 px short beside "16:00–18:00" (measured). The block takes the room the mark
+ *     doesn't want, and the mark gives way, never the when: a floor the flex algorithm freezes at, not a shrink ratio (the
+ *     second review of #2904 measured the old ratio, the end's `shrink-[999]` against the words' 1, still taking 0.08 px
+ *     from the words, enough for "16:00–18:…").
  */
-export const COMPACT_LEAD_FIRM = 'flex items-center gap-3 flex-auto w-min min-w-0';
-export const COMPACT_TEXT_FIRM = 'flex-1 min-w-0';
-export const COMPACT_TITLE_GIVES = 'm-0 font-extrabold text-sm text-nature-950 dark:text-white line-clamp-1 break-all';
-export const COMPACT_END_STACK = 'flex flex-col items-end justify-center gap-1 ml-3 max-w-[45%] min-w-min shrink-[999]';
-export const COMPACT_MARK_GIVES = 'min-w-0 line-clamp-1 break-all';
+export const COMPACT_EVENT_TEXT = 'flex-1 min-w-0 flex flex-col';
+export const COMPACT_EVENT_HEAD = 'flex items-center gap-3 min-w-0';
+export const COMPACT_TITLE_GIVES = 'm-0 flex-1 min-w-0 font-extrabold text-sm text-nature-950 dark:text-white line-clamp-1 break-all';
+export const COMPACT_EVENT_BODY = 'flex items-center gap-2 min-w-0';
+export const COMPACT_EVENT_MARK = 'flex-initial min-w-0 flex items-end justify-end text-end text-[11px] leading-snug';
+export const COMPACT_MARK_GIVES = 'min-w-0 line-clamp-2 break-normal text-ellipsis';
 
 /**
  * The poll's card on the box (slice C1; the table's Poll row): the list card's corners, outline, ground and shadow, a column

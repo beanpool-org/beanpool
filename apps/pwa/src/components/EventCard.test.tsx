@@ -1029,7 +1029,7 @@ describe("The event's grid tile, on the lattice (W3')", () => {
         expect(screen.queryByTestId('event-your-time')).toBeNull();
     });
 
-    it("the map's preview (a grid card with its buttons) keeps the stacked card until the pop-up is the list card (M1)", () => {
+    it('a grid card asked for with its buttons keeps the stacked card (the map asks for the list card since M1)', () => {
         renderAt320(<EventCard post={baseEvent} identity={identity} rsvpOnCard />);
         expect(screen.queryByTestId('grid-text-block')).toBeNull();
         expect(screen.getByTestId('event-rsvp-row')).toBeInTheDocument();

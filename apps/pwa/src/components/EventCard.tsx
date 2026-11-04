@@ -46,7 +46,7 @@ import { ReportModal } from './ReportModal';
 import {
     BOX_LABEL, CARD_INK, EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
     GRID_TIME_ROW, GRID_TYPE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE,
-    chip, gridTile, listCard,
+    POP_UP_CLOSE_ROOM, chip, gridTile, listCard,
 } from './market-card-shell';
 
 interface RsvpState {
@@ -147,11 +147,15 @@ function StateBadge({ post, box = false }: { post: MarketplacePost; box?: boolea
  * which keeps its whole line (Marty's Byron screenshot, 4 Nov 2026: the date wrapped to two lines on a pinned card).
  * No chip, no row.
  */
-function EventChips({ post, withType = false, box = false }: { post: MarketplacePost; withType?: boolean; box?: boolean }) {
+function EventChips({ post, withType = false, box = false, endRoom = false }: {
+    post: MarketplacePost; withType?: boolean; box?: boolean;
+    /** The map's pop-up: room at the row's end for the pop-up's ✕. */
+    endRoom?: boolean;
+}) {
     const pinned = pinLive(post as any);
     if (!withType && !pinned && !eventStateOf(post)) return null;
     return (
-        <span data-testid="event-chips" className="flex flex-wrap items-center gap-1 min-w-0 w-full">
+        <span data-testid="event-chips" className={`flex flex-wrap items-center gap-1 min-w-0 w-full${endRoom ? ` ${POP_UP_CLOSE_ROOM}` : ''}`}>
             {withType && (
                 <span data-testid="event-type-chip" className={box ? chip('event') : `${CHIP} bg-bp-tile-event-tint text-bp-tile-event-ink`}>
                     {upperCase(t('EVENT', undefined, 'event category tile label'))}
@@ -351,7 +355,8 @@ interface EventCardProps {
      * Which shape the feed is in, so the event is the same card as the offers beside it (MarketplaceCard): in the grid the
      * listing tile, on the same lattice (W3'); in the list the list card, the photo flush on the left; in compact the
      * stacked lines with no photo, until the compact row joins the box (C1). Defaults to the grid, which is how the Market
-     * opens. With `rsvpOnCard` (the map's preview) the grid draws the stacked card with its buttons.
+     * opens. A grid card asked for with `rsvpOnCard` draws the stacked card with its buttons: no screen asks for that since
+     * the map's pop-up became the list card (M1, #2881), whose buttons are the list branch's.
      */
     viewMode?: 'grid' | 'list' | 'compact';
     onOpen?: () => void;
@@ -367,9 +372,14 @@ interface EventCardProps {
      * distance only from a point the visitor shared, in whole km, since the node places the event at its area's centre.
      */
     visitor?: boolean;
+    /**
+     * The map's pop-up (DESIGN-card-style-box-fable.md §2, slice M1): the list card with the pop-up's ✕ in its top end
+     * corner, which the map draws beside the card. The chip row keeps room for it. List view only.
+     */
+    popUp?: boolean;
 }
 
-export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, rsvpOnCard = false, visitor = false }: EventCardProps) {
+export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpen, onRsvpChange, rsvpOnCard = false, visitor = false, popUp = false }: EventCardProps) {
     const rsvp = useEventRsvp(post, identity, onRsvpChange);
     const p = rsvp.livePost;
     const copy = eventCopyOf(p);
@@ -425,7 +435,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                         />
                     </span>
                     <span className={LIST_TEXT}>
-                        <EventChips post={p} withType box />
+                        <EventChips post={p} withType box endRoom={popUp} />
                         <EventWhen post={p} testId="event-when" className={`${LIST_TYPE.loud} ${CARD_INK.event}`} repeatClassName={CARD_INK.event} />
                         <span dir="auto" className={`w-full min-w-0 break-words line-clamp-2 ${LIST_TYPE.second} ${CARD_INK.title}`}>
                             {p.title}
@@ -458,7 +468,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                         )}
                     </span>
                 </button>
-                {/* Only the map's preview asks for the buttons, and it is a grid card; here they keep a row of their own under the card's lines. */}
+                {/* Only the map's pop-up asks for the buttons (and it is this list card); they keep a row of their own under the card's lines. */}
                 {rsvpOnCard && !visitor && !copy && <div className="basis-full px-3 pb-3"><RsvpButtons rsvp={rsvp} /></div>}
                 {rsvpOnCard && rsvp.error && (
                     <p role="alert" className="basis-full m-0 px-3 pb-3 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>
@@ -584,8 +594,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     );
 
     return (
-        // The stacked card: the compact view, until its row joins the box (C1), and the map's preview with its buttons (a grid
-        // card with `rsvpOnCard`), until the pop-up is the list card (M1). Its band is core's event tint, not a raw violet class.
+        // The stacked card: the compact view, until its row joins the box (C1), and a grid card asked for with `rsvpOnCard`
+        // (no screen since the map's pop-up became the list card, M1). Its band is core's event tint, not a raw violet class.
         <div data-testid="event-card" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-bp-tile-event-tint rounded-2xl p-3 shadow-sm flex flex-col gap-2 overflow-hidden">
             <button
                 type="button"

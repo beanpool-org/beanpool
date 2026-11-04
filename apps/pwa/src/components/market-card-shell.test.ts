@@ -13,7 +13,7 @@ import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOC
 import {
     BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
     GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
-    PAGE_TYPE, chip, gridChip, gridTile, listCard,
+    PAGE_TYPE, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
 
 const classes = (s: string) => s.split(/\s+/).filter(Boolean);
@@ -184,8 +184,28 @@ describe('the web style box holds core\'s numbers', () => {
         expect(LIST_BEAN_PX).toBe(14);
     });
 
+    it('the map pop-up (M1): the card\'s corners and core\'s floating shadow; a ✕ of 44 to tap, 28 to see, kept clear of the first row', () => {
+        expect(radius(POP_UP)).toBe(MARKET_CARD_SHELL.radius);
+        const shadow = classes(POP_UP).find(c => c.startsWith('shadow-['))?.match(/^shadow-\[0_(\d+)px_(\d+)px_rgba\(0,0,0,([\d.]+)\)\]$/);
+        expect(shadow).toBeTruthy();
+        const { offsetY, blur, opacity } = MARKET_CARD_SHELL.floatingShadow;
+        expect([Number(shadow![1]), Number(shadow![2]), Number(shadow![3])]).toEqual([offsetY, blur, opacity]);
+        expect(classes(POP_UP_CLOSE)).toEqual(expect.arrayContaining(['absolute', 'top-0', 'end-0', 'min-w-[44px]', 'min-h-[44px]', 'focus-visible:ring-2']));
+        // Nothing holds the target under 44.
+        expect(classes(POP_UP_CLOSE).filter(c => /^(w|h|max-w|max-h)-/.test(c))).toEqual([]);
+        expect(spacing(POP_UP_CLOSE_DOT, 'w')).toBe(28);
+        expect(spacing(POP_UP_CLOSE_DOT, 'h')).toBe(28);
+        // The circle's near edge is its inset (p-1.5) plus 28 from the card's end; the first row stops at the text's padding
+        // (12) plus the room: the room must reach past the circle.
+        expect(MARKET_CARD_SHELL.textPadding + spacing(POP_UP_CLOSE_ROOM, 'pe')!).toBeGreaterThanOrEqual(spacing(POP_UP_CLOSE, 'p')! + 28);
+        // And down: the circle's foot is its inset plus 28 from the card's top; the line under the first row starts at the
+        // text's padding plus the row's height at least (all in rem, so it holds at 1.3x text), past the circle's foot.
+        expect(MARKET_CARD_SHELL.textPadding + spacing(POP_UP_CLOSE_ROOM, 'min-h')!).toBeGreaterThan(spacing(POP_UP_CLOSE, 'p')! + 28);
+    });
+
     it('every colour is core\'s role or the card token: no raw violet, purple, blue or nature-950', () => {
         const all = [listCard(), listCard({ elder: true }), listCard({ pulse: true }), CHIP, CHIP_SENTENCE, LIST_PHOTO, LIST_TEXT,
+            POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT,
             ...Object.values(CHIP_TONE), ...Object.values(LIST_TYPE), ...Object.values(CARD_INK)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
         for (const tone of Object.values(CHIP_TONE)) expect(tone).toMatch(/^bg-bp-[a-z-]+-tint text-bp-[a-z-]+-ink$/);

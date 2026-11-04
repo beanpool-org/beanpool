@@ -356,6 +356,24 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
             vi.mocked(lastPillarSyncStartedAt).mockReturnValue(0);
         });
 
+        // Review of #2899 (live-updates.ts:229): a private group's change, its closing by vote, or a seat in a place circle
+        // goes to that group's few members only: no crowd, so it syncs at once as before, and the screens hear it too.
+        it('a private group made or changed, or a place-circle seat, is not wide: the screens hear it and it syncs at once', async () => {
+            const socket = await signedIn();
+            const narrow = [
+                { type: 'group_updated', group: { id: 'g2', name: 'Kitchen roster', joinPolicy: 'invite_only', memberCount: 4 } },
+                { type: 'group_updated', group: { id: 'g3', name: 'Old bees', joinPolicy: 'request_to_join', memberCount: 3 } },
+                { type: 'group_created', group: { id: 'c1', name: 'Near you', joinPolicy: 'invite_only', kind: 'circle', memberCount: 2 } },
+            ];
+            for (const event of narrow) {
+                socket.onmessage({ data: JSON.stringify(event) });
+                expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('ws_activity', event);
+            }
+            await vi.advanceTimersByTimeAsync(0);
+            expect(requestSync).toHaveBeenCalledTimes(3);
+            expect(client.deferredSyncPendingForTest()).toBe(false);
+        });
+
         it('a change to this member themself is theirs, not wide: it syncs at once as before', async () => {
             const socket = await signedIn();
             socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: ME }) });

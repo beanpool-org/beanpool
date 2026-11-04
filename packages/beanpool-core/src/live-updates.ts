@@ -225,9 +225,18 @@ export function wideSyncDelayMs(random: () => number = Math.random): number {
  * Whether a live-feed event is a wide doorbell for the member whose socket it came on (`selfKey`, null when the socket
  * is not signed by one). A card change or removal naming that member is theirs, not wide; one naming nobody (the bare
  * doorbell a visitor's or a suspended member's socket gets) is wide, since it names no one in particular.
+ *
+ * A group made or changed is wide only when the group it carries is open: an open group's is the one the node sends to
+ * every socket (state-engine.ts createGroup, updateGroup, updateGroupPolicy). A private group's goes to its own members
+ * alone (its rename, photo or policy, its closing by vote, someone seated in a place circle, which stays invite-only),
+ * so it is no crowd and its refresh stays immediate. Every group event the node sends carries its group (groupAsListed);
+ * one that carried none would name no group in particular, so it is wide, as a bare card doorbell is.
  */
 export function isWideDoorbell(event: unknown, selfKey: string | null | undefined): boolean {
     if (!isObject(event) || typeof event.type !== 'string' || !WIDE_DOORBELL_TYPES.has(event.type)) return false;
+    if ((event.type === 'group_created' || event.type === 'group_updated') && isObject(event.group)) {
+        return event.group.joinPolicy === 'open';
+    }
     if (event.type === 'profile_updated' || event.type === 'user_pruned') {
         const named = typeof event.publicKey === 'string' && event.publicKey ? event.publicKey : null;
         if (named !== null && !!selfKey && named === selfKey) return false;

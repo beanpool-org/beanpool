@@ -320,6 +320,30 @@ describe('wide doorbells (capacity REPORT bottleneck 2)', () => {
         }
     });
 
+    // Review of #2899 (live-updates.ts:229): the node sends an open group's create or change to every socket, and a
+    // private group's only to its members (state-engine.ts createGroup, updateGroup, updateGroupPolicy, afterGroupVote,
+    // addPlaceCircleMember). Only the first is the storm; the rest keep their immediate refresh.
+    it("a group made or changed is wide only when the group it carries is open", () => {
+        const open = { id: 'g1', name: 'Seed swap', joinPolicy: 'open', memberCount: 12 };
+        for (const type of ['group_created', 'group_updated']) {
+            expect(isWideDoorbell({ type, group: open }, ME)).toBe(true);
+            expect(isWideDoorbell({ type, group: open }, null)).toBe(true);
+        }
+        // updateGroup / updateGroupPolicy on a private group: to its members only.
+        for (const joinPolicy of ['invite_only', 'request_to_join']) {
+            const group = { id: 'g2', name: 'Kitchen roster', joinPolicy, memberCount: 4 };
+            expect(isWideDoorbell({ type: 'group_updated', group }, ME)).toBe(false);
+            // createGroup of a group that is not open: to its creator only.
+            expect(isWideDoorbell({ type: 'group_created', group }, ME)).toBe(false);
+        }
+        // A private group closed by vote (afterGroupVote 'closed', no target): group_updated to its members only.
+        expect(isWideDoorbell({ type: 'group_updated', group: { id: 'g3', name: 'Old bees', joinPolicy: 'request_to_join', memberCount: 3 } }, ME)).toBe(false);
+        // Someone seated in a place circle (addPlaceCircleMember): group_created to that one member. A circle stays invite-only.
+        expect(isWideDoorbell({ type: 'group_created', group: { id: 'c1', name: 'Near you', joinPolicy: 'invite_only', kind: 'circle', memberCount: 2 } }, ME)).toBe(false);
+        // A group with no policy said is not open.
+        expect(isWideDoorbell({ type: 'group_updated', group: { id: 'g4', name: 'Unsaid' } }, ME)).toBe(false);
+    });
+
     it("a card change or removal is wide unless it names the member themself; one naming nobody is wide", () => {
         for (const type of ['profile_updated', 'user_pruned']) {
             expect(isWideDoorbell({ type, publicKey: OTHER }, ME)).toBe(true);

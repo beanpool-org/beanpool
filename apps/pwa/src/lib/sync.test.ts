@@ -887,6 +887,27 @@ describe('PWA WebSocket Pong Watchdog', () => {
             expect(read).toHaveBeenCalledTimes(2);
         });
 
+        // Review of #2899 (live-updates.ts:229): a private group's change, its closing by vote, or a seat in a place circle
+        // goes to that group's few members only. On the web this refresh is what re-reads Talk's list, the open chat,
+        // needs-you and Home, so it stays immediate.
+        const NARROW: Array<[string, Record<string, unknown>]> = [
+            ['a private group renamed or closed by vote (group_updated)', { type: 'group_updated', group: { id: 'g2', name: 'Kitchen roster', joinPolicy: 'invite_only', memberCount: 4 } }],
+            ['a request-to-join group\'s policy changed (group_updated)', { type: 'group_updated', group: { id: 'g3', name: 'Old bees', joinPolicy: 'request_to_join', memberCount: 3 } }],
+            ['a seat in a place circle (group_created)', { type: 'group_created', group: { id: 'c1', name: 'Near you', joinPolicy: 'invite_only', kind: 'circle', memberCount: 2 } }],
+        ];
+        for (const [name, event] of NARROW) {
+            it(`${name}: refreshes at once, owes nothing later`, async () => {
+                const { socket, read } = await memberSocket();
+                vi.spyOn(Math, 'random').mockReturnValue(0.999);
+                socket.onmessage({ data: JSON.stringify(event) });
+                await vi.advanceTimersByTimeAsync(150);
+                expect(read).toHaveBeenCalledTimes(1);
+                expect(deferredSyncPendingForTest()).toBe(false);
+                await vi.advanceTimersByTimeAsync(300_000);
+                expect(read).toHaveBeenCalledTimes(1);
+            });
+        }
+
         it("a visitor's wide doorbell keeps the visitor's own pacing", async () => {
             const read = vi.fn();
             onSyncActivity(read);

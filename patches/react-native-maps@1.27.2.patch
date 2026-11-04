@@ -1,5 +1,5 @@
 diff --git a/android/src/main/java/com/rnmaps/maps/MapView.java b/android/src/main/java/com/rnmaps/maps/MapView.java
-index ebf87802160a201504a277fff47b7a3801c075b8..f2db030fc766a85cbd16591039ceba3b7dae4296 100644
+index ebf87802160a201504a277fff47b7a3801c075b8..3f535fd1dad026cfa3d7fcde1fe28a4153d366e5 100644
 --- a/android/src/main/java/com/rnmaps/maps/MapView.java
 +++ b/android/src/main/java/com/rnmaps/maps/MapView.java
 @@ -333,15 +333,16 @@ public class MapView extends com.google.android.gms.maps.MapView implements Goog
@@ -26,7 +26,7 @@ index ebf87802160a201504a277fff47b7a3801c075b8..f2db030fc766a85cbd16591039ceba3b
 @@ -377,7 +378,7 @@ public class MapView extends com.google.android.gms.maps.MapView implements Goog
              Log.e("MapView", "Error during stop in onDetachedFromWindow: " + e.getMessage());
          }
-
+ 
 -        savedFeatures = new ArrayList<>(features);
 +        savedFeatures = new ArrayList<>(liveFeatures());
          features.clear();
@@ -71,7 +71,7 @@ index ebf87802160a201504a277fff47b7a3801c075b8..f2db030fc766a85cbd16591039ceba3b
      }
  
      public void addFeature(View child, int index) {
-@@ -1273,18 +1270,19 @@ public class MapView extends com.google.android.gms.maps.MapView implements Goog
+@@ -1273,22 +1270,25 @@ public class MapView extends com.google.android.gms.maps.MapView implements Goog
      }
  
      public int getFeatureCount() {
@@ -95,3 +95,10 @@ index ebf87802160a201504a277fff47b7a3801c075b8..f2db030fc766a85cbd16591039ceba3b
          if (feature instanceof MapMarker) {
              markerMap.remove(feature.getFeature());
              feature.removeFromMap(markerCollection);
+-            safeRemoveFeatureFromAttacherGroup(feature);
++            // Off the window attacherGroup is null and the marker stayed in the old group, so its next insert made
++            // Fabric mark it re-added and skip every later remove: dead markers stayed on the map, red or unhidden.
++            safeRemoveFromParent(feature);
+         } else if (feature instanceof MapHeatmap) {
+             heatmapMap.remove(feature.getFeature());
+             feature.removeFromMap(map);

@@ -8,6 +8,7 @@
  *   beanpool restore --unlocked FILE.tar.gz
  *   beanpool restore-point list | roll-back NAME                                       (restore-point-command.ts)
  *   beanpool pair [--code-file F] [--follow-new-server]                                (pair-command.ts)
+ *   beanpool lights-out on [--address URL] | off | status                              (lights-out-command.ts)
  *
  * claim: the last step of an install, the address and then the one-time code and its QR for the phone. recover: makes
  * a member an owner, prints their break-glass code once, and tells the community. restore and restore-point roll-back:
@@ -23,6 +24,7 @@ import { CLAIM_USAGE, runClaim } from './claim-command.js';
 import { RESTORE_USAGE, runRestore, shown } from './restore-command.js';
 import { RESTORE_POINT_USAGE, runRestorePoint } from './restore-point-command.js';
 import { PAIR_USAGE, runPair } from './pair-command.js';
+import { LIGHTS_OUT_USAGE, runLightsOut } from './lights-out-command.js';
 import { terminalAsk } from './shell-prompt.js';
 
 const RECOVER_USAGE = `Usage: beanpool recover --key <member public key | @callsign>
@@ -33,7 +35,7 @@ The community is told in a critical announcement, and the node's log records it.
 
 The member must have joined first.`;
 
-const USAGE = `${CLAIM_USAGE}\n\n${RECOVER_USAGE}\n\n${RESTORE_USAGE}\n\n${RESTORE_POINT_USAGE}\n\n${PAIR_USAGE}`;
+const USAGE = `${CLAIM_USAGE}\n\n${RECOVER_USAGE}\n\n${RESTORE_USAGE}\n\n${RESTORE_POINT_USAGE}\n\n${PAIR_USAGE}\n\n${LIGHTS_OUT_USAGE}`;
 
 const [sub, ...rest] = process.argv.slice(2);
 if (sub === 'claim') {
@@ -57,6 +59,11 @@ if (sub === 'claim') {
         process.exit(code);
     }, (e) => {
         prompt.close();
+        console.error(`Nothing was changed. ${e?.message || e}`);
+        process.exit(1);
+    });
+} else if (sub === 'lights-out') {
+    runLightsOut(rest, { out: (l) => console.log(l), err: (l) => console.error(l) }).then(code => process.exit(code), (e) => {
         console.error(`Nothing was changed. ${e?.message || e}`);
         process.exit(1);
     });

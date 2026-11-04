@@ -44,7 +44,8 @@ describe("an event's spot where anyone can join (320px, 130%)", () => {
         const line = await screen.findByTestId('rough-place-line');
         expect(line).toHaveTextContent(LINE);
         expect(line.className).toMatch(/break-words/);
-        expect(line.className).toMatch(/(^|\s)text-nature-600(\s|$)/);
+        // The page's secondary ink (PAGE_INK.secondary, DW1): nature-700, as nature-600 is 4.3:1 on the page ground.
+        expect(line.className).toMatch(/(^|\s)text-nature-700(\s|$)/);
         expect(line.className).toMatch(/(^|\s)dark:text-nature-300(\s|$)/);
     });
     it('and so is one Going but still waiting', async () => {

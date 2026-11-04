@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ El túnel del nombre liberado se detuvo. Este servidor sigue respondiendo en {addresses}.",
   "🫘 A project you backed changed its end date": "🫘 Un proyecto que respaldaste cambió su fecha final",
   "🫘 Pledges went back to their backers": "🫘 Los aportes volvieron a quienes los hicieron",
-  "🫘 Your pledge came back": "🫘 Tu aporte regresó"
+  "🫘 Your pledge came back": "🫘 Tu aporte regresó",
+  "Answer serve or step_aside.": "Responde serve o step_aside.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "Ya votaste, así que formas parte de este jurado. Puedes cambiar tu voto hasta que cierre."
 }

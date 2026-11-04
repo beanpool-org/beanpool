@@ -203,7 +203,7 @@ describe('CommunityShapeSection — 320 px layout & role access', () => {
         // Header and role hint
         expect(screen.getByText('🧭')).toBeInTheDocument();
         expect(screen.getByText('Core settings')).toBeInTheDocument();
-        expect(screen.getByTestId('shape-role-hint')).toHaveTextContent("You're an admin: you can read these.");
+        expect(screen.getByTestId('shape-role-hint')).toHaveTextContent("You're an admin: you can read these and advise the owners.");
 
         // Admins see no expand arrows or buttons to change
         expect(container.querySelectorAll('button[type="submit"]')).toHaveLength(0);

@@ -533,7 +533,7 @@ export function HomeScreen({
                 )}
                 {coreAdminLine && (
                     <p data-testid="home-core-admin-line" className="text-xs text-nature-300 m-0 p-3 rounded-xl bg-nature-950 border border-nature-800">
-                        🧭 The owners haven&apos;t confirmed the core settings yet. You can read them.
+                        🧭 The owners haven&apos;t confirmed the core settings yet. You can read them and advise.
                     </p>
                 )}
                 {actionItems.length > 0 && (

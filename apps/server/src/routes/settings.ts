@@ -21,7 +21,7 @@ import {
 } from '../config/local-config.js';
 import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession, revokeAdminSession, ADMIN_SESSION_COOKIE } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
-import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, requireFreshProof, PASSWORD_RETIRED_CODE, type AdminRole } from '../admin-auth.js';
+import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, requireFreshProof, PASSWORD_RETIRED_CODE, TOKEN_REFUSED_CODE, type AdminRole } from '../admin-auth.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent, actingAs } from '../services/security-signal.js';
 import qrcode from 'qrcode';
@@ -34,6 +34,7 @@ import { KnownFloorError, knownFloorSettings, knownFloorExceptions, readKnownFlo
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { readShape } from '../config/community-shape.js';
 import { applyShapeChanges, shapeChangeAsksFreshProof, ShapeChangeError, SHAPE_OWNER_ONLY, CORE_PROOF_ACTION } from '../config/community-shape-write.js';
+import { adviseTheOwners, ADVICE_ROLE_ONLY, ADVICE_TOKEN_REFUSED } from '../config/core-advice.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import { countWebAppPageLoad } from '../engine/web-visits.js';
@@ -367,6 +368,31 @@ router.post('/api/local/admin/community-shape', async (ctx) => {
         if (!(e instanceof ShapeChangeError)) throw e;
         ctx.status = e.status;
         ctx.body = { error: e.message, code: e.code, ...(e.setting ? { setting: e.setting } : {}), ...(e.unlock ? { unlock: e.unlock } : {}) };
+    }
+});
+
+// Advise the owners (config/core-advice.ts, DESIGN-core-settings-fable.md §5, slice C4): `{ setting, advice }`, up to 200
+// characters about one Core setting, from an admin (who reads every Core setting and changes none) or an owner. One log
+// line and one owner alert; it changes nothing, tells no member and asks no proof. A moderator never gets this far
+// (checkAdminAuth); an automation token of any scope is refused here, since requireAdminRole lets an admin-level token
+// through and a token acts as whoever issued it, not as a person with something to say. Answers `{ shape, told: 'owners' }`.
+router.post('/api/local/admin/community-shape/advice', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if ((ctx.state as any)?.automationTokenId) {
+        ctx.status = 403;
+        ctx.body = { error: ADVICE_TOKEN_REFUSED, code: TOKEN_REFUSED_CODE };
+        return;
+    }
+    if (!requireAdminRole(ctx, ['owner', 'admin'], ADVICE_ROLE_ONLY)) return;
+    ctx.set('Cache-Control', 'no-store');
+    const role = (ctx.state as any).adminRole === 'owner' ? 'owner' : 'admin';
+    try {
+        const { shape } = adviseTheOwners(actingAs(ctx.state, role), role, (ctx as any).requestBody || {});
+        ctx.body = { shape, told: 'owners' };
+    } catch (e) {
+        if (!(e instanceof ShapeChangeError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code, ...(e.setting ? { setting: e.setting } : {}) };
     }
 });
 

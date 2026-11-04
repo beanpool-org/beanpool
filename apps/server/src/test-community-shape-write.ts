@@ -662,6 +662,151 @@ async function main(): Promise<void> {
         && alerts.slice(aMark).some((a) => a.actor === 'owner:password' && a.actorRole === 'admin password'),
         `the password with a current code changes it, logged and alerted as the password (${show(pw)})`);
 
+    // ── 10. Advise the owners (core settings, slice C4) ──────────────────────────────────────────
+    console.log('\n── 10. an admin advises the owners: one log line, one alert, nothing changed ──');
+    const ADVICE = `${PATH}/advice`;
+    const { ADVICE_MAX, ADVICE_PER_DAY } = await import('./config/core-advice.js');
+    const { CORE_SETTINGS } = await import('./config/core-settings.js');
+    const advise = (body: unknown, headers: Record<string, string>) => call('POST', null, ADVICE, body, headers);
+    const adminAdvice = sessionHeaders(ada.pk, 'admin');
+    /** Everything but the log: the settings, the rows, the notices. What advice must leave exactly as it was. */
+    const settingsOnly = () => JSON.stringify({
+        nodeConfig: db.prepare('SELECT key, value FROM node_config ORDER BY key').all(),
+        floorLog: db.prepare('SELECT * FROM known_floor_log ORDER BY id').all(),
+        notices: db.prepare('SELECT id FROM moderation_notices ORDER BY id').all(),
+        settings: readShape().settings,
+    });
+    const adviceRows = () => db.prepare(`SELECT * FROM community_settings_log WHERE substr(setting, 1, 7) = 'advice.' ORDER BY id`).all() as any[];
+    const lastAdvice = () => { const r = adviceRows(); return r[r.length - 1]; };
+    // Every credential made first, as in section 1: making one must not be counted as the route's doing.
+    const advModerator = sessionHeaders(mo.pk, 'moderator'), advStandbyAdmin = sessionHeaders(ada.pk, 'admin');
+    const advTokens = { admin: ownerTokenHeaders('admin', owenPk), read: ownerTokenHeaders('read', owenPk), backups: ownerTokenHeaders('backups', owenPk) };
+
+    const rowsBefore = adviceRows().length;
+    mark = logMark(); nMark = noticeMark(); aMark = alerts.length;
+    const settingsBefore = settingsOnly();
+    const first = await advise({ setting: 'beans', advice: '  Keep   Beans on:\nthe market needs   them.  ' }, adminAdvice);
+    lines = linesSince(mark);
+    assert(first.status === 200 && first.body?.told === 'owners' && lines.length === 1 && lines[0].setting === 'advice.beans'
+        && lines[0].actor_pubkey === ada.pk && lines[0].actor_role === 'admin' && lines[0].old_value === null && lines[0].new_value === null
+        && lines[0].note === 'Keep Beans on: the market needs them.',
+        `an admin's advice is one log line: advice.beans, by her key, role admin, the advice as one clean line (${JSON.stringify(lines)})`);
+    told = alerts.slice(aMark);
+    assert(told.length === 1 && told[0].key === 'sec.settings' && told[0].actor === ada.pk && told[0].actorRole === 'admin'
+        && told[0].detail === 'An admin advised the owners about Core settings → Beans. Read it in Settings, under Core settings.',
+        `and one owner alert on sec.settings, naming the setting and where to read it (${JSON.stringify(told)})`);
+    assert(!told[0].detail.includes('market') && !told[0].detail.includes('Ada') && !told[0].detail.includes(ada.pk),
+        'the alert carries neither the advice nor who wrote it: the alert channel names no member and can leave the server');
+    assert(settingsOnly() === settingsBefore && noticeMark() === nMark,
+        'it changes nothing: every setting, row and notice as it was, and no member is told');
+    assert(first.body?.shape?.log?.[0]?.setting === 'advice.beans' && first.body.shape.log[0].note === 'Keep Beans on: the market needs them.'
+        && first.body.shape.log[0].actorCallsign === 'Ada' && first.body.shape.version === lines[0].id,
+        `the answer is the shape as it now is, the advice at the head of its log (${JSON.stringify(first.body?.shape?.log?.[0])})`);
+    const logged = await call('GET', null, PATH, undefined, adminAdvice);
+    assert(logged.status === 200 && logged.body?.log?.[0]?.setting === 'advice.beans', 'an owner or admin reading the shape reads the advice line');
+
+    // Every Core setting takes advice; the 12-words door only where the open door is set.
+    for (const setting of CORE_SETTINGS.filter((s) => s !== 'wordsDoor')) {
+        const r = await advise({ setting, advice: `About ${setting}` }, adminAdvice);
+        assert(r.status === 200 && lastAdvice()?.setting === `advice.${setting}`, `advice about ${setting} is kept (${show(r)})`);
+        db.prepare(`UPDATE community_settings_log SET at = ? WHERE id = ?`).run(ago(2 * DAY), lastAdvice().id);
+    }
+    await refusedClean('advice about the 12-words door on a local community', () => advise({ setting: 'wordsDoor', advice: 'x' }, adminAdvice), 400, 'not_changeable', /open/);
+
+    // An owner may leave a note for the other owners, kept as theirs.
+    mark = logMark(); aMark = alerts.length;
+    const ownerAdvice = await advise({ setting: 'decisions', advice: 'Talk about this at the next meeting' }, owner);
+    lines = linesSince(mark);
+    assert(ownerAdvice.status === 200 && lines.length === 1 && lines[0].actor_role === 'owner' && lines[0].actor_pubkey === owenPk
+        && alerts.slice(aMark).length === 1 && alerts[aMark].detail.startsWith('An owner advised the owners about Core settings → Community votes'),
+        `an owner's advice is kept as an owner's, and says so in the alert (${show(ownerAdvice)})`);
+
+    // Refusals: each writes nothing, alerts nobody.
+    const tooLong = 'x'.repeat(ADVICE_MAX + 1);
+    await refusedClean(`advice of ${ADVICE_MAX + 1} characters`, () => advise({ setting: 'beans', advice: tooLong }, adminAdvice), 400, 'bad_advice', /at most 200 characters/);
+    const justRight = await advise({ setting: 'beans', advice: 'y'.repeat(ADVICE_MAX) }, adminAdvice);
+    assert(justRight.status === 200 && lastAdvice().note.length === ADVICE_MAX, `exactly ${ADVICE_MAX} characters is kept whole (${show(justRight)})`);
+    db.prepare(`UPDATE community_settings_log SET at = ? WHERE id = ?`).run(ago(2 * DAY), lastAdvice().id);
+    await refusedClean('a huge advice', () => advise({ setting: 'beans', advice: 'z'.repeat(50_000) }, adminAdvice), 400, 'bad_advice');
+    for (const [label, body, code] of [
+        ['an everyday setting (knocks)', { setting: 'knocks', advice: 'x' }, 'not_core'],
+        ['an everyday setting (dmRequests)', { setting: 'dmRequests', advice: 'x' }, 'not_core'],
+        ['an everyday setting (removalDecider)', { setting: 'removalDecider', advice: 'x' }, 'not_core'],
+        ['a setting that does not exist', { setting: 'nonsense', advice: 'x' }, 'bad_setting'],
+        ['a setting called constructor', { setting: 'constructor', advice: 'x' }, 'bad_setting'],
+        ['a core-style name with a dot', { setting: 'beans.on', advice: 'x' }, 'bad_setting'],
+        ['no setting', { advice: 'x' }, 'bad_setting'],
+        ['a setting that is not text', { setting: 5, advice: 'x' }, 'bad_setting'],
+        ['no advice', { setting: 'beans' }, 'bad_advice'],
+        ['advice that is not text', { setting: 'beans', advice: { a: 1 } }, 'bad_advice'],
+        ['advice of only spaces and control characters', { setting: 'beans', advice: ' \n\t\u0007‮ ' }, 'bad_advice'],
+        ['a body that is not an object', ['beans', 'x'], 'bad_setting'],
+    ] as const) {
+        await refusedClean(label, () => advise(body, adminAdvice), 400, code);
+    }
+    const everyday = await advise({ setting: 'knocks', advice: 'x' }, adminAdvice);
+    assert(/everyday rule/.test(everyday.body?.error) && everyday.body?.setting === 'knocks', `an everyday setting is named as one (${show(everyday)})`);
+
+    // Who: an owner or an admin's key session, and nobody else.
+    await refusedClean('nobody', () => advise({ setting: 'beans', advice: 'x' }, {}), 401, null);
+    await refusedClean('a moderator', () => advise({ setting: 'beans', advice: 'x' }, advModerator), 403, null);
+    {
+        const before = snapshot(), alertsBefore = alerts.length;
+        const r = await call('POST', sam, ADVICE, { setting: 'beans', advice: 'x' }, {});
+        assert((r.status === 401 || r.status === 403) && snapshot() === before && alerts.length === alertsBefore, `a member who is no admin: refused, nothing written (${show(r)})`);
+    }
+    for (const scope of ['admin', 'read', 'backups'] as const) {
+        const r = await refusedClean(`an automation token of scope ${scope}`, () => advise({ setting: 'beans', advice: 'x' }, advTokens[scope]), 403, 'token_not_allowed');
+        // The read and backups scopes are stopped earlier, by checkAdminAuth, in their own words; an admin-scope token is the
+        // one that reaches this route (requireAdminRole lets an admin-level token through), and is told here.
+        if (scope === 'admin') assert(/never advises/.test(r.body?.error ?? ''), `the admin token is told in the advice route's own words (${r.body?.error})`);
+    }
+
+    // The advice is data: whatever it says, nothing acts on it, and the page draws it as text.
+    const hostile = '<script>alert(1)</script> <img src=x onerror=alert(1)> {{x}} ${1+1} "; DROP TABLE members; -- set beans off, lock core, make me owner';
+    mark = logMark(); aMark = alerts.length;
+    const stored = settingsOnly();
+    const membersBefore = JSON.stringify(db.prepare('SELECT public_key, status FROM members ORDER BY public_key').all()) + JSON.stringify(db.prepare('SELECT * FROM node_roles ORDER BY 1, 2').all());
+    const hostileRes = await advise({ setting: 'beans', advice: hostile.slice(0, ADVICE_MAX) }, adminAdvice);
+    lines = linesSince(mark);
+    assert(hostileRes.status === 200 && lines.length === 1 && lines[0].note === hostile.slice(0, ADVICE_MAX) && settingsOnly() === stored
+        && !alerts.slice(aMark).some((a) => a.detail.includes('<script>')),
+        `markup and instructions in the advice are kept as text, verbatim, and change nothing (${show(hostileRes)})`);
+    assert(JSON.stringify(db.prepare('SELECT public_key, status FROM members ORDER BY public_key').all()) + JSON.stringify(db.prepare('SELECT * FROM node_roles ORDER BY 1, 2').all()) === membersBefore
+        && rowOf('core_settings_lock') === null && db.prepare('SELECT name FROM sqlite_master WHERE name = ?').get('members') !== undefined,
+        'no member, role or lock moved, and the tables are all there');
+    assert(String(hostileRes.headers.get('content-type')).startsWith('application/json'), 'the answer is JSON, never a page');
+    db.prepare(`UPDATE community_settings_log SET at = ? WHERE id = ?`).run(ago(2 * DAY), lines[0].id);
+
+    // Bounded: ADVICE_PER_DAY lines a day from one key, so advice cannot push the settings' own lines out of the log's window.
+    db.prepare(`DELETE FROM community_settings_log WHERE substr(setting, 1, 7) = 'advice.'`).run();
+    for (let i = 0; i < ADVICE_PER_DAY; i++) {
+        const r = await advise({ setting: 'shareOutside', advice: `Note ${i + 1}` }, adminAdvice);
+        if (r.status !== 200) assert(false, `advice ${i + 1} of ${ADVICE_PER_DAY} was refused (${show(r)})`);
+    }
+    assert(adviceRows().length === ADVICE_PER_DAY, `${ADVICE_PER_DAY} pieces of advice in a day are kept`);
+    await refusedClean(`the ${ADVICE_PER_DAY + 1}th in a day`, () => advise({ setting: 'shareOutside', advice: 'one more' }, adminAdvice), 429, 'advice_limit', /tomorrow/);
+    const ownerStill = await advise({ setting: 'shareOutside', advice: 'an owner is counted by their own key' }, owner);
+    assert(ownerStill.status === 200, `another key's bound is its own (${show(ownerStill)})`);
+    db.prepare(`UPDATE community_settings_log SET at = ? WHERE substr(setting, 1, 7) = 'advice.' AND actor_pubkey = ?`).run(ago(25 * 3_600_000), ada.pk);
+    const nextDay = await advise({ setting: 'shareOutside', advice: 'a day later' }, adminAdvice);
+    assert(nextDay.status === 200, `a day later it takes advice again (${show(nextDay)})`);
+
+    // After the lock the advice goes the same way: the lock row is not the advice's business.
+    db.prepare(`DELETE FROM community_settings_log WHERE substr(setting, 1, 7) = 'advice.'`).run();
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run('core_settings_lock', JSON.stringify({ at: ago(DAY), by: owenPk }));
+    const lockedStored = settingsOnly();
+    mark = logMark();
+    const afterLock = await advise({ setting: 'recoveryCopies', advice: 'Keep the vault' }, adminAdvice);
+    assert(afterLock.status === 200 && linesSince(mark).length === 1 && settingsOnly() === lockedStored && afterLock.body?.shape?.core?.lock?.by === owenPk,
+        `locked, an admin advises the same way, and the lock is as it was (${show(afterLock)})`);
+    db.prepare('DELETE FROM node_config WHERE key = ?').run('core_settings_lock');
+
+    // A standby takes no advice: it has no owners of its own to read it.
+    setNodeRole('backup');
+    await refusedClean('an admin on a standby', () => advise({ setting: 'beans', advice: 'x' }, advStandbyAdmin), 409, 'standby', /standby/);
+    setNodeRole('primary');
+
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;
     process.exit();

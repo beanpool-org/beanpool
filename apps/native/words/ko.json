@@ -1079,6 +1079,7 @@
   "Event: {title}, {when}, updated": "행사: {title}, {when}, 변경됨",
   "Event: {title}, {when}": "행사: {title}, {when}",
   "CANCELLED\u0004event": "취소됨",
+  "ENDED\u0004event": "종료됨",
   "UPDATED\u0004event": "변경됨",
   "You're hosting this event": "내가 주최하는 행사예요",
   "PENDING\u0004deal status": "대기 중",

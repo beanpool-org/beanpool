@@ -49,7 +49,7 @@ import { CardChip, gridTextBlock, useCardShell } from './market-card-shell';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { isPostPinned } from '../utils/pins';
 import {
-    formatEventWhenFor, eventWhen, eventTileWhenFor, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventBadge, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, eventTileWhenFor, eventRepeatCaption, eventPlaceLine, isOnlineEvent, eventCardState, formatRsvpCounts,
     formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus,
 } from '../utils/events';
 
@@ -59,7 +59,7 @@ export const EVENT_ACCENT = '#7c3aed';
 /**
  * The Market's view decides the card's size: the list card, or in the grid a tile whose text block is the listing tiles' own,
  * built by the same function at the phone's font scale market.tsx reads (gridTextBlock(fontScale)), so the two cannot differ.
- * Compact is the list card until slice C1.
+ * In the compact view (slice C1) the event is a compact row like a listing's, from the same box (shell.compactRow).
  */
 interface EventCardBaseProps {
     post: any;
@@ -67,7 +67,7 @@ interface EventCardBaseProps {
     myLocation?: { lat: number; lng: number } | null;
 }
 
-/** The list card (and compact, until C1): on the Market, or as the map's pin card. */
+/** The list card, or the compact row: on the Market, or (the list card) as the map's pin card. */
 interface EventCardListProps extends EventCardBaseProps {
     viewMode?: 'list' | 'compact';
     fontScale?: undefined;
@@ -101,7 +101,8 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
     const timeNote = eventWhen(post)?.note ?? null;
     // A repeating event: still only its next date, and the rule under it (DESIGN-event-times §4, §8).
     const repeats = eventRepeatCaption(post);
-    const badge = eventBadge(post);
+    // CANCELLED, ENDED (over and not cancelled) or UPDATED: the web card's chip, on every size of this one.
+    const badge = eventCardState(post);
     const distance = myLocation && post.lat != null && post.lng != null
         ? formatDistance(distanceKm(myLocation.lat, myLocation.lng, post.lat, post.lng))
         : null;
@@ -127,9 +128,12 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
     const mark = hosting ? t("You're hosting this event") : answer;
     const counts = !mark && !copy && (going > 0 || interested > 0) ? formatRsvpCounts(going, interested) : null;
 
-    const label = badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when })
-        : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when })
-        : t('Event: {title}, {when}', { title: post.title, when });
+    // An ended event's name ends with the chip's own word, as the grid's lock and mark follow its name.
+    const stateLabel = (whenSaid: string) => badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when: whenSaid })
+        : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when: whenSaid })
+        : badge === 'ENDED' ? `${t('Event: {title}, {when}', { title: post.title, when: whenSaid })}, ${t('ENDED', undefined, 'event')}`
+        : t('Event: {title}, {when}', { title: post.title, when: whenSaid });
+    const label = stateLabel(when);
     const pinned = isPostPinned(post);
 
     // A pin card (popUp) is always the list card, whatever else it is handed.
@@ -153,9 +157,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
         // The label speaks the when the tile shows: the reader's own clock, with "your time", when the rows are theirs; online,
         // the card's line, which says "your time" though no row does.
         const spoken = tileWhen?.spoken ?? when;
-        const tileLabel = badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when: spoken })
-            : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when: spoken })
-            : t('Event: {title}, {when}', { title: post.title, when: spoken });
+        const tileLabel = stateLabel(spoken);
         return (
             <Pressable
                 style={[shell.card, shell.gridTile]}
@@ -178,6 +180,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                     <View style={shell.gridBadgeRow} testID="grid-badge-row">
                         {pinned && <View style={shell.gridBadge} testID="pinned-chip"><Text style={shell.gridPinText}>{t('📌 PINNED')}</Text></View>}
                         {badge === 'CANCELLED' && <View style={shell.gridBadge} testID="event-state-chip"><Text style={shell.gridPinText}>{t('CANCELLED', undefined, 'event')}</Text></View>}
+                        {badge === 'ENDED' && <View style={shell.gridBadge} testID="event-state-chip"><Text style={shell.gridPinText}>{t('ENDED', undefined, 'event')}</Text></View>}
                         {badge === 'UPDATED' && <View style={shell.gridBadge} testID="event-state-chip"><Text style={shell.gridPinText}>{t('UPDATED', undefined, 'event')}</Text></View>}
                         {!!lock && <View style={shell.gridBadge} testID="event-group-chip" accessibilityLabel={lock}><Text style={shell.gridPinText}>🔒</Text></View>}
                         {!!tileMark && (
@@ -219,6 +222,56 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
         );
     }
 
+    if (viewMode === 'compact' && !popUp) {
+        // The compact row (slice C1, DESIGN-market-event-cards-fable.md §2.4): the listing row's shell and its 32 dp picture,
+        // the title on one line, then the when in the reader's own clock ("your time" where it differs from the place's, as
+        // the tile says it: core's event-when) with your mark after it, then the place; EVENT at the end, and the state under
+        // it. 📌 PINNED opens line 2, as the chip row's second chip. The host's line and the counts are the page's.
+        const tileWhen = eventTileWhenFor(post);
+        const rowWhen = tileWhen?.spoken ?? when;
+        const rowMark = hosting ? t("You're hosting this event") : answer;
+        const lock = groupOnly ? t('🔒 Only {group} can see this', { group: groupName }) : null;
+        const rowPlace = copy?.from ? [copyFromLine(copy.from), distance].filter(Boolean).join(' · ')
+            : placeLine ? `${isOnlineEvent(post) ? '💻' : '📍'} ${placeLine}` : '';
+        return (
+            <Pressable
+                style={shell.compactRow}
+                onPress={() => router.push(`/post/${post.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={[stateLabel(rowWhen), lock, rowMark].filter(Boolean).join(', ')}
+                testID={`event-card-${post.id}`}
+            >
+                <View style={shell.compactPicture} testID="compact-picture">
+                    <MarketCardPicture
+                        postId={post.id}
+                        cover={photo}
+                        picture={photo}
+                        kind="event"
+                        size="thumb"
+                        accessibilityLabel={post.title}
+                        imageStyle={shell.compactImage}
+                    />
+                </View>
+                <View style={shell.compactText}>
+                    <Text style={shell.compactTitle} numberOfLines={1}>{post.title}</Text>
+                    <Text testID="event-when" style={[shell.compactLine, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>
+                        {pinned && <Text testID="pinned-chip" style={shell.compactPinned}>{t('📌 PINNED')} · </Text>}
+                        {rowWhen}
+                        {!!rowMark && <Text testID="event-mark" style={shell.compactMark}> · {rowMark}</Text>}
+                    </Text>
+                    {!!rowPlace && <Text style={shell.compactLine} numberOfLines={1}>{rowPlace}</Text>}
+                </View>
+                <View style={shell.compactEnd}>
+                    <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
+                    {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}
+                    {badge === 'ENDED' && <CardChip shell={shell} role="danger" label={t('ENDED', undefined, 'event')} testID="event-state-chip" />}
+                    {badge === 'UPDATED' && <CardChip shell={shell} role="event" label={t('UPDATED', undefined, 'event')} testID="event-state-chip" />}
+                    {!!lock && <View accessibilityLabel={lock} testID="event-group-chip"><CardChip shell={shell} role="quiet" label="🔒" /></View>}
+                </View>
+            </Pressable>
+        );
+    }
+
     // The map's name for its card; an event with no title is "Event", as the map's card has always read it (eventPinCard).
     const named = popUp ? t('Open event: {title}', { title: post.title || t('Event') }) : label;
 
@@ -251,6 +304,7 @@ export function EventCard({ post, currentPubkey, myLocation, viewMode, fontScale
                     <CardChip shell={shell} role="event" label={upperCase(t('EVENT', undefined, 'event category tile label'))} testID="event-type-chip" />
                     {pinned && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
                     {badge === 'CANCELLED' && <CardChip shell={shell} role="danger" label={t('CANCELLED', undefined, 'event')} testID="event-state-chip" />}
+                    {badge === 'ENDED' && <CardChip shell={shell} role="danger" label={t('ENDED', undefined, 'event')} testID="event-state-chip" />}
                     {badge === 'UPDATED' && <CardChip shell={shell} role="event" label={t('UPDATED', undefined, 'event')} testID="event-state-chip" />}
                     {groupOnly && <CardChip shell={shell} role="quiet" label={t('🔒 Only {group} can see this', { group: groupName })} testID="event-group-chip" wrap />}
                 </View>

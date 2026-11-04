@@ -1080,6 +1080,7 @@
   "Event: {title}, {when}, updated": "Acara: {title}, {when}, diperbarui",
   "Event: {title}, {when}": "Acara: {title}, {when}",
   "CANCELLED\u0004event": "DIBATALKAN",
+  "ENDED\u0004event": "BERAKHIR",
   "UPDATED\u0004event": "DIPERBARUI",
   "You're hosting this event": "Anda menyelenggarakan acara ini",
   "PENDING\u0004deal status": "MENUNGGU",

@@ -41,6 +41,9 @@ import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSea
 import { PollOtherAnswers } from './PollOtherAnswers';
 import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 import { signedRequestWords } from './signed-request-lines';
+import { router } from 'expo-router';
+import { MARKET_CARD_SHELL, MARKET_CARD_TYPE } from '@beanpool/core';
+import { CardChip, useCardShell } from './market-card-shell';
 
 export interface PollOption {
     id: string;
@@ -73,11 +76,24 @@ interface PollCardProps {
     decisionsPreview?: boolean;
     /** The node's profile says pins are on (`features.pins`): the Market, which has the profile, says so; the card asks nothing of it. */
     pinsOn?: boolean;
+    /**
+     * The Market's view (slice C1, DESIGN-card-style-box-fable.md §2): in the compact view the poll is a compact row like a
+     * listing's (the question, its quiet status, your answer ✓) that opens the poll's page; its answers are on that page,
+     * never on the row. The list and the grid draw the card.
+     */
+    viewMode?: 'list' | 'grid' | 'compact';
+    /**
+     * The poll's page (app/post/[id].tsx): its author's name opens their profile, as every page's author does. The Market's
+     * card has none: a profile is opened from inside the item (Marty, 4 Nov).
+     */
+    onOpenProfile?: (who: { publicKey: string; callsign: string }) => void;
 }
 
-export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false }: PollCardProps) {
+export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode = 'list', onOpenProfile }: PollCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
+    // The style box (components/market-card-shell.ts): the card's shell, its chips and the compact row.
+    const shell = useCardShell();
 
     const [livePost, setLivePost] = useState(post);
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
@@ -255,24 +271,65 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
         }
     };
 
+    const pinned = isPostPinned(livePost);
+    const authorKey: string = livePost.author_pubkey || livePost.authorPublicKey || '';
+
+    if (viewMode === 'compact') {
+        // The compact row (slice C1): the poll's tile where a listing's picture is, the question on one line, then its quiet
+        // status and, when the member has answered, that answer ✓, the mark an event's row has; POLL at the end. A sealed poll
+        // (anonymous with Other) names no answer: the node cannot say which, and the page says that it has one. The whole row is
+        // one press that opens the poll's page, where its answers are: no answer, no Close Poll and no ··· on the row.
+        const chosen = sealed ? undefined : options.find(o => o.id === userVotedOptionId);
+        const chosenText = chosen ? (chosen.other ? pollOtherLines.other() : chosen.text) : null;
+        const rowMark = chosenText ? t('{label} ✓', { label: chosenText }) : null;
+        const status = formatTimeRemaining();
+        return (
+            <Pressable
+                style={shell.compactRow}
+                onPress={() => router.push(`/post/${livePost.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={[t('Poll: {title}', { title: livePost.title }), status, rowMark].filter(Boolean).join(', ')}
+                testID={`poll-row-${livePost.id}`}
+            >
+                <View style={[shell.compactPicture, styles.pollTile]} testID="compact-picture">
+                    <Text style={styles.pollTileEmoji}>🗳️</Text>
+                </View>
+                <View style={shell.compactText}>
+                    <Text style={shell.compactTitle} numberOfLines={1}>{livePost.title}</Text>
+                    <Text testID="poll-row-line" style={shell.compactLine} numberOfLines={2}>
+                        {pinned && <Text testID="pinned-chip" style={shell.compactPinned}>{t('📌 PINNED')} · </Text>}
+                        <Text testID="poll-status">{status}</Text>
+                        {!!rowMark && <Text testID="poll-mark" style={shell.compactMark}> · {rowMark}</Text>}
+                    </Text>
+                </View>
+                <View style={shell.compactEnd}>
+                    <CardChip shell={shell} role="poll" label={t('🗳️ POLL')} testID="poll-badge" />
+                </View>
+            </Pressable>
+        );
+    }
+
+    // The author: on the page a press opens their profile; on the Market's card it is words only.
+    const author = (
+        <>
+            <MemberAvatar pubkey={authorKey} avatarUrl={avatarUrl} callsign={authorName} size={MARKET_CARD_TYPE.list.whoAvatar} />
+            <View style={{ marginLeft: 8, flexShrink: 1 }}>
+                <Text style={styles.authorText}>
+                    {isAuthor ? t('{name} 👤 (You)', { name: authorName }) : authorName}
+                </Text>
+            </View>
+        </>
+    );
+
     return (
-        <View style={styles.card} testID="poll-card">
+        <View style={[shell.card, styles.card]} testID="poll-card">
             {/* Header: Badge, Status, Remaining Time */}
             <View style={styles.headerRow} testID="poll-header">
-                <View style={styles.badgeGroup}>
-                    {isPostPinned(livePost) && (
-                        <View testID="pinned-chip" style={[styles.pollBadge, { backgroundColor: colors.surface.subtle, borderColor: colors.border.default, borderWidth: 1 }]}>
-                            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.heading }}>{t('📌 PINNED')}</Text>
-                        </View>
-                    )}
-                    <View style={styles.pollBadge} testID="poll-badge">
-                        <Text style={styles.pollBadgeText}>{t('🗳️ POLL')}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, isClosed ? styles.statusClosed : styles.statusActive]} testID="poll-status">
-                        <Text style={isClosed ? styles.statusClosedText : styles.statusActiveText}>
-                            {formatTimeRemaining()}
-                        </Text>
-                    </View>
+                {/* The chip row, from the box: 📌 PINNED, POLL (plum), and its quiet status (Closes in, Closed). */}
+                <View style={[shell.chipRow, styles.badgeGroup]}>
+                    {pinned && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
+                    <CardChip shell={shell} role="poll" label={t('🗳️ POLL')} testID="poll-badge" />
+                    <CardChip shell={shell} role="quiet" label={formatTimeRemaining()} testID="poll-status" />
                 </View>
 
                 <View style={styles.headerActions}>
@@ -317,17 +374,22 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
             )}
 
             {/* Author info */}
-            <View style={styles.authorRow}>
-                <MemberAvatar pubkey={livePost.author_pubkey || livePost.authorPublicKey || ''} avatarUrl={avatarUrl} callsign={authorName} size={30} />
-                <View style={{ marginLeft: 8 }}>
-                    <Text style={styles.authorText}>
-                        {isAuthor ? t('{name} 👤 (You)', { name: authorName }) : authorName}
-                    </Text>
-                </View>
-            </View>
+            {onOpenProfile && authorKey ? (
+                <Pressable
+                    style={styles.authorRow}
+                    onPress={() => onOpenProfile({ publicKey: authorKey, callsign: authorName })}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Open {name}', { name: authorName })}
+                    testID="poll-author"
+                >
+                    {author}
+                </Pressable>
+            ) : (
+                <View style={styles.authorRow} testID="poll-author">{author}</View>
+            )}
 
-            {/* Question Title */}
-            <Text style={styles.title}>{livePost.title}</Text>
+            {/* Question Title: the list card's loud line, 16/900 */}
+            <Text style={[shell.loud, styles.title]}>{livePost.title}</Text>
             {Boolean(livePost.description) && (
                 <Text style={styles.description}>{livePost.description}</Text>
             )}
@@ -561,19 +623,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         otherCancelText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
         otherCount: { marginLeft: 'auto', fontSize: 11, color: colors.text.muted },
         answeredNote: { marginBottom: 6, fontSize: 12, fontWeight: '700', color: theme === 'dark' ? palette.violet300 : palette.violet700 },
-        card: {
-            backgroundColor: colors.surface.card,
-            borderRadius: 16,
-            padding: 16,
-            marginBottom: 14,
-            borderWidth: 1,
-            borderColor: theme === 'dark' ? '#374151' : '#e5e7eb',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 6,
-            elevation: 2,
-        },
+        // The card's shell is the box's (shell.card: corners 14, the 1 dp border, the card ground, the one shadow, 8 under it);
+        // the poll's words sit 12 in, as every card's do.
+        card: { padding: MARKET_CARD_SHELL.textPadding },
+        // The compact row's tile: the poll's own plum, the ballot box in it.
+        pollTile: { backgroundColor: colors.market.poll.bg, justifyContent: 'center', alignItems: 'center' },
+        pollTileEmoji: { fontSize: 16 },
         // Wraps: at 320 dp and 130% text a pinned poll's owner has PINNED, POLL, the status, "···" and Close Poll to
         // draw in 288 dp. The badges wrap among themselves; the buttons drop to their own line, to the right.
         headerRow: {
@@ -585,55 +640,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             columnGap: 8,
             marginBottom: 10,
         },
-        badgeGroup: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            flexShrink: 1,
-            alignItems: 'center',
-            gap: 8,
-        },
+        badgeGroup: { flexShrink: 1 },
         headerActions: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
             marginLeft: 'auto',
-        },
-        pollBadge: {
-            backgroundColor: theme === 'dark' ? '#4c1d95' : '#ede9fe',
-            borderColor: theme === 'dark' ? '#6d28d9' : '#c4b5fd',
-            borderWidth: 1,
-            borderRadius: 8,
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-        },
-        pollBadgeText: {
-            fontSize: 11,
-            fontWeight: '800',
-            color: theme === 'dark' ? '#ddd6fe' : '#6d28d9',
-        },
-        statusBadge: {
-            borderRadius: 8,
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderWidth: 1,
-        },
-        statusActive: {
-            backgroundColor: theme === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5',
-            borderColor: theme === 'dark' ? '#059669' : '#a7f3d0',
-        },
-        statusActiveText: {
-            fontSize: 11,
-            fontWeight: '700',
-            color: colors.feedback.success.fg,
-        },
-        statusClosed: {
-            backgroundColor: theme === 'dark' ? 'rgba(107, 114, 128, 0.2)' : '#f3f4f6',
-            borderColor: theme === 'dark' ? '#4b5563' : '#d1d5db',
-        },
-        statusClosedText: {
-            fontSize: 11,
-            fontWeight: '700',
-            color: theme === 'dark' ? '#9ca3af' : '#4b5563',
         },
         closeBtn: {
             paddingHorizontal: 10,
@@ -662,13 +674,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontWeight: '600',
             color: colors.text.secondary,
         },
-        title: {
-            fontSize: 17,
-            fontWeight: '800',
-            color: colors.text.body,
-            marginBottom: 6,
-            lineHeight: 22,
-        },
+        title: { marginBottom: 6 },
         description: {
             fontSize: 13,
             color: colors.text.secondary,

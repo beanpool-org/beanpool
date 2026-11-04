@@ -1244,6 +1244,7 @@
   "Event: {title}, {when}, updated": "Подія: {title}, {when}, оновлено",
   "Event: {title}, {when}": "Подія: {title}, {when}",
   "CANCELLED\u0004event": "СКАСОВАНО",
+  "ENDED\u0004event": "ЗАВЕРШЕНО",
   "UPDATED\u0004event": "ОНОВЛЕНО",
   "You're hosting this event": "Ви організатор цієї події",
   "PENDING\u0004deal status": "ОЧІКУЄ",

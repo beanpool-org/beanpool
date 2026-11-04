@@ -45,7 +45,8 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { SharePostButtons } from '../../components/SharePost';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
-import { showcaseMode } from '../../utils/node-profile';
+import { pollsInformal, showcaseMode } from '../../utils/node-profile';
+import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
 import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
@@ -937,6 +938,35 @@ export default function PostDetailModal() {
     // Events have their own screen: no price, no escrow, RSVP instead of accept (docs/events-on-the-map.md §3).
     if (post.type === 'event') {
         return <EventDetail post={post} openMembership={hostLetsInDefault(nodeProfile?.features)} onLocalCommunity={nodeProfile?.profile === 'local'} pinsOn={pinsOn} />;
+    }
+    // A poll's page (slice C1, DESIGN-card-style-box-fable.md §2): the Market's compact row opens it. The page is the poll's
+    // own card, as the web's is (MarketplacePage setSelectedPost), under this screen's Back: its answers, its Close Poll and its
+    // ··· are here, and its author's name opens their profile (a profile from inside the item, Marty 4 Nov).
+    if (post.type === 'poll') {
+        const leave = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
+        return (
+            <View style={[styles.container, { paddingTop: insets.top }]} testID="poll-page">
+                <View style={styles.header}>
+                    <Pressable accessibilityRole="button" onPress={leave} style={styles.backButton}>
+                        <Text style={styles.backText}>←</Text>
+                        <Text style={{ color: colors.text.body, fontSize: 16, fontWeight: 'bold', marginLeft: 4, flexShrink: 1 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Back')}</Text>
+                    </Pressable>
+                    <Text style={[styles.headerTitle, { flex: 1, textAlign: 'center' }]} numberOfLines={1}>{t('Poll')}</Text>
+                    <View style={{ width: 68 }} />
+                </View>
+                <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }}>
+                    <PollCard
+                        post={post}
+                        currentPubkey={identity?.publicKey}
+                        onVoteSuccess={() => { void getPost(post.id).then(p => { if (p) setPost(p); }); }}
+                        informal={pollsInformal(nodeProfile)}
+                        decisionsPreview={showcaseMode('decisions', reader.node, reader.reader) === 'preview'}
+                        pinsOn={pinsOn}
+                        onOpenProfile={({ publicKey, callsign }) => router.push({ pathname: '/public-profile', params: { publicKey, callsign } })}
+                    />
+                </ScrollView>
+            </View>
+        );
     }
     // A member's copy on the global community has its own screen, so nothing of a deal or a person can be drawn on one: no
     // price card, no author, no Message, no Accept (@beanpool/core eventCopyOf). The node refuses them all the same.

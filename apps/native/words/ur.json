@@ -1134,6 +1134,7 @@
   "Event: {title}, {when}, updated": "تقریب: {title}، {when}، اپ ڈیٹ شدہ",
   "Event: {title}, {when}": "تقریب: {title}، {when}",
   "CANCELLED\u0004event": "منسوخ شدہ",
+  "ENDED\u0004event": "ختم ہو گیا",
   "UPDATED\u0004event": "اپ ڈیٹ شدہ",
   "You're hosting this event": "آپ اس تقریب کی میزبانی کر رہے ہیں",
   "PENDING\u0004deal status": "زیر التواء",

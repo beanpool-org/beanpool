@@ -296,22 +296,6 @@ export default function MarketScreen() {
         // rest, components/market-card-shell.ts), shared with the event tile (EventCard, slice P3').
         price: { fontSize: 16, fontWeight: '800', color: colors.text.body },
         fab: { position: 'absolute', bottom: 32, right: 24, backgroundColor: colors.action.fab, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 8, zIndex: 100 },
-        compactRow: {
-            flexDirection: 'row',
-            backgroundColor: colors.surface.card,
-            borderRadius: 14,
-            paddingVertical: 10,
-            paddingHorizontal: 12,
-            marginBottom: 8,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            alignItems: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.02,
-            shadowRadius: 1,
-            elevation: 1,
-        },
         elderCompactRow: {
             borderLeftWidth: 3,
             borderLeftColor: colors.trust.star,
@@ -328,27 +312,6 @@ export default function MarketScreen() {
             fontSize: 11,
             color: colors.text.secondary,
             marginTop: 1,
-        },
-        compactPrice: {
-            fontSize: 14,
-            fontWeight: '900',
-            color: colors.text.body,
-        },
-        compactBadge: {
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 8,
-        },
-        compactBadgeOffer: {
-            backgroundColor: colors.market.offer.bg,
-        },
-        compactBadgeNeed: {
-            backgroundColor: colors.market.need.bg,
-        },
-        compactBadgeText: {
-            fontSize: 9,
-            fontWeight: '800',
-            letterSpacing: 0.5,
         },
         sectionHeader: {
             flexDirection: 'row',
@@ -1737,6 +1700,7 @@ export default function MarketScreen() {
             return (
                 <PollCard
                     post={item}
+                    viewMode={viewMode}
                     currentPubkey={identity?.publicKey}
                     onVoteSuccess={() => loadPosts()}
                     informal={pollsInformal(nodeProfile)}
@@ -1901,8 +1865,9 @@ export default function MarketScreen() {
                     testID={`market-card-${item.id}`}
                     onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
                 >
-                    <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
-                        <View style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', marginRight: 10 }}>
+                    {/* The box's compact row (shell.compactRow, slice C1), the one an event and a poll are drawn on too. */}
+                    <View style={[shell.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
+                        <View style={shell.compactPicture}>
                             <MarketCardPicture
                                 postId={item.id}
                                 cover={coverImage}
@@ -1910,10 +1875,10 @@ export default function MarketScreen() {
                                 category={item.category}
                                 kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
                                 size="thumb"
-                                imageStyle={{ width: '100%', height: '100%' }}
+                                imageStyle={shell.compactImage}
                             />
                         </View>
-                        <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
+                        <View style={shell.compactText}>
                             <Text style={styles.compactTitle} numberOfLines={1}>
                                 {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
                             </Text>
@@ -1929,32 +1894,21 @@ export default function MarketScreen() {
                                 </View>
                             )}
                         </View>
-                        <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
+                        <View style={shell.compactEnd}>
                             {!isPulse && showsBeans && !copy && (
                                 <CurrencyDisplay
                                     amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                    style={styles.compactPrice}
+                                    style={shell.compactPrice}
                                     asView={true}
                                 />
                             )}
-                            <View style={[
-                                styles.compactBadge, 
-                                isPulse ? {
-                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
-                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
-                                    borderWidth: 1,
-                                } : (item.type === 'offer' ? styles.compactBadgeOffer : styles.compactBadgeNeed)
-                            ]}>
-                                <Text style={[
-                                    styles.compactBadgeText, 
-                                    {
-                                        color: isPulse ? colors.feedback.warning.fg : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg),
-                                        fontWeight: '800',
-                                    }
-                                ]}>
-                                    {isPulse ? t('PULSE') : typeBadge(item.type)}
-                                </Text>
-                            </View>
+                            {/* The one chip (10/800, 6 x 2, corners 6): OFFER / NEED in their pairs, PULSE the warning one. */}
+                            <CardChip
+                                shell={shell}
+                                role={isPulse ? 'warn' : (item.type === 'offer' ? 'offer' : 'need')}
+                                label={isPulse ? t('PULSE') : typeBadge(item.type)}
+                                testID="compact-type-chip"
+                            />
                         </View>
                     </View>
                 </Pressable>

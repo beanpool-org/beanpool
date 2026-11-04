@@ -1134,6 +1134,7 @@
   "Event: {title}, {when}, updated": "Evento: {title}, {when}, actualizado",
   "Event: {title}, {when}": "Evento: {title}, {when}",
   "CANCELLED\u0004event": "CANCELADO",
+  "ENDED\u0004event": "FINALIZADO",
   "UPDATED\u0004event": "ACTUALIZADO",
   "You're hosting this event": "Eres el anfitrión de este evento",
   "PENDING\u0004deal status": "PENDIENTE",

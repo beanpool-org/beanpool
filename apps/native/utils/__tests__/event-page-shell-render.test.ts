@@ -3,12 +3,15 @@
  * The event page on the style box (DESIGN-detail-pages-fable.md §2 and §3 slice DP1; Marty, 4 Nov 2026: "All Fable's picks"):
  * components/EventDetail.tsx drawn for real, with what it draws (EventExtras' Share, Add to calendar and Remind me, the Share
  * button, the host's box), and laid out with Yoga (yoga-dom-layout.ts) at the floor: 320 dp wide, 569 tall, text at 1.3×, in
- * light and in dark. The Mullum market is the fixture (§2.9's): a two-line title, a repeat caption, a one-line place, a photo,
- * and, as the node sends it by id, its next six dates (drawn by the real EventNextDates, compact).
+ * light and in dark. The Mullum market is the fixture (§2.9's): a two-line title, a repeat rule, a one-line place, a photo,
+ * and, as the node sends it by id, its next six dates (drawn by the real EventNextDates, compact: the rule is their door,
+ * DESIGN-web-dates-stop-fable.md §4).
  *
- * It proves the order (the answer is the first button after the loud lines, before the photo, Share, the description and the
- * host: DESIGN-detail-pages-frame-fable.md §1.4), the 4:3 photo frame (288 × 216 in a 288 dp column, 16 dp under the answer),
- * where the answer row lands (the frame decision's stop, §2: its top ≤ 500 dp, its bottom ≤ 569; see its block), the next dates compact (the first and "and 5 more", one button that opens the list), HOSTED BY as
+ * It proves the order (the when, the rule that opens the next dates, the title, the place, then the answer, before the photo,
+ * Share, the description and the host: DESIGN-detail-pages-frame-fable.md §1.4), the 4:3 photo frame (288 × 216 in a 288 dp
+ * column, 16 dp under the answer), where the answer row lands (the frame decision's stop, §2: its top ≤ 500 dp, its bottom
+ * ≤ 569; see its block), the next dates behind the rule ("↻ Monthly, third Saturday · Next dates", one button that opens the
+ * list, the rule then its heading), HOSTED BY as
  * the page box and no grey host line, the counts only above zero, the boxes and buttons on the style box's numbers and the
  * event's library colours, nothing wider than the screen, and none of the old raw violets anywhere.
  */
@@ -225,24 +228,33 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
         // The when in the event's ink, 18/800; the title 20/800 in the heading.
         expect(styleOf(byId('event-when'))).toMatchObject({ fontSize: 18, fontWeight: '800', color: colors.event.ink });
         expect(styleOf(byId('event-title'))).toMatchObject({ fontSize: 20, fontWeight: '800', color: colors.text.heading });
-        expect(host.textContent).toContain('↻ ');
 
-        // Going is the first button after the loud lines. Their one button is the next dates' opener (the place's "Show on map"
-        // is a link): the dates are part of the loud lines, above the answer. The photo comes under the answer
-        // (DESIGN-detail-pages-frame-fable.md §1.4): title → next dates → Going → the photo → Share → description → HOSTED BY → Report.
+        // The loud lines in the card's cluster: the when, then how it repeats as the door to the next dates (their one button),
+        // then the title and the place (its "Show on map" is a link), then the answer: Going is the first button after the title.
+        // The photo comes under the answer (DESIGN-detail-pages-frame-fable.md §1.4; DESIGN-web-dates-stop-fable.md §4):
+        // when → the opener → title → place → Going → the photo → Share → description → HOSTED BY → Report.
+        const when = byId('event-when')!;
+        const opener = byId('event-next-dates-open')!;
         const title = byId('event-title')!;
+        const place = spanWith('📍 Summers Park')!;
         const going = buttonNamed('Going')!;
         const frame = byId('event-photo-frame')!;
-        const afterTitle = Array.from(host.querySelectorAll('[role="button"]')).filter((b) => before(title, b));
-        expect(afterTitle[0], 'the first button after the title: the next dates, compact').toBe(byId('event-next-dates-open'));
-        expect(afterTitle[1], 'the first button after the loud lines').toBe(going);
+        expect(opener, "the rule, the next dates' door").toBeTruthy();
+        expect(place, 'the place').toBeTruthy();
+        const buttons = Array.from(host.querySelectorAll('[role="button"]'));
+        expect(buttons.filter((b) => before(when, b) && before(b, title)), 'between the when and the title: the opener alone').toEqual([opener]);
+        expect(buttons.filter((b) => before(title, b))[0], 'the first button after the title: the answer').toBe(going);
+        // The rule is drawn once, in the opener: the caption's own line is gone.
+        expect(host.querySelectorAll('[data-testid="event-repeat-caption"]')).toHaveLength(1);
+        expect(opener.contains(byId('event-repeat-caption'))).toBe(true);
         expect(buttonNamed('Interested')).toBeTruthy();
         // Then the photo, Share, the description, the host's box, Report: the answer before the picture and the reading.
         const share = buttonNamed('Share this event')!;
         const description = spanWith(MULLUM.description)!;
         const hosted = spanWith('HOSTED BY')!;
         const report = buttonNamed('Report event')!;
-        for (const [a, b, what] of [[title, afterTitle[0], 'the title, then the next dates'], [afterTitle[0], going, 'the next dates, then Going'],
+        for (const [a, b, what] of [[when, opener, 'the when, then the opener'], [opener, title, 'the opener, then the title'],
+            [title, place, 'the title, then the place'], [place, going, 'the place, then Going'],
             [going, frame, 'Going, then the photo'], [frame, share, 'the photo, then Share'], [share, description, 'Share, then the description'],
             [description, hosted, 'the description, then HOSTED BY'], [hosted, report, 'HOSTED BY, then Report']] as const) {
             expect(before(a, b), what).toBe(true);
@@ -355,24 +367,66 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
         expect(buttonNamed('Report event')).toBeUndefined();
     });
 
-    it('a repeating event: its next dates compact, the first and "and 5 more", one 48 dp button that opens all six', async () => {
+    it('a repeating event: the rule is the door, "↻ Monthly, third Saturday · Next dates", one 48 dp button that opens all six', async () => {
         await draw(MULLUM, { ...BY_ID, myRsvp: null });
         const open = byId('event-next-dates-open')!;
         expect(open.getAttribute('role')).toBe('button');
-        expect(open.textContent).toBe(`Next dates${seriesDateLabel(NEXT_DATES[0].date)}and 5 more`);
+        // The rule, a dot, the link's words; no date and no "and 5 more" (they left the compact form). No label of its own: its
+        // name is the words it shows (WCAG 2.5.3), the rule naming itself without the ↻.
+        expect(open.textContent).toBe('↻ Monthly, third Saturday·Next dates');
+        expect(open.getAttribute('aria-label')).toBeNull();
+        expect(byId('event-repeat-caption')!.getAttribute('aria-label')).toBe('Monthly, third Saturday');
+        expect(open.textContent).not.toContain(seriesDateLabel(NEXT_DATES[0].date));
+        expect(host.textContent).not.toContain('and 5 more');
         expect(host.querySelectorAll('[data-testid="event-next-date"]')).toHaveLength(0);
-        expect(styleOf(spanWith('and 5 more'))).toMatchObject({ color: colors.text.link, textDecorationLine: 'underline' });
+        // The rule in the caption's own type, the link's words in the link's, the dot in the secondary ink.
+        expect(styleOf(byId('event-repeat-caption'))).toMatchObject({ fontSize: 14, fontWeight: '700', color: colors.accent.primary });
+        expect(styleOf(spanWith('Next dates'))).toMatchObject({ color: colors.text.link, textDecorationLine: 'underline' });
+        expect(styleOf(spanWith('·')).color).toBe(colors.text.secondary);
         const { abs } = screen();
-        expect(abs(open).height).toBeGreaterThanOrEqual(48);
         expect(abs(open).width).toBeCloseTo(288, 0);
+        // At 320 dp and 1.3× the rule and the link's words take two lines inside the 48: "Next dates" whole on the second.
+        expect(abs(open).height).toBeCloseTo(48, 1);
+        expect(abs(spanWith('Next dates')!).top).toBeGreaterThan(abs(byId('event-repeat-caption')!).top);
         await act(async () => { open.click(); });
         await settle(2);
         expect(byId('event-next-dates-open')).toBeNull();
         expect(Array.from(host.querySelectorAll('[data-testid="event-next-date"]')).map((d) => d.textContent))
             .toEqual(NEXT_DATES.map((d) => seriesDateLabel(d.date)));
+        // Opened: the rule is the list's heading, "Next dates" the box's name; the rule still drawn once, "NEXT DATES" not at all.
+        const box = byId('event-next-dates')!;
+        expect(box.getAttribute('aria-label')).toBe('Next dates');
+        const caption = byId('event-repeat-caption')!;
+        expect(box.contains(caption)).toBe(true);
+        expect(caption.getAttribute('role')).toBe('heading');
+        expect(caption.textContent).toBe('↻ Monthly, third Saturday');
+        expect(caption.getAttribute('aria-label')).toBe('Monthly, third Saturday');
+        expect(host.querySelectorAll('[data-testid="event-repeat-caption"]')).toHaveLength(1);
+        expect(spanWith('Next dates')).toBeUndefined();
+        expect(before(byId('event-when')!, box) && before(box, byId('event-title')!), 'the list where the opener was').toBe(true);
     });
 
-    it("the host: the same compact line; opened, each date with the host's controls", async () => {
+    it('one next date: no opener, the rule heads the one date; no dates from the node: the rule alone, once, in the same place', async () => {
+        await draw(MULLUM, { ...MULLUM, eventNextDates: NEXT_DATES.slice(0, 1), myRsvp: null });
+        expect(byId('event-next-dates-open')).toBeNull();
+        const box = byId('event-next-dates')!;
+        expect(box.getAttribute('aria-label')).toBe('Next dates');
+        expect(byId('event-repeat-caption')!.getAttribute('role')).toBe('heading');
+        expect(Array.from(host.querySelectorAll('[data-testid="event-next-date"]')).map((d) => d.textContent)).toEqual([seriesDateLabel(NEXT_DATES[0].date)]);
+        act(() => root.unmount());
+        root = createRoot(host);
+        // An older node, or the cached row before the node answers: the rule where the door goes, between the when and the title.
+        await draw(MULLUM, { ...MULLUM, myRsvp: null });
+        expect(byId('event-next-dates-open')).toBeNull();
+        expect(byId('event-next-dates')).toBeNull();
+        const alone = host.querySelectorAll('[data-testid="event-repeat-caption"]');
+        expect(alone).toHaveLength(1);
+        expect(alone[0].textContent).toBe('↻ Monthly, third Saturday');
+        expect(styleOf(alone[0])).toMatchObject({ fontSize: 14, fontWeight: '700', color: colors.accent.primary });
+        expect(before(byId('event-when')!, alone[0]) && before(alone[0], byId('event-title')!)).toBe(true);
+    });
+
+    it("the host: the same door; opened, each date with the host's controls", async () => {
         who.key = HOST;
         await draw(MULLUM, { ...BY_ID, eventRsvps: RSVPS, goingCount: 1 });
         expect(host.querySelectorAll('[data-testid="event-date-cancel"]')).toHaveLength(0);
@@ -404,12 +458,15 @@ describe.each(THEMES)('the event page at 320 dp and 1.3× text, %s', (theme, col
  * the answer no longer moves with the picture. The answer row's top, and Going's bottom, from the screen's top:
  *
  *                                        a photo (4:3)              no photo (the tile, 3:1)
- *   the six dates compact (as drawn)     415.5  · Going 463.5       415.5  · Going 463.5
- *   the six dates opened                 476.25 · Going 524.25      476.25 · Going 524.25
- *   no next dates (a one-off event)      362    · Going 410         362    · Going 410
+ *   the six dates behind the rule        387.25  · Going 435.25     387.25  · Going 435.25
+ *   the six dates opened                 451.125 · Going 499.125    451.125 · Going 499.125
+ *   no next dates (the rule alone)       362     · Going 410        362     · Going 410
  *
- * Before the move (the photo above the answer) the row was at 639.5 / 700.3 / 586 with a photo and 519.5 / 580.3 / 466
- * without: the photo block (8 + 216 + 12, or 8 + 96 + 12 for the tile) came out from above it, and the action's 12 went in.
+ * The rule became the dates' door (DESIGN-web-dates-stop-fable.md §4; #2880 drew 415.5 / 476.25 / 362): compact, the caption's
+ * own line (22.75 + 4) left and the opener is 48 where the "NEXT DATES / Sat 14 Nov · and 5 more" button was 49.5 (−28.25);
+ * opened, the caption's line left and the rule (22.75) heads the list where "NEXT DATES" (21.125) did (−25.125); with no dates
+ * the rule is drawn alone, as the caption was, in the same place. Before the photo moved under the answer (#2880) the row was
+ * at 639.5 / 700.3 / 586 with a photo and 519.5 / 580.3 / 466 without.
  */
 const answerRowTop = (abs: ReturnType<typeof screen>['abs']) => abs(byId('event-action')!).top;
 const goingBottom = (abs: ReturnType<typeof screen>['abs']) => { const b = abs(buttonNamed('Going')!); return b.top + b.height; };
@@ -428,32 +485,32 @@ describe("the stop, measured: the answer's top ≤ 500 dp and its bottom ≤ 569
         expect(goingBottom(abs), "Going's bottom, on the 569 dp screen").toBeLessThanOrEqual(569);
     });
 
-    it('with a photo: the row at 415.5 dp with the dates compact, 476.25 with all six open; Going on the screen in both', async () => {
+    it('with a photo: the row at 387.25 dp with the dates behind the rule, 451.125 with all six open; Going on the screen in both', async () => {
         await draw(MULLUM, { ...BY_ID, myRsvp: null });
         let { abs } = screen();
-        expect(answerRowTop(abs)).toBeCloseTo(415.5, 1);
-        expect(goingBottom(abs)).toBeCloseTo(463.5, 1);
+        expect(answerRowTop(abs)).toBeCloseTo(387.25, 1);
+        expect(goingBottom(abs)).toBeCloseTo(435.25, 1);
         await openTheDates();
         ({ abs } = screen());
-        expect(answerRowTop(abs)).toBeCloseTo(476.25, 1);
+        expect(answerRowTop(abs)).toBeCloseTo(451.125, 1);
         expect(goingBottom(abs), "opened, Going's bottom is still on the 569 dp screen").toBeLessThanOrEqual(569);
-        expect(goingBottom(abs)).toBeCloseTo(524.25, 1);
+        expect(goingBottom(abs)).toBeCloseTo(499.125, 1);
     });
 
-    it('no photo: the same 415.5 compact and 476.25 opened; the answer does not move with the picture', async () => {
+    it('no photo: the same 387.25 behind the rule and 451.125 opened; the answer does not move with the picture', async () => {
         const bare = { ...MULLUM, photos: [] };
         await draw(bare, { ...BY_ID, photos: [], myRsvp: null });
         let { abs } = screen();
-        expect(answerRowTop(abs)).toBeCloseTo(415.5, 1);
-        expect(goingBottom(abs)).toBeCloseTo(463.5, 1);
+        expect(answerRowTop(abs)).toBeCloseTo(387.25, 1);
+        expect(goingBottom(abs)).toBeCloseTo(435.25, 1);
         await openTheDates();
         ({ abs } = screen());
-        expect(answerRowTop(abs)).toBeCloseTo(476.25, 1);
+        expect(answerRowTop(abs)).toBeCloseTo(451.125, 1);
         expect(goingBottom(abs), "opened, Going's bottom is on the 569 dp screen").toBeLessThanOrEqual(569);
-        expect(goingBottom(abs)).toBeCloseTo(524.25, 1);
+        expect(goingBottom(abs)).toBeCloseTo(499.125, 1);
     });
 
-    it('with no next dates (a one-off event): the row at 362 dp with a photo and without; Going on the screen', async () => {
+    it('with no next dates (the rule alone, as an older node sends it): the row at 362 dp with a photo and without; Going on the screen', async () => {
         await draw(MULLUM, { ...MULLUM, myRsvp: null });
         let { abs } = screen();
         expect(answerRowTop(abs)).toBeCloseTo(362, 1);

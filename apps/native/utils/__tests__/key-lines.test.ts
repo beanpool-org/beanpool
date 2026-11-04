@@ -187,6 +187,8 @@ describe('key-lines.ts: sentences with a name, an address or a number, read back
         { line: NAMES_COPY.codeMismatch('Wren'), names: ['@Wren'] },
         { line: NAMES_COPY.mismatch('Wren'), names: ['@Wren'] },
         { line: NAMES_COPY.matched('Wren'), names: ['@Wren'] },
+        // A copy saved under the community's other address (DESIGN-names-list-web-fable.md §5.6 (b), §5.7 copyOtherAddress).
+        { line: NAMES_COPY.copyOtherAddress('https://mullum.beanpool.org', 'https://byron.beanpool.org'), names: ['https://mullum.beanpool.org', 'https://byron.beanpool.org'] },
 
         { line: NAMES_COPY.refusedRolledBack(2, 5), names: [] },
         { line: entryRefusal({ name: 'x'.repeat(NAMES_LIMITS.nameChars + 1) }), names: [] },

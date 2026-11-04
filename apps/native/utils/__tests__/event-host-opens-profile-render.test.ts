@@ -84,7 +84,7 @@ describe('an event\'s own screen: the host is the way to their profile', () => {
     });
 
     // Old phones at 1.3x text (Opus review of #2839, minor): a press aimed at the host must land. The host was one text line (it needed
-    // hit slop to reach 44 dp); it is now the listing's box, whose face alone is 48 dp inside 16 dp of padding on every side, so the
+    // hit slop to reach 44 dp); it is now the listing's box, whose face alone is 48 dp inside 12 dp of padding on every side (the style box's page box), so the
     // button is far past 44 dp at normal text and only grows with the text size. The card's own height is read from its styles.
     it('the host button reaches a 44 dp target, as the Market author chip does', async () => {
         await draw();

@@ -53,6 +53,21 @@ describe('the box is core\'s numbers', () => {
         expect(shell.mark).toMatchObject({ ...cardType(MARKET_CARD_TYPE.list.mark), color: lightColors.tile.event.ink });
     });
 
+    // The pages' boxes and buttons (DESIGN-detail-pages-fable.md §2.2, slice DP1), with the style box's one text padding (§3 row 3).
+    it('the page box, its label and its button: the card\'s corners, border, ground, shadow and padding; 10/800 spaced 1.5; 48 tall, corners 12, 15/700', () => {
+        expect(shell.pageBox).toMatchObject({
+            borderRadius: MARKET_CARD_SHELL.radius, borderWidth: MARKET_CARD_SHELL.borderWidth, padding: MARKET_CARD_SHELL.textPadding,
+            backgroundColor: lightColors.surface.card, borderColor: lightColors.border.default,
+            shadowOpacity: MARKET_CARD_SHELL.shadow.opacity, shadowRadius: MARKET_CARD_SHELL.shadow.blur, elevation: MARKET_CARD_SHELL.shadow.elevation,
+        });
+        expect(shell.pageBox).not.toHaveProperty('margin');
+        expect(shell.pageBox).not.toHaveProperty('marginBottom');
+        expect(shell.boxLabel).toEqual({ ...cardType(MARKET_CARD_TYPE.page.boxLabel), letterSpacing: MARKET_CARD_TYPE.page.boxLabelSpacing, color: lightColors.text.muted });
+        expect(shell.pageButton).toMatchObject({ minHeight: MARKET_CARD_TYPE.page.buttonHeight, borderRadius: MARKET_CARD_TYPE.page.buttonRadius });
+        expect(shell.pageButtonText).toEqual(cardType(MARKET_CARD_TYPE.page.button));
+        expect([shell.pageBox.borderRadius, shell.pageBox.padding, shell.pageButton.minHeight, shell.pageButton.borderRadius]).toEqual([14, 12, 48, 12]);
+    });
+
     it('the grid (PG2): a row of two cells with the 16 gutter between and under it; the tile fills its cell; the type scale', () => {
         expect(shell.gridRow).toEqual({ flexDirection: 'row', gap: MARKET_CARD_SHELL.gap.grid, marginBottom: MARKET_CARD_SHELL.gap.grid });
         expect(MARKET_CARD_SHELL.gap.grid).toBe(16);

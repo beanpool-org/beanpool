@@ -450,6 +450,123 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
     });
 });
 
+describe('Asked near you, and the First steps line for a Need (cold-start N2)', () => {
+    const NEEDS = () => {
+        const now = Date.now();
+        return [
+            { id: 'n1', title: 'Borrow a trailer Saturday', category: 'tools', credits: 20, createdAt: iso(now - 2 * H), photoUrl: null },
+            { id: 'n2', title: 'Someone to dig a bed', category: 'labour', credits: 40, createdAt: iso(now - 26 * H), photoUrl: null },
+            { id: 'n3', title: 'Lift to Lismore Thursday', category: 'transport', credits: 0, createdAt: iso(now - 3 * 24 * H), photoUrl: null },
+        ];
+    };
+    /** A local member whose list holds the card after the Market, with the Needs the node sent and First steps as it stands. */
+    function withAsked(over: { items?: Array<ReturnType<typeof NEEDS>[number] & { priceType?: string }> | null; firstNeed?: boolean; firstOffer?: boolean; stars?: string[] } = {}): HomeAnswer {
+        const a = localMember();
+        const list = a.layout!.cards;
+        const at = list.findIndex(c => c.type === 'market');
+        return {
+            ...a,
+            me: { ...a.me!, firstOffer: over.firstOffer ?? true, interests: over.stars ?? [] },
+            layout: { ...a.layout!, cards: [...list.slice(0, at + 1), { id: 'asked', type: 'asked' }, ...list.slice(at + 1)] },
+            cards: {
+                ...a.cards,
+                steps: { ...a.cards.steps!, firstOffer: over.firstOffer ?? true, ...(over.firstNeed === undefined ? {} : { firstNeed: over.firstNeed }) },
+                ...(over.items === null ? {} : { asked: { items: over.items ?? NEEDS() } }),
+            },
+        };
+    }
+    const rowIds = () => Array.from(document.querySelectorAll('[data-testid^="home-asked-n"]')).map(e => e.getAttribute('data-testid')!.replace('home-asked-', ''));
+
+    it('the card comes after the Market with a row for each Need: its title, "20 Beans · 2h ago", and the sentence a screen reader hears for any Need', async () => {
+        node.answer = withAsked();
+        await render();
+        expect(cards().indexOf('asked')).toBe(cards().indexOf('market') + 1);
+        expect(rowIds()).toEqual(['n1', 'n2', 'n3']);
+        const row = document.querySelector('[data-testid="home-asked-n1"]') as HTMLElement;
+        expect(row.textContent).toContain('Borrow a trailer Saturday');
+        expect(row.textContent).toContain('20 Beans · 2h ago');
+        expect(row.getAttribute('aria-label')).toMatch(/^Need: Borrow a trailer Saturday\. 20 Beans · 2h ago\. [^.]+\. Opens the listing\.$/);
+        // A Need that asks nothing says Free, and how long ago.
+        expect(document.querySelector('[data-testid="home-asked-n3"]')!.textContent).toContain('Free · 3d ago');
+        // The caption is the card's name, and the card says nothing of a unit or an unlock.
+        expect(document.querySelector('[data-testid="home-card-asked"]')!.textContent).toContain('Asked near you');
+        expect(document.querySelector('[data-testid="home-card-asked"]')!.textContent).not.toMatch(/Ʀ|unlock|resilience|survival/i);
+    });
+
+    it('a Need priced by the hour or the month says so, on the row and in the sentence a screen reader hears; a fixed price and Free are as before', async () => {
+        const [fixed, , free] = NEEDS();
+        node.answer = withAsked({ items: [
+            { ...fixed, id: 'n1', credits: 20, priceType: 'hourly' },
+            { ...fixed, id: 'n2', title: 'Someone to mind the shop', credits: 300, priceType: 'monthly' },
+            { ...fixed, id: 'n3', title: 'Lift to Lismore Thursday', credits: 25, priceType: 'fixed' },
+            { ...free, id: 'n4', priceType: 'hourly' },
+        ] });
+        await render();
+        const row = (id: string) => document.querySelector(`[data-testid="home-asked-${id}"]`) as HTMLElement;
+        expect(row('n1').textContent).toContain('20 Beans /Hr · 2h ago');
+        expect(row('n1').getAttribute('aria-label')).toMatch(/^Need: Borrow a trailer Saturday\. 20 Beans \/Hr · 2h ago\. [^.]+\. Opens the listing\.$/);
+        expect(row('n2').textContent).toContain('300 Beans /Mo · ');
+        expect(row('n2').getAttribute('aria-label')).toContain('300 Beans /Mo · ');
+        // A fixed price is a total, and Free never carries a unit.
+        expect(row('n3').textContent).toContain('25 Beans · ');
+        expect(row('n3').textContent).not.toContain('/');
+        expect(row('n4').textContent).toContain('Free · 3d ago');
+        expect(row('n4').textContent).not.toContain('/');
+        expect(row('n4').getAttribute('aria-label')).not.toContain('/');
+    });
+
+    it('a tap anywhere on a row opens the Need; See all Needs opens the Market on its Needs pill', async () => {
+        node.answer = withAsked();
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-asked-n2"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/post/[id]', params: { id: 'n2' } });
+        await act(async () => { (document.querySelector('[data-testid="home-asked-all"]') as HTMLElement).click(); });
+        expect(nav.router.navigate).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { filter: 'needs' } });
+    });
+
+    it('the member\'s stars first, the node\'s order inside each part', async () => {
+        node.answer = withAsked({ stars: ['labour', 'transport'] });
+        await render();
+        expect(rowIds()).toEqual(['n2', 'n3', 'n1']);
+    });
+
+    it('no Need to show: no card, no empty box (the node sends none, or an empty list)', async () => {
+        node.answer = withAsked({ items: null });
+        await render();
+        expect(cards()).not.toContain('asked');
+        expect(document.body.textContent).not.toContain('Asked near you');
+    });
+
+    it('First steps: "Ask for one thing you\'d pay a neighbour for" opens the composer on a Need, after the interests line and before the invite', async () => {
+        node.answer = withAsked({ firstNeed: false });
+        await render();
+        const order = Array.from(document.querySelectorAll('[data-testid^="home-step-"]')).map(e => e.getAttribute('data-testid'));
+        expect(order.filter(id => ['home-step-interests', 'home-step-need', 'home-step-invite'].includes(id!))).toEqual(['home-step-interests', 'home-step-need', 'home-step-invite']);
+        expect(byLabel("Ask for one thing you'd pay a neighbour for, not done yet")).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="home-step-need"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'need' } });
+    });
+
+    it('First steps: once a Need is posted the line is ticked and opens nothing; before the first Offer, or from a node that sent no fact, there is no line', async () => {
+        node.answer = withAsked({ firstNeed: true });
+        await render();
+        expect(byLabel("Ask for one thing you'd pay a neighbour for, done")).not.toBeNull();
+        Object.values(nav.router).forEach(f => f.mockClear());
+        await act(async () => { (document.querySelector('[data-testid="home-step-need"]') as HTMLElement).click(); });
+        expect(nav.router.push).not.toHaveBeenCalled();
+        await act(async () => { root!.unmount(); });
+        host!.remove();
+        node.answer = withAsked({ firstOffer: false, firstNeed: false });
+        await render();
+        expect(document.querySelector('[data-testid="home-step-need"]')).toBeNull();
+        await act(async () => { root!.unmount(); });
+        host!.remove();
+        node.answer = withAsked({ firstNeed: undefined });
+        await render();
+        expect(document.querySelector('[data-testid="home-step-need"]')).toBeNull();
+    });
+});
+
 describe('tailoring: the "…" menu, Arrange, interests', () => {
     it('Remove: the card goes at once, the instance leaves the list on the phone and the account, and it is said (CARD-FRAME §1.3)', async () => {
         await render();

@@ -393,6 +393,7 @@ export const SUITES = [
     'test-sync-signature',
     'test-trust-value-curve',
     'test-trust-tiers-one-source',
+    'test-admin-data-pages',
     'test-vouch-covenant',
     'test-enterprise-not-a-member-profile',
     'test-wash-sybil-defense',

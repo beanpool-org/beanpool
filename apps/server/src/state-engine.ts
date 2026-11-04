@@ -373,6 +373,7 @@ import {
     exactPlaceReaders,
     neighbourhoodOf,
     placeForOthers, unauthorized,
+    likeContains,
 } from '@beanpool/engine';
 import {
     addRating,
@@ -2232,6 +2233,103 @@ export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
     const own = nodeOwnAccountKeys();
     for (const profile of profiles) if (profile.isTreasury && own.has(profile.publicKey)) delete profile.isTreasury;
     return profiles;
+}
+
+/**
+ * The admins' member list, a page at a time (POST /api/local/admin/data/members): the members /admin/data listed (every
+ * one not pruned), oldest joined first, the key last, so the order is total and nothing a member does moves them in it.
+ * A walk from the first page to the last meets each member once, and one who joins during it at the end. An inviter
+ * joined before the members they brought in, so a page never names an inviter a later page holds. Each page's keys are
+ * ranked on the two columns of the order first, and only those rows are read in full. `query` narrows it to a callsign
+ * or key holding the words. `after` is the key the page before handed out (parseAdminMemberPageKey: null when it is not
+ * one this node made), and `next` is null on the last page.
+ */
+export interface AdminMembersPage {
+    members: Member[];
+    profiles: MemberProfile[];
+    stats: Record<string, { posts: number; messages: number }>;
+    next: string | null;
+    total: number;
+}
+
+const ADMIN_MEMBER_JOINED = "COALESCE(joined_at, '')";
+
+export function adminMemberPageKeyOf(joinedAt: string, publicKey: string): string {
+    return Buffer.from(JSON.stringify([joinedAt, publicKey])).toString('base64url');
+}
+
+export function parseAdminMemberPageKey(key: string): [string, string] | null {
+    try {
+        const parts = JSON.parse(Buffer.from(key, 'base64url').toString('utf8'));
+        return Array.isArray(parts) && parts.length === 2 && parts.every(p => typeof p === 'string' && p.length <= 200)
+            ? parts as [string, string] : null;
+    } catch {
+        return null;
+    }
+}
+
+export function getAdminMembersPage(after: [string, string] | null, limit: number, query?: string): AdminMembersPage {
+    let where = "status != 'pruned'";
+    const params: unknown[] = [];
+    if (query) {
+        where += " AND (callsign LIKE ? ESCAPE '\\' OR public_key LIKE ? ESCAPE '\\')";
+        params.push(likeContains(query), likeContains(query));
+    }
+    const total = db.prepare(`SELECT COUNT(*) FROM members WHERE ${where}`).pluck().get(...params) as number;
+    const below = after ? ` AND (${ADMIN_MEMBER_JOINED} > ? OR (${ADMIN_MEMBER_JOINED} = ? AND public_key > ?))` : '';
+    const ranked = db.prepare(`SELECT public_key, ${ADMIN_MEMBER_JOINED} AS joined FROM members WHERE ${where}${below}
+        ORDER BY ${ADMIN_MEMBER_JOINED}, public_key LIMIT ?`).all(...params, ...(after ? [after[0], after[0], after[1]] : []), limit + 1) as
+        Array<{ public_key: string; joined: string }>;
+    // One past the page says whether another follows, so the last page hands out no cursor, even when it is full.
+    const more = ranked.length > limit;
+    if (more) ranked.length = limit;
+    const keys = JSON.stringify(ranked.map(r => r.public_key));
+    const rows = db.prepare('SELECT * FROM members WHERE public_key IN (SELECT value FROM json_each(?))').all(keys) as any[];
+    const byKey = new Map(rows.map(row => [row.public_key as string, row]));
+    const inOrder = ranked.flatMap(r => byKey.get(r.public_key) ?? []);
+    // The profiles as getAllProfiles gives them: the photo as its URL, no contact details a reader with no key may not see.
+    const viewer = contactViewerEngine(db, undefined);
+    const own = nodeOwnAccountKeys();
+    const profiles = inOrder.map(row => {
+        const profile = rowToProfile(row);
+        profile.avatar = avatarUrlOf(row.public_key, row.avatar_ref);
+        if (profile.contact && !contactVisibleTo(profile.publicKey, row.contact_visibility, viewer)) profile.contact = null;
+        if (profile.isTreasury && own.has(profile.publicKey)) delete profile.isTreasury;
+        return profile;
+    });
+    const last = ranked[ranked.length - 1];
+    return {
+        members: inOrder.map(rowToMember),
+        profiles,
+        stats: getMemberStats(ranked.map(r => r.public_key)),
+        next: more && last ? adminMemberPageKeyOf(last.joined, last.public_key) : null,
+        total,
+    };
+}
+
+/**
+ * The counts the admins' screens show where they listed every member to count them (/admin/data's `counts`): members not
+ * pruned, of them the community's own accounts (treasuries), those who came in through the open door ('open:<provider>'),
+ * the owners among them, and their phones' platforms as the list's rows give them (each push token's platform, or unknown).
+ */
+export function getAdminMemberCounts(): { members: number; treasuries: number; doorMembers: number; owners: number; platforms: Record<string, number> } {
+    const r = db.prepare(`SELECT COUNT(*) AS members,
+            COALESCE(SUM(CASE WHEN is_treasury = 1 THEN 1 ELSE 0 END), 0) AS treasuries,
+            COALESCE(SUM(CASE WHEN invited_by LIKE 'open:%' THEN 1 ELSE 0 END), 0) AS doorMembers
+        FROM members WHERE status != 'pruned'`).get() as { members: number; treasuries: number; doorMembers: number };
+    const live = new Set(db.prepare("SELECT public_key FROM members WHERE status != 'pruned'").pluck().all() as string[]);
+    const owners = listNodeRoles().filter(role => role.role === 'owner' && live.has(role.member_pubkey)).length;
+    const platformOf = new Map<string, string>();
+    for (const row of db.prepare('SELECT public_key, platform FROM push_tokens').all() as Array<{ public_key: string; platform: string | null }>) {
+        if (row.public_key && row.platform) platformOf.set(row.public_key, row.platform.toLowerCase());
+    }
+    const platforms: Record<string, number> = { ios: 0, android: 0, web: 0, unknown: 0 };
+    for (const key of live) {
+        const p = platformOf.get(key) || 'unknown';
+        const bucket = p === 'ios' || p === 'android' ? p : p === 'web' || p === 'pwa' ? 'web' : 'unknown';
+        platforms[bucket]++;
+    }
+    return { ...r, owners, platforms };
 }
 
 // Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member
@@ -7721,7 +7819,10 @@ export function getReportCount(): number {
  * Each member's posts up and messages sent, for the admins' member stats. No trade figures: an admin sees those only
  * as the community's totals (getTradeTotals; queue item 29, Marty 4 Oct: "totals only in member stats").
  */
-export function getMemberStats(): Record<string, { posts: number; messages: number }> {
+export function getMemberStats(keys?: string[]): Record<string, { posts: number; messages: number }> {
+    // A page's members only (getAdminMembersPage), each count read for them alone, or every member.
+    const of = (column: string) => keys ? ` AND ${column} IN (SELECT value FROM json_each(?))` : '';
+    const list = keys ? [JSON.stringify(keys)] : [];
     const rows = db.prepare(`
         SELECT m.public_key,
             COALESCE(p.post_count, 0) as post_count,
@@ -7729,15 +7830,16 @@ export function getMemberStats(): Record<string, { posts: number; messages: numb
         FROM members m
         LEFT JOIN (
             SELECT author_pubkey, COUNT(*) as post_count 
-            FROM posts WHERE active = 1 
+            FROM posts WHERE active = 1${of('author_pubkey')}
             GROUP BY author_pubkey
         ) p ON m.public_key = p.author_pubkey
         LEFT JOIN (
             SELECT author_pubkey, COUNT(*) as msg_count 
-            FROM messages WHERE author_pubkey != 'SYSTEM' 
+            FROM messages WHERE author_pubkey != 'SYSTEM'${of('author_pubkey')}
             GROUP BY author_pubkey
         ) msg ON m.public_key = msg.author_pubkey
-    `).all() as any[];
+        WHERE 1=1${of('m.public_key')}
+    `).all(...list, ...list, ...list) as any[];
 
     const stats: Record<string, { posts: number; messages: number }> = {};
     for (const r of rows) stats[r.public_key] = { posts: r.post_count, messages: r.msg_count };
@@ -9367,6 +9469,30 @@ export function inviteBranchOf(rootPublicKey: string): string[] {
     }
     walk(rootPublicKey);
     return branch;
+}
+
+/**
+ * What an owner's prune of this branch would do, for its confirmation (GET /api/local/admin/branches/:pubkey/prune): the
+ * whole subtree adminPruneBranch walks (inviteBranchOf), not the console's pages. `members` counts the rows it would mark
+ * pruned (each one not pruned already). Each one's balance as the prune settles it (adminPruneUser): a debt the Commons
+ * pays (`badDebt`), a surplus it takes back (`surplus`), and what the Commons gains or pays overall (`net`), each to the
+ * cent. Totals only, and no names; `keys` are the members whose balances they hold, for the route's access-log lines.
+ */
+export function branchPrunePreview(rootPublicKey: string): { members: number; badDebt: number; surplus: number; net: number; keys: string[] } {
+    const status = db.prepare('SELECT status FROM members WHERE public_key = ?');
+    const keys = inviteBranchOf(rootPublicKey).filter((pubkey) => {
+        const row = status.get(pubkey) as { status: string } | undefined;
+        return !!row && row.status !== 'pruned';
+    });
+    let badDebt = 0;
+    let surplus = 0;
+    for (const pubkey of keys) {
+        const balance = roundedBalance(pubkey);
+        if (balance < 0) badDebt += -balance;
+        else if (balance > 0) surplus += balance;
+    }
+    const cents = (n: number) => Math.round(n * 100) / 100;
+    return { members: keys.length, badDebt: cents(badDebt), surplus: cents(surplus), net: cents(surplus - badDebt), keys };
 }
 
 /**

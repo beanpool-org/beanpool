@@ -4,6 +4,15 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PruneBranchModal } from './PruneBranchModal';
 import type { MemberItem } from './MembersModule';
+import { BranchPruneRefusedError, type BranchPruneFigures } from '../../lib/node-client';
+
+/**
+ * The dialog's figures are the node's, for the whole branch (GET /api/local/admin/branches/:pubkey/prune, `loadFigures`):
+ * the console's members hold only the pages read so far (capacity fix 3), so the figures were once made from part of the
+ * branch. These tests used to hand the dialog a members list and balances and check the sums it made; they now hand it
+ * the node's figures for the same branches and check the same numbers, and that Confirm waits for them.
+ */
+const figuresOf = (f: BranchPruneFigures) => vi.fn().mockResolvedValue(f);
 
 describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
     const mockRootMember: MemberItem = {
@@ -48,14 +57,19 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         },
     ];
 
-    it('renders with a real payload, calculates members and balances, and enforces type-to-confirm', async () => {
+    // The branch above as the node counts it: root + 2 children + 1 grandchild, 150.5 + 50.25 + 200 + 75.25 in surplus.
+    const branchFigures: BranchPruneFigures = { members: 4, badDebt: 0, surplus: 476, net: 476 };
+    void mockDownstreamMembers;
+
+    it("shows the node's figures for the branch, and enforces type-to-confirm", async () => {
         const handleConfirm = vi.fn().mockResolvedValue(undefined);
         const handleClose = vi.fn();
+        const loadFigures = figuresOf(branchFigures);
 
         render(
             <PruneBranchModal
                 rootMember={mockRootMember}
-                members={mockDownstreamMembers}
+                loadFigures={loadFigures}
                 onConfirm={handleConfirm}
                 onClose={handleClose}
             />
@@ -65,8 +79,9 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
         expect(screen.getByText('DESTRUCTIVE PROTOCOL ACTION')).toBeInTheDocument();
 
-        // 4 members in branch: root + 2 children + 1 grandchild
-        expect(screen.getByText('4')).toBeInTheDocument();
+        // 4 members in branch: root + 2 children + 1 grandchild, as the node counts them
+        expect(await screen.findByText('4')).toBeInTheDocument();
+        expect(loadFigures).toHaveBeenCalledWith('pk-root-elder-12345678');
         // Net Commons Pool Impact: 150.5 + 50.25 + 200 + 75.25 = +476 🫘
         expect(screen.getByText('Net Commons Pool Impact:')).toBeInTheDocument();
         expect(document.getElementById('prune-net-impact')?.textContent).toContain('+476 🫘');
@@ -96,23 +111,25 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         });
     });
 
-    it('renders safely with an empty payload without crashing', () => {
+    it('renders safely with an empty payload without crashing, and reads nothing for no branch', () => {
         const handleConfirm = vi.fn();
         const handleClose = vi.fn();
+        const loadFigures = figuresOf(branchFigures);
 
         render(
             <PruneBranchModal
                 rootMember={null}
-                members={[]}
+                loadFigures={loadFigures}
                 onConfirm={handleConfirm}
                 onClose={handleClose}
             />
         );
 
         expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
-        expect(screen.getByText('0')).toBeInTheDocument();
+        expect(loadFigures).not.toHaveBeenCalled();
+        expect(document.getElementById('prune-members-affected')?.textContent).toBe('—');
         expect(screen.getByText('Net Commons Pool Impact:')).toBeInTheDocument();
-        expect(document.getElementById('prune-net-impact')?.textContent).toContain('0 🫘');
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('— 🫘');
 
         const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
         expect(pruneBtn).toBeDisabled();
@@ -130,10 +147,11 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
             balance: 'invalid-number-string' as any,
         };
 
+        const loadFigures = figuresOf(branchFigures);
         render(
             <PruneBranchModal
                 rootMember={malformedRoot as any}
-                members={'not-an-array' as any}
+                loadFigures={loadFigures}
                 onConfirm={handleConfirm}
                 onClose={handleClose}
             />
@@ -141,9 +159,11 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
 
         expect(screen.getByText('Prune Invite Branch')).toBeInTheDocument();
         expect(screen.getByText('Unknown Root')).toBeInTheDocument();
-        expect(screen.getByText('1')).toBeInTheDocument();
+        // No key to ask the node about: nothing read, nothing to confirm.
+        expect(loadFigures).not.toHaveBeenCalled();
         expect(screen.getByText('Net Commons Pool Impact:')).toBeInTheDocument();
-        expect(document.getElementById('prune-net-impact')?.textContent).toContain('0 🫘');
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('— 🫘');
+        expect(screen.getByRole('button', { name: /Prune Entire Branch/i })).toBeDisabled();
     });
 
     it('dismisses via Escape key and Cancel button', async () => {
@@ -152,7 +172,7 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         render(
             <PruneBranchModal
                 rootMember={mockRootMember}
-                members={mockDownstreamMembers}
+                loadFigures={figuresOf(branchFigures)}
                 onConfirm={vi.fn()}
                 onClose={handleClose}
             />
@@ -171,7 +191,7 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         render(
             <PruneBranchModal
                 rootMember={mockRootMember}
-                members={mockDownstreamMembers}
+                loadFigures={figuresOf(branchFigures)}
                 onConfirm={vi.fn()}
                 onClose={vi.fn()}
             />
@@ -179,6 +199,7 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
 
         const input = screen.getByPlaceholderText(/Type "BadRootLeader" to confirm/i);
         const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
+        await screen.findByText('4');
 
         // Lowercase should NOT enable the button (case mismatch)
         await userEvent.type(input, 'badrootleader');
@@ -190,32 +211,23 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         expect(pruneBtn).toBeEnabled();
     });
 
-    it('merges accounts balances and separates bad debt write-off from credit confiscation', () => {
+    it("separates bad debt write-off from credit confiscation, as the node's figures give them", async () => {
         const root: MemberItem = {
             publicKey: 'pk-debtor-root',
             callsign: 'DebtorRoot',
         };
-        const child: MemberItem = {
-            publicKey: 'pk-credit-child',
-            callsign: 'CreditChild',
-            invitedBy: 'pk-debtor-root',
-        };
-        const mockAccounts = [
-            { publicKey: 'pk-debtor-root', balance: -250 },
-            { publicKey: 'pk-credit-child', balance: 400 },
-        ];
-
+        // A root owing 250 and a child holding 400, as the node works them out.
         render(
             <PruneBranchModal
                 rootMember={root}
-                members={[root, child]}
-                accounts={mockAccounts}
+                loadFigures={figuresOf({ members: 2, badDebt: 250, surplus: 400, net: 150 })}
                 onConfirm={vi.fn()}
                 onClose={vi.fn()}
             />
         );
 
         // Debt written off: 250 beans
+        await screen.findByText('2');
         const debtEl = document.getElementById('prune-debt-written-off');
         expect(debtEl?.textContent).toBe('250 🫘 bad debt');
 
@@ -239,13 +251,14 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         render(
             <PruneBranchModal
                 rootMember={mockRootMember}
-                members={mockDownstreamMembers}
+                loadFigures={figuresOf(branchFigures)}
                 onConfirm={handleConfirm}
                 onClose={handleClose}
             />
         );
 
         // Type to confirm and click prune
+        await screen.findByText('4');
         const input = screen.getByPlaceholderText(/Type "BadRootLeader" to confirm/i);
         await userEvent.type(input, 'BadRootLeader');
         const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
@@ -280,5 +293,74 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         await waitFor(() => {
             expect(handleClose).toHaveBeenCalledTimes(1);
         });
+    });
+
+    it("while the node's figures load: says so, shows none, and keeps Confirm off even with the name typed", async () => {
+        let resolveFigures: (f: BranchPruneFigures) => void = () => {};
+        const loadFigures = vi.fn().mockReturnValue(new Promise<BranchPruneFigures>((resolve) => { resolveFigures = resolve; }));
+        const handleConfirm = vi.fn().mockResolvedValue(undefined);
+        render(<PruneBranchModal rootMember={mockRootMember} loadFigures={loadFigures} onConfirm={handleConfirm} onClose={vi.fn()} />);
+
+        expect(screen.getByTestId('prune-figures-loading')).toHaveTextContent('Reading the whole branch from the node…');
+        expect(screen.getByTestId('prune-branch-figures')).toHaveAttribute('aria-busy', 'true');
+        expect(document.getElementById('prune-members-affected')?.textContent).toBe('…');
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('… 🫘');
+        await userEvent.type(screen.getByPlaceholderText(/Type "BadRootLeader" to confirm/i), 'BadRootLeader');
+        const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
+        expect(pruneBtn).toBeDisabled();
+        await userEvent.click(pruneBtn);
+        expect(handleConfirm).not.toHaveBeenCalled();
+
+        resolveFigures({ members: 1_250, badDebt: 300.4, surplus: 10, net: -290.4 });
+        await waitFor(() => expect(document.getElementById('prune-members-affected')?.textContent).toBe('1250'));
+        expect(screen.queryByTestId('prune-figures-loading')).toBeNull();
+        expect(document.getElementById('prune-debt-written-off')?.textContent).toBe('300.4 🫘 bad debt');
+        expect(document.getElementById('prune-net-impact')?.textContent).toBe('-290.4 🫘');
+        expect(pruneBtn).toBeEnabled();
+    });
+
+    it('when the node cannot give the figures: says so, keeps Confirm off, and Try again reads them again', async () => {
+        const loadFigures = vi.fn()
+            .mockRejectedValueOnce(new Error('Only an owner of this node can remove a whole invite branch'))
+            .mockResolvedValueOnce(branchFigures);
+        const handleConfirm = vi.fn().mockResolvedValue(undefined);
+        render(<PruneBranchModal rootMember={mockRootMember} loadFigures={loadFigures} onConfirm={handleConfirm} onClose={vi.fn()} />);
+
+        const failed = await screen.findByTestId('prune-figures-error');
+        expect(failed).toHaveTextContent("Couldn't read this branch from the node, so it can't be pruned until its figures are in: Only an owner of this node can remove a whole invite branch");
+        expect(document.getElementById('prune-members-affected')?.textContent).toBe('—');
+        await userEvent.type(screen.getByPlaceholderText(/Type "BadRootLeader" to confirm/i), 'BadRootLeader');
+        const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
+        expect(pruneBtn).toBeDisabled();
+        await userEvent.click(pruneBtn);
+        expect(handleConfirm).not.toHaveBeenCalled();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        expect(await screen.findByText('4')).toBeInTheDocument();
+        expect(loadFigures).toHaveBeenCalledTimes(2);
+        expect(screen.queryByTestId('prune-figures-error')).toBeNull();
+        expect(pruneBtn).toBeEnabled();
+    });
+
+    it("when the node refuses the prune: shows the node's words, no figures, no Try again, and keeps Confirm off", async () => {
+        const words = "Removing a member is the community's vote here. Pause them instead: that opens the vote, and the community decides.";
+        const loadFigures = vi.fn().mockRejectedValue(new BranchPruneRefusedError(words, 'removal_is_the_vote'));
+        const handleConfirm = vi.fn().mockResolvedValue(undefined);
+        render(<PruneBranchModal rootMember={mockRootMember} loadFigures={loadFigures} onConfirm={handleConfirm} onClose={vi.fn()} />);
+
+        const refused = await screen.findByTestId('prune-figures-refused');
+        expect(refused).toHaveTextContent(words);
+        expect(refused).not.toHaveTextContent("Couldn't read");
+        expect(screen.queryByTestId('prune-figures-error')).toBeNull();
+        expect(screen.queryByTestId('prune-figures-loading')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(document.getElementById('prune-members-affected')?.textContent).toBe('—');
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('— 🫘');
+        await userEvent.type(screen.getByPlaceholderText(/Type "BadRootLeader" to confirm/i), 'BadRootLeader');
+        const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
+        expect(pruneBtn).toBeDisabled();
+        await userEvent.click(pruneBtn);
+        expect(handleConfirm).not.toHaveBeenCalled();
+        expect(loadFigures).toHaveBeenCalledTimes(1);
     });
 });

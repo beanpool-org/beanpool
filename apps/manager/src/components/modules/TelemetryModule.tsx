@@ -217,6 +217,10 @@ export function TelemetryModule({
         if (typeof diagCount === 'number') {
             return acc + diagCount;
         }
+        const nodeCount = fleetNodeData?.[p.id]?.counts?.members;
+        if (typeof nodeCount === 'number') {
+            return acc + nodeCount;
+        }
         const nodeMembers = fleetNodeData?.[p.id]?.members;
         if (Array.isArray(nodeMembers)) {
             return acc + nodeMembers.length;
@@ -402,7 +406,9 @@ export function TelemetryModule({
                             const refusedToken = tokenRefusal(profile, error);
                             const nodeUserCount = typeof diag?.userCount === 'number'
                                 ? diag.userCount
-                                : (Array.isArray(fleetNodeData?.[profile.id]?.members)
+                                : (typeof fleetNodeData?.[profile.id]?.counts?.members === 'number'
+                                    ? fleetNodeData[profile.id]?.counts?.members
+                                    : Array.isArray(fleetNodeData?.[profile.id]?.members)
                                     ? fleetNodeData[profile.id]?.members?.length
                                     : undefined);
                             const nodeColor = NODE_COLORS[pIdx % NODE_COLORS.length];
@@ -546,7 +552,9 @@ export function TelemetryModule({
                             const refusedToken = tokenRefusal(profile, error);
                             const nodeUserCount = typeof diag?.userCount === 'number'
                                 ? diag.userCount
-                                : (Array.isArray(fleetNodeData?.[profile.id]?.members)
+                                : (typeof fleetNodeData?.[profile.id]?.counts?.members === 'number'
+                                    ? fleetNodeData[profile.id]?.counts?.members
+                                    : Array.isArray(fleetNodeData?.[profile.id]?.members)
                                     ? fleetNodeData[profile.id]?.members?.length
                                     : undefined);
                             const nodeColor = NODE_COLORS[pIdx % NODE_COLORS.length];

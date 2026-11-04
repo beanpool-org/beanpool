@@ -1325,6 +1325,11 @@ const PAGE_BELOW = " AND (COALESCE(p.updated_at, '') < ? OR (COALESCE(p.updated_
 export interface SyncPage {
     after: string | null;
     next: string | null;
+    /**
+     * Read one row past the page, so `next` is set only when another row follows: a full last page hands out no key
+     * (the owner console's posts pages, /admin/data/posts). Unset, a full page always hands one out, as phones read it.
+     */
+    lookAhead?: boolean;
 }
 
 /** A page key: a row's time, its creation time and its id, as PAGE_ORDER reads them. Opaque to the phone. */
@@ -1348,12 +1353,20 @@ function postRowsForSyncPage(db: Db, where: string, whereParams: unknown[], page
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE 1=1${where}${PAGE_ORDER}`;
     const params: unknown[] = [...whereParams];
+    const peek = !!(page.lookAhead && filter?.limit);
     if (filter?.limit) {
         sql += ' LIMIT ?';
-        params.push(filter.limit);
+        params.push(peek ? filter.limit + 1 : filter.limit);
     }
     const ranked = db.prepare(sql).all(...params) as Array<{ id: string; updated_at: string | null; created_at: string | null }>;
-    page.next = filter?.limit && ranked.length === filter.limit ? pageKeyOf(ranked[ranked.length - 1]) : null;
+    if (peek) {
+        // The row past the page only says whether another follows; it is not read.
+        const more = ranked.length > filter!.limit!;
+        if (more) ranked.length = filter!.limit!;
+        page.next = more ? pageKeyOf(ranked[ranked.length - 1]) : null;
+    } else {
+        page.next = filter?.limit && ranked.length === filter.limit ? pageKeyOf(ranked[ranked.length - 1]) : null;
+    }
     const full = selectInChunks(db, ranked.map(r => r.id), ph => `${postRowSelect(filter)}\n        WHERE p.id IN (${ph})`);
     const byId = new Map(full.map(row => [row.id as string, row]));
     return ranked.flatMap(r => byId.get(r.id) ?? []);

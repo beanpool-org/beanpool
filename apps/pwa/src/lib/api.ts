@@ -3357,7 +3357,9 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     // for owners and admins out of the admin line (whose settings page has no list of them), and for any member where any
     // member may answer, once a request has waited 3 days.
     // `asks`: and a member's ask that an admin invite someone (components/InviteAsks).
-    q.set('lands', 'enterprise,group,invite,people,asks');
+    // `first-need`: and First steps' line "Ask for one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start
+    // N2): the node keeps First steps up for that line alone only for an app that says it draws it (home-answer.ts HomeLanding).
+    q.set('lands', 'enterprise,group,invite,people,asks,first-need');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

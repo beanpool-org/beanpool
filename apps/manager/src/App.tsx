@@ -16,6 +16,10 @@ import {
     fetchGatewayConfig,
     updateGatewayConfig,
     fetchNodeData,
+    fetchMembersPage,
+    fetchPostsPage,
+    withMembersPage,
+    withPostsPage,
     fetchAlertsSummary,
     fetchNodeLogs,
     freezeNodeUser,
@@ -89,6 +93,7 @@ import { passwordField, isAuthFailure, passwordNeeds2faError } from './lib/node-
 import { fetchCommunityShape, coreAwaitsOwner } from './lib/community-shape';
 import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
 import { useInPageConfirm } from './components/common/InPageConfirm';
+import { NodeDataPagesContext, type NodeDataPagesValue, type PagedKind } from './lib/node-data-pages';
 
 /**
  * A short digest of a profile's password (fleet mode, held in memory only: lib/profiles.ts), used only to tell
@@ -395,6 +400,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const [nodeDataLoading, setNodeDataLoading] = useState(false);
     /** Why the active node's data last failed to load, for Home's figures ("couldn't load", never 0); null once it loads. */
     const [nodeDataError, setNodeDataError] = useState<string | null>(null);
+    // Load more: the next page of members or posts, added below the ones held (capacity fix 3).
+    const [pagesBusy, setPagesBusy] = useState<Record<PagedKind, boolean>>({ members: false, posts: false });
+    const [pagesError, setPagesError] = useState<Record<PagedKind, string | null>>({ members: null, posts: null });
+    /** A Refresh or another node starts the pages again: a Load more's failure, or one in flight, was the last data's. */
+    const resetPages = () => {
+        setPagesError({ members: null, posts: null });
+        setPagesBusy({ members: false, posts: false });
+    };
     const [nodeLogs, setNodeLogs] = useState<LogEntry[]>([]);
 
     const [publicCommunityName, setPublicCommunityName] = useState<string | null>(null);
@@ -980,6 +993,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
      */
     const loadNodeData = async () => {
         if (!activeNode || moderatorRef.current) return;
+        // A Refresh reads the pages again from the first: what a Load more said went wrong was about the last read.
+        resetPages();
         if (dataInFlightRef.current[activeNode.id]) return;
         dataInFlightRef.current[activeNode.id] = true;
         lastFlagFetchRef.current[activeNode.id] = Date.now();
@@ -1146,6 +1161,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setGateway(null);
         setNodeData(null);
         setNodeDataError(null);
+        resetPages();
         setNodeLogs([]);
         refreshAll();
     }, [activeProfileId]);
@@ -1432,7 +1448,44 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         );
     }
 
+    const loadMorePage = async (kind: PagedKind) => {
+        const node = activeNode;
+        const cursor = kind === 'members' ? nodeData?.membersNext : nodeData?.postsNext;
+        if (!node || !cursor || pagesBusy[kind]) return;
+        setPagesBusy((prev) => ({ ...prev, [kind]: true }));
+        setPagesError((prev) => ({ ...prev, [kind]: null }));
+        try {
+            const cred = nodeCredential(node);
+            const tfa = getTfaSessionToken(node.id);
+            if (kind === 'members') {
+                const page = await fetchMembersPage(node.url, cred, tfa, { cursor });
+                if (node.id === activeNodeIdRef.current) setNodeData((prev) => (prev && prev.membersNext === cursor ? withMembersPage(prev, page) : prev));
+            } else {
+                const page = await fetchPostsPage(node.url, cred, tfa, { cursor });
+                if (node.id === activeNodeIdRef.current) setNodeData((prev) => (prev && prev.postsNext === cursor ? withPostsPage(prev, page) : prev));
+            }
+        } catch (e: unknown) {
+            // Said only on the node it failed for: a failure that lands after the operator moved to another node is not
+            // that node's (switching node cleared the last one's: resetPages).
+            if (node.id === activeNodeIdRef.current) setPagesError((prev) => ({ ...prev, [kind]: e instanceof Error ? e.message : String(e) }));
+        } finally {
+            if (node.id === activeNodeIdRef.current) setPagesBusy((prev) => ({ ...prev, [kind]: false }));
+        }
+    };
+    const nodeDataPages: NodeDataPagesValue = {
+        members: {
+            loaded: Array.isArray(nodeData?.members) ? nodeData.members.length : 0,
+            total: typeof nodeData?.membersTotal === 'number' ? nodeData.membersTotal : (nodeData?.counts?.members ?? null),
+            more: !!nodeData?.membersNext,
+        },
+        posts: { loaded: Array.isArray(nodeData?.posts) ? nodeData.posts.length : 0, more: !!nodeData?.postsNext },
+        busy: pagesBusy,
+        error: pagesError,
+        loadMore: (kind) => { void loadMorePage(kind); },
+    };
+
     return (
+        <NodeDataPagesContext.Provider value={nodeDataPages}>
         <div className={`min-h-screen bg-nature-950 text-nature-100 flex font-sans antialiased ${isFleetMode ? '' : 'bp-settings'}`}>
             {confirmation}
             {/* Left Vertical Navigation & Connected Fleet Sidebar */}
@@ -1955,5 +2008,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 />
             )}
         </div>
+        </NodeDataPagesContext.Provider>
     );
 }

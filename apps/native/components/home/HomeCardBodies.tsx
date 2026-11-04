@@ -14,8 +14,8 @@ import {
     SEARCH_OFFLINE_LINE, searchEmptyLine, searchFirstLine,
     RSVP_SAID, RSVP_WORDS, beansAmount, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventLine,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence, DECIDE_HREF, formatBeans,
-    communitiesListed, decideOnNode, timeAgoInWords, withPin,
-    type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
+    askedFacts, communitiesListed, decideOnNode, timeAgoInWords, withPin,
+    type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeNeedItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
 import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
@@ -418,6 +418,46 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
             left={<Thumb uri={onNode(nodeUrl, p.photoUrl || p.bannerUrl)} category={p.category} kind="listing" colors={colors} />}
             subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
             testID={testID}
+        />
+    );
+}
+
+/**
+ * "Asked near you" (cold-start N2): the open Needs of neighbours, one row each (the Market row's photo or category tile, the
+ * title, and "20 Beans · 2h ago"); the whole row opens the Need. The node sends only real, open Needs and none of the
+ * reader's own, so there is nothing to draw an empty box for: the screen draws the card only while there is a row.
+ */
+export function AskedBody({ items, nodeUrl, showsBeans, colors, now, onSeeAll }: {
+    items: HomeNeedItem[];
+    nodeUrl: string | null;
+    showsBeans: boolean;
+    colors: AppColors;
+    now: number;
+    onSeeAll: () => void;
+}) {
+    return (
+        <>
+            {items.map(p => <AskedRow key={p.id} p={p} nodeUrl={nodeUrl} showsBeans={showsBeans} colors={colors} now={now} />)}
+            <HomeLink id="asked:all" colors={colors} text={t('See all Needs')} a11y={t('See all Needs, in the Market')} onPress={onSeeAll} testID="home-asked-all" />
+        </>
+    );
+}
+
+function AskedRow({ p, nodeUrl, showsBeans, colors, now }: { p: HomeNeedItem; nodeUrl: string | null; showsBeans: boolean; colors: AppColors; now: number }) {
+    const facts = askedFacts(p, showsBeans, now);
+    const category = categoryLabel(p.category);
+    const values = { title: sentence(p.title), facts, category };
+    // The Market row's own sentence for a Need, so a screen reader hears the same thing on both.
+    const a11y = facts ? t('Need: {title} {facts}. {category}. Opens the listing.', values) : t('Need: {title} {category}. Opens the listing.', values);
+    return (
+        <HomeRow
+            colors={colors}
+            text={p.title}
+            sub={facts || category}
+            a11y={a11y}
+            onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
+            left={<Thumb uri={onNode(nodeUrl, p.photoUrl)} category={p.category} kind="listing" colors={colors} />}
+            testID={`home-asked-${p.id}`}
         />
     );
 }

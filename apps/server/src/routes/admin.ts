@@ -9,7 +9,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { getVersion, shownVersion } from '../version.js';
 import {
-    getAllMembers, getAllProfiles, getMember,
+    getAllMembers, getAllProfiles, getMember, getAdminMembersPage, parseAdminMemberPageKey, getAdminMemberCounts, type Member,
     getPosts, getCommunityHealth,
     getReports, getReportCount,
     adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier,
@@ -33,7 +33,7 @@ import {
     lastActiveForViewer,
     restoreHiddenPost, liftModerationMute, liftRequestsLimit, pushServiceRefusals,
     hideBurst, undoBurst,
-    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal,
+    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal, branchPrunePreview,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listRequestLimits } from '../engine/request-limits.js';
@@ -119,7 +119,8 @@ import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
 import { actionableKnockCount } from '../engine/knocks.js';
-import { likeContains, withoutTradeParty } from '@beanpool/engine';
+import { likeContains, withoutTradeParty, parsePageKey, type SyncPage } from '@beanpool/engine';
+import { heavyRead, heavyReadKey } from '../heavy-reads.js';
 
 // The most post ids one POST /api/local/admin/posts/bulk-delete takes. The manager (PeopleSafetySection.tsx) and the
 // node's own settings page (static/settings.js) send longer lists in batches of this size, one after another.
@@ -1123,10 +1124,36 @@ function readableServerAlerts(): ReturnType<typeof serverAlertsBanner> | undefin
     }
 }
 
-router.post('/api/local/admin/data', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    
-    const pushTokenRows = (db.prepare(`SELECT public_key, platform FROM push_tokens`).all() as any[]) || [];
+/**
+ * The most members and posts /admin/data sends whole, in one answer, to a reader that asks for the lists (an older owner
+ * console, Settings' moderation page, scripts/grant-operator.mjs). Built in one go on the main thread, that answer cost a
+ * 10,000-member node 5 s with everything else waiting, 11.6 MB, and killed a 100,000-member one (out of heap after 65 s;
+ * capacity report 5 Nov, bottleneck 3). At these sizes it is about 1.2 MB and half a second, under the heavy-read cap.
+ * Past them the node says so (413, `code: admin_data_paged`) and the reader pages: /admin/data/members and /data/posts.
+ */
+const ADMIN_DATA_WHOLE_MAX_MEMBERS = 1_000;
+const ADMIN_DATA_WHOLE_MAX_POSTS = 3_000;
+const ADMIN_DATA_PAGED_CODE = 'admin_data_paged';
+/** A page of members: at most, and when no size is asked. Each row reads its member's trust profile (about 0.5 ms). */
+const ADMIN_MEMBERS_PAGE_MAX = 200;
+const ADMIN_MEMBERS_PAGE_DEFAULT = 100;
+/** A page of posts: at most, and when no size is asked. */
+const ADMIN_POSTS_PAGE_MAX = 100;
+const ADMIN_POSTS_PAGE_DEFAULT = 50;
+
+function pageLimit(asked: unknown, fallback: number, max: number): number {
+    const n = typeof asked === 'number' ? asked : parseInt(String(asked ?? ''), 10);
+    return Number.isInteger(n) && n > 0 ? Math.min(n, max) : fallback;
+}
+
+/**
+ * The admins' rows of these members, as /admin/data has always sent them. Each push token's platform, read for `keys`
+ * alone when given (a page) or every one (the whole list).
+ */
+function adminMemberRows(members: Member[], keys?: string[]) {
+    const pushTokenRows = ((keys
+        ? db.prepare(`SELECT public_key, platform FROM push_tokens WHERE public_key IN (SELECT value FROM json_each(?))`).all(JSON.stringify(keys))
+        : db.prepare(`SELECT public_key, platform FROM push_tokens`).all()) as any[]) || [];
     const platformMap = new Map<string, string>();
     for (const row of pushTokenRows) {
         if (row.public_key && row.platform) {
@@ -1140,41 +1167,46 @@ router.post('/api/local/admin/data', async (ctx) => {
         rolesByPubkey.set(r.member_pubkey, r.role);
     }
 
-    ctx.body = {
-        members: getAllMembers().filter(m => m.status !== 'pruned').map(m => {
-            const isVoucher = canVouch(m.publicKey);
-            // The member's real tier, from the same profile their own app shows. `m.earnedCredit` is only
-            // the granted lane (it leaves out earned trade and vouches), and vouching is a capability
-            // shown by canVouch, not a tier.
-            const tier = getMemberTrustProfile(m.publicKey).tier.name;
-            // An admin sees no more of a member's contact details than any member does: the choice reads "Hidden —
-            // only you can see it", and the manager never shows them. `profiles` below goes through the same rule as
-            // the profile page (contactVisibleTo) with no viewer, and a password proves no member, so it carries no
-            // contact details at all. The rest of the row stays: the manager draws the invite tree, pruning and roles
-            // from it. Each photo as its URL (avatarUrlOf, from the row's avatar_ref), which the manager, served by this node,
-            // shows as it shows a photo: a list of every member never reads every photo (it sent each one twice, here and in
-            // `profiles`, which at 30,000 members with photos would be 1.6 GB).
-            const { contactValue, contactVisibility, avatarRef, ...row } = m;
-            void contactValue; void contactVisibility;
-            return {
-                ...row,
-                avatarUrl: avatarUrlOf(m.publicKey, avatarRef),
-                // Admins see the day too: a node admin could otherwise match secret-ballot votes to voters.
-                lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
-                tier,
-                standing: tier,
-                canVouch: isVoucher,
-                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-                platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
-            };
-        }),
-        profiles: getAllProfiles(),
-        // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt. Polls carry their counts and not
-        // who voted for what: that is for members (includeVoters), and the manager never shows it. A listing someone took
-        // shows its status and dates, not who took it or its deal (withoutTradeParty): a trade shows only its two people,
-        // and an admin's look at one is the logged one, /admin/disputes (queue item 29, Marty 4 Oct). The manager and
-        // the settings page read none of the three.
-        posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled').map(withoutTradeParty),
+    return members.filter(m => m.status !== 'pruned').map(m => {
+        const isVoucher = canVouch(m.publicKey);
+        // The member's real tier, from the same profile their own app shows. `m.earnedCredit` is only
+        // the granted lane (it leaves out earned trade and vouches), and vouching is a capability
+        // shown by canVouch, not a tier.
+        const tier = getMemberTrustProfile(m.publicKey).tier.name;
+        // An admin sees no more of a member's contact details than any member does: the choice reads "Hidden —
+        // only you can see it", and the manager never shows them. `profiles` goes through the same rule as
+        // the profile page (contactVisibleTo) with no viewer, and a password proves no member, so it carries no
+        // contact details at all. The rest of the row stays: the manager draws the invite tree, pruning and roles
+        // from it. Each photo as its URL (avatarUrlOf, from the row's avatar_ref), which the manager, served by this node,
+        // shows as it shows a photo: a list of every member never reads every photo (it sent each one twice, here and in
+        // `profiles`, which at 30,000 members with photos would be 1.6 GB).
+        const { contactValue, contactVisibility, avatarRef, ...row } = m;
+        void contactValue; void contactVisibility;
+        return {
+            ...row,
+            avatarUrl: avatarUrlOf(m.publicKey, avatarRef),
+            // Admins see the day too: a node admin could otherwise match secret-ballot votes to voters.
+            lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
+            tier,
+            standing: tier,
+            canVouch: isVoucher,
+            nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
+            platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
+        };
+    });
+}
+
+/**
+ * The owner console's data. `lists: 'none'` (the console since the capacity fix) is the summary: the health, the
+ * reports, the counts, and no member or post, so it costs much the same on any node; the console then reads the members
+ * and the posts a page at a time. Without it, the lists come whole as before, up to the sizes above, and past them a
+ * plain refusal that says how many and where the pages are, never a list cut short with nothing to say so.
+ */
+router.post('/api/local/admin/data', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const counts = getAdminMemberCounts();
+    const summary = {
         health: healthFor(ctx),
         reports: getReports().reports,
         reportCount: getReportCount(),
@@ -1187,13 +1219,103 @@ router.post('/api/local/admin/data', async (ctx) => {
         // Requests to join waiting for an answer (front doors S1): a count, no names. Home's Action Required says where
         // they are answered (People → Invites in the app); the manager has no list of them.
         knockCount: actionableKnockCount(),
-        // Each member's posts and messages; of trades, only the community's totals (queue item 29, Marty 4 Oct).
-        memberStats: getMemberStats(),
+        // Of trades, only the community's totals (queue item 29, Marty 4 Oct).
         tradeTotals: getTradeTotals(),
         // The Commons pot, as members' apps show it (public in /api/community/info): Settings' Home card. Before this the
         // card read a field no node sent, and said 0.0 on every node.
         commonsBalance: getCommonsBalance(),
+        // What the screens counted by listing every member (getAdminMemberCounts), and what a walk of the pages meets.
+        counts,
     };
+    if (body.lists === 'none') {
+        ctx.body = summary;
+        return;
+    }
+    const postCount = db.prepare(`SELECT COUNT(*) FROM posts WHERE status IS NOT 'cancelled'`).pluck().get() as number;
+    if (counts.members > ADMIN_DATA_WHOLE_MAX_MEMBERS || postCount > ADMIN_DATA_WHOLE_MAX_POSTS) {
+        ctx.status = 413;
+        ctx.body = {
+            error: `This node has ${counts.members.toLocaleString('en')} members and ${postCount.toLocaleString('en')} posts, too many to send in one answer. `
+                + 'Reload the owner console: it reads them a page at a time.',
+            code: ADMIN_DATA_PAGED_CODE,
+            counts,
+            pages: { members: '/api/local/admin/data/members', posts: '/api/local/admin/data/posts' },
+        };
+        return;
+    }
+    await heavyRead(ctx, 'admin-data', () => {
+        ctx.body = {
+            ...summary,
+            members: adminMemberRows(getAllMembers()),
+            profiles: getAllProfiles(),
+            // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt. Polls carry their counts and not
+            // who voted for what: that is for members (includeVoters), and the manager never shows it. A listing someone took
+            // shows its status and dates, not who took it or its deal (withoutTradeParty): a trade shows only its two people,
+            // and an admin's look at one is the logged one, /admin/disputes (queue item 29, Marty 4 Oct). The manager and
+            // the settings page read none of the three.
+            posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled').map(withoutTradeParty),
+            // Each member's posts and messages.
+            memberStats: getMemberStats(),
+        };
+    });
+});
+
+/**
+ * The admins' members, a page at a time: the rows, profiles and member stats /admin/data sent for every member, for
+ * `limit` of them (at most ADMIN_MEMBERS_PAGE_MAX), oldest joined first (getAdminMembersPage). `cursor` is the
+ * `nextCursor` of the page before; a page with none is the last. `q` narrows it to a callsign or key holding the words,
+ * and `total` counts what the walk will meet. The same admins as /admin/data, and nothing it didn't send.
+ */
+router.post('/api/local/admin/data/members', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.set('Cache-Control', 'no-store');
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const limit = pageLimit(body.limit, ADMIN_MEMBERS_PAGE_DEFAULT, ADMIN_MEMBERS_PAGE_MAX);
+    const cursor = body.cursor ?? null;
+    const after = typeof cursor === 'string' ? parseAdminMemberPageKey(cursor) : null;
+    if (cursor !== null && !after) {
+        ctx.status = 400;
+        ctx.body = { error: 'Not a page cursor this node handed out', code: 'bad_cursor' };
+        return;
+    }
+    const q = typeof body.q === 'string' ? body.q.trim().slice(0, 100) : '';
+    await heavyRead(ctx, heavyReadKey('admin-data-members', { limit }), () => {
+        const page = getAdminMembersPage(after, limit, q || undefined);
+        ctx.body = {
+            members: adminMemberRows(page.members, page.members.map(m => m.publicKey)),
+            profiles: page.profiles,
+            memberStats: page.stats,
+            nextCursor: page.next,
+            total: page.total,
+            limit,
+        };
+    });
+});
+
+/**
+ * The admins' posts, a page at a time: the posts /admin/data sent, as it sent them (withoutTradeParty), `limit` of them
+ * (at most ADMIN_POSTS_PAGE_MAX), newest changed first, each page below the last row of the one before (engine SyncPage).
+ * A post that changes while the console pages moves above every cursor handed out: the next first page has it. A
+ * cancelled post is left out after the read, so a page can hold fewer than `limit` and still have a `nextCursor`. The
+ * read looks one row past the page, so a full last page has none.
+ */
+router.post('/api/local/admin/data/posts', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.set('Cache-Control', 'no-store');
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const limit = pageLimit(body.limit, ADMIN_POSTS_PAGE_DEFAULT, ADMIN_POSTS_PAGE_MAX);
+    const cursor = body.cursor ?? null;
+    if (cursor !== null && (typeof cursor !== 'string' || !parsePageKey(cursor))) {
+        ctx.status = 400;
+        ctx.body = { error: 'Not a page cursor this node handed out', code: 'bad_cursor' };
+        return;
+    }
+    await heavyRead(ctx, heavyReadKey('admin-data-posts', { limit }), () => {
+        // One row past the page, as the members pages read: a full last page hands out no cursor (SyncPage.lookAhead).
+        const page: SyncPage = { after: cursor, next: null, lookAhead: true };
+        const posts = getPosts({ includeHidden: true, syncPage: page, limit }).filter(p => p.status !== 'cancelled').map(withoutTradeParty);
+        ctx.body = { posts, nextCursor: page.next, limit };
+    });
 });
 
 router.post('/api/local/admin/ws-connections', async (ctx) => {
@@ -2025,6 +2147,44 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
         ctx.status = e?.status || 400;
         ctx.body = { error: e?.message || 'Failed to prune user' };
     }
+});
+
+// What pruning this branch would do, for the owner's confirmation (the console's PruneBranchModal): how many members it
+// removes and the Beans it settles with the Commons, over the whole subtree (state-engine branchPrunePreview), not the
+// pages of members the console holds. The same owners as the prune; totals only, no names. Each balance in the totals is
+// a look at a member's balance while removing them, as the offboarding preview is: a line each in the access log the
+// owners read, all written before the answer, or no answer. A removal the node refuses where the community votes (a
+// branch of one: branchRemovalRefusal, as the prune asks it) is refused here the same way, before any balance is read, so
+// no look is logged and no figure is sent for it (as the offboarding preview refuses: engine/member-wizards.ts removalToSettle).
+router.get('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove a whole invite branch')) return;
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
+    ctx.set('Cache-Control', 'no-store');
+    const root = ctx.params.pubkey;
+    if (!getMember(root)) {
+        ctx.status = 404;
+        ctx.body = { error: 'Member not found' };
+        return;
+    }
+    const refusal = branchRemovalRefusal(root, actor);
+    if (refusal) {
+        ctx.status = 400;
+        ctx.body = { error: refusal, code: REMOVAL_IS_THE_VOTE_CODE };
+        return;
+    }
+    await heavyRead(ctx, 'admin-branch-prune-preview', () => {
+        try {
+            const { keys, ...totals } = branchPrunePreview(root);
+            const token = lookTokenOf(ctx);
+            db.transaction(() => { for (const key of keys) logBalanceLook(actor, key, 'offboard_preview', token); })();
+            ctx.body = totals;
+        } catch (e: any) {
+            ctx.status = e?.status || 400;
+            ctx.body = { error: e?.message || "Couldn't work out what pruning this branch would do" };
+        }
+    });
 });
 
 router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {

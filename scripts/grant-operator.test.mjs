@@ -21,7 +21,8 @@ const BOB1 = 'b1'.repeat(32);
 const BOB2 = 'b2'.repeat(32);
 
 /** A node: members-only reads refused unsigned, as with read auth on; the admin reads answer the token only. */
-async function standIn({ treasuryList = [200, { treasuries: [{ name: 'Community Eggs', publicKey: EGGS, callsign: null }] }] } = {}) {
+async function standIn({ treasuryList = [200, { treasuries: [{ name: 'Community Eggs', publicKey: EGGS, callsign: null }] }] } = {}, { pages = false } = {}) {
+    const MEMBERS = [{ publicKey: ALICE, callsign: 'alice' }, { publicKey: BOB1, callsign: 'bob' }, { publicKey: BOB2, callsign: 'Bob' }];
     const requests = [];
     const grants = [];
     const server = http.createServer((req, res) => {
@@ -34,11 +35,15 @@ async function standIn({ treasuryList = [200, { treasuries: [{ name: 'Community 
             if (p === '/api/community/members' || p === '/api/treasuries') return send(401, { error: 'Missing cryptographic signature headers' });
             if (req.headers.authorization !== `Bearer ${TOKEN}`) return send(401, { error: 'Unauthorized' });
             if (req.method === 'GET' && p === '/api/local/admin/treasury') return send(treasuryList[0], treasuryList[1]);
-            if (req.method === 'POST' && p === '/api/local/admin/data') {
-                return send(200, { members: [
-                    { publicKey: ALICE, callsign: 'alice' }, { publicKey: BOB1, callsign: 'bob' }, { publicKey: BOB2, callsign: 'Bob' },
-                ] });
+            // A node that pages its members (capacity fix 3): too many for the whole list, searched a page (here one) at a time.
+            if (pages && req.method === 'POST' && p === '/api/local/admin/data') return send(413, { error: 'too many to send in one answer', code: 'admin_data_paged' });
+            if (pages && req.method === 'POST' && p === '/api/local/admin/data/members') {
+                const asked = JSON.parse(body || '{}');
+                const hits = MEMBERS.filter((m) => m.callsign.toLowerCase().includes(String(asked.q || '').toLowerCase()));
+                const from = asked.cursor ? Number(asked.cursor) : 0;
+                return send(200, { members: hits.slice(from, from + 1), nextCursor: from + 1 < hits.length ? String(from + 1) : null, total: hits.length });
             }
+            if (req.method === 'POST' && p === '/api/local/admin/data') return send(200, { members: MEMBERS });
             const m = /^\/api\/local\/admin\/treasury\/([^/]+)\/operators$/.exec(p);
             if (req.method === 'POST' && m) {
                 grants.push({ treasury: decodeURIComponent(m[1]), pubkey: JSON.parse(body || '{}').pubkey });
@@ -69,6 +74,23 @@ test('a treasury name and a callsign resolve to their keys, read with the token'
         assert.ok(!out.includes(TOKEN), 'the token is never printed');
     } finally {
         await node.close();
+    }
+});
+
+test('on a node that pages its members, the callsign is searched page by page, never the whole list', async () => {
+    for (const [args, words, grants] of [
+        [['Community Eggs', 'alice'], 'Found member "alice"', [{ treasury: EGGS, pubkey: ALICE }]],
+        [['Community Eggs', 'bob'], '2 members are called "bob"', []],
+    ]) {
+        const node = await standIn(undefined, { pages: true });
+        try {
+            const { out } = await runScript(node.url, args);
+            assert.ok(out.includes(words), out);
+            assert.deepEqual(node.grants, grants, out);
+            assert.ok(!node.requests.includes('POST /api/local/admin/data'), `the whole list is never asked for (${node.requests.join(', ')})`);
+        } finally {
+            await node.close();
+        }
     }
 });
 

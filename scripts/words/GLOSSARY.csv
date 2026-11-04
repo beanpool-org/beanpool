@@ -1,0 +1,50 @@
+term,meaning,flags,es,pt,fr,ru
+BeanPool,"the project and its mark; never translated, in any language",untranslatable;name,BeanPool,BeanPool,BeanPool,BeanPool
+Beans,"the community's unit of trade; the bean picture is translated in each language; no currency symbol is used",terminology,Frijoles | frijol,Feijões | feijão,Haricots | haricot,Бобы | боб~
+community,"a local group of members with its own Beans, trades and Commons; also the global community",terminology,comunidad | comunitari~,comunidade | comunitári~,communauté | communautaire~,сообщество | сообществ~
+global community,"the worldwide community anyone can join; no Beans and no votes there",terminology,comunidad global,comunidade global,communauté mondiale | communauté globale,глобальное сообщество | глобальн~
+member,a person in a community,,miembro,membro,membre,участник
+admin,a member who runs a community's day-to-day settings,,,,,
+owner,"the person who runs the node; the node password is owner level",,,,,
+node,"a server that hosts a community; members rarely see the word",,nodo,nó,nœud | serveur,узел | узл~
+Keeper,"a custodian of a shared role or resource in the Commons",terminology,Custodio,Custódio,Gestionnaire,Хранитель | хранител~
+Commons,"the shared pool and the community's shared resources; the tab word is short",terminology,Bienes comunes | Comunes,Bens comuns | Comuns,Communs,Общие проекты | проект~
+Decision,"a proposal or poll the community decides",terminology,Decisiones | Decisión,Decisões | Decisão,Décisions | Décision,Решения | решени~
+Pulse,"the live stream of community activity",name;terminology,Pulso,Pulso,Pouls,Пульс
+Offer,"a post that offers help, goods or skills",name;terminology,Oferta,Oferta,Offre,Предложение | предложени~
+Need,"a post that asks for help or goods",name;terminology,Necesidad,Pedido | Necessidade,Demande | Besoin,Спрос | Запрос
+listing,"any Market post: an Offer, a Need or a shop item",,Publicación | Anuncio,Anúncio,Annonce,Объявление | объявлени~
+deal,"an Offer or Need taken up between two members, with steps",terminology,Trato,Acordo,Accord,Сделка | сделк~ | сделок
+held in trust,"Beans the community holds until a deal ends (what other apps call escrow)",terminology,Retenido en custodia | En custodia,Retido em custódia | Em custódia,Retenu en fiducie | fiducie,Удержано в сделке | На удержании | удержан~
+credit line,"how far below zero a member may go",money,Línea de crédito,Linha de crédito,Ligne de crédit,Кредитная линия | кредитной линии | кредитную линию
+circulation fee,"the small fee on a trade that goes to the Commons (1.5 %)",money,Comisión de circulación | Comisiones de circulación,Taxa de circulação | Taxas de circulação,Frais de circulation,Комиссия за обращение | обращени~
+12 words,"the member's recovery phrase; the twelve words themselves stay English",safety,12 palabras,12 palavras,12 mots,12 слов
+recovery kit,"the printed or saved page that carries the 12 words",safety,Kit de recuperación,Kit de recuperação,Kit de récupération,Набор для восстановления | набор~
+key vault,"BeanPool's vault that can bring a key back through a sign-in",safety,,,,
+sign-in,"a Google, Apple or Facebook account linked for recovery; never a password",safety,,,,
+recovery code,"a one-time code typed exactly as shown (bring-back or sealed backup)",safety,,,,
+invite,"a link, QR or code that lets one person join once, for 30 days",,Invitar | Invitación,Convidar | Convite,Inviter | Invitation,Пригласить | пригла~
+vouch,"a member standing for another's join request or ticket",,,,,
+enterprise,"a project or business that lives inside the Commons",terminology,Emprendimiento,Empreendimento,Entreprise,Предприятие | предприяти~
+steward,"the member who runs an enterprise",terminology,,,,
+standby,"a second copy of a node that takes over if the first stops",operator,,,,
+level,"a merit badge; it gates nothing, ever",,,,,
+tier,"a merit badge; it gates nothing, ever",,,,,
+Home,"the main screen; also the tab word",name;terminology,Inicio,Início,Accueil,Главная | главн~
+Market,"where Offers, Needs and shops are listed; also the tab word",name;terminology,Mercado,Mercado,Marché,Рынок | рын~
+Map,"the map of places and events; also the tab word",name;terminology,Mapa,Mapa,Carte,Карта | карт~
+Chat,"talk with people and groups; also the tab word",name;terminology,Chat,Bate-papo,Chat,Чат
+Ledger,"a member's record of trades; also the tab word",name;terminology,Registro,Registro,Registre,Реестр
+People,"the list of people in a community",name;terminology,Personas,Pessoas,Membres,Люди | люд~
+Settings,"a member's own choices; also the tab word",name;terminology,Ajustes | Configuración,Configurações | Ajustes,Paramètres | Réglages,Настройки | настройк~ | настроек
+group,"a Talk group chat",terminology,Grupo,Grupo,Groupe,Группа | групп~
+channel,"a Pulse channel",terminology,,,,
+shop,"a member's shopfront in the Market",,,,,
+event,"a dated gathering on the map",,Evento,Evento,Événement,Событие | событи~
+assistant,"an owner's AI assistant",,,,,
+claim code,"the code an operator types to claim a node",,Código de reclamo,Código de reivindicação,Code de revendication,Код привязки | привязк~
+CONFIRM,"a word the member types exactly as shown; it stays English",untranslatable,,,,
+WIPE,"a word the member types exactly as shown; it stays English",untranslatable,,,,
+DELETE,"a word the member types exactly as shown; it stays English",untranslatable,,,,
+resilience,"a word we do not use, in any language",forbidden,resiliencia,resiliência,résilience,устойчивост~ | стойкост~
+survival,"a word we do not use, in any language",forbidden,,,,

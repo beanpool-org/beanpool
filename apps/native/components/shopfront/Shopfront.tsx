@@ -13,7 +13,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { formatCount, listPhotoUrl, t, type ShopCategory } from '@beanpool/core';
+import { formatCount, t, type ShopCategory } from '@beanpool/core';
+import { ListPhoto } from '../ListPhoto';
 import { useStyles, useTheme } from '../../app/ThemeContext';
 import type { AppColors } from '../../constants/colors';
 import { MemberAvatar } from '../MemberAvatar';
@@ -237,11 +238,15 @@ export function openListing(id: string): void {
 function ListingPicture({ l, style, size = 'thumb' }: { l: ShopfrontListing; style: object; emojiStyle?: object; size?: 'grid' | 'thumb' }) {
     return (
         <View style={[style, { overflow: 'hidden' }]}>
-            {l.photo ? (
-                <Image source={{ uri: listPhotoUrl(l.photo) }} style={{ width: '100%', height: '100%' }} contentFit="cover" contentPosition={{ top: '33%', left: '50%' }} cachePolicy="memory-disk" accessibilityIgnoresInvertColors />
-            ) : (
-                <CategoryTile category={l.category} size={size} />
-            )}
+            <ListPhoto
+                photo={l.photo}
+                style={{ width: '100%', height: '100%' }}
+                contentFit="cover"
+                contentPosition={{ top: '33%', left: '50%' }}
+                cachePolicy="memory-disk"
+                accessibilityIgnoresInvertColors
+                fallback={<CategoryTile category={l.category} size={size} />}
+            />
         </View>
     );
 }

@@ -31,10 +31,15 @@
  * falls back for now, to a name), and only to an address communityOrigin takes. While the follow card offers the
  * community's new main address (utils/address-follow.ts addressFollowOffer: not snoozed, and checked to be the same
  * community), this card stays out of its way. Only then: when that card can't show (the member said "Not now" to it, or
- * the main address doesn't answer either, design §3.1), this one goes ahead, so a member is never left with neither.
+ * the main address doesn't answer either, design §3.1), this one goes ahead, so a member is never left with neither. A
+ * 'same' that card checked before this run of failed tries began, or five minutes ago or more, is checked again first
+ * (sameSince, sameWithin): else its hour-long check kept this card aside while the main address had stopped answering too
+ * (review of 533de50e). That costs one check of the move (its two addresses asked) at most every five minutes, and only
+ * while this card is due.
  *
  * It costs nothing while there is nothing to fall back to: with no other published name, nobody is asked. "Not now"
- * hides the card for 24 hours, for that pair of addresses only.
+ * hides the card for 24 hours, for that pair of addresses only, and a look already on its way when it was said never
+ * offers that pair (the snooze is read again before an offer is returned; the card drops that look's answer too).
  */
 
 import { audienceOf } from '@beanpool/core';
@@ -145,12 +150,13 @@ export function forgetFallbackChecks(): void {
 }
 
 /**
- * Whether the phone's address `from` has not answered as its community for FALLBACK_AFTER_MS of tries, or gave no
- * statement at all at the app's open (`atOpen`: asked then whatever the last ask was). Asks it, unless it was asked within
- * the minute (or answered within five). A statement of the same community with more take-overs raises what is kept, as
- * the follow card's check does, so the replaced server is never a way back in.
+ * When this run of failed tries at the phone's address `from` began, if it has not answered as its community for
+ * FALLBACK_AFTER_MS of tries, or gave no statement at all at the app's open (`atOpen`: asked then whatever the last ask
+ * was); else null. Asks it, unless it was asked within the minute (or answered within five). A statement of the same
+ * community with more take-overs raises what is kept, as the follow card's check does, so the replaced server is never a
+ * way back in.
  */
-async function notAnswering(from: string, kept: CommunityIdentity, deps: AddressFollowDeps, atOpen: boolean): Promise<boolean> {
+async function notAnswering(from: string, kept: CommunityIdentity, deps: AddressFollowDeps, atOpen: boolean): Promise<number | null> {
     const now = deps.now();
     const last = asked.get(from);
     const fresh = !atOpen && last && now - last.at >= 0 && now - last.at < (last.answered ? ANSWERED_FOR_MS : ASK_EVERY_MS);
@@ -173,9 +179,9 @@ async function notAnswering(from: string, kept: CommunityIdentity, deps: Address
             await writeEntry<Tries>(FALLBACK_TRIES_KEY, from, due ? { ...next, due: true } : next);
         }
     }
-    if (answered) return false;
+    if (answered) return null;
     const run = readTries((await readMap<Tries>(FALLBACK_TRIES_KEY))[from]);
-    return !!run && (run.due === true || now - run.since >= FALLBACK_AFTER_MS);
+    return run && (run.due === true || now - run.since >= FALLBACK_AFTER_MS) ? run.since : null;
 }
 
 async function snoozed(offer: AddressFallbackOffer, now: number): Promise<boolean> {
@@ -205,10 +211,13 @@ export async function addressFallbackOffer(injected?: Partial<AddressFollowDeps>
     const open: AddressFallbackOffer[] = [];
     for (const c of all) if (!(await snoozed(c, deps.now()))) open.push(c);
     if (!open.length) return null;
-    if (!(await notAnswering(from, kept, deps, atOpen))) return null;
+    const since = await notAnswering(from, kept, deps, atOpen);
+    if (since === null) return null;
     // The follow card shows the community's new main address: this card stays out of its way. Only when that card will
-    // show (not snoozed, and checked to be the community), never merely because the community names another main address.
-    if (await addressFollowOffer(deps)) return null;
+    // show (not snoozed, and checked to be the community), never merely because the community names another main address,
+    // and only on a 'same' checked since this run of failed tries began and less than five minutes ago: one from before
+    // says nothing of whether the main address answers now, with the phone's own not answering (review of 533de50e).
+    if (await addressFollowOffer(deps, { sameSince: since, sameWithin: FALLBACK_AFTER_MS })) return null;
     // What is kept now: the follow card's check may have raised it just now.
     const keptNow = (await keptIdentityAt(from)) ?? kept;
     const same = await Promise.all(open.slice(0, MAX_ASKED).map(async (c) => {
@@ -226,8 +235,10 @@ export async function addressFallbackOffer(injected?: Partial<AddressFollowDeps>
         // Its statement, verified, never fewer take-overs than kept now: judged each round, never a verdict kept.
         return !!there && sameCommunity(keptNow, there);
     }));
-    const i = same.indexOf(true);
-    return i >= 0 ? open[i] : null;
+    // The snoozes again: "Not now" may have been said while this look waited on the network (review of 533de50e). A pair
+    // just declined is never offered by it; another pair found the same is, as the next look would offer it.
+    for (let i = 0; i < same.length; i++) if (same[i] && !(await snoozed(open[i], deps.now()))) return open[i];
+    return null;
 }
 
 /** "Not now": the same pair is not offered again for 24 hours. Another address of the community is another pair. */

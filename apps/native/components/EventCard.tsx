@@ -12,10 +12,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
-import { Image } from 'expo-image';
-import { copyCardLine, eventCopyOf, listPhotoUrl, t } from '@beanpool/core';
+import { copyCardLine, eventCopyOf, t } from '@beanpool/core';
 import { router } from 'expo-router';
 import { CategoryTile } from './CategoryTile';
+import { ListPhoto } from './ListPhoto';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { rsvpEvent } from '../utils/db';
 import { isPostPinned } from '../utils/pins';
@@ -151,20 +151,19 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
               * Without a photo the card is exactly the stack it has always been.
               */}
             <View style={styles.photoRow}>
-                {photo ? (
-                    <Image
-                        source={{ uri: listPhotoUrl(photo) }}
-                        style={styles.photo}
-                        accessibilityLabel={post.title}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        transition={150}
-                    />
-                ) : (
-                    <View style={[styles.photo, { overflow: 'hidden' }]}>
-                        <CategoryTile kind="event" size="thumb" />
-                    </View>
-                )}
+                <ListPhoto
+                    photo={photo}
+                    style={styles.photo}
+                    accessibilityLabel={post.title}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={150}
+                    fallback={(
+                        <View style={[styles.photo, { overflow: 'hidden' }]}>
+                            <CategoryTile kind="event" size="thumb" />
+                        </View>
+                    )}
+                />
                 <View style={styles.photoRowText}>
                     <View style={styles.whenRow}>
                         {isPostPinned(post) && (

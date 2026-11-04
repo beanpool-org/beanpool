@@ -168,16 +168,18 @@ export interface ConsentRequest {
     codeChallenge: string;
     resource: string;
     createdAt: number;
-    /** "May post for me", as the consent page's tick was when its digits were sent (setConsentCanPost). */
+    /** "May post for me", as the consent page's tick was when its digits were sent (setConsentTicks). */
     canPost?: boolean;
+    /** "May take down posts for me" (MCP-MODERATION S3), the same way: off unless ticked. */
+    canModerate?: boolean;
 }
 
 const requests = new Map<string, ConsentRequest>();
 
-/** The consent page's tick, sent with its digits: the code, and the grant it makes, carry it. */
-export function setConsentCanPost(pairingId: string, canPost: boolean): void {
+/** The consent page's two ticks, sent with its digits: the code, and the grant it makes, carry them. Each is off unless ticked. */
+export function setConsentTicks(pairingId: string, ticks: { canPost: boolean; canModerate: boolean }): void {
     const r = requests.get(pairingId);
-    if (r) r.canPost = canPost;
+    if (r) { r.canPost = ticks.canPost === true; r.canModerate = ticks.canModerate === true; }
 }
 
 export function holdConsentRequest(r: ConsentRequest): void {
@@ -201,6 +203,7 @@ interface CodeRecord {
     member: string;
     clientName: string;
     canPost: boolean;
+    canModerate: boolean;
     expiresAt: number;
     /** Set once exchanged: the grant it made, revoked if the code comes again. */
     spentFor: string | null;
@@ -224,7 +227,7 @@ export function issueCode(r: ConsentRequest, member: string, now = Date.now()): 
     const code = crypto.randomBytes(32).toString('hex');
     codes.set(sha256Hex(code), {
         clientId: r.clientId, redirectUri: r.redirectUri, codeChallenge: r.codeChallenge, resource: r.resource,
-        member, clientName: r.clientName, canPost: r.canPost === true, expiresAt: now + OAUTH_CODE_TTL_MS, spentFor: null, spentAt: 0,
+        member, clientName: r.clientName, canPost: r.canPost === true, canModerate: r.canModerate === true, expiresAt: now + OAUTH_CODE_TTL_MS, spentFor: null, spentAt: 0,
     });
     return code;
 }
@@ -347,6 +350,7 @@ export function exchangeCode(p: { code: unknown; clientId: unknown; redirectUri:
     const record: AgentOAuthGrantRecord = {
         id, clientId: rec.clientId, clientName: rec.clientName, redirectUri: rec.redirectUri, resource: rec.resource,
         member: rec.member, createdAt: now, lastUsedAt: null, refreshIssuedAt: now, refreshHash, spentRefresh: [], canPost: rec.canPost,
+        canModerate: rec.canModerate,
     };
     saveGrants([...list, record]);
     pending.delete(rec.clientId);

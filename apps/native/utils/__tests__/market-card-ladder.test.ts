@@ -38,8 +38,11 @@ describe('Phone Market card ladder (Pictures S6)', () => {
         expect(listBlock).not.toMatch(/<Image\b/);
     });
 
-    it('MarketCardPicture draws the picture while it loads, and the CategoryTile when there is none or the banner failed', () => {
-        expect(pictureSrc).toMatch(/if \(picture && picture !== failed\) \{\s*return \(\s*<Image\s+source=\{\{ uri: listPhotoUrl\(picture\) \}\}/);
+    it('MarketCardPicture draws the picture while it loads, and the CategoryTile when there is none or every step failed', () => {
+        // The small copy first (listPhotoUrl), then the photo's own URL, then the tile: stepped down in nextListPhotoUrl, drawn
+        // and failed for real in market-card-picture-retry.test.ts.
+        expect(pictureSrc).toMatch(/listPhotoUrl\(picture\)/);
+        expect(pictureSrc).toMatch(/if \(picture && shown\) \{\s*return \(\s*<Image\s+source=\{\{ uri: shown \}\}/);
         expect(pictureSrc).toMatch(/const tile = <CategoryTile /);
     });
 
@@ -58,9 +61,9 @@ describe('Phone Market card ladder (Pictures S6)', () => {
         expect(marketSrc).not.toMatch(/authorBannerUrl:\s*p\.authorBannerUrl\s*\?\?\s*absoluteBannerUrl/);
     });
 
-    it('onError only heals listings with actual coverImage photos', () => {
+    it('onError only heals listings with actual coverImage photos, and every failure steps the picture down', () => {
         // A banner that fails is never sent to the listing-photo heal: it gives way to the tile instead.
-        expect(pictureSrc).toMatch(/onError=\{\(\) => \(cover \? refreshListingAfterPhotoError\(postId, cover\) : setFailed\(picture\)\)\}/);
+        expect(pictureSrc).toMatch(/if \(cover\) refreshListingAfterPhotoError\(postId, cover\);\s*setSteppedDown\(\{ photo: picture, shown: nextListPhotoUrl\(picture, shown\) \}\);/);
         expect(marketSrc).not.toMatch(/refreshListingAfterPhotoError/);
     });
 });

@@ -12,7 +12,7 @@
 import { useState } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { copyPriceLine, eventCopyOf, formatNumber, listPhotoUrl, listingChipWords, pinLive, t, type ListingChip } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, formatNumber, listPhotoUrl, listingChipWords, nextListPhotoUrl, pinLive, t, type ListingChip } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 
@@ -84,12 +84,19 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
     const firstPhoto = post.photos && post.photos.length > 0 ? post.photos[0] : null;
     const bannerUrl = post.authorBannerUrl || (post as any)?.author_banner_url || null;
-    // A banner that will not load (a weak connection, or a URL from before the enterprise changed it) gives way to the
-    // tile, never an empty box (review of #2565, finding 8). The URL that failed is kept, not a flag, so a new one is tried.
-    const [failedBanner, setFailedBanner] = useState<string | null>(null);
-    const banner = bannerUrl && bannerUrl !== failedBanner ? bannerUrl : null;
-    const displayImage = firstPhoto || banner;
-    const onPictureError = firstPhoto ? undefined : () => setFailedBanner(bannerUrl);
+    // A picture that will not load steps down, each step once, and never leaves a broken image or an empty box (review of
+    // #2565, finding 8; card-photo-retry, Marty 4 Nov 2026: a card on global missed its photo in the list and showed it when
+    // opened): a listing photo's small copy gives way to the photo's own URL, and that to the tile (@beanpool/core
+    // nextListPhotoUrl). A banner has no small copy, so it goes straight to the tile: a weak connection, or a URL from before
+    // the enterprise changed it. The URL that failed is kept beside its step, not a flag, so a new URL a later read brings
+    // starts again from its small copy.
+    const pictureUrl: string | null = firstPhoto || bannerUrl || null;
+    const [steppedDown, setSteppedDown] = useState<{ photo: string; shown: string | null } | null>(null);
+    // What is drawn now: null is the tile.
+    const displayImage = !pictureUrl ? null : steppedDown?.photo === pictureUrl ? steppedDown.shown : listPhotoUrl(pictureUrl);
+    const onPictureError = () => {
+        if (pictureUrl && displayImage) setSteppedDown({ photo: pictureUrl, shown: nextListPhotoUrl(pictureUrl, displayImage) });
+    };
     // Only actual listing photos should open the zoom lightbox; shop banner is card branding fallback
     const photosToZoom = firstPhoto ? post.photos! : [];
     // A member's copy on the global community: where it is from and its price there, in words, where its author would be.
@@ -180,7 +187,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {/* Compact Category Picture / Tile */}
                     <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
                         {displayImage ? (
-                            <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
+                            <img src={displayImage} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
                         ) : (
                             <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                         )}
@@ -260,7 +267,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             >
                 {/* Left Thumbnail (80px) */}
                 <div className="w-20 h-20 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
-                    {photosToZoom.length > 0 ? (
+                    {photosToZoom.length > 0 && displayImage ? (
                         <button
                             type="button"
                             onClick={(e) => {
@@ -281,10 +288,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                             }`}
                         >
-                            <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
+                            <img src={displayImage} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
                         </button>
                     ) : displayImage ? (
-                        <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
+                        <img src={displayImage} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
                     ) : (
                         <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                     )}
@@ -389,7 +396,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         >
             {/* 4:3 Media Box at Card Top (edge to edge, radius 14) */}
             <div className="relative w-full aspect-[4/3] overflow-hidden">
-                {photosToZoom.length > 0 ? (
+                {photosToZoom.length > 0 && displayImage ? (
                     <button
                         type="button"
                         onClick={(e) => {
@@ -410,10 +417,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                         }`}
                     >
-                        <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} />
+                        <img src={displayImage} alt={post.title} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} onError={onPictureError} />
                     </button>
                 ) : displayImage ? (
-                    <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} onError={onPictureError} />
+                    <img src={displayImage} alt={post.title} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} onError={onPictureError} />
                 ) : (
                     <CategoryTile
                         category={post.category}

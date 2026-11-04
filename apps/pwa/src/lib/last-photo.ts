@@ -1,4 +1,4 @@
-import { communityHostOf, lastPhotoOffer, photoCanTravel, type LastPhoto } from '@beanpool/core';
+import { communityHostOf, lastPhotoOffer, photoCanTravel, photoToCopyHere, type LastPhoto } from '@beanpool/core';
 
 /**
  * "The picture I used last", kept by this browser so joining another community can OFFER it (Profile S3,
@@ -45,6 +45,17 @@ export function lastPhotoToOffer(here: string, hereAvatar: string | null | undef
     const last = readLastPhoto();
     const hereOrigin = originOf(here);
     return lastPhotoOffer({ last, hereAvatar, setHere: hereOrigin !== null && hereOrigin === originOf(last?.from) });
+}
+
+/**
+ * The photo to copy into the community at `here` when the member asks (Profile S4): the one kept from ANOTHER community, even
+ * while this one holds a photo for them, which they may now replace. Null when none is kept, it cannot travel, or it was set in
+ * this very community. A browser talks to one community, so this is the only direction a copy can go on the web: INTO it.
+ */
+export function lastPhotoToCopy(here: string): LastPhoto | null {
+    const last = readLastPhoto();
+    const hereOrigin = originOf(here);
+    return photoToCopyHere({ last, setHere: hereOrigin !== null && hereOrigin === originOf(last?.from) });
 }
 
 /** The words for where the photo came from: the community's host, or null when that is not known. */

@@ -85,13 +85,20 @@ export function logSettingName(setting: string): string {
     return table[setting] ?? setting;
 }
 
+/** The log's `setting` for advice to the owners about a Core setting: `advice.<setting>` (server config/core-advice.ts). */
+export const ADVICE_LINE_PREFIX = 'advice.';
+
 /**
  * The log's whole line for a core row (design §8.5), or null for any other: "Core settings confirmed and locked",
- * "unlocked Beans". Advice lines (C4) are drawn by the generic line until that slice.
+ * "unlocked Beans", "advised the owners about Beans". An advice line's words are the admin's own: they arrive as the entry's
+ * `note` and ChangesLog draws them as text, quoted, after this line.
  */
 export function coreLogWords(entry: ShapeLogLine): string | null {
     if (entry.setting === 'core.lock') return t('🔒 Core settings confirmed and locked');
     if (entry.setting === 'core.unlock') return t('🔓 Unlocked {setting}').replace('{setting}', logSettingName(entry.to ?? ''));
+    if (entry.setting.startsWith(ADVICE_LINE_PREFIX)) {
+        return t('💬 Advised the owners about {setting}').replace('{setting}', logSettingName(entry.setting.slice(ADVICE_LINE_PREFIX.length)));
+    }
     return null;
 }
 

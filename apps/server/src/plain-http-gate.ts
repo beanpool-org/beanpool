@@ -33,7 +33,7 @@
 
 import type Koa from 'koa';
 import { configuredAddresses, isBeanPoolName, isLoopbackHost, normalizeAddress, primaryAddress } from './engine/own-addresses.js';
-import { isDirectLanRequest, isLoopbackSource, isPrivateSource } from './direct-lan-source.js';
+import { isDirectLanRequest, isLoopbackSource, isPrivateSource } from './direct-lan.js';
 import { lightsOutOn } from './services/lights-out.js';
 import { holdsOwnCertificate, servedHosts, servesCaCertificateFor } from './services/tls.js';
 import { acmeTargets } from './services/acme/schedule.js';
@@ -42,8 +42,8 @@ import { acmeTargets } from './services/acme/schedule.js';
  *  same): what tls.ts holdsOwnCertificate reads state.json for, from the first request after a start. */
 const certifiedHosts = () => acmeTargets().map((t) => t.host);
 
-// The source tests live in direct-lan-source.ts (one place for every LAN-only rule); here as they always were.
-export { isLoopbackSource, isPrivateSource } from './direct-lan-source.js';
+// The source tests live in direct-lan.ts (the one direct-LAN rule, the hall's and the APK's); here as they always were.
+export { isLoopbackSource, isPrivateSource } from './direct-lan.js';
 
 export interface PlainRequest {
     /** The socket's remote address, as req.socket.remoteAddress gives it. */
@@ -54,7 +54,7 @@ export interface PlainRequest {
     forwardedProto?: string | undefined;
     /** The Forwarded header (RFC 7239), or undefined. */
     forwarded?: string | undefined;
-    /** Every header, as Node gives them, and the path: what the hall's exemption reads (direct-lan-source.ts). */
+    /** Every header, as Node gives them, and the path: what the hall's exemption reads (direct-lan.ts). */
     headers?: Record<string, string | string[] | undefined>;
     path?: string;
 }
@@ -83,9 +83,9 @@ export function hallPathWhileOff(rawPath: string | undefined): boolean {
 
 /**
  * Lights-out's exemption (services/lights-out.ts, design §2.1 item 1, §4.1): a request straight from the hall Wi-Fi (a
- * private or loopback source with no tunnel or proxy header, naming a local-network host: direct-lan-source.ts) is answered
- * while the switch is on, and reaches the sign-in and switch paths while it is off. Never a public source, never anything
- * that came through a tunnel or proxy.
+ * private or loopback source that is not a default gateway, with no tunnel or proxy header, naming a local-network host:
+ * direct-lan.ts, the same rule /android uses) is answered while the switch is on, and reaches the sign-in and switch
+ * paths while it is off. Never a public source, never anything that came through a tunnel or proxy.
  */
 export function hallMayReach(req: PlainRequest): boolean {
     if (!req.headers) return false;

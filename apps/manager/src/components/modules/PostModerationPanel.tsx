@@ -1,8 +1,23 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { getTfaSessionToken, deleteNodePost } from '../../lib/node-client';
+import { getTfaSessionToken, deleteNodePost, resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { CHILD_SAFETY_OPEN } from '../../lib/takedown-words';
 import { nodeCredential } from '../../lib/profiles';
+import type { RolesViewer } from './NodeRolesPanel';
+
+/**
+ * The posts screen in Settings → Moderation (scratch/fable-design/DESIGN-mcp-moderation-fable.md §3.13, slice S4).
+ *
+ * - Type Filter: Offers, Needs, Events, Polls, and "Shown from another community" (a copy on a global community: its row is
+ *   `shownCopy: true`, whatever it is a copy of). The server's list is every type, so events, polls and copies were always here.
+ * - Each row's chip is coloured from the central brand colours (brand-colours.ts, `bg-bp-…`), one per type; before, anything that
+ *   was not an Offer was drawn in the Need colour.
+ * - "Taken down by <assistant>": a post an owner's assistant took down is hidden at once and removed for good after 7 days. The
+ *   row says so, with the day, and an owner or admin can Put it back there (the route "Taken down by assistants" uses, one post).
+ *   The record is read from that route (agent/takedowns-route.ts), which only an owner's or an admin's session may read: with no
+ *   `viewer`, or a moderator's, nothing is asked and no line is drawn. A post's own row says nothing of who hid it.
+ */
 
 export interface PostModerationItem {
     id: string;
@@ -19,6 +34,11 @@ export interface PostModerationItem {
     createdAt?: string | number;
     created_at?: string | number;
     status?: string;
+    /** A copy of a post from another community, shown on this one (global): the server marks it, whatever it copies. */
+    shownCopy?: boolean;
+    shownFrom?: { name?: string } | null;
+    /** Hidden by reports, or by an assistant's takedown: only an owner's and an admin's list carries it. */
+    hiddenByReportsAt?: string | null;
     [key: string]: unknown;
 }
 
@@ -27,6 +47,110 @@ export interface PostModerationPanelProps {
     activeNode: NodeProfile;
     onRefresh: () => void;
     onDeletePost?: (postId: string) => Promise<void>;
+    /** Who is looking. Without it the screen asks nothing of the takedown record and draws no "taken down" line. */
+    viewer?: RolesViewer;
+}
+
+export type PostTypeFilter = 'all' | 'offer' | 'need' | 'event' | 'poll' | 'copy';
+
+const TYPE_FILTERS: Array<{ value: PostTypeFilter; label: string }> = [
+    { value: 'all', label: 'All Types' },
+    { value: 'offer', label: 'Offers' },
+    { value: 'need', label: 'Needs' },
+    { value: 'event', label: 'Events' },
+    { value: 'poll', label: 'Polls' },
+    { value: 'copy', label: 'Shown from another community' },
+];
+
+/** A copy, whatever it is a copy of: the server's own marker, never a guess from the words. */
+export const isCopy = (p: PostModerationItem) => p.shownCopy === true || (typeof p.shownFrom === 'object' && p.shownFrom !== null);
+
+/**
+ * One chip per type, from the central brand colours (docs/brand-colours.md): Offer and Need are the chips every app draws,
+ * an event takes the event tile's violet, a poll the sage accent, a copy the amber chip. An unknown type reads as the sage chip.
+ */
+const CHIP_FRAME = 'border border-bp-chip-accent-border';
+const SAGE_CHIP = `bg-bp-chip-accent-tint text-bp-chip-accent-ink ${CHIP_FRAME}`;
+const TYPE_CHIPS: Record<string, string> = {
+    offer: `bg-bp-chip-ok-tint text-bp-chip-ok-ink ${CHIP_FRAME}`,
+    need: `bg-bp-chip-need-tint text-bp-chip-need-ink ${CHIP_FRAME}`,
+    event: `bg-bp-tile-event-tint text-bp-tile-event-ink ${CHIP_FRAME}`,
+    poll: SAGE_CHIP,
+};
+const COPY_CHIP = `bg-bp-chip-warn-tint text-bp-chip-warn-ink ${CHIP_FRAME}`;
+export const chipClassFor = (type: unknown) => TYPE_CHIPS[typeof type === 'string' ? type.toLowerCase() : ''] ?? SAGE_CHIP;
+
+const TAKEDOWNS = '/api/local/admin/agent/takedowns';
+
+/** What the posts screen needs of a takedown: the assistant, when it goes for good, whether it was left hidden and why, and whether a Child safety report holds it. */
+export interface HeldTakedown {
+    grantName: string;
+    finalAfter: string;
+    state: 'hidden' | 'left_hidden';
+    leftFor: 'deal' | 'child_safety' | null;
+    /** A Child safety report is open on it, on any day of the hold: the sweep skips it, so it is never removed for good by itself. */
+    childSafetyOpen: boolean;
+}
+
+/**
+ * Each post still held (hidden, or left hidden), by the newest call that holds it. `takedowns` is the route's own list, newest
+ * first; anything not in its shape is left out, so an older or odd answer draws no line rather than a wrong one.
+ */
+export function heldTakedowns(takedowns: unknown): Map<string, HeldTakedown> {
+    const held = new Map<string, HeldTakedown>();
+    if (!Array.isArray(takedowns)) return held;
+    for (const call of takedowns) {
+        if (!call || typeof call !== 'object') continue;
+        const { grantName, finalAfter, posts } = call as { grantName?: unknown; finalAfter?: unknown; posts?: unknown };
+        if (!Array.isArray(posts)) continue;
+        for (const p of posts) {
+            const post = p as { id?: unknown; state?: unknown; leftFor?: unknown; childSafetyOpen?: unknown } | null;
+            if (!post || typeof post.id !== 'string' || (post.state !== 'hidden' && post.state !== 'left_hidden') || held.has(post.id)) continue;
+            held.set(post.id, {
+                grantName: typeof grantName === 'string' && grantName ? grantName : 'an assistant',
+                finalAfter: typeof finalAfter === 'string' ? finalAfter : '',
+                state: post.state,
+                leftFor: post.leftFor === 'deal' || post.leftFor === 'child_safety' ? post.leftFor : null,
+                childSafetyOpen: post.childSafetyOpen === true,
+            });
+        }
+    }
+    return held;
+}
+
+const day = (iso: string) => {
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? new Date(t).toLocaleDateString(undefined, { dateStyle: 'medium' }) : '';
+};
+
+/**
+ * The line on a taken-down post's row: who, that it is hidden now, and when it goes for good unless put back. A post a deal or a Child
+ * safety report holds is never removed on a day: it says why, and that a person decides (a Child safety report open on a post still
+ * only hidden is the same, from the first day, as the card "Taken down by assistants" says).
+ */
+export function takenDownWords(h: HeldTakedown, now: number = Date.now()): string {
+    const childSafety = h.childSafetyOpen || (h.state === 'left_hidden' && h.leftFor === 'child_safety');
+    if (h.state === 'left_hidden' || childSafety) {
+        const reasons = [h.state === 'left_hidden' && h.leftFor === 'deal' ? 'a deal is in escrow' : '', childSafety ? CHILD_SAFETY_OPEN : ''].filter(Boolean);
+        const why = reasons.length ? `, because ${reasons.join(', and ')}` : '';
+        return `Taken down by ${h.grantName}: ${h.state === 'left_hidden' ? 'left hidden' : 'hidden now'}${why}. It is not removed for good until a person decides.`;
+    }
+    const final = Date.parse(h.finalAfter);
+    if (!Number.isFinite(final)) return `Taken down by ${h.grantName}: hidden now, and removed for good after 7 days unless put back.`;
+    return final <= now
+        ? `Taken down by ${h.grantName}: hidden now, and due to be removed for good.`
+        : `Taken down by ${h.grantName}: hidden now, and removed for good on ${day(h.finalAfter)} unless put back.`;
+}
+
+/** What Put back did, in words, from the route's answer (the same lines "Taken down by assistants" says). */
+export function putBackWords(json: { back?: unknown; stillHidden?: unknown; gone?: unknown }): string {
+    const back = Array.isArray(json.back) ? json.back.length : 0;
+    const stillHidden = Array.isArray(json.stillHidden) ? json.stillHidden.length : 0;
+    if (back === 0) return 'That post had gone already: it was removed for good, so there is nothing to put back.';
+    const closed = ' Any reports the takedown closed are open again.';
+    return stillHidden > 0
+        ? `Put back, but it stays hidden for the moderators: a hide from before the assistant took it down, or its reports, still hold it.${closed}`
+        : `Put back: its author is told, and everyone sees it again.${closed}`;
 }
 
 const CATEGORIES = [
@@ -54,9 +178,10 @@ export function PostModerationPanel({
     activeNode,
     onRefresh,
     onDeletePost,
+    viewer,
 }: PostModerationPanelProps) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [typeFilter, setTypeFilter] = useState<'all' | 'offer' | 'need'>('all');
+    const [typeFilter, setTypeFilter] = useState<PostTypeFilter>('all');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [deletingPost, setDeletingPost] = useState<PostModerationItem | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -64,12 +189,65 @@ export function PostModerationPanel({
 
     const safePosts = Array.isArray(posts) ? posts : [];
 
+    // Only an owner's or an admin's session may read the takedown record (the route says so as well): no one else is asked.
+    const mayReadTakedowns = viewer !== undefined && (viewer.kind === 'password' || viewer.role === 'owner' || viewer.role === 'admin');
+    const [held, setHeld] = useState<Map<string, HeldTakedown>>(() => new Map());
+    const [takedownNote, setTakedownNote] = useState('');
+    const [puttingBack, setPuttingBack] = useState<string | null>(null);
+    const credential = nodeCredential(activeNode);
+
+    const loadTakedowns = useCallback(async () => {
+        if (!mayReadTakedowns) return;
+        try {
+            const res = await fetch(resolveNodeApiUrl(activeNode.url, TAKEDOWNS), {
+                headers: buildAdminHeaders(credential, getTfaSessionToken(activeNode.id)), credentials: 'same-origin',
+            });
+            const json = await res.json().catch(() => ({}));
+            if (res.ok) {
+                setHeld(heldTakedowns(json.takedowns));
+                setTakedownNote('');
+            } else if (res.status !== 404 && res.status !== 403) {
+                // A node older than this has no such route (404), and a moderator may not read it (403): nothing to say. Anything else is.
+                setTakedownNote(`Which posts an assistant took down could not be listed: ${json.error || `HTTP ${res.status}`}`);
+            }
+        } catch (e: unknown) {
+            setTakedownNote(`Which posts an assistant took down could not be listed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }, [mayReadTakedowns, activeNode.url, activeNode.id, credential]);
+
+    // Again whenever the set of hidden posts changes (an assistant took one down, or one was put back), not on every refresh of the list.
+    const hiddenKey = safePosts.filter((p) => p && typeof p === 'object' && p.hiddenByReportsAt).map((p) => p.id).sort().join(',');
+    useEffect(() => { void loadTakedowns(); }, [loadTakedowns, hiddenKey]);
+
+    const handlePutBack = async (post: PostModerationItem) => {
+        if (puttingBack) return;
+        setPuttingBack(post.id);
+        setActionMessage(null);
+        try {
+            const res = await fetch(resolveNodeApiUrl(activeNode.url, `${TAKEDOWNS}/put-back`), {
+                method: 'POST', credentials: 'same-origin', body: JSON.stringify({ postId: post.id }),
+                headers: buildAdminHeaders(credential, getTfaSessionToken(activeNode.id)),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+            setActionMessage({ text: putBackWords(json), isError: false });
+            onRefresh();
+        } catch (err: unknown) {
+            setActionMessage({ text: `Failed to put the post back: ${err instanceof Error ? err.message : String(err)}`, isError: true });
+        } finally {
+            setPuttingBack(null);
+            void loadTakedowns();
+        }
+    };
+
     const filteredPosts = useMemo(() => {
         return safePosts.filter((p) => {
             if (!p || typeof p !== 'object') return false;
 
             // Type filter
-            if (typeFilter !== 'all') {
+            if (typeFilter === 'copy') {
+                if (!isCopy(p)) return false;
+            } else if (typeFilter !== 'all') {
                 const pType = typeof p.type === 'string' ? p.type.toLowerCase() : '';
                 if (pType !== typeFilter) return false;
             }
@@ -159,7 +337,7 @@ export function PostModerationPanel({
                     </span>
                     <button
                         type="button"
-                        onClick={onRefresh}
+                        onClick={() => { onRefresh(); void loadTakedowns(); }}
                         className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs text-white font-bold transition-all min-h-[36px]"
                     >
                         🔄 Refresh
@@ -205,12 +383,12 @@ export function PostModerationPanel({
                     <select
                         id="admin-post-type-filter"
                         value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value as 'all' | 'offer' | 'need')}
-                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
+                        onChange={(e) => setTypeFilter(e.target.value as PostTypeFilter)}
+                        className="w-full min-w-0 overflow-hidden text-ellipsis bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-terra-500 min-h-[44px]"
                     >
-                        <option value="all">All Types</option>
-                        <option value="offer">Offers</option>
-                        <option value="need">Needs</option>
+                        {TYPE_FILTERS.map((f) => (
+                            <option key={f.value} value={f.value}>{f.label}</option>
+                        ))}
                     </select>
                 </div>
 
@@ -232,6 +410,10 @@ export function PostModerationPanel({
                     </select>
                 </div>
             </div>
+
+            {takedownNote && (
+                <p role="status" data-testid="post-takedown-note" className="text-xs text-nature-300 m-0 break-words">{takedownNote}</p>
+            )}
 
             {/* Posts List */}
             <div
@@ -256,7 +438,7 @@ export function PostModerationPanel({
                                 : (typeof post.authorPublicKey === 'string'
                                     ? `${post.authorPublicKey.slice(0, 10)}...`
                                     : 'Unknown Author'));
-                        const isOffer = typeof post.type === 'string' && post.type.toLowerCase() === 'offer';
+                        const takenDown = held.get(post.id);
                         const createdStr = post.createdAt || post.created_at
                             ? new Date(post.createdAt || post.created_at || '').toLocaleDateString()
                             : '';
@@ -270,14 +452,19 @@ export function PostModerationPanel({
                                 <div className="space-y-1 min-w-0 flex-1">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <span
-                                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                isOffer
-                                                    ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30'
-                                                    : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                                            }`}
+                                            data-testid="post-type-chip"
+                                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${chipClassFor(post.type)}`}
                                         >
                                             {post.type || 'post'}
                                         </span>
+                                        {isCopy(post) && (
+                                            <span
+                                                data-testid="post-copy-chip"
+                                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${COPY_CHIP}`}
+                                            >
+                                                Shown from another community
+                                            </span>
+                                        )}
                                         {categoryStr && (
                                             <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-nature-800 text-nature-300 border border-nature-700 capitalize">
                                                 {categoryStr}
@@ -290,14 +477,34 @@ export function PostModerationPanel({
                                     <p className="text-xs text-nature-300 line-clamp-1 m-0">
                                         {post.description || 'No description'}
                                     </p>
-                                    <div className="flex items-center gap-3 text-[11px] text-nature-400 font-mono">
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-nature-400 font-mono">
                                         <span>By: {author}</span>
                                         {post.price !== undefined && <span>{post.price} 🫘</span>}
                                         {createdStr && <span>{createdStr}</span>}
                                     </div>
+                                    {takenDown && (
+                                        <p
+                                            data-testid="post-taken-down"
+                                            className="m-0 mt-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold leading-snug break-words bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-bp-chip-accent-border"
+                                        >
+                                            {takenDownWords(takenDown)}
+                                        </p>
+                                    )}
                                 </div>
 
-                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                                <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 self-end sm:self-center">
+                                    {takenDown && (
+                                        <button
+                                            type="button"
+                                            onClick={() => void handlePutBack(post)}
+                                            disabled={puttingBack !== null}
+                                            data-testid="post-put-back"
+                                            aria-label={`Put back post ${post.title || post.id}`}
+                                            className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-xs font-bold transition-all active:scale-95 disabled:opacity-50"
+                                        >
+                                            {puttingBack === post.id ? 'Putting back…' : 'Put back'}
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={() => setDeletingPost(post)}

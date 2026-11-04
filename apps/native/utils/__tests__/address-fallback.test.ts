@@ -9,10 +9,11 @@
  *   - one card once the phone's address has failed for five minutes of tries, kept across a cold start within the hour;
  *     at once when the app's first look since it opened (or came back to the front) gets no answer there (design §3.2,
  *     "or at app open with a connection error", the director's reading);
- *   - it stands aside for the follow card only when that card will show: never left with neither (review of 90712eba);
+ *   - it stands aside for the follow card only when that card will show: never left with neither (review of 90712eba),
+ *     and only on that card's 'same' checked during this run of failed tries, under five minutes old (review of 533de50e);
  *   - only to an address whose statement is the community the phone first verified at its own address: another key,
  *     another community, a forged statement, or fewer take-overs is never offered;
- *   - "Not now" is per pair of addresses, for 24 hours;
+ *   - "Not now" is per pair of addresses, for 24 hours, and a look already on its way never undoes it (review of 533de50e);
  *   - never from or to http, never the worldwide community, never a bare number;
  *   - the move is the follow card's move (switchPhoneTo, the copy carried before the address is written);
  *   - never silent, and the follow card offers the way back once the main address answers again.
@@ -53,7 +54,7 @@ import {
     type AddressFallbackOffer,
 } from '../address-fallback';
 import {
-    addressFollowOffer, forgetFollowChecks, onFollowOfferChanged, readIdentityStatement, snoozeAddressFollow, COMMUNITY_IDENTITY_KEY,
+    acceptAddressFollow, addressFollowOffer, forgetFollowChecks, onFollowOfferChanged, readIdentityStatement, snoozeAddressFollow, COMMUNITY_IDENTITY_KEY,
     FOLLOW_SNOOZE_MS, type AddressFollowDeps,
 } from '../address-follow';
 import { communitySwitched } from '../community-switch';
@@ -479,6 +480,54 @@ describe('"Not now": 24 hours, per pair of addresses', () => {
         expect(await addressFallbackOffer(w.deps)).toEqual({ ...OFFER, to: seventh, host: hosts[6] });
     });
 
+    /** The next ask of `origin` waits: `reached` once the look is waiting there, `release` lets it go on. */
+    function holdAt(w: ReturnType<typeof world>, origin: string) {
+        let release!: () => void;
+        let reachedNow!: () => void;
+        const held = new Promise<void>(r => { release = r; });
+        const reached = new Promise<void>(r => { reachedNow = r; });
+        const real = w.deps.statement;
+        w.deps.statement = vi.fn(async (o: string) => {
+            if (o === origin) { reachedNow(); await held; }
+            return real(o);
+        });
+        return { reached, release };
+    }
+
+    it('"Not now" said while a look is on its way is never undone by it (review of 533de50e)', async () => {
+        const w = world();
+        const offer = (await failForFiveMinutes(w))[5]!;
+        expect(offer).toEqual(OFFER);
+        // The next minute's look starts and waits on byron (a blackholed address takes its 8 s), past its snooze read.
+        const hold = holdAt(w, BYRON);
+        w.state.now += MIN;
+        const inFlight = addressFallbackOffer(w.deps);
+        await hold.reached;
+        // The member taps "Not now" meanwhile; then byron fails.
+        await snoozeAddressFallback(offer, w.deps);
+        hold.release();
+        // Before this fix the look returned the pair just declined, and the card came back for a minute.
+        expect(await inFlight).toBeNull();
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+    });
+
+    it('a pair declined while a look is on its way: another pair it found the same is offered instead, as the next look would', async () => {
+        const w = world({
+            prof: profile({ addresses: ['byron.example.org', 'mullum.example.org', 'beans.example.net'] }),
+            answers: { [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) },
+        });
+        expect((await failForFiveMinutes(w))[5]).toEqual(OFFER);
+        const hold = holdAt(w, BYRON);
+        w.state.now += MIN;
+        const inFlight = addressFallbackOffer(w.deps);
+        await hold.reached;
+        await snoozeAddressFallback(OFFER, w.deps);
+        hold.release();
+        const other = { ...OFFER, to: THIRD, host: 'beans.example.net' };
+        expect(await inFlight).toEqual(other);
+        expect(await addressFallbackOffer(w.deps)).toEqual(other);
+    });
+
     it('with every pair snoozed, the phone\'s address is not even asked', async () => {
         const w = world();
         await snoozeAddressFallback(OFFER, w.deps);
@@ -622,6 +671,78 @@ describe('the follow card\'s move: this card stands aside only when that card wi
         expect(w.state.asked).not.toContain(MULLUM);
     });
 
+    it('the follow card checked its move, then the main address stopped answering with the phone\'s own: this card at five minutes, not when that check is an hour old (review of 533de50e)', async () => {
+        const w = world({ prof: THREE, answers: { [BYRON]: statement(node, COMMUNITY), [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) } });
+        const follow = { from: BYRON, to: THIRD, host: 'beans.example.net' };
+        const told = vi.fn();
+        const off = onFollowOfferChanged(told);
+        try {
+            // All three answer: Home comes into view and the follow card checks beans, the same community.
+            expect(await addressFollowOffer(w.deps)).toEqual(follow);
+            told.mockClear();
+            // Byron and beans stop answering together (design §3.1); mullum still answers.
+            w.state.answers[BYRON] = undefined;
+            w.state.answers[THIRD] = undefined;
+            const seen = await failForFiveMinutes(w);
+            // Before this fix the follow card's hour-old 'same' kept this card aside: the first offer came at minute 60.
+            expect(seen.slice(0, 5)).toEqual([null, null, null, null, null]);
+            expect(seen[5]).toEqual(OFFER);
+            // The follow card's move was asked again first, and the follow card was told: it no longer offers beans.
+            expect(told).toHaveBeenCalledTimes(1);
+            expect(await oneCard(w)).toEqual({ fallback: OFFER, follow: null });
+        } finally {
+            off();
+        }
+    });
+
+    it('a "same" checked during the run, then the main address stopped too: this card within five minutes of that check', async () => {
+        const w = world({ prof: THREE, answers: { [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) } });
+        const follow = { from: BYRON, to: THIRD, host: 'beans.example.net' };
+        // Byron fails from minute 0; at minute 2 Home comes into view and the follow card checks beans: the same community.
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        w.state.now += 2 * MIN;
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        expect(await addressFollowOffer(w.deps)).toEqual(follow);
+        // Beans stops answering a moment later.
+        w.state.answers[THIRD] = undefined;
+        const seen: (AddressFallbackOffer | null)[] = [];
+        for (let m = 3; m <= 8; m++) { w.state.now += MIN; seen.push(await addressFallbackOffer(w.deps)); }
+        // Minutes 3 to 8: due from minute 5, but beans answered at minute 2, so its 'same' stands until it is five minutes
+        // old: asked again at minute 7, no answer, and this card comes then (before this fix, at minute 62).
+        expect(seen).toEqual([null, null, null, null, OFFER, OFFER]);
+        expect(await oneCard(w)).toEqual({ fallback: OFFER, follow: null });
+    });
+
+    it('while the main address answers, its "same" is asked again at most every five minutes, and this card stays aside', async () => {
+        const w = world({ prof: THREE, answers: { [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) } });
+        const follow = { from: BYRON, to: THIRD, host: 'beans.example.net' };
+        expect(await addressFollowOffer(w.deps)).toEqual(follow);
+        await failForFiveMinutes(w);
+        const beansAsked = () => w.state.asked.filter(o => o === THIRD).length;
+        const before = beansAsked();
+        for (let i = 0; i < 20; i++) { w.state.now += MIN; expect(await oneCard(w)).toEqual({ fallback: null, follow }); }
+        // Twenty minutes: four checks of beans, not twenty.
+        expect(beansAsked() - before).toBe(4);
+        expect(w.state.asked).not.toContain(MULLUM);
+    });
+
+    it('the follow card couldn\'t check its move at the tap: this card is weighed at the next look', async () => {
+        const w = world({ prof: THREE, answers: { [BYRON]: statement(node, COMMUNITY), [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) } });
+        const follow = { from: BYRON, to: THIRD, host: 'beans.example.net' };
+        expect(await addressFollowOffer(w.deps)).toEqual(follow);
+        w.state.answers[BYRON] = undefined;
+        // Byron fails for five minutes while beans answers: the follow card shows, this card stays aside.
+        expect(await failForFiveMinutes(w)).toEqual([null, null, null, null, null, null]);
+        // A minute on, beans stops answering; its 'same' is a minute old, so this card still stays aside...
+        w.state.now += MIN;
+        w.state.answers[THIRD] = undefined;
+        expect(await addressFallbackOffer(w.deps)).toBeNull();
+        // ...until the member taps the follow card and it couldn't check: then this card at the next look, not minutes later.
+        expect(await acceptAddressFollow(follow, w.deps)).toBe('unreachable');
+        expect(await addressFallbackOffer(w.deps)).toEqual(OFFER);
+        expect(w.deps.switchTo).not.toHaveBeenCalled();
+    });
+
     it('the follow card is told when this card\'s check finds its move, so it shows what this card stood aside for', async () => {
         const w = world({ prof: THREE, answers: { [MULLUM]: statement(node, COMMUNITY) } });
         const told = vi.fn();
@@ -726,6 +847,24 @@ describe('at app open with a connection error: the other addresses asked at once
         coldStart();
         expect(await addressFallbackOffer(all.deps)).toBeNull();
         expect(all.state.asked).toEqual([]);
+    });
+
+    it('at the open with the main address answering: its move checked at the open, then every five minutes, not each minute', async () => {
+        const w = world({
+            prof: profile({ addresses: ['byron.example.org', 'mullum.example.org', 'beans.example.net'], primaryAddress: 'beans.example.net' }),
+            answers: { [MULLUM]: statement(node, COMMUNITY), [THIRD]: statement(node, COMMUNITY) },
+        });
+        coldStart();
+        const beansAskedAt: number[] = [];
+        for (let m = 0; m <= 12; m++) {
+            const before = w.state.asked.filter(o => o === THIRD).length;
+            expect(await addressFallbackOffer(w.deps)).toBeNull();
+            if (w.state.asked.filter(o => o === THIRD).length > before) beansAskedAt.push(m);
+            w.state.now += MIN;
+        }
+        // The check made at the open is one of this run's: not made again a minute later (it was, in this lane's first cut).
+        expect(beansAskedAt).toEqual([0, 5, 10]);
+        expect(w.state.asked).not.toContain(MULLUM);
     });
 
     it('at the open with the follow card\'s move checked: one card, the follow card\'s', async () => {

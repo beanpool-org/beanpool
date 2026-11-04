@@ -59,7 +59,8 @@ import { MapStackList } from '../components/MapStackList';
 import { bubblesOnMap, planBubbleTap, stackPins, stackPinFromPost, type StackPin } from '../lib/map-stack';
 import { EventCard } from '../components/EventCard';
 import { Sentence } from '../components/Sentence';
-import { approximateLocation, listPhotoUrl, tierForCredit, type AddressResult } from '@beanpool/core';
+import { approximateLocation, tierForCredit, type AddressResult } from '@beanpool/core';
+import { ListPhoto } from '../components/ListPhoto';
 import { AddressSearch } from '../components/AddressSearch';
 import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
@@ -2629,9 +2630,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-300">✕</span>
                     </button>
                     <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
-                        {previewPost.photos && previewPost.photos.length > 0
-                            ? <img src={listPhotoUrl(previewPost.photos[0])} alt="" className="w-full h-full object-cover" />
-                            : <span className="text-3xl" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
+                        <ListPhoto
+                            photo={previewPost.photos?.[0]}
+                            fallback={<span className="text-3xl" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
+                            alt="" className="w-full h-full object-cover"
+                        />
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-center pr-6">
                         <span data-testid="map-preview-title" className="text-base font-extrabold text-gray-900 dark:text-white leading-tight break-words">
@@ -2673,7 +2676,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             aria-label={t('View enlarged photo: {title}', { title: previewPost.title })}
                             className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
                         >
-                            <img src={listPhotoUrl(previewPost.photos[0])} alt="" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
+                            <ListPhoto
+                                photo={previewPost.photos[0]}
+                                fallback={<span className="w-full h-full flex items-center justify-center text-4xl bg-gray-100 dark:bg-nature-800" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
+                                alt="" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800"
+                            />
                         </button>
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">

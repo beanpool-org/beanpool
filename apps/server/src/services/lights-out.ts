@@ -4,7 +4,7 @@
  *
  * When the internet and the phone network are down, the community's record is on a laptop in the hall and members reach it
  * by its number on the hall Wi-Fi (http://192.168.8.1:8080). The switch is what lets them:
- *   - the plain port answers a phone straight from the hall Wi-Fi (direct-lan-source.ts) as it always did, instead of a 301
+ *   - the plain port answers a phone straight from the hall Wi-Fi (direct-lan.ts) as it always did, instead of a 301
  *     to https, on a server that holds a certificate of its own (plain-http-gate.ts). A public source, and anything that came
  *     through a tunnel or proxy, is unchanged;
  *   - /api/community/health and /api/community/info say so (`lightsOut`, {@link publicLightsOut}), which the phone's banner
@@ -88,8 +88,10 @@ export function lightsOutOn(): boolean {
 }
 
 /**
- * The hall address an owner gave: `http://<a local-network number or .local/.lan name>[:port]`, nothing else (no path, no
- * user, no https: a hall laptop has no certificate a phone trusts). Null when it is none of those.
+ * The hall address an owner gave: `http://<a local-network number or .local name>[:port]`, nothing else (no path, no
+ * user, no https: a hall laptop has no certificate a phone trusts). Null when it is none of those. Only a Host the hall's
+ * own rule lets in (direct-lan.ts, isLocalNetworkHost): a router's `.lan` name is not one, so the poster never sends
+ * phones to an address the hall would refuse.
  */
 export function hallAddressOf(input: unknown): string | null {
     if (typeof input !== 'string') return null;
@@ -100,7 +102,7 @@ export function hallAddressOf(input: unknown): string | null {
     if (u.protocol !== 'http:' || u.username || u.password || (u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return null;
     const host = normalizeAddress(u.host);
     if (!host || isLoopbackHost(host)) return null;
-    if (!isLocalNetworkHost(host) && !host.endsWith('.lan')) return null;
+    if (!isLocalNetworkHost(host)) return null;
     return `http://${u.host.toLowerCase()}`;
 }
 

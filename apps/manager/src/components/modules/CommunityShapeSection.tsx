@@ -22,7 +22,8 @@ import {
     isCoreSetting,
     typedWordFor,
 } from '../../lib/community-shape';
-import { RowControls, ShapeRow, joinDisplay } from './ShapeRows';
+import { RowControls, ShapeRow, joinDisplay, logSettingName, ADVICE_LINE_PREFIX } from './ShapeRows';
+import { AdviseTheOwners } from './AdviseTheOwners';
 import { ChangesLog } from './ChangesLog';
 import { CoreWalkthrough, currentDoor, knownFloorProblem } from './CoreWalkthrough';
 
@@ -61,6 +62,8 @@ export function CommunityShapeSection({
     onUnconfirmedChange,
 }: CommunityShapeSectionProps) {
     const isOwner = viewer?.kind === 'password' || viewer?.role === 'owner';
+    // An admin reads every Core setting and advises the owners about it (slice C4); a moderator never gets this page.
+    const isAdmin = !isOwner && viewer?.kind === 'key' && viewer.role === 'admin';
 
     const [shape, setShape] = useState<Shape | null>(null);
     const [loading, setLoading] = useState(true);
@@ -220,10 +223,12 @@ export function CommunityShapeSection({
     const canEdit = isOwner && !standby;
     const coreLog = log.filter((l) => {
         const base = l.setting.split('.')[0];
-        return isCoreSetting(base) || base === 'core';
+        return isCoreSetting(base) || base === 'core' || (l.setting.startsWith(ADVICE_LINE_PREFIX) && isCoreSetting(l.setting.slice(ADVICE_LINE_PREFIX.length)));
     });
 
     // ── The lock line and the button under a locked Core row ──
+    // An admin on the main server can advise the owners about any Core setting, locked or not (AdviseTheOwners).
+    const advising = isAdmin && !standby;
     const lockedBy = shape.core?.lock?.byCallsign ? `@${shape.core.lock.byCallsign}` : t('an owner');
     const since = lockDate(shape.core?.lock?.at);
     const lockLine = !locked
@@ -231,10 +236,14 @@ export function CommunityShapeSection({
         : since
             ? (canEdit
                 ? t('Locked since {date} by {callsign}. Unlock to change: it asks for your proof, and every owner is told.')
-                : t('Locked since {date} by {callsign}. Only an owner unlocks it.')).replace('{date}', since).replace('{callsign}', lockedBy)
+                : advising
+                    ? t('Locked since {date} by {callsign}. Only an owner unlocks it; you can advise them below.')
+                    : t('Locked since {date} by {callsign}. Only an owner unlocks it.')).replace('{date}', since).replace('{callsign}', lockedBy)
             : canEdit
                 ? t('Locked. Unlock to change: it asks for your proof, and every owner is told.')
-                : t('Locked. Only an owner unlocks it.');
+                : advising
+                    ? t('Locked. Only an owner unlocks it; you can advise them below.')
+                    : t('Locked. Only an owner unlocks it.');
 
     const unlockButton = (key: keyof ShapeSettings, current: unknown) => {
         if (!locked || !canEdit || settings[key]?.lock) return undefined;
@@ -250,6 +259,23 @@ export function CommunityShapeSection({
             >
                 {t('Unlock to change')}
             </button>
+        );
+    };
+
+    /** An admin's "Advise the owners" under a Core row; an owner has Unlock to change, and a standby takes no advice. */
+    const adviseButton = (key: keyof ShapeSettings) => {
+        if (!advising) return undefined;
+        return (
+            <AdviseTheOwners
+                setting={key}
+                settingName={logSettingName(key)}
+                activeNode={activeNode}
+                onSent={(next) => {
+                    setShape(next);
+                    setSaveSuccess(t('Sent. Every owner is told, and your words are under Changes below.'));
+                    successTimer.schedule(() => setSaveSuccess(null), 6000);
+                }}
+            />
         );
     };
 
@@ -292,7 +318,7 @@ export function CommunityShapeSection({
         isOpen: openSetting === key,
         onToggle: () => handleOpenRow(key, current),
         coreLockLine: locked ? lockLine : undefined,
-        coreAction: unlockButton(key, current),
+        coreAction: unlockButton(key, current) ?? adviseButton(key),
     });
 
     const door = currentDoor(shape);
@@ -316,9 +342,9 @@ export function CommunityShapeSection({
                     {standby ? (
                         <span className="text-bp-ink-warning">{t('This is a standby: change it on the main server.')}</span>
                     ) : !isOwner ? (
-                        <span className="text-nature-300">{t("You're an admin: you can read these.")}</span>
+                        <span className="text-nature-300">{t("You're an admin: you can read these and advise the owners.")}</span>
                     ) : (
-                        <span>{t('Only an owner unlocks one. Admins can read these.')}</span>
+                        <span>{t('Only an owner unlocks one. Admins can read these and advise you.')}</span>
                     )}
                 </p>
             </div>
@@ -362,7 +388,7 @@ export function CommunityShapeSection({
                     </div>
                 ) : (
                     <p data-testid="core-unconfirmed-admin" className="text-xs text-nature-300 m-0 p-3 rounded-xl bg-nature-950 border border-nature-800">
-                        {t("The owners haven't confirmed the core settings yet. You can read them.")}
+                        {t("The owners haven't confirmed the core settings yet. You can read them and advise.")}
                     </p>
                 )
             )}
@@ -377,7 +403,7 @@ export function CommunityShapeSection({
                         setShape(next);
                         setWalkStart(null);
                         onUnconfirmedChange?.(false);
-                        setSaveSuccess(t('Locked. From now on each change asks you to unlock it first, and every owner is told. Admins can read these.'));
+                        setSaveSuccess(t('Locked. From now on each change asks you to unlock it first, and every owner is told. Admins can read these and advise you.'));
                         successTimer.schedule(() => setSaveSuccess(null), 8000);
                         void told;
                     }}

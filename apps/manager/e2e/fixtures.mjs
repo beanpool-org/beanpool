@@ -1058,7 +1058,9 @@ const AGENT_GRANTS = {
             // Ticked "May take down posts for me", with takedowns still waiting: its row offers "Disconnect and put back" (MCP-MODERATION S2).
             canModerate: true, takedownsToday: 2, takedownsHeld: 3 },
         { id: 'oa5c0ffee004', name: 'Claude', sendsTo: 'claude.ai', member: 'Wilhelmina-Featherstonehaugh', mine: false, role: 'admin', via: 'oauth',
-            createdAt: Date.UTC(2026, 9, 14), expiresAt: null, expired: false, lastUsedAt: Date.UTC(2026, 9, 14), callsToday: 12 },
+            createdAt: Date.UTC(2026, 9, 14), expiresAt: null, expired: false, lastUsedAt: Date.UTC(2026, 9, 14), callsToday: 12,
+            // Ticked on the consent page: an admin's takes one post a call (MCP-MODERATION S3), the longer line drawn at 320px.
+            canModerate: true, takedownsToday: 1 },
         { id: 'a9e5c0ffee03', name: 'Old helper', member: 'Former Admin', mine: false, role: null, via: 'token',
             createdAt: Date.UTC(2026, 8, 1), expiresAt: Date.UTC(2026, 9, 1), expired: true, lastUsedAt: Date.UTC(2026, 8, 20), callsToday: 0 },
     ],

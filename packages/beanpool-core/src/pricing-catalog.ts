@@ -200,6 +200,18 @@ function priceTypeOfUnit(unit: string | undefined): 'daily' | 'weekly' | 'hourly
 export function pricingHintFor(
     items: readonly PricingGuideItem[], category: string | null | undefined, words: string,
 ): { credits: number; priceType: 'daily' | 'weekly' | 'hourly' | 'monthly' | 'fixed' } | null {
+    const item = pricingItemFor(items, category, words);
+    return item ? { credits: item.priceBeans, priceType: priceTypeOfUnit(item.unit) } : null;
+}
+
+/**
+ * The guide item `pricingHintFor` reads its figure from: the same match, as the item itself (its own unit, not the price
+ * type the unit is turned into). A unit the composer has no price type for ("night") comes out of `pricingHintFor` as one
+ * price; whoever shows the figure beside a word like "per night" needs the unit to say so.
+ */
+export function pricingItemFor(
+    items: readonly PricingGuideItem[], category: string | null | undefined, words: string,
+): PricingGuideItem | null {
     const wanted = hintWords(words);
     if (wanted.size === 0) return null;
     const cat = category ? normalizeCategory(category) : null;
@@ -212,7 +224,7 @@ export function pricingHintFor(
         const sameCategory = cat !== null && item.category === cat;
         if (!best || score > best.score || (score === best.score && sameCategory && !best.sameCategory)) best = { item, score, sameCategory };
     }
-    return best ? { credits: best.item.priceBeans, priceType: priceTypeOfUnit(best.item.unit) } : null;
+    return best ? best.item : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

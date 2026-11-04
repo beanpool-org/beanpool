@@ -30,6 +30,9 @@
  *      A member the lender has blocked asks as anyone does: their request waits, the lender is not pushed, and nothing they
  *      are sent says "blocked". An ordinary Offer, one-off or repeatable, is still taken in one step.
  *  15. A standby copy carries the four columns, by plain assignment.
+ *  16. The starter drafts (cold start O1) posted as the composer sends them: every one of the 51 is kept with the price type
+ *      it opened with (a Total or by the hour), the figure it showed, and its loan flag. A per-day draft that isn't lent
+ *      would be kept as a Total (section 1), so none may be one.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-lendable-offers.ts
  */
@@ -57,6 +60,7 @@ import {
     LENDABLE_NOT_A_FLAG, LEND_MAX_DAYS_REFUSED, REPLACEMENT_VALUE_NOT_WORDS, REPLACEMENT_VALUE_TOO_LONG,
 } from './engine/post-fields.js';
 import { guestPost, setMemberPhoto, withoutTradeParty } from '@beanpool/engine';
+import { DEFAULT_PRICING_CATALOG, PRICING_CATEGORIES, STARTER_OFFERS, pricingItemFor } from '@beanpool/core';
 
 // Expo is answered here, so who is told what is read from the notices this server keeps; nothing else off it is reached.
 const realFetch = globalThis.fetch;
@@ -715,6 +719,34 @@ async function main(): Promise<void> {
     await callOff(hal, jobsTaken.body.transaction.id);
     assert(bal(hal.pk) === hb && postRow(bread).status === 'active', 'both called off, Hal\'s Beans are back and the loaf is back on the board');
     ledgerAddsUp('ordinary one-step accepts');
+
+    // ── 16. The starter drafts ───────────────────────────────────────────────────────────────────────────────────────
+    // Cold start O1 (packages/beanpool-core/src/starter-offers.ts). The sheet opens the composer on a draft's title,
+    // description, figure and price type, and the member taps Post. Each of the 51 is posted here as the composer sends it,
+    // through the real route, and read back from the row the node keeps: what the member saw is what is kept.
+    // It runs before 15 because 15 makes this node a standby, which takes no posts.
+    console.log('\n— 16. The starter drafts');
+    const fay = makeMember('Fay', 100, false);
+    const unkept: string[] = [];
+    let drafted = 0, draftsLent = 0;
+    for (const { id: category } of PRICING_CATEGORIES) {
+        for (const [position, draft] of STARTER_OFFERS[category].entries()) {
+            const at = `${category}.${position + 1} ${draft.title}`;
+            // The composer's price types are Total, / Hr, / Dy ...: a Free draft is a Total of 0 Beans, as the Tool shed's sheet makes it.
+            const shown = draft.priceType === 'free' ? 'fixed' : draft.priceType;
+            const figure = draft.priceType === 'free' ? 0 : (draft.guide ? pricingItemFor(DEFAULT_PRICING_CATALOG, category, draft.guide)?.priceBeans : undefined) ?? 5;
+            const made = await offer(fay, {
+                title: draft.title, description: draft.description, category, credits: figure, priceType: shown, ...(draft.lendable ? { lendable: true } : {}),
+            });
+            const row = made.status === 200 ? postRow(made.body.post.id) : undefined;
+            if (!row) unkept.push(`${at}: not posted (${brief(made)})`);
+            else if (row.price_type !== shown) unkept.push(`${at}: the composer showed ${shown}, the node kept ${row.price_type}`);
+            else if (row.credits !== figure) unkept.push(`${at}: the composer showed ${figure} Beans, the node kept ${row.credits}`);
+            else if (row.lendable !== (draft.lendable ? 1 : 0)) unkept.push(`${at}: lendable is ${row.lendable}`);
+            else { drafted++; if (row.lendable === 1) draftsLent++; }
+        }
+    }
+    assert(unkept.length === 0 && drafted === 51 && draftsLent === 2, `all 51 drafts are kept as they opened (${drafted} of 51, ${draftsLent} lent): ${unkept.join('; ') || 'none differ'}`);
 
     // ── 15. A standby copy ───────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 15. A standby copy');

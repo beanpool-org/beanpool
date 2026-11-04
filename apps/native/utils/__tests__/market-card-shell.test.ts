@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, brandColours, contrastRatio } from '@beanpool/core';
+import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, brandColours, contrastRatio, gridTextBlockHeight } from '@beanpool/core';
 
 /**
  * The phone's style box (components/market-card-shell.ts, slice P2 of DESIGN-card-style-box-fable.md): every number in its
@@ -11,7 +11,7 @@ import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, brandColours, contras
 vi.mock('react-native', () => ({ StyleSheet: { create: (s: unknown) => s }, View: 'View', Text: 'Text' }));
 vi.mock('../../app/ThemeContext', () => ({ useStyles: () => ({}) }));
 
-import { chipTones, makeCardShell, cardType, type CardChipRole } from '../../components/market-card-shell';
+import { chipTones, makeCardShell, cardType, gridTextBlock, type CardChipRole } from '../../components/market-card-shell';
 import { darkColors, lightColors } from '../../constants/colors';
 
 // The theme context hands either set as `typeof lightColors` (ThemeContextType).
@@ -53,6 +53,32 @@ describe('the box is core\'s numbers', () => {
         expect(shell.mark).toMatchObject({ ...cardType(MARKET_CARD_TYPE.list.mark), color: lightColors.tile.event.ink });
     });
 
+    it('the grid (PG2): a row of two cells with the 16 gutter between and under it; the tile fills its cell; the type scale', () => {
+        expect(shell.gridRow).toEqual({ flexDirection: 'row', gap: MARKET_CARD_SHELL.gap.grid, marginBottom: MARKET_CARD_SHELL.gap.grid });
+        expect(MARKET_CARD_SHELL.gap.grid).toBe(16);
+        expect(shell.gridCell).toEqual({ flex: 1, minWidth: 0 });
+        expect(shell.gridTile).toEqual({ flex: 1, marginBottom: 0 });
+        expect(cardType(MARKET_CARD_TYPE.grid.loud)).toEqual({ fontSize: 14, fontWeight: '800', lineHeight: 18 });
+        expect(shell.gridTitle).toMatchObject(cardType(MARKET_CARD_TYPE.grid.loud));
+        expect(shell.gridLine).toMatchObject(cardType(MARKET_CARD_TYPE.grid.place));
+    });
+
+    it.each([1, 1.3, 2])('the grid text block at %sx: four rows of 18 and three gaps of 4, scaled, in 12 of padding: core\'s height', (scale) => {
+        const b = gridTextBlock(scale);
+        expect(b.block).toMatchObject({ height: gridTextBlockHeight(scale), padding: MARKET_CARD_SHELL.textPadding, gap: 4 * scale, overflow: 'hidden' });
+        expect(b.block.height).toBeCloseTo(24 + (4 * 18 + 3 * 4) * scale, 9);
+        // The title's two rows and the gap between them; then rows 3 and 4: they fill the block exactly, gaps and all.
+        expect(b.titleBox.height).toBeCloseTo((2 * 18 + 4) * scale, 9);
+        expect(b.row.height).toBeCloseTo(18 * scale, 9);
+        expect(b.lastRow.height).toBeCloseTo(18 * scale, 9);
+        expect(2 * MARKET_CARD_SHELL.textPadding + b.titleBox.height + b.row.height + b.lastRow.height + 2 * b.block.gap).toBeCloseTo(b.block.height, 9);
+        expect(b.lastRow).toMatchObject({ flexDirection: 'row', overflow: 'hidden' });
+    });
+
+    it('a font scale that is not a positive number counts as 1, as core\'s does', () => {
+        for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(gridTextBlock(bad)).toEqual(gridTextBlock(1));
+    });
+
     it('writes no number or colour of its own (the source)', () => {
         const src = readFileSync(join(__dirname, '..', '..', 'components', 'market-card-shell.ts'), 'utf8');
         expect(src.replace("shadowColor: '#000'", '')).not.toMatch(/['"`]#[0-9a-fA-F]{3,8}['"`]/);
@@ -84,7 +110,7 @@ describe.each(THEMES)('the %s chips', (theme, colors, brand) => {
 
     it('the card\'s inks read on the card ground', () => {
         const shell = makeCardShell(colors);
-        for (const ink of [shell.loud.color, shell.second.color, shell.place.color, shell.mark.color] as string[]) {
+        for (const ink of [shell.loud.color, shell.second.color, shell.place.color, shell.mark.color, shell.gridTitle.color, shell.gridLine.color] as string[]) {
             expect(contrastRatio(ink, colors.surface.card), `${theme} ${ink} on ${colors.surface.card}`).toBeGreaterThanOrEqual(4.5);
         }
     });

@@ -11,7 +11,7 @@
  */
 import { createElement } from 'react';
 import { StyleSheet, Text, View, type TextStyle } from 'react-native';
-import { MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, MARKET_CHIP, type CardType } from '@beanpool/core';
+import { MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, gridTextBlockHeight, type CardType } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 
 type Colors = ThemeContextType['colors'];
@@ -46,7 +46,10 @@ export function chipTones(colors: Colors): Record<CardChipRole, { bg: string; fg
 }
 
 const LIST = MARKET_CARD_TYPE.list;
+const GRID = MARKET_CARD_TYPE.grid;
 const SLOT = SHELL.photo.list.width;
+const POP_UP = SHELL.popUp;
+const CLOSE = POP_UP.close;
 
 /** The box's styles for one theme. `useCardShell()` is this, made once per theme. */
 export function makeCardShell(colors: Colors) {
@@ -102,9 +105,97 @@ export function makeCardShell(colors: Colors) {
         distance: { ...cardType(LIST.distance), color: colors.text.secondary },
         /** Going ✓ / Interested ✓, You're hosting this event: words, never a control, in the event's ink. */
         mark: { ...cardType(LIST.mark), color: colors.tile.event.ink },
+        /** A listing's price at the end of its chip row: the amount (and its unit) 16/800. */
+        price: { ...cardType(LIST.price), color: colors.text.body },
+        /** An Elder's card: the gold left border (§1.1 variants). */
+        elder: { borderLeftWidth: SHELL.variant.elderBorderLeft, borderLeftColor: colors.trust.star },
+        /**
+         * The map's pin card (map.tsx, MapPreviewCard; slice M1): the same card, 16 in from the screen's edges, with the floating
+         * shadow in place of the card's own.
+         */
+        floating: {
+            margin: POP_UP.margin,
+            // The card's own gap under it is an edge of its own, and an edge outranks `margin`: set it too.
+            marginBottom: POP_UP.margin,
+            shadowOffset: { width: 0, height: SHELL.floatingShadow.offsetY },
+            shadowOpacity: SHELL.floatingShadow.opacity,
+            shadowRadius: SHELL.floatingShadow.blur,
+            elevation: SHELL.floatingShadow.elevation,
+        },
+        /**
+         * Its ✕: 28 round, 8 in from the card's top-right corner (the card sits 16 in), on the subtle ground. The ✕ is the
+         * card's sibling, after it in the tree. Plain Android draws siblings in order of elevation, which would put the
+         * floating card's 20 over it (#2879 review); React Native's ReactViewGroup keeps tree order by giving each elevated
+         * child its own Z barrier (public Canvas API from 29, reflection on hidden methods before), and on the API 36
+         * emulator the ✕ was already on top. So the order never rests on that: its box sits one above the card, with a zIndex
+         * for iOS and for which of the two a touch meets first. The lifted box has no ground and no corners, so Android gives
+         * it no outline and no shadow of its own (a 21 dp shadow round a 28 dp dot, black on API 26 whatever shadowColor says);
+         * the dot is `closeDot`, inside it, with no elevation.
+         */
+        close: {
+            position: 'absolute',
+            top: POP_UP.margin + CLOSE.inset,
+            right: POP_UP.margin + CLOSE.inset,
+            width: CLOSE.size,
+            height: CLOSE.size,
+            elevation: SHELL.floatingShadow.elevation + 1,
+            zIndex: 1,
+        },
+        /** The ✕'s dot: the box's full 28, round, on the subtle ground, the glyph in its middle. */
+        closeDot: {
+            flex: 1,
+            borderRadius: CLOSE.size / 2,
+            backgroundColor: colors.surface.subtle,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        closeText: { ...cardType(CLOSE.type), color: colors.text.secondary },
+        /**
+         * The pin card's first row (the chips, and a listing's price) stops short of the ✕: the ✕ and an inset either side of it,
+         * less the text column's own padding.
+         */
+        clearOfClose: { marginRight: CLOSE.size + 2 * CLOSE.inset - SHELL.textPadding },
+        /**
+         * The grid (DESIGN-market-grid-sizes-fable.md §2.2, §2.5, slice PG2) is a list of rows: two tiles side by side with the
+         * gutter between them and under the row, or a poll on its own, the list's width. A cell is half the row less the gutter
+         * and is stretched to the row's height; the tile fills its cell, so the two tiles of a row are one height.
+         */
+        gridRow: { flexDirection: 'row', gap: SHELL.gap.grid, marginBottom: SHELL.gap.grid },
+        gridCell: { flex: 1, minWidth: 0 },
+        gridTile: { flex: 1, marginBottom: 0 },
+        /** Rows 1 and 2 of the four: the title, two lines at most. */
+        gridTitle: { ...cardType(GRID.loud), color: colors.text.body },
+        /** Row 3 on a copy (its price there, in words) and row 4's distance: one line each. */
+        gridLine: { ...cardType(GRID.place), color: colors.text.secondary },
     });
     return { ...styles, tones: chipTones(colors) };
 }
+
+/**
+ * The grid tile's text block at the phone's font scale (§2.2): four rows of 18 with 4 between them, both scaled with the text
+ * (a phone scales a line height as it does a font size), inside 12 of padding that does not scale; core's
+ * `gridTextBlockHeight`. Rows 1 and 2 are the title's box (its two lines and the gap between them), rows 3 and 4 a box each,
+ * so the block is the same height whatever a tile holds, and every tile in a row puts its author and its last line at the
+ * same place. A scale that is not a positive number counts as 1, as core's does. No colour here: the theme's are in the table.
+ * A StyleSheet table, so the phone's contrast scan (utils/button-contrast.ts) reads it where the grid tile uses it.
+ */
+export function gridTextBlock(fontScale: number) {
+    const scale = Number.isFinite(fontScale) && fontScale > 0 ? fontScale : 1;
+    const { rowHeight, rowGap } = MARKET_GRID_TEXT_BLOCK;
+    const row = rowHeight * scale;
+    return StyleSheet.create({
+        block: { height: gridTextBlockHeight(scale), padding: SHELL.textPadding, gap: rowGap * scale, overflow: 'hidden' },
+        titleBox: { height: 2 * row + rowGap * scale },
+        /** Row 3: the author (an 18 dp avatar and a name) or a copy's line, centred in the row. */
+        row: { height: row, justifyContent: 'center' },
+        /** Row 4: one line that is cut, never wrapped: the distance first, then one chip at most, spaced as a chip row. */
+        lastRow: { height: row, flexDirection: 'row', alignItems: 'center', gap: 6, overflow: 'hidden' },
+        /** Row 4's distance and its chip: each gives way and is cut at the row's end rather than pushed past it. */
+        lastRowPiece: { flexShrink: 1, minWidth: 0 },
+    });
+}
+
+export type GridTextBlock = ReturnType<typeof gridTextBlock>;
 
 export type CardShell = ReturnType<typeof makeCardShell>;
 

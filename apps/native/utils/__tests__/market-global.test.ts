@@ -345,11 +345,15 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
     });
 
     it('the map: the Offer/Need form’s price section and the preview’s amount are gated, and the post goes up at 0', () => {
-        // The preview's amount is the map's (map.tsx); the form is its own screen since MAP-FORM (app/new-listing.tsx).
-        const map = read('../../app/(tabs)/map.tsx').split('\n');
-        const currency = map.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
+        // The preview's amount is the pin card's since M1 (components/MapPreviewCard.tsx, #2879): map.tsx draws none of its own
+        // and hands the card its rule; the form is its own screen since MAP-FORM (app/new-listing.tsx).
+        const mapSrc = read('../../app/(tabs)/map.tsx');
+        expect(mapSrc).not.toContain('<CurrencyDisplay');
+        expect(mapSrc).toContain('showsBeans={showsBeans}');
+        const card = read('../../components/MapPreviewCard.tsx').split('\n');
+        const currency = card.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
         expect(currency.length).toBe(1);
-        for (const i of currency) expect(map.slice(Math.max(0, i - 3), i).join('\n')).toMatch(/\{showsBeans && (!previewCopy && )?\(/);
+        for (const i of currency) expect(card.slice(Math.max(0, i - 3), i).join('\n')).toMatch(/\{showsBeans && (!copy && )?\(/);
         const src = read('../../app/new-listing.tsx');
         const lines = src.split('\n');
         expect(lines.some(l => l.includes('<CurrencyDisplay'))).toBe(false);

@@ -21,7 +21,7 @@
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards, t, word,
-    knockStillAnswerable,
+    knockStillAnswerable, reorderIds,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
 import { drawnToolCardTypes } from '../tools/cards';
@@ -393,14 +393,7 @@ export function moveCard(
  * Every card that can't move, and every slot it stands in, stays where it is.
  */
 export function reorderAmong<T extends Pick<HomeCardInstance, 'id' | 'type'>>(items: readonly T[], id: string, to: number, pinned: readonly string[] = []): T[] {
-    const slots = items.flatMap((c, i) => (canMoveCard(c.type, pinned) ? [i] : []));
-    const order = slots.map(i => items[i]);
-    const from = order.findIndex(c => c.id === id);
-    const out = [...items];
-    if (from < 0) return out;
-    order.splice(to, 0, ...order.splice(from, 1));
-    slots.forEach((slot, k) => { out[slot] = order[k]; });
-    return out;
+    return reorderIds(items, items.filter(c => canMoveCard(c.type, pinned)).map(c => c.id), id, to);
 }
 
 /**
@@ -453,8 +446,8 @@ export function fewerCardsNews(account: HomeLayoutV2 | null, local: HomeLayoutV2
 
 /** These three are word() keys: Home shows them through t(). */
 export const FEWER_CARDS_LINE = word('Home now starts with fewer cards. Add a card brings the rest back.');
-/** The one-time hint (§1.3). */
-export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom, or hold a card to arrange.');
+/** The one-time hint (§1.3), as the web says it: its cards can be dragged (DESIGN-home-arrange-in-place-fable.md §2.9). The phone's own line says "hold a card to arrange" until its drag lands. */
+export const HOME_HINT_LINE = word('This is your Home. Add a card at the bottom. Hold a card to drag it, or use the arrows.');
 /** A saved search's body before the node has answered for these words: added or changed offline (CARD-FRAME §2.4). */
 export const SEARCH_OFFLINE_LINE = word('Shows when your community answers');
 
@@ -582,22 +575,8 @@ export const gridWidth = (cols: number) => cols * HOME_COLUMN_MAX + (cols - 1) *
 
 // ── Packing by height (DESIGN-home-layout-fable.md §3.1, slice L1) ───────────────────────────────────
 
-export const HOME_PACK_ROW_HEIGHT = 4;
-export const HOME_PACK_ROW_GAP = 16;
-
-export interface PackableCard {
-    id: string;
-    height: number;
-    fullRow?: boolean;
-}
-
-export interface PackedCard {
-    id: string;
-    col: number;
-    rowStart: number;
-    rowSpan: number;
-    fullRow?: boolean;
-}
+// The packing itself, and where a carried card lands, are core's (home-place.ts): both apps place by the same rules.
+export { HOME_PACK_ROW_GAP, HOME_PACK_ROW_HEIGHT, packHome, placeLifted, placedBoxes, reorderIds, type PackableCard, type PackedCard, type PlaceBox, type PlaceItem } from '@beanpool/core';
 
 /**
  * What Home keeps of one card's height. `packHome` places a card by the cards before it only, so a card's own height can't
@@ -639,52 +618,3 @@ export function settleHeights(was: Readonly<Record<string, PackHeight>>, seen: R
     }
     return next ?? was;
 }
-
-/**
- * At two or more columns, each card is placed under the column whose stack is shortest at that moment,
- * in the saved order. Full-row cards wait until every column is free and span them all.
- * At one column (or invalid counts), no placement is returned: one column gives no placement.
- */
-export function packHome(cards: readonly PackableCard[], cols: number): PackedCard[] {
-    if (!Number.isFinite(cols) || cols <= 1 || cards.length === 0) return [];
-    const columnCount = Math.floor(cols);
-    const bottoms = new Array(columnCount).fill(1);
-    const result: PackedCard[] = [];
-
-    for (const card of cards) {
-        const h = Math.max(0, card.height || 0);
-        const span = Math.ceil((h + HOME_PACK_ROW_GAP) / HOME_PACK_ROW_HEIGHT);
-
-        if (card.fullRow) {
-            const rowStart = Math.max(...bottoms);
-            result.push({
-                id: card.id,
-                col: 1,
-                rowStart,
-                rowSpan: span,
-                fullRow: true,
-            });
-            bottoms.fill(rowStart + span);
-        } else {
-            let minIdx = 0;
-            let minVal = bottoms[0];
-            for (let c = 1; c < columnCount; c++) {
-                if (bottoms[c] < minVal) {
-                    minVal = bottoms[c];
-                    minIdx = c;
-                }
-            }
-            const col = minIdx + 1;
-            const rowStart = bottoms[minIdx];
-            result.push({
-                id: card.id,
-                col,
-                rowStart,
-                rowSpan: span,
-            });
-            bottoms[minIdx] += span;
-        }
-    }
-    return result;
-}
-

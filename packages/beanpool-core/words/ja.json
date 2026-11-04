@@ -1914,5 +1914,10 @@
   "{price} in another community · You can't buy or take this here.": "別のコミュニティで{price} · ここでは買うことも受け取ることもできません。",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{community}で{price} · {community}があなたを迎え入れるまで、買うことも受け取ることもできません。",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 グローバルコミュニティを見る"
+  "🌍 Look around the global community": "🌍 グローバルコミュニティを見る",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "抽選で選ばれた陪審があなたの返事を待っています。1日以内に返事をしないと、あなたの席は次に選ばれたメンバーに移ります。",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "あなたが入っている陪審は、約1日後に締め切られます。BeanPoolを開いて投票してください。",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "陪審が審議しているメンバーが、この件に回答しました。BeanPoolを開いて読んでください。",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "コミュニティの陪審に選ばれました。投票は2日未満で締め切られます。BeanPoolを開いて、務めるか、辞退してください。",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "コミュニティの陪審に選ばれました。3日以内にBeanPoolを開いて、務めるか、辞退してください。"
 }

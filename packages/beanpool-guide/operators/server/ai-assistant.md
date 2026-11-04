@@ -1,7 +1,7 @@
 ---
 slug: ai-assistant
 title: AI assistants
-summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor, or any MCP client you run yourself, such as Hermes or a local model) to your server, what it sees and never sees, the suggestions you approve, what an owner's assistant posts and takes down, its limits, and disconnecting it.
+summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor, or any MCP client you run yourself, such as Hermes or a local model) to your server, what it sees and never sees, the suggestions you approve, what an owner's assistant posts and what assistants take down, its limits, and disconnecting it.
 related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees, install-with-ai
 ---
 

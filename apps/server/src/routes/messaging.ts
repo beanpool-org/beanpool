@@ -16,7 +16,7 @@ import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGrou
 import { canReadEventThread, withEventChatReaders, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, groupLineForReader, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { fromEpochOf } from '../engine/group-keys.js';
-import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone } from '../engine/enterprise-thread.js';
+import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone, enterpriseThreadReadRefusal } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
 import { accountsDeletedAmong } from '../engine/message-tombstone.js';
 import { withDmFormerKeys } from '../engine/key-succession.js';
@@ -44,7 +44,7 @@ import { fileMessageReport } from './message-report.js';
 import { word } from '@beanpool/core';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
- *  thread is readable by any member (it is public), but only its keepers get it in "Your groups", so only they may
+ *  thread is readable by any member of this community (enterpriseThreadReadRefusal), but only its keepers get it in "Your groups", so only they may
  *  mute it. A group chat goes through groupChatRefusal instead, which also says whether to answer 403 or 404. */
 function canOpenChat(conv: { id: string; type: string; participants: string[] }, actor: string): boolean {
     if (conv.type === 'enterprise_thread') return isKeeperOfEnterprise(actor, conv.id);
@@ -738,17 +738,27 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         ctx.body = { error: CONVERSATION_NOT_FOUND.error };
         return;
     }
-    // An enterprise's discussion reads like its own route's: gone with a pruned or deleted enterprise, for everyone.
-    else if (conv.type === 'enterprise_thread' && isEnterpriseThreadGone(conversationId)) {
-        ctx.status = CONVERSATION_NOT_FOUND.status;
-        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
-        return;
+    // An enterprise's discussion reads like its own route's (routes/treasury.ts): to every member of this community and
+    // nobody else, whatever ENFORCE_READ_AUTH says (#2157), then gone with a pruned or deleted enterprise. It has no
+    // participants to check: a member reads it here without being one.
+    else if (conv.type === 'enterprise_thread') {
+        const refusal = enterpriseThreadReadRefusal(viewer);
+        if (refusal) {
+            ctx.status = refusal.status;
+            ctx.body = refusal.code ? { error: refusal.error, code: refusal.code } : { error: refusal.error };
+            return;
+        }
+        if (isEnterpriseThreadGone(conversationId)) {
+            ctx.status = CONVERSATION_NOT_FOUND.status;
+            ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+            return;
+        }
     }
     // A2-2: only a participant may read a conversation's messages + metadata.
     // Require the signer (ctx.state.actor) to be in this conversation, whatever
     // ENFORCE_READ_AUTH says (#2119): with read auth opted out, anyone, unsigned
     // too, read any DM by id before.
-    else if (conv.type !== 'enterprise_thread' && (!ctx.state.actor || !conv.participants.includes(ctx.state.actor))) {
+    else if (!ctx.state.actor || !conv.participants.includes(ctx.state.actor)) {
         ctx.status = 403;
         // Going to an event whose host hasn't let them in yet (no seat until they do): the event chat route's words and code.
         ctx.body = conv.type === 'event_thread' && eventWaitingFor(conversationId, ctx.state.actor as string | undefined)

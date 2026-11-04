@@ -1439,6 +1439,22 @@ describe('Arrange', () => {
         expect(safety.props.band).toBeUndefined();
     });
 
+    it('the Beans example, which Home draws under the first card, is not lost when that card is the community card, the only one drawn: it goes with it', async () => {
+        const base = everyCard('global', 1);
+        const mine = { v: 2, cards: [{ id: 'community', type: 'community' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...base, features: { ...base.features, showcase: true }, layout: mine as never, cards: { ...base.cards, needs: { items: [] }, find: undefined, steps: undefined } };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+        await render();
+        expect(cards()).toEqual(['community', 'beans-preview']);
+        await open();
+        // The community card is after the strip and the tile in Arrange; the example stays under it, quiet and with no arrows.
+        expect(cards()).toEqual(['community', 'beans-preview']);
+        expect(has('home-quiet-beans-preview')).toBe(true);
+        expect(has('home-arrange-beans-preview-up') || has('home-arrange-beans-preview-down')).toBe(false);
+        await done();
+        expect(cards()).toEqual(['community', 'beans-preview']);
+    });
+
     it('a card with settings and nothing to show keeps Settings… here: the only way to give Sun and moon its place', async () => {
         const mine = { v: 2, cards: [{ id: 'sky', type: 'sky' }, { id: 'market', type: 'market' }], dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
         node.answer = { ...localMember(), layout: mine as never };

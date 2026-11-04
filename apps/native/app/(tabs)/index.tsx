@@ -1366,6 +1366,8 @@ export default function HomeScreen() {
                                 {list.filter(c => c.type === 'community').map(c => (
                                     <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
                                         {card(c)}
+                                        {/* Home draws the Beans example under the first card; when that is this one (no other card up), it stays under it. */}
+                                        {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} quiet />}
                                     </View>
                                 ))}
                                 <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />

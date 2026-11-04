@@ -6,7 +6,8 @@
  * Going / Interested, the photo at 4:3 (the event's tile without one), the quiet row (the chat, Share, Add to calendar), the
  * reminder and the note for people who are going as boxes, the description, the host's box, the host's guest list, Report.
  * The answer comes right after the loud lines, before the picture and the reading (DESIGN-detail-pages-frame-fable.md §1.4);
- * a repeating event's next dates are one compact line above it. That it is on the first screen is measured
+ * a repeating event's rule is the door to its next dates, one 48 dp line under the when ("↻ Monthly, third Saturday · Next
+ * dates", DESIGN-web-dates-stop-fable.md §4, as the web's page has it). That the answer is on the first screen is measured
  * (event-page-shell-render.test.ts: at 320 × 569 and 1.3×, its top ≤ 500 dp and its bottom ≤ 569, with a photo, without,
  * and with the dates opened). The counts show only once someone has answered.
  *
@@ -436,26 +437,26 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 )}
 
                 {/*
-                  * 4. The loud lines, the card's three in the card's order: the when, the title, the place. A repeating event's next
-                  * dates (six on a by-id read) are compact here: the first and "and 5 more", which opens the list and the host's controls.
+                  * 4. The loud lines, the card's three in the card's order: the when, the title, the place. A repeating event's rule
+                  * sits under the when and is the door to its next dates (six on a by-id read; DESIGN-web-dates-stop-fable.md §4):
+                  * "↻ Monthly, third Saturday · Next dates", one button that opens the list and the host's controls, the rule then
+                  * the list's heading. Before the node answers (the cached row has no dates) the rule alone, in the same place.
                   */}
                 <Text testID="event-when" style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
                 {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
                 {!!hostLine && <Text style={styles.timeNote}>{hostLine}</Text>}
-                {!!eventRepeatCaption(p) && <Text testID="event-repeat-caption" style={styles.repeats}>↻ {eventRepeatCaption(p)}</Text>}
+                <EventNextDates
+                    post={view ?? p}
+                    compact
+                    repeatCaption={eventRepeatCaption(p)}
+                    isHost={isHost && !closed}
+                    onChanged={(next) => setView(next)}
+                    onChangeThisDateOnly={(next) => {
+                        const copy = buildEventCopy(next, identity?.publicKey);
+                        setCopyDraft({ ...copy, description: withMovedFromLine(seriesMovedFromLine(next.eventRepeat), copy.description) });
+                    }}
+                />
                 <Text style={styles.title} testID="event-title">{p.title}</Text>
-                {!!view && (
-                    <EventNextDates
-                        post={view}
-                        compact
-                        isHost={isHost && !closed}
-                        onChanged={(next) => setView(next)}
-                        onChangeThisDateOnly={(next) => {
-                            const copy = buildEventCopy(next, identity?.publicKey);
-                            setCopyDraft({ ...copy, description: withMovedFromLine(seriesMovedFromLine(next.eventRepeat), copy.description) });
-                        }}
-                    />
-                )}
                 {ended && !cancelled && <Text style={styles.endedNote}>{t('This event has ended.')}</Text>}
 
                 {online && (
@@ -724,7 +725,6 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         when: { fontSize: 18, fontWeight: '800', lineHeight: 24, color: colors.event.ink, marginBottom: 4 },
         whenCancelled: { textDecorationLine: 'line-through', color: colors.text.secondary },
         timeNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 4 },
-        repeats: { fontSize: 14, fontWeight: '700', color: colors.accent.primary, marginBottom: 4 },
         title: { fontSize: 20, fontWeight: '800', lineHeight: 26, color: colors.text.heading, marginTop: 4, marginBottom: 4 },
         endedNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 4 },
         placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

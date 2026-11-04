@@ -192,6 +192,23 @@ describe("the prune-branch dialog confirms on the node's figures for the whole b
         fireEvent.change(document.getElementById('prune-branch-confirm-input') as HTMLInputElement, { target: { value: 'Member 0' } });
         expect(document.getElementById('confirm-prune-branch-btn')).toBeDisabled();
     });
+
+    it("where the community votes and the node refuses a branch of one: the node's words, no figures, and Confirm stays off", async () => {
+        const words = "Removing a member is the community's vote here. Pause them instead: that opens the vote, and the community decides.";
+        const fetchMock = vi.fn().mockImplementation(() => Promise.resolve({ ok: false, status: 400, statusText: 'Bad Request', json: () => Promise.resolve({ error: words, code: 'removal_is_the_vote' }) }));
+        vi.stubGlobal('fetch', fetchMock);
+        const first: NodeDataPayload = { members: [member(0), member(1)], profiles: [], memberStats: {}, reports: [], health: { flags: [] }, membersNext: 'c2', membersTotal: 3_500 };
+        render(<TreeWithPages first={first} pages={{}} />);
+        fireEvent.click(screen.getAllByText(/Prune Branch/i)[0]);
+        const refused = await screen.findByTestId('prune-figures-refused');
+        expect(refused).toHaveTextContent(words);
+        expect(screen.queryByTestId('prune-figures-error')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(document.getElementById('prune-members-affected')?.textContent).toBe('—');
+        fireEvent.change(document.getElementById('prune-branch-confirm-input') as HTMLInputElement, { target: { value: 'Member 0' } });
+        expect(document.getElementById('confirm-prune-branch-btn')).toBeDisabled();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe("the member's page counts every owner on the node", () => {

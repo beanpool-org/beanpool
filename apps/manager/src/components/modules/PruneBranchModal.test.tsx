@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PruneBranchModal } from './PruneBranchModal';
 import type { MemberItem } from './MembersModule';
-import type { BranchPruneFigures } from '../../lib/node-client';
+import { BranchPruneRefusedError, type BranchPruneFigures } from '../../lib/node-client';
 
 /**
  * The dialog's figures are the node's, for the whole branch (GET /api/local/admin/branches/:pubkey/prune, `loadFigures`):
@@ -340,5 +340,27 @@ describe('PruneBranchModal Component (Bucket 2 Item 1)', () => {
         expect(loadFigures).toHaveBeenCalledTimes(2);
         expect(screen.queryByTestId('prune-figures-error')).toBeNull();
         expect(pruneBtn).toBeEnabled();
+    });
+
+    it("when the node refuses the prune: shows the node's words, no figures, no Try again, and keeps Confirm off", async () => {
+        const words = "Removing a member is the community's vote here. Pause them instead: that opens the vote, and the community decides.";
+        const loadFigures = vi.fn().mockRejectedValue(new BranchPruneRefusedError(words, 'removal_is_the_vote'));
+        const handleConfirm = vi.fn().mockResolvedValue(undefined);
+        render(<PruneBranchModal rootMember={mockRootMember} loadFigures={loadFigures} onConfirm={handleConfirm} onClose={vi.fn()} />);
+
+        const refused = await screen.findByTestId('prune-figures-refused');
+        expect(refused).toHaveTextContent(words);
+        expect(refused).not.toHaveTextContent("Couldn't read");
+        expect(screen.queryByTestId('prune-figures-error')).toBeNull();
+        expect(screen.queryByTestId('prune-figures-loading')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        expect(document.getElementById('prune-members-affected')?.textContent).toBe('—');
+        expect(document.getElementById('prune-net-impact')?.textContent).toContain('— 🫘');
+        await userEvent.type(screen.getByPlaceholderText(/Type "BadRootLeader" to confirm/i), 'BadRootLeader');
+        const pruneBtn = screen.getByRole('button', { name: /Prune Entire Branch/i });
+        expect(pruneBtn).toBeDisabled();
+        await userEvent.click(pruneBtn);
+        expect(handleConfirm).not.toHaveBeenCalled();
+        expect(loadFigures).toHaveBeenCalledTimes(1);
     });
 });

@@ -1312,6 +1312,18 @@ export interface BranchPruneFigures {
     net: number;
 }
 
+/**
+ * The node won't prune this branch, so it sends no figures for it: a 400 with its words and a code (`removal_is_the_vote`
+ * where the community votes and the branch is one member: only its vote removes them). Not a read that failed: asking
+ * again gets the same answer.
+ */
+export class BranchPruneRefusedError extends Error {
+    constructor(message: string, readonly code: string) {
+        super(message);
+        this.name = 'BranchPruneRefusedError';
+    }
+}
+
 /** The branch's figures for the prune's confirmation (GET /api/local/admin/branches/:pubkey/prune): owners only, as the prune. */
 export async function fetchBranchPruneFigures(
     nodeUrl: string,
@@ -1322,6 +1334,9 @@ export async function fetchBranchPruneFigures(
     const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/branches/${encodeURIComponent(pubkey.trim())}/prune`);
     const res = await fetch(endpoint, { headers: buildAdminHeaders(adminPassword, tfaToken) });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 400 && typeof data?.code === 'string' && typeof data?.error === 'string' && data.error.trim()) {
+        throw new BranchPruneRefusedError(data.error, data.code);
+    }
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);
     const figures = { members: data?.members, badDebt: data?.badDebt, surplus: data?.surplus, net: data?.net };
     if (!Object.values(figures).every((n) => typeof n === 'number' && Number.isFinite(n))) {

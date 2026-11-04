@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { MemberItem } from './MembersModule';
-import type { BranchPruneFigures } from '../../lib/node-client';
+import { BranchPruneRefusedError, type BranchPruneFigures } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 
@@ -42,6 +42,8 @@ export function PruneBranchModal({
     // confirmed on figures the console made up from part of the branch, or on none.
     const [figures, setFigures] = useState<BranchPruneFigures | null>(null);
     const [figuresError, setFiguresError] = useState<string | null>(null);
+    // The node's own refusal of this prune (BranchPruneRefusedError), in its words: no figures, and no Try again.
+    const [figuresRefusal, setFiguresRefusal] = useState<string | null>(null);
     const [attempt, setAttempt] = useState(0);
     // Read once for the branch and again on Try again, not each time a parent hands a new loader.
     const loadRef = useRef(loadFigures);
@@ -51,19 +53,25 @@ export function PruneBranchModal({
         let live = true;
         setFigures(null);
         setFiguresError(null);
+        setFiguresRefusal(null);
         // A loader that throws, or answers no figures, is a read that failed: Confirm stays off and the dialog says so.
+        // The node refusing this prune is not a failed read: its words are shown as they are, and Confirm stays off.
         Promise.resolve().then(() => loadRef.current(rootPubkey)).then(
             (f) => {
                 if (!live) return;
                 if (f && typeof f.members === 'number') setFigures(f);
                 else setFiguresError("The node's answer has no figures for this branch");
             },
-            (e: unknown) => { if (live) setFiguresError(e instanceof Error ? e.message : String(e)); },
+            (e: unknown) => {
+                if (!live) return;
+                if (e instanceof BranchPruneRefusedError) setFiguresRefusal(e.message);
+                else setFiguresError(e instanceof Error ? e.message : String(e));
+            },
         );
         return () => { live = false; };
     }, [rootPubkey, attempt]);
     const retryFigures = useCallback(() => setAttempt((n) => n + 1), []);
-    const figuresLoading = !!rootPubkey && !figures && !figuresError;
+    const figuresLoading = !!rootPubkey && !figures && !figuresError && !figuresRefusal;
     const shown = (n: number | undefined) => (figures && typeof n === 'number' ? String(beans(n)) : figuresLoading ? '…' : '—');
     const net = figures ? beans(figures.net) : null;
 
@@ -193,6 +201,11 @@ export function PruneBranchModal({
                         </p>
                     )}
                 </div>
+                {figuresRefusal && (
+                    <div role="alert" data-testid="prune-figures-refused" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-xs font-semibold text-red-300">
+                        <p className="m-0 break-words">{figuresRefusal}</p>
+                    </div>
+                )}
                 {figuresError && (
                     <div role="alert" data-testid="prune-figures-error" className="p-3 rounded-xl bg-red-950/80 border border-red-800 text-xs font-semibold text-red-300 space-y-2">
                         <p className="m-0 break-words">

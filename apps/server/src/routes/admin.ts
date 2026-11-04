@@ -2155,7 +2155,7 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
 // a look at a member's balance while removing them, as the offboarding preview is: a line each in the access log the
 // owners read, all written before the answer, or no answer. A removal the node refuses where the community votes (a
 // branch of one: branchRemovalRefusal, as the prune asks it) is refused here the same way, before any balance is read, so
-// no look is logged and no figure is sent for it (as the offboarding preview refuses: member-wizards.ts removalToSettle).
+// no look is logged and no figure is sent for it (as the offboarding preview refuses: engine/member-wizards.ts removalToSettle).
 router.get('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove a whole invite branch')) return;

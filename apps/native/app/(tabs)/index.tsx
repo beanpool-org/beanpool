@@ -377,10 +377,8 @@ export default function HomeScreen() {
     const onArrangeBar = useCallback((dp: number) => {
         if (!keepPlace.current) return;
         keepPlace.current = false;
-        if (scrollY.current > 0 || carrying.current) {
-            scrollY.current += dp;
-            scrollRef.current?.scrollTo({ y: scrollY.current, animated: false });
-        }
+        // `scrollY` is left to onScroll: where the list can't scroll that far, it says where the list really is.
+        if (scrollY.current > 0 || carrying.current) scrollRef.current?.scrollTo({ y: scrollY.current + dp, animated: false });
     }, []);
 
     // ── The reveal and the hint (§6.2): once per account, never again ──

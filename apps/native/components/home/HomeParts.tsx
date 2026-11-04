@@ -83,7 +83,9 @@ export type OnHold = (e: GestureResponderEvent) => void;
  * In Arrange, the whole of a card that moves is its handle (§2.2): this lies under the card's band and over its quiet
  * inside, which no touch reaches, so a finger held still on the inside for ARRANGE_HOLD_MS lifts the card. A finger that
  * moves first is scrolling: the Pressable lets the list take the touch and nothing is lifted. Nothing for TalkBack or a
- * keyboard (the arrows are their way): explore-by-touch never lands on it.
+ * keyboard to land on (the arrows are their way). TalkBack can still pass a long press through to it (measured on the
+ * emulator: its explore hold and its double tap and hold both reached the hold), so the drag refuses to lift while a
+ * screen reader is on (useArrangeDrag.ts `lift`).
  */
 export function HoldSurface({ id, onLift }: { id: string; onLift: OnHold }) {
     return (

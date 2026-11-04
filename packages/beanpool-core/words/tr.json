@@ -1972,5 +1972,10 @@
   "{price} in another community · You can't buy or take this here.": "Başka bir toplulukta {price} · Bunu burada satın alamazsın veya edinemezsin.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{community} içinde {price} · {community} seni aramıza almadan bunu satın alamazsın veya edinemezsin.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 Küresel topluluğa göz at"
+  "🌍 Look around the global community": "🌍 Küresel topluluğa göz at",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "Seçildiğin bir jüri yanıtını bekliyor. Bir gün içinde yanıtla, yoksa koltuğun seçilen sıradaki üyeye geçer.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "Üyesi olduğun bir jüri yaklaşık bir gün içinde kapanıyor. Oy vermek için BeanPool'u aç.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "Jürinin hakkında karar verdiği üye vakaya yanıt verdi. Okumak için BeanPool'u aç.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "Topluluğunda bir jüri için seçildin ve oylaması iki günden kısa sürede kapanıyor. Görev almak ya da çekilmek için BeanPool'u aç.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "Topluluğunda bir jüri için seçildin. Görev almak ya da çekilmek için üç gün içinde BeanPool'u aç."
 }

@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ Serbest bırakılan adın tüneli durdu. Bu sunucu hâlâ {addresses} adresinde yanıt veriyor.",
   "🫘 A project you backed changed its end date": "🫘 Desteklediğin bir proje bitiş tarihini değiştirdi",
   "🫘 Pledges went back to their backers": "🫘 Taahhütler destekçilerine geri gitti",
-  "🫘 Your pledge came back": "🫘 Taahhüdün geri geldi"
+  "🫘 Your pledge came back": "🫘 Taahhüdün geri geldi",
+  "Answer serve or step_aside.": "serve veya step_aside ile yanıtla.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "Oy verdin, bu yüzden bu jüride görev yapıyorsun. Oylama kapanana kadar oyunu değiştirebilirsin."
 }

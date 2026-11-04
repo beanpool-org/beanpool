@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Bu mesaj doğrulanamadı, bu nedenle gösterilmiyor.",
   "🗳️ Create Poll": "🗳️ Anket oluştur",
   "🟢 List an Offer first to post Needs": "🟢 İhtiyaç paylaşmak için önce bir Teklif listeleyin",
-  "🤝 Chosen": "🤝 Seçilenler"
+  "🤝 Chosen": "🤝 Seçilenler",
+  "Done. This is now your photo here.": "Bitti. Bu artık buradaki fotoğrafın.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "Yalnızca fotoğraf kopyalanır. Buradaki adın ve profilinin geri kalanı olduğu gibi kalır.",
+  "Use the photo from {community} here?": "{community} topluluğundaki fotoğraf burada kullanılsın mı?",
+  "Use the photo you chose last here?": "En son seçtiğin fotoğraf burada kullanılsın mı?",
+  "Use this photo here": "Bu fotoğrafı burada kullan"
 }

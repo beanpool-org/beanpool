@@ -13,7 +13,7 @@
  * first date and "and 5 more" as one 48 px button that opens the list, where the host's controls are.
  *
  * `repeatCaption` (the event page, DESIGN-web-dates-stop-fable.md §1–2): the repeat rule is the door to the dates, in the
- * caption's slot under the when. Compact, one 48 px button "↻ Every third Saturday · Next dates" (no date, no "and 5 more");
+ * caption's slot under the when. Compact, one 48 px button "↻ Every 3 weeks on Saturday · Next dates" (no date, no "and 5 more");
  * opened, or with one date, the caption is the list's visible heading and "Next dates" its name; with no dates from the node
  * (an older node, a list read), the caption alone. So the page draws the caption once, in one place, whatever the node sent.
  */
@@ -93,8 +93,9 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
         }
     };
 
-    // Compact, with the rule: "↻ Every third Saturday · Next dates", one button, the rule in its own type and the link's
-    // words after it; it wraps whole (two lines at 320 px and 130% text, one at 100%). Its name is the words it shows (WCAG
+    // Compact, with the rule: "↻ Every 3 weeks on Saturday · Next dates", one button, the rule in its own type and the link's
+    // words after it; it wraps whole ("Next dates" on a second line at 320 px for that English rule, at 130% and at 100% text
+    // alike, inside the 48 px at 100%; a shorter rule fits on one line). Its name is the words it shows (WCAG
     // 2.5.3), the ↻ left out; the spaces between the parts are for that name, a flex row draws none.
     if (!open && dates.length > 1 && caption) {
         return (

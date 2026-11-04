@@ -637,10 +637,10 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
 
     // The page is one column, the parts in DESIGN-detail-pages-fable.md §2.1's order as DESIGN-detail-pages-frame-fable.md §1.6
     // amends it, drawn from the style box (components/market-card-shell.ts), as the phone's page is: the chips, the loud lines
-    // (the when; how it repeats as the door to the next dates, "↻ Every third Saturday · Next dates", in the caption's slot,
-    // DESIGN-web-dates-stop-fable.md §1; the title; the place), the answer, the photo, the quiet row, the boxes, the
-    // description, the host, the host's own, Report. The answer comes before the photo so Going is on the first screen at 320 px and 130% text, with a
-    // photo or without. No outer card: the column is the page, and its boxes are the card family's. From 768 px a photo takes
+    // (the when; how it repeats as the door to the next dates, "↻ Every 3 weeks on Saturday · Next dates", in the caption's
+    // slot, DESIGN-web-dates-stop-fable.md §1; the title; the place), the answer, the photo, the quiet row, the boxes, the
+    // description, the host, the host's own, Report. The answer comes before the photo so Going is on the first screen at
+    // 320 px and 130% text, with a photo or without. No outer card: the column is the page, and its boxes are the card family's. From 768 px a photo takes
     // the left column, spanning the three rows, and the head, the answer and the rest the right, one row each, placed by the
     // grid with the DOM order kept (so Tab reads the chips, the when and Going before the photo), as the listing's page does.
     return (

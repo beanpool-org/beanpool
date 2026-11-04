@@ -26,7 +26,7 @@ const MIN_PAIRS_MEASURED = 4300; // unchanged 5 Nov 2026: 7,041 measured (3,515 
 // Either number rising is a screen going dark: teach utils/button-contrast.ts the new shape, or, if it truly cannot be read,
 // raise the number here in the same change so a reviewer sees it. The style ceiling has the same margin it had before (about 60).
 const MAX_UNREAD_STYLES = 1908; // 1,848 measured 5 Nov 2026 on main 1de57237 + the scanner reading the style box's chips, tones and cardType (1,866 before, -18), + the same ~60 margin (it had worn down to 4 above 1,866); was 1,812 on 31 Oct (f9fbbfd8)
-const MAX_UNREAD_TABLE_FILES = 43; // 43 on main f9fbbfd8 (31 Oct): #2604's first-account screens (FindCommunityBody, WaitingToJoin) changed since 42 was pinned
+const MAX_UNREAD_TABLE_FILES = 44; // 44 with O2 (5 Nov, #2894): StarterOffersSheet reads layout from components/home/sheet-parts.ts as AddCardSheet and CardSettingsSheet already do (its colours are inline token pairs, which are read); 43 on main f9fbbfd8 (31 Oct)
 
 describe('the phone\'s buttons and labels reach 4.5:1 in light and in dark', () => {
     const report = scanTree(ROOT);

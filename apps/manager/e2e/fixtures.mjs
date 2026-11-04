@@ -1500,7 +1500,8 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/restore-points') return ok({ points: RESTORE_POINTS });
 
     // ---- snapshots ----
-    if (pathname === '/api/local/admin/snapshots/list') return ok({ snapshots: SNAPSHOTS });
+    // The node answers its schedule with the list (routes/backup.ts), and Settings reads it there (node-client fetchNodeSnapshotSchedule).
+    if (pathname === '/api/local/admin/snapshots/list') return ok({ snapshots: SNAPSHOTS, config: SNAPSHOT_SCHEDULE });
     if (pathname === '/api/local/admin/snapshots/create') return ok({ snapshot: { name: 'snap-2026-09-19T12-00-00Z-riverbend-community-exchange-full.db.gz', sizeBytes: 813000000, createdAt: '2026-09-19T12:00:00.000Z' } });
     if (pathname === '/api/local/admin/snapshots/delete') return ok({ success: true });
     if (pathname === '/api/local/admin/snapshots/config') return ok({ config: SNAPSHOT_SCHEDULE });

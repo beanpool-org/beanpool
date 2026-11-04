@@ -12,6 +12,17 @@ import { POST_TYPE_COLORS } from '../lib/marketplace';
 import { EXAMPLE_LISTINGS, EXAMPLE_WORDS, exampleLabel } from '../lib/example-listings';
 import { CategoryTile } from './CategoryTile';
 
+/**
+ * The cards' columns. `lg:grid-cols-4` follows the WINDOW, so it is right only where the cards have the page's width (the grid
+ * view). In the list and the compact view the Market is a phone-width column, 672 px at most, on any window (style box V1), and
+ * four columns in it would be 147 px wide on a laptop (review on #2866). `narrow` (the Market passes it in those views) keeps
+ * the cards to one column, and two from sm up: about 300 px a card in that column. Both strings are literal for Tailwind.
+ */
+const COLUMNS = {
+    page: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
+    column: 'grid-cols-1 sm:grid-cols-2',
+} as const;
+
 const EXAMPLE_CATEGORY_MAP: Record<string, string> = {
     seedlings: 'garden',
     couch: 'goods',
@@ -19,12 +30,12 @@ const EXAMPLE_CATEGORY_MAP: Record<string, string> = {
     drill: 'tools',
 };
 
-export function ExampleListings() {
+export function ExampleListings({ narrow = false }: { narrow?: boolean }) {
     return (
         <section data-testid="example-listings" aria-label={t(EXAMPLE_WORDS.heading)} className="mt-3 mb-2">
             <h4 className="m-0 px-1 text-sm font-extrabold text-nature-800 dark:text-nature-100">{t(EXAMPLE_WORDS.heading)}</h4>
             <p className="mt-0.5 mb-2 px-1 text-xs font-semibold text-nature-600 dark:text-nature-300">{t(EXAMPLE_WORDS.note)}</p>
-            <ul className="list-none m-0 p-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <ul className={`list-none m-0 p-0 grid ${narrow ? COLUMNS.column : COLUMNS.page} gap-3`}>
                 {EXAMPLE_LISTINGS.map((example) => (
                     <li key={example.key} className="min-w-0">
                         <article

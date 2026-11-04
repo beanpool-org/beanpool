@@ -18,6 +18,9 @@
  *  8. "Your events" is the signer's own RSVPs, soonest first, without the cancelled and the ended.
  *  9. A reminder cannot be set on an event the member has no RSVP on, and the offsets are a closed set.
  * 10. Every reminder body is the same sentence whatever timezone the process runs in.
+ * 11. The dispatcher and the preference.
+ * 12. The reminder is written in the language on the member's push-token row: the catalog's sentence where there is one,
+ *     the English where there is not, one push per language.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-event-reminders.ts
  */
@@ -32,6 +35,7 @@ import { db } from './db/db.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
 import { initStateEngine } from './state-engine.js';
+import { useCatalogsForTests, wordsIn } from './member-words.js';
 import { setNodeRole } from './engine/sync.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import {
@@ -40,7 +44,7 @@ import {
 import {
     runEventReminderSweep, tickEventReminders, setEventReminderOffsets, listMyEvents,
     parseReminderOffsets, setMemberDefaultReminderOffsets, getMemberDefaultReminderOffsets,
-    reminderPushTitle, reminderPushBody, NO_RSVP_MESSAGE, DEFAULT_EVENT_REMINDER_OFFSETS,
+    reminderPushTitle, reminderPushBody, reminderLangOf, NO_RSVP_MESSAGE, DEFAULT_EVENT_REMINDER_OFFSETS,
     EVENT_REMINDER_OFFSETS,
 } from './engine/event-reminders.js';
 
@@ -458,6 +462,113 @@ async function main(): Promise<void> {
     } finally {
         (globalThis as any).fetch = realFetch;
     }
+
+    // ── 12. In the language on the phone's push-token row ───────────────────────────────────
+    console.log('\n--- 12. The reminder in the phone\'s language ---');
+    // The server's catalog as the translation pass will write it (the key is the English); the suite brings its own, since
+    // the catalogs are drafted after merge. Spanish has every reminder sentence; French has none.
+    useCatalogsForTests('es', {
+        server: {
+            'Starts in 1 week': 'Empieza en 1 semana',
+            'Starts in 1 day': 'Empieza en 1 día',
+            'Starts in 2 hours': 'Empieza en 2 horas',
+            'Starts in 1 hour': 'Empieza en 1 hora',
+            'Starts in 30 minutes': 'Empieza en 30 minutos',
+            'An event': 'Un evento',
+            'Starts in {n} minute|Starts in {n} minutes': { one: 'Empieza en {n} minuto', other: 'Empieza en {n} minutos' },
+        },
+    });
+    useCatalogsForTests('fr', { server: {}, core: {} });
+    const esPhone = makeMember('EsPhone');
+    const enPhone = makeMember('EnPhone');
+    const frPhone = makeMember('FrPhone');
+    const noLangPhone = makeMember('NoLangPhone');
+    const twoPhones = makeMember('TwoPhones');
+    const setToken = (member: string, token: string, lang: string | null, registeredAt: number | null) => {
+        const id = putPushTokenRow(member, token, 'ios');
+        db.prepare('UPDATE push_tokens SET lang = ?, registered_at = ? WHERE public_key = ? AND token_id = ?').run(lang, registeredAt, member, id);
+    };
+    setToken(esPhone, 'ExponentPushToken[es]', 'es', 1000);
+    setToken(enPhone, 'ExponentPushToken[en]', 'en', 1000);
+    setToken(frPhone, 'ExponentPushToken[fr]', 'fr', 1000);
+    setToken(noLangPhone, 'ExponentPushToken[nolang]', null, null);
+    // Two phones: the Spanish one registered later is the one the member's app last wrote in.
+    setToken(twoPhones, 'ExponentPushToken[two-old]', 'en', 1000);
+    setToken(twoPhones, 'ExponentPushToken[two-new]', 'es', 2000);
+
+    assert(reminderLangOf(esPhone) === 'es' && reminderLangOf(enPhone) === 'en' && reminderLangOf(noLangPhone) === null,
+        'the language is the one on the member\'s push-token row; a row with none reads as English');
+    assert(reminderLangOf(twoPhones) === 'es', '...and with two phones, the newest registration decides the notice\'s language');
+    assert(reminderLangOf(makeMember('NoPhone')) === null, '...and a member with no phone at all is written to in English');
+    setToken(twoPhones, 'ExponentPushToken[two-odd]', 'xx-nonsense', 3000);
+    assert(reminderLangOf(twoPhones) === null, '...a newest row with a tag BeanPool has no version in is English, never a throw');
+    db.prepare(`DELETE FROM push_tokens WHERE public_key = ? AND lang = 'xx-nonsense'`).run(twoPhones);
+
+    const realFetch12 = globalThis.fetch;
+    const sent12: ToldPush[] = [];
+    (globalThis as any).fetch = async (url: any, init: any) => {
+        if (String(url).includes('exp.host')) {
+            sent12.push(...JSON.parse(init.body).map((m: any) => toldPush(db, m)));
+            return { ok: true, status: 200, json: async () => ({}) } as any;
+        }
+        return realFetch12(url, init);
+    };
+    try {
+        const fiesta = newEvent(160 * DAY, 'Fiesta');
+        for (const m of [esPhone, enPhone, frPhone, noLangPhone, twoPhones]) rsvpAt(fiesta.id, m, 'going', 0);
+        const { dispatchPushNotification } = await import('./state-engine.js');
+        runEventReminderSweep(dispatchPushNotification, T0 + 159 * DAY);
+        await new Promise(r => setImmediate(r));
+        const told = (token: string) => sent12.find(m => m.to === token);
+        const clock = placeTime(fiesta.eventStartAt!);
+        assert(sent12.length === 6, `each phone gets its reminder (${sent12.length} messages for 5 members, one with two phones)`);
+        assert(told('ExponentPushToken[es]')?.body === `Empieza en 1 día · ${clock}`,
+            `a phone whose push-token lang is es is told in Spanish where the catalog has the sentence (${told('ExponentPushToken[es]')?.body})`);
+        assert(told('ExponentPushToken[es]')?.title === '📅 Fiesta', '...the event\'s own title stays the host\'s words');
+        assert(told('ExponentPushToken[en]')?.body === `Starts in 1 day · ${clock}`, 'a phone whose lang is en is told in English, as before');
+        assert(told('ExponentPushToken[fr]')?.body === `Starts in 1 day · ${clock}`,
+            'a language with no translation of the sentence yet gets the English, whole');
+        assert(told('ExponentPushToken[nolang]')?.body === `Starts in 1 day · ${clock}`, 'a phone that named no language gets the English');
+        assert(told('ExponentPushToken[two-new]')?.body === `Empieza en 1 día · ${clock}`
+            && told('ExponentPushToken[two-old]')?.body === `Empieza en 1 día · ${clock}`,
+            'a member with two phones has one notice, in the newest phone\'s language');
+        assert(sent12.every(m => m.kind === 'event.reminder' && pushIsGeneric(m.sent)),
+            'every lock screen is still only its kind\'s fixed words, with no event name');
+        const marked = (db.prepare('SELECT COUNT(*) AS n FROM event_reminders_sent WHERE post_id = ?').get(fiesta.id) as { n: number }).n;
+        assert(sentMarks(fiesta.id).every(offset => offset === 1440) && marked === 5,
+            '...and each member\'s moment is marked once, however many languages the batch split into');
+
+        // Members in the same language are one call (the title, body and payload are identical); `en` and no language are one.
+        const calls: PushCall[] = [];
+        const batchSpy = (targets: string[], actor: string, title: string, body: string, data: any, category: any) => {
+            calls.push({ targets, actor, title, body, data, category });
+        };
+        const party = newEvent(170 * DAY, 'Party');
+        for (const m of [esPhone, enPhone, frPhone, noLangPhone]) rsvpAt(party.id, m, 'going', 0);
+        runEventReminderSweep(batchSpy, T0 + 169 * DAY);
+        const callOf = (member: string) => calls.find(c => c.targets.includes(member));
+        assert(calls.length === 3, `three calls for three languages: Spanish, French and English (${calls.length})`);
+        assert(callOf(esPhone)?.body.startsWith('Empieza en 1 día') === true && callOf(esPhone)?.targets.join() === esPhone,
+            '...Spanish alone, in Spanish');
+        assert(callOf(enPhone) === callOf(noLangPhone) && callOf(enPhone)?.targets.length === 2 && callOf(enPhone)?.body.startsWith('Starts in 1 day') === true,
+            '...a phone that says en and one that says nothing together, in English');
+        assert(callOf(frPhone)?.targets.join() === frPhone && callOf(frPhone)?.body.startsWith('Starts in 1 day') === true,
+            '...and French apart, in English until its sentences are translated');
+    } finally {
+        (globalThis as any).fetch = realFetch12;
+    }
+
+    // The words themselves, apart from any phone.
+    assert(reminderPushTitle('   ') === '📅 An event' && reminderPushTitle('', wordsIn('es')) === '📅 Un evento'
+        && reminderPushTitle(' Bee ', wordsIn('es')) === '📅 Bee',
+        'an event with no title is "An event", in the phone\'s language; a title is never translated');
+    assert(reminderPushBody(45) === 'Starts in 45 minutes' && reminderPushBody(1) === 'Starts in 1 minute'
+        && reminderPushBody(45, null, wordsIn('es')) === 'Empieza en 45 minutos' && reminderPushBody(1, null, wordsIn('es')) === 'Empieza en 1 minuto',
+        'an offset a later picker adds is "Starts in N minutes", the count through the plural of the language');
+    assert(reminderPushBody(1440, 'Sat 20:50 Lagos time', wordsIn('es')) === 'Empieza en 1 día · Sat 20:50 Lagos time',
+        'the place\'s own clock follows the relative words, as the node wrote it');
+    useCatalogsForTests('es', null);
+    useCatalogsForTests('fr', null);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

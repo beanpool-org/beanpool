@@ -317,6 +317,43 @@ describe('offered only when the new address is the same community', () => {
         await addressFollowOffer(w.deps);
         expect(w.state.asked).toHaveLength(6);
     });
+
+    it('the fallback card\'s ask (sameSince, sameWithin): a "same" from before, or as old as it allows, is checked again; the card\'s own ask keeps the hour', async () => {
+        const MIN = 60 * 1000;
+        const offer = { from: IP, to: NAME, host: 'beans.example.org' };
+        const w = world({ answers: same() });
+        const checkedAt = w.state.now;
+        expect(await addressFollowOffer(w.deps)).toEqual(offer);
+        expect(w.state.asked).toHaveLength(2);
+        // Ten minutes on the new address has stopped answering. The follow card's own ask still reuses its 'same'...
+        w.state.now += 10 * MIN;
+        w.state.answers[NAME] = undefined;
+        expect(await addressFollowOffer(w.deps)).toEqual(offer);
+        // ...and so does an ask that takes one checked since then, or up to fifteen minutes old: nobody asked.
+        expect(await addressFollowOffer(w.deps, { sameSince: checkedAt })).toEqual(offer);
+        expect(await addressFollowOffer(w.deps, { sameWithin: 15 * MIN })).toEqual(offer);
+        expect(w.state.asked).toHaveLength(2);
+        // One that takes it only from a moment after it was made asks again, and finds no answer.
+        expect(await addressFollowOffer(w.deps, { sameSince: checkedAt + 1 })).toBeNull();
+        expect(w.state.asked).toHaveLength(4);
+        // That check stands for every ask now: the follow card's own finds nothing to offer.
+        expect(await addressFollowOffer(w.deps)).toBeNull();
+        // It never shortens a check that offered nothing: no answer is asked again after its own five minutes, not sooner.
+        w.state.now += MIN;
+        expect(await addressFollowOffer(w.deps, { sameSince: w.state.now, sameWithin: 0 })).toBeNull();
+        expect(w.state.asked).toHaveLength(4);
+        // The new address answers again: 'same' once more. An ask that takes it under five minutes old asks at five.
+        forgetFollowChecks();
+        w.state.answers[NAME] = statement(node, COMMUNITY);
+        expect(await addressFollowOffer(w.deps)).toEqual(offer);
+        w.state.answers[NAME] = undefined;
+        w.state.now += 5 * MIN - 1;
+        expect(await addressFollowOffer(w.deps, { sameWithin: 5 * MIN })).toEqual(offer);
+        expect(w.state.asked).toHaveLength(6);
+        w.state.now += 1;
+        expect(await addressFollowOffer(w.deps, { sameWithin: 5 * MIN })).toBeNull();
+        expect(w.state.asked).toHaveLength(8);
+    });
 });
 
 // Review of #2138: kept only by a check of a move, the identity came too late for the case it is there for. A community

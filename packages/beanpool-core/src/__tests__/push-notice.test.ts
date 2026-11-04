@@ -50,6 +50,21 @@ describe('the kinds', () => {
         });
     });
 
+    it('a removal jury is five kinds of its own, landing on Home: seated, seated late, the two reminders and the member answering, each naming nobody (removal jury J2b)', () => {
+        const jury = ['decision.jury', 'decision.jury-late', 'decision.jury-reminder', 'decision.jury-last-day', 'decision.jury-reply'] as const;
+        for (const kind of jury) {
+            expect(isPushNoticeKind(kind)).toBe(true);
+            expect(PUSH_NOTICE_KINDS[kind].tab).toBe('home');
+            // Not the community, the member, the admin or the case: a lock screen is anyone's to read.
+            expect(PUSH_NOTICE_KINDS[kind].body).not.toMatch(/Mullum|admin|paused|remov/i);
+        }
+        expect(pushNoticeWords('decision.jury').body).toBe('You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.');
+        // A juror seated with less than two days left is told so (JURY_LATE_SEAT_HOURS), and no three-day ask.
+        expect(pushNoticeWords('decision.jury-late').body).toMatch(/less than two days/);
+        expect(pushNoticeWords('decision.jury-late').body).not.toMatch(/three days/);
+        expect(new Set(jury.map((k) => PUSH_NOTICE_KINDS[k].body)).size).toBe(jury.length);
+    });
+
     it('a knock notice lands on People with fixed generic words, and the answer is no push kind (the phone posts it)', () => {
         expect(isPushNoticeKind('community.knock')).toBe(true);
         expect(PUSH_NOTICE_KINDS['community.knock'].tab).toBe('people');

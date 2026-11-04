@@ -12,7 +12,8 @@ import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { clearWaitingArchetype, keepQuizResult, keepWaitingArchetype, onGuestVisit, removeWorkingStyle } from '../utils/working-style';
-import { parseArchetype, calculateSynergy, newestArchetype, publicArchetype, ARCHETYPES, listPhotoUrl, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, newestArchetype, publicArchetype, ARCHETYPES, type QuizResult, type PublicCreatorChannel } from '@beanpool/core';
+import { ListPhoto } from '../components/ListPhoto';
 import { getCanonicalProfile } from '../utils/canonical-profile';
 import { ChannelChips } from '../components/ChannelChips';
 import { fetchPublicChannels } from '../utils/channels';
@@ -1695,13 +1696,16 @@ export default function PublicProfileScreen() {
                                             <Pressable key={p.id || i} accessibilityRole="button" onPress={() => router.push(`/post/${p.id}`)}>
                                                 <View style={styles.dealCard}>
                                                     <View style={{ flexDirection: 'row', gap: 12 }}>
-                                                        {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                                                            <Image accessibilityLabel={t('Listing photo')} source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} />
-                                                        ) : (
-                                                            <View style={[styles.dealThumb, styles.dealThumbFallback]}>
-                                                                <Text style={{ fontSize: 24, opacity: 0.4 }}>📦</Text>
-                                                            </View>
-                                                        )}
+                                                        <ListPhoto
+                                                            photo={coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? coverImage : null}
+                                                            accessibilityLabel={t('Listing photo')}
+                                                            style={styles.dealThumb}
+                                                            fallback={(
+                                                                <View style={[styles.dealThumb, styles.dealThumbFallback]}>
+                                                                    <Text style={{ fontSize: 24, opacity: 0.4 }}>📦</Text>
+                                                                </View>
+                                                            )}
+                                                        />
                                                         <View style={{ flex: 1, justifyContent: 'center' }}>
                                                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                                                                 <View style={[styles.typeBadge, p.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>

@@ -106,7 +106,13 @@ export interface TableHashes {
  * for the same reason as 8: a standby updated before its main server hashes one more table. REPLICA_FORMAT stays: no
  * community has a jury until its owners choose one, and a vote's pool comes with it once both sides run this release.
  */
-export const TABLE_HASHES_VERSION = 19;
+/**
+ * 20: decision_electors gains answered_at and reminded_at (a removal juror's Serve and the last reminder sent,
+ * DESIGN-removal-jury-j2-calls-fable.md slice J2b). Raised for the same reason as 8: a standby updated before its main
+ * server hashes `decision_electors` over two more columns. REPLICA_FORMAT stays: an older importer drops only a juror's
+ * Serve and a reminder's time, and no community has a jury until its owners choose one.
+ */
+export const TABLE_HASHES_VERSION = 20;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

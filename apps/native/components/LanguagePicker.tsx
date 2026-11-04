@@ -6,14 +6,17 @@
  * is kept in storage stays; a field typed on an open screen and not yet saved does not.
  *
  * 48dp rows that wrap rather than truncate (320dp at 1.3× text); colours from the theme's roles only.
+ *
+ * A development build adds a last row, "Pseudo (test)" (the pseudo-locale: every sentence accented and padded, to see
+ * what a longer language does to a screen). A release build never draws it (utils/language-choice.ts languagePickerRows).
  */
 
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { areCatalogsMachineDraft, type Lang } from '@beanpool/core';
+import { areCatalogsMachineDraft, PSEUDO_LANG, type Lang, type UiLang } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 import { useWords } from './LanguageProvider';
-import { LANGUAGE_NAMES, LANGUAGE_OPTIONS } from '../utils/language-choice';
+import { LANGUAGE_NAMES, PSEUDO_ROW_NAME, languagePickerRows } from '../utils/language-choice';
 import { catalogsFor } from '../utils/words-catalogs';
 
 /** Whether the current language's words are a machine draft no native speaker has checked yet (its catalog's _meta). */
@@ -26,11 +29,21 @@ export function isMachineDraft(lang: string): boolean {
     }
 }
 
+/**
+ * The name Settings and the first screen's switch show for a language: its own name. The pseudo-locale is "Pseudo (test)"
+ * when a developer picked it, and a bracketed stand-in when a test draws a screen in it (so the stand-in is never taken
+ * for text that bypassed the words layer).
+ */
+function shownName(lang: UiLang, choice: UiLang | null): string {
+    if (lang !== PSEUDO_LANG) return LANGUAGE_NAMES[lang];
+    return choice === PSEUDO_LANG ? PSEUDO_ROW_NAME : '[Ŝāṽé~~]';
+}
+
 export function LanguagePickerSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
     const { colors } = useTheme();
     const { t, choice, phoneLanguage, chooseLanguage } = useWords();
     const styles = makeStyles(colors);
-    const pick = (lang: Lang | null) => { chooseLanguage(lang); onClose(); };
+    const pick = (lang: UiLang | null) => { chooseLanguage(lang); onClose(); };
     return (
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
             <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('Close')}>
@@ -43,7 +56,7 @@ export function LanguagePickerSheet({ visible, onClose }: { visible: boolean; on
                             onPress={() => pick(null)}
                             styles={styles}
                         />
-                        {LANGUAGE_OPTIONS.map(({ value, name }) => (
+                        {languagePickerRows().map(({ value, name }) => (
                             <Row key={value} label={name} selected={choice === value} onPress={() => pick(value)} styles={styles} testID={`language-${value}`} />
                         ))}
                     </ScrollView>
@@ -75,10 +88,10 @@ function Row({ label, selected, onPress, styles, testID }: { label: string; sele
 /** The first screen's switch: "🌐 English ▾" at the top, which opens the list. Never a step; skipping it is fine. */
 export function LanguageSwitch() {
     const { colors } = useTheme();
-    const { t, lang } = useWords();
+    const { t, lang, choice } = useWords();
     const [open, setOpen] = useState(false);
     const styles = makeStyles(colors);
-    const name = lang === 'xx' ? '[Ŝāṽé~~]' : LANGUAGE_NAMES[lang];
+    const name = shownName(lang, choice);
     return (
         <>
             <Pressable
@@ -107,7 +120,7 @@ export interface MenuRowStyles {
 export function LanguageRow({ styles }: { styles: MenuRowStyles }) {
     const { t, lang, choice } = useWords();
     const [open, setOpen] = useState(false);
-    const name = lang === 'xx' ? '[Ŝāṽé~~]' : LANGUAGE_NAMES[lang];
+    const name = shownName(lang, choice);
     return (
         <>
             <Pressable style={styles.menuBtn} onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={t('Language: {language}', { language: name })} testID="settings-language">

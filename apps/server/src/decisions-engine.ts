@@ -57,8 +57,14 @@ import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/nod
 import { unmutedRecipients } from './engine/chat-mutes.js';
 import { keepNotice } from './engine/kept-notices.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
-import { JURY_SERVE_AFTER_DAYS, juryDraw, juryOrder, juryPasses, juryRuleFor, jurySnapshotAt, jurySnapshotDate, type JuryRule } from '@beanpool/core';
-import { juryConflictsOf, juryDrawnAs, juryPoolOf, juryRollOf, seatedJuror, writeJuryRecords } from './engine/removal-jury.js';
+import {
+    JURY_ANSWER_HOURS, JURY_LAST_DAY_AFTER_DAYS, JURY_LATE_SEAT_HOURS, JURY_REMINDER_HOURS, JURY_SERVE_AFTER_DAYS, PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE,
+    juryDraw, juryOrder, juryPasses, juryRuleFor, jurySnapshotAt, jurySnapshotDate, type JuryRule, type PushNoticeKind,
+} from '@beanpool/core';
+import {
+    addToJuryRoll, juryConflictsOf, juryCurrentKey, juryDrawnAs, juryHeldMs, juryHolds, juryPoolOf, juryRollOf, jurySeatsOf, noteJuryHold, noteJurorReminded,
+    noteJurorServes, seatedJuror, unseatJuror, writeJuryRecords,
+} from './engine/removal-jury.js';
 import { deciderFor, removalDecider } from './config/removal-decider.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -1644,13 +1650,28 @@ export function tallyForReader(decision: Decision, tally: DecisionTally): Decisi
 }
 
 /**
+ * When a seated juror's answer, Serve or Step aside, is due (slice J2b): JURY_ANSWER_HOURS after their seat, not counting
+ * the time formal Decisions were off since (juryHeldMs, as settleOpenJuries counts it), or the vote's close if that comes
+ * first; null once they answered Serve. A vote answers too (settleOpenJuries), and the app knows of one from the reader's
+ * own `myVote`; it moves nothing here, so two jurors seated together read the same whoever voted.
+ */
+function jurorAnswerBy(decision: Decision, juror: string): string | null {
+    const seat = jurySeatsOf(decision.id).find(s => s.key === juror);
+    if (!seat || seat.answeredAt) return null;
+    const seatedAt = parseDbTime(seat.seatedAt);
+    const due = seatedAt + JURY_ANSWER_HOURS * HOUR_MS + juryHeldMs(seatedAt, Date.now());
+    return new Date(Math.min(due, parseDbTime(decision.closesAt))).toISOString();
+}
+
+/**
  * What a member reads of a jury (GET /api/commons/decisions/:id/jury; DESIGN-removal-jury-fable.md §3, §8): the pool it was
  * drawn from, sorted as hashed, each with their name here now, so anyone can recompute the hash and the draw (@beanpool/core
  * checkJuryDraw) and hold the pool against the People list; the draw's public facts, its `subject` the key it was drawn
  * for (JuryParams.subject); and where the reader stands on it, in neutral words (DESIGN-removal-jury-j2-calls-fable.md
- * call 2 point 4, J2a): `seated`, `not_seated` for a juror who was seated and is no longer (slice J2b's silence and
- * leaving), or null. A member passed over at the draw reads null, as a member not drawn does, so nothing they read says
- * the node knows of a link between them and the member.
+ * call 2 point 4, J2a): `seated`, with when their answer is due (`answerBy`, slice J2b); `not_seated` for a juror who was
+ * seated and is no longer (gone silent or gone, J2b); or null. A member passed over at the draw reads null, as a member not
+ * drawn does, so nothing they read says the node knows of a link between them and the member; and so does one who stepped
+ * aside (J2b writes them as the walk writes one passed over, answerJurySeat).
  *
  * While it is open nobody else on it is named. Once it closes, two lists and no more (call 2 point 2): `voted`, the seated
  * jurors whose votes are the tally, never which way; and `didNotServe`, everyone else the walk reached, passed over at the
@@ -1678,6 +1699,8 @@ export function juryForReader(decision: Decision, reader: string): Record<string
         poolSize: jury.poolSize, size: jury.size, mustVote: jury.mustVote, minYes: jury.minYes,
         pool: pool.map(k => ({ publicKey: k, callsign: callsignOf(k) })),
         you: mine === 'on' ? 'seated' : mine === 'silent' || mine === 'left' ? 'not_seated' : null,
+        // A seated juror's own answer is due by then (slice J2b): null once they answered Serve. Nobody else's is told.
+        ...(mine === 'on' && decision.status === 'open' ? { answerBy: jurorAnswerBy(decision, reader) } : {}),
     };
     if (decision.status === 'open') return facts;
     const drawnAs = juryDrawnAs(roll.map(r => r.key), new Set(pool));
@@ -3326,9 +3349,11 @@ export const REPLY_TAKEN_DOWN = word('An admin took down your reply to this case
  * replaces the last, and once the vote closes it stays as it was. Only the member themself, signed: a paused member
  * included, since a pause's own vote is always about one. The words go on the Decision and nowhere else: no log, no push,
  * no alert. They go with the member's account when they delete it (eraseRepliesOf). Once an admin has taken a reply down
- * (adminHideReply) the member can't write another on that vote: a new one would put back what was taken down.
+ * (adminHideReply) the member can't write another on that vote: a new one would put back what was taken down. On a vote
+ * a jury decides, the first answer on it pushes every seated juror, naming nobody (design §7, slice J2b:
+ * noticeJuryOfReply); a rewrite pushes nobody.
  */
-export function replyToRemovalCase(decisionId: string, actor: string, reply: unknown): FairVoteResult {
+export function replyToRemovalCase(decisionId: string, actor: string, reply: unknown, push: RemovalVotePush = dispatchPushNotification): FairVoteResult {
     assertPlainTablesWritable();
     if (!decisionsOn()) return { success: false, status: 404, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = communityRemovalVote(decisionId);
@@ -3343,6 +3368,9 @@ export function replyToRemovalCase(decisionId: string, actor: string, reply: unk
     if (!text) return { success: false, status: 400, error: REPLY_EMPTY };
     if (text.length > REMOVAL_REPLY_MAX_CHARS) return { success: false, status: 400, error: REPLY_TOO_LONG };
     const now = new Date().toISOString();
+    // The vote's first answer, of anyone it is about: the one a jury is told of.
+    const answeredBefore = !!decision.subjectRepliedAt
+        || (isBranchVote(decision) && (decision.params.branch as BranchEntry[]).some(e => !!e?.repliedAt));
     if (entry) {
         // On a branch's vote each account on its list replies for itself, on its own entry (BranchEntry).
         updateBranchEntry(decision, actor, e => ({ ...e, reply: text, repliedAt: now }), now);
@@ -3351,6 +3379,7 @@ export function replyToRemovalCase(decisionId: string, actor: string, reply: unk
             .run(text, now, now, decisionId);
     }
     announceDecisionUpdated(decisionId);
+    if (!answeredBefore && juryOf(decision)) noticeJuryOfReply(decision, push);
     return { success: true };
 }
 
@@ -3816,8 +3845,21 @@ function removalVoters(decision: Decision): string[] {
 /** What sends a removal vote's pushes (state-engine dispatchPushNotification); a suite passes a spy. */
 export type RemovalVotePush = (
     targets: string[], actor: string, title: string, body: string, data: Record<string, any>,
-    category: 'chat' | 'recovery', kind: 'decision.removal' | 'account.removal-vote' | 'account.reply-taken-down',
+    category: 'chat' | 'recovery', kind: 'decision.removal' | 'account.removal-vote' | 'account.reply-taken-down' | JuryPushKind,
 ) => unknown;
+
+/**
+ * The pushes a removal jury's members get (slice J2b; @beanpool/core PUSH_NOTICE_KINDS holds their words): seated, seated
+ * with less than two days left, the answer reminder, the last day's, and the member answering the case. Sent by pushJury.
+ */
+const JURY_PUSH_KINDS = [
+    'decision.jury',
+    'decision.jury-late',
+    'decision.jury-reminder',
+    'decision.jury-last-day',
+    'decision.jury-reply',
+] as const satisfies readonly PushNoticeKind[];
+export type JuryPushKind = typeof JURY_PUSH_KINDS[number];
 
 /** What the member a vote on removing them is about is told at once (noticeRemovalVoteOpened): no case, no name. */
 export const REMOVAL_VOTE_NOTICE_TITLE = 'A vote about your account';
@@ -3835,19 +3877,25 @@ export function removalVoteNoticeBody(closesAt: string): string {
  * side. The voters' push keeps to each one's own notify_chat switch, as a vote opening in a group does. The member's is
  * an alert about their account, which always comes through ('recovery', as a re-key's), and is also kept for them and
  * sent live, as a moderation notice is (engine/moderation-notices.ts tell): the web app, which has no push, shows it when
- * it next opens. The admin who paused is not told (the dispatcher drops the actor). Call once the pause's transaction has
- * committed; a notice that fails never undoes the vote.
+ * it next opens. The admin who paused is not told (the dispatcher drops the actor). On a vote a jury decides, its voters are
+ * the seated jurors (removalVoters), and theirs is the jury's own push (slice J2b, pushJurySeated): they were drawn, and
+ * answer within three days. Call once the pause's transaction has committed; a notice that fails never undoes the vote.
  */
 export function noticeRemovalVoteOpened(decision: Decision, push: RemovalVotePush = dispatchPushNotification): void {
     if (!isPauseVote(decision)) return;
     const subjects = removalSubjects(decision);
     if (!subjects.length) return;
     const actor = typeof decision.params?.pausedBy === 'string' ? decision.params.pausedBy : SYSTEM_AUTHOR;
-    try {
-        push(removalVoters(decision), actor, 'A vote on removing a member opened', 'Open Commons, then Decide, to read the case and vote.',
-            { screen: 'decide' }, 'chat', 'decision.removal');
-    } catch (err) {
-        console.warn('[Decisions] the removal vote push to its voters failed:', err);
+    // A vote a jury decides: its jurors are told they were drawn, and asked to answer (slice J2b, pushJurySeated).
+    if (juryOf(decision)) {
+        pushJurySeated(decision, removalVoters(decision), push, parseDbTime(decision.opensAt));
+    } else {
+        try {
+            push(removalVoters(decision), actor, 'A vote on removing a member opened', 'Open Commons, then Decide, to read the case and vote.',
+                { screen: 'decide' }, 'chat', 'decision.removal');
+        } catch (err) {
+            console.warn('[Decisions] the removal vote push to its voters failed:', err);
+        }
     }
     const body = removalVoteNoticeBody(decision.closesAt);
     // Each account it names is told, a branch's every one (removalSubjects).
@@ -4021,6 +4069,228 @@ function ownerDecisionStands(decision: Decision, tally: DecisionTally): boolean 
     return isOwnerLevelActor(decision.ownerDecidedBy);
 }
 
+// ── A removal jury's seats (slice J2b) ──────────────────────────────────
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** What a seated juror answers (answerJurySeat). */
+export type JuryAnswer = 'serve' | 'step_aside';
+export const JURY_ANSWER_UNKNOWN = word('Answer serve or step_aside.');
+export const JURY_STEP_ASIDE_AFTER_VOTE = word("You have voted, so you serve on this jury. You can change your vote until it closes.");
+
+/**
+ * A seated juror answers their seat (DESIGN-removal-jury-j2-calls-fable.md call 2 point 3, slice J2b): `serve`, and then
+ * vote (a vote answers too), or `step_aside`, before voting, with no reason asked ("Step aside if you know them too well to
+ * judge, or can't give it the time. Nobody is told why"). Stepping aside is put to every juror as an ordinary answer, so a
+ * name among those who didn't serve is as likely someone busy as someone with a link. The seat then goes on down the draw
+ * at once (topUpJury) and the member seated is told. A juror who stepped aside is listed after close as one passed over is,
+ * and reads as one (juryForReader: null). Asked of a vote a jury decides, while it is open, by the juror themself: the
+ * account checks first and the seat last (checkJurorEligibility), so a member passed over is refused in exactly the words a
+ * member not drawn is.
+ */
+export function answerJurySeat(decisionId: string, actor: string, answer: unknown, push: RemovalVotePush = dispatchPushNotification): FairVoteResult {
+    assertPlainTablesWritable();
+    if (!decisionsOn()) return { success: false, status: 404, error: featureOffMessage('decisions'), code: FEATURE_OFF };
+    const decision = getDecision(decisionId);
+    if (!decision || decision.scopeKind !== 'community' || !juryOf(decision)) return { success: false, status: 404, error: word('Decision not found') };
+    if (answer !== 'serve' && answer !== 'step_aside') return { success: false, status: 400, error: JURY_ANSWER_UNKNOWN };
+    if (decision.status !== 'open' || parseDbTime(decision.closesAt) <= Date.now()) {
+        return { success: false, status: 409, error: word('Voting window has closed') };
+    }
+    const elig = checkJurorEligibility(actor, decision);
+    if (!elig.ok) return { success: false, status: 403, error: elig.error ?? JURY_ONLY_VOTE_ERROR };
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    if (answer === 'serve') {
+        noteJurorServes(decision.id, actor, nowIso);
+        return { success: true };
+    }
+    if (db.prepare('SELECT 1 FROM decision_votes WHERE decision_id = ? AND voter_pubkey = ?').get(decision.id, actor)) {
+        return { success: false, status: 409, error: JURY_STEP_ASIDE_AFTER_VOTE };
+    }
+    const seated = db.transaction((): string[] => (unseatJuror(decision.id, actor, 'stood_aside', nowIso) ? topUpJury(decision, nowMs) : []))();
+    pushJurySeated(decision, seated, push, nowMs);
+    return { success: true };
+}
+
+/**
+ * Seat the next members of the draw until the jury is whole again (slice J2b): the walk goes on from where the roll ends,
+ * in draw order, as it went at the draw, so the roll stays the head of the draw and Check the draw still checks out over
+ * it. A member it reaches is passed over (`stood_aside`) when they have a conflict with an account the vote is on, as of
+ * now (juryConflictsOf over removalSubjects: the member, or every account on a branch's list), or are the admin who
+ * paused, or, on a branch's vote, anyone else still in its root's invite subtree, as at the draw (chooseRemovalDecider,
+ * J2c); or when they can't take a seat now (mayTakeJurySeat). One is seated under the key they hold now (juryCurrentKey),
+ * which juryDrawnAs maps back to the pool. Stops when `size` are seated or the draw runs out: then fewer serve, and fewer
+ * votes than `mustVote` miss the quorum, which lifts the pause. Inside the caller's transaction. Returns who was seated.
+ */
+function topUpJury(decision: Decision, nowMs: number): string[] {
+    const jury = juryOf(decision);
+    const pool = jury ? juryPoolOf(decision.id) : null;
+    if (!jury || !pool) return [];
+    const roll = juryRollOf(decision.id);
+    let open = jury.size - roll.filter(r => r.status === 'on').length;
+    if (open <= 0) return [];
+    const nowIso = new Date(nowMs).toISOString();
+    const onRoll = new Set(roll.map(r => r.key));
+    const reached = new Set(juryDrawnAs([...onRoll], new Set(pool)).values());
+    const subjects = removalSubjects(decision);
+    let conflicts: Set<string> | null = null;
+    const seated: string[] = [];
+    for (const drawn of juryOrder(pool, jury.subject ?? decision.subject ?? '', jury.snapshotDate).order) {
+        if (open <= 0) break;
+        if (reached.has(drawn)) continue;
+        const key = juryCurrentKey(drawn);
+        if (onRoll.has(key)) continue;
+        if (!conflicts) {
+            conflicts = juryConflictsOf(subjects, nowMs);
+            // A branch's (J2c): the root's whole subtree, whose accounts the card doesn't name (a role holder, one already
+            // paused) in the pool, as the draw passes them over. The root's key now: a re-key moves params.root (key-move.ts).
+            const root = isBranchVote(decision) ? decision.params?.root?.pubkey : null;
+            if (typeof root === 'string' && root) for (const k of inviteBranchOf(root)) conflicts.add(k);
+            if (typeof decision.params?.pausedBy === 'string') conflicts.add(decision.params.pausedBy);
+        }
+        const takes = !subjects.includes(key) && !conflicts.has(key) && mayTakeJurySeat(key);
+        addToJuryRoll(decision.id, key, takes ? 'on' : 'stood_aside', nowIso);
+        onRoll.add(key);
+        reached.add(drawn);
+        if (takes) { seated.push(key); open--; }
+    }
+    return seated;
+}
+
+/**
+ * Whether this account can take a seat on a removal jury now (topUpJury): a member here whose account could vote on it
+ * (checkJurorEligibility's account test: active, or paused and held by nothing but its own open vote; not an enterprise or
+ * a visitor's row), or one an admin's re-key code holds while they move to a new phone, who votes once they have. The
+ * pool already asked 30 days of every member in it.
+ */
+function mayTakeJurySeat(key: string): boolean {
+    const m = db.prepare('SELECT status, is_treasury, is_visitor FROM members WHERE public_key = ?').get(key) as
+        { status: string | null; is_treasury: number | null; is_visitor: number | null } | undefined;
+    if (!m || m.is_treasury || m.is_visitor) return false;
+    if (m.status === 'active') return true;
+    if (m.status === 'suspended') return suspendedOnlyByRekeyCode(key);
+    return m.status === 'disabled' && pausedOnlyByOpenVote(key);
+}
+
+/**
+ * Whether a seated juror still serves (settleOpenJuries): their account is here and could vote on the jury, as when they
+ * were seated (mayTakeJurySeat), and nobody paused them since. A juror paused after the walk seated them leaves (design
+ * §4: "A juror who leaves, is paused or removed is `left`"); one already paused when it seated them stays, since the pool
+ * keeps a paused member and the walk may seat one. Gone from this community, removed, suspended, or in a removal's grace
+ * window, they leave too.
+ */
+function jurorServesStill(key: string, seatedAt: string): boolean {
+    if (!mayTakeJurySeat(key)) return false;
+    return !db.prepare(`
+        SELECT 1 FROM decisions pv
+         WHERE ${namesMemberSql('pv', '@k')} AND pv.status = 'open' AND pv.effect = 'remove_member'
+           AND julianday(pv.opens_at) > julianday(@seatedAt)
+    `).get({ k: key, seatedAt });
+}
+
+/**
+ * The tick's step for removal juries (DESIGN-removal-jury-fable.md §4; DESIGN-removal-jury-j2-calls-fable.md call 2 point
+ * 3 and §5.2–§5.4, slice J2b), for each vote a jury decides that is still open:
+ *  1. A seated juror who no longer serves (jurorServesStill) is `left`, and their vote stops counting: the tally counts
+ *     seated jurors' votes only (tallyJury), as an enterprise's roll drops a keeper's.
+ *  2. One with no answer JURY_ANSWER_HOURS after being seated (no Serve, no vote) is `silent`. One who answered Serve
+ *     keeps the seat until the vote closes.
+ *  3. The jury is made whole from the draw (topUpJury), and each member seated is told (pushJurySeated): with less than
+ *     JURY_LATE_SEAT_HOURS of the vote left, that it closes soon. Nothing extends the vote's 7 days.
+ *  4. Reminders, each once a seat (reminded_at): a juror with no answer JURY_REMINDER_HOURS after being seated; and every
+ *     juror seated before the vote's last day who hasn't voted, once it has been open JURY_LAST_DAY_AFTER_DAYS. At most one
+ *     push a tick, the last day's first.
+ * Each vote's changes are one transaction, its pushes after it; a push that fails changes nothing. A seat ends once (only a
+ * seat still `on` changes) and a seat taken is filled once (only up to `size`), however often the tick runs.
+ *
+ * With formal Decisions off, nobody can see the vote or answer it (castDecisionVote, answerJurySeat: `feature_off`), so
+ * none of that happens: no seat ends, none is filled, nobody is reminded or pushed. The tick notes the time instead
+ * (noteJuryHold), and a seat's hours, 48 to the reminder and 72 to silence, leave it out once they are back on
+ * (juryHeldMs): each juror has the 72 hours of seat the design gives, counted from where they stood. The vote's own days
+ * don't stop (nothing extends them): its last day and its close come when they would.
+ */
+export function settleOpenJuries(nowMs: number, push: RemovalVotePush = dispatchPushNotification): void {
+    const nowIso = new Date(nowMs).toISOString();
+    const open = db.prepare(`
+        SELECT * FROM decisions
+         WHERE status = 'open' AND effect = 'remove_member' AND COALESCE(scope_kind, 'community') = 'community' AND closes_at > ?
+           AND json_valid(params) AND json_extract(params, '$.decider') = 'jury'
+    `).all(nowIso) as any[];
+    const on = decisionsOn();
+    noteJuryHold(on, nowMs, open.length ? Math.min(...open.map(r => parseDbTime(r.opens_at))) : null);
+    if (!on) return;
+    const holds = juryHolds();
+    /** How long a seat has waited, Decisions on: the time since it was taken, less the holds since. */
+    const waited = (seatedAt: string) => {
+        const at = parseDbTime(seatedAt);
+        return nowMs - at - juryHeldMs(at, nowMs, holds);
+    };
+    for (const r of open) {
+        const decision = rowToDecision(r);
+        if (!juryOf(decision)) continue;
+        try {
+            const reminders = new Map<JuryPushKind, string[]>();
+            const seated = db.transaction((): string[] => {
+                for (const seat of jurySeatsOf(decision.id)) {
+                    if (!jurorServesStill(seat.key, seat.seatedAt)) unseatJuror(decision.id, seat.key, 'left', nowIso);
+                    else if (!seat.answeredAt && !seat.voted && waited(seat.seatedAt) >= JURY_ANSWER_HOURS * HOUR_MS) {
+                        unseatJuror(decision.id, seat.key, 'silent', nowIso);
+                    }
+                }
+                const filled = topUpJury(decision, nowMs);
+                const lastDay = parseDbTime(decision.opensAt) + JURY_LAST_DAY_AFTER_DAYS * DAY_MS;
+                for (const seat of jurySeatsOf(decision.id)) {
+                    if (seat.voted) continue;
+                    const seatedAt = parseDbTime(seat.seatedAt);
+                    const reminded = seat.remindedAt ? parseDbTime(seat.remindedAt) : null;
+                    const kind: JuryPushKind | null =
+                        nowMs >= lastDay && seatedAt < lastDay && (reminded === null || reminded < lastDay) ? 'decision.jury-last-day'
+                        : !seat.answeredAt && reminded === null && waited(seat.seatedAt) >= JURY_REMINDER_HOURS * HOUR_MS ? 'decision.jury-reminder'
+                        : null;
+                    if (!kind) continue;
+                    noteJurorReminded(decision.id, seat.key, nowIso);
+                    reminders.set(kind, [...(reminders.get(kind) ?? []), seat.key]);
+                }
+                return filled;
+            })();
+            pushJurySeated(decision, seated, push, nowMs);
+            for (const [kind, keys] of reminders) pushJury(push, keys, kind);
+        } catch (err) {
+            console.warn(`[Decisions] A removal jury's seats could not be settled (${decision.id}):`, err);
+        }
+    }
+}
+
+/**
+ * The member a jury decides about answered the case (design §7, slice J2b): every seated juror is told, once a vote, at the
+ * first answer; the push names nobody. A rewrite of it tells nobody again: the card shows it.
+ */
+function noticeJuryOfReply(decision: Decision, push: RemovalVotePush): void {
+    pushJury(push, juryRollOf(decision.id).filter(r => r.status === 'on').map(r => r.key), 'decision.jury-reply');
+}
+
+/** Members just seated on a jury are told (slice J2b): with less than JURY_LATE_SEAT_HOURS of the vote left, so. */
+function pushJurySeated(decision: Decision, keys: string[], push: RemovalVotePush, nowMs: number): void {
+    const late = parseDbTime(decision.closesAt) - nowMs < JURY_LATE_SEAT_HOURS * HOUR_MS;
+    pushJury(push, keys, late ? 'decision.jury-late' : 'decision.jury');
+}
+
+/**
+ * One push of a jury's kind to these members. Its words are the kind's (@beanpool/core PUSH_NOTICE_KINDS), on each lock
+ * screen in its phone's language; its details, kept for each one, say only where it opens: Commons, Decide. Each keeps to
+ * the member's own notify_chat switch, as the push of any vote opening does. Never throws. Nothing with formal Decisions
+ * off: a push would ask a juror to answer a vote they can't see.
+ */
+function pushJury(push: RemovalVotePush, targets: string[], kind: JuryPushKind): void {
+    if (targets.length === 0 || !decisionsOn()) return;
+    try {
+        push(targets, SYSTEM_AUTHOR, PUSH_NOTICE_TITLE, PUSH_NOTICE_KINDS[kind].body, { screen: 'decide' }, 'chat', kind);
+    } catch (err) {
+        console.warn(`[Decisions] A removal jury's push (${kind}) failed:`, err);
+    }
+}
+
 // ── Tick Engine ─────────────────────────────────────────────────────────
 
 /** How the record of a removal only the Yes floor stopped opens (notPassedWhy); no other failed vote's does (secondPauseOf). */
@@ -4055,6 +4325,9 @@ export function tickDecisions(asOfTime?: number): {
 
     // 0. A keepers' vote closes early the moment its result can no longer change, and is void once its enterprise winds up.
     settleOpenScopedDecisions(nowIso);
+    // 0b. A removal jury's seats (slice J2b): jurors gone or silent replaced from the draw, and reminders. With formal
+    // Decisions off, none of it, and the time off is left out of every seat's hours.
+    settleOpenJuries(Date.parse(nowIso));
 
     // 1. Close open decisions whose window expired, or retry stranded passed decisions
     const openExpired = db.prepare(

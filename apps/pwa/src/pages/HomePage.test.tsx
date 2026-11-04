@@ -3393,16 +3393,20 @@ describe('on a wide screen the cards stand in two or three columns, in the saved
 
 describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §3.1, slice L1)', () => {
     let width = 0;
+    /** The grid's own width, which only a held card's place reads (A2); 0 elsewhere, as before. */
+    let gridW = 0;
     let measured: { mockRestore(): void } | null = null;
     let heights: Record<string, number> = {};
     let offsetSpy: ReturnType<typeof vi.spyOn> | null = null;
 
     beforeEach(() => {
         width = 0;
+        gridW = 0;
         heights = {};
         vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
         measured = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
-            return this.getAttribute('data-testid') === 'home-page' ? width : 0;
+            const testId = this.getAttribute('data-testid');
+            return testId === 'home-page' ? width : testId === 'home-grid' ? gridW : 0;
         });
         offsetSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
             const testId = this.getAttribute('data-testid');
@@ -3624,6 +3628,64 @@ describe('packing cards by height on wide screen (DESIGN-home-layout-fable.md §
         // The reading order: the cards in the member's order, then the strip, the tile, and the community card last.
         expect(order.slice(-3)).toEqual(['home-arrange-strip', 'home-arrange-tile', 'home-card-community']);
         expect(order.indexOf('home-card-beans')).toBeLessThan(order.indexOf('home-arrange-strip'));
+    });
+
+    // DESIGN-home-arrange-in-place-fable.md §2.2–§2.3, slice A2: the band held on Home goes on as a drag, and the held card is
+    // the preview of the drop. jsdom has no layout, so the grid stands at the window's corner and a cell's box is read from
+    // its packing: two columns of 376 px (768 px of grid) with 16 px between, 4 px rows.
+    it('a band held on Home opens Arrange and goes on as a drag: no drawn card changes its cell, the held card is drawn where the pointer puts it, and release saves the order on screen', async () => {
+        gridW = 768;
+        await landWithHeights(800, {
+            'home-card-needs': 100, 'home-card-tips': 200, 'home-card-events': 150, 'home-card-market': 120,
+            'home-card-pulse': 80, 'home-card-beans': 90, 'home-card-community': 110, 'home-arrange-strip': 220, 'home-arrange-tile': 48,
+        });
+        await screen.findByTestId('home-hint');
+        const drawn = () => Object.fromEntries(Array.from(grid().children)
+            .filter(el => /^home-(card-(?!community)|hint$)/.test(el.getAttribute('data-testid') ?? ''))
+            .map(el => [el.getAttribute('data-testid')!, `${(el as HTMLElement).style.gridColumn} | ${(el as HTMLElement).style.gridRow}`]));
+        const box = (testId: string) => {
+            const el = screen.getByTestId(testId);
+            const m = /^(\d+) \/ span \d+$/.exec(el.style.gridRow);
+            if (!m) throw new Error(`${testId} has no row`);
+            const x = (Number(el.style.gridColumn) - 1) * (376 + 16);
+            const y = (Number(m[1]) - 1) * 4;
+            return { x, y, right: x + 376, bottom: y + el.offsetHeight };
+        };
+        const onHome = drawn();
+        expect(box('home-card-beans').x, 'Your Beans stands in the second column').toBe(392);
+
+        vi.useFakeTimers();
+        fireEvent.pointerDown(screen.getByTestId('card-band-beans'), { pointerId: 7, isPrimary: true, pointerType: 'mouse', button: 0, clientX: 420, clientY: 445 });
+        act(() => { vi.advanceTimersByTime(HOLD_MS); });
+        vi.useRealTimers();
+        // Arrange is open around the card, already in the hand: no second press.
+        expect(screen.getByTestId('home-arrange-bar')).toBeInTheDocument();
+        expect(screen.getByTestId('home-card-beans')).toHaveAttribute('data-lifted', 'true');
+        const ghost = screen.getByTestId('home-arrange-ghost');
+        expect(ghost).toHaveTextContent(/your beans/i);
+        expect(ghost).toHaveAttribute('aria-hidden', 'true');
+        expect(screen.getByTestId('home-card-beans').style.touchAction).toBe('pan-y');
+        expect(screen.getByTestId('card-band-beans').style.touchAction).toBe('');
+        // A red test, not a tolerance: no drawn card changed its cell when Arrange opened under the held card.
+        expect(drawn()).toEqual(onHome);
+
+        // Pointed over Tips, in the first column: the held card is drawn there, the pointer inside its cell.
+        const tips = box('home-card-tips');
+        const at = { x: tips.x + 40, y: tips.y + 20 };
+        act(() => { fireEvent.pointerMove(window, { pointerId: 7, clientX: at.x, clientY: at.y }); });
+        const held = box('home-card-beans');
+        expect(at.x >= held.x && at.x <= held.right && at.y >= held.y && at.y <= held.bottom, `the pointer (${at.x}, ${at.y}) is on the held card (${JSON.stringify(held)})`).toBe(true);
+        const preview = drawn();
+
+        // Let go: the order saved is the order on screen, and every card stays in the cell the preview showed.
+        act(() => { fireEvent.pointerUp(window, { pointerId: 7 }); });
+        await waitFor(() => expect(vi.mocked(api.saveHomePreferences)).toHaveBeenCalled());
+        const saved = (vi.mocked(api.saveHomePreferences).mock.calls.at(-1)![1]['home.layout'] as unknown as { cards: { type: string }[] }).cards.map(c => c.type);
+        const shownOrder = ['beans', 'tips', 'events', 'market', 'pulse'];
+        expect(saved.filter(t => shownOrder.includes(t))).toEqual(shownOrder);
+        expect(screen.queryByTestId('home-arrange-ghost')).toBeNull();
+        expect(screen.getByTestId('home-card-beans')).not.toHaveAttribute('data-lifted');
+        await waitFor(() => expect(drawn()).toEqual(preview));
     });
 
     it('useLayoutEffect does not re-query DOM card heights when card set is unchanged across re-renders', async () => {

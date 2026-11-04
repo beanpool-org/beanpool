@@ -10,7 +10,8 @@
  * Slice W2 puts the LIST card on it, for listings (MarketplaceCard) and events (EventCard): the photo flush under the
  * card's left corners and the card's full height, the text beside it, the one chip, the type scale. A list card takes the
  * height its lines need (Marty, 4 Nov 2026: "the big card doesnt need to conform to the same size"): nothing here fixes
- * or equalises a list card's height. The grid tile and the compact row join in their own slices.
+ * or equalises a list card's height. Slice G2 puts the GRID tile on it: one height per row ("the other smaller tiles yes").
+ * The compact row joins in its own slice.
  */
 
 /** §1.1 The list card's frame: corners 14, a 1 px border, the card shadow; the photo and the text sit side by side. */
@@ -115,6 +116,61 @@ export const LIST_TYPE = {
 /** The bean sign beside a list card's price, in px. */
 export const LIST_BEAN_PX = 14;
 
+/**
+ * The grid (slice G2, DESIGN-market-grid-sizes-fable.md §2.2 to §2.4): a lattice. Every tile in a row is the same height,
+ * because each is the photo (4:3, following the column) over a text block of exactly four rows (in rem, following the text
+ * size), and each tile fills its cell. The gutter is the box's 16 (`gap-4`, from `gap-3.5`).
+ *
+ * The columns: 2 to 767 px, 3 from 768, 4 from 1024, 5 from 1280 (viewport breakpoints, as before). `grid-flow-row-dense`
+ * lets the tiles after a poll back-fill a cell its two columns cannot start in (#1092).
+ */
+export const GRID = 'grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4';
+
+/**
+ * The poll's cell (§2.3): the whole row at two and three columns, where nothing sits beside it, at its own height; from four
+ * columns up a 2 x 2 square that the tiles flow round. It fills its cell, so its turnout row sits at the square's foot.
+ */
+export const GRID_POLL_CELL = 'h-full col-span-2 md:col-span-3 lg:col-span-2 lg:row-span-2';
+
+/** A grid tile's outer box: the list card's corners, border, ground and shadow, the photo on top, filling its cell. */
+const GRID_FRAME = 'relative flex flex-col h-full w-full min-w-0 overflow-hidden rounded-[14px] border shadow-sm';
+
+/** The grid tile's outer box. A Pulse tile has its own border; an Elder's adds its left border. */
+export function gridTile({ pulse = false, elder = false }: { pulse?: boolean; elder?: boolean } = {}): string {
+    if (pulse) return `${GRID_FRAME} ${GROUND} ${PULSE}`;
+    return `${GRID_FRAME} ${BORDER} ${GROUND}${elder ? ` ${ELDER}` : ''}`;
+}
+
+/** The tile's photo: 4:3, flush under the tile's top corners, never squeezed by the text block. */
+export const GRID_PHOTO = 'relative w-full aspect-[4/3] overflow-hidden shrink-0';
+
+/**
+ * The text block under the photo: 12 of padding, rows 4 apart, and a FIXED height of four rows, `1.5rem + 4 x 1.203125rem +
+ * 3 x 0.25rem` = 7.0625rem (core's MARKET_GRID_TEXT_BLOCK_REM; 113 px at 16 px text, 147 at 1.3x). Whatever a tile holds, its
+ * block is this tall, so a tile with a row to spare is the same box with a blank line inside it, never a shorter tile.
+ */
+export const GRID_TEXT = 'min-w-0 flex flex-col gap-1 p-3 h-[7.0625rem] shrink-0 overflow-hidden';
+
+/** Rows 1 and 2: the title, two lines at most, and two rows reserved however short it is. 14/800 on 1.203125rem. */
+export const GRID_TITLE = 'm-0 shrink-0 text-sm font-extrabold leading-snug line-clamp-2 min-h-[2.40625rem]';
+
+/** Rows 3 and 4: one line each, exactly a row tall; what is longer ends in an ellipsis inside the row. */
+export const GRID_ROW = 'shrink-0 h-[1.203125rem] min-w-0 flex items-center gap-1.5 overflow-hidden whitespace-nowrap';
+
+/** The one chip in a grid row: as `CHIP`, but it gives way to the distance before it and ends in an ellipsis. */
+export const GRID_ROW_CHIP = 'inline-block min-w-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis px-1.5 py-0.5 rounded-md text-[10px] font-extrabold leading-normal tracking-wide';
+
+/** A chip of one tone in a grid row. */
+export function gridChip(tone: ChipTone): string {
+    return `${GRID_ROW_CHIP} ${CHIP_TONE[tone]}`;
+}
+
+/**
+ * A pill on the tile's photo, at its foot (📌 PINNED; the phone's `gridBadge`): the scrim, white words, 10/700, the chip's
+ * padding and corners. Readable on any photo, in either scheme.
+ */
+export const GRID_SCRIM_PILL = 'inline-block shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md text-[10px] font-bold leading-normal bg-nature-900/90 text-white shadow-sm';
+
 /** The inks on the card ground, light and dark. */
 export const CARD_INK = {
     /** A title, a price: the page's own text colour, on the card's own ground. */
@@ -123,4 +179,85 @@ export const CARD_INK = {
     event: 'text-bp-tile-event-ink',
     /** The place, the distance, a price's unit, the counts. */
     secondary: 'text-nature-600 dark:text-nature-300',
+} as const;
+
+/*
+ * The pages (DESIGN-detail-pages-fable.md §2.2, slice DW1 for the event page; the Offer / Need page joins in DW3): the same
+ * box, drawn as the page's boxes and buttons. Core's MARKET_CARD_TYPE.page holds the numbers; market-card-shell.test.ts holds
+ * these classes to them. The page's words are in rem, so a member's larger text setting (130% at the floor) grows them.
+ */
+
+/**
+ * A box on a page (the note for people who are going, Remind me, the host's guest list, the person): the card's corners,
+ * outline, ground and shadow, with the card's 12 of padding (the style box's §3 row 3: one number for every box).
+ */
+export const PAGE_BOX = `rounded-[14px] border ${BORDER} ${GROUND} p-3 shadow-sm`;
+
+/**
+ * A box's label, in small capitals: 10/800, letter-spaced 1.5, 8 above what it names. The web writes its labels in sentence
+ * case and draws the capitals here ("Hosted by", as its "Posted by"). The muted ink is nature-600 / nature-300, not the
+ * design's nature-500 / nature-400: 10 px words need 4.5:1, and nature-500 is 3.3:1 on the card ground (nature-600 is 4.9).
+ */
+const BOX_LABEL_TYPE = 'm-0 mb-2 text-[0.625rem] font-extrabold tracking-[1.5px] uppercase leading-normal';
+export const BOX_LABEL = {
+    muted: `${BOX_LABEL_TYPE} text-nature-600 dark:text-nature-300`,
+    /** The note for people who are going: an event's own words, in the event ink. */
+    event: `${BOX_LABEL_TYPE} text-bp-ink-event`,
+} as const;
+
+/** A page's button: 48 tall, corners 12, 15/700, a 1.5 px outline. */
+const PAGE_BUTTON_TYPE = 'text-[0.9375rem] font-bold leading-tight';
+const PAGE_BUTTON_FRAME = `min-h-[48px] px-3 rounded-xl border-[1.5px] ${PAGE_BUTTON_TYPE} cursor-pointer transition-colors `
+    + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-60 disabled:cursor-not-allowed';
+
+/**
+ * The event's two answers, on the card (the map's preview) and on the page: chosen = the one event fill with white words in
+ * both schemes (core's `event` role); not chosen = the event ink's outline and words on the card ground (`ink.event`).
+ */
+export const EVENT_ANSWER = {
+    chosen: 'bg-bp-event-fill border-bp-event-fill text-bp-event-on hover:bg-bp-event-hover hover:border-bp-event-hover',
+    open: `${GROUND} border-bp-ink-event text-bp-ink-event hover:bg-bp-tile-event-tint`,
+} as const;
+
+export const PAGE_BUTTON = {
+    /** The commit on an event: Edit event, Let in ✓, Save for this event. */
+    eventFill: `${PAGE_BUTTON_FRAME} ${EVENT_ANSWER.chosen} focus-visible:ring-bp-ink-event`,
+    /** An event's other buttons: Let in, Let everyone in, Copy to a new date. */
+    eventOutline: `${PAGE_BUTTON_FRAME} ${EVENT_ANSWER.open} focus-visible:ring-bp-ink-event`,
+    /** The quiet row (the chat, Share, Add to calendar) and Remind me's Change: the neutral outline, the page's own words. */
+    quiet: `${PAGE_BUTTON_FRAME} ${GROUND} border-nature-300 dark:border-nature-700 text-nature-900 dark:text-white `
+        + 'hover:bg-nature-50 dark:hover:bg-nature-800 focus-visible:ring-nature-600 dark:focus-visible:ring-nature-300',
+} as const;
+
+/** Going / Interested on the page: the page button's type. The map's preview card keeps the card's own. */
+export const PAGE_ANSWER_TYPE = PAGE_BUTTON_TYPE;
+
+/** §2.3 The page's type. */
+export const PAGE_TYPE = {
+    /** An event's when: 18/900, in the event ink. */
+    when: 'text-lg font-black leading-tight',
+    /** An event's title: 20/800. */
+    title: 'text-xl font-extrabold leading-snug',
+    /** The place, the online line: 14/600, the page's own words. */
+    place: 'text-sm font-semibold',
+    /** The description: 15 on 22. */
+    description: 'text-[0.9375rem] leading-[1.375rem]',
+    /** A box's note, the counts, the hint lines: 13. */
+    note: 'text-[0.8125rem] leading-snug',
+    /** "Show on map", "Join": a link in the event ink, the whole 48 px row its target. */
+    link: 'text-sm font-bold underline underline-offset-2',
+    /** 🚩 Report: 13/700 in the danger ink. */
+    report: 'text-[0.8125rem] font-bold',
+} as const;
+
+/** The page's inks. */
+export const PAGE_INK = {
+    /** The page's own words: the place, the description, a box's words. */
+    body: 'text-nature-800 dark:text-nature-200',
+    /** The clock notes, the counts, the hints: nature-700, because they sit on the page ground too (oat-100, where nature-600 is 4.3:1). */
+    secondary: 'text-nature-700 dark:text-nature-300',
+    /** The event violet as words: the when, the repeat line, "You're hosting this event", Show on map. */
+    event: 'text-bp-ink-event',
+    /** 🚩 Report. */
+    danger: 'text-bp-ink-danger',
 } as const;

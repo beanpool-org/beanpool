@@ -16,7 +16,7 @@ import { copyPriceLine, eventCopyOf, formatNumber, listingChipWords, pinLive, t,
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 import { styleUntilDrawn, useListPhotoSteps } from '../lib/use-list-photo-steps';
-import { CARD_INK, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, listCard } from './market-card-shell';
+import { CARD_INK, GRID_PHOTO, GRID_ROW, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, chip, gridChip, gridTile, listCard } from './market-card-shell';
 
 /** The grid's 4:3 frame anchors upright photos towards the top third (market-card-43). */
 const GRID_CROP: CSSProperties = { objectPosition: '50% 33%' };
@@ -154,9 +154,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // Paused Offers show only to their author (server viewer-aware) — mark them so they're
     // distinguishable in "My Posts" from live listings.
     const isPaused = post.status === 'paused';
-    const pausedPill = isPaused ? (
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent">{t('⏸ Paused')}</span>
-    ) : null;
     const dealPill = dealChip ? (
         <span
             data-testid="card-deal-chip"
@@ -164,9 +161,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         >
             {listingChipWords(dealChip)}
         </span>
-    ) : null;
-    const pulsePill = isPulse ? (
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">{t('🗞️ Daily Pulse')}</span>
     ) : null;
     const isPinned = pinLive(post as any);
     const pinnedChip = isPinned ? (
@@ -185,9 +179,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const groupScopeBadge = isGroupScope ? t('🔒 Only {group} can see this', { group: targetGroupName }) : null;
     const authorName = post.authorCallsign || t('Anonymous');
     const copyLine = copy && <p data-testid="listing-copy-line" className="m-0 mt-0.5 text-xs font-semibold text-nature-700 dark:text-nature-300 break-words">{copyPriceLine(copy)}</p>;
-    const elderStyleGrid = isPulse
-        ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.18)] bg-gradient-to-b from-amber-50/30 to-transparent dark:from-amber-950/20'
-        : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.15)]' : '';
     const elderStyleList = isPulse
         ? 'border-2 border-amber-400/80 dark:border-amber-500/70 shadow-[0_4px_20px_rgba(245,158,11,0.15)] bg-amber-50/20 dark:bg-amber-950/20'
         : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]' : '';
@@ -375,36 +366,38 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         );
     }
 
-    // Grid View Return (Condensed tiles)
-    // Rebuilt on the phone's layout (market.tsx grid card):
-    // Photo (or CategoryTile) 4:3 landscape and edge-to-edge at card top, radius 14, no inner padding frame;
-    // Type pill top-leading, price pill bottom-trailing; title under the photo (clamped to two lines).
-    // No description line and no VIEW button on non-Pulse cards.
+    // The grid tile, on the Market's style box (components/market-card-shell.ts; DESIGN-market-grid-sizes-fable.md §2.2, G2).
+    // A lattice: the photo 4:3 flush at the top, then a text block of exactly four rows, and the tile fills its cell, so every
+    // tile in a row is the same height whatever it holds. On the photo: the type chip top-left, and at its foot the status
+    // chip, 📌 PINNED and the price (the phone's foot row). Under it: the title (rows 1 and 2, two reserved), who (row 3), and
+    // row 4, one line: how far, then at most one chip by deal › paused › group lock › RECURRING. The Pulse tile: its title, its
+    // pill, one line of its news. Nothing is cut from what a member reads: the page a tap opens says it all.
+    const tileKind = isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing');
+    const rowChip = (() => {
+        if (dealChip) {
+            return <span data-testid="card-deal-chip" className={gridChip(dealChip === 'in-trust' ? 'ok' : 'warn')}>{upperCase(listingChipWords(dealChip))}</span>;
+        }
+        if (isPaused) return <span className={gridChip('warn')}>{upperCase(t('⏸ Paused'))}</span>;
+        if (groupScopeBadge) return <span className={gridChip('quiet')}>{groupScopeBadge}</span>;
+        // RECURRING by the photo's precedence, PENDING > YOU > RECURRING: an own or pending listing's chip says more.
+        if (post.repeatable && !isOwnPost && post.status !== 'pending') return <span className={gridChip('quiet')}>{t('↻ RECURRING')}</span>;
+        return null;
+    })();
     return (
-        <div
-            className={`bg-white dark:bg-nature-950 overflow-hidden cursor-pointer transition-all duration-300 shadow-sm hover:shadow-md border border-nature-200 dark:border-nature-800 flex flex-col rounded-[14px] ${elderStyleGrid}`}
-        >
+        <div data-testid="listing-grid-tile" className={`${gridTile({ pulse: isPulse, elder: elderCard })} cursor-pointer transition-shadow duration-300 hover:shadow-md`}>
             {/* 4:3 Media Box at Card Top (edge to edge, radius 14) */}
-            <div className="relative w-full aspect-[4/3] overflow-hidden">
+            <div className={GRID_PHOTO}>
                 {displayImage ? (
-                    cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="grid" />, GRID_CROP)
+                    cardPicture(<CategoryTile category={post.category} kind={tileKind} size="grid" />, GRID_CROP)
                 ) : (
-                    <CategoryTile
-                        category={post.category}
-                        kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')}
-                        size="grid"
-                    />
+                    <CategoryTile category={post.category} kind={tileKind} size="grid" />
                 )}
 
-                {/* Top-leading: Type pill (unless pulse) */}
+                {/* Top-leading: the type chip (unless pulse) */}
                 {!isPulse && (
                     <div className="absolute top-2 left-2">
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg ${
-                            post.type === 'offer'
-                                ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                                : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
-                        }`}>
-                            {typeWords(post.type)}
+                        <span className={chip(post.type === 'offer' ? 'offer' : 'need')}>
+                            {upperCase(typeWords(post.type))}
                         </span>
                     </div>
                 )}
@@ -416,14 +409,19 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
                 )}
 
-                {/* Foot of photo: status chip on left, price pill bottom-trailing on right */}
-                <div data-testid="grid-badge-row" className="absolute left-2 right-2 bottom-2 flex flex-wrap items-end justify-between gap-1 pointer-events-none">
+                {/* The foot row: the status chip and 📌 PINNED at the start, the price at the end; it wraps upward when a
+                    long language needs it. */}
+                <div data-testid="grid-badge-row" className="absolute left-2 right-2 bottom-2 flex flex-wrap items-end gap-1 pointer-events-none">
                     {/* Status chip: at most ONE by precedence PENDING > YOU */}
-                    {statusChip ? (
+                    {statusChip && (
                         <div className={`font-bold rounded-lg shadow-sm text-[0.6rem] px-2 py-1 pointer-events-auto ${statusChip.className}`}>
                             {statusChip.text}
                         </div>
-                    ) : <div />}
+                    )}
+
+                    {isPinned && (
+                        <span data-testid="card-pinned-chip" className={GRID_SCRIM_PILL}>{t('📌 PINNED')}</span>
+                    )}
 
                     {/* Price pill bottom-trailing */}
                     {showPrice && (
@@ -440,68 +438,53 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 </div>
             </div>
 
-            {/* Content under the photo */}
-            <div className="p-3 flex flex-col gap-1 min-w-0 flex-1">
-                {/* Two-line title */}
-                <h3 dir="auto" className="font-bold text-sm text-nature-950 dark:text-white line-clamp-2 leading-snug">
+            {/* The four rows under the photo: a fixed block, the same at every width. */}
+            <div data-testid="grid-text-block" className={GRID_TEXT}>
+                {/* Rows 1 and 2: the title */}
+                <h3 dir="auto" className={`${GRID_TITLE} ${CARD_INK.title}`}>
                     {post.cashAlsoNeeded && <span className="mr-0.5">💸</span>}
                     {post.title}
                 </h3>
 
-                {/* Author line with PostAuthorTrust */}
-                {copyLine || <PostAuthorTrust
-                    callsign={authorName}
-                    energyCycled={authorEnergy}
-                    rating={authorRating}
-                    avatarUrl={authorAvatarUrl}
-                    publicKey={post.authorPublicKey}
-                    mode="compact"
-                    showTier={!beansMarked}
-                    isFounding={!beansMarked && !!post.authorFoundingNeeded}
-                />}
-
-                {pinnedChip && (
-                    <div className="mt-0.5">
-                        {pinnedChip}
-                    </div>
-                )}
-
-                {/* Recurring pill under the photo (market-card-43) */}
-                {post.repeatable && !isOwnPost && post.status !== 'pending' && (
-                    <div className="mt-0.5">
-                        <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink inline-block">
-                            {t('↻ RECURRING')}
-                        </span>
-                    </div>
-                )}
-
-                {/* Group lock line stays under the author */}
-                {groupScopeBadge && (
-                    <div className="mt-1">
-                        <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent block break-words">
-                            {groupScopeBadge}
-                        </span>
-                    </div>
-                )}
-
-                {/* Distance tag */}
-                {distanceTag && <div className="mt-0.5">{distanceTag}</div>}
-
-                {/* The reader's own deal on it (S4), and the paused pill */}
-                {dealPill && <div className="mt-1">{dealPill}</div>}
-                {pausedPill && <div className="mt-1">{pausedPill}</div>}
-
-                {/* Daily Pulse keeps its description and button */}
-                {isPulse && (
+                {isPulse ? (
                     <>
-                        {pulsePill && <div className="mt-1">{pulsePill}</div>}
-                        {post.description && (
-                            <p dir="auto" className="text-nature-600 dark:text-nature-400 leading-relaxed text-[11px] line-clamp-1 mt-2 mb-2">
-                                {post.description}
-                            </p>
-                        )}
-                        <div className="w-full rounded-full font-bold tracking-widest text-center transition-colors shadow-sm py-2 text-[10px] mt-auto bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 cursor-default">
-                            {t('DAILY PULSE')}
+                        {/* Row 3: the Pulse's pill; row 4: one line of its news */}
+                        <div className={GRID_ROW}>
+                            <span className={gridChip('warn')}>{upperCase(t('🗞️ Daily Pulse'))}</span>
+                        </div>
+                        <div className={GRID_ROW}>
+                            {post.description && (
+                                <p dir="auto" className={`m-0 min-w-0 truncate text-xs ${CARD_INK.secondary}`}>
+                                    {post.description}
+                                </p>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* Row 3: who (or, for a member's copy on the global community, its price at home) */}
+                        <div className={GRID_ROW}>
+                            {copy ? (
+                                <p data-testid="listing-copy-line" className="m-0 min-w-0 truncate text-xs font-semibold text-nature-700 dark:text-nature-300">{copyPriceLine(copy)}</p>
+                            ) : (
+                                <PostAuthorTrust
+                                    callsign={authorName}
+                                    energyCycled={authorEnergy}
+                                    rating={authorRating}
+                                    avatarUrl={authorAvatarUrl}
+                                    publicKey={post.authorPublicKey}
+                                    mode="compact"
+                                    showTier={!beansMarked}
+                                    isFounding={!beansMarked && !!post.authorFoundingNeeded}
+                                    className="min-w-0 flex-1"
+                                />
+                            )}
+                        </div>
+
+                        {/* Row 4: how far, then at most one chip; blank when there is nothing to say */}
+                        <div data-testid="grid-row-4" className={GRID_ROW}>
+                            {distanceTag}
+                            {rowChip}
                         </div>
                     </>
                 )}

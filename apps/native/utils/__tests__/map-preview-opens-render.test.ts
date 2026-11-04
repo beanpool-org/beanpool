@@ -265,14 +265,18 @@ describe('the Map: a pin card opens its item from anywhere on it, and never the 
         expect(pushed()).toEqual(['/post/p-eggs']);
     });
 
-    it('a listing: a press on its title, and on View Details, open it too (once each)', async () => {
+    // The View Details button is gone (slice M1: the card is the Market's list card, and the whole card opens the listing), so
+    // the second press is on what stands where it was: the card's own chips and price.
+    it('a listing: a press on its title, and on its OFFER chip, open it too (once each); no View Details', async () => {
         await renderIn('en');
         await click(marker(POSTS[0] as any), 'the eggs pin');
         await click(textOf(openCard()!, 'Fresh duck eggs'), 'the title');
         expect(pushed()).toEqual(['/post/p-eggs']);
         nav.pushed.length = 0;
         await click(marker(POSTS[0] as any), 'the eggs pin again');
-        await click(byText('View Details'), 'View Details');
+        expect(byText('View Details')).toBeNull();
+        expect(openCard()!.querySelectorAll('button')).toHaveLength(0);
+        await click(host.querySelector('[data-testid="map-preview-type-chip"]'), 'the OFFER chip');
         expect(pushed()).toEqual(['/post/p-eggs']);
     });
 

@@ -83,7 +83,7 @@ function PinSheetContent({ post, onClose, onSuccess }: Omit<PinSheetProps, 'isOp
                         onClick={onClose}
                         disabled={submitting}
                         aria-label={t('Close')}
-                        className="text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 font-bold p-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 cursor-pointer disabled:opacity-50"
+                        className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 font-bold p-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 cursor-pointer disabled:opacity-50"
                     >
                         ✕
                     </button>

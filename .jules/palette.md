@@ -286,3 +286,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-11-02 - MarketplacePage Inline Star Rating Accessibility & Focus Indicators
 **Learning:** In `MarketplacePage.tsx`, inline trade rating star buttons lacked `type="button"` attributes, lacked accessible names (`aria-label`) for screen readers, and suppressed focus outlines with `focus:outline-none` without providing keyboard focus ring indicators.
 **Action:** Added `type="button"`, dynamic `aria-label={tn(star, 'Rate {n} star', 'Rate {n} stars')}`, and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg` to inline star rating buttons in `MarketplacePage.tsx`.
+
+## 2026-11-04 - PinSheet Close Button Touch Target Sizing
+**Learning:** `PinSheet.tsx` close button used `p-1` around a single character without explicit minimum touch target dimensions, resulting in touch target dimensions failing the 44px x 44px minimum touch target requirement on mobile devices.
+**Action:** Added `min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center` to the close button in `PinSheet.tsx` and updated unit test coverage in `PinSheet.test.tsx`.

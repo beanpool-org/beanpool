@@ -586,14 +586,16 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
         expect(styleOf(byTestId('event-when')).textDecorationLine).toBeUndefined();
     });
 
-    it('outside the grid the list card is unchanged: list and compact draw it (the compact row is slice C1)', async () => {
+    it('outside the grid: the list view draws the list card, and the compact view (slice C1) the compact row', async () => {
         for (const viewMode of ['list', 'compact'] as const) {
             await act(async () => {
                 root.render(createElement(EventCard, { post: MARKET, currentPubkey: ME, viewMode }) as unknown as Parameters<Root['render']>[0]);
                 await new Promise((r) => setTimeout(r, 0));
             });
             expect(byTestId('grid-text-block'), viewMode).toBeNull();
-            expect(styleOf(card()), viewMode).toMatchObject({ flexDirection: 'row', padding: 0 });
+            expect(styleOf(card()), viewMode).toMatchObject(viewMode === 'list'
+                ? { flexDirection: 'row', padding: 0 }
+                : { flexDirection: 'row', borderRadius: MARKET_CARD_SHELL.radius, paddingVertical: MARKET_CARD_SHELL.compactPadding.vertical, paddingHorizontal: MARKET_CARD_SHELL.compactPadding.horizontal });
         }
     });
 });

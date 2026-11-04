@@ -535,7 +535,8 @@ describe('Every door lands on the enterprise page', () => {
         }
         // §1.1's doors, and the member's own profile (the Ledger tab, the header, a voucher or mutual link on a profile).
         expect(doors).toEqual({
-            [path.join('app', 'post', '[id].tsx')]: 3,
+            // The deal's other person, a listing's POSTED BY, a request's asker, and a poll's author (C1: a poll has a page now).
+            [path.join('app', 'post', '[id].tsx')]: 4,
             [path.join('app', 'chat', '[id].tsx')]: 2,
             // The map's small cards open the item and never its owner (4 Nov), so the map is no longer a door. An event's own screen
             // is: the host's box ("HOSTED BY", components/AuthorCard.tsx) opens the host, as a listing's "POSTED BY" does.

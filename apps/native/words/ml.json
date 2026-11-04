@@ -1134,6 +1134,7 @@
   "Event: {title}, {when}, updated": "ഇവന്റ്: {title}, {when}, അപ്ഡേറ്റ് ചെയ്തു",
   "Event: {title}, {when}": "ഇവന്റ്: {title}, {when}",
   "CANCELLED\u0004event": "റദ്ദാക്കി",
+  "ENDED\u0004event": "അവസാനിച്ചു",
   "UPDATED\u0004event": "അപ്ഡേറ്റ് ചെയ്തു",
   "You're hosting this event": "നിങ്ങളാണ് ഈ ഇവന്റ് നടത്തുന്നത്",
   "PENDING\u0004deal status": "തീർപ്പാക്കാത്തത്",

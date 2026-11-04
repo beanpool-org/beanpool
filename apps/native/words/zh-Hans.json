@@ -1079,6 +1079,7 @@
   "Event: {title}, {when}, updated": "活动：{title}，{when}，已更新",
   "Event: {title}, {when}": "活动：{title}，{when}",
   "CANCELLED\u0004event": "已取消",
+  "ENDED\u0004event": "已结束",
   "UPDATED\u0004event": "已更新",
   "You're hosting this event": "你是本次活动的主办人",
   "PENDING\u0004deal status": "待处理",

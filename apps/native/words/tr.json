@@ -1135,6 +1135,7 @@
   "Event: {title}, {when}, updated": "Etkinlik: {title}, {when}, güncellendi",
   "Event: {title}, {when}": "Etkinlik: {title}, {when}",
   "CANCELLED\u0004event": "İPTAL EDİLDİ",
+  "ENDED\u0004event": "SONA ERDİ",
   "UPDATED\u0004event": "GÜNCELLENDİ",
   "You're hosting this event": "Bu etkinliğin ev sahibi sensin",
   "PENDING\u0004deal status": "BEKLEMEDE",

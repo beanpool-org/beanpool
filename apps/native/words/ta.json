@@ -1136,6 +1136,7 @@
   "Event: {title}, {when}, updated": "நிகழ்வு: {title}, {when}, புதுப்பிக்கப்பட்டது",
   "Event: {title}, {when}": "நிகழ்வு: {title}, {when}",
   "CANCELLED\u0004event": "ரத்து செய்யப்பட்டது",
+  "ENDED\u0004event": "முடிந்தது",
   "UPDATED\u0004event": "புதுப்பிக்கப்பட்டது",
   "You're hosting this event": "நீங்கள் இந்த நிகழ்வை நடத்துகிறீர்கள்",
   "PENDING\u0004deal status": "நிலுவையில்",

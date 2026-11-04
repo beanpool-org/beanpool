@@ -39,6 +39,12 @@
  * Every event tile fails when any of its four rows is cut (the row's scrollWidth > clientWidth: something drawn past its box),
  * when a date or time piece it shows is cut by its own "…", or when its time row, as shown, ends in a dash.
  *
+ * --view compact (the style box C1, DESIGN-card-style-box-fable.md §2) taps "Grid view" then "Compact view" and runs `local` and
+ * `global`. An event and a poll are compact rows like a listing's: each row is one row of the box (the 32 dp picture, the words,
+ * the chip at the end), no taller than the tallest listing row and one line (11 dp at 1.3x), never wider than the screen; the
+ * poll's row names the member's answer with ✓ and holds no control of its own (no answer, no Close Poll, no ···), and no poll
+ * card is drawn in the compact view. The local case holds the pinned Byron event (Going) and a poll the member answered.
+ *
  * Fonts: Chromium on a Mac draws the system font, wider than Android's Roboto (a plain "10:26–14:26" is 113.5 dp in it, in a
  * 110 dp row). Pass Android's own Roboto to measure what a phone draws, e.g. pulled from an emulator's /system/fonts:
  *   node apps/native/e2e/market-order-320.mjs --view grid --font <Roboto-Regular.ttf> --shots <dir>
@@ -58,7 +64,7 @@ const WIDTH = 320;
 const HEIGHT = 1300; // tall, so one shot holds the whole list: the real phone scrolls it
 const viewAt = process.argv.indexOf('--view');
 const VIEW = viewAt > 0 ? process.argv[viewAt + 1] : 'list';
-if (VIEW !== 'list' && VIEW !== 'grid') { console.log('--view is list or grid'); process.exit(2); }
+if (VIEW !== 'list' && VIEW !== 'grid' && VIEW !== 'compact') { console.log('--view is list, grid or compact'); process.exit(2); }
 const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? path.resolve(process.argv[shotsAt + 1]) : null;
 if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -84,6 +90,12 @@ const STUB_FILES = [
     'components/PageTitle', 'components/PollCard', 'components/PostAuthorTrust', 'components/MarketCardPicture', 'components/CategoryTile',
     'components/ListingCopyLine', 'components/CurrencyDisplay', 'components/keyboardAwareList',
 ];
+// The compact view draws the real PollCard: its row is what C1 measures (list and grid keep the stand-in card).
+// What only the card draws (the author's avatar, the pin sheet, the Other answers, the showcase's mark) stays stubbed.
+if (VIEW === 'compact') {
+    STUB_FILES.splice(STUB_FILES.indexOf('components/PollCard'), 1);
+    STUB_FILES.push('components/MemberAvatar', 'components/PinSheet', 'components/PollOtherAnswers', 'components/showcase/LocalCommunityMark', 'utils/use-pin-role', 'utils/keyboard-alert');
+}
 const STUB_PACKAGES = ['expo-secure-store', 'expo-router', 'expo-location', 'expo-image', '@expo/vector-icons', '@react-native-async-storage/async-storage', 'react-native-safe-area-context'];
 
 // ─── The names each stub must export: read off the screen's own imports, so a new import never breaks the harness ──────────
@@ -271,12 +283,18 @@ if (c === 'local') {
         post('ev', 'Repair Café', { type: 'event', category: 'events', created_at: ago(60 * 24 * 35), author_callsign: 'Civic Hall',
             event_start_at: ahead(60 * 23), event_end_at: ahead(60 * 25), event_state: 'scheduled', event_going_count: 4, event_interested_count: 2 }),
         // The style box P2: an event pinned, with Byron's longest title, in the list's Pinned block (the grid's one-pin case keeps one).
-        ...(${JSON.stringify(VIEW)} === 'list' ? [post('evpin', 'Byron Bay Twilight Market - Every Saturday', { type: 'event', category: 'events',
+        ...(${JSON.stringify(VIEW)} !== 'grid' ? [post('evpin', 'Byron Bay Twilight Market - Every Saturday', { type: 'event', category: 'events',
             created_at: ago(60 * 24 * 20), pinned_until: ahead(60 * 48), pinned_at: ago(30), author_callsign: 'Byron Markets',
             event_start_at: ahead(60 * 50), event_end_at: ahead(60 * 55), event_state: 'scheduled', event_place_name: 'Railway Park, Jonson Street',
             myRsvp: 'going', event_going_count: 12, event_interested_count: 5 })] : []),
         post('c', 'Firewood, split', { created_at: ago(40), author_callsign: 'Ana' }),
         post('y', 'Someone to mind two goats', { type: 'need', category: 'pets', created_at: ago(60 * 26), author_callsign: 'Mo' }),
+        // C1: a poll the member answered, in the compact view a row with its answer ✓ (its answers are on its page).
+        ...(${JSON.stringify(VIEW)} === 'compact' ? [
+            post('pollc', 'What would make trading on BeanPool easier for you?', { type: 'poll', category: 'general', created_at: ago(30),
+                author_callsign: 'Dee', poll_closes_at: ahead(60 * 24 * 11 + 60), pollOpenVote: true, userVotedOptionId: 'o1', totalVotes: 4,
+                pollOptions: [{ id: 'o1', text: 'Better matches between offers and needs', votes: 3 }, { id: 'o2', text: 'More events', votes: 1 }] }),
+        ] : []),
         // The lattice (PG2): a poll in the grid is a row of its own; a recurring Offer with a two-line title beside a short one.
         ...(${JSON.stringify(VIEW)} === 'grid' ? [
             post('poll', 'Where should the new tool shed go?', { type: 'poll', category: 'general', created_at: ago(30), author_callsign: 'Dee' }),
@@ -374,17 +392,21 @@ const browser = await chromium.launch();
 let failures = 0;
 const fail = (msg) => { failures++; console.log('  FAIL', msg); };
 for (const scheme of ['light', 'dark']) {
-    for (const which of VIEW === 'grid' ? ['local', 'global'] : ['local', 'global', 'newsince', 'newsince-day']) {
+    for (const which of VIEW !== 'list' ? ['local', 'global'] : ['local', 'global', 'newsince', 'newsince-day']) {
         const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 2, ...(VIEW === 'grid' ? { timezoneId: READER_TZ } : {}) });
         const errors = [];
         page.on('pageerror', e => errors.push(String(e)));
         page.on('console', m => { if (process.env.DEBUG_TEXT) console.log('  [console.' + m.type() + ']', m.text().slice(0, 300)); if (m.type() === 'error') errors.push(m.text()); });
         await page.goto(`http://127.0.0.1:${port}/?case=${which}&scheme=${scheme}`);
         await page.waitForTimeout(1500);
-        if (VIEW === 'grid') {
-            // The Market opens in list view; its view button goes list → grid.
+        if (VIEW !== 'list') {
+            // The Market opens in list view; its view button goes list → grid → compact.
             await page.click('[aria-label="Grid view"]');
             await page.waitForTimeout(700);
+            if (VIEW === 'compact') {
+                await page.click('[aria-label="Compact view"]');
+                await page.waitForTimeout(700);
+            }
         }
         if (FONT) await page.evaluate(() => document.fonts.ready);
         console.log(`${which} / ${scheme}${VIEW === 'grid' ? ` / grid / reader in ${READER_TZ}` : ''}`);
@@ -650,7 +672,47 @@ for (const scheme of ['light', 'dark']) {
             if (result.lineScrollH > result.lineClientH + 1) fail('the line is cut: its words do not fit at 320dp and 1.3x');
             console.log('  distances:', result.distances.join(', '));
         }
-        if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `market-order-${which}${VIEW === 'grid' ? '-grid' : ''}-${scheme}.png`) });
+        if (VIEW === 'compact') {
+            // C1: every row of the compact view, measured where the browser drew it.
+            const rows = await page.evaluate(() => {
+                const box = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, left: r.left, width: r.width, height: r.height, right: r.right }; };
+                const lines = (el) => (el.innerText || '').split('\n').map(l => l.trim()).filter(Boolean);
+                // A listing's row is its pressable's one child; an event's and a poll's row is the pressable.
+                const listings = Array.from(document.querySelectorAll('[data-testid^="market-card-"]')).map(b => ({ id: b.getAttribute('data-testid'), ...box(b.firstElementChild ?? b), text: lines(b) }));
+                const kinds = Array.from(document.querySelectorAll('[data-testid^="event-card-"], [data-testid^="poll-row-"]')).map(r => ({
+                    id: r.getAttribute('data-testid'), ...box(r), text: lines(r),
+                    inner: r.querySelectorAll('[role="button"], button').length,
+                    picture: (() => { const p = r.querySelector('[data-testid="compact-picture"]'); return p ? box(p) : null; })(),
+                    mark: (r.querySelector('[data-testid="poll-mark"], [data-testid="event-mark"]') || {}).innerText || null,
+                    // The row's own short lines as drawn (an emoji draws a line taller in Chromium than the words alone).
+                    lineHeights: Array.from(r.querySelectorAll('[data-testid="event-when"], [data-testid="event-row-place"]')).map(l => l.getBoundingClientRect().height),
+                }));
+                return { listings, kinds, pollCards: document.querySelectorAll('[data-testid="poll-card"]').length };
+            });
+            const ONE_LINE = 11 * SCALE * 1.25;
+            const tallest = Math.max(...rows.listings.map(r => r.height));
+            if (!rows.listings.length) fail('no listing rows');
+            if (rows.pollCards) fail(`${rows.pollCards} poll card(s) in the compact view`);
+            if (which === 'local' && !rows.kinds.some(r => r.id.startsWith('poll-row-'))) fail('the poll is not a row');
+            if (!rows.kinds.some(r => r.id.startsWith('event-card-'))) fail('no event row');
+            for (const r of rows.kinds) {
+                // One line: the tallest of the row's own short lines as the browser drew it, at least the phone's 11 dp at 1.3x.
+                const line = Math.max(ONE_LINE, ...r.lineHeights);
+                if (r.height > tallest + line + 0.5) fail(`${r.id}: ${r.height} dp, more than the tallest listing row ${tallest} and one line (${line})`);
+                if (r.right > WIDTH + 0.5) fail(`${r.id}: drawn past the edge (${r.right})`);
+                if (!r.picture || Math.abs(r.picture.width - 32) > 0.5 || Math.abs(r.picture.height - 32) > 0.5) fail(`${r.id}: picture ${JSON.stringify(r.picture)}, not 32 x 32`);
+                if (r.inner) fail(`${r.id}: ${r.inner} control(s) inside the row`);
+            }
+            const poll = rows.kinds.find(r => r.id === 'poll-row-pollc');
+            if (which === 'local' && (!poll || !/Better matches/.test(poll.mark || '') || !/✓/.test(poll.mark || ''))) fail(`the poll row's mark is ${poll?.mark}`);
+            if (poll && poll.text.some(l => /^More events$/.test(l))) fail('an answer is on the poll row');
+            // The shot from the list's top, so the Pinned block (the pinned event's row) is in it.
+            await page.evaluate(() => { for (const el of Array.from(document.querySelectorAll('#root *'))) if (el.scrollTop) el.scrollTop = 0; });
+            await page.waitForTimeout(300);
+            console.log('  listing rows:', rows.listings.map(r => Math.round(r.height)).join(', '), 'dp');
+            console.log('  rows:', rows.kinds.map(r => `${r.id} ${Math.round(r.height)} dp [${r.text.join(' | ')}]`).join(' || '));
+        }
+        if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `market-order-${which}${VIEW !== 'list' ? `-${VIEW}` : ''}-${scheme}.png`) });
         await page.close();
     }
 }

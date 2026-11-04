@@ -1135,6 +1135,7 @@
   "Event: {title}, {when}, updated": "رویداد: {title}، {when}، به‌روزرسانی شد",
   "Event: {title}, {when}": "رویداد: {title}، {when}",
   "CANCELLED\u0004event": "لغو شده",
+  "ENDED\u0004event": "پایان یافته",
   "UPDATED\u0004event": "به‌روزرسانی شده",
   "You're hosting this event": "شما میزبان این رویداد هستید",
   "PENDING\u0004deal status": "در انتظار",

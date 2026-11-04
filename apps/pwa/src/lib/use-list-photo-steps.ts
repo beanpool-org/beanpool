@@ -13,16 +13,17 @@ import { joinPhotoLine } from './list-photo-line';
  * fallback until then; a photo that has neither loaded nor failed in time counts as failed and takes the same step down
  * (@beanpool/core nextListPhotoUrl: the small copy once more past every cache, the photo's own URL, then nothing).
  *
- * "In time" counts from when its request starts, never before (the phone's rule, apps/native/components/useListPhotoSteps.ts).
- * An <img> shows neither that start nor its bytes, so the web follows the two steps the browser takes:
+ * "In time" counts from when its request starts, never before (the phone's rule, in its twin). An <img> shows neither
+ * that start nor its bytes, so the web follows the two steps the browser takes:
  *  - the browser asks for it: at once for an eager <img>; a `lazy` one off screen is not asked for at all (review of
  *    #2853, finding 1: a wait that started at mount stepped MapStackList's and Home's lazy photos down to their fallback
  *    before they were ever fetched, and they never loaded), so its wait starts once it has been in view with the URL it
  *    shows (`ref` takes the <img> and an IntersectionObserver watches it). A step down to a new URL while it is out of
  *    view waits for it to come back;
  *  - its request starts: a browser runs at most 6 requests to one host at once and the rest wait with no event (round 3
- *    of that review: the Market page's 50 eager cards on a 25 KB/s link drew 12, and 38 were stepped down unfetched and
- *    stayed on their tile). The page keeps the same line (lib/list-photo-line.ts) and the wait starts at the photo's turn.
+ *    of that review: with the wait from mount, the Market page's 50 eager cards on a 25 KB/s link drew 12, and the other
+ *    38 stepped down and stayed on their tile, where main drew all 50). The page keeps the same line
+ *    (lib/list-photo-line.ts) and the wait starts at the photo's turn.
  * From its turn it has LIST_PHOTO_QUEUED_MS, the phone's wait for a load that may still be queued: the web cannot tell
  * a request still in the browser's line from one that has stalled, nor see bytes arrive, so it has no shorter wait.
  *

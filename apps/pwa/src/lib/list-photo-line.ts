@@ -12,9 +12,10 @@
  * Where the line differs from the browser's, a turn comes later than the request starts, or earlier, and both are safe:
  *  - later: over HTTP/2 every request starts at once, and two cards with one URL make one request; the wait only starts
  *    later, and the tile holds the slot meanwhile;
- *  - earlier: another request to the host (an API read, a URL a card has moved past that the browser still downloads) can
- *    hold a place in the browser's line that this one does not count. The wait after a turn is the phone's budget for a
- *    load that may still be queued (LIST_PHOTO_QUEUED_MS), not the short one.
+ *  - earlier: another request to the host (an API read, a URL a card has moved past that the browser still downloads, a
+ *    lazy photo the browser asks for before it is in view, as it does within its lazy-load distance) can hold a place in
+ *    the browser's line that this one does not count. The wait after a turn is the phone's budget for a load that may
+ *    still be queued (LIST_PHOTO_QUEUED_MS), not the short one.
  * A photo whose turn has come leaves within its wait, so the line always moves, and a request that never ends (the one
  * the wait is for) is stepped down in the end however many are ahead of it.
  */

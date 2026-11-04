@@ -140,3 +140,49 @@ describe('the 12 words never pass through the words layer', () => {
         expect(src).not.toMatch(/bip39|recovery-words|WORDLIST|seedFrom|BIP39_ENGLISH|mnemonic/i);
     });
 });
+
+describe('the kit steps name each button as the screen draws it', () => {
+    // A member who has lost their phone follows the printed page and looks for the quoted text on the screen, so a step that
+    // quotes a button in other words than the button's own catalog entry (or in English, where the button is translated)
+    // sends them looking for a label that is not there. The phone's steps ("Tap …") name the phone's buttons, the web's
+    // steps ("Click …") the web app's; a button with no entry in its app's catalog shows its English, so that is what is quoted.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const repoRoot = resolve(here, '..', '..', '..', '..');
+    const catalog = (dir: string, lang: string): Record<string, unknown> => {
+        try {
+            return JSON.parse(readFileSync(join(repoRoot, dir, 'words', `${lang}.json`), 'utf8'));
+        } catch {
+            return {};
+        }
+    };
+    const quoted = (step: string) => Array.from(step.matchAll(/“([^”]+)”/g), (m) => m[1]);
+    const SURFACES = [
+        { name: 'phone', dir: 'apps/native', steps: KIT_RESTORE_STEPS },
+        { name: 'web', dir: 'apps/pwa', steps: KIT_WEB_RESTORE_STEPS },
+    ] as const;
+
+    it('the English steps quote the buttons below (so the languages are held to a list that is not empty)', () => {
+        expect(SURFACES[0].steps.flatMap(quoted)).toEqual(['🔑 Already a Member? Restore Account →', '🔑 Recover with 12 Words', 'Recover Identity']);
+        expect(SURFACES[1].steps.flatMap(quoted)).toEqual([
+            'Already have BeanPool?', '🔑 Restore Existing Identity →', 'Use my 12 words', '🔑 Recover with 12 Words', 'Recover Identity',
+        ]);
+    });
+
+    for (const lang of LANGS.filter((l) => l !== 'en')) {
+        it(`${lang}: every quoted label in a kit step is the label of the button it names, word for word`, () => {
+            const core = catalog('packages/beanpool-core', lang);
+            for (const { name, dir, steps } of SURFACES) {
+                const app = catalog(dir, lang);
+                for (const step of steps) {
+                    const written = core[step];
+                    // A step with no translation reads in English, quoting the English labels: nothing to hold it to here.
+                    if (typeof written !== 'string') continue;
+                    for (const label of quoted(step)) {
+                        const drawn = typeof app[label] === 'string' ? (app[label] as string) : label;
+                        expect(written, `${lang} ${name}: "${label}" is drawn as "${drawn}", and the step quotes it differently`).toContain(drawn);
+                    }
+                }
+            }
+        });
+    }
+});

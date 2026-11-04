@@ -60,7 +60,7 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
  * for every tool this build has with a Home card (tools/index.ts toolHomeCardIds), drawn by Home's `default:` branch.
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
-    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'search', 'decide', 'groups',
+    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'search', 'decide', 'groups',
     'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
     ...toolHomeCardIds(),
 ]);
@@ -135,6 +135,11 @@ export interface HomeMarketItem {
     /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
     pinned?: boolean | null;
 }
+/**
+ * One row of "Asked near you" (apps/server routes/home-answer.ts NeedItem): a neighbour's open Need, with the Market card's
+ * own fields for the row. `credits` only where Beans are on; `priceType` only when the post has one.
+ */
+export interface HomeNeedItem { id: string; title: string; category: string; credits?: number; priceType?: string; createdAt: string; photoUrl: string | null }
 export interface HomeEventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
     /** The host's clock, its zone and online (DESIGN-event-times §4), when the node's Home answer carries them. */
@@ -188,7 +193,10 @@ export interface HomeCards {
     safety?: { words: true; signInLinked: false };
     find?: HomeFind;
     steps?: {
-        joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean;
+        joinedAt: string | null; firstOffer: boolean;
+        /** Whether the member has posted a Need here (cold-start N1); absent from a node before it: that node has no such line. */
+        firstNeed?: boolean;
+        firstPost: boolean; photo: boolean; interests: boolean;
         invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
     };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items?: HomeDealItem[] };
@@ -201,6 +209,8 @@ export interface HomeCards {
     shop?: ShopHomeCard;
     events?: { items: HomeEventItem[]; radiusKm: number | null };
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
+    /** "Asked near you" (cold-start N1): the open Needs of neighbours, the member's stars first; absent while there is none to show. */
+    asked?: { items: HomeNeedItem[] };
     decide?: {
         open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean;
         items?: HomeDecideItem[]; poll?: HomeDecidePoll | null;
@@ -837,7 +847,7 @@ export function marketForward(params: { tab?: string | string[]; dealsTab?: stri
  * A First steps line (§3.1), with what is done. `suggestion`: a line that never holds the card open (the phone can't
  * tick it: a knock is kept on the community knocked on, not here); it goes once the phone remembers a knock.
  */
-export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'post' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch'; text: string; done: boolean; suggestion?: true }
+export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'need' | 'invite' | 'post' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch'; text: string; done: boolean; suggestion?: true }
 
 /**
  * `canInvite`: whether the reader can invite here ({@link invitesForReader}). The node sends `invited: false` wherever
@@ -850,6 +860,11 @@ export function stepLines(steps: NonNullable<HomeCards['steps']>, interestsSet: 
         { id: 'photo', text: t('Add a photo to your profile'), done: steps.photo },
         { id: 'interests', text: t('Pick a few things you like'), done: steps.interests || interestsSet },
     ];
+    // After the first Offer (a Need needs one where Beans are on): asking for one thing a neighbour could do (cold-start N2). A node
+    // from before the fact (`firstNeed` absent) has no such line and keeps the card up for nothing else, so none is drawn for it.
+    if (steps.firstOffer && typeof steps.firstNeed === 'boolean') {
+        lines.push({ id: 'need', text: t("Ask for one thing you'd pay a neighbour for"), done: steps.firstNeed });
+    }
     // After the first Offer, where invites are on (null: no such step here) and the reader can make one.
     if (steps.invited !== null && steps.firstOffer && canInvite) lines.push({ id: 'invite', text: t('Invite someone'), done: steps.invited });
     return lines;
@@ -958,6 +973,18 @@ export function marketInOrder<T extends { category: string; distanceKm?: number 
     return [...ordered.filter(i => i.pinned), ...ordered.filter(i => !i.pinned)];
 }
 
+/**
+ * The second line of an "Asked near you" row ("20 Beans · 2h ago", "Free · 3d ago"): what the Need pays, where Beans show, then
+ * how long ago it was asked. A Need that asks nothing says Free; a node that sent no figure, or one without Beans, says no price.
+ * Never a price the node did not send.
+ */
+export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'createdAt'>, showsBeans: boolean, nowMs: number = Date.now()): string {
+    const price = showsBeans && typeof p.credits === 'number' && Number.isFinite(p.credits)
+        ? (p.credits > 0 ? beansAmount(p.credits) : t('Free', undefined, 'a listing with no price'))
+        : null;
+    return [price, timeAgoInWords(p.createdAt, nowMs)].filter(Boolean).join(' · ');
+}
+
 /** The 📌 a pinned Home row draws before its title (DESIGN-pinning-fable.md §2.2): nothing on any other row. */
 export function pinMark(row: { pinned?: boolean | null }): string {
     return row.pinned ? '📌 ' : '';
@@ -998,6 +1025,8 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'tips': return !!answer.me && !!ctx.tipsUp;
             case 'invite': return !global && canInvite && !!answer.me?.firstOffer;
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
+            // Real open Needs only: drawn while the node sent a row, never an empty box (cold-start N2).
+            case 'asked': return !!c.asked && Array.isArray(c.asked.items) && c.asked.items.length > 0;
             case 'decide': return !!c.decide && decideLines(c.decide, answer.features, 0).length > 0;
             // Drawn with no body too (SEARCH_OFFLINE_LINE), so a member on 2G knows the add took; a search that finds
             // nothing says so (searchEmptyLine).

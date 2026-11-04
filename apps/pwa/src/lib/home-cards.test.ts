@@ -9,7 +9,7 @@ import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLa
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
     HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, dealTitleLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, monthSummaryLine, probationSentence, searchCardFor, shownFrame, skyOf,
-    starredFirst, stepLines, stepsSaySomething, toggleInterest, usePhoneAppCardDue, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
+    askedFacts, starredFirst, stepLines, stepsSaySomething, toggleInterest, usePhoneAppCardDue, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
     homeEventWhere,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -473,6 +473,57 @@ describe('month summary line: partial month indication when more is set', () => 
 
     it('shows partial indicator when more is true', () => {
         expect(monthSummaryLine({ trades: 200, in: 500, out: 300, more: true })).toBe('This month (partial): 200 trades · +500 in · −300 out');
+    });
+});
+
+describe('Asked near you, and the First steps line for a Need (cold-start N2)', () => {
+    const need = (id: string, over: Partial<NonNullable<HomeCards['asked']>['items'][number]> = {}) =>
+        ({ id, title: `Need ${id}`, category: 'labour', credits: 20, createdAt: new Date(NOW - 2 * 3_600_000).toISOString(), photoUrl: null, ...over });
+    const onList: HomeLayoutV2 = { ...every(), cards: [...every().cards, { id: 'asked', type: 'asked' }] };
+    const beansWords = (n: number) => `${n} Beans`;
+
+    it('the card is drawn while the node sent a row, never empty', () => {
+        const base = { steps, market, community };
+        expect(shown(answer({ ...base, asked: { items: [need('n1')] } }, { me: me() }), { now: NOW }, onList)).toContain('asked');
+        expect(shown(answer({ ...base }, { me: me() }), { now: NOW }, onList)).not.toContain('asked');
+        expect(shown(answer({ ...base, asked: { items: [] } }, { me: me() }), { now: NOW }, onList)).not.toContain('asked');
+    });
+
+    it('the starter set holds it after the Market, and a list that does not name it never asks for it', () => {
+        const starter = cardsToAsk(null);
+        expect(starter).toContain('asked');
+        expect(starter.indexOf('asked')).toBe(starter.indexOf('market') + 1);
+        expect(cardsToAsk(every())).not.toContain('asked');
+    });
+
+    it('the second line: what the Need pays, then how long ago; Free asks nothing; no Beans, no price; no figure sent, none made up', () => {
+        expect(askedFacts(need('a', { credits: 20 }), true, beansWords)).toMatch(/^20 Beans · .+/);
+        expect(askedFacts(need('a', { credits: 0 }), true, beansWords)).toMatch(/^Free · .+/);
+        expect(askedFacts(need('a', { credits: 20 }), false, beansWords)).not.toMatch(/Beans|Free/);
+        expect(askedFacts(need('a', { credits: undefined }), true, beansWords)).not.toMatch(/Beans|Free/);
+        expect(askedFacts(need('a', { createdAt: 'nonsense' }), true, beansWords)).toBe('20 Beans');
+    });
+
+    it('First steps: the Need line follows the interests line, once there is an Offer, with the invite line after it', () => {
+        const keys = (s: object, m = me({ firstOffer: false })) => stepLines(answer({ steps: { ...steps, ...s } }, { me: m }), []).map(l => l.key);
+        expect(keys({ firstOffer: true, firstNeed: false })).toEqual(['firstOffer', 'photo', 'interests', 'firstNeed', 'invite']);
+        expect(keys({ firstOffer: true, firstNeed: false, invited: null })).toEqual(['firstOffer', 'photo', 'interests', 'firstNeed']);
+        const line = stepLines(answer({ steps: { ...steps, firstOffer: true, firstNeed: false } }), []).find(l => l.key === 'firstNeed')!;
+        expect(line).toEqual({ key: 'firstNeed', done: false, text: "Ask for one thing you'd pay a neighbour for" });
+        expect(stepLines(answer({ steps: { ...steps, firstOffer: true, firstNeed: true } }), []).find(l => l.key === 'firstNeed')!.done).toBe(true);
+        // Not before the first Offer; not from a node that sent no such fact (it has no such line, and keeps the card for nothing else).
+        expect(keys({ firstOffer: false, firstNeed: false })).toEqual(['firstOffer', 'photo', 'interests']);
+        expect(keys({ firstOffer: true })).toEqual(['firstOffer', 'photo', 'interests', 'invite']);
+        // The global node's first week has no such line.
+        expect(stepLines(answer({ steps: { ...steps, firstOffer: true, firstNeed: false }, find }, { profile: 'global', features: GLOBAL_FEATURES }), []).map(l => l.key)).not.toContain('firstNeed');
+    });
+
+    it('First steps stays up for the Need line alone, only for a node that sent the fact', () => {
+        const old = { ...steps, joinedAt: daysAgo(40), firstOffer: true, photo: true, interests: true, invited: true };
+        const may = (s: object) => stepsSaySomething(answer({ steps: { ...old, ...s } }, { me: me({ firstOffer: true, interests: ['food'] }) }), ['food'], NOW);
+        expect(may({ firstNeed: false })).toBe(true);
+        expect(may({ firstNeed: true })).toBe(false);
+        expect(may({})).toBe(false);
     });
 });
 

@@ -89,7 +89,9 @@ export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null)
     // invitation's landing, and People → Invites (utils/needs-you.ts needsTargetHref), so the node may point a keepers' or
     // a group's vote line there and count it, send the line for the member's open invitations, and give requests to join
     // a line of their own (apps/server routes/home-answer.ts parseLands). `asks`: and a member's ask that an admin invite someone.
-    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
+    // `first-need`: and First steps' line "Ask for one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start N2):
+    // the node keeps First steps up for that line alone only for an app that says it draws it (home-answer.ts HomeLanding).
+    return `/api/home?cards=${asked.join(',')}&lands=enterprise,group,invite,people,asks,first-need${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {

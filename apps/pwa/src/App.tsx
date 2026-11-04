@@ -290,8 +290,9 @@ export function App() {
     const clearSaveSearch = useCallback(() => setSaveSearchToHome(null), []);
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
-    // Commons' Start something → Poll / Event: the composer opens on that kind ('map-post-poll' / 'map-post-event').
-    const [openNewPostType, setOpenNewPostType] = useState<'poll' | 'event' | undefined>(undefined);
+    // Commons' Start something → Poll / Event, and First steps' "Ask for one thing you'd pay a neighbour for": the composer opens on
+    // that kind ('map-post-poll' / 'map-post-event' / 'map-post-need').
+    const [openNewPostType, setOpenNewPostType] = useState<'poll' | 'event' | 'need' | undefined>(undefined);
     // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
     const [focusMapPostId, setFocusMapPostId] = useState<string | null>(null);
     const clearFocusMapPost = useCallback(() => setFocusMapPostId(null), []);
@@ -450,11 +451,11 @@ export function App() {
             setOpenNewPostGroupId(contextId);
             return;
         }
-        if (tab === 'map-post-poll' || tab === 'map-post-event') {
+        if (tab === 'map-post-poll' || tab === 'map-post-event' || tab === 'map-post-need') {
             setActiveTab('map');
             setOpenNewPost(true);
             setOpenNewPostGroupId(undefined);
-            setOpenNewPostType(tab === 'map-post-poll' ? 'poll' : 'event');
+            setOpenNewPostType(tab === 'map-post-poll' ? 'poll' : tab === 'map-post-need' ? 'need' : 'event');
             return;
         }
         if (tab === 'map-event') {
@@ -482,6 +483,12 @@ export function App() {
         if (tab === 'marketplace' && contextId === 'events') {
             setActiveTab('marketplace');
             setOpenMarketFilter('event');
+            return;
+        }
+        // Home's "Asked near you" → See all Needs: the Market on its Needs pill.
+        if (tab === 'marketplace' && contextId === 'needs') {
+            setActiveTab('marketplace');
+            setOpenMarketFilter('need');
             return;
         }
         if (tab === 'map') {

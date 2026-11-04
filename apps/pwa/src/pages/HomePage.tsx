@@ -55,10 +55,10 @@ import { AskedCommunity } from '../components/AskedCommunity';
 import { AskToJoin } from '../components/AskToJoin';
 import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
-    dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
+    askedFacts, dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
     joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, promiseLine, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
     pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
-    type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
+    type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type HomeNeedItem, type NeedsItem, type StepLine,
     type HomeFind,
 } from '../lib/home-cards';
 import {
@@ -506,6 +506,56 @@ function MarketBody({
                 </div>
             )}
             <HomeMore onClick={() => onNavigate('marketplace')} label={t('See all of the Market')}>{t('See all ›')}</HomeMore>
+        </div>
+    );
+}
+
+/**
+ * "Asked near you" (cold-start N2): the open Needs of neighbours, one row each (the Market row's photo or category tile, the title,
+ * and "20 Beans · 2h ago"); the whole row opens the Need. The node sends only real, open Needs and none of the reader's own, and the
+ * page draws the card only while there is a row, so there is never an empty box.
+ */
+function AskedBody({
+    items,
+    beansOn,
+    onNavigate,
+    nextImageLoading,
+}: {
+    items: HomeNeedItem[];
+    beansOn: boolean;
+    onNavigate: (page: string, id?: string) => void;
+    nextImageLoading: () => 'eager' | 'lazy';
+}) {
+    return (
+        <div>
+            <div data-testid="home-asked-items" className="flex flex-col">
+                {items.map(item => {
+                    const photo = resolveImageUrl(item.photoUrl);
+                    const facts = askedFacts(item, beansOn, priceWords);
+                    const label = [t('Need', undefined, 'listing type'), item.title, facts].filter(Boolean).join(', ');
+                    return (
+                        <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId="home-asked-item" label={label}>
+                            <span data-testid="home-photo-slot" className="relative shrink-0 w-12 h-12 rounded-lg overflow-hidden">
+                                <ListPhoto
+                                    photo={photo}
+                                    alt=""
+                                    loading={photo ? nextImageLoading() : undefined}
+                                    decoding="async"
+                                    className="w-full h-full object-cover bg-bg-hover"
+                                    fallback={<CategoryTile category={item.category} size="thumb" />}
+                                />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                                <span dir="auto" className="block break-words">{item.title}</span>
+                                {facts && <span className="block text-xs text-text-secondary">{facts}</span>}
+                            </span>
+                        </HomeLine>
+                    );
+                })}
+            </div>
+            <HomeMore onClick={() => onNavigate('marketplace', 'needs')} testId="home-asked-all" label={t('See all Needs, in the Market')}>
+                {t('See all Needs')}<span aria-hidden="true"> ›</span>
+            </HomeMore>
         </div>
     );
 }
@@ -1389,6 +1439,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             const pick = member ? pickLayout(account, local, v1, overRef.current) : { layout: null, push: false };
             if (member && account && !v1) {
                 // A version-2 answer: this node keeps the new shape, so nothing waits on it any more.
+                // After a refusal the landing's one extra read may already be spent: a standby's empty version-1 list is built without
+                // the starter set's cards that version 1 never had ("Asked near you"), and asking for them took it. The account's
+                // real list is a new list to read the cards of, so it gets its own one (cold-start N2).
+                if (refusedLanding.current) extraRead.current = false;
                 refusedLanding.current = false;
                 setNotOnAccount(false);
                 // The account's real list is back: it stands, and the edit made on the unknown one goes, unsent.
@@ -2625,6 +2679,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     firstPost: () => onNavigate('map-post'),
                     photo: () => onNavigate('settings-profile'),
                     interests: openTune,
+                    // Ask for one thing you'd pay a neighbour for: the composer on a Need. Nothing is posted until the member taps Post.
+                    firstNeed: () => onNavigate('map-post-need'),
                     invite: () => onNavigate('people-invites'),
                     ask: undefined,
                     name: undefined,
@@ -2807,6 +2863,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             m={m}
                             isVisitor={isVisitor}
                             myInterests={myInterests}
+                            beansOn={beansOn}
+                            onNavigate={onNavigate}
+                            nextImageLoading={nextImageLoading}
+                        />
+                    </HomeCard>
+                );
+            }
+            // Real open Needs only: drawn while the node sent a row (shownFrame), never an empty box (cold-start N2).
+            // The member's stars first again here: this browser's can be newer than its answer (the Market card's reason).
+            case 'asked': {
+                const asked = c.asked;
+                if (!asked || asked.items.length === 0) return null;
+                return (
+                    <HomeCard key={id} {...common}>
+                        <AskedBody
+                            items={starredFirst(asked.items, i => i.category, isVisitor ? [] : myInterests)}
                             beansOn={beansOn}
                             onNavigate={onNavigate}
                             nextImageLoading={nextImageLoading}

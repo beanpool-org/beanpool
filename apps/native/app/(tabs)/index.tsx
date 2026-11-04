@@ -43,7 +43,7 @@ import { ShopHomeBody } from '../../components/shop/ShopHomeBody';
 import { readTypedPlace } from '../../utils/typed-place';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
-    MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
+    AskedBody, MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
@@ -882,6 +882,8 @@ export default function HomeScreen() {
         if (step === 'offer' || step === 'post') router.push({ pathname: '/new-listing', params: { newPost: 'offer' } });
         else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
         else if (step === 'interests') openTune();
+        // Ask for one thing you'd pay a neighbour for: the composer on a Need. Nothing is posted until the member taps Post.
+        else if (step === 'need') router.push({ pathname: '/new-listing', params: { newPost: 'need' } });
         else if (step === 'ask') router.push('/find-community');
         else if (step === 'area') router.push('/your-area');
         else if (step === 'sawLedger') router.push('/(tabs)/ledger');
@@ -1169,6 +1171,17 @@ export default function HomeScreen() {
                         </Pressable>
                     ) : undefined,
                 },
+            ) : null;
+            // The stars first again here: the phone's can be newer than its answer (marketInOrder's reason); the node ordered the rest.
+            case 'asked': return c.asked ? frame(
+                <AskedBody
+                    items={starredFirst(c.asked.items, i => i.category, interests, normalizeCategory)}
+                    nodeUrl={url}
+                    showsBeans={showsBeans}
+                    colors={colors}
+                    now={now}
+                    onSeeAll={() => router.navigate({ pathname: '/(tabs)/market', params: { filter: 'needs' } })}
+                />,
             ) : null;
             case 'decide': return c.decide ? frame(<DecideBody card={c.decide} features={answer.features} colors={colors} now={now} />) : null;
             case 'groups': return c.groups ? frame(<GroupsBody card={c.groups} colors={colors} />) : null;

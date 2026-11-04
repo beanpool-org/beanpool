@@ -151,6 +151,11 @@ export interface HomeMarketItem {
     /** An owner's or admin's live pin (DESIGN-pinning-fable.md §2.2): the row leads its card with 📌. Absent from an older node. */
     pinned?: boolean;
 }
+/**
+ * One row of "Asked near you" (apps/server routes/home-answer.ts NeedItem): a neighbour's open Need, with the Market card's own
+ * fields for the row. `credits` only where Beans are on; `priceType` only when the post has one.
+ */
+export interface HomeNeedItem { id: string; title: string; category: string; credits?: number; priceType?: string; createdAt: string; photoUrl: string | null }
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
 export interface HomeEventItem {
@@ -212,7 +217,10 @@ export interface HomeCards {
     safety?: { words: true; signInLinked: false };
     find?: HomeFind;
     steps?: {
-        joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean;
+        joinedAt: string | null; firstOffer: boolean;
+        /** Whether the member has posted a Need here (cold-start N1); absent from a node before it: that node has no such line. */
+        firstNeed?: boolean;
+        firstPost: boolean; photo: boolean; interests: boolean;
         invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
     };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items?: DealItem[] };
@@ -232,6 +240,8 @@ export interface HomeCards {
     shop?: ShopHomeCard;
     events?: { items: HomeEventItem[]; radiusKm: number | null };
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
+    /** "Asked near you" (cold-start N1): the open Needs of neighbours, the member's stars first; absent while there is none to show. */
+    asked?: { items: HomeNeedItem[] };
     decide?: {
         open: number;
         soonestClosesAt: string | null;
@@ -350,6 +360,9 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
                 return me.standing === 'member';
             case 'search':
                 return true;
+            // Real open Needs only: drawn while the node sent a row, never an empty box (cold-start N2).
+            case 'asked':
+                return Array.isArray(answer.cards.asked?.items) && answer.cards.asked!.items.length > 0;
             // Worked out in this browser; drawn only where a place is known (CARD-FRAME §4).
             case 'sky':
                 return skyOf(answer, { settings }, now) !== null;
@@ -380,7 +393,7 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
 export const STEPS_NEW_DAYS = 14;
 
 export interface StepLine {
-    key: 'firstOffer' | 'photo' | 'interests' | 'invite' | 'firstPost' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch';
+    key: 'firstOffer' | 'photo' | 'interests' | 'firstNeed' | 'invite' | 'firstPost' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch';
     done: boolean;
     text: string;
     /** A line the web app can never tick: it keeps no card on its own. */
@@ -411,6 +424,10 @@ export function stepLines(answer: HomeAnswer, interests: readonly string[]): Ste
         { key: 'firstOffer', done: s.firstOffer, text: t('Post your first Offer') },
         { key: 'photo', done: s.photo, text: t('Add a photo to your profile') },
         { key: 'interests', done: s.interests || interests.length > 0, text: t('Pick a few things you like') },
+        // After the first Offer (a Need needs one where Beans are on): asking for one thing a neighbour could do (cold-start N2). A
+        // node from before the fact (`firstNeed` absent) has no such line and keeps the card up for nothing else, so none is drawn for it.
+        ...(s.firstOffer && typeof s.firstNeed === 'boolean'
+            ? [{ key: 'firstNeed' as const, done: s.firstNeed, text: t("Ask for one thing you'd pay a neighbour for") }] : []),
         ...(s.invited !== null && (s.firstOffer || answer.me?.firstOffer) ? [{ key: 'invite' as const, done: s.invited, text: t('Invite someone') }] : []),
     ];
 }
@@ -431,6 +448,18 @@ export function stepsSaySomething(answer: HomeAnswer, interests: readonly string
     if (young) return true;
     if (lines.some(l => !l.done && !l.untracked)) return true;
     return probationSentence(answer.me?.probation) !== null;
+}
+
+/**
+ * The second line of an "Asked near you" row ("20 Beans · 2h ago", "Free · 3d ago"): what the Need pays, where Beans show, then how
+ * long ago it was asked. A Need that asks nothing says Free; a node that sent no figure, or one without Beans, says no price.
+ * Never a price the node did not send. `priceWords`: the page's own wording of an amount of Beans.
+ */
+export function askedFacts(p: Pick<HomeNeedItem, 'credits' | 'createdAt'>, beansOn: boolean, priceWords: (credits: number) => string): string {
+    const price = beansOn && typeof p.credits === 'number' && Number.isFinite(p.credits)
+        ? (p.credits > 0 ? priceWords(p.credits) : t('Free', undefined, 'price'))
+        : null;
+    return [price, formatRelativeTime(p.createdAt)].filter(Boolean).join(' · ');
 }
 
 // ── interests ─────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ تونل نام آزادشده متوقف شد. این سرور هنوز در {addresses} پاسخ می‌دهد.",
   "🫘 A project you backed changed its end date": "🫘 پروژه‌ای که پشتیبانی کرده بودید تاریخ پایانش را تغییر داد",
   "🫘 Pledges went back to their backers": "🫘 تعهدها به حامیانشان برگشتند",
-  "🫘 Your pledge came back": "🫘 تعهد شما برگشت"
+  "🫘 Your pledge came back": "🫘 تعهد شما برگشت",
+  "Answer serve or step_aside.": "با serve یا step_aside پاسخ دهید.",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "رأی داده‌اید، پس در این هیئت خدمت می‌کنید. تا بسته شدن رأی‌گیری می‌توانید رأی خود را تغییر دهید."
 }

@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 این پیام قابل تأیید نبود، بنابراین نمایش داده نمی‌شود.",
   "🗳️ Create Poll": "🗳️ ساخت نظرسنجی",
   "🟢 List an Offer first to post Needs": "🟢 برای ارسال نیازها، ابتدا یک پیشنهاد ثبت کنید",
-  "🤝 Chosen": "🤝 انتخابی"
+  "🤝 Chosen": "🤝 انتخابی",
+  "Done. This is now your photo here.": "انجام شد. این اکنون عکس شما اینجاست.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "فقط عکس کپی می‌شود. نام شما و بقیهٔ نمایه‌تان اینجا همان‌طور که هست می‌ماند.",
+  "Use the photo from {community} here?": "از عکس {community} اینجا استفاده شود؟",
+  "Use the photo you chose last here?": "از آخرین عکسی که انتخاب کردید اینجا استفاده شود؟",
+  "Use this photo here": "از این عکس اینجا استفاده کنید"
 }

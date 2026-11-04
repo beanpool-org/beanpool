@@ -1972,5 +1972,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} در جامعه‌ای دیگر · نمی‌توانید اینجا این را بخرید یا بگیرید.",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} در {community} · تا وقتی {community} به شما خوش‌آمد نگوید نمی‌توانید این را بخرید یا بگیرید.",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 جامعه جهانی را بگردید"
+  "🌍 Look around the global community": "🌍 جامعه جهانی را بگردید",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "هیئتی که برای آن انتخاب شده‌اید منتظر پاسخ شماست. ظرف یک روز پاسخ دهید، وگرنه جایگاه شما به عضو بعدی که انتخاب می‌شود می‌رسد.",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "هیئتی که در آن هستید حدود یک روز دیگر بسته می‌شود. برای رأی دادن BeanPool را باز کنید.",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "عضوی که هیئت شما دربارهٔ او تصمیم می‌گیرد به پرونده پاسخ داد. برای خواندن آن BeanPool را باز کنید.",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "در جامعه‌تان برای یک هیئت انتخاب شده‌اید و رأی‌گیری‌اش کمتر از دو روز دیگر بسته می‌شود. برای شرکت یا کنار کشیدن BeanPool را باز کنید.",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "در جامعه‌تان برای یک هیئت انتخاب شده‌اید. ظرف سه روز BeanPool را باز کنید تا شرکت کنید یا کنار بکشید."
 }

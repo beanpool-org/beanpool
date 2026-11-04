@@ -4463,5 +4463,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 此消息无法验证，因此未予显示。",
   "🗳️ Create Poll": "🗳️ 创建投票",
   "🟢 List an Offer first to post Needs": "🟢 请先列出一项提供再发布需求",
-  "🤝 Chosen": "🤝 指定社区"
+  "🤝 Chosen": "🤝 指定社区",
+  "Done. This is now your photo here.": "完成。这现在是你在这里的照片。",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "只会复制照片。你在这里的名字和个人资料的其余部分保持不变。",
+  "Use the photo from {community} here?": "要在这里使用 {community} 的照片吗？",
+  "Use the photo you chose last here?": "要在这里使用你上次选择的照片吗？",
+  "Use this photo here": "在这里使用这张照片"
 }

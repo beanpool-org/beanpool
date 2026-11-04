@@ -87,7 +87,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 // The picture as a phone draws it: its URL, and what it does when the picture will not load.
 vi.mock('expo-image', () => ({
-    Image: ({ source, onError }: { source?: { uri?: string }; onError?: () => void }) => createElement('img', { 'data-src': source?.uri, onError }),
+    Image: ({ source, onError, onLoad }: { source?: { uri?: string }; onError?: () => void; onLoad?: () => void }) => createElement('img', { 'data-src': source?.uri, onError, onLoad }),
 }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
@@ -208,6 +208,11 @@ async function failToLoad(img: HTMLImageElement | null) {
     await act(async () => { img!.dispatchEvent(new Event('error')); });
     await settle(2);
 }
+async function loads(img: HTMLImageElement | null) {
+    expect(img).not.toBeNull();
+    await act(async () => { img!.dispatchEvent(new Event('load')); });
+    await settle(2);
+}
 
 describe("the Market's cards: a banner that will not load gives way to the tile", () => {
     // The Market opens in list view; its view button goes list → grid → compact.
@@ -223,7 +228,8 @@ describe("the Market's cards: a banner that will not load gives way to the tile"
         // The enterprise's listing draws its banner, not the tile.
         const bread = pictureOf(cardOf('Sourdough from the bakery'));
         expect(bread?.getAttribute('data-src')).toBe(BANNER);
-        expect(tileOf(cardOf('Sourdough from the bakery'))).toBeNull();
+        // card-photo-blank: the tile holds the slot until the picture has drawn, never an empty slot.
+        expect(tileOf(cardOf('Sourdough from the bakery'))).not.toBeNull();
         // It will not load: the tile takes its place, and nothing is read again (a banner is no listing photo).
         await failToLoad(bread);
         expect(pictureOf(cardOf('Sourdough from the bakery'))).toBeNull();
@@ -236,8 +242,11 @@ describe("the Market's cards: a banner that will not load gives way to the tile"
         expect(jam?.getAttribute('data-src')).toBe(`${JAM_PHOTO}&size=thumb2`);
         await failToLoad(jam);
         expect(healed.calls).toEqual([['p-jam', JAM_PHOTO]]);
+        // card-photo-blank: the small copy is asked once more past every cache before the photo's own URL.
+        expect(pictureOf(cardOf('Plum jam jars'))?.getAttribute('data-src')).toBe(`${JAM_PHOTO}&size=thumb2&retry=1`);
+        await failToLoad(pictureOf(cardOf('Plum jam jars')));
         expect(pictureOf(cardOf('Plum jam jars'))?.getAttribute('data-src')).toBe(JAM_PHOTO);
-        expect(tileOf(cardOf('Plum jam jars'))).toBeNull();
+        expect(tileOf(cardOf('Plum jam jars'))).not.toBeNull();
         await failToLoad(pictureOf(cardOf('Plum jam jars')));
         expect(pictureOf(cardOf('Plum jam jars'))).toBeNull();
         expect(tileOf(cardOf('Plum jam jars'))).not.toBeNull();
@@ -260,7 +269,8 @@ describe("Home's Market row: a banner that will not load gives way to the tile",
         await show(body());
         const img = row('h-bread').querySelector<HTMLImageElement>('img[data-src]');
         expect(img?.getAttribute('data-src')).toBe(`${NODE}/api/shops/shop-1/photo?v=ref1&k=Yq`);
-        expect(row('h-bread').querySelector('[data-testid="category-tile"]')).toBeNull();
+        // card-photo-blank: the tile holds the slot until the picture has drawn.
+        expect(row('h-bread').querySelector('[data-testid="category-tile"]')).not.toBeNull();
         await failToLoad(img);
         expect(row('h-bread').querySelector('img[data-src]')).toBeNull();
         expect(row('h-bread').querySelector('[data-testid="category-tile"]')).not.toBeNull();
@@ -268,17 +278,21 @@ describe("Home's Market row: a banner that will not load gives way to the tile",
         // The enterprise put a new banner up: the next answer's URL is drawn.
         await show(body([{ ...items[0], bannerUrl: '/api/shops/shop-1/photo?v=ref2&k=Zz' }, items[1]]));
         expect(row('h-bread').querySelector('img[data-src]')?.getAttribute('data-src')).toBe(`${NODE}/api/shops/shop-1/photo?v=ref2&k=Zz`);
+        await loads(row('h-bread').querySelector<HTMLImageElement>('img[data-src]'));
+        expect(row('h-bread').querySelector('[data-testid="category-tile"]')).toBeNull();
         expect(row('h-tools').querySelector('[data-testid="category-tile"]')).not.toBeNull();
     });
 
-    it("steps a listing's own photo down: the small copy, then the photo's own URL, then the tile", async () => {
+    it("steps a listing's own photo down: the small copy, once more past every cache, then the photo's own URL, then the tile", async () => {
         const photoUrl = '/api/marketplace/posts/h-jam/photos/0?v=1&k=Kk';
         await show(body([{ id: 'h-jam', type: 'offer', title: 'Plum jam jars', category: 'food', credits: 3, photoUrl }]));
         const picture = () => row('h-jam').querySelector<HTMLImageElement>('img[data-src]');
         expect(picture()?.getAttribute('data-src')).toBe(`${NODE}${photoUrl}&size=thumb2`);
         await failToLoad(picture());
+        expect(picture()?.getAttribute('data-src')).toBe(`${NODE}${photoUrl}&size=thumb2&retry=1`);
+        await failToLoad(picture());
         expect(picture()?.getAttribute('data-src')).toBe(`${NODE}${photoUrl}`);
-        expect(row('h-jam').querySelector('[data-testid="category-tile"]')).toBeNull();
+        expect(row('h-jam').querySelector('[data-testid="category-tile"]')).not.toBeNull();
         await failToLoad(picture());
         expect(picture()).toBeNull();
         expect(row('h-jam').querySelector('[data-testid="category-tile"]')).not.toBeNull();

@@ -281,7 +281,7 @@ vi.mock('@beanpool/core', async (importOriginal) => {
 import { DatabaseSync } from 'node:sqlite';
 import {
     GARDEN, HOME_CARD_TYPES, TOOLS, pseudoLocalise, setLanguage, toolFixtureProblems, toolHomeCardType, toolManifestProblems, word,
-    type ToolFixtures, type ToolManifest, type ToolScreenProps,
+    type StarterOpening, type ToolFixtures, type ToolManifest, type ToolScreenProps,
 } from '@beanpool/core';
 import { TOOL_APPS, phoneTools, type PhoneTool } from '../../tools/index';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from '../../tools/schema';
@@ -292,7 +292,7 @@ import {
 import { communityKey } from '../../tools/community';
 import { keepToolPhoto, toolPhotoUri } from '../../tools/photos';
 import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/builder';
-import { composerDraft, openNeedComposer, OFFER_DRAFT_KEY } from '../../tools/doors';
+import { composerDraft, openNeedComposer, openStarterOffer, OFFER_DRAFT_KEY, STARTER_DRAFT_SOURCE } from '../../tools/doors';
 import { decideDraftOpen } from '../compose-options';
 import { remindersToSchedule, scheduleToolReminders, toolReminderRoute, cancelToolReminders, TOOL_REMINDER_CHANNEL } from '../../tools/reminders';
 import { ToolButton, ToolButtons, ToolChips, ToolEmpty, ToolField, ToolNote, ToolRow, ToolScreen, ToolSection } from '../../tools/ui';
@@ -1527,6 +1527,58 @@ describe("the doors write the composer's own draft (app/new-listing.tsx, map.tsx
         expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postType: 'need', postTitle: 'A tent', source: 'tool', tool: 'fixture-kit' });
         expect(decideDraftOpen(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!), 'https://mullum.example')).toBe('open-tool');
         expect(nav.pushed).toHaveLength(2);
+    });
+
+    describe('the "What could you offer?" door (slice O2)', () => {
+        const HOUR: StarterOpening = { title: 'An hour of help', description: 'An extra pair of hands for jobs around the house or yard. Tell me what and when.', category: 'labour', credits: 25, priceType: 'hourly' };
+        beforeEach(() => { store.map.delete(OFFER_DRAFT_KEY); store.map.delete('beanpool_offer_shop_choice'); nav.pushed.length = 0; alerts.said.length = 0; });
+
+        it('writes the composer\'s own draft with the draft\'s words and price, opens the composer without asking, and posts nothing', async () => {
+            expect(await openStarterOffer(HOUR)).toBe(true);
+            const written = JSON.parse(store.map.get(OFFER_DRAFT_KEY)!);
+            expect(written).toMatchObject({
+                postType: 'offer', postCategory: 'labour', postTitle: 'An hour of help', postDescription: HOUR.description,
+                postCredits: '25', postPriceType: 'hourly', postPhotos: [], postLat: null, postLng: null, postReach: 'local',
+                anchorUrl: 'https://mullum.example', source: 'tool', tool: STARTER_DRAFT_SOURCE,
+            });
+            // No photo and no place: the composer asks for both, and Post is the member's tap.
+            expect(decideDraftOpen(written, 'https://mullum.example')).toBe('open-tool');
+            expect(nav.pushed).toEqual(['/new-listing?newPost=offer']);
+            expect(alerts.said).toEqual([]);
+        });
+
+        it('a free draft opens at 0 (the FREE chip), a paid one with no figure opens with the price box empty so the composer asks', async () => {
+            await openStarterOffer({ ...HOUR, title: 'Lend a tool', category: 'tools', credits: 0, priceType: 'fixed' });
+            expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postCredits: '0', postPriceType: 'fixed' });
+            // The first draft is now the member's unfinished post (the next pick would ask before replacing it): start clean.
+            store.map.delete(OFFER_DRAFT_KEY);
+            await openStarterOffer({ ...HOUR, credits: null });
+            expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postCredits: '', postPriceType: 'hourly', postTitle: 'An hour of help' });
+        });
+
+        it('asks before it replaces an unfinished post on the map, and keeping it leaves everything as it was', async () => {
+            setLanguage('en');
+            const unfinished = JSON.stringify({ anchorUrl: 'https://mullum.example', postType: 'offer', postTitle: 'My half-written post' });
+            store.map.set(OFFER_DRAFT_KEY, unfinished);
+            const asked = openStarterOffer(HOUR);
+            await settle(3);
+            expect(alerts.said).toEqual(['Replace your unfinished post?', 'You have an unfinished post on the map. Going on replaces it.']);
+            alerts.buttons.find((b) => b.text === 'Cancel')!.onPress!();
+            expect(await asked).toBe(false);
+            expect([store.map.get(OFFER_DRAFT_KEY), nav.pushed]).toEqual([unfinished, []]);
+            const goOn = openStarterOffer(HOUR);
+            await settle(3);
+            alerts.buttons.find((b) => b.text === 'Go on')!.onPress!();
+            expect(await goOn).toBe(true);
+            expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postTitle: 'An hour of help', tool: STARTER_DRAFT_SOURCE });
+            expect(nav.pushed).toEqual(['/new-listing?newPost=offer']);
+        });
+
+        it('forgets a "Put this in your shop" choice an earlier List sheet left: this is not that Offer', async () => {
+            store.map.set('beanpool_offer_shop_choice', JSON.stringify({ anchorUrl: 'https://mullum.example', title: 'Ladder', savedAt: NOW }));
+            await openStarterOffer(HOUR);
+            expect(store.map.has('beanpool_offer_shop_choice')).toBe(false);
+        });
     });
 });
 

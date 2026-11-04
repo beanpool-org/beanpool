@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
-import { t, type ShopCategory, type ToolNeedDraft, type ToolOfferDraft, type ToolPhoto } from '@beanpool/core';
+import { t, type ShopCategory, type StarterOpening, type ToolNeedDraft, type ToolOfferDraft, type ToolPhoto } from '@beanpool/core';
 import { keepToolPhoto, toolPhotoDataUri } from './photos';
 import { communityKey } from './community';
 import { clearShopChoice, rememberShopChoice } from '../utils/shop-choice';
@@ -130,4 +130,32 @@ export async function openNeedComposer(owner: string, tool: string, draft: ToolN
     await writeDraft('need', owner, tool, draft, null);
     await clearShopChoice();
     router.push('/new-listing?newPost=need');
+}
+
+/** The marker the starter sheet's draft carries as its `tool` ({@link composerDraft}): not a tool, but the same "a door has just opened the composer". */
+export const STARTER_DRAFT_SOURCE = 'starter-offers';
+
+/**
+ * The "What could you offer?" sheet's door (components/home/StarterOffersSheet.tsx, slice O2): the Offer composer, opened
+ * with one starter draft filled in (core `starterRows`' `opening`: the category, the title, the words, the price type and
+ * the community guide's figure, or the price left empty for the member). Nothing is posted until the member taps Post, and
+ * the composer still asks for the photo and the place. It writes the draft a tool's door writes and opens the composer the
+ * same way, so the composer opens it without asking while it is fresh and checks the member's name and photo as it opens.
+ * An unfinished post on the map that this would replace is asked about first, as {@link openNeedComposer} does, and a
+ * refusal leaves everything as it was. A "Put this in your shop" choice from an earlier List sheet is forgotten: this is
+ * not that Offer. Returns false when the member chose to keep their unfinished post.
+ */
+export async function openStarterOffer(opening: StarterOpening): Promise<boolean> {
+    if (await unfinishedPostHere() && !await replaceUnfinishedPost()) return false;
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const draft = composerDraft(
+        'offer', { title: opening.title, description: opening.description, category: opening.category, credits: opening.credits ?? 0, priceType: opening.priceType },
+        anchorUrl, [], null, Date.now(), STARTER_DRAFT_SOURCE,
+    );
+    // A paid draft the guide has no figure for: the price box starts empty, so the composer asks for one (Post stays off until the member sets a price or taps FREE).
+    if (opening.credits === null) draft.postCredits = '';
+    await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
+    await clearShopChoice();
+    router.push('/new-listing?newPost=offer');
+    return true;
 }

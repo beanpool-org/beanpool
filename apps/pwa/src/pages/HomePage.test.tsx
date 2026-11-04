@@ -31,6 +31,8 @@ vi.mock('../components/AddressSearch', () => ({
         </button>
     ),
 }));
+// The community's price guide the starter dialog reads as it opens (slice O2): stood in for, so a test says what the guide holds.
+vi.mock('../lib/starter-offers', () => ({ readPricingGuide: vi.fn(async () => null) }));
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn((cb: () => unknown) => { hooks.sync.push(cb); return () => { hooks.sync = hooks.sync.filter(c => c !== cb); }; }),
     onSocketOpen: vi.fn((cb: () => void) => { hooks.open.push(cb); return () => { hooks.open = hooks.open.filter(c => c !== cb); }; }),
@@ -38,8 +40,9 @@ vi.mock('../lib/sync', () => ({
 }));
 
 import * as api from '../lib/api';
+import { readPricingGuide } from '../lib/starter-offers';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { ARRANGE_WORDS, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
+import { ARRANGE_WORDS, DEFAULT_PRICING_CATALOG, FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, searchFromMarket, setLanguage, skyToday, starterCards, tipsFor, tourSteps, t } from '@beanpool/core';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 import * as tourStore from '../lib/tour-store';
 import { HOLD_MS } from '../components/HomeCard';
@@ -513,6 +516,10 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(await screen.findByTestId('home-card-beans')).toHaveTextContent('0 Beans · nothing to repayYour credit opens with a first trade.');
         const steps = screen.getByTestId('home-card-steps');
         fireEvent.click(within(steps).getByRole('button', { name: 'To do: Post your first Offer' }));
+        // The first Offer starts from the dialog of drafts (slice O2); "Something else" is the blank composer this step opened before.
+        expect(screen.getByTestId('home-starter-dialog')).toBeInTheDocument();
+        expect(nav).not.toHaveBeenCalledWith('map-post');
+        fireEvent.click(screen.getByTestId('home-starter-other'));
         expect(nav).toHaveBeenCalledWith('map-post');
         fireEvent.click(within(steps).getByRole('button', { name: 'To do: Add a photo to your profile' }));
         expect(nav).toHaveBeenCalledWith('settings-profile');
@@ -4856,3 +4863,161 @@ describe('Home slice 4: a pinned row leads its card with 📌 (DESIGN-pinning-fa
     });
 });
 
+
+// ── "What could you offer?" (cold start, slice O2): what Post your first Offer opens ─────────────────────────────────────
+
+describe('What could you offer? (cold start O2): the dialog First steps opens, then the composer', () => {
+    const STEPS = { joinedAt: NOW, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null };
+    const localAnswer = (interests: string[] = []) => answer({ me: { ...answer().me!, interests } }, { steps: STEPS });
+    const globalAnswer = () => answer({
+        profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true },
+        me: { ...answer().me!, joinedAt: NOW, interests: [] },
+    }, {
+        beans: undefined,
+        find: { point: 'area', communities: [{ key: 'b', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 }], communityCount: 2, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: null },
+        steps: { ...STEPS, joinedAt: NOW, invited: null, saidHello: false, watch: false, sawLedger: false },
+    });
+    const openFrom = async (name: string, a: HomeAnswer, props: Partial<Parameters<typeof HomePage>[0]> = {}) => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(a));
+        const nav = vi.fn();
+        const composer = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} onComposer={composer} {...props} />);
+        const steps = await screen.findByTestId('home-card-steps');
+        fireEvent.click(within(steps).getByRole('button', { name }));
+        const dialog = await screen.findByTestId('home-starter-dialog');
+        return { nav, composer, steps, dialog };
+    };
+    const labels = () => Array.from(document.querySelectorAll('[data-testid^="home-starter-"][aria-label]')).map(e => e.getAttribute('aria-label'));
+    beforeEach(() => { vi.mocked(readPricingGuide).mockReset().mockResolvedValue(DEFAULT_PRICING_CATALOG); });
+
+    it('opens as a real dialog, labelled by its heading, with the three drafts, the community guide\'s figures and Something else', async () => {
+        const { dialog, nav, composer } = await openFrom('To do: Post your first Offer', localAnswer());
+        expect(dialog).toHaveAttribute('role', 'dialog');
+        expect(dialog).toHaveAttribute('aria-modal', 'true');
+        expect(screen.getByRole('dialog', { name: 'What could you offer?' })).toBe(dialog);
+        expect(screen.getByTestId('home-starter-note')).toHaveTextContent('Pick one. Every word is yours to change before it posts.');
+        await waitFor(() => expect(labels()).toEqual([
+            'An hour of help, 25 Beans an hour. Opens a new Offer with this filled in.',
+            'Lend a tool, Free. Opens a new Offer with this filled in.',
+            'Extra from the garden, 6 Beans. Opens a new Offer with this filled in.',
+            'Something else. Opens a blank new Offer.',
+        ]));
+        // Nothing is opened, posted or said as done: a dialog is a door.
+        expect(composer).not.toHaveBeenCalled();
+        expect(nav).not.toHaveBeenCalledWith('map-post');
+        expect(dialog.textContent).not.toMatch(/\b(posted|sent|saved|published)\b/i);
+        expect(readPricingGuide).toHaveBeenCalledTimes(1);
+    });
+
+    it('a row opens the composer with that Offer filled in and goes; the composer is given words, price and category, no photo, no place', async () => {
+        const { composer, nav } = await openFrom('To do: Post your first Offer', localAnswer());
+        await waitFor(() => expect(screen.getByTestId('home-starter-labour.1-price')).toHaveTextContent('25 Beans an hour'));
+        fireEvent.click(screen.getByTestId('home-starter-labour.1'));
+        expect(screen.queryByTestId('home-starter-dialog')).toBeNull();
+        expect(composer).toHaveBeenCalledTimes(1);
+        expect(composer).toHaveBeenCalledWith({
+            type: 'offer', title: 'An hour of help', description: 'An extra pair of hands for jobs around the house or yard. Tell me what and when.',
+            category: 'labour', credits: 25, priceType: 'hourly', repeatable: false, cashAlsoNeeded: false,
+        });
+        expect(nav).not.toHaveBeenCalled();
+    });
+
+    it('the rows follow what the member starred, in the order they starred it', async () => {
+        await openFrom('To do: Post your first Offer', localAnswer(['animals', 'transport']));
+        await waitFor(() => expect(labels().slice(0, 3).map(l => l!.split(',')[0].split('.')[0])).toEqual(['Dog walking', 'A lift into town', 'Pet sitting']));
+    });
+
+    it('Something else asks for the blank composer, as this step always did, and gives it no draft', async () => {
+        const { composer, nav } = await openFrom('To do: Post your first Offer', localAnswer());
+        fireEvent.click(screen.getByTestId('home-starter-other'));
+        expect(nav).toHaveBeenCalledWith('map-post');
+        expect(composer).not.toHaveBeenCalled();
+        expect(screen.queryByTestId('home-starter-dialog')).toBeNull();
+    });
+
+    it('Cancel and Escape close it, opening nothing, and focus goes back to the step', async () => {
+        const { composer, nav, steps } = await openFrom('To do: Post your first Offer', localAnswer());
+        fireEvent.click(screen.getByTestId('home-starter-dialog-done'));
+        expect(screen.queryByTestId('home-starter-dialog')).toBeNull();
+        const step = within(steps).getByRole('button', { name: 'To do: Post your first Offer' });
+        expect(document.activeElement).toBe(step);
+        step.focus();
+        fireEvent.click(step);
+        await screen.findByTestId('home-starter-dialog');
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByTestId('home-starter-dialog')).toBeNull();
+        expect(composer).not.toHaveBeenCalled();
+        expect(nav).not.toHaveBeenCalled();
+    });
+
+    it('a guide that cannot be read leaves the prices off the paid rows, and a paid draft opens with its price empty', async () => {
+        vi.mocked(readPricingGuide).mockResolvedValue(null);
+        const { composer } = await openFrom('To do: Post your first Offer', localAnswer());
+        await act(async () => { await new Promise(r => setTimeout(r, 10)); });
+        expect(labels()).toEqual([
+            'An hour of help. Opens a new Offer with this filled in.',
+            'Lend a tool, Free. Opens a new Offer with this filled in.',
+            'Extra from the garden. Opens a new Offer with this filled in.',
+            'Something else. Opens a blank new Offer.',
+        ]);
+        fireEvent.click(screen.getByTestId('home-starter-garden.1'));
+        expect(composer).toHaveBeenCalledWith(expect.objectContaining({ category: 'garden', credits: null, priceType: 'fixed', title: 'Extra from the garden' }));
+    });
+
+    it('where Beans are off (the global community) the first post opens it with no prices, and every draft free', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer()));
+        const composer = vi.fn();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} onComposer={composer} />);
+        const steps = await screen.findByTestId('home-card-steps');
+        fireEvent.click(within(steps).getByRole('button', { name: 'To do: Post something free or for swap' }));
+        await screen.findByTestId('home-starter-dialog');
+        expect(labels()).toEqual([
+            'An hour of help. Opens a new Offer with this filled in.',
+            'Lend a tool. Opens a new Offer with this filled in.',
+            'Extra from the garden. Opens a new Offer with this filled in.',
+            'Something else. Opens a blank new Offer.',
+        ]);
+        fireEvent.click(screen.getByTestId('home-starter-labour.1'));
+        expect(composer).toHaveBeenCalledWith(expect.objectContaining({ category: 'labour', credits: 0, priceType: 'fixed' }));
+    });
+
+    it('a step already done opens the blank composer as it did, and no dialog', async () => {
+        const a = localAnswer();
+        vi.mocked(api.getHome).mockResolvedValue(fresh({ ...a, cards: { ...a.cards, steps: { ...STEPS, firstOffer: true, firstPost: true } } }));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} onComposer={vi.fn()} />);
+        const steps = await screen.findByTestId('home-card-steps');
+        fireEvent.click(within(steps).getByRole('button', { name: 'Done: Post your first Offer' }));
+        expect(nav).toHaveBeenCalledWith('map-post');
+        expect(screen.queryByTestId('home-starter-dialog')).toBeNull();
+    });
+
+    it('without a composer door to give a draft to, a row asks for the blank composer rather than do nothing', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(localAnswer()));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const steps = await screen.findByTestId('home-card-steps');
+        fireEvent.click(within(steps).getByRole('button', { name: 'To do: Post your first Offer' }));
+        await screen.findByTestId('home-starter-dialog');
+        fireEvent.click(screen.getByTestId('home-starter-tools.1'));
+        expect(nav).toHaveBeenCalledWith('map-post');
+    });
+
+    it('in the pseudo-locale, the heading, the note, every row and every label go through the words layer', async () => {
+        await showIn('xx');
+        vi.mocked(api.getHome).mockResolvedValue(fresh(localAnswer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} onComposer={vi.fn()} />);
+        const steps = await screen.findByTestId('home-card-steps');
+        const first = xx('Post your first Offer').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        fireEvent.click(within(steps).getByRole('button', { name: new RegExp(first) }));
+        const dialog = await screen.findByTestId('home-starter-dialog');
+        await waitFor(() => expect(screen.getByTestId('home-starter-labour.1-price')).toBeInTheDocument());
+        expect(screen.getByRole('dialog', { name: xx('What could you offer?') })).toBe(dialog);
+        expect(screen.getByTestId('home-starter-note')).toHaveTextContent(xx('Pick one. Every word is yours to change before it posts.'));
+        expect(screen.getByTestId('home-starter-other')).toHaveTextContent(xx('Something else'));
+        expect(screen.getByTestId('home-starter-dialog-done')).toHaveTextContent(xx('Cancel'));
+        expect(screen.getByTestId('home-starter-labour.1')).toHaveTextContent(xx('An hour of help'));
+        expect(bypassing(dialog)).toEqual([]);
+        backToEnglish();
+    });
+});

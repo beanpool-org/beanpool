@@ -136,9 +136,10 @@ export function EventNextDates({ post, isHost, onChanged, onChangeThisDateOnly, 
 
     return (
         <section ref={listRef} tabIndex={-1} data-testid="event-next-dates" aria-label={caption ? t('Next dates') : undefined} className="min-w-0 flex flex-col gap-1 focus:outline-none">
-            {/* With the rule, the rule heads the list (it opened it), and "Next dates" is the section's name. */}
+            {/* With the rule, the rule heads the list (it opened it), and "Next dates" is the section's name. An h3: it sits
+                between the page's h2 (the when) and the title's h3, so h2 -> h3 -> h3 keeps axe's heading-order (#2891 review). */}
             {caption
-                ? <h4 data-testid="event-repeat-caption" className={`m-0 ${CAPTION}`}>{caption}</h4>
+                ? <h3 data-testid="event-repeat-caption" className={`m-0 ${CAPTION}`}>{caption}</h3>
                 : <h4 className="m-0 text-xs font-bold text-nature-700 dark:text-nature-300 uppercase tracking-wider">{t('Next dates')}</h4>}
             {line && <p data-testid="event-date-cancelled-line" role="status" className="m-0 text-sm font-bold text-nature-800 dark:text-nature-100 break-words">{line}</p>}
             <ul className={`m-0 p-0 list-none ${isHost ? 'flex flex-col gap-1' : 'flex flex-wrap gap-x-3 gap-y-1'}`}>

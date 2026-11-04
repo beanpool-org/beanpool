@@ -163,7 +163,7 @@ describe('the next dates: the repeat rule is the door, "↻ rule · Next dates",
         expect(screen.queryByTestId('event-next-dates-open')).toBeNull();
         // Opened: the rule is the list's visible heading, "Next dates" its name, and the rule is still drawn once.
         expect(screen.getByRole('region', { name: 'Next dates' })).toBe(list);
-        const heading = within(list).getByRole('heading', { level: 4 });
+        const heading = within(list).getByRole('heading', { level: 3 });
         expect(heading.textContent).toBe(`↻ ${RULE}`);
         expect(heading).toBe(within(list).getByTestId('event-repeat-caption'));
         expect(within(list).queryByText('Next dates')).toBeNull();
@@ -188,7 +188,7 @@ describe('the next dates: the repeat rule is the door, "↻ rule · Next dates",
         renderAt320(<EventDetail post={repeating({ eventNextDates: repeating().eventNextDates.slice(0, 1) })} identity={identity} />);
         expect(screen.queryByTestId('event-next-dates-open')).toBeNull();
         const list = screen.getByRole('region', { name: 'Next dates' });
-        expect(within(list).getByRole('heading', { level: 4 }).textContent).toBe(`↻ ${RULE}`);
+        expect(within(list).getByRole('heading', { level: 3 }).textContent).toBe(`↻ ${RULE}`);
         expect(within(list).getAllByTestId('event-next-date').map(d => d.textContent)).toEqual([seriesDateLabel(NEXT[0])]);
         expect(screen.getAllByTestId('event-repeat-caption')).toHaveLength(1);
     });

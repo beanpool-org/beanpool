@@ -115,7 +115,7 @@ const MEASURE = () => {
  */
 const DETAIL_CASES = [
     { name: 'phone-320-130pc', width: 320, height: 569, fontScale: 1.3, cases: ['member', 'going', 'host', 'copy', 'no-photo', 'dates', 'dates-open', 'posted-by'] },
-    // The same at 100% text: the opener on one line (DESIGN-web-dates-stop-fable.md §1).
+    // The same at 100% text (DESIGN-web-dates-stop-fable.md §1): the opener measures 48 px on two lines here.
     { name: 'phone-320', width: 320, height: 569, fontScale: 1, cases: ['dates'] },
     { name: 'tablet-800', width: 800, height: 1000, fontScale: 1, cases: ['member', 'host'] },
     { name: 'desktop-1280', width: 1280, height: 900, fontScale: 1, cases: ['member', 'host'] },

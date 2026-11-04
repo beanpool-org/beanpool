@@ -2594,6 +2594,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 ? (lat, lng) => haversineDistance(near.circle.lat, near.circle.lng, lat, lng) : null, near)}
                         onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                         onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
+                        // The map's preview is one card, not a list, and the web's only way to answer from the map.
+                        rsvpOnCard
                     />
                     <div className="flex gap-2">
                         <button

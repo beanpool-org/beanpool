@@ -36,7 +36,7 @@ import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { archetypeIsAfter, archetypeIsNewer, eventCopyColumn, POLL_BALLOT_SEALED, reportKind, t, requestAfterOwnLine, requestAfterRead, freeTagsOf, listingFreeTags, postTagsOf, storedFreeTags, COUNTS_AS_UNREAD_SQL, countsAsUnreadSql, type PinDays } from '@beanpool/core';
 import { dealAction } from './deal-rows';
-import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
+import { TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect, type JuryTurnout, type ServedJury } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
@@ -3630,6 +3630,12 @@ export interface DecisionTally {
     minYes?: number;
     /** A pause's own vote fewer than 3 members could vote on, so its quorum can't be met: an owner may decide it. */
     tooFewToVote?: boolean;
+    /**
+     * A vote a drawn jury decides (removal jury J1): while it is open the node sends `turnout` and none of the split
+     * (yesWeight, noWeight, totalWeight, supportRatio, passed are absent then), so the card counts jurors (J2a, J3).
+     */
+    decider?: 'jury';
+    turnout?: JuryTurnout;
 }
 
 export interface DecisionWithTally extends Decision {
@@ -3725,6 +3731,24 @@ export async function replyToRemovalCase(decisionId: string, reply: string): Pro
  */
 export async function reportRemovalCase(decisionId: string): Promise<{ success: boolean; duplicate?: boolean }> {
     return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/report`, {});
+}
+
+/**
+ * The jury of a vote a jury decides (removal jury, GET …/jury): its pool, the draw's facts and the signer's own seat, and
+ * after close who voted and who didn't serve. Signed: the node answers members only. Null for a vote no jury decides (and
+ * from a node older than the route); throws when the node can't be reached, so the card can offer to try again.
+ */
+export async function getDecisionJury(decisionId: string): Promise<ServedJury | null> {
+    const res = await signedGet(`/api/commons/decisions/${encodeURIComponent(decisionId)}/jury`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    const data = await res.json();
+    return data?.jury ?? null;
+}
+
+/** A seated juror's answer to their seat (J2b): Serve, or Step aside (no reason asked). The node answers with their jury read. */
+export async function answerJurySeat(decisionId: string, answer: 'serve' | 'step_aside'): Promise<{ success: boolean; jury: ServedJury | null }> {
+    return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/jury/answer`, { answer });
 }
 
 export async function updatePost(id: string, updates: any) {

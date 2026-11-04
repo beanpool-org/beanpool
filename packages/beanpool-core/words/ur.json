@@ -1972,5 +1972,10 @@
   "{price} in another community · You can't buy or take this here.": "{price} کسی اور کمیونٹی میں · آپ اسے یہاں خرید یا لے نہیں سکتے۔",
   "{price} in {community} · You can't buy or take this until {community} welcomes you.": "{price} {community} میں · جب تک {community} آپ کا خیرمقدم نہیں کرتی، آپ اسے خرید یا لے نہیں سکتے۔",
   "{zone} · {hemisphere}": "{zone} · {hemisphere}",
-  "🌍 Look around the global community": "🌍 عالمی کمیونٹی میں گھومیں"
+  "🌍 Look around the global community": "🌍 عالمی کمیونٹی میں گھومیں",
+  "A jury you were drawn for is waiting for your answer. Answer within a day, or your seat goes to the next member drawn.": "جس جیوری کے لیے آپ چنے گئے وہ آپ کے جواب کی منتظر ہے۔ ایک دن کے اندر جواب دیں، ورنہ آپ کی نشست اگلے چنے گئے رکن کو چلی جائے گی۔",
+  "A jury you're on closes in about a day. Open BeanPool to vote.": "جس جیوری میں آپ ہیں وہ تقریباً ایک دن میں بند ہو جاتی ہے۔ ووٹ دینے کے لیے BeanPool کھولیں۔",
+  "The member your jury is deciding about has answered the case. Open BeanPool to read it.": "جس رکن کے بارے میں آپ کی جیوری فیصلہ کر رہی ہے اس نے کیس کا جواب دے دیا ہے۔ پڑھنے کے لیے BeanPool کھولیں۔",
+  "You were drawn for a jury in your community, and its vote closes in less than two days. Open BeanPool to serve or step aside.": "آپ کی کمیونٹی میں آپ کو ایک جیوری کے لیے چنا گیا ہے، اور اس کا ووٹ دو دن سے کم میں بند ہو جاتا ہے۔ خدمت کرنے یا ہٹ جانے کے لیے BeanPool کھولیں۔",
+  "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside.": "آپ کی کمیونٹی میں آپ کو ایک جیوری کے لیے چنا گیا ہے۔ خدمت کرنے یا ہٹ جانے کے لیے تین دن کے اندر BeanPool کھولیں۔"
 }

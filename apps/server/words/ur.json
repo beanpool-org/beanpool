@@ -940,5 +940,7 @@
   "⚠️ The released name's tunnel stopped. This server still answers at {addresses}.": "⚠️ جاری کیے گئے نام کی سرنگ رک گئی۔ یہ سرور اب بھی {addresses} پر جواب دیتا ہے۔",
   "🫘 A project you backed changed its end date": "🫘 آپ نے جس پروجیکٹ کی پشت پناہی کی تھی اس نے اپنی اختتامی تاریخ بدل دی",
   "🫘 Pledges went back to their backers": "🫘 عہد اپنے حامیوں کو واپس چلے گئے",
-  "🫘 Your pledge came back": "🫘 آپ کا عہد واپس آ گیا"
+  "🫘 Your pledge came back": "🫘 آپ کا عہد واپس آ گیا",
+  "Answer serve or step_aside.": "serve یا step_aside کے ساتھ جواب دیں۔",
+  "You have voted, so you serve on this jury. You can change your vote until it closes.": "آپ نے ووٹ دیا ہے، اس لیے آپ اس جیوری میں خدمت کرتے ہیں۔ بند ہونے تک آپ اپنا ووٹ بدل سکتے ہیں۔"
 }

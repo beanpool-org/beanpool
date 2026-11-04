@@ -787,6 +787,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
     knockAnswersNoneSince: { kind: 'per-server', reason: "when this server's measure of how it answers requests to join began saying 'none' (engine/knocks.ts knockAnswersForDirectory); a standby that takes over starts its own count, which only delays the directory's demotion" },
     friendsAddedYouSince: { kind: 'per-server', reason: "when this server began telling members who added them; an add from before it is never news (engine/friends-added-you.ts)" },
+    juryHolds: { kind: 'per-server', reason: "when this server's tick found formal Decisions off while a removal jury sat, which a juror's 48 and 72 hours leave out (engine/removal-jury.ts JURY_HOLDS_KEY); a standby that takes over starts with none, so a time off before it counts toward a seat there" },
     // These two and standby_health hold internet addresses: 7 days at most, and none in any copy of the database
     // (services/address-retention.ts).
     takeover_envelope_holders: { kind: 'per-server', reason: 'which standbys hold this server\'s take-over envelope' },

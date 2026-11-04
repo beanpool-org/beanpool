@@ -13,7 +13,8 @@
  *    seat dates from its row's created_at, a Serve is its answered_at, and the last reminder sent its reminded_at. A
  *    juror's vote counts while they are `on` (decisions-engine.ts tallyDecision).
  *
- * Both replicate with the decision (engine/replication-manifest.ts), so a restored node never redraws.
+ * Both replicate with the decision (engine/replication-manifest.ts), so a restored node never redraws. Beside them, this
+ * server's own note of when formal Decisions were off while a jury sat (JURY_HOLDS_KEY), which a seat's hours leave out.
  */
 import { db } from '../db/db.js';
 
@@ -173,6 +174,76 @@ export function noteJurorReminded(decisionId: string, key: string, at: string): 
         UPDATE decision_electors SET reminded_at = ?, updated_at = ?
          WHERE decision_id = ? AND member_pubkey = ? AND role_at_open = 'juror' AND status = 'on'
     `).run(at, at, decisionId, key);
+}
+
+/**
+ * node_config: when this server's tick found formal Decisions off while a jury sat (decisions-engine.ts settleOpenJuries),
+ * as a JSON list of holds, `{ from, to }` (ISO; `to` null while they are still off). Nobody can answer a seat then, so a
+ * seat's 48 and 72 hours leave every hold out (juryHeldMs). Per server, as the tick is: a standby that takes over starts
+ * with none.
+ */
+export const JURY_HOLDS_KEY = 'juryHolds';
+
+/** One time formal Decisions were off while a jury sat: from, and to (null while still off), in ms. */
+export interface JuryHold { from: number; to: number | null }
+
+/** The holds this server keeps (JURY_HOLDS_KEY), oldest first; none for no row, or one that doesn't read. */
+export function juryHolds(): JuryHold[] {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(JURY_HOLDS_KEY) as { value: string } | undefined;
+    if (!row) return [];
+    try {
+        const list: unknown = JSON.parse(row.value);
+        if (!Array.isArray(list)) return [];
+        return (list as Array<{ from?: unknown; to?: unknown } | null>)
+            .map(h => ({ from: Date.parse(String(h?.from)), to: h?.to == null ? null : Date.parse(String(h.to)) }))
+            .filter((h): h is JuryHold => Number.isFinite(h.from) && (h.to === null || Number.isFinite(h.to)));
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * The tick's note of the Decisions switch, for a seat's hours (settleOpenJuries, each tick, at `nowMs`). `oldestOpenMs`:
+ * when the oldest vote a jury decides that is still open opened, or null when none is. Off, with a jury sitting: a hold
+ * starts, unless one has. On: a hold still open ends now; one that ended before the oldest open jury's vote opened is
+ * dropped, since no seat on it is older; and the row goes once no jury sits. Writes only when that changes something.
+ */
+export function noteJuryHold(decisionsOn: boolean, nowMs: number, oldestOpenMs: number | null): void {
+    const holds = juryHolds();
+    const last = holds[holds.length - 1];
+    const open = last && last.to === null ? last : null;
+    if (!decisionsOn) {
+        if (!open && oldestOpenMs !== null) writeJuryHolds([...holds, { from: nowMs, to: null }]);
+        return;
+    }
+    if (!holds.length) return;
+    if (open) open.to = nowMs;
+    const kept = oldestOpenMs === null ? [] : holds.filter(h => h.to !== null && h.to > h.from && h.to > oldestOpenMs);
+    if (open || kept.length !== holds.length) writeJuryHolds(kept);
+}
+
+function writeJuryHolds(holds: readonly JuryHold[]): void {
+    if (!holds.length) {
+        db.prepare('DELETE FROM node_config WHERE key = ?').run(JURY_HOLDS_KEY);
+        return;
+    }
+    const iso = (ms: number) => new Date(ms).toISOString();
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+        .run(JURY_HOLDS_KEY, JSON.stringify(holds.map(h => ({ from: iso(h.from), to: h.to === null ? null : iso(h.to) }))));
+}
+
+/**
+ * How much of the time since a seat taken at `seatedMs` formal Decisions were off (the holds): the part of each hold after
+ * the seat, a hold still open up to `nowMs`. A hold ends where the tick found them on again, so one that has ended is past.
+ */
+export function juryHeldMs(seatedMs: number, nowMs: number, holds: readonly JuryHold[] = juryHolds()): number {
+    let held = 0;
+    for (const h of holds) {
+        const from = Math.max(h.from, seatedMs);
+        const to = h.to ?? nowMs;
+        if (to > from) held += to - from;
+    }
+    return held;
 }
 
 /**

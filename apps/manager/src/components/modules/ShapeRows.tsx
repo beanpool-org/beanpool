@@ -79,6 +79,7 @@ export function logSettingName(setting: string): string {
         autoHideReports: t('Reported posts hidden and message requests cleared automatically'),
         autoMute: t('Repeat offenders muted automatically'),
         recoveryCopies: t("Where members' copies go"),
+        removalDecider: t('Who decides a removal'),
         'core.lock': t('Core settings'),
         'core.unlock': t('Core settings'),
     };

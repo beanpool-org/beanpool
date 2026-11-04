@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import {
-    fetchAdminDecisions, fetchNodeDecisionsOn, fetchPastRemovalVotes, haltDecision, hideDecisionCase, ownerDecideRemoval, takeDownDecisionReply,
+    adminTallyLine, fetchAdminDecisions, fetchNodeDecisionsOn, fetchPastRemovalVotes, haltDecision, hideDecisionCase, ownerDecideRemoval, takeDownDecisionReply,
     type AdminDecisionItem,
 } from '../../lib/node-client';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
@@ -378,8 +378,8 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
                             </div>
                             <h4 className="text-sm font-bold text-white m-0">{d.title}</h4>
                             {d.subjectName && <p className="text-xs text-nature-400 m-0">About: {d.subjectName}</p>}
-                            <p className="text-xs text-nature-300 m-0">
-                                {d.tally.totalVoters} of {d.tally.quorumRequired} votes needed · Yes {d.tally.yesWeight} · No {d.tally.noWeight}
+                            <p className="text-xs text-nature-300 m-0" data-testid="admin-decision-tally">
+                                {adminTallyLine(d.tally, d.status)}
                             </p>
                             {ownerMayDecide(d) && (
                                 <p className="text-xs text-amber-300 m-0" data-testid="admin-too-few-to-vote">

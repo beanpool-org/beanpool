@@ -9,7 +9,7 @@ export type ShapeSource = 'owner' | 'profile' | 'default' | 'server';
 
 export const SHAPE_LOCK_CODES = [
     'ledger_moved', 'private_preview', 'invites_off', 'beans_off', 'profile', 'server_env', 'held_back', 'schedule_never',
-    'auth_hatch_open', 'open_membership', 'standby',
+    'auth_hatch_open', 'open_membership', 'standby', 'pool_too_small',
 ] as const;
 export type ShapeLockCode = (typeof SHAPE_LOCK_CODES)[number];
 
@@ -30,6 +30,8 @@ export type JoinState = 'members' | 'admins' | 'paused' | 'open';
 export type VisitorsView = 'nothing' | 'listings' | 'open';
 /** Where members' copies go (apps/server config/recovery-copies.ts, vault rethink VR2). */
 export type RecoveryCopies = 'vault' | 'server' | 'none';
+/** Who decides a removal (apps/server config/removal-decider.ts, DESIGN-removal-jury-fable.md §6). */
+export type RemovalDecider = 'automatic' | 'everyone' | 'jury';
 export interface KnownFloorShape {
     on: boolean;
     floor: number;
@@ -65,6 +67,11 @@ export interface ShapeSettings {
     autoMute: ShapeSetting<boolean>;
     /** Absent on a node from before the rule: there every copy goes where each app's build sends it. */
     recoveryCopies?: ShapeSetting<RecoveryCopies>;
+    /**
+     * Who decides a removal (removal jury). `lock` (pool_too_small) refuses only A jury, while fewer than 36 could serve;
+     * `poolSize` is how many could serve today. Absent on a node from before the jury.
+     */
+    removalDecider?: ShapeSetting<RemovalDecider> & { poolSize: number };
     connections: ShapeSetting<boolean>;
 }
 
@@ -178,6 +185,33 @@ export const RECOVERY_COPIES_CHOICES: ReadonlyArray<{ rule: RecoveryCopies; name
         words: "This community keeps no copies and does not use BeanPool's key vault. Members' 12 words are their way back here, and an admin can re-key them to a new key. A copy a member made elsewhere is theirs: this community can't remove it.",
     },
 ];
+
+/**
+ * Who decides a removal, the three rules as an owner chooses them (DESIGN-removal-jury-fable.md §6, §9's manager row). Every
+ * choice is kept as written; a vote already open keeps the rule it opened under.
+ */
+export const REMOVAL_DECIDER_CHOICES: ReadonlyArray<{ rule: RemovalDecider; name: string; words: string }> = [
+    {
+        rule: 'automatic',
+        name: 'Automatic',
+        words: 'A jury of 12 members, drawn at random, once 100 could serve on one (18 from 1,000); everyone who can vote until then.',
+    },
+    {
+        rule: 'everyone',
+        name: 'Everyone',
+        words: 'Every member who can vote decides, however big the community grows: a quarter of those active must vote.',
+    },
+    {
+        rule: 'jury',
+        name: 'A jury',
+        words: 'A jury of 12 members, drawn at random, from 36 who could serve on one. Fewer than that, and everyone decides.',
+    },
+];
+
+/** A rule's short name, for the row and the log. */
+export function removalDeciderName(rule: string): string {
+    return REMOVAL_DECIDER_CHOICES.find((c) => c.rule === rule)?.name ?? rule;
+}
 
 /** A rule's short name, for the row and the log ("BeanPool's key vault", "This server", "Nowhere"). */
 export function recoveryCopiesName(rule: string): string {
@@ -467,6 +501,15 @@ export function getConsequenceSentence(
             return targetValue === false
                 ? t('Node health and version diagnostics will no longer be shared.')
                 : t('Node health and version diagnostics will be shared with the BeanPool team for monitoring.');
+        case 'removalDecider': {
+            const pool = s.removalDecider?.poolSize ?? 0;
+            const rule = String(targetValue);
+            const everyoneToday = rule === 'everyone' || (rule === 'automatic' && pool < 100) || (rule === 'jury' && pool < 36);
+            const today = everyoneToday
+                ? t('Today everyone who can vote would decide one ({n} could serve on a jury).')
+                : t('Today a jury of 12 would decide one ({n} could serve on a jury).');
+            return `${t('The next removal is decided this way; a vote already open keeps its rule. Every member is told.')} ${today.replace('{n}', pool.toLocaleString('en'))}`;
+        }
         case 'probation':
             return targetValue === true
                 ? t('New members get the limits for 3 days, or 7 with 12 words: 3 posts, 5 photos, 10 new people messaged a day.')

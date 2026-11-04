@@ -9,12 +9,16 @@
  *  - Elder treatment (gold border/shadow) for high-energy users
  */
 
-import { useState } from 'react';
+import { type CSSProperties, type ReactNode } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { copyPriceLine, eventCopyOf, formatNumber, listPhotoUrl, listingChipWords, nextListPhotoUrl, pinLive, t, type ListingChip } from '@beanpool/core';
+import { copyPriceLine, eventCopyOf, formatNumber, listingChipWords, pinLive, t, type ListingChip } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
+import { styleUntilDrawn, useListPhotoSteps } from '../lib/use-list-photo-steps';
+
+/** The grid's 4:3 frame anchors upright photos towards the top third (market-card-43). */
+const GRID_CROP: CSSProperties = { objectPosition: '50% 33%' };
 
 /** A listing's type on its badge (the badge's `uppercase` class puts it in capitals); a type this build doesn't know, as written. */
 function typeWords(type: string): string {
@@ -88,13 +92,28 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // nextListPhotoUrl). A banner has no small copy, so it goes straight to the tile: a weak connection, or a URL from before
     // the enterprise changed it. The URL that failed is kept beside its step, not a flag, so a new URL a later read brings
     // starts again from its small copy.
+    // card-photo-blank (Marty, 4 Nov 2026): the small copy is asked once more past every cache before the photo's own URL,
+    // the tile holds the slot until the picture has fired load, and one that neither loads nor fails in time counts as
+    // failed (lib/use-list-photo-steps.ts), so no state leaves an empty box.
     const pictureUrl: string | null = firstPhoto || bannerUrl || null;
-    const [steppedDown, setSteppedDown] = useState<{ photo: string; shown: string | null } | null>(null);
+    const pictureSteps = useListPhotoSteps(pictureUrl);
     // What is drawn now: null is the tile.
-    const displayImage = !pictureUrl ? null : steppedDown?.photo === pictureUrl ? steppedDown.shown : listPhotoUrl(pictureUrl);
-    const onPictureError = () => {
-        if (pictureUrl && displayImage) setSteppedDown({ photo: pictureUrl, shown: nextListPhotoUrl(pictureUrl, displayImage) });
-    };
+    const displayImage = pictureSteps.shown;
+    /** The picture in its box: the tile until it has drawn, the photo after. */
+    const cardPicture = (tile: ReactNode, imgStyle?: CSSProperties) => (
+        <>
+            {pictureSteps.drawn ? null : tile}
+            <img
+                src={displayImage ?? undefined}
+                alt={post.title}
+                aria-hidden={pictureSteps.drawn ? undefined : true}
+                className="w-full h-full object-cover"
+                style={styleUntilDrawn(imgStyle, pictureSteps.drawn)}
+                onLoad={pictureSteps.onLoad}
+                onError={pictureSteps.onError}
+            />
+        </>
+    );
     // The photo is part of the card: a tap on it opens the listing, as on the phone (Marty's standing rule, small-cards-open-the-item).
     // The enlarge lives on the listing's own page, never on a card (no button, so the card stays one element).
     // A member's copy on the global community: where it is from and its price there, in words, where its author would be.
@@ -183,9 +202,9 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Compact Category Picture / Tile */}
-                    <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                    <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0">
                         {displayImage ? (
-                            <img src={displayImage} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
+                            cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />)
                         ) : (
                             <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                         )}
@@ -266,7 +285,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 {/* Left Thumbnail (80px) */}
                 <div className="w-20 h-20 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
                     {displayImage ? (
-                        <img src={displayImage} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
+                        cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />)
                     ) : (
                         <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                     )}
@@ -371,7 +390,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             {/* 4:3 Media Box at Card Top (edge to edge, radius 14) */}
             <div className="relative w-full aspect-[4/3] overflow-hidden">
                 {displayImage ? (
-                    <img src={displayImage} alt={post.title} className="w-full h-full object-cover" style={{ objectPosition: '50% 33%' }} onError={onPictureError} />
+                    cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="grid" />, GRID_CROP)
                 ) : (
                     <CategoryTile
                         category={post.category}

@@ -12,6 +12,8 @@
  *   BeanPool?" its ways back; ← Back returns to the listings. Once joined, App draws the member's app.
  * - On a phone's browser at the community the BeanPool app's link opens, the Join card offers **Open in the BeanPool
  *   app** first and the browser join second (lib/global-entry.ts); the header keeps Join (DESIGN-global-entry §B.3).
+ *   At a self-hoster's open community the same offer is the app at THAT community's own address, with the store's
+ *   listing beside it (issue #2563): the link carries that address and nothing signed or of ours.
  * - It asks for nothing a visitor couldn't already read: the visitors' Home (GET /api/home, unsigned), the guest list
  *   read, the socket's doorbells (unsigned, so nothing else), and `/api/community/info`, which App read once to decide
  *   on the lobby and hands down.
@@ -31,8 +33,9 @@ import { LedgerPage } from './LedgerPage';
 import { keyProblemSentence, joinTakes } from '../components/WebJoin';
 import { FormerAddressBanner } from '../components/FormerAddressBanner';
 import { modeFor } from '../lib/features';
-import { APP_GLOBAL_LINK, isAppsGlobal, lobbyJoinWays, usePhoneBrowser } from '../lib/global-entry';
+import { APP_GLOBAL_LINK, isAppsGlobal, lobbyJoinWays, openDoorAppDoors, usePhoneBrowser } from '../lib/global-entry';
 import { webAppHost } from '../lib/former-address';
+import { getNodeApiUrl } from '../lib/api';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
@@ -127,10 +130,15 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
     // On a phone's browser at the community the BeanPool app's link opens: the app first, the browser second (design
     // DESIGN-global-entry-fable.md §B.3, decision 3), so a phone keeps one account in the app. Anywhere else, as before.
     const phone = usePhoneBrowser();
+    const appsGlobal = isAppsGlobal(info, webAppHost());
+    // A self-hoster's open community (issue #2563): the app at this community's OWN address (the one this page is served
+    // from), never a link into ours. Only where the door is open and this isn't the app's global; the store beside it.
+    const ownDoor = phone && doorOpen && !appsGlobal ? openDoorAppDoors(getNodeApiUrl() || window.location.origin) : null;
     const appFirst = lobbyJoinWays({
         phone,
-        appsGlobal: isAppsGlobal(info, webAppHost()),
+        appsGlobal,
         doorOpen,
+        ownDoorLink: !!ownDoor,
         appVersions: health?.appVersions,
     })[0] === 'app';
 
@@ -177,9 +185,17 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
                     : t('This community takes new members with an invite from one of them.')}
             </p>
             {appFirst && (
-                <a href={APP_GLOBAL_LINK} data-testid="lobby-open-app"
+                <a href={appsGlobal ? APP_GLOBAL_LINK : ownDoor!.app} data-testid="lobby-open-app"
                     className="mb-2 flex items-center justify-center w-full min-h-[48px] px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2">
                     {t('Open in the BeanPool app')}
+                </a>
+            )}
+            {/* The app's own listing, for a phone without it (a scheme link to no app opens nothing on an iPhone): at a
+                self-hoster's community only; the global's smart link leads to the store itself. */}
+            {appFirst && !appsGlobal && ownDoor && (
+                <a href={ownDoor.store} target="_blank" rel="noopener noreferrer" data-testid="lobby-get-app"
+                    className="mb-2 flex items-center justify-center w-full min-h-[44px] px-2 text-center text-sm font-semibold leading-snug text-nature-700 dark:text-nature-200 underline">
+                    {ownDoor.platform === 'ios' ? t('Download on the App Store') : t('Get it on Google Play')}
                 </a>
             )}
             {canHoldKey === false ? (
@@ -199,9 +215,10 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
                 className="mt-1 min-h-[44px] px-2 bg-transparent border-0 text-sm font-semibold text-nature-600 dark:text-nature-300 underline cursor-pointer">
                 {t('Already have BeanPool?')}
             </button>
-            {/* What the global community is, in members' words (DESIGN-global-mothership-fable.md §2.5, pick 1): on a global
-                community only, under its ways in, so no button moves. */}
-            {info.profile === 'global' && (
+            {/* What the global community is, in members' words (DESIGN-global-mothership-fable.md §2.5, pick 1): at the
+                global community only, under its ways in, so no button moves. A self-hoster's open community has the global
+                profile too, but isn't "the global community" (issue #2563): it says nothing of the kind. */}
+            {info.profile === 'global' && appsGlobal && (
                 <p data-testid="lobby-one-among-many" className="m-0 mt-2 text-sm text-nature-700 dark:text-nature-200 leading-snug">
                     {t('The global community is one community among many. Your own community runs on its own server and never needs it.')}
                 </p>

@@ -3473,9 +3473,9 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
             `Your names-list record was saved from ${COMMUNITY}. This device uses ${BYRON} for the same community, so it has taken the record as it is.`);
         expect(r.value.notices.filter((w) => w.startsWith('Restored your names-list record from the server')).length).toBe(1);
         expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
-        // Said once.
-        expect((await open(ada)).notices).not.toContain(NAMES_COPY.copyOtherAddress(COMMUNITY, BYRON));
+        // Said once: the next open on byron doesn't say it again.
         const second = await openNamesList(BYRON, ada, STORE);
+        expect(second.ok ? 'ok' : second.code).toBe('ok');
         expect(second.ok && second.value.notices.includes(NAMES_COPY.copyOtherAddress(COMMUNITY, BYRON))).toBe(false);
         // The next save, on byron: Bea joins, Ada checks her and sends her the keys; the copy goes first and names byron.
         const bea = await admin('Bea');
@@ -3586,6 +3586,8 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
             if (!r.ok) return;
             expect(r.value.plan.kind).toBe('ready');
             expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
+            // One address typed two ways is one address: nothing is said about another (§5.6 (b)).
+            expect(r.value.notices.some((w) => w.startsWith('Your names-list record was saved from'))).toBe(false);
         });
     }
 

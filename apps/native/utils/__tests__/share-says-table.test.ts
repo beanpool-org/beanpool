@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 /**
- * Render tests for SharePostButtons on phone (native), testing all rows of the share-says specification:
+ * Render tests for SharePostButtons on phone (native), testing all rows of the share-says specification, through the ONE
+ * Share button's sheet (DESIGN-detail-pages-fable.md §2.5, DP2): every row's sentences are the sheet items' lines, read
+ * after a tap on 🔗 Share:
  * - Row 1: Sharing outside on
  * - Row 2: Sharing outside off, any member may invite
  * - Row 3: Sharing outside off, only admins invite, member not an admin
@@ -30,6 +32,8 @@ const mockState = vi.hoisted(() => ({
     /** The last role this phone kept for this node: undefined = nothing kept. */
     kept: undefined as any,
     recognition: 'member' as string,
+    /** The signed request to the node: the peek link is made through it. */
+    signed: vi.fn(),
 }));
 
 vi.mock('react-native', () => {
@@ -48,12 +52,15 @@ vi.mock('react-native', () => {
         View: el('div'),
         Text: el('span'),
         Pressable: el('button'),
-        StyleSheet: { create: (s: unknown) => s },
+        Modal: ({ visible, children }: { visible: boolean; children?: any }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
+        StyleSheet: { create: (s: unknown) => s, absoluteFill: {} },
         Alert: { alert: vi.fn() },
         Share: { share: vi.fn() },
         DeviceEventEmitter: { emit: nav.emit },
     };
 });
+
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
 vi.mock('expo-router', async () => {
     const { useEffect } = await import('react');
@@ -71,7 +78,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 vi.mock('../db', () => ({
-    signedRequestWithMethod: vi.fn(),
+    signedRequestWithMethod: mockState.signed,
     signedGet: vi.fn(),
     askCanVouch: vi.fn(async () => false),
 }));
@@ -148,6 +155,21 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
     });
 
     const get = (id: string) => container.querySelector(`[data-testid="${id}"]`);
+    const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+    /** Draw the post's Share and open its sheet: the ways and their sentences are read in the sheet. */
+    const render = async (post: any = samplePost) => {
+        await act(async () => { root.render(createElement(SharePostButtons, { post }) as any); });
+        await settle();
+        // Before the tap: one Share button on the page, and none of the ways or their sentences.
+        expect(container.querySelectorAll('[data-testid="share-open-button"]')).toHaveLength(1);
+        expect(get('share-sheet')).toBeNull();
+        expect(get('share-members-button')).toBeNull();
+        expect(get('share-members-note')).toBeNull();
+        expect(get('share-outside-line')).toBeNull();
+        await act(async () => { (get('share-open-button') as HTMLElement).click(); });
+        await settle();
+        expect(get('share-sheet')).not.toBeNull();
+    };
 
     it('Row 1: Sharing outside on — keeps both buttons, says members only and 7 days line', async () => {
         mockState.profile = {
@@ -155,9 +177,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
             features: { shareOutside: true, door: 'members', knocks: true },
         };
 
-        await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
-        });
+        await render();
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-outside-button')).not.toBeNull();
@@ -175,15 +195,14 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
             features: { shareOutside: false, door: 'members' },
         };
 
-        await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
-        });
+        await render();
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
         const inviteBtn = get('invite-and-share-button');
         expect(inviteBtn).not.toBeNull();
-        expect(inviteBtn?.textContent).toBe('Invite and share');
+        // The way's name, its sentence under it in the same item.
+        expect(inviteBtn?.firstElementChild?.textContent).toBe('Invite and share');
         // Exactly one invite action: the old Invite someone button never shows beside it.
         expect(container.querySelectorAll('[data-testid="invite-and-share-button"]')).toHaveLength(1);
         expect(get('invite-someone-button')).toBeNull();
@@ -198,14 +217,12 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         };
         mockState.role = null;
 
-        await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
-        });
+        await render();
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull(); // the seam for Ask an admin (#2775)
+        expect(get('invite-and-share-button')).toBeNull(); // the seam for Ask an admin (#2775)
         expect(get('share-outside-button')).toBeNull();
     });
 
@@ -216,9 +233,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         };
         mockState.role = 'admin';
 
-        await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
-        });
+        await render();
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
@@ -233,14 +248,12 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
             features: { door: 'open', openJoin: true, invites: false, shareOutside: false },
         };
 
-        await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
-        });
+        await render();
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')).toBeNull();
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull();
+        expect(get('invite-and-share-button')).toBeNull();
         expect(get('share-outside-button')).toBeNull();
     });
 
@@ -252,13 +265,11 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         };
         mockState.role = null;
 
-        await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
-        });
+        await render();
 
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull();
+        expect(get('invite-and-share-button')).toBeNull();
         expect(get('share-outside-button')).toBeNull();
 
         act(() => { root.unmount(); });
@@ -266,9 +277,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
 
         // Admin member
         mockState.role = 'owner';
-        await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
-        });
+        await render();
 
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only.');
         expect(get('invite-and-share-button')).not.toBeNull();
@@ -278,20 +287,14 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
     it('Fallback: settings cannot be read — shows today buttons and no line', async () => {
         mockState.profile = null;
 
-        await act(async () => {
-            root.render(createElement(SharePostButtons, { post: samplePost }) as any);
-        });
+        await render();
 
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')).toBeNull();
         expect(get('share-outside-line')).toBeNull();
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull();
+        expect(get('invite-and-share-button')).toBeNull();
     });
-
-    const render = async (post: any = samplePost) => {
-        await act(async () => { root.render(createElement(SharePostButtons, { post }) as any); });
-    };
 
     it('Row 1 with joining paused: the outside line never promises to ask to join', async () => {
         mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: false } };
@@ -321,7 +324,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         expect(get('share-members-button')).not.toBeNull();
         expect(get('share-members-note')).toBeNull();
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull();
+        expect(get('invite-and-share-button')).toBeNull();
     });
 
     it('only admins invite, no answer from the node: the role kept on the phone is used, so an owner offline keeps the button', async () => {
@@ -340,7 +343,7 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         await render();
         expect(get('share-members-note')?.textContent).toBe('This link opens for members only, and only admins invite here.');
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull();
+        expect(get('invite-and-share-button')).toBeNull();
     });
 
     it('a guest here (or one the node has not recognised yet) is not offered Invite and share', async () => {
@@ -349,11 +352,13 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         await render();
         expect(get('share-members-button')).not.toBeNull();
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull();
+        expect(get('invite-and-share-button')).toBeNull();
+        act(() => { root.unmount(); });
+        root = createRoot(container);
         mockState.recognition = 'unknown';
         await render();
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull();
+        expect(get('invite-and-share-button')).toBeNull();
     });
 
     it('invites off with a members door: no invite action and no members line', async () => {
@@ -361,7 +366,58 @@ describe('SharePostButtons — share-says table rows (phone)', () => {
         await render();
         expect(get('share-members-button')).not.toBeNull();
         expect(get('invite-someone-button')).toBeNull();
-        expect(get('invite-and-share')).toBeNull();
+        expect(get('invite-and-share-button')).toBeNull();
         expect(get('share-members-note')).toBeNull();
+    });
+
+    /** The ways the sheet offers: its buttons, less Cancel. */
+    const ways = () => [...container.querySelectorAll('[data-testid="share-sheet"] > button')]
+        .map((b) => b.getAttribute('data-testid'))
+        .filter((id) => id !== 'share-sheet-cancel');
+
+    it('sharing outside off and invites off: the sheet has one way, Share with members (a sheet of one is the same door)', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'members', invites: false } };
+        await render();
+        expect(ways()).toEqual(['share-members-button']);
+    });
+
+    it('every way in its order: members, outside, Invite and share; each sentence under its own name', async () => {
+        mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
+        await render();
+        expect(ways()).toEqual(['share-members-button', 'share-outside-button', 'invite-and-share-button']);
+        expect(get('share-members-button')?.contains(get('share-members-note'))).toBe(true);
+        expect(get('share-outside-button')?.contains(get('share-outside-line'))).toBe(true);
+        expect(get('invite-and-share-button')?.contains(get('invite-and-share-line'))).toBe(true);
+        expect(get('invite-and-share-line')?.textContent).toBe('One invite, for one person: a code works once.');
+    });
+
+    it('the sheet is not the share: no link is made until Share outside is tapped, and then no second question', async () => {
+        const { Alert, Share } = await import('react-native');
+        mockState.signed.mockImplementation(async (_m: string, path: string) =>
+            path === '/api/peek' ? { ticket: 'AbCdEfGhIjKlMnOpQrSt_-', postId: samplePost.id, expiresAt: '2999-01-01T00:00:00Z' } : {});
+        mockState.profile = { profile: 'local', features: { shareOutside: true, door: 'members', knocks: true } };
+        await render();
+        expect(mockState.signed.mock.calls.filter(([m, p]) => m === 'POST' && p === '/api/peek')).toHaveLength(0);
+        expect(Share.share).not.toHaveBeenCalled();
+
+        await act(async () => { (get('share-outside-button') as HTMLElement).click(); });
+        await settle();
+        expect(mockState.signed.mock.calls.filter(([m, p]) => m === 'POST' && p === '/api/peek')).toHaveLength(1);
+        expect(Alert.alert).not.toHaveBeenCalled();
+        expect(Share.share).toHaveBeenCalledWith({
+            message: `${samplePost.title}\nhttps://node.example/?post=${samplePost.id}&peek=AbCdEfGhIjKlMnOpQrSt_-`, title: samplePost.title,
+        });
+        // Handed over: the sheet has closed.
+        expect(get('share-sheet')).toBeNull();
+    });
+
+    it('Share with members hands the members\' link over from the sheet, then closes it', async () => {
+        const { Share } = await import('react-native');
+        mockState.profile = { profile: 'local', features: { shareOutside: false, door: 'members' } };
+        await render();
+        await act(async () => { (get('share-members-button') as HTMLElement).click(); });
+        await settle();
+        expect(Share.share).toHaveBeenCalledWith({ message: `${samplePost.title}\nhttps://node.example/?post=${samplePost.id}`, title: samplePost.title });
+        expect(get('share-sheet')).toBeNull();
     });
 });

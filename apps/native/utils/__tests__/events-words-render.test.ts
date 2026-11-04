@@ -280,7 +280,10 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         expect(said()).toEqual([xx('RSVP not saved'), xx("This event's id isn't one BeanPool recognises, so your answer wasn't signed or sent.")]);
         alerts.said.length = 0;
         store.map.clear();
+        // One Share (DP2): it opens the sheet, and the members' link is its first way.
         await click(byLabel(xx('Share this event')), 'Share');
+        expect(said()).toEqual([]);
+        await click(host.querySelector('[data-testid="share-members-button"]'), 'Share with members');
         expect(said()).toEqual([xx('Not shared'), xx('You are currently offline.')]);
         alerts.said.length = 0;
         store.map.set('beanpool_anchor_url', 'https://mullum.example');

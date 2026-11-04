@@ -320,6 +320,17 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 const NEW_SINCE_WORDS = { line: NEW_SINCE_LINE };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
+/**
+ * The page's column by view (style box V1, DESIGN-card-style-box-fable.md §4): the grid uses the width (2 to 5 columns); the
+ * list and the compact view are a phone-width column, 672 px at most, centred beside the sidebar, so a card never stretches
+ * across a wide window. The search row, the filters, the headings and the cards all sit in this one column. Tailwind reads
+ * these as literal classes. The detail pages keep their own `max-w-3xl` column.
+ */
+const VIEW_COLUMN: Record<'grid' | 'list' | 'compact', string> = {
+    grid: 'max-w-7xl',
+    list: 'max-w-2xl',
+    compact: 'max-w-2xl',
+};
 
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onComposer, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor, openFilter, onFilterOpened }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
@@ -3527,7 +3538,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // =================== LIST VIEW ===================
     return (
-        <div className="px-3 md:px-6 pt-4 pb-24 max-w-7xl mx-auto w-full">
+        <div data-testid="market-view-column" className={`px-3 md:px-6 pt-4 pb-24 ${VIEW_COLUMN[viewMode]} mx-auto w-full`}>
             {/* Radius Picker Full Screen */}
             {showRadiusPicker && (
                 <Suspense fallback={<div className="flex-1 flex items-center justify-center">{t('Loading Location Services...')}</div>}>

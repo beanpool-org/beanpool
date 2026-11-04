@@ -13,7 +13,7 @@
  * before the tap that shares. What a way leaves behind (a note, a link to copy by hand, the invite panel) shows under the row.
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { INVITE_ASK_WORDS, PEEK_WORDS as W, shareSays, t, type ShareSaysKind, type WordKey } from '@beanpool/core';
+import { INVITE_ASK_WORDS, PEEK_WORDS as W, shareSays, t, type ShareSaysKind } from '@beanpool/core';
 import type { MarketplacePost } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
 import { useShareRole } from '../lib/use-share-role';
@@ -27,7 +27,7 @@ import { nodeOrigin } from './EventExtras';
 import { MenuChoices, useInFlowMenu, type MenuChoice, type SharePart } from './ShareMenu';
 
 /** The quiet, neutral outline (DESIGN-detail-pages-fable.md §2.2): the page's own words on the card ground, no colour of its own. */
-export const QUIET_BUTTON = 'min-h-[48px] px-3 rounded-xl border text-sm font-bold bg-white dark:bg-nature-900 cursor-pointer break-words '
+const QUIET_BUTTON ='min-h-[48px] px-3 rounded-xl border text-sm font-bold bg-white dark:bg-nature-900 cursor-pointer break-words '
     + 'border-nature-300 dark:border-nature-700 text-nature-900 dark:text-white '
     + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-600 dark:focus-visible:ring-nature-300 focus-visible:ring-offset-1 '
     + 'disabled:opacity-60 disabled:cursor-not-allowed';
@@ -59,7 +59,7 @@ export function shareableOutside(
  * A share sheet the member closed leaves one too: it is kept the same way, unshown, for the next tap. The kept link lives
  * here, not in the menu, so closing the menu loses nothing.
  */
-function useShareOutside(post: MarketplacePost, offered: boolean, line: WordKey | null): SharePart | null {
+function useShareOutside(post: MarketplacePost, offered: boolean, line: string | null): SharePart | null {
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
     // The link made but not handed over, for the post it was made for (the same part may be drawn for another post
@@ -101,7 +101,7 @@ function useShareOutside(post: MarketplacePost, offered: boolean, line: WordKey 
     return {
         // ONE note before the tap: how long anyone with the link can read it, no names or faces, that it can be stopped, and
         // (where joining is on) that they can then ask to join.
-        choice: { key: 'outside', testId: 'share-outside-button', label: t(W.shareOutside), line: line && t(line), lineTestId: 'share-outside-line', disabled: busy, onSelect: () => { void share(); } },
+        choice: { key: 'outside', testId: 'share-outside-button', label: t(W.shareOutside), line, lineTestId: 'share-outside-line', disabled: busy, onSelect: () => { void share(); } },
         after: (note || shownLink) && (
             <div data-testid="share-outside" className="flex flex-col gap-1">
                 {note && (
@@ -189,7 +189,7 @@ export function useShare(post: MarketplacePost, opts: ShareOptions): { trigger: 
         const how = await handOver(post.title, eventLink(nodeOrigin(), post.id));
         setNote(how === 'copied' ? t('Link copied.') : how === 'failed' ? t('Could not copy the link.') : null);
     };
-    const outside = useShareOutside(post, says.showShareOutside && shareableOutside(post), says.outsideLine);
+    const outside = useShareOutside(post, says.showShareOutside && shareableOutside(post), says.outsideLine && t(says.outsideLine));
     // ONE invite action (share-one-flow): Invite and share, where this member may invite and the line does not say only
     // admins do. Where only admins invite and this member is none, the line stands and one more choice, "Ask an admin to
     // invite someone", opens the ask form of People → Invites (#2775). Never both.

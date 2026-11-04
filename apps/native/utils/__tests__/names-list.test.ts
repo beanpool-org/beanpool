@@ -45,7 +45,7 @@ import { getPublicKey } from '@noble/ed25519';
 import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, makeNamesGeneration, makeNamesShare, readNamesGeneration,
     readNamesShare, namesKeyQr, namesKeyCode, namesListKeyCode, namesBoxDigest, emptyNamesPin, namesShareHeader, sealNamesRing, NAMES_REFUSAL_REASONS, toEd25519Pkcs8,
-    readNamesCopy, makeNamesCopy, namesPinForNextCopy,
+    readNamesCopy, makeNamesCopy, namesPinForNextCopy, syncNames,
     type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { bytesToHex } from '../crypto';
@@ -1228,7 +1228,7 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         expect(f.ok && f.value.plan.kind).toBe('ready');
         const three = node.current()!;
         expect(three).toMatchObject({ maker: bea.publicKey, drops: [abe.publicKey, zed.publicKey].sort() });
-        expect(f.ok && f.value.notices.some((w) => w.startsWith('The list has a new key without') && w.includes('@Abe') && w.includes('@Zed') && w.includes('on a key history it has since left'))).toBe(true);
+        expect(f.ok && f.value.notices.some((w) => w.startsWith('The list has a new key without') && w.includes('@Abe') && w.includes('@Zed') && w.includes('on a key history this device isn’t on'))).toBe(true);
         expect(f.ok && f.value.pin.trusted).not.toContain(abe.publicKey);
         // Nothing from Bea to Abe after the tap; his lost phone holds neither key.
         expect(sent.slice(tap).filter((x) => x.method === 'POST' && new URL(x.url).pathname === '/api/names/shares'
@@ -2565,7 +2565,7 @@ describe('F6 the words are the design\'s (§9), and the old ones are gone', () =
         // Round 7: when the new key is this phone's own drop, the holder only sends the key; this phone makes the new one.
         expect(plain(NAMES_COPY.waitOwnKey(['A'], ['X']))).toBe("The list needs a new key without @X before anything more is written. This phone makes it once it holds the list's current key: @A will send that the next time they open the names list.");
         // Round 14 (the re-review's :1078): true when the followed history removed them too, in another statement.
-        expect(plain(NAMES_COPY.newKeyCarried(['X']))).toBe("The list has a new key without @X: this phone had removed their key on a key history it has since left.");
+        expect(plain(NAMES_COPY.newKeyCarried(['X']))).toBe("The list has a new key without @X: their key had been removed on a key history this device isn't on.");
         expect(plain(NAMES_COPY.checkAgain('X', 4))).toBe("Key 4 removed @X's key. If @X is an admin again, check each other's phones again: a check made before this phone took key 4 doesn't count past it.");
         expect(plain(`${NAMES_COPY.newKeyMade(['X'])} ${NAMES_COPY.newKeySent(['A'], [])}`)).toBe('The list has a new key because @X is no longer an admin. Nothing this phone writes from now on can be read with the keys @X had. This phone has sent the new key to the admins it trusts.');
         expect(plain(NAMES_COPY.newKeyRemoved(['X']))).toBe("The list has a new key that @X's old phone can't read. If @X gets a new phone, check its code and this phone will send the keys.");
@@ -3329,8 +3329,8 @@ describe('§8 21. Two phones, one key: the higher-seq copy is merged, never roll
         expect(after.chain.map((l) => l.id)).toEqual(phoneB.chain.map((l) => l.id));
         expect(Object.keys(after.ring)).toEqual(expect.arrayContaining([k1, k2]));
         expect(sentAs('GET', '/api/names/copy').length).toBe(1);
-        expect(a.notices).toContain(NAMES_COPY.copyNewer);
-        expect((await open(ada)).notices).not.toContain(NAMES_COPY.copyNewer);
+        expect(a.notices).toContain(NAMES_COPY.secondDevice);
+        expect((await open(ada)).notices).not.toContain(NAMES_COPY.secondDevice);
         // The merge itself: the further chain kept whichever side holds it, never a lower number, no key of either lost.
         const ab = mergeNamesPins(was, phoneB).pin;
         const ba = mergeNamesPins(phoneB, was).pin;
@@ -3338,6 +3338,71 @@ describe('§8 21. Two phones, one key: the higher-seq copy is merged, never roll
             expect(m.chain.map((l) => l.id)).toEqual(phoneB.chain.map((l) => l.id));
             expect(m.copy.seq).toBe(Math.max(was.copy.seq, phoneB.copy.seq));
             expect(Object.keys(m.ring).sort()).toEqual([...new Set([...Object.keys(was.ring), ...Object.keys(phoneB.ring)])].sort());
+        }
+    });
+
+    it('M10 (ruling DESIGN-names-list-merge-rule-fable.md §3, §4): a merge that carries a drop from a fork says secondDevice once, checkAgainOtherDevice once, and the new key it makes says newKeyCarried; nothing reaches the removed admin', async () => {
+        const { node, phones: [owen, ada, bea, cy, dan] } = await community(['Owen', 'Ada', 'Bea', 'Cy', 'Dan'], true);
+        const standby = { gens: new Map(node.gens), shares: new Map(node.shares) };
+        const phoneA = takePhone(ada);
+        const keptA = (await pinOf(ada))!;
+        // Device B (Ada's other device), on the main server: Bea is no longer an admin, Owen's key 2 (X) drops her, B takes it.
+        node.admins = [role(owen, 'owner'), role(ada), role(cy), role(dan)];
+        for (let i = 0; i < 2; i++) { await open(owen); await open(ada); }
+        const X = node.current()!;
+        expect(X).toMatchObject({ maker: owen.publicKey, drops: [bea.publicKey] });
+        expect((await pinOf(ada))!.dropped[bea.publicKey]).toBe(X.id);
+        expect(nodeCopy(node, ada)!.seq).toBeGreaterThan(keptA.copy.seq);
+        // A standby takes over from the older copy (Bea an admin there, Dan not): Cy's phone makes key 2 (W) dropping Dan.
+        node.gens = new Map(standby.gens); node.shares = new Map(standby.shares);
+        node.admins = [role(owen, 'owner'), role(ada), role(bea), role(cy)];
+        for (let i = 0; i < 2; i++) await open(cy);
+        const W = node.current()!;
+        expect(W).toMatchObject({ maker: cy.publicKey, drops: [dan.publicKey] });
+        // Device A never saw X: it took W (and W's key from Cy's box) before B's copy reached it.
+        putPhone(ada, phoneA);
+        const tookW = syncNames({ pin: keptA, state: node.stateFor(ada.publicKey), me: ada }).pin;
+        expect(tookW.chain.map((l) => l.id)).toEqual([keptA.chain[0].id, W.id]);
+        expect(tookW.ring[W.id]).toBeDefined();
+        expect(tookW.trusted).toContain(bea.publicKey);
+        expect(await writeNamesPinTo(STORE, ada.publicKey, COMMUNITY, tookW)).toBe(true);
+        // A opens: B's newer copy is a fork; A's record is kept, X joins abandoned, the drop of Bea carries.
+        sent = [];
+        const tap = sent.length;
+        const a = await open(ada);
+        const made = node.current()!;
+        expect(made).toMatchObject({ maker: ada.publicKey, parentId: W.id, drops: [bea.publicKey] });
+        expect(a.pin.abandoned).toContain(X.id);
+        expect(a.pin.trusted).not.toContain(bea.publicKey);
+        expect(a.notices).toContain(NAMES_COPY.secondDevice);
+        expect(a.notices).toContain(NAMES_COPY.checkAgainOtherDevice('Bea'));
+        expect(a.notices).toContain(NAMES_COPY.newKeyCarried(['Bea']));
+        for (const w of a.notices) {
+            expect(w).not.toMatch(/Use one phone|this one removed|another device checked|this phone had removed their key on a key history it has since left/);
+        }
+        // Said once.
+        const again = await open(ada);
+        expect(again.notices).not.toContain(NAMES_COPY.secondDevice);
+        expect(again.notices).not.toContain(NAMES_COPY.checkAgainOtherDevice('Bea'));
+        // Nothing from this key to Bea, and no header vouching for her.
+        const shares = sent.slice(tap).filter((x) => x.method === 'POST' && new URL(x.url).pathname === '/api/names/shares').map((x) => readNamesShare(JSON.parse(x.body), CID)!);
+        expect(shares.filter((x) => x.to === bea.publicKey)).toEqual([]);
+        for (const x of shares) expect(x.trusts).not.toContain(bea.publicKey);
+    });
+
+    it('M10 F6: the old two-device words are gone, and the new ones are the ruling\'s §4 sentences', () => {
+        const plain = (w: string) => w.replace(/’/g, "'");
+        expect('copyNewer' in NAMES_COPY).toBe(false);
+        expect(plain(NAMES_COPY.secondDevice)).toBe('Your account opened the names list on another device since this one last did. This device has taken what that one saved: its checks, its removals and its keys.');
+        expect(plain(NAMES_COPY.checkAgainOtherDevice('X'))).toBe("@X's key was removed on one of your devices and checked on another, and this device can't tell which came last, so the removal stands here. If @X is an admin, check their code here once.");
+        const call = (f: (...a: unknown[]) => unknown) => { try { return String(f('X', 'X', 'X')); } catch { return String(f(['X'], ['X'], ['X'])); } };
+        const said = Object.values(NAMES_COPY).flatMap((v) => (typeof v === 'string' ? [v] : typeof v === 'function' ? [call(v as (...a: unknown[]) => unknown)] : []));
+        for (const w of said) expect(w).not.toMatch(/Use one phone|this one removed|another device checked|has since left/);
+        for (const file of ['utils/names-list.ts', 'components/key-lines.ts', 'app/names-list.tsx']) {
+            expect(fs.readFileSync(path.join(__dirname, '../..', file), 'utf8')).not.toMatch(/Use one phone|on a key history it has since left/);
+        }
+        for (const file of fs.readdirSync(path.join(__dirname, '../../words'))) {
+            expect(fs.readFileSync(path.join(__dirname, '../../words', file), 'utf8'), file).not.toMatch(/Use one phone/);
         }
     });
 });
@@ -3516,7 +3581,7 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
             expect(now.copy.seq).toBe(was.copy.seq);
             expect(now.chain.map((l) => l.id)).toEqual(was.chain.map((l) => l.id));
             expect(Object.keys(now.ring).sort()).toEqual(Object.keys(was.ring).sort());
-            expect(o.notices).toContain(NAMES_COPY.copyNewer);
+            expect(o.notices).toContain(NAMES_COPY.copyNotSaved);
             expect(sentAs('GET', '/api/names/copy').length).toBe(1);
             expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
             expect(sentAs('POST', '/api/names/shares')).toEqual([]);

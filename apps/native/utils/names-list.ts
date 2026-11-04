@@ -450,7 +450,8 @@ async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: Names
     const mine = state.myCopy;
     if (last && mine && last.seq === pin.copy.seq && last.part === part && mine.seq === last.seq && mine.digest === last.digest) return { ok: true, pin, mine };
     // A newer copy on the node is another phone's (design §3, "higher seq"): never written over before stage 3b's merge.
-    if (state.myCopy && state.myCopy.seq > pin.copy.seq) return copyFailure('copy_newer', NAMES_COPY.copyNewer);
+    // No copy was saved and nothing sent: the next open merges that copy and tries again (ruling §4).
+    if (state.myCopy && state.myCopy.seq > pin.copy.seq) return copyFailure('copy_newer', NAMES_COPY.copyNotSaved);
     if ((copiesPausedUntil.get(label) ?? 0) > Date.now()) return copyFailure('too_many_copies', NAMES_COPY.copyNotSaved);
     const address = copyAddress(anchor);
     if (!address) return copyFailure('copy_not_saved', NAMES_COPY.copyNotSaved);
@@ -531,10 +532,13 @@ async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store:
     if (!got.ok) return local;
     const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address: copyAddress(anchor) ?? anchor });
     if (!r.ok || r.copy.seq <= local.copy.seq || state.myCopy?.seq !== r.copy.seq) return local;
-    const merged = mergeNamesPins(local, r.pin).pin;
-    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, merged))) return local;
-    await keepUnsaid(store, identity.publicKey, anchor, [NAMES_COPY.copyNewer]);
-    return merged;
+    const merged = mergeNamesPins(local, r.pin);
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, merged.pin))) return local;
+    // Said once by the next open: the merge, then each key one record trusted that stands removed here (ruling §4).
+    await keepUnsaid(store, identity.publicKey, anchor, [
+        NAMES_COPY.secondDevice, ...merged.recheck.map((k) => NAMES_COPY.checkAgainOtherDevice(callsignIn(state, k))),
+    ]);
+    return merged.pin;
 }
 
 /** The codes of a refused copy, on which the screen offers "Start afresh on this phone" (asked first). */
@@ -1671,7 +1675,9 @@ export const NAMES_COPY = {
     copyOtherAddress: (address: string) => `This record was saved for ${address}, not this community.`,
     copyTooBig: 'Your names-list record is too big to keep a copy on the server. Keep this phone signed in, or save the names as a PDF.',
     copyNotSaved: 'The server didn’t keep a copy of your names-list record just now, so no keys were sent. The next open tries again.',
-    copyNewer: 'Another phone signed in as you saved the names list’s record. Use one phone.',
+    // Two devices, one key (DESIGN-names-list-merge-rule-fable.md §4): a newer record from another device was merged.
+    secondDevice: 'Your account opened the names list on another device since this one last did. This device has taken what that one saved: its checks, its removals and its keys.',
+    checkAgainOtherDevice: (who: string) => `${at(who)}’s key was removed on one of your devices and checked on another, and this device can’t tell which came last, so the removal stands here. If ${at(who)} is an admin, check their code here once.`,
     copyRestored: (savedAt: string, n: number, code: string) => `Restored your names-list record from the server, saved ${shortDate(savedAt)}, key ${n} (${code}).`,
     startAfresh: 'Start afresh on this phone',
     // Sign Out with the copy not confirmed (design §5): nothing is blocked.
@@ -1712,7 +1718,7 @@ export const NAMES_COPY = {
     /** A key this phone had removed, carried into the history it took (Addendum 2, ruling 2): the forced drop landed. */
     // Round 14 (:1078): the key that removed them on this phone is on a history it left (the followed one may drop them too,
     // in another statement; rule (a) keeps this phone's own, so it makes its own key).
-    newKeyCarried: (who: string[]) => `The list has a new key without ${both(who)}: this phone had removed their key on a key history it has since left.`,
+    newKeyCarried: (who: string[]) => `The list has a new key without ${both(who)}: their key had been removed on a key history this device isn’t on.`,
     /** The walk dropped a key this phone trusted that the server still lists (Addendum 2, ruling 5). */
     checkAgain: (who: string, n: number) => `Key ${n} removed ${at(who)}’s key. If ${at(who)} is an admin again, check each other’s phones again: `
         + `a check made before this phone took key ${n} doesn’t count past it.`,

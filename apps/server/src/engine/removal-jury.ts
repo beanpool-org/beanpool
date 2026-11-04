@@ -44,10 +44,15 @@ export const JURY_CONFLICT_DAYS = 90;
  * one under the subject's name: the member's kept lines are older than it). None of it is ever said: a member passed over
  * for any of these is listed after close exactly as one who stepped aside themselves, with no reason, and while the vote
  * is open is refused in the words a member not drawn is.
+ *
+ * A branch's vote is on every account on its list (DESIGN-removal-jury-j2-calls-fable.md call 4, J2c): a member with any
+ * of these links to any one of them stands aside, so `subjects` may be that whole list. No account on it is ever one of
+ * the conflicts returned: each is out of the vote's pool already.
  */
-export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set<string> {
+export function juryConflictsOf(subjects: string | readonly string[], atMs: number = Date.now()): Set<string> {
+    const judged = new Set(typeof subjects === 'string' ? [subjects] : subjects);
     const since = new Date(atMs - JURY_CONFLICT_DAYS * DAY_MS).toISOString();
-    const rows = db.prepare(`
+    const conflictsOf = db.prepare(`
         SELECT reporter_pubkey AS k FROM abuse_reports
          WHERE julianday(created_at) >= julianday(@since)
            AND (target_pubkey = @s OR target_post_id IN (SELECT id FROM posts WHERE author_pubkey = @s))
@@ -72,9 +77,11 @@ export function juryConflictsOf(subject: string, atMs: number = Date.now()): Set
           JOIN conversation_participants them ON them.conversation_id = c.id AND them.public_key = @s
           JOIN conversation_participants opener ON opener.conversation_id = c.id AND opener.public_key = w.author_pubkey
          WHERE julianday(w.timestamp) < julianday(c.created_at)
-    `).all({ s: subject, since }) as Array<{ k: string | null }>;
+    `);
     const out = new Set<string>();
-    for (const r of rows) if (r.k && r.k !== subject) out.add(r.k);
+    for (const subject of judged) {
+        for (const r of conflictsOf.all({ s: subject, since }) as Array<{ k: string | null }>) if (r.k && !judged.has(r.k)) out.add(r.k);
+    }
     return out;
 }
 

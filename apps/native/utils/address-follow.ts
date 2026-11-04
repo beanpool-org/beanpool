@@ -84,10 +84,14 @@ export interface AddressFollowOffer {
     host: string;
 }
 
-const IPV4_HOST = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+/** A server's number as a host (communityOrigin takes only a public one). */
+export const IPV4_HOST = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
-/** The phone's community address as an origin a move may start from: plain, https, not the worldwide community's. */
-function followableOrigin(anchor: string | null | undefined): string | null {
+/**
+ * The phone's community address as an origin a move may start from: plain, https, not the worldwide community's. The
+ * fallback card (utils/address-fallback.ts) starts from the same addresses.
+ */
+export function followableOrigin(anchor: string | null | undefined): string | null {
     const from = anchor && isPlainNodeAddress(anchor.trim()) ? plainOriginOf(anchor.trim()) : null;
     if (!from || !from.startsWith('https://')) return null;
     const here = audienceOf(from);
@@ -151,7 +155,7 @@ export function readIdentityStatement(body: unknown): CommunityIdentity | null {
 }
 
 /** One community: the same node key and the same community id. */
-function sameIdentity(a: CommunityIdentity, b: CommunityIdentity): boolean {
+export function sameIdentity(a: CommunityIdentity, b: CommunityIdentity): boolean {
     return a.peerId === b.peerId && a.communityId === b.communityId;
 }
 
@@ -215,14 +219,14 @@ async function defaultDeps(): Promise<AddressFollowDeps> {
     };
 }
 
-async function depsWith(injected?: Partial<AddressFollowDeps>): Promise<AddressFollowDeps> {
+export async function depsWith(injected?: Partial<AddressFollowDeps>): Promise<AddressFollowDeps> {
     const keys: (keyof AddressFollowDeps)[] = [
         'anchor', 'profile', 'statement', 'now', 'switchTo', 'savedNodes', 'addSavedNode', 'removeSavedNode', 'isGuestNode', 'markGuestNode',
     ];
     return keys.every(k => injected?.[k]) ? injected as AddressFollowDeps : { ...(await defaultDeps()), ...injected };
 }
 
-async function readMap<T>(key: string): Promise<Record<string, T>> {
+export async function readMap<T>(key: string): Promise<Record<string, T>> {
     try {
         const raw = await AsyncStorage.getItem(key);
         const parsed = raw ? JSON.parse(raw) : {};
@@ -233,7 +237,7 @@ async function readMap<T>(key: string): Promise<Record<string, T>> {
 }
 
 /** Writes `map` with `id` set (or removed, for undefined), keeping the newest MAX_KEPT. Never throws. */
-async function writeEntry<T>(key: string, id: string, value: T | undefined): Promise<void> {
+export async function writeEntry<T>(key: string, id: string, value: T | undefined): Promise<void> {
     try {
         const map = await readMap<T>(key);
         delete map[id];
@@ -250,6 +254,11 @@ function readKeptIdentity(v: unknown): CommunityIdentity | null {
     const k = v as Partial<CommunityIdentity> | null | undefined;
     return k && typeof k.peerId === 'string' && typeof k.communityId === 'string' && Number.isSafeInteger(k.epoch)
         ? { peerId: k.peerId, communityId: k.communityId, epoch: k.epoch as number } : null;
+}
+
+/** Who the phone first verified its community at `origin` to be (kept by keepCommunityIdentity or a check), or null. */
+export async function keptIdentityAt(origin: string): Promise<CommunityIdentity | null> {
+    return readKeptIdentity((await readMap<CommunityIdentity>(COMMUNITY_IDENTITY_KEY))[origin]);
 }
 
 export type FollowCheck = 'same' | 'not-same' | 'unreachable';
@@ -280,6 +289,20 @@ const unanswered = new Map<string, number>();
 export function forgetFollowChecks(): void {
     checked.clear();
     unanswered.clear();
+}
+
+/** Told when a check's answer for a move differs from the last one (onFollowOfferChanged). */
+const changeListeners = new Set<() => void>();
+
+/**
+ * Call `listener` whenever a check of a move comes out other than the one before it: the follow card asks again (from the
+ * check just made, so nothing more is asked of the network). The fallback card's check (utils/address-fallback.ts) asks
+ * this one too and stands aside when it finds a move to offer, so the follow card must show what that check found, not
+ * only what it found itself when Home came into view. Returns the unsubscribe.
+ */
+export function onFollowOfferChanged(listener: () => void): () => void {
+    changeListeners.add(listener);
+    return () => { changeListeners.delete(listener); };
 }
 
 /**
@@ -320,8 +343,15 @@ async function snoozed(offer: AddressFollowOffer, now: number): Promise<boolean>
  * The card's question, or null: the phone's community lives somewhere else now, the member hasn't said "Not now" to it in
  * the last 7 days, and it is checked to be the same community. Writes nothing but what the phone verified of its own
  * community (above): never the community's address.
+ *
+ * `opts`, the fallback card's ask (utils/address-fallback.ts) while the phone's own address isn't answering: a 'same'
+ * checked before `sameSince` (when its run of failed tries began), or `sameWithin` ms ago or more, is checked again first.
+ * An hour-old 'same' says nothing of whether the new address answers now, and that card stands aside only for a move that
+ * can be made (review of 533de50e). Neither shortens a check that offered nothing.
  */
-export async function addressFollowOffer(injected?: Partial<AddressFollowDeps>): Promise<AddressFollowOffer | null> {
+export async function addressFollowOffer(
+    injected?: Partial<AddressFollowDeps>, opts?: { sameSince?: number; sameWithin?: number },
+): Promise<AddressFollowOffer | null> {
     const deps = await depsWith(injected);
     const anchor = await deps.anchor().catch(() => null);
     if (!anchor || !followableOrigin(anchor)) return null;
@@ -330,10 +360,14 @@ export async function addressFollowOffer(injected?: Partial<AddressFollowDeps>):
     const id = `${offer.from} ${offer.to}`;
     const memo = checked.get(id);
     const ttl = memo?.verdict === 'unreachable' ? UNREACHABLE_TTL_MS : VERDICT_TTL_MS;
-    let verdict = memo && deps.now() - memo.at >= 0 && deps.now() - memo.at < ttl ? memo.verdict : null;
+    const age = memo ? deps.now() - memo.at : -1;
+    const stale = !memo || age < 0 || age >= ttl || (memo.verdict === 'same' && (
+        (opts?.sameSince !== undefined && memo.at < opts.sameSince) || (opts?.sameWithin !== undefined && age >= opts.sameWithin)));
+    let verdict = stale ? null : memo.verdict;
     if (!verdict) {
         verdict = await checkFollow(offer, deps);
         checked.set(id, { verdict, at: deps.now() });
+        if (verdict !== memo?.verdict) for (const l of [...changeListeners]) l();
     }
     return verdict === 'same' ? offer : null;
 }
@@ -379,6 +413,20 @@ export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: 
     const verdict = await checkFollow(offer, deps);
     checked.delete(`${offer.from} ${offer.to}`);
     if (verdict !== 'same') return verdict;
+    const moved = await moveCommunity(offer, anchor, deps);
+    await writeEntry(FOLLOW_SNOOZE_KEY, offer.from, undefined);
+    return moved;
+}
+
+/**
+ * The move itself, once the new address is checked to be the same community: the follow card's and the fallback card's
+ * (utils/address-fallback.ts), so both carry the same things. `anchor` is the phone's community address as stored (at
+ * `offer.from`). A guest visit's mark goes first, then the switch, the profile change waiting, alerts turned off, and
+ * the saved list's row with its name.
+ */
+export async function moveCommunity(
+    offer: Pick<AddressFollowOffer, 'from' | 'to'>, anchor: string, deps: AddressFollowDeps,
+): Promise<'moved' | 'moved-kept-both'> {
     const saved = (await deps.savedNodes().catch(() => [] as SavedNode[])).find(n => isPlainNodeAddress(n.url) && plainOriginOf(n.url) === offer.from);
     if (await deps.isGuestNode(anchor).catch(() => false)) await deps.markGuestNode(offer.to);
     const carried = await deps.switchTo(offer.to, offer.from);
@@ -388,7 +436,6 @@ export async function acceptAddressFollow(offer: AddressFollowOffer, injected?: 
     await carryAlertsOff(offer.from, offer.to);
     await deps.addSavedNode(offer.to, saved?.alias, saved?.currencyType, saved?.currencyValue).catch(() => {});
     if (saved) await deps.removeSavedNode(saved.url).catch(() => {});
-    await writeEntry(FOLLOW_SNOOZE_KEY, offer.from, undefined);
     return carried === 'kept-both' ? 'moved-kept-both' : 'moved';
 }
 

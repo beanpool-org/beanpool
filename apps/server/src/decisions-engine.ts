@@ -514,9 +514,10 @@ export function decisionForReader(decision: Decision, reader: string | null | un
     const shown = publicDecision(decision);
     if (!reader || !carriesMemberBalance(decision.params)) return shown;
     if (isBranchVote(decision)) {
-        // A branch's: its voters see every account's, and an account on its list its own (branchParamsWithout).
+        // A branch's: its voters see every account's, and an account on its list its own (branchParamsWithout). Its voters
+        // as one member's vote has them (mayVoteOn): where a jury decides it, its seated jurors (J2c), nobody else.
         const full = { ...(shown.params || {}), branch: decision.params.branch, branchDebt: decision.params.branchDebt };
-        if (checkVoterEligibility(reader, decision).ok) {
+        if (mayVoteOn(reader, decision)) {
             return { ...shown, params: { ...full, branch: (decision.params.branch as BranchEntry[]).map(({ replyHiddenBy: _by, ...e }) => e) } };
         }
         if (branchEntryOf(decision, reader)) return { ...shown, params: branchParamsWithout(full, reader) };
@@ -865,15 +866,16 @@ function pausedOnlyByOpenVote(pubkey: string): boolean {
 
 /**
  * Who may serve on a removal jury drawn on `snapshotDate` (DESIGN-removal-jury-fable.md §2), sorted, `exclude` left out
- * (the subject). Public facts only, so a member can hold the pool the node serves against the People list: a member who
- * could vote (active, or paused and held by nothing but their own pause's vote, who keeps their place in every electorate
- * but that one, design §3.3, so pausing someone can't shape a jury either), not an enterprise or a visitor's row, and
- * joined at least JURY_SERVE_AFTER_DAYS before the snapshot (00:00 UTC that day), so members invited since can't pack it.
- * No activity, trade or standing test: removal is one member one vote, and a juror who doesn't answer is replaced (slice
- * J2). Nothing private either (DESIGN-removal-jury-j2-calls-fable.md call 1, J2a): a member whose credit an admin froze
- * is in it, since a freeze is private and any admin's, and leaving them out let an admin freeze a few members for a
- * minute, pause, and unfreeze to pick the jury; and the admin who paused is in it too, stood aside at the walk instead
- * (drawRemovalJury), so which admin pauses moves nothing. Who stands aside is private and decided after (juryConflictsOf).
+ * (the subject, or on a branch's vote every account its card names: drawRemovalJury). Public facts only, so a member can
+ * hold the pool the node serves against the People list: a member who could vote (active, or paused and held by nothing
+ * but their own pause's vote, who keeps their place in every electorate but that one, design §3.3, so pausing someone
+ * can't shape a jury either), not an enterprise or a visitor's row, and joined at least JURY_SERVE_AFTER_DAYS before the
+ * snapshot (00:00 UTC that day), so members invited since can't pack it. No activity, trade or standing test: removal is
+ * one member one vote, and a juror who doesn't answer is replaced (slice J2). Nothing private either
+ * (DESIGN-removal-jury-j2-calls-fable.md call 1, J2a): a member whose credit an admin froze is in it, since a freeze is
+ * private and any admin's, and leaving them out let an admin freeze a few members for a minute, pause, and unfreeze to
+ * pick the jury; and the admin who paused is in it too, stood aside at the walk instead (drawRemovalJury), so which admin
+ * pauses moves nothing. Who stands aside is private and decided after (juryConflictsOf).
  */
 export function removalJuryPool(snapshotDate: string, exclude: ReadonlyArray<string | null | undefined>): string[] {
     const cutoff = new Date(jurySnapshotAt(snapshotDate) - JURY_SERVE_AFTER_DAYS * DAY_MS).toISOString();
@@ -891,10 +893,11 @@ export function removalJuryPool(snapshotDate: string, exclude: ReadonlyArray<str
 }
 
 /**
- * What a vote a jury decides records when it opens (pauseMember): the draw's public facts, and the jury's rule (§5).
- * `subject` is the key the draw was made for, as it was then (DESIGN-removal-jury-j2-calls-fable.md §5.1, J2a): a re-key
- * moves the vote's subject to the member's new key (engine/key-move.ts) and never this, so Check the draw still seeds
- * with the key it was drawn from. A vote opened before J2a has none, and its subject is the vote's own.
+ * What a vote a jury decides records when it opens (pauseMember, pauseBranch): the draw's public facts, and the jury's
+ * rule (§5). `subject` is the key the draw was made for, as it was then (DESIGN-removal-jury-j2-calls-fable.md §5.1, J2a):
+ * a re-key moves the vote's subject to the member's new key (engine/key-move.ts) and never this, so Check the draw still
+ * seeds with the key it was drawn from. A vote opened before J2a has none, and its subject is the vote's own. A branch's
+ * vote has no subject of its own, and is drawn for its root's key (call 4, J2c): that key, as it was, is this.
  */
 export interface JuryParams extends JuryRule { snapshotDate: string; rosterHash: string; poolSize: number; subject?: string }
 
@@ -1590,8 +1593,9 @@ export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTa
 /**
  * The tally of a vote a jury decides (DESIGN-removal-jury-fable.md §5), over its roll only: a vote counts while its juror is
  * seated (`on`), never one of a member passed over, gone silent or gone (slice J2 writes those), nor anyone not drawn, nor
- * its subject, whatever a row says. It passes with at least `mustVote` cast, two-thirds of them Yes, at least `minYes`
- * Yes, and more Yes than No (juryPasses); fewer cast is a missed quorum, which lifts the pause as any removal's does.
+ * an account it is on (its subject, or a branch's every one), whatever a row says. It passes with at least `mustVote` cast,
+ * two-thirds of them Yes, at least `minYes` Yes, and more Yes than No (juryPasses); fewer cast is a missed quorum, which
+ * lifts the pause as any removal's does.
  */
 function tallyJury(decision: Decision, jury: JuryParams): DecisionTally {
     const rows = countedJuryVotes(decision);
@@ -1618,14 +1622,17 @@ function tallyJury(decision: Decision, jury: JuryParams): DecisionTally {
     };
 }
 
-/** The votes a jury's tally counts (tallyJury), by voter: each of a juror seated (`on`) now, never its subject's. */
+/**
+ * The votes a jury's tally counts (tallyJury), by voter: each of a juror seated (`on`) now, never one of an account the vote
+ * is on (removalSubjects: its subject, or every account on a branch's list, whose subject is null: J2c), whatever a row says.
+ */
 function countedJuryVotes(decision: Decision): Array<{ voter: string; support: number }> {
     return db.prepare(`
         SELECT v.voter_pubkey AS voter, v.support FROM decision_votes v
         JOIN decision_electors e ON e.decision_id = v.decision_id AND e.member_pubkey = v.voter_pubkey
              AND e.role_at_open = 'juror' AND e.status = 'on'
-        WHERE v.decision_id = ? AND v.voter_pubkey != ?
-    `).all(decision.id, decision.subject ?? '') as Array<{ voter: string; support: number }>;
+        WHERE v.decision_id = ? AND v.voter_pubkey NOT IN (SELECT value FROM json_each(?))
+    `).all(decision.id, JSON.stringify(removalSubjects(decision))) as Array<{ voter: string; support: number }>;
 }
 
 /** A tally with which way the votes went left off: how many voted, and what it needs. */
@@ -1668,6 +1675,11 @@ function jurorAnswerBy(decision: Decision, juror: string): string | null {
  * draw, stepped aside, gone silent, gone, or seated and not voting, never which of those or when. Both in draw order, each
  * entry the same shape: the key now, the name now, and `drawnAs`, the key it was drawn as (juryDrawnAs, the same unless a
  * re-key moved it since), so Check the draw runs over the two lists together. Null for a vote no jury decides.
+ *
+ * A branch's vote (call 4, J2c) is on several accounts and has no one subject: `subject` is null, `root` the key its draw
+ * was made for (the branch's root, as it was when the vote opened, JuryParams.subject: Check the draw seeds with it), and
+ * `branch` the accounts it is on now (its card's list, each as a pool entry is). The pool leaves out every account the card
+ * names (drawRemovalJury): those on its list when it opened (`branch`, and `lifted` since) and the established ones left off.
  */
 export function juryForReader(decision: Decision, reader: string): Record<string, unknown> | null {
     const jury = juryOf(decision);
@@ -1676,8 +1688,11 @@ export function juryForReader(decision: Decision, reader: string): Record<string
     const drawnFor = jury.subject ?? decision.subject ?? '';
     const roll = juryRollOf(decision.id);
     const mine = roll.find(r => r.key === reader)?.status;
+    const ofBranch = isBranchVote(decision)
+        ? { subject: null, root: drawnFor, branch: removalSubjects(decision).map(k => ({ publicKey: k, callsign: callsignOf(k) })) }
+        : { subject: drawnFor };
     const facts = {
-        decisionId: decision.id, subject: drawnFor, snapshotDate: jury.snapshotDate, rosterHash: jury.rosterHash,
+        decisionId: decision.id, ...ofBranch, snapshotDate: jury.snapshotDate, rosterHash: jury.rosterHash,
         poolSize: jury.poolSize, size: jury.size, mustVote: jury.mustVote, minYes: jury.minYes,
         pool: pool.map(k => ({ publicKey: k, callsign: callsignOf(k) })),
         you: mine === 'on' ? 'seated' : mine === 'silent' || mine === 'left' ? 'not_seated' : null,
@@ -2780,42 +2795,82 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
 
 interface RemovalJuryDraw { params: JuryParams; pool: string[]; jury: string[]; stoodAside: string[] }
 
+/** A removal vote opening (chooseRemovalDecider): one member's pause, or an owner's pause of a whole invite branch. */
+type RemovalVoteOpening =
+    | { kind: 'member'; subject: string; actor: string | null; atMs: number }
+    | {
+        kind: 'branch';
+        /** The member the owner chose, whose invite subtree it is. Always on the list (branchPauseSelection). */
+        root: string;
+        /** The accounts the vote is on (its card's `branch`). */
+        listed: readonly string[];
+        /**
+         * The established accounts in the subtree left off the list, which its card names too (`established`). Not the
+         * other accounts left off (a role holder, one already paused): the card doesn't name those, so they stay in the pool.
+         */
+        established: readonly string[];
+        actor: string;
+        atMs: number;
+    };
+
 /**
  * Who decides a removal vote as it opens, chosen here and nowhere else (pauseMember, pauseBranch); everything after goes by
- * what the vote records (params.decider, juryOf). One member's pause goes by the community's rule, Who decides a removal
- * (drawRemovalJury: a jury drawn at or over its line, else everyone). A branch's vote (removal by vote S5, pauseBranch) is
- * decided by the whole community whatever that rule says, exactly as S5 built it: no draw, no roll, no stand-asides, and
- * every member who may vote on it votes. The director's call for J1 (3 Nov), reversible and recorded for Marty: whether a
- * jury should decide a branch is open for J2/J3.
+ * what the vote records (params.decider, juryOf). Both go by the community's rule, Who decides a removal (drawRemovalJury: a
+ * jury drawn at or over its line, else everyone), since a branch's vote removes members too and the rule says who decides a
+ * removal (DESIGN-removal-jury-j2-calls-fable.md call 4, J2c; under Everyone, or below the line, the whole community decides
+ * it as removal by vote S5 built). A branch's vote is one case, so one jury for the whole of it, drawn as a member's is:
+ *  - for the root's key (the seed's subject, and the vote's `params.jury.subject`);
+ *  - from the day's pool without every account its card names, the listed and the established left off: `include` only
+ *    moves an account from one of those to the other, so which ones an owner names never moves the roster or the order;
+ *  - passing over every member with a conflict with any account on the list (juryConflictsOf, which takes in the root's
+ *    inviter), everyone else still in the root's invite subtree (a role holder, an account already paused: in the pool,
+ *    and not on the card), and the owner pausing them.
  */
-function chooseRemovalDecider(vote: { kind: 'branch' } | { kind: 'member'; subject: string; actor: string | null; atMs: number }):
-    { decider: 'everyone'; draw: null } | { decider: 'jury'; draw: RemovalJuryDraw } {
-    if (vote.kind === 'branch') return { decider: 'everyone', draw: null };
-    const draw = drawRemovalJury(vote.subject, vote.actor, vote.atMs);
+function chooseRemovalDecider(vote: RemovalVoteOpening): { decider: 'everyone'; draw: null } | { decider: 'jury'; draw: RemovalJuryDraw } {
+    const draw = vote.kind === 'member'
+        ? drawRemovalJury({ seed: vote.subject, named: [vote.subject], judged: [vote.subject], actor: vote.actor, atMs: vote.atMs })
+        : drawRemovalJury({
+            seed: vote.root,
+            named: [...vote.listed, ...vote.established],
+            judged: vote.listed,
+            alsoAside: () => inviteBranchOf(vote.root),
+            actor: vote.actor,
+            atMs: vote.atMs,
+        });
     return draw ? { decider: 'jury', draw } : { decider: 'everyone', draw: null };
 }
 
 /**
- * The jury for a pause made at `atMs`, or null when everyone decides it (DESIGN-removal-jury-fable.md §2–§6). The pool is
- * that day's (00:00 UTC), without the subject; the community's rule and that pool's size say whether a jury decides
- * (config/removal-decider.ts deciderFor); the draw is @beanpool/core juryDraw, with every member who has a conflict with
- * the subject passed over (juryConflictsOf), and the admin pausing them. A pool that can't seat a whole jury once they are
- * passed over is decided by everyone, as a pool under the line is. Reads only: pauseMember writes what it returns.
+ * The jury for a removal vote opening at `atMs`, or null when everyone decides it (DESIGN-removal-jury-fable.md §2–§6). The
+ * pool is that day's (00:00 UTC), without every account the vote's card names (`named`: the subject, or a branch's
+ * accounts); the community's rule and that pool's size say whether a jury decides (config/removal-decider.ts deciderFor);
+ * the draw is @beanpool/core juryDraw for `seed` (the subject's key, or a branch's root's), with every member who has a
+ * conflict with an account it judges passed over (juryConflictsOf over `judged`), anyone `alsoAside` names, and whoever
+ * is pausing them. A pool that can't seat a whole jury once they are passed over is decided by everyone, as a pool under
+ * the line is. Reads only: pauseMember and pauseBranch write what it returns.
  */
-function drawRemovalJury(subject: string, actor: string | null, atMs: number): RemovalJuryDraw | null {
-    const snapshotDate = jurySnapshotDate(atMs);
-    const pool = removalJuryPool(snapshotDate, [subject]);
+function drawRemovalJury(vote: {
+    seed: string;
+    named: readonly string[];
+    judged: readonly string[];
+    alsoAside?: () => Iterable<string>;
+    actor: string | null;
+    atMs: number;
+}): RemovalJuryDraw | null {
+    const snapshotDate = jurySnapshotDate(vote.atMs);
+    const pool = removalJuryPool(snapshotDate, vote.named);
     if (deciderFor(removalDecider(), pool.length) !== 'jury') return null;
     const rule = juryRuleFor(pool.length);
-    const conflicts = juryConflictsOf(subject, atMs);
+    const conflicts = juryConflictsOf(vote.judged, vote.atMs);
+    for (const k of vote.alsoAside?.() ?? []) conflicts.add(k);
     // The admin who paused stands aside at the walk, as the inviter does, rather than leaving the pool: so the roster is the
     // day's and the subject's alone, whichever admin pauses (DESIGN-removal-jury-j2-calls-fable.md call 1, J2a). The admin
     // password has no key, and is in no pool.
-    if (actor) conflicts.add(actor);
-    const drawn = juryDraw({ pool, subject, snapshotDate, size: rule.size, standsAside: k => conflicts.has(k) });
+    if (vote.actor) conflicts.add(vote.actor);
+    const drawn = juryDraw({ pool, subject: vote.seed, snapshotDate, size: rule.size, standsAside: k => conflicts.has(k) });
     if (drawn.jury.length < rule.size) return null;
     return {
-        params: { snapshotDate, rosterHash: drawn.rosterHash, poolSize: drawn.poolSize, subject, ...rule },
+        params: { snapshotDate, rosterHash: drawn.rosterHash, poolSize: drawn.poolSize, subject: vote.seed, ...rule },
         pool,
         jury: drawn.jury,
         stoodAside: drawn.stoodAside,
@@ -3131,10 +3186,12 @@ export function pauseBranchRefusal(rootPubkey: string, actor: string, reason: st
  * its vote on every other Decision), and ONE vote opens on removing them all, "Remove these N accounts?": a pause's own
  * vote (isPauseVote) whose params list them (isBranchVote: `branch`, each with the Beans it owes, `branchDebt` their total
  * the Commons would absorb, `commonsPool`) and name the established accounts left off (`established`). Decided as any
- * removal is: Yes starts one grace window for every account on the list (startBranchGrace) and removes each at its end
- * (pruneBranchVote); No, a tie or a missed quorum lifts every pause on the tick that closes it. Nobody on the list votes on
- * it, nor counts in its electorate. Each may reply to its case (replyToRemovalCase). The owners are told, as of every pause.
- * Moves no Beans. Returns the vote, or the refusal; nothing is written when refused.
+ * removal is, by whoever Who decides a removal says (chooseRemovalDecider): the whole community, or, under a jury rule, one
+ * jury for the whole branch, drawn for its root's key, its pool and roll kept as a member's are (DESIGN-removal-jury-j2-calls-
+ * fable.md call 4, J2c). Yes starts one grace window for every account on the list (startBranchGrace) and removes each at
+ * its end (pruneBranchVote); No, a tie or a missed quorum lifts every pause on the tick that closes it. Nobody on the list
+ * votes on it, nor counts in its electorate or sits on its jury. Each may reply to its case (replyToRemovalCase). The
+ * owners are told, as of every pause. Moves no Beans. Returns the vote, or the refusal; nothing is written when refused.
  */
 export function pauseBranch(rootPubkey: string, actor: string, reason: string, opts: PauseBranchOptions = {}):
     { success: true; decision: Decision; leftOff: BranchSelectionAccount[] } | ({ success: false } & BranchPauseRefusal) {
@@ -3161,15 +3218,21 @@ export function pauseBranch(rootPubkey: string, actor: string, reason: string, o
                 const { balance, debt } = removalBalanceParams(a.pubkey);
                 return { pubkey: a.pubkey, name: a.name, balance, debt };
             });
+            const established = accounts.filter(a => a.leftOff === 'established');
+            // Who decides it, by the community's rule, as one member's removal (chooseRemovalDecider): under a jury rule, one
+            // jury for the whole branch (J2c), drawn before anyone in it is paused.
+            const draw = chooseRemovalDecider({
+                kind: 'branch', root: rootPubkey, listed: listed.map(a => a.pubkey), established: established.map(a => a.pubkey),
+                actor, atMs: now.getTime(),
+            }).draw;
             const params = {
                 rule: PAUSE_VOTE_RULE, pausedBy: actor, pausedAt: opensAt, ...(pausedByName ? { pausedByName } : {}), reason: cleanReason,
-                // The whole community, whatever Who decides a removal says (chooseRemovalDecider): no jury is drawn for a branch.
-                decider: chooseRemovalDecider({ kind: 'branch' }).decider,
+                ...(draw ? { decider: 'jury', jury: draw.params } : { decider: 'everyone' }),
                 root: { pubkey: rootPubkey, name: rootName },
                 branch,
                 branchDebt: branchDebtOf(branch),
                 commonsPool: Math.round(getCommonsBalanceExact()),
-                established: accounts.filter(a => a.leftOff === 'established').map(a => ({ pubkey: a.pubkey, name: a.name })),
+                established: established.map(a => ({ pubkey: a.pubkey, name: a.name })),
             };
             for (const a of listed) setUserStatusRow(a.pubkey, 'disabled', { actor, how: 'suspended' });
             const { title, description } = branchVoteWords(params);
@@ -3179,6 +3242,7 @@ export function pauseBranch(rootPubkey: string, actor: string, reason: string, o
                     franchise, status, opens_at, closes_at, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, 'member', 'remove_member', NULL, ?, '1m1v', 'open', ?, ?, ?, ?)
             `).run(id, SYSTEM_AUTHOR, title, description, JSON.stringify(params), opensAt, closesAt, opensAt, opensAt);
+            if (draw) writeJuryRecords(id, draw.pool, draw.jury, draw.stoodAside, opensAt);
             notePauseForOwners(id, actor, false, listed.length);
             decision = getDecision(id)!;
         })();

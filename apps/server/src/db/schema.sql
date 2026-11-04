@@ -1176,7 +1176,8 @@ CREATE TABLE IF NOT EXISTS agent_takedowns (
     reason TEXT NOT NULL CHECK (reason IN ('spam', 'offensive', 'misleading', 'unsafe', 'rules')),
     why TEXT NOT NULL DEFAULT '',
     via TEXT NOT NULL CHECK (via IN ('ids', 'reports')),
-    posts INTEGER NOT NULL DEFAULT 0 CHECK (posts >= 0)
+    posts INTEGER NOT NULL DEFAULT 0 CHECK (posts >= 0),
+    by_author INTEGER NOT NULL DEFAULT 0 CHECK (by_author IN (0, 1))
 );
 CREATE INDEX IF NOT EXISTS idx_agent_takedowns_at ON agent_takedowns(at);
 CREATE INDEX IF NOT EXISTS idx_agent_takedowns_grant_at ON agent_takedowns(grant_id, at);

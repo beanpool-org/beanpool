@@ -44,8 +44,9 @@
  */
 
 import { postPhotoUrl, readRepeatRule } from '@beanpool/engine';
-import { eventPlaceTimeText, type PushNoticeKind } from '@beanpool/core';
+import { eventPlaceTimeText, isLang, word, wordn, type Lang, type PushNoticeKind, type WordKey, type Words } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { wordsIn } from '../member-words.js';
 import { getNodeRole } from './sync.js';
 import { postInSightSql } from './post-sight.js';
 import { RSVP_IS_CURRENT, publicRepeatPattern } from './event-series-roll.js';
@@ -262,8 +263,33 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
 
 // ===================== DELIVERY =====================
 
-export const reminderPushTitle = (eventTitle: string): string =>
-    `📅 ${(eventTitle || 'An event').trim() || 'An event'}`;
+/**
+ * The words of a reminder (scratch/global-node/DESIGN-translation-fable.md §3): the five sentences, the name an event with no
+ * title is given, and the count of minutes for an offset a later picker adds. Marked with word() where they are written and said
+ * in the language of the member's phone where the push is made (reminderLangOf); a language with no translation of one yet
+ * shows the English. The event's own title and its place and clock are the host's and the node's, not these.
+ */
+const AN_EVENT = word('An event');
+
+/** The language a reminder to this member is written in: the phone they most recently registered, from its push-token row. */
+export function reminderLangOf(memberPubkey: string): Lang | null {
+    try {
+        // Each registration names the language again, so the newest phone is the one the member's app last wrote in (a row
+        // with no registration time sorts last; ties go to the row made later). A row from before the column, or one a hand
+        // wrote with a tag BeanPool has no version in, is English (as getPushTokens reads it). The notice's details are one
+        // per member, so a member with phones in two languages is told in the newest phone's; each phone's lock screen
+        // is still in its own (dispatchPushNotification).
+        const row = db.prepare(
+            `SELECT lang FROM push_tokens WHERE public_key = ? ORDER BY registered_at DESC, rowid DESC LIMIT 1`
+        ).get(memberPubkey) as { lang: string | null } | undefined;
+        return row && isLang(row.lang) ? row.lang : null;
+    } catch {
+        return null; // no `lang` column on an older schema
+    }
+}
+
+export const reminderPushTitle = (eventTitle: string, words: Pick<Words, 't'> = wordsIn(null)): string =>
+    `📅 ${(eventTitle || '').trim() || words.t(AN_EVENT)}`;
 
 /**
  * "Starts in 1 week", "Starts in 2 hours" — always relative to the moment the reminder is sent.
@@ -283,18 +309,20 @@ export const reminderPushTitle = (eventTitle: string): string =>
  * The sentence comes from the offset the member chose, not from a day difference computed between two
  * dates, so there is no calendar arithmetic left here to get wrong.
  */
-const REMINDER_BODY: Record<EventReminderOffset, string> = {
-    10080: 'Starts in 1 week',
-    1440: 'Starts in 1 day',
-    120: 'Starts in 2 hours',
-    60: 'Starts in 1 hour',
-    30: 'Starts in 30 minutes',
+const REMINDER_BODY: Record<EventReminderOffset, WordKey> = {
+    10080: word('Starts in 1 week'),
+    1440: word('Starts in 1 day'),
+    120: word('Starts in 2 hours'),
+    60: word('Starts in 1 hour'),
+    30: word('Starts in 30 minutes'),
 };
+const REMINDER_BODY_MINUTES = wordn('Starts in {n} minute', 'Starts in {n} minutes');
 
-export function reminderPushBody(offsetMin: number, placeTime?: string | null): string {
+export function reminderPushBody(offsetMin: number, placeTime?: string | null, words: Pick<Words, 't' | 'tn'> = wordsIn(null)): string {
     // The offsets are a closed set (`parseReminderOffsets`), so the lookup always hits; the fallback is
     // for a stored row from some future picker, and stays relative like the rest.
-    const relative = REMINDER_BODY[offsetMin as EventReminderOffset] ?? `Starts in ${offsetMin} minutes`;
+    const fixed = REMINDER_BODY[offsetMin as EventReminderOffset];
+    const relative = fixed ? words.t(fixed) : words.tn(offsetMin, REMINDER_BODY_MINUTES.one, REMINDER_BODY_MINUTES.other);
     // An in-person event's own clock, labelled with its zone (DESIGN-event-times §6): "Sat 20:50 Lagos time" is right
     // wherever the node's process clock stands, because it names whose clock it is. Online gets none: the reader's
     // zone is not known here.
@@ -402,8 +430,12 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
  * written either way, and deliberately: the moment has passed, and a member who turns notifications back on
  * an hour later should not then hear about an event that started meanwhile.
  *
- * Members due the same reminder for the same event are dispatched as one call, because the title, the body
- * and the payload are identical for all of them.
+ * Members due the same reminder for the same event, whose phones write in the same language, are dispatched as one call,
+ * because the title, the body and the payload are identical for all of them.
+ *
+ * The words are in the language on the member's push-token row (reminderLangOf), the one every other push is written in
+ * (dispatchPushNotification: the lock screen's sentence, per phone); never the language a request names, for none is
+ * made here. The title and body below are the notice's details, which the member's app shows when they open it.
  */
 export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now()): number {
     if (!push) return 0;
@@ -419,15 +451,19 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
     const sentAt = new Date(nowMs).toISOString();
 
     // Keyed on the push that would be sent, not on the event: two members of the same event with different
-    // offsets get different words and must not be collapsed into one message.
-    const batches = new Map<string, { postId: string; title: string; offsetMin: number; placeTime: string | null; targets: string[] }>();
+    // offsets, or whose phones write in different languages, get different words and must not be collapsed into one message.
+    const batches = new Map<string, { postId: string; title: string; offsetMin: number; placeTime: string | null; lang: Lang | null; targets: string[] }>();
+    const langOfMember = new Map<string, Lang | null>();
     for (const d of due) {
         // The due list already excludes everything marked. This is the atomic re-check on top of it:
         // losing the insert means another process claimed the same reminder between the read and here.
         if (claim.run(d.postId, d.memberPubkey, d.offsetMin, d.occurrenceAt, sentAt).changes === 0) continue;
-        const key = `${d.postId}|${d.offsetMin}`;
+        if (!langOfMember.has(d.memberPubkey)) langOfMember.set(d.memberPubkey, reminderLangOf(d.memberPubkey));
+        const lang = langOfMember.get(d.memberPubkey)!;
+        // English is English whether the row says `en` or says nothing: one batch for both.
+        const key = `${d.postId}|${d.offsetMin}|${lang && lang !== 'en' ? lang : ''}`;
         if (!batches.has(key)) {
-            batches.set(key, { postId: d.postId, title: d.title, offsetMin: d.offsetMin, placeTime: d.placeTime, targets: [] });
+            batches.set(key, { postId: d.postId, title: d.title, offsetMin: d.offsetMin, placeTime: d.placeTime, lang: lang === 'en' ? null : lang, targets: [] });
         }
         batches.get(key)!.targets.push(d.memberPubkey);
     }
@@ -436,11 +472,12 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
     for (const b of batches.values()) {
         claimed += b.targets.length;
         try {
+            const words = wordsIn(b.lang);
             push(
                 b.targets,
                 'SYSTEM',
-                reminderPushTitle(b.title),
-                reminderPushBody(b.offsetMin, b.placeTime),
+                reminderPushTitle(b.title, words),
+                reminderPushBody(b.offsetMin, b.placeTime, words),
                 { screen: 'post', postId: b.postId },
                 REMINDER_PUSH_CATEGORY,
                 'event.reminder',

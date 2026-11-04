@@ -117,6 +117,15 @@ try {
             let clipped = await clippedButtons(page);
             check(clipped.length === 0, `${at}: every button shows all its words, with the list`, JSON.stringify(clipped));
             await shot(page, `${tag}-list`);
+            // "Disconnect and put back" (MCP-MODERATION S2): an owner's, on a row with takedowns still waiting. The checks above
+            // (48px, all its words, no sideways scroll) cover it only because it is drawn here.
+            const putBack = card.getByRole('button', { name: 'Disconnect Cursor and put back what it took down' });
+            check(await putBack.isVisible() && /May take down · 2 today · 3 waiting/.test(await card.getByTestId('agent-grant-moderates').first().innerText()),
+                `${at}: an owner's row with takedowns waiting says how many, with "Disconnect and put back"`);
+            if (await putBack.isVisible()) {
+                await putBack.scrollIntoViewIfNeeded();
+                await putBack.locator('xpath=ancestor::*[@data-testid="agent-grant-row"]').screenshot({ path: path.join(SHOTS, `connected-assistants-${tag}-put-back.png`) });
+            }
             const before = await secretCount(page);
             check(before.html + before.fields + before.storage === 0, `${at}: no token in the page before connecting`, JSON.stringify(before));
 

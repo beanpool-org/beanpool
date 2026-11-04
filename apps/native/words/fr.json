@@ -6983,5 +6983,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community} ne peut pas vérifier les connexions pour le moment, rien n'a donc été ajouté. Veuillez réessayer plus tard.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} n'accepte pas la connexion {provider}. Vous pouvez en essayer une autre.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "Impossible de joindre {community} pour le moment, rien n'a donc été ajouté. Vérifiez votre connexion et réessayez.",
-  "HOSTED BY": "ORGANISÉ PAR"
+  "HOSTED BY": "ORGANISÉ PAR",
+  "Open event: {title}": "Ouvrir l'événement : {title}",
+  "Open listing: {title}": "Ouvrir l'annonce : {title}"
 }

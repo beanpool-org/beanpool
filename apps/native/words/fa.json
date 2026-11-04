@@ -6983,5 +6983,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "{community} در حال حاضر نمی‌تواند روش‌های ورود را بررسی کند، بنابراین چیزی اضافه نشد. لطفاً بعداً دوباره تلاش کنید.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "{community} ورود با {provider} را نمی‌پذیرد. می‌توانید روش دیگری را امتحان کنید.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "در حال حاضر دسترسی به {community} امکان‌پذیر نیست، بنابراین چیزی اضافه نشد. اتصال خود را بررسی کنید و دوباره تلاش کنید.",
-  "HOSTED BY": "میزبان"
+  "HOSTED BY": "میزبان",
+  "Open event: {title}": "باز کردن رویداد: {title}",
+  "Open listing: {title}": "باز کردن آگهی: {title}"
 }

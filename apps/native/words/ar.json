@@ -7995,5 +7995,7 @@
   "{community} can't check sign-ins right now, so nothing was added. Please try again later.": "لا يمكن التحقق من تسجيلات الدخول في {community} حاليًا، لذا لم تتم إضافة شيء. يرجى المحاولة مرة أخرى لاحقًا.",
   "{community} doesn't take {provider} sign-in. You can try a different one.": "لا يُقبل تسجيل الدخول عبر {provider} في {community}. يمكنك تجربة حساب آخر.",
   "Can't reach {community} right now, so nothing was added. Check your connection and try again.": "تعذر الوصول إلى {community} حاليًا، لذا لم تتم إضافة شيء. تحقق من اتصالك وحاول مجددًا.",
-  "HOSTED BY": "المضيف"
+  "HOSTED BY": "المضيف",
+  "Open event: {title}": "فتح الفعالية: {title}",
+  "Open listing: {title}": "فتح القائمة: {title}"
 }

@@ -216,17 +216,28 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* Author Row: never for a visitor, whom the node sends no author. */}
             {!visitor && (
             <div className="flex items-center gap-2 mb-2">
-                <button
-                    type="button"
-                    onClick={() => onOpenProfile?.(livePost.authorPublicKey)}
-                    aria-label={t("View {name}'s profile", { name: authorName })}
-                    className="flex items-center gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
-                >
-                    <MemberAvatar avatarUrl={avatarSrc} pubkey={livePost.authorPublicKey} callsign={authorName} size={24} className="border border-nature-200 dark:border-nature-700" />
-                    <span className="text-xs font-bold text-nature-600 dark:text-nature-300 group-hover:text-nature-900 dark:group-hover:text-white transition-colors">
-                        {authorName} {isAuthor && <span className="text-blue-600 dark:text-blue-400 font-extrabold">{t('(You)')}</span>}
-                    </span>
-                </button>
+                {onOpenProfile ? (
+                    <button
+                        type="button"
+                        onClick={() => onOpenProfile(livePost.authorPublicKey)}
+                        aria-label={t("View {name}'s profile", { name: authorName })}
+                        className="flex items-center gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+                    >
+                        <MemberAvatar avatarUrl={avatarSrc} pubkey={livePost.authorPublicKey} callsign={authorName} size={24} className="border border-nature-200 dark:border-nature-700" />
+                        <span className="text-xs font-bold text-nature-600 dark:text-nature-300 group-hover:text-nature-900 dark:group-hover:text-white transition-colors">
+                            {authorName} {isAuthor && <span className="text-blue-600 dark:text-blue-400 font-extrabold">{t('(You)')}</span>}
+                        </span>
+                    </button>
+                ) : (
+                    // On a card in the Market's list or grid the poster is shown, not pressed: a small card opens its item, never the
+                    // poster's profile (Marty, 4 Nov). The poll's own page passes `onOpenProfile`, and there the poster is a button.
+                    <div data-testid="poll-author" className="flex items-center gap-2 text-left">
+                        <MemberAvatar avatarUrl={avatarSrc} pubkey={livePost.authorPublicKey} callsign={authorName} size={24} className="border border-nature-200 dark:border-nature-700" />
+                        <span className="text-xs font-bold text-nature-600 dark:text-nature-300">
+                            {authorName} {isAuthor && <span className="text-blue-600 dark:text-blue-400 font-extrabold">{t('(You)')}</span>}
+                        </span>
+                    </div>
+                )}
             </div>
             )}
 

@@ -54,7 +54,6 @@ interface Props {
     remoteNode?: string;
     onTrade?: (post: MarketplacePost) => void;
     viewMode?: 'grid' | 'list' | 'compact';
-    onOpenProfile?: (pubkey: string) => void;
     isOwnPost?: boolean;
     onPhotoClick?: (photos: string[], initialIndex: number, e: React.MouseEvent) => void;
     /** How far the listing is (km), as the node measured it from the point the Market read from; none, no distance. */
@@ -72,7 +71,7 @@ interface Props {
     dealChip?: ListingChip | null;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick, distanceKm, beansMarked = false, dealChip = null }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', isOwnPost, onPhotoClick, distanceKm, beansMarked = false, dealChip = null }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -364,7 +363,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         mode="full"
                         showTier={!beansMarked}
                         isFounding={!beansMarked && !!post.authorFoundingNeeded}
-                        onOpenProfile={onOpenProfile}
                     />}
                 </div>
                 
@@ -484,7 +482,6 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     mode="compact"
                     showTier={!beansMarked}
                     isFounding={!beansMarked && !!post.authorFoundingNeeded}
-                    onOpenProfile={onOpenProfile}
                 />}
 
                 {pinnedChip && (

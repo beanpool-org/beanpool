@@ -4119,7 +4119,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     identity={identity}
                                                     viewMode={viewMode}
                                                     onVoteSuccess={() => refresh()}
-                                                    onOpenProfile={onOpenProfile}
                                                     informal={informalPolls} localWays={markWays}
                                                 />
                                             </div>
@@ -4227,7 +4226,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         identity={identity}
                                                         viewMode={viewMode}
                                                         onVoteSuccess={() => refresh()}
-                                                        onOpenProfile={onOpenProfile}
                                                         informal={informalPolls} localWays={markWays}
                                                     />
                                                 </div>

@@ -33,7 +33,7 @@ import {
     lastActiveForViewer,
     restoreHiddenPost, liftModerationMute, liftRequestsLimit, pushServiceRefusals,
     hideBurst, undoBurst,
-    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal,
+    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal, branchPrunePreview,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listRequestLimits } from '../engine/request-limits.js';
@@ -1296,7 +1296,8 @@ router.post('/api/local/admin/data/members', async (ctx) => {
  * The admins' posts, a page at a time: the posts /admin/data sent, as it sent them (withoutTradeParty), `limit` of them
  * (at most ADMIN_POSTS_PAGE_MAX), newest changed first, each page below the last row of the one before (engine SyncPage).
  * A post that changes while the console pages moves above every cursor handed out: the next first page has it. A
- * cancelled post is left out after the read, so a page can hold fewer than `limit` and still have a `nextCursor`.
+ * cancelled post is left out after the read, so a page can hold fewer than `limit` and still have a `nextCursor`. The
+ * read looks one row past the page, so a full last page has none.
  */
 router.post('/api/local/admin/data/posts', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -1310,7 +1311,8 @@ router.post('/api/local/admin/data/posts', async (ctx) => {
         return;
     }
     await heavyRead(ctx, heavyReadKey('admin-data-posts', { limit }), () => {
-        const page: SyncPage = { after: cursor, next: null };
+        // One row past the page, as the members pages read: a full last page hands out no cursor (SyncPage.lookAhead).
+        const page: SyncPage = { after: cursor, next: null, lookAhead: true };
         const posts = getPosts({ includeHidden: true, syncPage: page, limit }).filter(p => p.status !== 'cancelled').map(withoutTradeParty);
         ctx.body = { posts, nextCursor: page.next, limit };
     });
@@ -2145,6 +2147,36 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
         ctx.status = e?.status || 400;
         ctx.body = { error: e?.message || 'Failed to prune user' };
     }
+});
+
+// What pruning this branch would do, for the owner's confirmation (the console's PruneBranchModal): how many members it
+// removes and the Beans it settles with the Commons, over the whole subtree (state-engine branchPrunePreview), not the
+// pages of members the console holds. The same owners as the prune; totals only, no names. Each balance in the totals is
+// a look at a member's balance while removing them, as the offboarding preview is: a line each in the access log the
+// owners read, all written before the answer, or no answer.
+router.get('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove a whole invite branch')) return;
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
+    ctx.set('Cache-Control', 'no-store');
+    const root = ctx.params.pubkey;
+    if (!getMember(root)) {
+        ctx.status = 404;
+        ctx.body = { error: 'Member not found' };
+        return;
+    }
+    await heavyRead(ctx, 'admin-branch-prune-preview', () => {
+        try {
+            const { keys, ...totals } = branchPrunePreview(root);
+            const token = lookTokenOf(ctx);
+            db.transaction(() => { for (const key of keys) logBalanceLook(actor, key, 'offboard_preview', token); })();
+            ctx.body = totals;
+        } catch (e: any) {
+            ctx.status = e?.status || 400;
+            ctx.body = { error: e?.message || "Couldn't work out what pruning this branch would do" };
+        }
+    });
 });
 
 router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {

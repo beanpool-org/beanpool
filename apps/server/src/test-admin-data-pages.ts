@@ -15,6 +15,11 @@
  *      are), never cut short in silence.
  *   6. Every credential is answered by the page routes exactly as by /admin/data: none, a wrong password, a member with
  *      no role, a moderator (403), an admin who is not an owner (let in: the data was always admin level), an owner.
+ *   7. A posts walk whose last page is exactly full ends on it: the read looks one row past the page, as the members'
+ *      pages do, so no cursor leads to an empty page.
+ *   8. The prune-branch confirmation's figures, GET /branches/:pubkey/prune: on a node bigger than a page, a branch whose
+ *      root is on page 1 and whose members are on the last pages is counted whole, with its debts and surpluses, as the
+ *      prune then settles them with the Commons; the same owners as the prune, each look in the access log, no names.
  *
  * Run: SERVER_SUITES_ONLY=test-admin-data-pages TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
  */
@@ -24,11 +29,12 @@ process.env.ADMIN_PASSWORD = 'TestAdminDataPages123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
+import { initStateEngine, grantNodeRole, revokeNodeRole, reconcileLedgerFromDb, getCommonsBalanceExact } from './state-engine.js';
+import { ledger } from './engine/ledger.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
-import { ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { ownerTokenHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 
@@ -85,6 +91,14 @@ function adminSession(role: 'owner' | 'admin' | 'moderator'): { pub: string; hea
     const s = consumeHandshakeToken(handshakeToken);
     if (!s.ok || !s.sessionId) throw new Error(`could not open a ${role} session: ${s.error}`);
     return { pub, headers: { 'X-Admin-Session': s.sessionId } };
+}
+
+async function get(path: string, headers: Record<string, string>): Promise<{ status: number; json: any }> {
+    const res = await fetch(`${BASE}${path}`, { headers });
+    const text = await res.text();
+    let json: any = null;
+    try { json = JSON.parse(text); } catch { /* not JSON */ }
+    return { status: res.status, json };
 }
 
 async function walkMembers(headers: Record<string, string>, limit: number, q?: string): Promise<{ keys: string[]; pages: number; maxPageBytes: number; maxPageMs: number; total: number; rows: any[] }> {
@@ -203,6 +217,28 @@ async function main() {
     const forgedPost = await post('/api/local/admin/data/posts', owner, { cursor: 'nope' });
     assert(forgedPost.status === 400 && forgedPost.json?.code === 'bad_cursor', `a posts cursor this node never handed out is refused (${forgedPost.status})`);
 
+    // ── 7. A full last page of posts hands out no cursor ──
+    console.log('\n── 7. A posts walk ends on a full last page ──');
+    // Posts enough to fill their last page of 50 exactly.
+    const fill = (50 - (postKeys.length % 50)) % 50;
+    const author = whole.json.members[0].publicKey;
+    const insertFill = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, created_at, updated_at)
+        VALUES (?, 'offer', 'misc', ?, 'Fills the last page.', 5, ?, 'active', 1, '2025-06-01T00:00:00.000Z', '2025-06-01T00:00:00.000Z')`);
+    for (let i = 0; i < fill; i++) insertFill.run(`fillpost-${i}`, `Fill ${i}`, author);
+    const fullPages = (postKeys.length + fill) / 50;
+    const sizes: number[] = [];
+    let lastCursor: string | null = 'start';
+    cursor = null;
+    do {
+        const r = await post('/api/local/admin/data/posts', owner, { limit: 50, cursor });
+        if (r.status !== 200) { assert(false, `a posts page of 50 answered ${r.status}`); break; }
+        sizes.push(r.json.posts.length);
+        cursor = r.json.nextCursor;
+        lastCursor = cursor;
+    } while (cursor && sizes.length < 1_000);
+    assert(Number.isInteger(fullPages) && sizes.length === fullPages && sizes.every(n => n === 50) && lastCursor === null,
+        `${postKeys.length + fill} posts at 50 a page: ${fullPages} full pages, the last with no cursor, no empty page after it (pages: ${sizes.length}, the last ${sizes[sizes.length - 1]})`);
+
     // ── 5. Past the size the whole answer is sent at ──
     console.log('\n── 5. Past 1,000 members: refused plainly, and the pages carry it ──');
     seedMembers(2_500);
@@ -259,6 +295,72 @@ async function main() {
     }
     const modData = await post('/api/local/admin/data/members', mod.headers, {});
     assert(modData.status === 403 && modData.json?.moderator === true, `a moderator is refused the members page as /admin/data refuses them (${modData.status})`);
+
+    // ── 8. The prune-branch confirmation, from the node ──
+    console.log('\n── 8. The figures a branch prune is confirmed on: the whole branch, from the node ──');
+    const epoch = ledger.getCurrentEpoch();
+    const branchMember = (callsign: string, joined: string, invitedBy: string, balance: number, status = 'active') => {
+        const pub = crypto.randomBytes(32).toString('hex');
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?, 'seed')`)
+            .run(pub, callsign, status, joined, invitedBy);
+        db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`).run(pub, balance, epoch);
+        return pub;
+    };
+    // The root joined before every seeded member, so it is on page 1; the members it brought in joined after them all, so
+    // they are on the last pages. One it brought in is pruned already, and the member they brought in is not.
+    const root = branchMember('Branch Root', '2025-01-01T00:00:00.000Z', 'genesis', 40);
+    const kidA = branchMember('Branch Kid A', '2027-01-01T00:00:00.000Z', root, -25.5);
+    const kidB = branchMember('Branch Kid B', '2027-01-01T00:01:00.000Z', root, 10);
+    const grandkid = branchMember('Branch Grandkid', '2027-01-01T00:02:00.000Z', kidA, -100);
+    const gone = branchMember('Branch Gone', '2027-01-01T00:03:00.000Z', root, 0, 'pruned');
+    const underGone = branchMember('Branch Under Gone', '2027-01-01T00:04:00.000Z', gone, 5);
+    reconcileLedgerFromDb();
+    const branchKeys = [root, kidA, kidB, grandkid, underGone];
+    const firstPage = await post('/api/local/admin/data/members', owner, { limit: 100 });
+    const onFirst = new Set(firstPage.json.members.map((m: any) => m.publicKey));
+    assert(onFirst.has(root) && branchKeys.slice(1).every(k => !onFirst.has(k)) && typeof firstPage.json.nextCursor === 'string',
+        `the premise: page 1 of ${liveMemberCount()} members holds the branch's root and none of the members under it`);
+    const ownerSession = ownerSessionHeaders();
+    const looksBefore = db.prepare(`SELECT COUNT(*) FROM health_access_log WHERE action = 'offboard_preview'`).pluck().get() as number;
+    const preview = await get(`/api/local/admin/branches/${root}/prune`, ownerSession);
+    assert(preview.status === 200 && preview.json?.members === 5 && preview.json.badDebt === 125.5 && preview.json.surplus === 55 && preview.json.net === -70.5,
+        `an owner reads the whole branch: 5 members (the pruned one left out, the one under them in), 125.5 bad debt, 55 surplus, -70.5 net (${preview.status} ${JSON.stringify(preview.json)})`);
+    assert(JSON.stringify(Object.keys(preview.json ?? {}).sort()) === JSON.stringify(['badDebt', 'members', 'net', 'surplus']),
+        `totals only: no names, no keys (${Object.keys(preview.json ?? {}).join(', ')})`);
+    const looks = db.prepare(`SELECT subject_pubkey FROM health_access_log WHERE action = 'offboard_preview' ORDER BY rowid DESC LIMIT 5`).pluck().all() as string[];
+    const looksAfter = db.prepare(`SELECT COUNT(*) FROM health_access_log WHERE action = 'offboard_preview'`).pluck().get() as number;
+    assert(looksAfter - looksBefore === 5 && branchKeys.every(k => looks.includes(k)),
+        `each balance in the totals is a look in the owners' access log, as the offboarding preview's is (${looksAfter - looksBefore} lines)`);
+    const leaf = await get(`/api/local/admin/branches/${kidB}/prune`, ownerSession);
+    assert(leaf.status === 200 && leaf.json?.members === 1 && leaf.json.surplus === 10 && leaf.json.badDebt === 0 && leaf.json.net === 10,
+        `a branch of one: 1 member, 10 surplus (${JSON.stringify(leaf.json)})`);
+    const nobody = await get(`/api/local/admin/branches/${'ab'.repeat(32)}/prune`, ownerSession);
+    assert(nobody.status === 404, `a key that is no member's: 404 (${nobody.status})`);
+    // The same owners as the prune itself: whoever the prune refuses is refused the figures too, and told nothing of them.
+    for (const [who, h] of [
+        ['no credential', {}],
+        ['a wrong password', { 'X-Admin-Password': 'not-the-password' }],
+        ['a member with no role', lapsed.headers],
+        ['a moderator', mod.headers],
+        ['an admin who is not an owner', admin.headers],
+        ["an owner's automation token", owner],
+    ] as Array<[string, Record<string, string>]>) {
+        resetAdminAuthTarpit();
+        const r = await get(`/api/local/admin/branches/${root}/prune`, h);
+        resetAdminAuthTarpit();
+        const pruneTry = await post(`/api/local/admin/branches/${root}/prune`, h, {});
+        assert((r.status === 401 || r.status === 403) && r.status === pruneTry.status && !('members' in (r.json ?? {})) && !('net' in (r.json ?? {})),
+            `${who}: refused the figures (${r.status}) as the prune refuses them (${pruneTry.status}), with none of them`);
+    }
+    const stillThere = db.prepare(`SELECT COUNT(*) FROM members WHERE public_key IN (SELECT value FROM json_each(?)) AND status != 'pruned'`).pluck().get(JSON.stringify(branchKeys));
+    assert(stillThere === 5, 'and none of those refusals pruned anyone');
+    // The prune then settles what the figures said: the Commons moves by `net`, and every one of the five is pruned.
+    const commonsBefore = getCommonsBalanceExact();
+    const pruned = await post(`/api/local/admin/branches/${root}/prune`, ownerSession, {});
+    const commonsMoved = Math.round((getCommonsBalanceExact() - commonsBefore) * 100) / 100;
+    const prunedNow = db.prepare(`SELECT COUNT(*) FROM members WHERE public_key IN (SELECT value FROM json_each(?)) AND status = 'pruned'`).pluck().get(JSON.stringify(branchKeys));
+    assert(pruned.status === 200 && commonsMoved === preview.json.net && prunedNow === preview.json.members,
+        `the owner's prune removes the ${prunedNow} members the figures counted and moves the Commons by their net, ${commonsMoved} (${pruned.status} ${JSON.stringify(pruned.json)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

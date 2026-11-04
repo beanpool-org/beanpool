@@ -9472,6 +9472,30 @@ export function inviteBranchOf(rootPublicKey: string): string[] {
 }
 
 /**
+ * What an owner's prune of this branch would do, for its confirmation (GET /api/local/admin/branches/:pubkey/prune): the
+ * whole subtree adminPruneBranch walks (inviteBranchOf), not the console's pages. `members` counts the rows it would mark
+ * pruned (each one not pruned already). Each one's balance as the prune settles it (adminPruneUser): a debt the Commons
+ * pays (`badDebt`), a surplus it takes back (`surplus`), and what the Commons gains or pays overall (`net`), each to the
+ * cent. Totals only, and no names; `keys` are the members whose balances they hold, for the route's access-log lines.
+ */
+export function branchPrunePreview(rootPublicKey: string): { members: number; badDebt: number; surplus: number; net: number; keys: string[] } {
+    const status = db.prepare('SELECT status FROM members WHERE public_key = ?');
+    const keys = inviteBranchOf(rootPublicKey).filter((pubkey) => {
+        const row = status.get(pubkey) as { status: string } | undefined;
+        return !!row && row.status !== 'pruned';
+    });
+    let badDebt = 0;
+    let surplus = 0;
+    for (const pubkey of keys) {
+        const balance = roundedBalance(pubkey);
+        if (balance < 0) badDebt += -balance;
+        else if (balance > 0) surplus += balance;
+    }
+    const cents = (n: number) => Math.round(n * 100) / 100;
+    return { members: keys.length, badDebt: cents(badDebt), surplus: cents(surplus), net: cents(surplus - badDebt), keys };
+}
+
+/**
  * The way an owner's prune branch reaches adminPruneUser (PruneDoor): 'owner-branch' only for a branch. A member who invited
  * nobody, or whose invitees are all gone already, is a branch of one, and removing them alone is the direct removal that
  * only the community's vote makes where it votes (§10 Q4), not the exception kept for a branch until the branch vote (Q5;

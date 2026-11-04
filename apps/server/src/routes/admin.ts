@@ -1204,7 +1204,7 @@ function adminMemberRows(members: Member[], keys?: string[]) {
  */
 router.post('/api/local/admin/data', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const body = (ctx as any).requestBody || {};
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const counts = getAdminMemberCounts();
     const summary = {
         health: healthFor(ctx),
@@ -1269,7 +1269,7 @@ router.post('/api/local/admin/data', async (ctx) => {
 router.post('/api/local/admin/data/members', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     ctx.set('Cache-Control', 'no-store');
-    const body = (ctx as any).requestBody || {};
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const limit = pageLimit(body.limit, ADMIN_MEMBERS_PAGE_DEFAULT, ADMIN_MEMBERS_PAGE_MAX);
     const cursor = body.cursor ?? null;
     const after = typeof cursor === 'string' ? parseAdminMemberPageKey(cursor) : null;
@@ -1301,7 +1301,7 @@ router.post('/api/local/admin/data/members', async (ctx) => {
 router.post('/api/local/admin/data/posts', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     ctx.set('Cache-Control', 'no-store');
-    const body = (ctx as any).requestBody || {};
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const limit = pageLimit(body.limit, ADMIN_POSTS_PAGE_DEFAULT, ADMIN_POSTS_PAGE_MAX);
     const cursor = body.cursor ?? null;
     if (cursor !== null && (typeof cursor !== 'string' || !parsePageKey(cursor))) {

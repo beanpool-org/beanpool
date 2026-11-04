@@ -2,8 +2,9 @@
 /**
  * The person on an item's own screen is where its profile opens (Marty, 4 Nov 2026: "Once they are in the item and then they
  * click on the person that is a good time to go to the profile"). The small cards that lead here open the event and never its
- * host; on the event's screen "Hosted by {name}" is the tap that opens the host's profile, as the web's event page does. Drawn
- * for real as event-tag-chips-render.test.ts draws the screen.
+ * host; on the event's screen the host's box ("HOSTED BY", the same box as a listing's "POSTED BY": components/AuthorCard.tsx, drawn
+ * in event-hosted-by-card-render.test.ts) is the tap that opens the host's profile, as the web's event page does. Drawn for real
+ * as event-tag-chips-render.test.ts draws the screen.
  *
  * A member's copy of an event has no host to open, and a visitors' view that hides who posted offers no profile.
  */
@@ -50,6 +51,7 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { 
 vi.mock('../db', () => ({ fetchEventDetail: async () => null, rsvpEvent: vi.fn(), deletePost: vi.fn(), reportAbuse: vi.fn(), letInToEvent: vi.fn() }));
 vi.mock('../haptics', () => ({ hapticTick: () => {} }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
+vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/EventCard', () => ({ EVENT_ACCENT: '#0a7' }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
 vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
@@ -67,32 +69,34 @@ const draw = async (more: Record<string, unknown> = {}) => { await act(async () 
 const hostButton = () => host.querySelector('[data-testid="event-host-open"]') as HTMLElement | null;
 
 describe('an event\'s own screen: the host is the way to their profile', () => {
-    it('"Hosted by Hana" is a button named for the profile it opens, and a tap opens it', async () => {
+    // The box says what it is by its words ("HOSTED BY", the name, the ratings), which a screen reader reads as the listing's
+    // "POSTED BY" box is read: no label of its own on top of them.
+    it('the host\'s box is a button that says who hosts, and a tap opens the profile', async () => {
         await draw();
         const button = hostButton();
-        expect(button, 'the host line').toBeTruthy();
-        expect(button!.textContent).toBe('Hosted by Hana');
+        expect(button, 'the host box').toBeTruthy();
+        expect(button!.textContent).toContain('HOSTED BY');
+        expect(button!.textContent).toContain('🤝 Hana');
         expect(button!.getAttribute('role')).toBe('button');
-        expect(button!.getAttribute('aria-label')).toBe("View Hana's profile");
         await act(async () => { button!.click(); });
         expect(push).toHaveBeenCalledTimes(1);
         expect(push).toHaveBeenCalledWith({ pathname: '/public-profile', params: { publicKey: HOST_KEY, callsign: 'Hana' } });
     });
 
-    // Old phones at 1.3x text (Opus review of #2839, minor): a press aimed at the host's name must land. The line is one text line
-    // (never shorter than its font size) plus the margin under it, which sits inside the button; the slop adds the rest, so the
-    // target reaches 44 dp at normal text and only grows with the text size.
+    // Old phones at 1.3x text (Opus review of #2839, minor): a press aimed at the host must land. The host was one text line (it needed
+    // hit slop to reach 44 dp); it is now the listing's box, whose face alone is 48 dp inside 16 dp of padding on every side, so the
+    // button is far past 44 dp at normal text and only grows with the text size. The card's own height is read from its styles.
     it('the host button reaches a 44 dp target, as the Market author chip does', async () => {
         await draw();
         const button = hostButton()!;
-        const slop = JSON.parse(button.getAttribute('data-hitslop') || '{}');
-        const line = JSON.parse(button.querySelector('span')!.getAttribute('data-style') || '{}');
-        const target = (line.fontSize ?? 0) + (line.marginBottom ?? 0) + (slop.top ?? 0) + (slop.bottom ?? 0);
-        expect(line.fontSize).toBeGreaterThan(0);
+        const card = JSON.parse(button.getAttribute('data-style') || '{}');
+        const face = JSON.parse(button.querySelector('[data-avatar="true"]')!.parentElement!.getAttribute('data-style') || '{}');
+        const target = (face.height ?? 0) + 2 * (card.padding ?? 0);
+        expect(face.height).toBeGreaterThan(0);
+        expect(card.padding).toBeGreaterThan(0);
         expect(target).toBeGreaterThanOrEqual(44);
-        // A press just left or right of the name still lands; the slop never goes negative.
-        expect(slop.left ?? 0).toBeGreaterThanOrEqual(0);
-        expect(slop.right ?? 0).toBeGreaterThanOrEqual(0);
+        // The box fills the page's width, so a press anywhere across it lands.
+        expect(card.marginHorizontal ?? 0).toBe(0);
     });
 
     it('a member\'s copy of an event has no host to open: the line is plain', async () => {

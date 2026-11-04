@@ -9,23 +9,80 @@
  */
 const LISTING_PHOTO = /^(?:https?:\/\/[^/?#]+)?\/api\/marketplace\/posts\/[^/?#]+\/photos\/\d+(?:[?#]|$)/;
 
-export function listPhotoUrl<T extends string | null | undefined>(url: T): T {
-    if (typeof url !== 'string' || !LISTING_PHOTO.test(url) || /[?&]size=/.test(url)) return url;
+/** `url` with `param` added to its query, before any `#`. */
+function withParam(url: string, param: string): string {
     const hash = url.indexOf('#');
     const base = hash < 0 ? url : url.slice(0, hash);
     const tail = hash < 0 ? '' : url.slice(hash);
-    return `${base}${base.includes('?') ? '&' : '?'}size=thumb2${tail}` as T;
+    return `${base}${base.includes('?') ? '&' : '?'}${param}${tail}`;
+}
+
+export function listPhotoUrl<T extends string | null | undefined>(url: T): T {
+    if (typeof url !== 'string' || !LISTING_PHOTO.test(url) || /[?&]size=/.test(url)) return url;
+    return withParam(url, 'size=thumb2') as T;
 }
 
 /**
- * What a list card draws next when the picture it showed would not load: a listing photo's small copy gives way to the
- * photo's own URL (the same URL without `size=thumb2`), and that gives way to nothing (null), where the card draws its
- * category tile and never an empty slot. `photo` is the URL the listing carries; `failed` is the URL the card was drawing.
+ * How long a list card waits for its picture before it counts it as failed (card-photo-blank, Marty 4 Nov 2026: a card
+ * on global showed an empty slot through two restarts while its small copy was served fine). Neither picture library
+ * bounds a load that never ends: on Android expo-image's OkHttp client keeps OkHttp's defaults (10 s to connect, 10 s per
+ * read, no limit on the whole call), so a response that trickles never fails, and a load that waits for a size or is
+ * paused sends no event at all; an <img> on the web has no limit either. 10 s is OkHttp's own per-read limit: a small
+ * copy (about 18 KB) that has not drawn by then on a working connection is not coming. The phone counts it from the last
+ * bytes it received, so a slow phone that is still receiving is not cut off (never past LIST_PHOTO_LONGEST_MS), and waits
+ * LIST_PHOTO_QUEUED_MS for the first bytes. The web sees no bytes, so it does not use this one: it waits
+ * LIST_PHOTO_QUEUED_MS from the picture's turn in the browser's line.
+ */
+export const LIST_PHOTO_WAIT_MS = 10_000;
+
+/**
+ * However many bytes are still arriving, a list card on the phone never waits longer than this from its picture's first
+ * bytes. expo-image on Android sends a progress event on every read of the response (react-native's ProgressResponseBody),
+ * so a response that sends one byte every few seconds would start LIST_PHOTO_WAIT_MS again for ever. Counted from the
+ * first bytes, not from when the card was shown, because a picture can wait its turn first (LIST_PHOTO_QUEUED_MS). 60 s
+ * lets a small copy (about 18 KB) arrive at 0.3 KB a second: the five pictures OkHttp fetches at once from one node,
+ * sharing a 1.5 KB/s link. A small copy slower than that is trickling, not coming; the tile is on screen all the while.
+ */
+export const LIST_PHOTO_LONGEST_MS = 60_000;
+
+/**
+ * How long a list card waits for a picture whose load may still be queued, before it counts the picture as failed.
+ *
+ * The phone: its picture's first bytes, once its load has started (expo-image's onLoadStart; review of #2853, finding 3).
+ * onLoadStart comes when the Image hands the URL to Glide, before the request leaves OkHttp's queue: Glide 5's OkHttp
+ * fetcher calls `enqueue`, and OkHttp 4.12's Dispatcher runs at most 5 requests to one host at once, so the rest of a
+ * Market screen's cards wait there with no event.
+ * A request that is running and gets no bytes is failed by OkHttp itself (10 s to connect, 10 s per read) through
+ * onError; this only bounds a load that is lost without an event. 60 s: at 50 KB/s about 160 small copies come down in
+ * that time, so a card that far back in the queue still gets its turn; at a weak 2G 3 KB/s, about 10. A load that has not
+ * started at all (no onLoadStart: on Android, its view has no size yet) is not waited on: a new URL would wait the same
+ * way, and the tile holds the slot.
+ *
+ * The web: the whole picture, from its turn in the browser's line (apps/pwa/src/lib/list-photo-line.ts: a browser runs
+ * at most 6 requests to one host at once and an <img> waiting its turn fires no event; round 3 of that review). An <img>
+ * shows neither its request starting nor its bytes, so the web cannot tell a request still queued from one that has
+ * stalled, and waits this long, not LIST_PHOTO_WAIT_MS: six pictures sharing a 2 KB/s link each get their small copy
+ * in time.
+ */
+export const LIST_PHOTO_QUEUED_MS = 60_000;
+
+/**
+ * What a list card draws next when the picture it showed would not load (or did not load within LIST_PHOTO_WAIT_MS):
+ * a listing photo's small copy is asked once more past every cache (`retry=1`: a new address, so no bad copy the phone,
+ * the browser or a shared cache keeps under the first one can answer it; the node reads only `k` and `size`); that gives
+ * way to the photo's own URL (the same URL without `size=thumb2`, which the detail screen draws), and that gives way to
+ * nothing (null), where the card draws its category tile and never an empty slot. `photo` is the URL the listing
+ * carries; `failed` is the URL the card was drawing.
  *
  * Each step happens once: the photo's own URL has no step after it, and a URL that has no small copy (a banner, an
  * avatar, a `data:` photo, a URL that already names a size) goes straight to null, so a card cannot loop. A card holds
  * the URL it gave up on beside the `photo` it was for, so a new URL a later read brings starts the steps again.
  */
 export function nextListPhotoUrl(photo: string, failed: string | null | undefined): string | null {
-    return failed === listPhotoUrl(photo) && failed !== photo ? photo : null;
+    const small = listPhotoUrl(photo);
+    if (small === photo || !failed) return null;
+    const again = withParam(small, 'retry=1');
+    if (failed === small) return again;
+    if (failed === again) return photo;
+    return null;
 }

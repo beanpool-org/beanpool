@@ -58,15 +58,19 @@ describe('Web Home Market card picture ladder (Pictures S6)', () => {
         expect(m3.querySelector('[data-testid="category-tile"]')).toBeInTheDocument();
 
         // A banner has no small copy, so one that will not load gives way to the tile, never an empty box (review of #2565,
-        // finding 8). A listing's own photo steps down: its small copy, then the photo's own URL, then the tile (card-photo-retry).
+        // finding 8). A listing's own photo steps down: its small copy, once more past every cache (card-photo-blank), then the
+        // photo's own URL, then the tile (card-photo-retry); the tile holds the slot while each step loads (card-photo-blank).
         fireEvent.error(m2Img!);
         const m2After = screen.getByRole('button', { name: /Enterprise Banner Item/ });
         expect(m2After.querySelector('img')).toBeNull();
         expect(m2After.querySelector('[data-testid="category-tile"]')).toBeInTheDocument();
         fireEvent.error(m1Img!);
+        const m1Again = screen.getByRole('button', { name: /Own Photo Item/ });
+        expect(m1Again.querySelector('img')?.getAttribute('src')).toBe('/api/marketplace/posts/m1/photos/0?v=1&k=K1&size=thumb2&retry=1');
+        fireEvent.error(m1Again.querySelector('img')!);
         const m1After = screen.getByRole('button', { name: /Own Photo Item/ });
         expect(m1After.querySelector('img')?.getAttribute('src')).toBe('/api/marketplace/posts/m1/photos/0?v=1&k=K1');
-        expect(m1After.querySelector('[data-testid="category-tile"]')).toBeNull();
+        expect(m1After.querySelector('[data-testid="category-tile"]')).toBeInTheDocument();
         fireEvent.error(m1After.querySelector('img')!);
         const m1Last = screen.getByRole('button', { name: /Own Photo Item/ });
         expect(m1Last.querySelector('img')).toBeNull();

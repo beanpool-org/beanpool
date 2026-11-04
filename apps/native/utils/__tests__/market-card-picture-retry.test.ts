@@ -24,8 +24,13 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
+const events = vi.hoisted(() => ({ start: null as null | (() => void), progress: null as null | (() => void) }));
 vi.mock('expo-image', () => ({
-    Image: ({ source, onError }: { source?: { uri?: string }; onError?: () => void }) => createElement('img', { 'data-src': source?.uri, onError }),
+    Image: ({ source, onError, onLoad, onLoadStart, onProgress }: { source?: { uri?: string }; onError?: () => void; onLoad?: () => void; onLoadStart?: () => void; onProgress?: () => void }) => {
+        events.start = onLoadStart ?? null;
+        events.progress = onProgress ?? null;
+        return createElement('img', { 'data-src': source?.uri, onError, onLoad });
+    },
 }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
@@ -40,6 +45,7 @@ vi.mock('../photo-refresh', () => ({
 }));
 
 import { MarketCardPicture } from '../../components/MarketCardPicture';
+import { LIST_PHOTO_QUEUED_MS, LIST_PHOTO_WAIT_MS } from '@beanpool/core';
 
 const NODE = 'https://global.example';
 const COVER = `${NODE}/api/marketplace/posts/p-jam/photos/0?v=1791608803169&k=AbCdEf`;
@@ -63,17 +69,19 @@ const show = async (cover: string | null, pic: string | null = cover) => { await
 const img = () => host.querySelector<HTMLImageElement>('img[data-src]');
 const tile = () => host.querySelector('[data-testid="category-tile"]');
 const fail = async () => { expect(img()).not.toBeNull(); await act(async () => { img()!.dispatchEvent(new Event('error')); }); };
+const load = async () => { expect(img()).not.toBeNull(); await act(async () => { img()!.dispatchEvent(new Event('load')); }); };
 
 describe("MarketCardPicture: a listing's own photo that will not load steps down", () => {
-    it('draws the small copy, then the full photo once it fails, then the tile once that fails too', async () => {
+    it('draws the small copy, asks it once more past every cache, then the full photo, then the tile once that fails too', async () => {
         await show(COVER);
         expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2`);
-        expect(tile()).toBeNull();
+
+        await fail();
+        expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2&retry=1`);
 
         await fail();
         expect(img()?.getAttribute('data-src')).toBe(COVER);
         expect(img()?.getAttribute('data-src')).not.toContain('size=thumb2');
-        expect(tile()).toBeNull();
 
         await fail();
         expect(img()).toBeNull();
@@ -85,11 +93,13 @@ describe("MarketCardPicture: a listing's own photo that will not load steps down
         await fail();
         expect(healed.calls[0]).toEqual(['p-jam', COVER]);
         await fail();
+        await fail();
         expect(healed.calls.every((c) => c[0] === 'p-jam' && c[1] === COVER)).toBe(true);
     });
 
     it('does not loop: the tile stays, and a card that has given up draws nothing more', async () => {
         await show(COVER);
+        await fail();
         await fail();
         await fail();
         await show(COVER);
@@ -101,18 +111,83 @@ describe("MarketCardPicture: a listing's own photo that will not load steps down
         await show(COVER);
         await fail();
         await fail();
+        await fail();
         expect(tile()).not.toBeNull();
         await show(COVER_2);
         expect(img()?.getAttribute('data-src')).toBe(`${COVER_2}&size=thumb2`);
+        await load();
         expect(tile()).toBeNull();
     });
 
     it('when the read brings a new URL after the small copy failed, that URL starts from its small copy', async () => {
         await show(COVER);
         await fail();
+        await fail();
         expect(img()?.getAttribute('data-src')).toBe(COVER);
         await show(COVER_2);
         expect(img()?.getAttribute('data-src')).toBe(`${COVER_2}&size=thumb2`);
+    });
+});
+
+// card-photo-blank (Marty, 4 Nov 2026): GLOBAL's "Apples needed" showed an empty ~160 px slot, no photo and no tile,
+// through two restarts, while its small copy was served fine (200, 18,127 B); expo-image sent neither onLoad nor onError.
+describe('MarketCardPicture: never an empty slot while the photo loads', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('draws the tile until the photo has drawn, then the photo alone', async () => {
+        await show(COVER);
+        expect(tile()).not.toBeNull();
+        expect(img()).not.toBeNull();
+        await load();
+        expect(tile()).toBeNull();
+        expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2`);
+    });
+
+    // expo-image's onLoadStart (the URL is handed to Glide), then bytes (onProgress) that stop.
+    const startedThenStalled = async () => {
+        await act(async () => { events.start?.(); });
+        await act(async () => { events.progress?.(); });
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS); });
+    };
+
+    it('a photo whose bytes stop counts as failed: the small copy again past every cache, then the full photo, then the tile', async () => {
+        vi.useFakeTimers();
+        await show(COVER);
+        await startedThenStalled();
+        expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2&retry=1`);
+        expect(tile()).not.toBeNull();
+        expect(healed.calls[0]).toEqual(['p-jam', COVER]);
+        await startedThenStalled();
+        expect(img()?.getAttribute('data-src')).toBe(COVER);
+        await startedThenStalled();
+        expect(img()).toBeNull();
+        expect(tile()).not.toBeNull();
+    });
+
+    // Review of #2853, finding 3: the Market's later cards wait in OkHttp's queue (5 at once to one node) with no event.
+    it('a load that has not started is never stepped down; a started one with no bytes waits LIST_PHOTO_QUEUED_MS', async () => {
+        vi.useFakeTimers();
+        await show(COVER);
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS * 2); });
+        expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2`);
+        expect(healed.calls).toEqual([]);
+        await act(async () => { events.start?.(); });
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_QUEUED_MS - 1); });
+        expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2`);
+        expect(tile()).not.toBeNull();
+        await act(async () => { vi.advanceTimersByTime(1); });
+        expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2&retry=1`);
+        expect(healed.calls[0]).toEqual(['p-jam', COVER]);
+    });
+
+    it('a photo that has drawn is never stepped down by the wait', async () => {
+        vi.useFakeTimers();
+        await show(COVER);
+        await load();
+        await act(async () => { vi.advanceTimersByTime(LIST_PHOTO_WAIT_MS * 5); });
+        expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2`);
+        expect(tile()).toBeNull();
+        expect(healed.calls).toEqual([]);
     });
 });
 

@@ -18,10 +18,13 @@ const LISTS: [string, string[], RegExp[]][] = [
     // The Market's three views draw their picture through MarketCardPicture (its banner that fails gives way to the tile),
     // and none draws one itself.
     ['app/(tabs)/market.tsx', ['<MarketCardPicture'], [/uri: (coverImage|picture)\s*}/, /<Image\b/]],
-    ['components/MarketCardPicture.tsx', ['listPhotoUrl(picture)', 'nextListPhotoUrl(picture, shown)'], [/uri: (cover|picture)\s*}/]],
-    // Every other small card draws through ListPhoto (the small copy, then the photo's own URL, then the card's fallback;
-    // drawn and failed for real in list-photo-render.test.ts), and none draws a listing photo's URL itself.
-    ['components/ListPhoto.tsx', ['listPhotoUrl(photo)', 'nextListPhotoUrl(photo, shown)'], [/uri: photo\s*}/]],
+    // Both pictures take their URL from useListPhotoSteps: the small copy, then its retry past every cache, then the
+    // photo's own URL, then the tile or fallback (card-photo-blank; drawn and failed for real in list-photo-render.test.ts
+    // and market-card-picture-retry.test.ts).
+    ['components/useListPhotoSteps.ts', ['listPhotoUrl(photo)', 'nextListPhotoUrl(p, failed)'], []],
+    ['components/MarketCardPicture.tsx', ['useListPhotoSteps(picture', 'uri: steps.shown'], [/uri: (cover|picture)\s*}/]],
+    // Every other small card draws through ListPhoto, and none draws a listing photo's URL itself.
+    ['components/ListPhoto.tsx', ['useListPhotoSteps(photo)', 'uri: steps.shown'], [/uri: photo\s*}/]],
     ['components/home/HomeCardBodies.tsx', ['<Thumb uri={onNode(nodeUrl, p.photoUrl || p.bannerUrl)}', '<ListPhoto'], [/listPhotoUrl/, /<Image\b/]],
     ['components/EventCard.tsx', ['<ListPhoto', 'photo={photo}'], [/uri: photo\s*}/, /<Image\b/]],
     ['components/MyDealsSheet.tsx', ['<ListPhoto'], [/uri: (item\.)?coverImage\s*}/, /ExpoImage/, /listPhotoUrl/]],

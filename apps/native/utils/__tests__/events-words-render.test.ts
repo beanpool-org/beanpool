@@ -226,7 +226,10 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         expect(host.textContent).toContain(xx('Going'));
         expect(host.textContent).toContain(xx('Show on map'));
         expect(byLabel(xx('Show {place} on a map').replace('{place}', 'Bangalow Hall'))).not.toBeNull();
-        expect(host.textContent).toContain(xx('Hosted by {name}').replace('{name}', 'Hana'));
+        // The host is the box a listing's "POSTED BY" is (components/AuthorCard.tsx): its label, the name, the ratings line.
+        expect(host.textContent).toContain(xx('HOSTED BY'));
+        expect(host.textContent).toContain('🤝 Hana');
+        expect(host.textContent).toContain(xx('☆☆☆☆☆ No ratings yet'));
         expect(host.textContent).toContain(xx('🔗 Share'));
         expect(host.textContent).toContain(xx('📅 Add to calendar'));
         expect(host.textContent).toContain(xx('🚩 Report event'));
@@ -387,7 +390,10 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         await renderIn('xx', createElement(EventDetail, { post: { ...base, author_pubkey: ME, authorPublicKey: ME } }));
         expect(host.textContent).toContain(xx("You're hosting this event"));
         expect(host.textContent).toContain(xx('NOTE FOR PEOPLE WHO ARE GOING'));
-        expect(host.textContent).toContain(xx('Hosted by {name} · 🔒 only {group} can see this').replace('{name}', 'Wren').replace('{group}', 'Seed Savers'));
+        // The group-only line sits under the host's box, which names the host.
+        expect(host.textContent).toContain(xx('HOSTED BY'));
+        expect(host.textContent).toContain('🤝 Wren');
+        expect(host.textContent).toContain(xx('🔒 Only {group} can see this.').replace('{group}', 'Seed Savers'));
         expect(byLabel(xx("Who's going, {n} replies").replace('{n}', '2'))).not.toBeNull();
         await click(byLabel(xx("Who's going, {n} replies").replace('{n}', '2')), "Who's going");
         expect(host.textContent).toContain(xx("Who's going ({n})").replace('{n}', '2'));
@@ -541,7 +547,7 @@ describe('in English nothing is bracketed, and the words are as they were', () =
         await renderIn('en', createElement(EventDetail, { post: base }));
         expect(bracketed(host)).toBe(0);
         for (const english of ['EVENT', '3 going · 1 interested', 'Going ✓', 'Interested', '⏰ Remind me: 1 day before (your default)', '🔗 Share', '📅 Add to calendar',
-            'Show on map', 'Hosted by Hana', '🚩 Report event']) {
+            'Show on map', 'HOSTED BY', '🤝 Hana', '☆☆☆☆☆ No ratings yet', '🚩 Report event']) {
             expect(host.textContent, english).toContain(english);
         }
         act(() => root.unmount());

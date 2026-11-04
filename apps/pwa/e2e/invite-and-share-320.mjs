@@ -51,7 +51,7 @@ const MEASURE = () => {
         if (!hidden && (r.right > vw + 0.5 || r.left < -0.5)) out.push(`${name(el)} spans ${Math.round(r.left)}..${Math.round(r.right)} of ${vw}`);
         const cuts = (cs.overflow === 'hidden' || cs.overflowX === 'hidden' || cs.overflow === 'clip') && el.scrollWidth > el.clientWidth + 1;
         if (!hidden && cuts && cs.textOverflow !== 'ellipsis' && /\p{L}/u.test(el.textContent || '')) out.push(`${name(el)} cuts its words (${el.scrollWidth} > ${el.clientWidth})`);
-        if (el.matches('[data-testid="invite-and-share"] button') && r.height < 44) out.push(`the button ${name(el)} is ${Math.round(r.height)} px tall, under 44`);
+        if (el.matches('[data-testid="invite-and-share"] button, [data-testid="share-button"], [role="menuitem"]') && r.height < 44) out.push(`the button ${name(el)} is ${Math.round(r.height)} px tall, under 44`);
         if (el.matches('fieldset label') && r.height < 44) out.push(`the choice ${name(el)} is ${Math.round(r.height)} px tall, under 44`);
         if (el.matches('fieldset label span') && el.scrollWidth > el.clientWidth) out.push(`the words of ${name(el)} spill out of it (${el.scrollWidth} > ${el.clientWidth})`);
     }
@@ -100,10 +100,15 @@ try {
                     });
                 }, [theme, FONT_SCALE]);
                 await page.goto(`${base}/e2e/invite-and-share-harness.html?${new URLSearchParams({ lang })}`, { waitUntil: 'networkidle' });
+                // One Share button (DW2): the ways, and Invite and share among them, are in the menu it opens. 'closed' is the
+                // panel closed, with the menu open to show the choice and its sentence.
+                await page.waitForSelector('[data-testid="share-button"]', { timeout: 20_000 });
+                await page.click('[data-testid="share-button"]');
                 await page.waitForSelector('[data-testid="share-members-button"]', { timeout: 20_000 });
                 if (state !== 'locked-out') await page.waitForSelector('[data-testid="invite-and-share-button"]', { timeout: 20_000 });
                 else await page.waitForTimeout(800);
                 if (state === 'voucher' || state === 'member' || state === 'offline') {
+                    // The choice closes the menu and opens its panel under the row.
                     await page.click('[data-testid="invite-and-share-button"]');
                     if (state === 'voucher') await page.waitForSelector('[data-testid="invite-vouch"]', { timeout: 10_000 });
                 }

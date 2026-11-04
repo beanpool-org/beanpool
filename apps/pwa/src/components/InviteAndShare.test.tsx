@@ -25,7 +25,26 @@ vi.mock('../lib/identity', async (importOriginal) => {
     return { ...actual, loadIdentity };
 });
 
-import { InviteAndShareButton } from './InviteAndShare';
+import { useInviteAndShare } from './InviteAndShare';
+
+/**
+ * The Invite and share part on its own, as the Share menu draws it (components/SharePost.tsx useShare): its choice and
+ * the sentence under it, then what it leaves under the row. It is offered here as core's shareSays offers it, so what
+ * is proved is the part's OWN gate (the community's invites, the door, the member's key and role). The menu around it,
+ * and shareSays' rows, are proved in SharePost.test.tsx and ShareMenu.test.tsx.
+ */
+function InviteOnly({ post }: { post: { id: string; title: string } }) {
+    const part = useInviteAndShare(post, true);
+    if (!part) return null;
+    const c = part.choice;
+    return (
+        <>
+            <button type="button" data-testid={c.testId} aria-expanded={c.expanded} onClick={c.onSelect}>{c.label}</button>
+            <span data-testid={c.lineTestId}>{c.line}</span>
+            {part.after}
+        </>
+    );
+}
 
 const POST = { id: '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34', title: 'Ladder for borrowing' };
 const IDENTITY = { publicKey: 'pk-me', privateKey: 'sk', callsign: 'Ana', createdAt: '2026-09-27T00:00:00.000Z' };
@@ -36,7 +55,7 @@ async function open(info: unknown = { features: { invites: true, door: 'members'
     communityInfoOnce.mockResolvedValue(info);
     getBalance.mockResolvedValue({ canVouch: opts.canVouch === true });
     request.mockResolvedValue({ role: opts.role ?? null });
-    render(<InviteAndShareButton post={POST} />);
+    render(<InviteOnly post={POST} />);
     await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
 }
 const tap = (id: string) => fireEvent.click(screen.getByTestId(id));
@@ -60,19 +79,19 @@ describe('who is offered the button', () => {
     it('no button where the community takes no invites, or with no key', async () => {
         await open({ features: { invites: false } });
         await new Promise((r) => setTimeout(r, 20));
-        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
         cleanup();
         loadIdentity.mockResolvedValue(null);
         await open();
         await new Promise((r) => setTimeout(r, 20));
-        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
     });
 
     it('where only admins invite: a plain member has none (and asked for their role), an admin has it', async () => {
         await open({ features: { invites: true, door: 'admins' } }, { role: null });
         await waitFor(() => expect(request).toHaveBeenCalledWith('GET', '/api/node-admin/me'));
         await new Promise((r) => setTimeout(r, 20));
-        expect(screen.queryByTestId('invite-and-share')).toBeNull();
+        expect(screen.queryByTestId('invite-and-share-button')).toBeNull();
         cleanup();
         await open({ features: { invites: true, door: 'admins' } }, { role: 'admin' });
         await waitFor(() => expect(screen.getByTestId('invite-and-share-button')).toBeTruthy());

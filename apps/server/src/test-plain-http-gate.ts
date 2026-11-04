@@ -187,8 +187,13 @@ console.log('\n4. A host-level tunnel (Docker\'s bridge gateway) naming a beanpo
     check('the same from ::ffff:172.18.0.1 is served', mapped.status === 200, `${mapped.status}`);
     const lan = await get('172.18.0.1', '/api/version', OWN);
     check('the same source naming the own domain is redirected', redirected(lan, `https://${OWN}/api/version`), `${lan.status}`);
-    const lanIp = await get('192.168.1.20', '/settings', '192.168.1.10');
-    check('a LAN member at a LAN address is sent to the main address', redirected(lanIp, `https://${OWN}/settings`), `${lanIp.status} ${lanIp.headers.location}`);
+    const lanIp = await get('192.168.1.20', '/api/version', '192.168.1.10');
+    check('a LAN member at a LAN address is sent to the main address', redirected(lanIp, `https://${OWN}/api/version`), `${lanIp.status} ${lanIp.headers.location}`);
+    // Lights-out (design scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §4.1, test-lights-out.ts): with the switch
+    // off, a request straight from the local network still reaches Settings, its sign-in and the switch, so an owner in the
+    // hall can open it. Before lights-out this was redirected too; every other path keeps the redirect (above).
+    const lanSettings = await get('192.168.1.20', '/settings', '192.168.1.10');
+    check('… but Settings itself is reached from the LAN (lights-out §4.1)', lanSettings.status !== 301, `${lanSettings.status}`);
     const spoof = await get(PUBLIC, '/api/version', 'mullum.beanpool.org');
     check('a public source naming a beanpool.org host is redirected', spoof.status === 301, `${spoof.status}`);
     const wsSpoof = await upgrade('172.18.0.1', OWN);

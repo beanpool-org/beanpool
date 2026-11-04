@@ -180,6 +180,34 @@ export interface LocalConfig {
         peerId: string; epoch: number; ownEpoch: number; since: string | null; detectedAt: string; url: string;
         conflict?: { ownSince: string | null } | null;
     } | null;
+    // --- Lights-out (services/lights-out.ts; design scratch/fable-design/DESIGN-lights-out-plain-ip-fable.md §2.1) ---
+    // The owner's switch for the hall. This server's own: never in a backup file, the stager's copy, the take-over bundle or
+    // anything a standby pulls, so a hall laptop's "on" never comes back to life on the rented server.
+    lightsOut?: LightsOutRecord | null;
+    // The last backup restored onto this server (routes/backup.ts restoreFromTar): when, when the backup was made, and
+    // the take-over count its keys carried (0 when it carried none). What lights-out reads for recordAsOf and the epoch
+    // raise (§3.5, §2.1 item 3). This server's own, like lightsOut.
+    restoredCopy?: { at: string; madeAt: string | null; epoch: number } | null;
+}
+
+/** The lights-out switch as local-config.json keeps it (services/lights-out.ts). */
+export interface LightsOutRecord {
+    on: boolean;
+    /** When it last went on (ISO); kept after it goes off, for the stand-down offer. */
+    since: string | null;
+    /** The hall address the owner confirmed: http://<a local-network number>[:port]; null when none was given. */
+    address: string | null;
+    /** How old the record is, written when it went on (§3.5); null on a server that was always the main server. */
+    recordAsOf: string | null;
+    /** The community's main address when it went on, https://<name>: where phones go home to. */
+    home: string | null;
+    by?: 'owner-key' | 'password' | 'shell';
+    /** When it last went off. */
+    offAt?: string | null;
+    /** A member wrote here (a write answered 2xx) since it last went on: the hall copy holds something new. */
+    hallWrites?: boolean;
+    /** The epoch raise this switch made (§2.1 item 3): for which restore (restoredCopy.at), when, and to what. */
+    raised?: { for: string; at: string; epoch: number } | null;
 }
 
 /**
@@ -762,6 +790,9 @@ const LEFT_OUT_OF_BACKUPS = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes',
     'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'agentOAuthGrants', 'claim', 'addressRequest', 'endedAddressRequest', 'turnedAwayNames',
     'registrarNotices', 'registrarNoticeSeen',
+    // Not credentials, but this server's own (services/lights-out.ts): a backup never says "the hall is open", and never
+    // says it was restored.
+    'lightsOut', 'restoredCopy',
 ] as const;
 
 /** A copy of the local config that is safe to put in a backup file (LEFT_OUT_OF_BACKUPS). */

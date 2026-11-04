@@ -76,6 +76,8 @@ const CREDENTIALS_LEFT_OUT = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes', 'recoveryCode',
     'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'agentOAuthGrants', 'claim', 'addressRequest', 'endedAddressRequest', 'turnedAwayNames',
     'registrarNotices', 'registrarNoticeSeen',
+    // And the lights-out switch (services/lights-out.ts): the stager never serves the hall.
+    'lightsOut', 'restoredCopy',
 ];
 /**
  * node_config: the copy this database was swapped in from, written by the stager into the staging database. The puller's

@@ -444,6 +444,12 @@ export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMes
     return { title: t('Local copy cleared'), message };
 }
 
+/** When the last cycle started (0 before any): a wide doorbell's deferred sync is dropped when one started after it (ws-client.ts). */
+let lastCycleStartedAt = 0;
+export function lastPillarSyncStartedAt(): number {
+    return lastCycleStartedAt;
+}
+
 /**
  * True while a sync is queued (debounce window, or a trailing sync's cooldown) or running. The market uses it so a sync
  * that is still downloading on a slow connection is not reported as "trouble connecting".
@@ -486,6 +492,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
     let endCycle = () => {};
     cycleEnd = new Promise<void>(resolve => { endCycle = resolve; });
     const startTime = Date.now();
+    lastCycleStartedAt = startTime;
     // Pushed listing changes applied after this point are replayed over this cycle's writes (liveChangesSince).
     const liveMark = liveSeq;
 

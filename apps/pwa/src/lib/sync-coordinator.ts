@@ -109,6 +109,11 @@ export function setOnSyncCompletedCallback(cb: ((time: number) => void) | null):
 
 let syncPromise: Promise<void> | null = null;
 let needsAnotherSync = false;
+/** When the last run started (0 before any): a wide doorbell's deferred sync is dropped when one started after it (lib/sync). */
+let lastRunStartedAt = 0;
+export function lastSyncStartedAt(): number {
+    return lastRunStartedAt;
+}
 let debounceTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let cooldownTimeoutId: ReturnType<typeof setTimeout> | null = null;
 let pendingResolvers: Array<() => void> = [];
@@ -204,6 +209,7 @@ export function requestSync(): Promise<void> {
             // the cooldown no longer buys a second redundant run behind the one it triggered.
             needsAnotherSync = false;
 
+            lastRunStartedAt = Date.now();
             syncPromise = performSyncImpl()
                 .catch((err) => {
                     console.error('[Sync Coordinator] Sync failed:', err);
@@ -239,6 +245,7 @@ export function resetCoordinatorForTest(): void {
     }
     syncPromise = null;
     needsAnotherSync = false;
+    lastRunStartedAt = 0;
     pendingResolvers.forEach((r) => r());
     pendingResolvers = [];
     activityListeners = [];

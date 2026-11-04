@@ -32,7 +32,8 @@ class WebSocketSyncClient {
     private dataUpdatedTimeoutId: ReturnType<typeof setTimeout> | null = null;
     /**
      * The one sync a burst of wide doorbells still owes (@beanpool/core createDeferredSync): a random 0–5 minutes on,
-     * dropped when a sync starts meanwhile, and on a close (the reopening syncs).
+     * skipped when a sync started meanwhile (a dropped socket's reopening sync is one), and cancelled when the app closes
+     * the socket (backgrounded or stopped: coming back opens a socket, which syncs).
      */
     private deferredSync = createDeferredSync({
         run: () => { void requestSync(); },

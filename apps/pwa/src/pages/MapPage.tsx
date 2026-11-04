@@ -2645,7 +2645,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         </span>
                         <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-2">{t('near here')}</span>
                         <button
-                            onClick={(e) => { e.stopPropagation(); onNavigate && onNavigate('marketplace', previewPost.id); }}
+                            onClick={(e) => { e.stopPropagation(); if (onNavigate) onNavigate('marketplace', previewPost.id); }}
                             aria-describedby="map-preview-title-text"
                             className="min-h-[44px] py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer bg-indigo-600 hover:bg-indigo-700"
                         >
@@ -2720,7 +2720,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 </span>
                             )}
                         <button
-                            onClick={(e) => { e.stopPropagation(); onNavigate && onNavigate('marketplace', previewPost.id); }}
+                            onClick={(e) => { e.stopPropagation(); if (onNavigate) onNavigate('marketplace', previewPost.id); }}
                             aria-describedby="map-preview-title-text"
                             className={`py-2 px-4 rounded-xl border-none font-bold text-sm cursor-pointer shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98] ${
                                 previewPost.type === 'offer' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'

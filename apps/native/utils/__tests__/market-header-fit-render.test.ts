@@ -339,6 +339,8 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
                 callsign: 'Sam',
                 energyCycled: 500,
                 mode: 'full',
+                // A chip is display only on a small card now (cards open their item, 4 Nov); where a screen makes it a button, it is a 44 dp one.
+                navigable: true,
             }) as any);
         });
         const authorChipFull = host.querySelector('[data-testid="author-chip"]') as HTMLElement;
@@ -357,6 +359,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
                 callsign: 'Sam',
                 energyCycled: 500,
                 mode: 'compact',
+                navigable: true,
             }) as any);
         });
         const authorChipCompact = host.querySelector('[data-testid="author-chip"]') as HTMLElement;

@@ -40,6 +40,7 @@ import { ShowOnGlobalHostRow } from './ShowOnGlobalRow';
 import { ReportReasonBox } from './ReportReasonBox';
 import { eventLineWords } from './event-lines';
 import { reportedAlertBody } from '../utils/reportReasons';
+import { isHiddenAuthor } from '../utils/posts-view';
 import {
     formatEventWhenFor, eventWhen, eventRepeatCaption, withMovedFromLine, eventHostLine, eventPlaceLine, eventLinkWaitWords, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
@@ -493,14 +494,30 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 {!!p.description && <Text style={styles.description}>{p.description}</Text>}
                 <PostTagChips tags={p.tags} freeTags={p.freeTags ?? p.free_tags} />
 
-                {(!copy || !!copy.from) && (
-                    <Text style={styles.hostLine} numberOfLines={2}>
-                        {copy?.from ? copyFromLine(copy.from)
-                            : isGroupOnly && groupName
-                            ? t('Hosted by {name} · 🔒 only {group} can see this', { name: hostName, group: groupName })
-                            : t('Hosted by {name}', { name: hostName })}
-                    </Text>
-                )}
+                {(!copy || !!copy.from) && (() => {
+                    const line = (
+                        <Text style={styles.hostLine} numberOfLines={2}>
+                            {copy?.from ? copyFromLine(copy.from)
+                                : isGroupOnly && groupName
+                                ? t('Hosted by {name} · 🔒 only {group} can see this', { name: hostName, group: groupName })
+                                : t('Hosted by {name}', { name: hostName })}
+                        </Text>
+                    );
+                    // The host is the person on this screen: a tap on the line opens their profile (as the web's event page does).
+                    // The small cards that lead here open the event, never the host (Marty, 4 Nov). A copy has no host to open.
+                    const hostKey: string | undefined = p.authorPublicKey ?? p.author_pubkey;
+                    if (copy || !hostKey || isHiddenAuthor(hostKey)) return line;
+                    return (
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t("View {name}'s profile", { name: hostName })}
+                            testID="event-host-open"
+                            onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: hostKey, callsign: hostName } })}
+                        >
+                            {line}
+                        </Pressable>
+                    );
+                })()}
                 {isHost && !!view && (
                     <ShowOnGlobalHostRow event={view} enabled={onLocalCommunity && !copy && !closed && !online && !isGroupOnly && view.authorPublicKey === identity?.publicKey} />
                 )}

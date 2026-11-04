@@ -23,7 +23,7 @@
  * font scale market.tsx reads, so the same numbers):
  *
  *   SAT 7 NOV                                         the date, in the event's ink
- *   16:00 –21:00                                      the time in two whole pieces (a repeating event with no time: its ↻ rule)
+ *   16:00–21:00                                       the time, two whole pieces "16:00" "–21:00" (no time, repeating: its ↻ rule)
  *   Byron Bay Twilight Market                         the title, one line
  *   📍 Railway Park · 3 km                             the place, one line (a copy on global: "from Mullumbimby · 740 km")
  *

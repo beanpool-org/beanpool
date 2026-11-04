@@ -482,7 +482,7 @@ describe("the grid tile (P3'): the listing tile's shell, the four rows, the mark
         // Cancelled: both pieces struck through.
         await showTile({ ...SAME_DAY, eventState: 'cancelled' });
         for (const id of ['event-time', 'event-time-end']) expect(styleOf(byTestId(id))).toMatchObject({ textDecorationLine: 'line-through' });
-        // A start with no end of its own: the phone's default end, still a span; an event that ends the next day: one piece.
+        // An event that ends on a later date: its start alone, one piece, and no end piece at all.
         const twoDay = { ...SAME_DAY, eventEndAt: new Date(new Date(SAME_DAY.eventStartAt).getTime() + DAY).toISOString() };
         await showTile(twoDay);
         expect(Array.from(byTestId('event-time-row')!.children).map(x => x.textContent)).toEqual(['10:26']);

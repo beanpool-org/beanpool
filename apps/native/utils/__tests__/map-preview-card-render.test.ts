@@ -262,6 +262,11 @@ describe.each([['light', false], ['dark', true]] as const)("the map's pin card a
         expect(q('event-counts').textContent).toBe('👥 3 going · 1 interested');
     });
 
+    it('an event with no title is named "Open event: Event", as the map\'s card always named it (eventPinCard)', async () => {
+        await show({ ...TWILIGHT, title: '', myRsvp: null });
+        expect(q('map-preview-open').getAttribute('aria-label')).toBe('Open event: Event');
+    });
+
     it("an event I host: You're hosting this event", async () => {
         await show({ ...TWILIGHT, author_pubkey: ME.publicKey, myRsvp: null });
         expect(q('event-mark').textContent).toBe("You're hosting this event");

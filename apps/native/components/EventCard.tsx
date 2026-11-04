@@ -87,7 +87,8 @@ export function EventCard({ post, currentPubkey, myLocation, popUp }: EventCardP
     const label = badge === 'CANCELLED' ? t('Event: {title}, {when}, cancelled', { title: post.title, when })
         : badge === 'UPDATED' ? t('Event: {title}, {when}, updated', { title: post.title, when })
         : t('Event: {title}, {when}', { title: post.title, when });
-    const named = popUp ? t('Open event: {title}', { title: post.title }) : label;
+    // The map's name for its card; an event with no title is "Event", as the map's card has always read it (eventPinCard).
+    const named = popUp ? t('Open event: {title}', { title: post.title || t('Event') }) : label;
 
     return (
         <Pressable

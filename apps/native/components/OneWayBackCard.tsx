@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { LinkSignInSheet } from './LinkSignInSheet';
+import { QUIET_OPACITY, quietWrapperProps } from './home/quiet';
 import {
     askOneWayBackStandingShared,
     dismissOneWayBack,
@@ -80,7 +81,7 @@ export interface OneWayBackActionsAt {
  * - `onDismiss(at)`: the card was put away at `at` (the same moment the phone's record keeps), for Home to keep on the
  *   account. `onUp`: whether the card is drawn now, so Home's "…" moves count only the cards on screen.
  */
-export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp }: {
+export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp, band }: {
     place: 'landing' | 'settings';
     colors?: AppColors;
     onActionsAt?: (at: OneWayBackActionsAt | null) => void;
@@ -88,6 +89,11 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
     accountDismissedAt?: string | null;
     onDismiss?: (at: number) => void;
     onUp?: (up: boolean) => void;
+    /**
+     * Home in Arrange: the band this card has only there (its caption and ↑ ↓, across the top of its frame). With a band the
+     * rest of the card goes quiet, dimmed and untouchable, until Done (DESIGN-home-arrange-in-place-fable.md §2.1).
+     */
+    band?: React.ReactNode;
 }): React.JSX.Element | null {
     const { identity } = useIdentity();
     const [record, setRecord] = useState<OneWayBack | null>(null);
@@ -244,8 +250,8 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         );
     }
 
-    return (
-        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={t(ONE_WAY_BACK_LINES.title)}>
+    const content = (
+        <>
             {/* The design's one sentence, as it is: no heading that says it twice. */}
             <View style={s.row}>
                 <Text style={s.title}>🔑 {bodyLine}</Text>
@@ -290,10 +296,20 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
                 </Pressable>
             )}
             </View>
+        </>
+    );
+
+    return (
+        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={t(ONE_WAY_BACK_LINES.title)}>
+            {band}
+            {/* One wrapper whether or not Home's band is up (home/quiet.ts): the card's inside is never rebuilt when Arrange opens. */}
+            <View {...quietWrapperProps(!!band)} style={band ? quietInside : undefined}>{content}</View>
             {sheet}
         </View>
     );
 }
+
+const quietInside = { opacity: QUIET_OPACITY };
 
 const cache = new WeakMap<AppColors, ReturnType<typeof make>>();
 function styles(colors: AppColors) {

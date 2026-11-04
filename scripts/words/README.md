@@ -51,7 +51,7 @@ pnpm words:draft --report [--langs <l1,l2>]
 Exits with code `0`, or `2` when a scan fails (stderr `words:draft: SCAN ERROR — <what failed>`, and no `words:draft: … missing` line, so a heartbeat never reads a failed scan as a clean tree). Outputs:
 1. Website pages status (or `website pages: skipped (S6 not yet implemented)` until slice S6 exists).
 2. Per-language breakdown:
-   - App words per catalog (`packages/beanpool-core/words`, `apps/native/words`, `apps/pwa/words`, `apps/server/words`): missing, stale (0), and orphaned.
+   - App words per catalog (`packages/beanpool-core/words`, `apps/native/words`, `apps/pwa/words`, `apps/server/words`): missing, stale (0), and orphaned. What counts as missing follows the tests (2.4): `native: 690 missing (6 all-at-once), …`.
    - Guide titles & summaries (`packages/beanpool-guide/content/<lang>/manifest.json`): missing and stale.
    - Guide pages (`packages/beanpool-guide/content/<lang>/<section>/<slug>.md`): missing (no file) and stale (source-hash behind).
    - SAFETY/MONEY count: missing and stale items requiring meaning-check.
@@ -72,7 +72,9 @@ Each brief contains:
 - Exact missing and stale keys / pages with today's English and source hashes.
 - Source file and line context for app words.
 - Exact commit and push sequence per catalog and page.
-- Option `--max-keys N` to cap the number of app word keys in large top-up rounds.
+- Option `--max-keys N` to cap the number of app word keys in large top-up rounds. It never cuts a sentence of an all-or-none group (2.4).
+
+A language with nothing left to ask for gets no brief, and the run says which all-at-once sentences it left out.
 
 ### 2.3 Safety / Money Pattern List
 
@@ -84,6 +86,19 @@ The director meaning-checks translations touching sensitive security or financia
 - **Beans amounts**: currency balances, circulation fees, and transfer amounts.
 - **limits**: partner limits, rate limits, and credit lines.
 - **privacy**: profile visibility, admin access, "who can see".
+
+### 2.4 What counts as missing: the tests decide
+
+`--report` and `--briefs` list a key as missing only if drafting it cannot turn a test red (4 Nov, #2841 and #2842: a round gave the phone and web catalogs a bare `Your deals`, and six welcome sentences in four languages only, and broke 21 checks). Two rules:
+
+1. **A sentence core's own sources use is core's.** The phone and the web app load `[their catalog, core's]` for a language, core's last, so a copy of a core sentence in an app catalog would never show; `your-deals-words.test.ts` forbids it for `Your deals`. In `draft.mjs`, `APP_CATALOG_DEFS` marks these packages `throughCore` (`native`, `pwa`; not the server, whose refusals use its own catalog alone). A key such a package uses that core's sources also use is missing in core only. It is still a used key there, so an older copy is not orphaned.
+2. **An all-or-none group is drafted whole.** `all-or-none.mjs` lists them; today the welcome screens' sentences (`app/welcome.tsx` and `components/WelcomeDoors.tsx`), which `language-switch-render.test.ts` needs in every phone catalog or in none. That test reads its sentences from the same file, so the two cannot differ. For a group sentence:
+   - **no catalog has it** (*all-at-once*): a brief asks for it only when the run covers every language (no `--langs`); a shorter run marks it as "draft in all languages at once" and leaves it out. `--report` counts it as missing and says `(N all-at-once)`.
+   - **some catalog has it** (*complete the set*): every other catalog is missing it, tagged `[COMPLETE THE SET]`, even when core also has it.
+
+   A group sentence is never cut by `--max-keys`. The director merges a round that drafted such a group for all languages together.
+
+To add a group, add it to `ALL_OR_NONE_GROUPS` in `all-or-none.mjs` and have its test read its sentences from there; `draft.test.mjs` checks that the welcome test does.
 
 ---
 

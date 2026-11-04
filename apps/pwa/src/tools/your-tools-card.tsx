@@ -26,7 +26,7 @@ interface Props {
     apps?: Readonly<Record<string, unknown>>;
     hue?: CardHue;
     onHeight?: (height: number) => void;
-    onHold?: () => void;
+    onHold?: Parameters<typeof HomeCard>[0]['onHold'];
     /** In Arrange: the band's arrows, and the body quiet (components/HomeCard.tsx). */
     arrange?: Parameters<typeof HomeCard>[0]['arrange'];
     quiet?: boolean;

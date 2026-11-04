@@ -179,3 +179,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `project-detail.tsx` missing an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `project-detail.tsx` so unhandled screen errors on the `/project-detail` route are safely caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-16 - [Remove deprecated shouldShowAlert in push notification handler]
+**Issue:** `services/push-notifications.ts` returned `shouldShowAlert` in `setNotificationHandler`, which is deprecated in `expo-notifications` and triggers runtime deprecation warnings.
+**Learning:** `expo-notifications` replaced `shouldShowAlert` with `shouldShowBanner` and `shouldShowList`. Since both are already specified, removing `shouldShowAlert` eliminates deprecation warnings and aligns with modern `NotificationBehavior`.
+**Pattern:** Check Expo SDK callbacks and options for deprecated properties replaced by newer fine-grained flags.

@@ -17,9 +17,15 @@ An assistant sees much less than an admin does in Settings. Your community's ser
 
 ## What it never sees
 
-Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone. It can't change anything about you: it can't remove you, mute you, take down your post or answer your join request. Those are done by people. An admin does them in Settings or on their phone, and a join request is answered in the app by any member who may invite.
+Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone.
 
-An assistant can suggest what to do about a report, for example to keep your post or take it down. Nothing happens unless the admin it works for reads the report and approves; anything you hear about it comes from your community's moderators, as always.
+An assistant can suggest what to do about a report, for example to keep your post or take it down. Its suggestion does nothing unless the admin it works for reads the report and approves; anything you hear about it comes from your community's moderators, as always.
+
+## When an assistant takes a post down
+
+An owner's or an admin's assistant can take your post down only if they ticked "May take down posts for me" when they connected it. It is off unless they do. An admin's takes down one post at a time; an owner's can also take down many at once, or everything you have up here. Either way your post comes down straight away, with no person approving it: it is hidden from everyone else, and you get a notice with the reason. The notice says the community's moderators took it down, and doesn't say an assistant did. The post stays yours to open. An owner or an admin can put it back for 7 days; if nobody does, it is removed. As with a removal by the moderators, where repeat offender rules are active it counts towards the three removals in 30 days that mute an account (see "How this community works").
+
+It can't remove you, suspend you or mute you itself, or answer your join request. Those are done by people. An admin does them in Settings or on their phone, and a join request is answered in the app by any member who may invite.
 
 ## When an owner's assistant posts
 

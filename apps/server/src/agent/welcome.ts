@@ -21,7 +21,10 @@ export interface WelcomeFacts {
     canSuggest: boolean;
     /** An owner's grant ticked "May post for me": its posts are live at once, with no approval. */
     canPost?: boolean;
-    /** An owner's grant ticked "May take down posts for me" (agent/owner-takedowns.ts): a takedown happens at once. */
+    /**
+     * A grant ticked "May take down posts for me" (agent/owner-takedowns.ts): a takedown happens at once. An owner's takes one post or
+     * many; an admin's one post a call (MCP-MODERATION S3), by `role`.
+     */
     canModerate?: boolean;
 }
 
@@ -38,14 +41,17 @@ export function welcomeInstructions(f: WelcomeFacts): string {
     ];
     if (f.canBackup) can.push('take a backup');
     if (f.canPost) can.push(`post Offers, Needs and events as ${f.callsign} (or as an enterprise they keep) and polls as ${f.callsign}, and start groups and enterprises for ${f.callsign} and post to their groups, live at once with no approval`);
-    if (f.canModerate) can.push(`take posts down for ${f.callsign} (spam, reported posts and any listing, events included), hidden at once and final after 7 days`);
+    if (f.canModerate) {
+        can.push(`take posts down for ${f.callsign}${f.role === 'owner' ? '' : ', one post a call'} (spam, reported posts and any listing, events included), hidden at once and final after 7 days`);
+    }
     if (f.canSuggest) {
         can.push(`SUGGEST actions (${SUGGESTABLE_WORDS})`);
     }
     const suggestions = f.canSuggest
         ? ` A suggestion changes nothing: it becomes a card ${f.callsign} approves on their phone, where they see the original. When you suggest, say so; never say you did it.`
         : '';
-    const cannotAct = f.canModerate ? `${f.canSuggest ? 'approve a suggestion; ' : ''}dismiss a report, put a post back or lift a mute`
+    const cannotAct = f.canModerate
+        ? `${f.canSuggest ? 'approve a suggestion; ' : ''}dismiss a report, put a post back or lift a mute${f.role === 'owner' ? '' : '; take more than one post down in a call'}`
         : f.canSuggest ? 'approve a suggestion' : 'act on a report or a join request, or send an announcement';
     // A takedown is done the moment it is made, and member text is exactly where a wish for one would be written.
     const takedowns = f.canModerate
@@ -197,7 +203,7 @@ export function agentConnectedWords(name: string, role: 'owner' | 'admin', canBa
     const can = ['read health, backups, totals, reports and join requests'];
     if (canBackup) can.push('take a backup');
     if (canPost) can.push(`post Offers, Needs, events and polls and start groups and enterprises as that ${role}`);
-    if (canModerate) can.push('take posts down');
+    if (canModerate) can.push(role === 'owner' ? 'take posts down' : 'take posts down, one a call');
     if (canSuggest) can.push('suggest actions it cannot take');
     const list = can.length === 1 ? can[0] : `${can.slice(0, -1).join(', ')}, and ${can[can.length - 1]}`;
     return `An AI assistant (${name}) was connected by an ${role}: it can ${list}.`;

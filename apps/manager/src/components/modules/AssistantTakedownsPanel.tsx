@@ -187,7 +187,7 @@ export function AssistantTakedownsPanel({ activeNode, viewer = { kind: 'password
             <div className="border-b border-nature-800 pb-3 min-w-0">
                 <h3 id="agent-takedowns-title" className="text-base font-bold text-white m-0 break-words">Taken down by assistants</h3>
                 <p className="text-xs text-nature-400 m-0 mt-1 break-words">
-                    What an owner&apos;s AI assistant took down. It is hidden at once, and removed for good after 7 days unless you put it back here. Only a person can put a post back: it returns to where it stood, so a post hidden for review before stays hidden, and the reports the takedown closed open again.
+                    What an owner&apos;s or an admin&apos;s AI assistant took down. It is hidden at once, and removed for good after 7 days unless you put it back here. Only a person can put a post back: it returns to where it stood, so a post hidden for review before stays hidden, and the reports the takedown closed open again.
                 </p>
             </div>
             {message && <p role="status" className="text-sm text-nature-200 m-0 break-words">{message}</p>}

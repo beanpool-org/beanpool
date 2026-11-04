@@ -236,6 +236,12 @@ export interface AgentOAuthGrantRecord {
     spentRefresh: string[];
     /** "May post for me", ticked on the consent page when it was approved (agent/owner-posts.ts): left out, it may not. */
     canPost?: boolean;
+    /**
+     * "May take down posts for me", ticked on the consent page when it was approved (agent/owner-takedowns.ts, MCP-MODERATION S3):
+     * left out, it may not. Only the tick is kept: what it takes down (an owner's one or many, an admin's one a call) is the
+     * member's role read at every call.
+     */
+    canModerate?: boolean;
 }
 
 /** One owner automation token as local-config.json keeps it (automation-tokens.ts). */

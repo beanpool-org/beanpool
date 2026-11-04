@@ -123,11 +123,13 @@ export function makeCardShell(colors: Colors) {
         },
         /**
          * Its ✕: 28 round, 8 in from the card's top-right corner (the card sits 16 in), on the subtle ground. The ✕ is the
-         * card's sibling, after it in the tree, but Android draws siblings in order of elevation, not tree order: a ✕ below the
-         * floating card's 20 is drawn under the card (#2879 review). So its box sits one above the card, with a zIndex for iOS
-         * and for which of the two a touch meets first. The lifted box has no ground and no corners, so Android gives it no
-         * outline and no shadow of its own (a 21 dp shadow round a 28 dp dot, black on API 26 whatever shadowColor says); the
-         * dot is `closeDot`, inside it, with no elevation.
+         * card's sibling, after it in the tree. Plain Android draws siblings in order of elevation, which would put the
+         * floating card's 20 over it (#2879 review); React Native's ReactViewGroup keeps tree order by giving each elevated
+         * child its own Z barrier (public Canvas API from 29, reflection on hidden methods before), and on the API 36
+         * emulator the ✕ was already on top. So the order never rests on that: its box sits one above the card, with a zIndex
+         * for iOS and for which of the two a touch meets first. The lifted box has no ground and no corners, so Android gives
+         * it no outline and no shadow of its own (a 21 dp shadow round a 28 dp dot, black on API 26 whatever shadowColor says);
+         * the dot is `closeDot`, inside it, with no elevation.
          */
         close: {
             position: 'absolute',

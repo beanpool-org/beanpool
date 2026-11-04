@@ -48,7 +48,7 @@ export function MapPreviewCard({ post, copy, showsBeans, onOpen, onClose }: MapP
                 ? <EventCard post={post} currentPubkey={me} popUp={{ onOpen }} />
                 : <ListingPinCard post={post} copy={copy} showsBeans={showsBeans} me={me} onOpen={onOpen} />}
             {/* The one other control: a sibling of the card, so a press on it never opens the item and a screen reader meets it
-                on its own. Lifted above the card's elevation, or Android draws the card over it (shell.close). */}
+                on its own. Lifted above the card's elevation, so Android can never draw the card over it (shell.close). */}
             <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} style={shell.close} onPress={onClose} hitSlop={15} testID="map-preview-close">
                 <View style={shell.closeDot} testID="map-preview-close-dot">
                     <Text style={shell.closeText}>✕</Text>

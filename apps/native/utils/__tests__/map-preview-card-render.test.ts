@@ -200,8 +200,9 @@ describe.each([['light', false], ['dark', true]] as const)("the map's pin card a
         });
 
         it(`${post.type === 'event' ? 'an event' : 'a listing'}: the ✕ sits above the card on Android too (elevation and zIndex), with no shadow of its own`, async () => {
-            // Android draws siblings in order of elevation, not tree order, so a later sibling below the card's elevation is
-            // drawn under it (#2879 review). Yoga and Chromium both draw in tree order and cannot see that; the styles can.
+            // Plain Android draws siblings in order of elevation, so a later sibling below the card's elevation can be drawn
+            // under it (#2879 review; React Native's own Z barriers kept tree order on the API 36 emulator, but the order must
+            // not rest on them). Yoga and Chromium both draw in tree order and cannot see this; the styles can.
             await show(post);
             const card = q('map-preview-open');
             const close = q('map-preview-close');

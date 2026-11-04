@@ -233,7 +233,7 @@ describe('ConnectedAssistantsPanel', () => {
 
     it('an admin connects from their assistant with the phone\'s approval (S2): the address and the steps, no token form', async () => {
         const calls = fakeNode({
-            grants: [grant({ mine: true, member: 'Adam', role: 'admin' }), grant({ id: 'oa0123456789', name: 'Claude', mine: true, member: 'Adam', role: 'admin', via: 'oauth', sendsTo: 'claude.ai', expiresAt: null })],
+            grants: [grant({ mine: true, member: 'Adam', role: 'admin' }), grant({ id: 'oa0123456789', name: 'Claude', mine: true, member: 'Adam', role: 'admin', via: 'oauth', sendsTo: 'claude.ai', expiresAt: null, canModerate: true, takedownsToday: 1 })],
             role: 'admin', canConnect: false, seesAll: false,
         });
         render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
@@ -241,6 +241,10 @@ describe('ConnectedAssistantsPanel', () => {
         expect(steps).toHaveTextContent('https://mullum.example/mcp');
         expect(steps).toHaveTextContent(/Settings → Connectors → Add custom connector → paste it/);
         expect(steps).toHaveTextContent(/Approve on your phone.*type the two digits/);
+        // MCP-MODERATION S3: the consent page's second tick, an admin's one post a call; never the owner's posting tick.
+        expect(steps).toHaveTextContent('Tick “May take down posts for me” on that page only if it should take posts down for you, one post a call.');
+        expect(steps).not.toHaveTextContent(/May post for me/);
+        expect(screen.getByTestId('agent-grant-moderates')).toHaveTextContent('May take down, one post a call · 1 today');
         expect(screen.getByRole('button', { name: 'Copy address' })).toBeInTheDocument();
         expect(screen.getByTestId('agent-admin-oauth')).toHaveTextContent(/Only an owner makes a token/);
         expect(screen.queryByTestId('agent-admin-soon')).toBeNull();

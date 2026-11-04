@@ -224,10 +224,11 @@ const base = {
 };
 // What the node adds on a by-id read of a repeating event (packages/beanpool-engine/src/posts.ts, EVENT_NEXT_DATES = 6): the
 // next six dates, the event's own date first (the one its when line shows), then the third Saturday of each month after it.
-const pad = (n) => String(n).padStart(2, '0');
-const nextDates = [start.getFullYear() + '-' + pad(start.getMonth() + 1) + '-' + pad(start.getDate())];
+// The event's own date where it runs (its when line is drawn in Australia/Sydney, whatever the machine's zone): YYYY-MM-DD.
+const nextDates = [new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(start)];
+const [y0, m0] = nextDates[0].split('-').map(Number);
 for (let m = 1; nextDates.length < 6; m++) {
-    const first = new Date(Date.UTC(start.getFullYear(), start.getMonth() + m, 1));
+    const first = new Date(Date.UTC(y0, m0 - 1 + m, 1));
     nextDates.push(new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), 15 + ((6 - first.getUTCDay() + 7) % 7))).toISOString().slice(0, 10));
 }
 const byIdDates = nextDates.map((date) => ({ date, startLocal: date + 'T08:00', startAt: date + 'T08:00:00+10:00', endAt: date + 'T14:00:00+10:00', cancelled: false }));

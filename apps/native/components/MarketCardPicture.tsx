@@ -61,6 +61,7 @@ export function MarketCardPicture({ postId, cover, picture, category, kind, size
                 transition={150}
                 onLoad={steps.onLoad}
                 onError={steps.onError}
+                onLoadStart={steps.onLoadStart}
                 onProgress={steps.onProgress}
             />
         </>

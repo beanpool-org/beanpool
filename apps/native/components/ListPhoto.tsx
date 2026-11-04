@@ -17,7 +17,7 @@ import { styleUntilDrawn, useListPhotoSteps } from './useListPhotoSteps';
 export function ListPhoto({ photo, fallback, style, ...image }: {
     photo: string | null | undefined;
     fallback: ReactNode;
-} & Omit<ImageProps, 'source' | 'onError' | 'onLoad' | 'onProgress'>) {
+} & Omit<ImageProps, 'source' | 'onError' | 'onLoad' | 'onLoadStart' | 'onProgress'>) {
     const steps = useListPhotoSteps(photo);
     if (!photo || !steps.shown) return <>{fallback}</>;
     return (
@@ -31,6 +31,7 @@ export function ListPhoto({ photo, fallback, style, ...image }: {
                 source={{ uri: steps.shown }}
                 onLoad={steps.onLoad}
                 onError={steps.onError}
+                onLoadStart={steps.onLoadStart}
                 onProgress={steps.onProgress}
             />
         </>

@@ -28,19 +28,35 @@ export function listPhotoUrl<T extends string | null | undefined>(url: T): T {
  * bounds a load that never ends: on Android expo-image's OkHttp client keeps OkHttp's defaults (10 s to connect, 10 s per
  * read, no limit on the whole call), so a response that trickles never fails, and a load that waits for a size or is
  * paused sends no event at all; an <img> on the web has no limit either. 10 s is OkHttp's own per-read limit: a small
- * copy (about 18 KB) that has not drawn by then on a working connection is not coming. The phone counts from the last
- * bytes it received, so a slow phone that is still receiving is not cut off, but never past LIST_PHOTO_LONGEST_MS; the
- * web has no such event and counts from the start.
+ * copy (about 18 KB) that has not drawn by then on a working connection is not coming. The phone counts it from the last
+ * bytes it received, so a slow phone that is still receiving is not cut off (never past LIST_PHOTO_LONGEST_MS), and waits
+ * LIST_PHOTO_QUEUED_MS for the first bytes. The web has no progress event and counts from when the browser asks for the
+ * picture: at once for an eager <img>, once a lazy one is in view.
  */
 export const LIST_PHOTO_WAIT_MS = 10_000;
 
 /**
- * However many bytes are still arriving, a list card never waits longer than this for one picture. expo-image on Android
- * sends a progress event on every read of the response (react-native's ProgressResponseBody), so a response that sends
- * one byte every few seconds would start LIST_PHOTO_WAIT_MS again for ever. 30 s lets a whole photo (about 84 KB) arrive
- * at under 3 KB a second, a weak 2G link; a small copy that takes longer than that is trickling, not coming.
+ * However many bytes are still arriving, a list card on the phone never waits longer than this from its picture's first
+ * bytes. expo-image on Android sends a progress event on every read of the response (react-native's ProgressResponseBody),
+ * so a response that sends one byte every few seconds would start LIST_PHOTO_WAIT_MS again for ever. Counted from the
+ * first bytes, not from when the card was shown, because a picture can wait its turn first (LIST_PHOTO_QUEUED_MS). 60 s
+ * lets a small copy (about 18 KB) arrive at 0.3 KB a second: the five pictures OkHttp fetches at once from one node,
+ * sharing a 1.5 KB/s link. A small copy slower than that is trickling, not coming; the tile is on screen all the while.
  */
-export const LIST_PHOTO_LONGEST_MS = 30_000;
+export const LIST_PHOTO_LONGEST_MS = 60_000;
+
+/**
+ * How long a list card on the phone waits for its picture's first bytes once its load has started (expo-image's
+ * onLoadStart), before it counts the picture as failed (review of #2853, finding 3). onLoadStart comes when the Image hands
+ * the URL to Glide, before the request leaves OkHttp's queue: Glide 5's OkHttp fetcher calls `enqueue`, and OkHttp 4.12's
+ * Dispatcher runs at most 5 requests to one host at once, so the rest of a Market screen's cards wait there with no event.
+ * A request that is running and gets no bytes is failed by OkHttp itself (10 s to connect, 10 s per read) through
+ * onError; this only bounds a load that is lost without an event. 60 s: at 50 KB/s about 160 small copies come down in
+ * that time, so a card that far back in the queue still gets its turn; at a weak 2G 3 KB/s, about 10. A load that has not
+ * started at all (no onLoadStart: on Android, its view has no size yet) is not waited on: a new URL would wait the same
+ * way, and the tile holds the slot.
+ */
+export const LIST_PHOTO_QUEUED_MS = 60_000;
 
 /**
  * What a list card draws next when the picture it showed would not load (or did not load within LIST_PHOTO_WAIT_MS):

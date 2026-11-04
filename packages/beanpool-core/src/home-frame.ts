@@ -313,10 +313,9 @@ const everywhere = () => true;
 const notGlobal = (a: HomeNodeFacts) => a.profile !== 'global';
 
 /**
- * Arrange's words, one set for both apps (DESIGN-home-layout-fable.md §3.2, §3.7), shown through t(). `bar` and `opened`
- * say arrows only, which is all the phone has until its drag lands (DESIGN-home-arrange-in-place-fable.md slice A4); the
- * web says `barDrag` and `openedDrag`, which promise the hold-and-drag it has (§2.9). The phone takes the two new lines
- * when it can drag.
+ * Arrange's words, one set for both apps (DESIGN-home-layout-fable.md §3.2, §3.7), shown through t(). Both apps say
+ * `barDrag` and `openedDrag`, which promise the hold-and-drag they have (DESIGN-home-arrange-in-place-fable.md §2.9; the
+ * phone's drag is slice A4). `bar` and `opened`, the arrows-only lines from before the drag, are drawn by neither now.
  */
 export const ARRANGE_WORDS = {
     name: word('Arrange'),

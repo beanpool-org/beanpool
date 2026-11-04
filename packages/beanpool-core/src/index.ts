@@ -89,6 +89,7 @@ export * from './recovery-kit-lines.js';
 export * from './auth-bounce-words.js';
 export * from './home-tips.js';
 export * from './home-frame.js';
+export * from './home-place.js';
 export * from './tools/index.js';
 export * from './home-save-search.js';
 export * from './sample-community.js';

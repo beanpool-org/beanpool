@@ -17,7 +17,7 @@ import { HOME_GUTTER_DP, HOME_TARGET_DP } from './HomeParts';
 export function ArrangeBar({ colors, notOnAccount, onHeight }: { colors: AppColors; notOnAccount?: string | null; onHeight?: (dp: number) => void }) {
     return (
         <View style={st.bar} testID="home-arrange-bar" onLayout={onHeight ? e => onHeight(e.nativeEvent.layout.height) : undefined}>
-            <Text style={[st.barText, { color: colors.text.body }]}>{t(ARRANGE_WORDS.bar)}</Text>
+            <Text style={[st.barText, { color: colors.text.body }]}>{t(ARRANGE_WORDS.barDrag)}</Text>
             {!!notOnAccount && <Text style={[st.barText, { color: colors.text.secondary }]} testID="home-arrange-not-on-account">{notOnAccount}</Text>}
         </View>
     );

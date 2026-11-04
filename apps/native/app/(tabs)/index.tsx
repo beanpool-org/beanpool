@@ -6,7 +6,7 @@ import {
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import {
-    ARRANGE_WORDS, TIPS_ALL_SEEN, arrangeMovedLine, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
+    ARRANGE_WORDS, TIPS_ALL_SEEN, arrangeMovedLine, reorderIds, tipText, dismissTips, emptyTipsRecord, homeCardHue, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type CardHue, type TipsRecord,
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal, t,
@@ -28,7 +28,9 @@ import { NewPollModal } from '../../components/NewPollModal';
 import { NewEventModal } from '../../components/NewEventModal';
 import { goToNeedsTarget } from '../../components/NeedsYouIcons';
 import { useManageNode } from '../../components/useManageNode';
-import { ArrangeBandRow, FabBandContext, HomeCard, HomeButton, HOME_CARD_PADDING_DP, homeStyles, type ArrangeBand, type FabBand } from '../../components/home/HomeParts';
+import { ArrangeBandRow, FabBandContext, HomeCard, HomeButton, HOME_CARD_PADDING_DP, HOME_GUTTER_DP, homeStyles, type ArrangeBand, type FabBand, type OnHold } from '../../components/home/HomeParts';
+import { ArrangeGhost } from '../../components/home/ArrangeGhost';
+import { useArrangeDrag } from '../../components/home/useArrangeDrag';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { ArrangeAddTile, ArrangeBar, ArrangeReset, ArrangeStrip, type StripRow } from '../../components/home/ArrangeParts';
@@ -46,7 +48,7 @@ import {
     MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
+    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, isHomeDoorbellFor,
     effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
@@ -93,7 +95,11 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
  *   ↑ ↓ on each band in place of Tune and "…", the cards' insides gone quiet (dimmed, no taps, hidden from TalkBack) and,
  *   under the last card, a strip for the cards with nothing to show (Settings… and Remove, no arrows: they keep their saved
  *   place). Every move is saved as it is made, through `moveCard` among the drawn cards, so Done (in the floating button's
- *   place, or Back) only gives the insides back. No drag yet: that is slice A4, and the bar's words say arrows until it lands.
+ *   place, or Back) only gives the insides back.
+ * - **The drag** (same design §2.2, §2.3; slice A4): hold a card that moves (250 ms in Arrange; the band's 500 ms hold on
+ *   Home carries straight on) and it lifts: the list stops scrolling, a light tick, the band follows the finger and the card
+ *   is laid out where it would land (`placeLifted`, core), the others sliding to make room. Let go and it is saved once, as
+ *   an arrow saves; Back, leaving Home and the app going away put it back. TalkBack never lifts a card: the arrows are its way.
  * - **The one-time reveal** (~300 ms, skipped when the phone asks for less motion) and its one-line hint (§6.2).
  * - **Where only the community's admins invite** (`door: 'admins'`), Grow your community and First steps' invite line are
  *   an owner's or admin's alone (PR #1483 review 4166559683): the role is the header's ten-minute copy
@@ -172,10 +178,10 @@ async function readsGlobal(url: string, kept: StoredHome | null): Promise<boolea
 }
 
 export default function HomeScreen() {
-    const { colors } = useTheme();
+    const { colors, theme } = useTheme();
     const { identity } = useIdentity();
     const lookingAround = useLookingAround();
-    const { height: winH } = useWindowDimensions();
+    const { width: winW, height: winH } = useWindowDimensions();
     const s = homeStyles(colors);
     const manage = useManageNode();
 
@@ -286,6 +292,11 @@ export default function HomeScreen() {
     }, [dropKnocks]);
     const scrollRef = useRef<ScrollView>(null);
     const cardY = useRef(new Map<string, number>());
+    // Each card wrapper's height, for where a carried card lands (the drag, slice A4).
+    const cardH = useRef(new Map<string, number>());
+    const rootRef = useRef<View>(null);
+    // Puts a carried card back and saves nothing; true when one was lifted. Set where the drag is made, below.
+    const dragCancel = useRef<() => boolean>(() => false);
     const menuRefs = useRef(new Map<string, React.RefObject<View | null>>());
     const menuRef = (id: string) => {
         let r = menuRefs.current.get(id);
@@ -319,7 +330,7 @@ export default function HomeScreen() {
         arrangeFrom.current = from ?? null;
         keepPlace.current = true;
         setArranging(true);
-        AccessibilityInfo.announceForAccessibility(t(ARRANGE_WORDS.opened));
+        AccessibilityInfo.announceForAccessibility(t(ARRANGE_WORDS.openedDrag));
     }, []);
     const endArrange = useCallback(() => {
         const id = arrangeFrom.current;
@@ -333,8 +344,8 @@ export default function HomeScreen() {
     }, []);
     useEffect(() => {
         if (!arranging) return;
-        // Android's Back is Done too.
-        const sub = BackHandler.addEventListener('hardwareBackPress', () => { endArrange(); return true; });
+        // Android's Back is Done too; with a card carried, Back puts it back first and saves nothing.
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => { if (!dragCancel.current()) endArrange(); return true; });
         return () => sub.remove();
     }, [arranging, endArrange]);
 
@@ -361,10 +372,15 @@ export default function HomeScreen() {
         updateFab();
     }, [updateFab]);
     // The bar's height with its gap, once, when Arrange opens (startArrange): a view scrolled down moves down with the cards.
+    // A card the hold on Home lifted stays under the finger even from the top of the list: the view moves with it.
+    const carrying = useRef(false);
     const onArrangeBar = useCallback((dp: number) => {
         if (!keepPlace.current) return;
         keepPlace.current = false;
-        if (scrollY.current > 0) scrollRef.current?.scrollTo({ y: scrollY.current + dp, animated: false });
+        if (scrollY.current > 0 || carrying.current) {
+            scrollY.current += dp;
+            scrollRef.current?.scrollTo({ y: scrollY.current, animated: false });
+        }
     }, []);
 
     // ── The reveal and the hint (§6.2): once per account, never again ──
@@ -663,7 +679,8 @@ export default function HomeScreen() {
             focused.current = false;
             clearInterval(poll);
             setTuneOpen(false);
-            // Leaving Home ends Arrange: every move is saved already.
+            // Leaving Home ends Arrange: every move is saved already, and a card being carried is put back.
+            dragCancel.current();
             setArranging(false);
             // Home lost focus: the visit's cancelled requests (and their lines) go; the next visit reads the phone's memory.
             const gone = visitCancelled.current;
@@ -681,7 +698,11 @@ export default function HomeScreen() {
             if (focused.current && AppState.currentState === 'active') void refreshRef.current('bell');
         }, HOME_DOORBELL_SETTLE_MS, undefined, data => isHomeDoorbellFor(data, meRef.current));
         const ws = DeviceEventEmitter.addListener('ws_activity', (data: unknown) => { if (focused.current) bell.ring(data); });
-        const app = AppState.addEventListener('change', st => { if (st === 'active' && focused.current) void refreshRef.current('focus'); });
+        const app = AppState.addEventListener('change', st => {
+            if (st === 'active' && focused.current) void refreshRef.current('focus');
+            // The app going to the background puts a carried card back, nothing saved (the drag).
+            if (st !== 'active') dragCancel.current();
+        });
         return () => { bell.cancel(); ws.remove(); app.remove(); };
     }, []);
 
@@ -722,7 +743,7 @@ export default function HomeScreen() {
         if (!id || !ans || !tipsRef.current) return;
         const step = nextTip(tipsRef.current, tipsFor(ans, role), localDay());
         keepTips(homeAccount(id.publicKey), step.record);
-        AccessibilityInfo.announceForAccessibility(step.view ? t(step.view.tip.text) : t('That was the last tip. Add a card brings them back.'));
+        AccessibilityInfo.announceForAccessibility(step.view ? tipText(step.view.tip, true) : t('That was the last tip. Add a card brings them back.'));
     }, [role, keepTips]);
 
     // ── The member's edits ──
@@ -942,6 +963,47 @@ export default function HomeScreen() {
     // can show, with nothing to show now, are the strip's rows and keep their saved places.
     const arrangeOn = arranging && tailor && !!answer;
     const movable = arrangeOn ? drawn.filter(c => canMoveCard(c.type, pins)) : [];
+    // What a drag places among (slice A4): the drawn cards that move and stand on the list, the places `moveCardTo` counts.
+    // Worked out on Home too, so the hold that opens Arrange can carry its card on at once.
+    const dragMovable = tailor ? drawn.filter(c => canMoveCard(c.type, pins) && listOf(shown).some(l => l.id === c.id)) : [];
+    const dragMovableIds = dragMovable.map(c => c.id);
+    // The drag (DESIGN-home-arrange-in-place-fable.md §2.2, §2.3, slice A4): a card held is lifted, the list stops scrolling,
+    // the band follows the finger and the card is laid out where it would land; let go and it is saved as an arrow saves.
+    const drag = useArrangeDrag({
+        rootRef, scrollRef, scrollY, listY, cardY,
+        // The cards as the list draws them in the member's order (the community card is last and stays): `placeLifted` puts
+        // the lifted one at each place among those that move and keeps the place whose box holds the finger.
+        items: () => list.filter(c => c.type !== 'community').map(c => ({ id: c.id, height: cardH.current.get(c.id) ?? 0, movable: dragMovableIds.includes(c.id) })),
+        width: winW,
+        save: (id, to) => {
+            const c = dragMovable.find(m => m.id === id);
+            // No slide here: the list already stands in the order saved (the preview), so nothing moves on the drop.
+            changeLayout(moveCardTo(layoutRef.current, id, to, dragMovable, Date.now(), pins));
+            if (c) AccessibilityInfo.announceForAccessibility(arrangeMovedLine(cardLabelName(c, answer?.profile), to + 1, dragMovable.length));
+        },
+        motion: slideMotion,
+    });
+    dragCancel.current = () => {
+        const was = !!drag.drag.lifted;
+        drag.cancel();
+        carrying.current = false;
+        return was;
+    };
+    if (!drag.lifted) carrying.current = false;
+    // A carried card that leaves Home or the list (a fresh answer, Arrange ended) is put back, nothing saved.
+    const liftedGone = !!drag.lifted && (!arrangeOn || !dragMovableIds.includes(drag.lifted.id));
+    useEffect(() => { if (liftedGone) drag.cancel(); }, [liftedGone, drag]);
+    /** A band held on Home: Arrange opens around it, and a finger still down carries the card on as a drag (§2.2). */
+    const holdFromHome = (id: string): OnHold => e => {
+        startArrange(id);
+        const from = dragMovableIds.indexOf(id);
+        if (from >= 0 && drag.lift(id, from, e)) carrying.current = true;
+    };
+    /** In Arrange, a hold anywhere on a card that moves (not its arrows) lifts it. Undefined for a card that stays. */
+    const liftInArrange = (id: string): OnHold | undefined => {
+        const from = dragMovableIds.indexOf(id);
+        return arrangeOn && from >= 0 ? e => { drag.lift(id, from, e); } : undefined;
+    };
     const idle = arrangeOn && answer ? arrangeCards(ordered, drawn, type => cardOnNode(type, answer, role), pins).filter(c => !drawn.some(d => d.id === c.id)) : [];
     const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
     const picker = answer && tailor && addOpen ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
@@ -1085,7 +1147,7 @@ export default function HomeScreen() {
         // In Arrange the card is the one Home draws, full size and in its place: its band carries the arrows, its inside is quiet.
         const arrange = arrangeBandFor(inst);
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean; hue?: CardHue }) => (
-            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent} hue={extra?.hue ?? hue} onHold={tailor && type !== 'start' ? () => startArrange(id) : undefined} arrange={arrange} quiet={!!arrange}>
+            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent} hue={extra?.hue ?? hue} onHold={tailor && type !== 'start' ? holdFromHome(id) : undefined} arrange={arrange} quiet={!!arrange} onLift={liftInArrange(id)}>
                 {body}
             </HomeCard>
         );
@@ -1106,7 +1168,7 @@ export default function HomeScreen() {
                         onUp={setSafetyUp}
                         onActionsAt={at => band.report('safety:actions', at)}
                         // It has no band on Home; in Arrange it gets one across the top of its own frame, and goes quiet under it.
-                        band={arrange && drawn.some(d => d.id === id) ? <ArrangeBandRow id={id} caption={caption} hue={hue} colors={colors} arrange={arrange} style={{ marginTop: -HOME_CARD_PADDING_DP }} /> : undefined}
+                        band={arrange && drawn.some(d => d.id === id) ? <ArrangeBandRow id={id} caption={caption} hue={hue} colors={colors} arrange={arrange} style={{ marginTop: -HOME_CARD_PADDING_DP }} onLift={liftInArrange(id)} /> : undefined}
                     />
                 );
             case 'find': {
@@ -1240,9 +1302,26 @@ export default function HomeScreen() {
     const beansPreviewCard = !!answer && !touring && homeBeansPreview(answer);
     const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
 
-    // One listed card with what Home draws under it: the same wrapper in Home and in Arrange (`cardY` is measured on it).
-    const listed = (c: HomeCardInstance) => (
-        <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
+    // One listed card with what Home draws under it: the same wrapper in Home and in Arrange (`cardY` is measured on it). It
+    // takes the finger from the hold once its card is lifted (the drag); the lifted card is drawn dimmed, ringed in its ink,
+    // in the place it would land.
+    const listed = (c: HomeCardInstance) => {
+        const held = drag.lifted?.id === c.id;
+        return (
+        <View
+            key={c.id}
+            {...drag.handlers(c.id)}
+            onLayout={e => {
+                const { y, height } = e.nativeEvent.layout;
+                cardY.current.set(c.id, y);
+                const was = cardH.current.get(c.id);
+                cardH.current.set(c.id, height);
+                // A card that grew or shrank under a still finger (a fresh answer): the place is read again.
+                if (was !== undefined && was !== height && drag.drag.lifted) drag.drag.replace();
+            }}
+            style={held ? st.lifted : undefined}
+            testID={`home-slot-${c.id}`}
+        >
             {card(c)}
             {hint && tailor && c.id === firstDrawn?.id && (
                 <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
@@ -1261,8 +1340,15 @@ export default function HomeScreen() {
                 </View>
             )}
             {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
+            {held && <View pointerEvents="none" style={[st.liftedRing, { borderColor: colors.card[homeCardHue(c)].ink }]} testID={`home-lifted-${c.id}`} />}
         </View>
-    );
+        );
+    };
+    // The list as drawn: in the member's order, or, while a card is carried, with it at the place it would land (the preview
+    // is the truth: what is drawn is what a drop saves).
+    const listCards = list.filter(c => c.type !== 'community');
+    const drawnCards = drag.lifted ? reorderIds(listCards, dragMovableIds, drag.lifted.id, drag.lifted.to) : listCards;
+    const ghostCard = drag.ghost && answer ? list.find(c => c.id === drag.ghost) ?? null : null;
 
     let empty: React.ReactNode = null;
     if (!answer) {
@@ -1318,12 +1404,14 @@ export default function HomeScreen() {
 
     return (
         <FabBandContext.Provider value={band}>
-            <View style={{ flex: 1, backgroundColor: colors.surface.page }}>
+            <View ref={rootRef} onLayout={drag.onRootLayout} style={{ flex: 1, backgroundColor: colors.surface.page }}>
                 <ScrollView
                     ref={scrollRef}
                     onScroll={onScroll}
                     scrollEventThrottle={32}
-                    onContentSizeChange={() => setBandVersion(v => v + 1)}
+                    // Off while a card is carried, so the list never takes the finger (the hold began with it still).
+                    scrollEnabled={drag.scrollEnabled}
+                    onContentSizeChange={(_w, h) => { drag.setContentHeight(h); setBandVersion(v => v + 1); }}
                     contentContainerStyle={st.content}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} />}
                     testID="home-scroll"
@@ -1363,7 +1451,7 @@ export default function HomeScreen() {
                         {/* The community card is always last (`FIXED_LAST`), so Home is these cards and then it. Each stays in its own slot of this
                             list in both states: React must not rebuild a card that Arrange only quiets (the bodies of tool cards and of Find your
                             community hold what they have read), so the community card is not moved to another parent when Arrange opens. */}
-                        {list.filter(c => c.type !== 'community').map(listed)}
+                        {drawnCards.map(listed)}
                         {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} quiet={arrangeOn} />}
                         {arrangeOn && (
                             <>
@@ -1375,6 +1463,18 @@ export default function HomeScreen() {
                         {arrangeOn && <ArrangeReset colors={colors} onPress={() => { if (tips?.dismissedAt) onTipsOn(); changeLayout(resetLayout(layoutRef.current, Date.now())); }} />}
                     </Animated.View>
                 </ScrollView>
+
+                {ghostCard && answer && (
+                    <ArrangeGhost
+                        x={drag.ghostX}
+                        y={drag.ghostY}
+                        caption={ghostCard.type === 'tips' && tipsView ? tipsCaption(tipsView) : cardCaption(ghostCard.type, answer)}
+                        hue={homeCardHue(ghostCard)}
+                        colors={colors}
+                        dark={theme === 'dark'}
+                        width={Math.max(0, winW - 2 * HOME_GUTTER_DP)}
+                    />
+                )}
 
                 {arrangeOn ? (
                     // Done takes the floating button's place, and never steps aside: it is the way out.
@@ -1461,6 +1561,10 @@ const st = StyleSheet.create({
     hint: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: -4, marginBottom: 10, borderWidth: 1, borderRadius: 12, paddingLeft: 12 },
     hintText: { flex: 1, fontSize: 13, lineHeight: 18, paddingVertical: 8 },
     hintClose: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    // The card being carried, where it would land (design §2.3): its inside, already quiet at 65 %, comes to about 40 %.
+    lifted: { opacity: 0.6 },
+    // Its ring: 2 dp, dashed, in its ink, round the card's own frame (the gutters, and the 10 dp under it).
+    liftedRing: { position: 'absolute', top: -2, bottom: 8, left: HOME_GUTTER_DP - 2, right: HOME_GUTTER_DP - 2, borderRadius: 16, borderWidth: 2, borderStyle: 'dashed' },
     fab: {
         position: 'absolute', bottom: 32, right: 24, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 28,
         shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 8, zIndex: 100,

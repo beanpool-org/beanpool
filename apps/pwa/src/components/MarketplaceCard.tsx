@@ -302,7 +302,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         and the price keep 4 below them (`mb-1`), which the head's `-mb-1` takes back: rows 4 apart, as before. */}
                     <div data-testid="listing-list-head" className="flow-root min-w-0 leading-none -mb-1">
                         {showPrice && (
-                            <span data-testid="listing-list-price" className={`float-end ms-2 mb-1 flex flex-row items-center flex-nowrap ${LIST_TYPE.price} ${CARD_INK.title}`}>
+                            <span data-testid="listing-list-price" className={`float-right rtl:float-left ms-2 mb-1 flex flex-row items-center flex-nowrap ${LIST_TYPE.price} ${CARD_INK.title}`}>
                                 {priceAmount(post.credits)}
                                 <img src="/assets/bean.png" className="mx-0.5" style={{ width: `${LIST_BEAN_PX}px`, height: `${LIST_BEAN_PX}px`, flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
                                 <span className={`${LIST_TYPE.priceUnit} ${CARD_INK.secondary}`}>

@@ -587,6 +587,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } catch {}
         return 'grid';
     });
+    // The view whose column the page draws in. A visitor's feed is always the grid (1, 2 or 3 columns), whatever view this browser
+    // stored, so a stored `list` must not squeeze it into the phone-width column (review note on #2866). `narrowColumn`: the
+    // column is 672 px at most, so what lays out by the WINDOW (the example cards' four columns) is told to follow the column.
+    const columnMode: 'grid' | 'list' | 'compact' = isVisitor ? 'grid' : viewMode;
+    const narrowColumn = columnMode !== 'grid';
     const [showFilters, setShowFilters] = useState(false);
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
@@ -3509,7 +3514,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // =================== LIST VIEW ===================
     return (
-        <div data-testid="market-view-column" className={`px-3 md:px-6 pt-4 pb-24 ${VIEW_COLUMN[viewMode]} mx-auto w-full`}>
+        <div data-testid="market-view-column" className={`px-3 md:px-6 pt-4 pb-24 ${VIEW_COLUMN[columnMode]} mx-auto w-full`}>
             {/* Radius Picker Full Screen */}
             {showRadiusPicker && (
                 <Suspense fallback={<div className="flex-1 flex items-center justify-center">{t('Loading Location Services...')}</div>}>
@@ -3976,7 +3981,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const seenEligible = !visitor && !narrowed && searchResults === null && near?.from !== 'setting';
                 if (seenEligible) newestOnScreen.current = newestListed(unpinnedFiltered, orderNow) ?? newestOnScreen.current;
                 const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: fillPending ? FILL_BELOW : filtered.length + fillRows.length })
-                    ? <ExampleListings />
+                    ? <ExampleListings narrow={narrowColumn} />
                     : null;
 
                 if (visitor) {

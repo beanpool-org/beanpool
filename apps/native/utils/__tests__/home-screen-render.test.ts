@@ -50,6 +50,8 @@ vi.mock('react-native', () => {
         if (props.importantForAccessibility) attrs['data-ifa'] = props.importantForAccessibility;
         // The list's own scrolling, off while a card is carried (the drag).
         if (props.scrollEnabled === false) attrs['data-scroll'] = 'off';
+        // Android's pull-to-refresh wraps the list and takes a downward drag from the top unless it is off too (#2895 review).
+        if (props.refreshControl) attrs['data-refresh'] = props.refreshControl.props.enabled === false ? 'off' : 'on';
         // The finger leaving the screen, which every view under it hears (a hold let go without moving).
         if (props.onTouchEnd) attrs.onTouchEnd = () => props.onTouchEnd();
         if (testID && (props.onLayout || props.onScroll)) hooks.handlers.set(testID, { onLayout: props.onLayout, onScroll: props.onScroll });
@@ -1668,7 +1670,12 @@ describe('Arrange', () => {
         };
         const move = async (y: number) => { await act(async () => { const p = pan(); p.onPanResponderGrant(); p.onPanResponderMove({}, { moveX: 100, moveY: y }); }); };
         const release = async () => { await act(async () => { pan().onPanResponderRelease(); }); await settle(); };
-        const scrollOff = () => document.querySelector('[data-testid="home-scroll"]')!.getAttribute('data-scroll') === 'off';
+        // The list's scrolling AND its pull-to-refresh: both off while a card is carried, both on otherwise.
+        const scrollOff = () => {
+            const list = document.querySelector('[data-testid="home-scroll"]')!;
+            expect(list.getAttribute('data-refresh')).toBe(list.getAttribute('data-scroll') === 'off' ? 'off' : 'on');
+            return list.getAttribute('data-scroll') === 'off';
+        };
         const savedOrder = () => (JSON.parse(sent().at(-1)!.body).preferences['home.layout'].cards as Array<{ id: string }>).map(c => c.id);
         const movableIds = () => cards().filter(id => !has(`home-arrange-${id}-stays`));
         const unmount = () => { act(() => root?.unmount()); root = null; host?.remove(); hooks.pans.length = 0; };

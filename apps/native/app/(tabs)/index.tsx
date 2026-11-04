@@ -1411,7 +1411,9 @@ export default function HomeScreen() {
                     scrollEnabled={drag.scrollEnabled}
                     onContentSizeChange={(_w, h) => { drag.setContentHeight(h); setBandVersion(v => v + 1); }}
                     contentContainerStyle={st.content}
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} />}
+                    // Off with it: Android's swipe-to-refresh wraps the list, ignores the list's own scrollEnabled and the drag's
+                    // block, and would take a card carried down from the top (#2895 review).
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} enabled={drag.scrollEnabled} />}
                     testID="home-scroll"
                 >
                     <PageTitle title={t('Home')} testID="page-title-home" />

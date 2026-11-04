@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 इस संदेश की पुष्टि नहीं हो सकी, इसलिए इसे दिखाया नहीं गया है।",
   "🗳️ Create Poll": "🗳️ पोल बनाएं",
   "🟢 List an Offer first to post Needs": "🟢 ज़रूरतें पोस्ट करने के लिए पहले ऑफ़र लिस्ट करें",
-  "🤝 Chosen": "🤝 चुना गया"
+  "🤝 Chosen": "🤝 चुना गया",
+  "Done. This is now your photo here.": "हो गया। अब यह यहाँ आपकी फ़ोटो है।",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "केवल फ़ोटो कॉपी होती है। यहाँ आपका नाम और प्रोफ़ाइल की बाकी बातें जैसी हैं वैसी ही रहती हैं।",
+  "Use the photo from {community} here?": "{community} की फ़ोटो यहाँ इस्तेमाल करें?",
+  "Use the photo you chose last here?": "आपकी आख़िरी चुनी हुई फ़ोटो यहाँ इस्तेमाल करें?",
+  "Use this photo here": "इस फ़ोटो को यहाँ इस्तेमाल करें"
 }

@@ -4641,5 +4641,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 ഈ സന്ദേശം പരിശോധിച്ചുറപ്പിക്കാൻ കഴിഞ്ഞില്ല, അതിനാൽ ഇത് കാണിക്കുന്നില്ല.",
   "🗳️ Create Poll": "🗳️ പോൾ ഉണ്ടാക്കുക",
   "🟢 List an Offer first to post Needs": "🟢 ആവശ്യങ്ങൾ പോസ്റ്റ് ചെയ്യാൻ ആദ്യം ഒരു ഓഫർ ലിസ്റ്റ് ചെയ്യുക",
-  "🤝 Chosen": "🤝 തിരഞ്ഞെടുത്തത്"
+  "🤝 Chosen": "🤝 തിരഞ്ഞെടുത്തത്",
+  "Done. This is now your photo here.": "കഴിഞ്ഞു. ഇത് ഇപ്പോൾ ഇവിടെ നിങ്ങളുടെ ഫോട്ടോയാണ്.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "ഫോട്ടോ മാത്രമേ കോപ്പി ചെയ്യൂ. ഇവിടെ നിങ്ങളുടെ പേരും പ്രൊഫൈലിന്റെ ബാക്കി ഭാഗങ്ങളും ഉള്ളതുപോലെ തുടരും.",
+  "Use the photo from {community} here?": "{community}ലെ ഫോട്ടോ ഇവിടെ ഉപയോഗിക്കണോ?",
+  "Use the photo you chose last here?": "നിങ്ങൾ അവസാനം തിരഞ്ഞെടുത്ത ഫോട്ടോ ഇവിടെ ഉപയോഗിക്കണോ?",
+  "Use this photo here": "ഈ ഫോട്ടോ ഇവിടെ ഉപയോഗിക്കുക"
 }

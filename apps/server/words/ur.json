@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-c: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-c-fix1: the 20 lights-out hall words main gained, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -962,5 +962,13 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "ریکارڈ {when} تک کا ہے۔ اس کے بعد پرانے سرور پر ہونے والے لین دین یہاں نہیں ہیں۔",
   "The record is the one this laptop holds.": "ریکارڈ وہی ہے جو اس لیپ ٹاپ کے پاس ہے۔",
   "This laptop's key ends in {key}. Compare it with the poster.": "اس لیپ ٹاپ کی کلید {key} پر ختم ہوتی ہے۔ اسے پوسٹر سے ملائیں۔",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "ہوائی جہاز موڈ آن کریں، پھر Wi-Fi دوبارہ آن کریں۔"
+  "Turn on airplane mode, then turn Wi-Fi back on.": "ہوائی جہاز موڈ آن کریں، پھر Wi-Fi دوبارہ آن کریں۔",
+  "You can start one community poll a week. Your next one can start in {n} hour.|You can start one community poll a week. Your next one can start in {n} hours.": {
+    "one": "آپ ہفتے میں صرف ایک کمیونٹی پول شروع کر سکتے ہیں۔ آپ کا اگلا پول {n} گھنٹے بعد شروع ہو سکتا ہے۔",
+    "other": "آپ ہفتے میں صرف ایک کمیونٹی پول شروع کر سکتے ہیں۔ آپ کا اگلا پول {n} گھنٹے بعد شروع ہو سکتا ہے۔"
+  },
+  "You can start one community poll a week. Your next one can start in {n} day.|You can start one community poll a week. Your next one can start in {n} days.": {
+    "one": "آپ ہفتے میں صرف ایک کمیونٹی پول شروع کر سکتے ہیں۔ آپ کا اگلا پول {n} دن بعد شروع ہو سکتا ہے۔",
+    "other": "آپ ہفتے میں صرف ایک کمیونٹی پول شروع کر سکتے ہیں۔ آپ کا اگلا پول {n} دن بعد شروع ہو سکتا ہے۔"
+  }
 }

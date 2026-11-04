@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-04",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -955,5 +955,11 @@
   "The record is as of {when}. Trades made since then on the old server are not here.": "기록은 {when} 기준이에요. 그 이후 이전 서버에서 이루어진 거래는 여기에 없어요.",
   "The record is the one this laptop holds.": "기록은 이 노트북이 가지고 있는 것이에요.",
   "This laptop's key ends in {key}. Compare it with the poster.": "이 노트북 키의 끝부분: {key}. 포스터와 비교해 보세요.",
-  "Turn on airplane mode, then turn Wi-Fi back on.": "비행기 모드를 켠 다음 Wi-Fi를 다시 켜세요."
+  "Turn on airplane mode, then turn Wi-Fi back on.": "비행기 모드를 켠 다음 Wi-Fi를 다시 켜세요.",
+  "You can start one community poll a week. Your next one can start in {n} hour.|You can start one community poll a week. Your next one can start in {n} hours.": {
+    "other": "커뮤니티 투표는 일주일에 하나만 시작할 수 있어요. 다음 투표는 {n}시간 뒤부터 시작할 수 있어요."
+  },
+  "You can start one community poll a week. Your next one can start in {n} day.|You can start one community poll a week. Your next one can start in {n} days.": {
+    "other": "커뮤니티 투표는 일주일에 하나만 시작할 수 있어요. 다음 투표는 {n}일 뒤부터 시작할 수 있어요."
+  }
 }

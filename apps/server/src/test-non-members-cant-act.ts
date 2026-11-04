@@ -83,6 +83,7 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 import { initAdminPassword } from './config/local-config.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
+import { aWeekPasses } from './post-test-helper.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { lockedDm } from './dm-test-payload.js';
@@ -815,7 +816,9 @@ async function main(): Promise<void> {
                 const r = await signedFetch('POST', '/api/marketplace/posts/pause', m, { postId: p.id, authorPublicKey: m.pubKeyHex });
                 assert(r.status === 200 && postStatus(p.id) === 'paused', `${callsign} pauses "${p.title}" (got ${r.status})`);
             }
-            // Only once the poll is paused: a member has one poll up at a time.
+            // Only once the poll is paused: a member has one poll up at a time. And a week on from it: a member starts one a week
+            // (engine/poll-week.ts, test-poll-week.ts), which is not what is held here.
+            aWeekPasses(db, m.pubKeyHex);
             const s = { m, ...paused, liveOffer: offer(m, `${callsign} live jam`), liveEvent: event(m, `${callsign} live picnic`), livePoll: poll(m, `${callsign} live poll`) };
             rsvpEvent(s.liveEvent.id, bob.pubKeyHex, 'going');
             return s;

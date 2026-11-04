@@ -20,7 +20,7 @@
  *     `me` and `layout`): for a key that passes the read gate (passesReadGate: a member, a suspended one included, as for
  *     their own messages, trades and Beans). Each is about the signer and nobody else: no other member's balance, deal,
  *     notice or vote is ever read for it (privacy-defaults-2026-09-28).
- *   - the COMMUNITY's cards, what other members post and do (`events`, `market`, `decide`, `joined`, `pulse`): for a
+ *   - the COMMUNITY's cards, what other members post and do (`events`, `market`, `asked`, `decide`, `joined`, `pulse`): for a
  *     reader who reads as a member (readsAsMember). A suspended or disabled member, while that lasts, and everyone else
  *     get the visitors' subset where the node has one, and nothing of these elsewhere. Such a member's `me` says so
  *     (`standing: 'suspended'`), and they never get `welcome`: that is the visitors' Join card (§3.2 (c), §5.3), and
@@ -70,7 +70,7 @@
  * under 8 KB gzipped and 24 KB raw (DESIGN-home-wide-and-content-fable.md §2 "Budget").
  */
 import {
-    PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
+    NEAR_COMMUNITY_KM, PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readDecideSettings,
     readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe,
     openDeals as coreOpenDeals, pinLive, PINS_MAX, type HomeCardInstance, type HomeChatCard, type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings,
     type ShopCounts, type TourRecord,
@@ -128,7 +128,7 @@ export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'st
  * has just added one asks for it before its layout reaches the node; a version-1 app never asks for it, and with no
  * `cards=` it is built only from a version-2 layout that holds it.
  */
-const BUILT_WHEN_ASKED: ReadonlySet<string> = new Set([...HOME_CARD_IDS, 'shop']);
+const BUILT_WHEN_ASKED: ReadonlySet<string> = new Set([...HOME_CARD_IDS, 'shop', 'asked']);
 
 /** Cards a member can't hide (§4.1): `needs` costs them something if missed, `community` holds "Arrange". `find` too, for its first 30 days on the global node. */
 const UNHIDEABLE: ReadonlySet<string> = new Set(['needs', 'community']);
@@ -175,6 +175,9 @@ const MONTH_LINES = 200;
 const SEARCH_ITEMS = 4;
 /** The newest listings the Market card chooses its few from (starred categories first), and counts in `total14d`. */
 const MARKET_POOL = 40;
+/** "Asked near you": the rows it shows, and the open Needs it chooses them from (the reader's stars first, then the newest). */
+const ASKED_ITEMS = 5;
+const ASKED_POOL = 40;
 /**
  * The soonest events "Coming up" reads, in start order (PostFilter.upcomingUntil): the few it shows and two spare, for
  * one whose times can't be read (a peer's copy) and is left out here.
@@ -266,6 +269,11 @@ export interface MarketItem {
     pinned?: true;
 }
 /**
+ * One row of "Asked near you": a neighbour's open Need, with the Market card's own fields for the row (the category tile, the
+ * title, the price line and how long ago). `credits` only where Beans are on; `priceType` only when the post has one.
+ */
+export interface NeedItem { id: string; title: string; category: string; credits?: number; priceType?: string; createdAt: string; photoUrl: string | null }
+/**
  * One line of "Coming up". `startLocal` and `tz` are the host's clock and its zone (DESIGN-event-times §4: the line reads the
  * place's clock, with its zone named only when it differs from the reader's); `online` an event with no place. Each is
  * absent on an event from before them.
@@ -315,7 +323,14 @@ export interface HomeCards {
     safety?: { words: true; signInLinked: false };
     find?: LandingCard;
     steps?: {
-        joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean;
+        joinedAt: string | null; firstOffer: boolean;
+        /**
+         * Whether the signer has posted a Need here, as `firstOffer` is for an Offer (any status, a copy from elsewhere not
+         * counted): the fact behind the line "Ask for one thing you'd pay a neighbour for", drawn after the first Offer on a
+         * local community (DESIGN-cold-start-trades-fable.md §2.1, slice N1).
+         */
+        firstNeed: boolean;
+        firstPost: boolean; photo: boolean; interests: boolean;
         invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
     };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items: DealItem[] };
@@ -331,6 +346,11 @@ export interface HomeCards {
     shop?: { shop: ShopHomeCard | null };
     events?: { items: EventItem[]; radiusKm: number | null };
     market?: { items: MarketItem[]; total14d: number; more: boolean; examples?: true };
+    /**
+     * "Asked near you" (DESIGN-cold-start-trades-fable.md §2.4, slice N1): the newest open Needs of the community, the
+     * reader's stars first. Absent while there is no Need to show, so the card is never drawn empty.
+     */
+    asked?: { items: NeedItem[] };
     /** The open Decisions, soonest closing first, and the first open poll (the soonest closing), its question as asked. */
     decide?: {
         open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean;
@@ -406,9 +426,13 @@ export interface HomeReader {
     now?: number;
 }
 
-/** The landings an app may say it opens (`lands=`), beyond the ones every app has. */
-export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote';
-const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote']);
+/**
+ * The landings an app may say it opens (`lands=`), beyond the ones every app has. `first-need`: the First steps line "Ask for
+ * one thing you'd pay a neighbour for", which opens the composer on a Need (cold-start N1): an app that does not say it draws
+ * that line is not given a First steps card kept up for it alone.
+ */
+export type HomeLanding = 'enterprise' | 'group' | 'invite' | 'people' | 'asks' | 'branch-vote' | 'first-need';
+const HOME_LANDINGS: ReadonlySet<string> = new Set<HomeLanding>(['enterprise', 'group', 'invite', 'people', 'asks', 'branch-vote', 'first-need']);
 
 /** `lands=` as sent: a comma list, once or more; unknown names are dropped, never refused. */
 export function parseLands(raw: unknown): ReadonlySet<HomeLanding> {
@@ -741,6 +765,12 @@ function firstOfferOf(c: Ctx): boolean {
         .get(c.me!) as { offer: number }).offer;
 }
 
+/** Whether the signer has posted a Need here (any status, as `firstOffer` counts an Offer; a copy from another community is not theirs here). */
+function firstNeedOf(me: string): boolean {
+    return !!(db.prepare("SELECT EXISTS(SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'need' AND origin_node IS NULL) AS need")
+        .get(me) as { need: number }).need;
+}
+
 function stepsCard(c: Ctx): HomeCards['steps'] | undefined {
     built('steps');
     const me = c.me!;
@@ -793,6 +823,7 @@ function stepsCard(c: Ctx): HomeCards['steps'] | undefined {
     const steps = {
         joinedAt: row?.joinedAt ?? null,
         firstOffer: firstOfferOf(c),
+        firstNeed: firstNeedOf(me),
         firstPost: isPost,
         photo: isPhoto,
         interests: c.interests.length > 0,
@@ -807,11 +838,14 @@ function stepsCard(c: Ctx): HomeCards['steps'] | undefined {
     };
     const joinedMs = steps.joinedAt ? Date.parse(steps.joinedAt) : NaN;
     const young = Number.isFinite(joinedMs) && c.now - joinedMs < STEPS_DAYS * DAY_MS;
-    // The lines a member sees (§3.1, §3.2): local — first Offer, a photo, interests, an invite (once they have an Offer);
-    // global — the seven steps of §3.2 (name, area, photo, sawLedger, post, saidHello, watch).
+    // The lines a member sees (§3.1, §3.2): local — first Offer, a photo, interests, asking for one thing (once they have an
+    // Offer, and only for an app that says it draws that line, `lands=first-need`: an older app has no such line, and would
+    // draw this card with every line it knows ticked), an invite (once they have an Offer); global — the seven steps of §3.2
+    // (name, area, photo, sawLedger, post, saidHello, watch).
+    const needLine = steps.firstOffer && !steps.firstNeed && c.lands.has('first-need');
     const undone = c.switches.guestListingsOnly
         ? (!steps.area || !steps.photo || !steps.sawLedger || !steps.firstPost || !steps.saidHello || !steps.watch)
-        : (!steps.firstOffer || !steps.photo || !steps.interests || (steps.invited === false && steps.firstOffer));
+        : (!steps.firstOffer || !steps.photo || !steps.interests || needLine || (steps.invited === false && steps.firstOffer));
     // The card ends after 14 days or all done on global (§3.2, §6); local keeps young || undone.
     return c.switches.guestListingsOnly ? (young && undone ? steps : undefined) : (young || undone ? steps : undefined);
 }
@@ -1005,6 +1039,41 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
     const examples = c.features.exampleListings && pool.length < EXAMPLES_BELOW;
     if (!shown.length && !examples) return undefined;
     return { items: shown, total14d: Math.min(recent.length, MARKET_POOL), more: recent.length > MARKET_POOL, ...(examples ? { examples: true as const } : {}) };
+}
+
+/**
+ * "Asked near you" (DESIGN-cold-start-trades-fable.md §2.4, slice N1): the open Needs of the community the reader did not
+ * write, the reader's starred categories first and the newest first within each, five rows, each the Market card's fields.
+ * The one listing a newcomer can answer with nothing (no Offer, no Beans, no confirmation), so it is the card's whole point.
+ *
+ * Only real, open, local Needs: `status` active (a Need already answered is `pending`), no copy a member made of a listing
+ * from another community (`shownCopy`) and none a linked community's (`originNode`); read as the reader reads any listing
+ * (postsFor: a group's or a direct Need only to those it is for, post-sight.ts). Where the listings come nearest first (the
+ * global profile) "near" means within NEAR_COMMUNITY_KM of the reader's point, and a reader with no point is shown nothing
+ * rather than a Need from the other side of the world under a name that says near. No body while there is nothing to show
+ * (a card with nothing to say takes no space), never an empty box.
+ */
+function askedCard(c: Ctx): HomeCards['asked'] | undefined {
+    built('asked');
+    const nearestFirst = !!c.switches.distanceSortDefault;
+    if (nearestFirst && !c.point) return undefined;
+    const pool = postsFor(c, {
+        types: ['need'], status: 'active', limit: ASKED_POOL,
+        near: nearestFirst && c.point ? { ...c.point, radiusKm: NEAR_COMMUNITY_KM } : undefined,
+        measureAtMost: nearestFirst && c.point ? ONE_PASS_MAX_MEASURED : undefined,
+    }).filter(p => p.type === 'need' && p.status === 'active' && p.active !== false && p.authorPublicKey !== c.me && !p.shownCopy && !p.originNode
+        && !!bounded(p.id, ID_CHARS) && !!bounded(p.createdAt, ID_CHARS));
+    // The read gives the most recently changed first; the card is the newest ASKED, so an old Need that was edited today
+    // does not push a new one down. Array.sort is stable, so equal stamps keep the read's order.
+    const newest = [...pool].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const items = starredFirst(newest, p => p.category, c.interests).slice(0, ASKED_ITEMS).map((p): NeedItem => ({
+        id: p.id, title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
+        ...(c.switches.beans ? { credits: p.credits } : {}),
+        ...(typeof p.priceType === 'string' && bounded(p.priceType, ID_CHARS) ? { priceType: p.priceType } : {}),
+        createdAt: p.createdAt,
+        photoUrl: p.photos?.[0] ?? null,
+    }));
+    return items.length ? { items } : undefined;
 }
 
 /**
@@ -1345,7 +1414,7 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
 
 /** Which cards each part of a reader may have (the module's header). */
 const OWN_CARDS: ReadonlySet<string> = new Set(['needs', 'safety', 'steps', 'deals', 'enterprise', 'shop', 'groups', 'chat', 'beans', 'notices']);
-const COMMUNITY_CARDS: ReadonlySet<string> = new Set(['find', 'events', 'market', 'search', 'decide', 'joined', 'pulse']);
+const COMMUNITY_CARDS: ReadonlySet<string> = new Set(['find', 'events', 'market', 'asked', 'search', 'decide', 'joined', 'pulse']);
 
 /** A card type's builder: the reader, and the instance's settings through its type's reader (absent for a type with none). */
 type Builder = (c: Ctx, settings?: Record<string, unknown>) => unknown;
@@ -1353,7 +1422,7 @@ type Builder = (c: Ctx, settings?: Record<string, unknown>) => unknown;
 const BUILDERS: Partial<Record<string, Builder>> = {
     search: searchCard, chat: chatCard,
     needs: needsCard, safety: safetyCard, find: findCard, steps: stepsCard, deals: dealsCard, enterprise: enterpriseCard, shop: shopCard,
-    events: eventsCard, market: marketCard, decide: decideCard, groups: groupsCard, joined: joinedCard, pulse: pulseCard,
+    events: eventsCard, market: marketCard, asked: askedCard, decide: decideCard, groups: groupsCard, joined: joinedCard, pulse: pulseCard,
     beans: beansCard, notices: noticesCard, community: communityCard,
 };
 

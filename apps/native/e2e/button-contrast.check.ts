@@ -17,7 +17,7 @@ const ROOT = process.env.BUTTON_CONTRAST_ROOT ?? join(__dirname, '..');
 // The pairs measured when this was last set were 6,541 (3,265 light, 3,276 dark); a scanner that stops reading
 // styles (a renamed StyleSheet helper, a changed hook) measures far fewer and would pass for the wrong reason. About
 // two thirds of that, so deleting or reworking a few screens does not trip it.
-const MIN_PAIRS_MEASURED = 4300;
+const MIN_PAIRS_MEASURED = 4300; // unchanged 5 Nov 2026: 7,041 measured (3,515 light, 3,526 dark; 7,007 before the style box's chips were read, +34), nowhere near enough to move a floor set at two thirds
 
 // The other half of the same guard, on what was NOT read. A style the scanner cannot follow (a prop, a table built in
 // another file, `styles` handed to a child component) adds no colours, so a screen that moves into such a shape stops being
@@ -25,7 +25,7 @@ const MIN_PAIRS_MEASURED = 4300;
 // local table (`styles`, `s`, `chat`, whatever it is called) the scanner could not find (the report prints both lists).
 // Either number rising is a screen going dark: teach utils/button-contrast.ts the new shape, or, if it truly cannot be read,
 // raise the number here in the same change so a reviewer sees it. The style ceiling has the same margin it had before (about 60).
-const MAX_UNREAD_STYLES = 1870; // 1,812 measured 31 Oct on main f9fbbfd8 (market fill, Pulse rows, tags, listing doors added 32), + the same ~60 margin
+const MAX_UNREAD_STYLES = 1908; // 1,848 measured 5 Nov 2026 on main 1de57237 + the scanner reading the style box's chips, tones and cardType (1,866 before, -18), + the same ~60 margin (it had worn down to 4 above 1,866); was 1,812 on 31 Oct (f9fbbfd8)
 const MAX_UNREAD_TABLE_FILES = 43; // 43 on main f9fbbfd8 (31 Oct): #2604's first-account screens (FindCommunityBody, WaitingToJoin) changed since 42 was pinned
 
 describe('the phone\'s buttons and labels reach 4.5:1 in light and in dark', () => {

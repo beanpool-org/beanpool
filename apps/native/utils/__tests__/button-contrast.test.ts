@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scanSource, scanTree, parseColour, formatReport, topOpaqueFiles, type ContrastReport } from '../button-contrast';
@@ -610,5 +610,200 @@ describe('a table built in the style box module is followed there', () => {
         const elsewhere = SCREEN.replace('../components/market-card-shell', '../components/other-styles');
         const r = scanSource(FILE, elsewhere, [], { 'components/other-styles.ts': shellModule('colors.tile.event.ink') });
         expect(r.stats.unreadTables.get(FILE)).toEqual(['shell']);
+    });
+});
+
+// The style box's chips and tones (5 Nov 2026): a `<CardChip role=...>` is a ground and its words inside a component the scanner
+// cannot see into, and `shell.tones.<role>.bg` / `.fg` is a plain object the module builds, not a StyleSheet table. Both are
+// read from the module's `chipTones(colors)`, in the theme being measured, so a chip or a card that reads them is measured.
+describe('the style box\'s chip tones are measured at the card that reads them, light and dark', () => {
+    const MODULE = 'components/market-card-shell.ts';
+    // A pair that fails in both themes (the ground and the ink one colour), and Save Profile's pair, which fails in dark only.
+    const SAME = '{ bg: colors.surface.card, fg: colors.surface.card }';
+    const DARK_ONLY = '{ bg: colors.text.heading, fg: colors.text.inverse }';
+    const toneModule = (quiet: string) => `
+        import { useStyles } from '../app/ThemeContext';
+        export function chipTones(colors) {
+            return {
+                offer: colors.market.offer,
+                need: { bg: colors.tile.event.tint, fg: colors.tile.event.ink },
+                quiet: ${quiet},
+            };
+        }
+        export function makeCardShell(colors) { return { card: {}, tones: chipTones(colors) }; }
+        export function useCardShell() { return useStyles(({ colors }) => makeCardShell(colors)); }
+        export function CardChip() { return null; }`;
+    const screen = (body: string) => `
+        import { CardChip, useCardShell } from '../components/market-card-shell';
+        export function Card({ mine, roleName }) {
+            const shell = useCardShell();
+            return (<View>${body}</View>);
+        }`;
+    const scanBox = (body: string, quiet = SAME) => scanSource(FILE, screen(body), [], { [MODULE]: toneModule(quiet) });
+
+    it('a chip whose role reads fine is measured in both themes and passes', () => {
+        const r = scanBox(`<CardChip shell={shell} role="offer" label="OFFER" /><CardChip shell={shell} role="need" label="NEED" />`);
+        expect(r.stats.checked).toEqual({ light: 2, dark: 2 });
+        expect(r.stats.opaqueStyles).toBe(0);
+        expect(r.findings).toEqual([]);
+    });
+
+    it('a chip under the bar is caught in light and in dark, named where its tone is written', () => {
+        const r = scanBox(`<CardChip shell={shell} role="quiet" label="RECURRING" />`);
+        expect(themes(r)).toEqual(['dark', 'light']);
+        expect(r.findings[0]).toMatchObject({ file: FILE, min: 4.5, words: { expr: 'colors.surface.card', in: MODULE }, background: { expr: 'colors.surface.card', in: MODULE } });
+        expect(formatReport(r)).toContain(`(${MODULE}:`);
+    });
+
+    it('a chip under the bar in dark only is caught in dark only', () => {
+        const r = scanBox(`<CardChip shell={shell} role="quiet" label="RECURRING" />`, DARK_ONLY);
+        expect(themes(r)).toEqual(['dark']);
+        expect(r.findings[0].ratio).toBeLessThan(1.1);
+    });
+
+    it('a role chosen by a switch is measured under each choice, and the failing one is named with its switch', () => {
+        const r = scanBox(`<CardChip shell={shell} role={mine ? 'offer' : 'quiet'} label="X" />`);
+        expect(r.stats.checked).toEqual({ light: 2, dark: 2 });
+        expect(themes(r)).toEqual(['dark', 'light']);
+        expect(r.findings.every((f) => f.when.join() === '!(mine)')).toBe(true);
+    });
+
+    it('a role it cannot read is counted as an unread style, and measures nothing', () => {
+        const r = scanBox(`<CardChip shell={shell} role={roleName} label="X" />`);
+        expect(r.stats.checked).toEqual({ light: 0, dark: 0 });
+        expect(r.stats.opaqueStyles).toBe(2);
+        expect(r.findings).toEqual([]);
+    });
+
+    it('a tone read as a colour (`shell.tones.quiet.bg`) is caught, in light and in dark', () => {
+        const r = scanBox(`<View style={{ backgroundColor: shell.tones.quiet.bg }}><Text style={{ color: shell.tones.quiet.fg }}>Going</Text></View>`);
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1 });
+        expect(themes(r)).toEqual(['dark', 'light']);
+    });
+
+    it('a tone read through a local name (`const tone = shell.tones.quiet`) is caught, and a path to a colour token is followed', () => {
+        const r = scanBox(`{(() => { const tone = shell.tones.quiet; return <View style={{ backgroundColor: tone.bg }}><Text style={{ color: tone.fg }}>Going</Text></View>; })()}`);
+        expect(themes(r)).toEqual(['dark', 'light']);
+        // `offer` is the token object itself (`colors.market.offer`): its bg and fg are looked up in it, and a good pair passes.
+        const ok = scanBox(`<View style={{ backgroundColor: shell.tones.offer.bg }}><Text style={{ color: shell.tones.offer.fg }}>Going</Text></View>`);
+        expect(ok.stats.checked).toEqual({ light: 1, dark: 1 });
+        expect(ok.findings).toEqual([]);
+    });
+
+    it('a name that is not the box\'s stays unread, as before', () => {
+        const r = scanSource(FILE, `export function C() { const tone = pickTone(); return <View style={{ backgroundColor: tone.bg }}><Text style={{ color: tone.fg }}>x</Text></View>; }`, [], { [MODULE]: toneModule(SAME) });
+        expect(r.stats.checked).toEqual({ light: 0, dark: 0 });
+        expect(r.findings).toEqual([]);
+        expect(r.stats.skipped.get('background unresolved: tone.bg')).toBe(2);
+    });
+
+    it('without the module (or when the chip is not the box\'s) a chip is a component boundary and measures nothing', () => {
+        const body = `<CardChip shell={shell} role="quiet" label="RECURRING" />`;
+        expect(scanSource(FILE, screen(body)).stats.checked).toEqual({ light: 0, dark: 0 });
+        const elsewhere = screen(body).replace('../components/market-card-shell', '../components/other-styles');
+        expect(scanSource(FILE, elsewhere, [], { 'components/other-styles.ts': toneModule(SAME) }).findings).toEqual([]);
+    });
+
+    it('the old shapes still read the same: a StyleSheet table in the module, and Save Profile', () => {
+        const r = scanSource(FILE, `
+            import { useCardShell } from '../components/market-card-shell';
+            export function Card() { const shell = useCardShell(); return <Pressable style={shell.card}><Text style={shell.mark}>Going</Text></Pressable>; }`, [], {
+            [MODULE]: `
+                import { StyleSheet } from 'react-native';
+                export function makeCardShell(colors) { return { ...StyleSheet.create({ card: { backgroundColor: colors.surface.card }, mark: { color: colors.surface.card } }), tones: {} }; }
+                export function useCardShell() { return useStyles(({ colors }) => makeCardShell(colors)); }`,
+        });
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1 });
+        expect(themes(r)).toEqual(['dark', 'light']);
+        expect(themes(scanRaw(SAVE_PROFILE))).toEqual(['dark']);
+    });
+});
+
+// `cardType(...)` is spread into the box's text styles for the size and weight; it sets no colour, so it is not an unread style.
+describe('the box\'s text-metrics helper is not an unread style', () => {
+    const MODULE = 'components/market-card-shell.ts';
+    const SCREEN = `
+        import { useCardShell } from '../components/market-card-shell';
+        export function Card() { const shell = useCardShell(); return <View style={shell.card}><Text style={shell.loud}>Hi</Text></View>; }`;
+    const shellModule = (ink: string) => `
+        import { StyleSheet } from 'react-native';
+        export function cardType(t) { return { fontSize: t.size }; }
+        export function makeCardShell(colors) {
+            return StyleSheet.create({ card: { backgroundColor: colors.surface.card }, loud: { ...cardType(LIST.loud), color: ${ink} } });
+        }
+        export function useCardShell() { return useStyles(({ colors }) => makeCardShell(colors)); }`;
+
+    it('the table with the spread is read, in both themes, with nothing unread', () => {
+        const r = scanSource(FILE, SCREEN, [], { [MODULE]: shellModule('colors.text.body') });
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1 });
+        expect(r.stats.opaqueStyles).toBe(0);
+        expect(r.findings).toEqual([]);
+    });
+
+    it('a colour beside the spread is still measured and still caught', () => {
+        const r = scanSource(FILE, SCREEN, [], { [MODULE]: shellModule('colors.surface.card') });
+        expect(themes(r)).toEqual(['dark', 'light']);
+        expect(r.stats.opaqueStyles).toBe(0);
+    });
+
+    it('a helper of the same name that is not the box\'s is still an unread style', () => {
+        const local = `
+            export function Card() {
+                const { colors } = useTheme();
+                const styles = StyleSheet.create({ loud: { ...cardType(LIST.loud), color: colors.text.body } });
+                return <Text style={styles.loud}>Hi</Text>;
+            }
+            function cardType(t) { return { fontSize: t.size }; }`;
+        expect(scanRaw(local).stats.opaqueStyles).toBeGreaterThan(0);
+    });
+});
+
+// The real module (components/market-card-shell.ts) read by the scanner: the shapes above are the ones it is written in. A change
+// to the module that the scanner can no longer follow (a chip role in a shape it cannot read, a colour in `cardType`) fails here
+// with a name, before the whole-tree check only goes quieter.
+describe('the shipped style box can be read by the scanner', () => {
+    const MODULE = 'components/market-card-shell.ts';
+    const source = readFileSync(join(__dirname, '../../components/market-card-shell.ts'), 'utf8');
+    const roles = /export type CardChipRole =([^;]+);/.exec(source)![1].split('|').map((r) => r.trim().replace(/'/g, ''));
+
+    it('has the ten chip roles the Market names', () => {
+        expect(roles.length).toBe(10);
+        expect(roles).toEqual(expect.arrayContaining(['offer', 'need', 'event', 'poll', 'pinned', 'quiet', 'warn', 'ok', 'danger', 'info']));
+    });
+
+    it('every chip role is measured in both themes and reads 4.5:1 or better', () => {
+        const chips = roles.map((r) => `<CardChip shell={shell} role="${r}" label="X" />`).join('');
+        const r = scanSource(FILE, `
+            import { CardChip, useCardShell } from '../components/market-card-shell';
+            export function Chips() { const shell = useCardShell(); return <View>${chips}</View>; }`, [], { [MODULE]: source });
+        expect(r.stats.checked).toEqual({ light: roles.length, dark: roles.length });
+        expect(r.stats.opaqueStyles).toBe(0);
+        expect(r.findings).toEqual([]);
+    });
+
+    it('its card, its lines and its tones are read with nothing unread', () => {
+        const r = scanSource(FILE, `
+            import { useCardShell } from '../components/market-card-shell';
+            export function Card() {
+                const shell = useCardShell();
+                return (
+                    <View style={shell.card}>
+                        <Text style={shell.loud}>a</Text><Text style={shell.second}>b</Text><Text style={shell.place}>c</Text>
+                        <Text style={shell.distance}>d</Text><Text style={shell.mark}>e</Text><Text style={shell.gridTitle}>f</Text><Text style={shell.gridLine}>g</Text>
+                        <View style={{ backgroundColor: shell.tones.event.bg }}><Text style={{ color: shell.tones.event.fg }}>h</Text></View>
+                    </View>
+                );
+            }`, [], { [MODULE]: source });
+        expect(r.stats.unreadTables.size).toBe(0);
+        expect(r.stats.opaqueStyles).toBe(0);
+        expect(r.stats.checked.light).toBe(r.stats.checked.dark);
+        expect(r.stats.checked.light).toBeGreaterThanOrEqual(8);
+        expect(r.findings).toEqual([]);
+    });
+
+    it('cardType, which the scanner treats as setting no colour, sets none', () => {
+        const body = /export function cardType[\s\S]*?\n}\n/.exec(source)![0];
+        expect(body).toContain('fontSize');
+        expect(body).not.toMatch(/colou?r/i);
     });
 });

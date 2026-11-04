@@ -9,23 +9,48 @@
  */
 const LISTING_PHOTO = /^(?:https?:\/\/[^/?#]+)?\/api\/marketplace\/posts\/[^/?#]+\/photos\/\d+(?:[?#]|$)/;
 
-export function listPhotoUrl<T extends string | null | undefined>(url: T): T {
-    if (typeof url !== 'string' || !LISTING_PHOTO.test(url) || /[?&]size=/.test(url)) return url;
+/** `url` with `param` added to its query, before any `#`. */
+function withParam(url: string, param: string): string {
     const hash = url.indexOf('#');
     const base = hash < 0 ? url : url.slice(0, hash);
     const tail = hash < 0 ? '' : url.slice(hash);
-    return `${base}${base.includes('?') ? '&' : '?'}size=thumb2${tail}` as T;
+    return `${base}${base.includes('?') ? '&' : '?'}${param}${tail}`;
+}
+
+export function listPhotoUrl<T extends string | null | undefined>(url: T): T {
+    if (typeof url !== 'string' || !LISTING_PHOTO.test(url) || /[?&]size=/.test(url)) return url;
+    return withParam(url, 'size=thumb2') as T;
 }
 
 /**
- * What a list card draws next when the picture it showed would not load: a listing photo's small copy gives way to the
- * photo's own URL (the same URL without `size=thumb2`), and that gives way to nothing (null), where the card draws its
- * category tile and never an empty slot. `photo` is the URL the listing carries; `failed` is the URL the card was drawing.
+ * How long a list card waits for its picture before it counts it as failed (card-photo-blank, Marty 4 Nov 2026: a card
+ * on global showed an empty slot through two restarts while its small copy was served fine). Neither picture library
+ * bounds a load that never ends: on Android expo-image's OkHttp client keeps OkHttp's defaults (10 s to connect, 10 s per
+ * read, no limit on the whole call), so a response that trickles never fails, and a load that waits for a size or is
+ * paused sends no event at all; an <img> on the web has no limit either. 10 s is OkHttp's own per-read limit: a small
+ * copy (about 18 KB) that has not drawn by then on a working connection is not coming. The phone counts from the last
+ * bytes it received, so a slow phone that is still receiving is not cut off; the web has no such event and counts from
+ * the start.
+ */
+export const LIST_PHOTO_WAIT_MS = 10_000;
+
+/**
+ * What a list card draws next when the picture it showed would not load (or did not load within LIST_PHOTO_WAIT_MS):
+ * a listing photo's small copy is asked once more past every cache (`retry=1`: a new address, so no bad copy the phone,
+ * the browser or a shared cache keeps under the first one can answer it; the node reads only `k` and `size`); that gives
+ * way to the photo's own URL (the same URL without `size=thumb2`, which the detail screen draws), and that gives way to
+ * nothing (null), where the card draws its category tile and never an empty slot. `photo` is the URL the listing
+ * carries; `failed` is the URL the card was drawing.
  *
  * Each step happens once: the photo's own URL has no step after it, and a URL that has no small copy (a banner, an
  * avatar, a `data:` photo, a URL that already names a size) goes straight to null, so a card cannot loop. A card holds
  * the URL it gave up on beside the `photo` it was for, so a new URL a later read brings starts the steps again.
  */
 export function nextListPhotoUrl(photo: string, failed: string | null | undefined): string | null {
-    return failed === listPhotoUrl(photo) && failed !== photo ? photo : null;
+    const small = listPhotoUrl(photo);
+    if (small === photo || !failed) return null;
+    const again = withParam(small, 'retry=1');
+    if (failed === small) return again;
+    if (failed === again) return photo;
+    return null;
 }

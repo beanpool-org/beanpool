@@ -18,7 +18,6 @@ import { MARKET_CARD_SHELL, MARKET_CHIP } from '@beanpool/core';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(6).filter((x) => x && typeof x === 'object'));
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, accessibilityLabel, accessibilityRole, testID, style, numberOfLines } = props;

@@ -1986,7 +1986,7 @@ export default function MarketScreen() {
                                 {isOwn && <CardChip shell={shell} role="info" label={t('👤 YOU')} />}
                                 {isPostPinned(item, Date.now()) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
                                 {dealChip && <CardChip shell={shell} role={dealChip === 'in-trust' ? 'ok' : 'warn'} label={listingChipWords(dealChip)} testID="card-deal-chip" />}
-                                <CardChip shell={shell} role="quiet" label={`${catEmoji} ${catLabel}`} />
+                                <CardChip shell={shell} role="quiet" label={catEmoji + ' ' + catLabel} />
                                 {!!item.repeatable && <CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} />}
                                 {/* #108: on the card, not just the detail view */}
                                 {item.cash_also_needed === 1 && <CardChip shell={shell} role="warn" label={t('💸 CASH TOO')} />}

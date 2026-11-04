@@ -95,11 +95,15 @@ const QR_QUIET_ZONE = 4;
  * (a string of markup, a ragged or oversized grid, numbers for modules), is null, and the poster prints an empty frame.
  */
 function qrSvg(matrix: unknown): string | null {
-    if (!Array.isArray(matrix) || matrix.length === 0 || matrix.length > QR_MAX_SIDE) return null;
+    if (!Array.isArray(matrix)) return null;
+    // The length is read once, and every row by its index, never by the array's iterator: an Array subclass with an iterator of
+    // its own, or a Proxy, cannot hand over fewer rows than `side`, so the drawing below never reads a row that is not there.
     const side = matrix.length;
+    if (side === 0 || side > QR_MAX_SIDE) return null;
     // Copied while it is checked, so a caller's getter cannot hand a different answer to the drawing.
     const rows: boolean[][] = [];
-    for (const row of matrix as unknown[]) {
+    for (let y = 0; y < side; y++) {
+        const row: unknown = matrix[y];
         if (!Array.isArray(row) || row.length !== side) return null;
         const modules: boolean[] = [];
         for (let x = 0; x < side; x++) {

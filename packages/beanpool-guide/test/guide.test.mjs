@@ -981,6 +981,53 @@ test('lights-out, path B: the laptop is made the main server after the restore a
     assert.ok(phone.includes('NODE_ROLE=primary') && phone.includes('docker compose up -d'), 'the restore from Settings is followed by the same role change and the same start');
 });
 
+// A laptop that was never paired has a community of its own (index.ts ensureGenesis runs on every boot, whatever the role), so
+// `beanpool restore` (apps/server/src/restore-command.ts, otherCommunity) warns "This backup is from a DIFFERENT community" and
+// asks "Type yes to go on:" BEFORE the code prompt. That question is not secret: it shows what is typed (shell-prompt.ts mutes only
+// `secret`). A page that goes straight from the restore to "type the recovery code" has the owner type it there, in plain text, in
+// front of the hall, and then the restore refuses (Opus review of #2823, 3 Nov, second round).
+test('lights-out, path B: the "Type yes" question of a never-paired laptop has its own step, before the code, and the code is never typed there', () => {
+    const page = lightsOutPage(LIGHTS_OUT_PAGES[1]);
+    const b = textsOf(underHeading(page, 'Path B: you have a locked backup file'));
+    const at = (needle) => b.findIndex(i => i.includes(needle));
+    const restore = at('beanpool restore /data/FILE.bpsealed');
+    const yes = at('Type yes to go on');
+    const typed = at('Type the recovery code at the prompt');
+    const role = at('NODE_ROLE=primary');
+    for (const [name, i] of Object.entries({ restore, yes, typed })) assert.ok(i >= 0, `path B has: ${name}`);
+    // The step that answers the question is its own step, after the restore (which asks it) and before the code step.
+    const answer = b.findIndex((i, n) => n > restore && /^\*\*Step \d+\.\*\*/.test(i) && /type yes/i.test(i));
+    assert.ok(answer > restore && answer < typed, 'a step of its own answers "Type yes to go on", after the restore and before the code is typed');
+    assert.ok(answer !== restore, 'and it is not folded into the restore step');
+    // What the owner sees at the restore: the warning the page used to leave out, and that the code prompt can come at once.
+    assert.ok(b[restore].includes('DIFFERENT community') && b[restore].includes('Type yes to go on'), 'the restore step says what a never-paired laptop shows');
+    assert.ok(/at once/.test(b[restore]), 'and that a paired standby is asked for the code at once');
+    // The yes step: why the warning is true, that nothing but yes goes there, and what comes next.
+    const step = b[answer];
+    assert.ok(step.includes('made a community of its own') && step.includes('the backup replaces it'), 'it says why the warning is true of this laptop');
+    assert.ok(/never the recovery code/i.test(step) && step.includes('shows what you type'), 'it says the recovery code is never typed at that question, because it shows what is typed');
+    assert.ok(step.includes('You see:') && step.includes('not shown as you type'), 'it says what you see next: the code request that is not shown as you type');
+    assert.ok(/carry on/.test(step), 'and what to do when the question did not come');
+    // The code step names the prompt that hides what is typed, and the order holds: restore, yes, code, role.
+    assert.ok(b[typed].includes('not shown as you type') && b[typed].includes('Never put it on the command line'), 'the code goes only at the prompt that is not shown');
+    assert.ok(restore < answer && answer < typed && typed < role, 'restore, then yes, then the code, then the role');
+    // The steps after the new one are renumbered: the Settings-restore paragraph points at the role step and the start step by number.
+    const num = (s) => Number(/^\*\*Step (\d+)\./.exec(s)?.[1]);
+    const phone = b.find(i => i.includes('Restore from a locked backup')) ?? '';
+    assert.deepEqual([...phone.matchAll(/as in Step (\d+)/g)].map(m => Number(m[1])), [num(b[role]), num(b[at('docker compose up -d')])],
+        'the Settings-restore paragraph points at the right steps for the role and the start');
+});
+
+test('lights-out, path B step 1 names the folder the compose file mounts: the folder named data, beside docker-compose.yml', () => {
+    const page = lightsOutPage(LIGHTS_OUT_PAGES[1]);
+    const step = textsOf(underHeading(page, 'Path B: you have a locked backup file')).find(i => i.startsWith('**Step 1.**')) ?? '';
+    assert.ok(step.includes('the folder named data, beside docker-compose.yml'), 'the file goes in the folder named data');
+    assert.ok(!/next to docker-compose\.yml/.test(step), 'never "next to docker-compose.yml", which reads as the same folder as the compose file');
+    // The compose file mounts ./data at /data, which is where the restore command reads /data/FILE.bpsealed.
+    const compose = fs.readFileSync(path.resolve(CONTENT_DIR, '..', '..', '..', 'docker-compose.yml'), 'utf8');
+    assert.ok(/-\s*\.\/data:\/data\b/.test(compose), 'docker-compose.yml mounts ./data at /data');
+});
+
 test('lights-out, the way back: the laptop that was made the main server is a standby again by NODE_ROLE=backup in a fresh .env', () => {
     const page = lightsOutPage(LIGHTS_OUT_PAGES[1]);
     const back = textsOf(underHeading(page, 'When the internet comes back'));

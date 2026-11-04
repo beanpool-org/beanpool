@@ -53,16 +53,17 @@ With an owner's phone instead of the code, in steps 6 and 7: press **I understan
 
 This way needs no phone and no Settings, so it works on a laptop nobody can sign in to.
 
-- **Step 1.** Put the .bpsealed file in the laptop's data folder, next to docker-compose.yml. You see: the file listed there.
+- **Step 1.** Put the .bpsealed file in the folder named data, beside docker-compose.yml. You see: the file listed there.
 - **Step 2.** Run docker compose stop beanpool-node. You see: it stops.
-- **Step 3.** Run docker compose run --rm beanpool-node beanpool restore /data/FILE.bpsealed, with the file's real name. You see: the file's community and the machine that locked it, beside this laptop's own, then a request for the recovery code.
-- **Step 4.** Type the recovery code at the prompt. Never put it on the command line. You see: the restore finishes and says what it brought back.
-- **Step 5.** Make the laptop the main server, now that the restore is done. In the file named .env, in the folder with docker-compose.yml, change the line NODE_ROLE=backup to NODE_ROLE=primary. Do it after the restore, never before: the restore knows the file came from your main server only while the laptop is still a standby. The restore does not change the role itself, and a standby refuses every trade and send. You see: the line in the file now reads NODE_ROLE=primary. If there is no NODE_ROLE line, carry on.
-- **Step 6.** Run docker compose up -d. You see: beanpool-node running again. It is now the community, with the same server key, and with the old admin password and two-factor sign-in if the community had them. Everyone who opens the app is told the community was restored from a backup, and the day it was made.
-- **Step 7.** Coming with the next release: turn lights-out on (below). It needs the owner's way in below, or the laptop's shell.
-- **Step 8.** Show the poster, and say the record's age out loud (below).
+- **Step 3.** Run docker compose run --rm beanpool-node beanpool restore /data/FILE.bpsealed, with the file's real name. You see: the file's community and the machine that locked it, beside this laptop's own. Then one of two things. On a laptop that was never your standby you see a warning that the backup is from a DIFFERENT community, and "Type yes to go on:". On a laptop that is paired as your standby you see a request for the recovery code at once.
+- **Step 4.** If you saw "Type yes to go on:", type yes and press Enter. Type nothing else there, and never the recovery code: this question shows what you type. The warning is true of this laptop, because it made a community of its own when it first started, and the backup replaces it. You see: a request for the recovery code, with "not shown as you type" beside it. If you saw that request at once, carry on.
+- **Step 5.** Type the recovery code at the prompt that says it is not shown as you type, and nowhere else. Never put it on the command line. You see: the restore finishes and says what it brought back.
+- **Step 6.** Make the laptop the main server, now that the restore is done. In the file named .env, in the folder with docker-compose.yml, change the line NODE_ROLE=backup to NODE_ROLE=primary. Do it after the restore, never before: the restore knows the file came from your main server only while the laptop is still a standby. The restore does not change the role itself, and a standby refuses every trade and send. You see: the line in the file now reads NODE_ROLE=primary. If there is no NODE_ROLE line, carry on.
+- **Step 7.** Run docker compose up -d. You see: beanpool-node running again. It is now the community, with the same server key, and with the old admin password and two-factor sign-in if the community had them. Everyone who opens the app is told the community was restored from a backup, and the day it was made.
+- **Step 8.** Coming with the next release: turn lights-out on (below). It needs the owner's way in below, or the laptop's shell.
+- **Step 9.** Show the poster, and say the record's age out loud (below).
 
-If the recovery code is lost but an owner's phone holds the owner key, Settings can open the file with that phone instead: **Backups & Restore**, **Restore from a locked backup**. That needs the phone to reach the laptop, so it waits for the hall door. The laptop is still a standby afterwards: change NODE_ROLE=backup to NODE_ROLE=primary in .env as in Step 5, then run docker compose up -d as in Step 6.
+If the recovery code is lost but an owner's phone holds the owner key, Settings can open the file with that phone instead: **Backups & Restore**, **Restore from a locked backup**. That needs the phone to reach the laptop, so it waits for the hall door. The laptop is still a standby afterwards: change NODE_ROLE=backup to NODE_ROLE=primary in .env as in Step 6, then run docker compose up -d as in Step 7.
 
 The community's owners come back with the file. If nobody can sign in afterwards, make an owner from the laptop's shell: docker compose exec beanpool-node beanpool recover --key @callsign.
 

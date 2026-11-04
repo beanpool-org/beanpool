@@ -190,6 +190,37 @@ describe('the printable page', () => {
         expect(framesOf(lightsOutPosterHtml(w, { ...OPTS, hallQr: big(177) }))[0]).toContain('viewBox="0 0 185 185"');
     });
 
+    // Opus review of #2823, second round (non-blocking note): the length was read three times and the rows were read by the
+    // array's iterator, so an Array subclass with an iterator of its own gave fewer rows than `side`, and rows[y][x] threw
+    // where the docblock promises an empty frame. The length is read once and every row by its index.
+    it('a code whose array has an iterator of its own, or a length that changes, never throws: the rows are read by index, once', () => {
+        const w = wordsIn('en');
+        class ShortIterator extends Array<boolean[]> {
+            *[Symbol.iterator](): Generator<boolean[]> { yield this[0]; }
+        }
+        const short = new ShortIterator();
+        for (const row of CODE) short.push([...row]);
+        expect(short.length).toBe(3);
+        expect(Array.isArray(short)).toBe(true);
+        let html = '';
+        expect(() => { html = lightsOutPosterHtml(w, { ...OPTS, hallQr: short as unknown as QrMatrix }); }).not.toThrow();
+        // Read by index it is the whole 3 x 3 code, drawn exactly as the same code is drawn from a plain array.
+        const plain = framesOf(lightsOutPosterHtml(w, { ...OPTS, hallQr: CODE }))[0];
+        expect(framesOf(html)[0]).toBe(plain);
+        expect(plain).toContain('viewBox="0 0 11 11"');
+
+        // A length that answers differently each time it is asked is read once: the frame is whole or empty, never half a code.
+        for (const answers of [[3, 1], [3, 5], [3, 0], [3, 3, 2]]) {
+            let asked = 0;
+            const flaky = new Proxy(CODE.map((r) => [...r]), {
+                get: (target, key, receiver) => (key === 'length' ? answers[Math.min(asked++, answers.length - 1)] : Reflect.get(target, key, receiver)),
+            });
+            let out = '';
+            expect(() => { out = lightsOutPosterHtml(w, { ...OPTS, hallQr: flaky as unknown as QrMatrix }); }, answers.join(',')).not.toThrow();
+            expect([plain, EMPTY_FRAME], answers.join(',')).toContain(framesOf(out)[0]);
+        }
+    });
+
     it('markup cannot cross: the inputs the Opus review of #2823 tried, and the older ones, reach no part of the page', () => {
         const w = wordsIn('en');
         const MARKUP = [

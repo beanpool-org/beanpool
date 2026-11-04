@@ -4997,5 +4997,10 @@
   "🔒 This message couldn't be verified, so it isn't shown.": "🔒 Це повідомлення не вдалося підтвердити, тому воно не відображається.",
   "🗳️ Create Poll": "🗳️ Створити опитування",
   "🟢 List an Offer first to post Needs": "🟢 Спочатку створіть Пропозицію, щоб публікувати Потреби",
-  "🤝 Chosen": "🤝 Обрані"
+  "🤝 Chosen": "🤝 Обрані",
+  "Done. This is now your photo here.": "Готово. Тепер це ваше фото тут.",
+  "Only the photo is copied. Your name and the rest of your profile here stay as they are.": "Копіюється лише фото. Ваше ім’я та решта профілю тут залишаються без змін.",
+  "Use the photo from {community} here?": "Використати тут фото з {community}?",
+  "Use the photo you chose last here?": "Використати тут фото, яке ви обрали останнім?",
+  "Use this photo here": "Використати це фото тут"
 }

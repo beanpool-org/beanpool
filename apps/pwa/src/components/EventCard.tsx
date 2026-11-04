@@ -13,6 +13,10 @@
  * cards around it use — the host put it there, and a feed of pictures with one blank tile among them reads as
  * the event being the lesser thing.
  *
+ * In the Market's grid the event is the listing tile (slice W3', DESIGN-market-grid-sizes-fable.md §2.2): the 4:3 photo
+ * with its pills, then the same four-row block as a listing (SAT 7 NOV / 16:00–21:00 / the title / 📍 the place), so a
+ * row holding an event is one tile height. Its counts and the host's line are on the page.
+ *
  * Who is the host is the node's call, not the client's: the RSVP list (`eventRsvps`) is sent to the author, a
  * keeper of an enterprise author, or a convenor of the group, and to nobody else — so its presence is what
  * shows the host controls here.
@@ -23,7 +27,7 @@ import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, upperCase, word, p
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventWhenParts, formatDistance, formatEventWhen,
+    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
@@ -40,8 +44,9 @@ import { ListPhoto } from './ListPhoto';
 import { ImageLightbox } from './ImageLightbox';
 import { ReportModal } from './ReportModal';
 import {
-    BOX_LABEL, CARD_INK, EVENT_ANSWER, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON,
-    PAGE_INK, PAGE_TYPE, POP_UP_CLOSE_ROOM, chip, listCard,
+    BOX_LABEL, CARD_INK, EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
+    GRID_TIME_ROW, GRID_TYPE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE,
+    POP_UP_CLOSE_ROOM, chip, gridTile, listCard,
 } from './market-card-shell';
 
 interface RsvpState {
@@ -117,6 +122,11 @@ function eventStateOf(post: MarketplacePost): EventStateKind | null {
  */
 const CHIP = 'flex-shrink-0 whitespace-nowrap text-[10px] font-extrabold tracking-wide px-2 py-0.5 rounded-md border border-transparent';
 
+/** A state's words, as its chip (and the grid tile's pill) writes them. */
+function stateWords(state: EventStateKind): string {
+    return state === 'cancelled' ? t('CANCELLED', undefined, 'event') : state === 'ended' ? t('ENDED', undefined, 'event') : t('UPDATED', undefined, 'event');
+}
+
 function StateBadge({ post, box = false }: { post: MarketplacePost; box?: boolean }) {
     const state = eventStateOf(post);
     if (!state) return null;
@@ -126,7 +136,7 @@ function StateBadge({ post, box = false }: { post: MarketplacePost; box?: boolea
         : 'bg-bp-chip-danger-tint text-bp-chip-danger-ink';
     return (
         <span data-testid="event-state-badge" className={box ? chip(state === 'updated' ? 'event' : 'danger') : `${CHIP} ${tone}`}>
-            {state === 'cancelled' ? t('CANCELLED', undefined, 'event') : state === 'ended' ? t('ENDED', undefined, 'event') : t('UPDATED', undefined, 'event')}
+            {stateWords(state)}
         </span>
     );
 }
@@ -347,10 +357,11 @@ interface EventCardProps {
     /** Kilometres from the viewer, when the page knows where they are. */
     distanceKm?: number | null;
     /**
-     * Which shape the feed is in, so the event's photo takes the same size, crop and rounding the offer cards
-     * beside it are using (MarketplaceCard): a banner in the grid, a square thumbnail on the left in the list,
-     * and — because the compact offer card carries no photo at all — nothing in compact. Defaults to the grid,
-     * which is how the Market opens.
+     * Which shape the feed is in, so the event is the same card as the offers beside it (MarketplaceCard): in the grid the
+     * listing tile, on the same lattice (W3'); in the list the list card, the photo flush on the left; in compact the
+     * stacked lines with no photo, until the compact row joins the box (C1). Defaults to the grid, which is how the Market
+     * opens. A grid card asked for with `rsvpOnCard` draws the stacked card with its buttons: no screen asks for that since
+     * the map's pop-up became the list card (M1, #2881), whose buttons are the list branch's.
      */
     viewMode?: 'grid' | 'list' | 'compact';
     onOpen?: () => void;
@@ -471,6 +482,93 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
         );
     }
 
+    if (viewMode === 'grid' && !rsvpOnCard) {
+        // The grid tile (slice W3', DESIGN-market-grid-sizes-fable.md §2.2; DESIGN-grid-event-rows-fable.md): the listing tile's
+        // shell from the style box, so an event tile and the listing beside it are one height in the lattice. The photo 4:3
+        // flush at the top through the same picture hook (ListPhoto: the event tile until the photo has drawn), EVENT at its
+        // top-left, and at its foot the pills: 📌 PINNED, the state, 🔒 for a group-only event (its sentence is the pill's
+        // name), and the viewer's own answer at the end, where a listing's price sits. Then the listing's four-row block:
+        // the date, the time, the title, the place. No counts and no button but the card itself: the page has them.
+        const tileWhen = eventTileWhenFor(p);
+        const repeats = eventRepeatCaption(p);
+        // The time row's whole pieces (core's timePieces); a repeating event whose time cannot be read keeps its rule there.
+        const timePieces = tileWhen?.timePieces.length ? tileWhen.timePieces : repeats ? [`↻ ${repeats}`] : [];
+        // Every clock on the tile is the viewer's own. When that differs from the place's clock (a Byron 16:00 read in
+        // Queensland), the last row says so first, whole: "15:00–20:00 your time" cannot fit the time row at 320 x 1.3.
+        const yourTime = tileWhen?.yours ? t('{time} your time', { time: '🕒' }) : null;
+        const state = eventStateOf(p);
+        const pinned = pinLive(p as any);
+        // A group-only event says who can see it, as the listing tile beside it does; on the tile the cue is the 🔒 glyph.
+        const lock = p.audienceScope === 'group' || !!p.targetGroupId
+            ? t('🔒 Only {group} can see this', { group: p.targetGroupName || t('Group') })
+            : null;
+        // A member's copy on the global community says whose it is in the place's stead, with the distance after it (a
+        // visitor's in whole km, as their place line has it).
+        const copyDistance = distanceKm == null ? '' : visitor ? visitorDistanceText(distanceKm) : formatDistance(distanceKm);
+        const lastRow = copy?.from ? [copyFromLine(copy.from), copyDistance].filter(Boolean).join(' · ') : place;
+        const glyph = copy?.from ? '' : p.eventOnline ? '🌐 ' : '📍 ';
+        // The label stands in for what is inside the button, so it says all the tile shows: the title, the when in full (the
+        // viewer's clock with "your time" when it differs, as the list card's line says it; the phone's tile speaks the same),
+        // the state, the viewer's answer, who can see it, a copy's line (#2897 review).
+        const tileLabel = [openLabel, formatEventWhen(p), state ? stateWords(state) : null, myAnswer, lock, copyLine].filter(Boolean).join(', ');
+        return (
+            <div data-testid="event-card" className={`${gridTile()} transition-shadow duration-300 hover:shadow-md`}>
+                <button
+                    type="button"
+                    onClick={onOpen}
+                    disabled={!onOpen}
+                    aria-label={tileLabel}
+                    className="flex-1 w-full min-w-0 flex flex-col text-left bg-transparent border-0 p-0 cursor-pointer disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-nature-500"
+                >
+                    <span data-testid="event-grid-photo" className={`block ${GRID_PHOTO}`}>
+                        <ListPhoto
+                            photo={firstPhoto}
+                            alt={p.title}
+                            className="w-full h-full object-cover"
+                            style={GRID_PHOTO_CROP}
+                            fallback={<CategoryTile kind="event" size="grid" />}
+                        />
+                        <span className="absolute top-2 left-2">
+                            <span data-testid="event-type-chip" className={chip('event')}>{upperCase(t('EVENT', undefined, 'event category tile label'))}</span>
+                        </span>
+                        <span data-testid="grid-badge-row" className="absolute left-2 right-2 bottom-2 flex flex-wrap items-end gap-1 pointer-events-none">
+                            {pinned && <span data-testid="event-pinned-chip" className={GRID_SCRIM_PILL}>{t('📌 PINNED')}</span>}
+                            {state && <span data-testid="event-state-badge" className={GRID_SCRIM_PILL}>{stateWords(state)}</span>}
+                            {lock && (
+                                <span data-testid="event-lock-pill" role="img" aria-label={lock} title={lock} className={`${GRID_SCRIM_PILL} pointer-events-auto`}>
+                                    🔒
+                                </span>
+                            )}
+                            {myAnswer && <span data-testid="event-mark" className={GRID_SCRIM_MARK}>{myAnswer}</span>}
+                        </span>
+                    </span>
+                    {/* The four rows: a fixed block, the listing tile's, the same at every width. */}
+                    <span data-testid="grid-text-block" className={GRID_TEXT}>
+                        <span className={GRID_ROW}>
+                            <span data-testid="event-tile-date" className={`min-w-0 truncate ${GRID_TYPE.loud} ${CARD_INK.event}`}>{tileWhen?.date ?? ''}</span>
+                        </span>
+                        <span data-testid="event-tile-time" className={`${GRID_TIME_ROW} ${GRID_TYPE.loud} ${CARD_INK.event}`}>
+                            {timePieces.map((piece, i) => <span key={i} data-testid="event-time-piece" className={GRID_TIME_PIECE}>{piece}</span>)}
+                        </span>
+                        <span className={GRID_ROW}>
+                            <span data-testid="event-tile-title" dir="auto" className={`min-w-0 truncate ${GRID_TYPE.second} ${CARD_INK.title}`}>{p.title}</span>
+                        </span>
+                        <span data-testid="grid-row-4" className={GRID_ROW}>
+                            {yourTime && (
+                                <span data-testid="event-your-time" className={`${GRID_ROW_LABEL} ${CARD_INK.event}`}>{yourTime}</span>
+                            )}
+                            {lastRow && (
+                                <span data-testid="event-tile-place" className={`min-w-0 truncate ${GRID_TYPE.place} ${CARD_INK.secondary}`}>
+                                    {glyph && <span aria-hidden="true">{glyph}</span>}{lastRow}
+                                </span>
+                            )}
+                        </span>
+                    </span>
+                </button>
+            </div>
+        );
+    }
+
     const lines = (
         <>
             <EventChips post={p} withType />
@@ -503,7 +601,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     );
 
     return (
-        // The grid tile joins the box in its own slice (W3'); until then its band is core's event tint, not a raw violet class.
+        // The stacked card: the compact view, until its row joins the box (C1), and a grid card asked for with `rsvpOnCard`
+        // (no screen since the map's pop-up became the list card, M1). Its band is core's event tint, not a raw violet class.
         <div data-testid="event-card" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-bp-tile-event-tint rounded-2xl p-3 shadow-sm flex flex-col gap-2 overflow-hidden">
             <button
                 type="button"

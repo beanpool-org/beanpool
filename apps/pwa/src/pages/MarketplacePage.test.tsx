@@ -286,7 +286,7 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
 
     it("opens the event detail from the card, with the host's box", async () => {
         render(<MarketplacePage identity={identity} />);
-        const open = await screen.findByRole('button', { name: 'Open event: Working bee' });
+        const open = await screen.findByRole('button', { name: /^Open event: Working bee(,|$)/ });
         await act(async () => { open.click(); });
         const detail = await screen.findByTestId('event-detail');
         // The host is the box a listing's "Posted by" is (components/AuthorCard.tsx): the label above the button that opens them.
@@ -297,7 +297,7 @@ describe('MarketplacePage: events in the feed (docs/events-on-the-map.md §3, sl
 
     it('item and event detail pages use full width on narrow screens and cap at readable max-w-3xl on wide screens', async () => {
         render(<MarketplacePage identity={identity} />);
-        const open = await screen.findByRole('button', { name: 'Open event: Working bee' });
+        const open = await screen.findByRole('button', { name: /^Open event: Working bee(,|$)/ });
         await act(async () => { open.click(); });
         const detail = await screen.findByTestId('event-detail');
         const container = detail.parentElement as HTMLElement;

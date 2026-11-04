@@ -84,10 +84,12 @@ export function YourEvents({ identity, onOpen, refreshKey = 0 }: YourEventsProps
             </h3>
             <div className="flex flex-col gap-3">
                 {rows.map(row => (
+                    // A column of rows, so the list card: the grid's tile is one cell of a lattice, not a row.
                     <EventCard
                         key={row.postId}
                         post={myEventAsPost(row)}
                         identity={identity}
+                        viewMode="list"
                         onOpen={onOpen ? () => onOpen(row.postId) : undefined}
                     />
                 ))}

@@ -10,8 +10,8 @@
  * Slice W2 puts the LIST card on it, for listings (MarketplaceCard) and events (EventCard): the photo flush under the
  * card's left corners and the card's full height, the text beside it, the one chip, the type scale. A list card takes the
  * height its lines need (Marty, 4 Nov 2026: "the big card doesnt need to conform to the same size"): nothing here fixes
- * or equalises a list card's height. Slice G2 puts the GRID tile on it: one height per row ("the other smaller tiles yes").
- * The compact row joins in its own slice.
+ * or equalises a list card's height. Slice G2 puts the GRID tile on it: one height per row ("the other smaller tiles yes");
+ * slice W3' puts the event's tile on the same lattice. The compact row joins in its own slice.
  */
 
 /** §1.1 The list card's frame: corners 14, a 1 px border, the card shadow; the photo and the text sit side by side. */
@@ -192,6 +192,54 @@ export function gridChip(tone: ChipTone): string {
  * padding and corners. Readable on any photo, in either scheme.
  */
 export const GRID_SCRIM_PILL = 'inline-block shrink-0 whitespace-nowrap px-1.5 py-0.5 rounded-md text-[10px] font-bold leading-normal bg-nature-900/90 text-white shadow-sm';
+
+/*
+ * The event tile (slice W3', DESIGN-market-grid-sizes-fable.md §2.2; DESIGN-grid-event-rows-fable.md): the listing tile's
+ * shell (gridTile, GRID_PHOTO, GRID_TEXT, GRID_ROW) with the event's own four rows, date / time / title / place.
+ */
+
+/** The grid photo's crop, core's focus a third of the way down (market-card-43): a style, since 33% has no class. */
+export const GRID_PHOTO_CROP = { objectPosition: '50% 33%' } as const;
+
+/**
+ * §1.3 The grid tile's type, core's MARKET_CARD_TYPE.grid in size and weight; every one a row tall (text-sm leading-snug is
+ * 1.203125rem, GRID_ROW's height): the event's date and time (in the event ink), its title, its place.
+ */
+export const GRID_TYPE = {
+    /** The event's date row and time row. 14/800. */
+    loud: 'text-sm font-extrabold leading-snug',
+    /** The event's title, one line. 14/700. */
+    second: 'text-sm font-bold leading-snug',
+    /** The event's place · distance, one line. 14/500. */
+    place: 'text-sm font-medium leading-snug',
+} as const;
+
+/**
+ * The event's time row (DESIGN-grid-event-rows-fable.md call 4): one row tall, its pieces ("10:26", "–14:26", core's
+ * eventTileWhen timePieces) laid side by side and wrapping; the row clips at one line, so an end piece with no room beside
+ * the start wraps out of sight whole and the row reads the start alone, never a cut and never a dangling dash. No gap: the
+ * dash is the end piece's own.
+ */
+export const GRID_TIME_ROW = 'shrink-0 h-[1.203125rem] min-w-0 flex flex-wrap content-start overflow-hidden';
+
+/** One piece of the time row: whole, never shrunk; only a piece wider than the whole row (a long repeat rule) ends in "…". */
+export const GRID_TIME_PIECE = 'shrink-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis';
+
+/**
+ * The viewer's own answer on an event tile ("Going ✓"), where a listing's price sits: the foot row's end (`ml-auto`), the
+ * scrim pill's own size (10/700, as PINNED beside it). Not the price's 13/700: "Interested ✓" at 13/700 measured 124 px in
+ * the 111 px foot row at 320 x 1.3 (Chromium, market-grid-shots.mjs). White words on the scrim in both schemes: the event ink
+ * there would be dark violet on near black in the light scheme. One line; only a pill wider than the whole row ends in "…".
+ */
+export const GRID_SCRIM_MARK = 'ml-auto inline-block min-w-0 max-w-full whitespace-nowrap overflow-hidden text-ellipsis px-1.5 py-0.5 rounded-md text-[10px] font-bold leading-normal bg-nature-900/90 text-white shadow-sm';
+
+/**
+ * A label that leads a grid row, whole ("🕒 your time" before an event's place, DESIGN-grid-event-rows-fable.md): the chip's
+ * type (10/800), as the listing tile's distance tag in its row 4, never shrunk for what follows it. At the row's 14/800 it
+ * measured 109 px in a 101 px row at 320 x 1.3 (Chromium); at 10/800 it is whole there. Only a label wider than the whole
+ * row (a long language) ends in "…".
+ */
+export const GRID_ROW_LABEL = 'shrink-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[10px] font-extrabold leading-normal';
 
 /** The inks on the card ground, light and dark. */
 export const CARD_INK = {

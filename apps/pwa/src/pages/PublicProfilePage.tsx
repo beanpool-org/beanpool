@@ -915,7 +915,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     aria-label={t('View enlarged photo: {title}', { title: p.title })}
                                                                     className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                                                 >
-                                                                    <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center text-2xl bg-nature-100 dark:bg-nature-800" aria-hidden="true">📦</span>} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
+                                                                    <ListPhoto photo={coverImage} fallback={<span className="w-full h-full flex items-center justify-center bg-nature-100 dark:bg-nature-800" aria-hidden="true"><span className="text-2xl opacity-50">📦</span></span>} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
                                                                 </button>
                                                             ) : (
                                                                 <div className="w-14 h-14 rounded-lg bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-2xl opacity-50">

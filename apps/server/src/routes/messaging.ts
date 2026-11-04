@@ -44,8 +44,9 @@ import { fileMessageReport } from './message-report.js';
 import { word } from '@beanpool/core';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
- *  thread is readable by any member of this community (enterpriseThreadReadRefusal), but only its keepers get it in "Your groups", so only they may
- *  mute it. A group chat goes through groupChatRefusal instead, which also says whether to answer 403 or 404. */
+ *  thread is readable by any member of this community (enterpriseThreadReadRefusal), but only its keepers get it in
+ *  "Your groups", so only they may mute it. A group chat goes through groupChatRefusal instead, which also says whether
+ *  to answer 403 or 404. */
 function canOpenChat(conv: { id: string; type: string; participants: string[] }, actor: string): boolean {
     if (conv.type === 'enterprise_thread') return isKeeperOfEnterprise(actor, conv.id);
     if (conv.type === 'event_thread') {

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * "Invite and share" on a listing (components/InviteAndShare.tsx; utils/invite-and-share.ts), driven as the real component with
- * a fake node (the fetch is stubbed; nothing leaves the test):
+ * "Invite and share" on a listing (components/InviteAndShare.tsx; utils/invite-and-share.ts), driven as the real components
+ * through the one Share button's sheet (components/SharePost.tsx, DP2) with a fake node (the fetch is stubbed; nothing leaves
+ * the test):
  *   - who is offered the button: a member where the community takes invites and its door lets them; nobody else (a guest, a
  *     member where only admins invite, a community that takes none): there is no button, and nothing is asked of the node
  *   - what a tap makes: the node's own invite, with the Vouch for them choice for someone who can vouch (None unless chosen),
@@ -40,8 +41,10 @@ vi.mock('react-native', () => {
     };
     return {
         Platform: { OS: 'android' },
-        View: el('div'), Text: el('span'), Pressable: el('button'),
-        StyleSheet: { create: (s: unknown) => s },
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'),
+        Modal: ({ visible, children }: { visible: boolean; children?: any }) => (visible ? createElement('div', { 'data-modal': 'true' }, children) : null),
+        StyleSheet: { create: (s: unknown) => s, absoluteFill: {} },
+        Alert: { alert: () => {} },
         Share: { share: async (m: unknown) => { ctl.shared.push(m); return { action: 'sharedAction' }; } },
     };
 });
@@ -54,7 +57,12 @@ vi.mock('../nodes', () => ({ isGuestNode: async () => ctl.guest }));
 vi.mock('../node-admin', () => ({
     askNodeRole: async () => { ctl.asked.push('role'); return { role: ctl.role, communityName: 'Mullum' }; },
     readPersistedNodeRole: async () => undefined,
+    // The sheet's lines read the role through the header's cache (utils/use-share-role.ts).
+    cachedNodeRoleHeard: async () => ({ role: ctl.role, communityName: 'Mullum' }),
+    persistNodeRole: async () => {},
 }));
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recognition: 'member' }) }));
+vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('../db', () => ({ askCanVouch: async () => { ctl.asked.push('vouch'); return ctl.canVouch; } }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({ 'Content-Type': 'application/json', 'x-signed': '1' }) }));
 vi.mock('../../app/ThemeContext', async () => {
@@ -63,8 +71,8 @@ vi.mock('../../app/ThemeContext', async () => {
     return { useTheme: () => ctx, useStyles: (make: (t: unknown) => unknown) => make(ctx) };
 });
 
-import { InviteAndShareButton } from '../../components/InviteAndShare';
-import { offersInviteAndShare, makeInviteForShare } from '../invite-and-share';
+import { SharePostButtons } from '../../components/SharePost';
+import { offersInviteAndShare, makeInviteForShare, INVITE_FOR_SHARE_WAIT_MS } from '../invite-and-share';
 
 const POST = { id: '3f2b8c1e-5d4a-4e7b-9a10-0c6d2e8f1a34', title: 'Ladder for borrowing' };
 const NODE = 'https://mullum.example';
@@ -94,7 +102,10 @@ async function mount() {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    await act(async () => { root!.render(createElement(InviteAndShareButton, { post: POST }) as any); });
+    await act(async () => { root!.render(createElement(SharePostButtons, { post: POST }) as any); });
+    await settle();
+    // Invite and share is a way in the one Share button's sheet (DP2).
+    await act(async () => { byId('share-open-button')!.click(); });
     await settle();
 }
 const byId = (id: string) => host!.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
@@ -103,7 +114,8 @@ async function tap(id: string) { await act(async () => { byId(id)!.click(); }); 
 describe('who is offered the button', () => {
     it('a member, where the community takes invites and any member may make them', async () => {
         await mount();
-        expect(byId('invite-and-share-button')?.textContent).toBe('Invite and share');
+        // The way's name, with its sentence under it in the same item.
+        expect(byId('invite-and-share-button')?.firstElementChild?.textContent).toBe('Invite and share');
         expect(byId('invite-and-share-line')?.textContent).toBe('One invite, for one person: a code works once.');
         // Asked nothing of the node until they tap: no role (any member may invite), no vouch (the community has none).
         expect(ctl.asked).toEqual([]);
@@ -112,28 +124,40 @@ describe('who is offered the button', () => {
     it('no button where the community takes no invites', async () => {
         ctl.profile = { profile: 'global', features: { invites: false } };
         await mount();
-        expect(byId('invite-and-share')).toBeNull();
+        expect(byId('invite-and-share-button')).toBeNull();
     });
 
     it('no button for a guest of the community', async () => {
         ctl.guest = true;
         await mount();
-        expect(byId('invite-and-share')).toBeNull();
+        expect(byId('invite-and-share-button')).toBeNull();
     });
 
     it('where only admins invite: a plain member has none, an owner or an admin has it', async () => {
         ctl.profile = { profile: 'local', features: { door: 'admins' } };
         ctl.role = null;
         await mount();
-        expect(ctl.asked).toContain('role');
-        expect(byId('invite-and-share')).toBeNull();
+        // The sheet's line already says only admins invite here (the role through the header's cache): Invite and share is
+        // not offered, so it asks the node nothing more.
+        expect(ctl.asked).toEqual([]);
+        expect(byId('invite-and-share-button')).toBeNull();
         act(() => root?.unmount()); host?.remove();
         for (const role of ['owner', 'admin']) {
             ctl.role = role;
+            ctl.asked.length = 0;
             await mount();
+            expect(ctl.asked, role).toContain('role');
             expect(byId('invite-and-share-button'), role).toBeTruthy();
             act(() => root?.unmount()); host?.remove();
         }
+    });
+
+    it('where Invite and share is not offered, nothing is read for it: no vouch asked on a community that takes no invites', async () => {
+        ctl.profile = { profile: 'local', features: { door: 'members', invites: false, inviteVouch: true } };
+        ctl.canVouch = true;
+        await mount();
+        expect(byId('invite-and-share-button')).toBeNull();
+        expect(ctl.asked).toEqual([]);
     });
 
     it('the rule, on its own: no post id, no button', () => {
@@ -156,9 +180,10 @@ describe('what a tap makes', () => {
         expect(fake.calls[0].url).toBe(`${NODE}/api/invite/generate`);
         expect(fake.calls[0].body).toEqual({ publicKey: 'pk-me' });
         expect(ctl.shared).toEqual([{ message: `${POST.title}\n${NODE}/?invite=INV-AB12-CD34&post=${POST.id}`, title: POST.title }]);
-        // Done: the panel is closed, no note.
+        // Done: the panel and the sheet are closed, no note.
         expect(byId('invite-and-share-panel')).toBeNull();
         expect(byId('invite-and-share-note')).toBeNull();
+        expect(byId('share-sheet')).toBeNull();
     });
 
     it('someone who can vouch chooses; None unless they do', async () => {
@@ -171,6 +196,8 @@ describe('what a tap makes', () => {
         await tap('invite-and-share-make');
         expect(fake.calls[0].body).toEqual({ publicKey: 'pk-me' });
 
+        // Shared: the sheet closed. The next invite is a new tap on Share.
+        await tap('share-open-button');
         await tap('invite-and-share-button');
         await tap('invite-vouch-1');
         await tap('invite-and-share-make');
@@ -237,5 +264,24 @@ describe('what it never makes', () => {
         expect(down).toMatchObject({ ok: false, offline: true });
         const refused = await makeInviteForShare(NODE, id, null, undefined, { signedHeaders, fetchImpl: (async () => ({ ok: false, status: 500, json: async () => ({}) })) as any });
         expect(refused).toMatchObject({ ok: false, offline: false });
+    });
+
+    it('makeInviteForShare, on its own: a community that never answers is no answer at INVITE_FOR_SHARE_WAIT_MS, and the request is given up', async () => {
+        vi.useFakeTimers();
+        try {
+            const id = { publicKey: 'pk', privateKey: 'sk', callsign: 'x' } as any;
+            const signals: AbortSignal[] = [];
+            const fetchImpl = ((_url: string, init: { signal: AbortSignal }) => { signals.push(init.signal); return new Promise(() => {}); }) as any;
+            let settled: unknown = 'waiting';
+            void makeInviteForShare(NODE, id, null, undefined, { signedHeaders: (async () => ({})) as any, fetchImpl }).then((r) => { settled = r; });
+            await vi.advanceTimersByTimeAsync(INVITE_FOR_SHARE_WAIT_MS - 1);
+            expect(settled).toBe('waiting');
+            expect(signals[0]?.aborted).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(settled).toMatchObject({ ok: false, offline: true });
+            expect(signals[0].aborted).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

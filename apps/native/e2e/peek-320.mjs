@@ -88,13 +88,15 @@ const STUBS = {
         export const makePeekLink = async () => ({ link: 'https://castlemaine.beanpool.org/?post=p&peek=t', expiresAt: '' });
     `,
     'use-node-profile': `export const useNodeProfile = () => ({ profile: 'local', features: { shareOutside: true }, checkedAt: '' });`,
+    // The ask form (#2775) is opened by a tap these shots never make; stubbed as share-one-flow-320.mjs does.
+    'InviteAsks': `export const AskSheet = () => null;`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
     const base = path.basename(spec);
-    return ['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile'].includes(base) ? base : null;
+    return ['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'InviteAsks'].includes(base) ? base : null;
 };
 
 // ─── The page: each case renders the real screens for one state ─────────────────────────────────────────────────────
@@ -252,6 +254,8 @@ try {
         await page.getByText('Nothing shared outside right now.').waitFor();
         await measure(`${scheme} · Settings, Shared outside: none`);
         await open(`case=share&scheme=${scheme}`);
+        // The ways are in the one Share button's sheet (DP2).
+        await page.locator('[data-testid="share-open-button"]').click();
         await page.getByText('Share outside the community').waitFor();
         await measure(`${scheme} · a listing's Share with members and Share outside the community`);
     }

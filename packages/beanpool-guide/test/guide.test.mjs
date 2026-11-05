@@ -122,13 +122,13 @@ test('§1.3: legacy vouching words and phrases are absent across the guide and o
     const banned = [
         [/\bVouched in by\b/i, 'replaced by "Invited by" (§1.3)'],
         [/\bAppointed vouchers?\b/i, 'appointed vouchers term removed (§1.3)'],
-        [/\bPromote and Demote\b/i, 'Promote and Demote removed (§1.3)'],
+        [/\bPromote\b(?:\*\*)?\s+and\s+(?:\*\*)?Demote\b/i, 'Promote and Demote removed (§1.3)'],
         [/\bgive or take away vouching\b/i, 'vouching decisions removed (§1.3)'],
         [/\bchoosing who may vouch\b/i, 'choosing who may vouch removed (§1.3)'],
         [/\bVouch for Member\b/i, 'old profile vouch button removed (§1.3)'],
         [/\bLight \(25\)/i, 'old preset names removed (§1.3)'],
-        [/\b(give|giving) a member the right to vouch\b/i, 'decision effect removed (§1.3)'],
-        [/\b(take|taking) away the right to vouch\b/i, 'decision effect removed (§1.3)'],
+        [/\b(give|gives|giving)\s+(?:a\s+member|members)\s+the\s+right\s+to\s+vouch\b/i, 'decision effect removed (§1.3)'],
+        [/\b(take|takes|taking)\s+away\s+the\s+right\s+to\s+vouch\b/i, 'decision effect removed (§1.3)'],
         [/\b25, 50 or 100\b/i, 'presets are 25, 50, 75 or 100 (§4)'],
     ];
     for (const file of files) {

@@ -544,8 +544,12 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     const prior = typeof err?.prior === 'number' && err.prior > 0 ? err.prior : null;
                                     if (prior !== null) setNodePriorVouch(prior);
                                     if (!isRaise && err?.code === 'already_vouched' && prior !== null) {
-                                        setRaisePrompt({ prior, newTotal: prior + profileVouchPreset, amount: profileVouchPreset });
-                                        return;
+                                        if (prior + profileVouchPreset <= VOUCH_MAX) {
+                                            setRaisePrompt({ prior, newTotal: prior + profileVouchPreset, amount: profileVouchPreset });
+                                            return;
+                                        }
+                                        // A raise by this preset would pass the cap: it is greyed now, so it is not offered either.
+                                        setProfileVouchPreset(null);
                                     }
                                     const msg = typeof err?.message === 'string' && err.message ? err.message : typeof err?.error === 'string' && err.error ? err.error : t('Could not vouch.');
                                     setVouchRefusal(msg);

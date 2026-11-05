@@ -353,6 +353,35 @@ describe('PublicProfilePage Vouching (§9)', () => {
         expect(screen.getByTestId('invite-vouch-50')).toBeDisabled();
     });
 
+    it('an already_vouched refusal whose raise would pass 100 offers no raise and greys that preset (#2915 round 4, self-check)', async () => {
+        const error: any = new Error('You’ve already vouched for @sam.');
+        error.code = 'already_vouched';
+        error.prior = 50;
+        vi.mocked(vouchForMember).mockRejectedValueOnce(error);
+
+        render(
+            <PublicProfilePage
+                identity={IDENTITY}
+                pubkey={TARGET_PK}
+                onBack={() => {}}
+                onMessage={() => {}}
+                onNavigateTab={() => {}}
+                onNavigatePost={() => {}}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('invite-vouch-75'));
+        fireEvent.click(screen.getByTestId('profile-vouch-submit'));
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch-refusal')).toHaveTextContent('You’ve already vouched for @sam.'));
+        expect(screen.queryByTestId('profile-vouch-raise-confirm')).toBeNull();
+        expect(screen.getByTestId('invite-vouch-75')).toBeDisabled();
+        expect(screen.getByTestId('invite-vouch-75')).not.toBeChecked();
+        expect(screen.getByTestId('profile-vouch-submit')).toBeDisabled();
+        expect(vouchForMember).toHaveBeenCalledTimes(1);
+    });
+
     it('an already_vouched refusal without the node’s figure shows the node’s sentence and never guesses 25 (#2915 round 4, note 7)', async () => {
         const error: any = new Error('You’ve already vouched for @sam.');
         error.code = 'already_vouched';

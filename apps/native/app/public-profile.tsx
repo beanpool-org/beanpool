@@ -1495,6 +1495,12 @@ export default function PublicProfileScreen() {
                                                 // `over_max`). Without it nothing is guessed: the node's own sentence is shown.
                                                 const prior = !res.ok && typeof res.prior === 'number' && res.prior > 0 ? res.prior : null;
                                                 if (prior !== null) setNodePriorVouch(prior);
+                                                if (!isRaise && !res.ok && res.code === 'already_vouched' && prior !== null && prior + profileVouchPreset > VOUCH_MAX) {
+                                                    // A raise by this preset would pass the cap: it is greyed now, so it is not offered either.
+                                                    setProfileVouchPreset(null);
+                                                    setVouchRefusal(res.message);
+                                                    return;
+                                                }
                                                 if (!isRaise && !res.ok && res.code === 'already_vouched' && prior !== null) {
                                                     const newTotal = prior + profileVouchPreset;
                                                     Alert.alert(

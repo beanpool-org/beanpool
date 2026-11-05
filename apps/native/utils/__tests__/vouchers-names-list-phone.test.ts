@@ -259,6 +259,23 @@ describe('vouchers on the phone (slice V2)', () => {
             // Own confirmed entry: FORBIDDEN (own_budget refusal prevention)
             expect(canMake(confirmedEntry, isCommitteeTrue, 'pk1')).toBe(false);
         });
+
+        it('resolves callsign fallback to callsignOf or entry name when confirmation.callsign is null', () => {
+            const callsignOf = (pk: string) => (pk === 'pk_charlie' ? 'charlie_callsign' : '');
+            const entryWithoutCallsign = {
+                text: { name: 'Charlie Bucket', note: '' },
+                confirmation: { memberPubkey: 'pk_charlie', callsign: null },
+            };
+            const resolvedCallsign = entryWithoutCallsign.confirmation.callsign || callsignOf(entryWithoutCallsign.confirmation.memberPubkey) || entryWithoutCallsign.text?.name || '';
+            expect(resolvedCallsign).toBe('charlie_callsign');
+
+            const entryWithOnlyName = {
+                text: { name: 'Charlie Bucket', note: '' },
+                confirmation: { memberPubkey: 'pk_unknown', callsign: null },
+            };
+            const resolvedFromName = entryWithOnlyName.confirmation.callsign || callsignOf(entryWithOnlyName.confirmation.memberPubkey) || entryWithOnlyName.text?.name || '';
+            expect(resolvedFromName).toBe('Charlie Bucket');
+        });
     });
 
     describe('VoucherCard rendering from fixture (§5, §10)', () => {
@@ -560,6 +577,121 @@ describe('vouchers on the phone (slice V2)', () => {
             // Stop vouching button is not rendered
             expect(container.textContent).not.toContain('Stop vouching');
         });
+
+        it('renders real decrypted entry name in title and avoids false confirmation attribution in subtitle', async () => {
+            const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'viewer', createdAt: '2026-11-01' };
+            const entry: OpenedEntry = {
+                id: 'e_jane',
+                keyId: 'k1',
+                createdAt: '2026-11-01',
+                updatedAt: '2026-11-01',
+                text: { name: 'Jane Doe', note: 'Local farmer' },
+                locked: null,
+                key: null,
+                holders: [],
+                notTrusting: [],
+                checkedHere: [],
+                confirmation: {
+                    id: 'c1',
+                    memberPubkey: 'pk_jane',
+                    callsign: 'jane',
+                    entryId: 'e_jane',
+                    confirmedBy: 'pk_other',
+                    confirmedAt: '2026-10-15',
+                    needsSecond: false,
+                    secondedBy: null,
+                    secondedAt: null,
+                    revokedBy: null,
+                    revokedAt: null,
+                    revokeReason: null,
+                },
+                voucher: FIXTURE_VOUCHER_CARD,
+            };
+
+            await act(async () => {
+                root.render(
+                    createElement(VoucherCard, {
+                        anchorUrl: 'https://community.test',
+                        identity,
+                        memberPubkey: 'pk_jane',
+                        initialCard: FIXTURE_VOUCHER_CARD,
+                        entry,
+                    })
+                );
+            });
+
+            // Title is decrypted real name
+            expect(container.textContent).toContain('Jane Doe');
+            // Subtitle has @jane and made a voucher by @admin, but NOT confirmed by @admin
+            expect(container.textContent).toContain('@jane · made a voucher by @admin');
+            expect(container.textContent).not.toContain('confirmed by @admin');
+        });
+
+        it('formats migration actor without @ prefix in budget history', async () => {
+            const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'viewer', createdAt: '2026-11-01' };
+            const migrationCard: VoucherCardData = {
+                ...FIXTURE_VOUCHER_CARD,
+                history: [
+                    {
+                        kind: 'grant',
+                        amount: 1000,
+                        actor: 'migration:vouchers',
+                        actorCallsign: null,
+                        at: '2026-11-01T10:00:00Z',
+                    },
+                    {
+                        kind: 'stop',
+                        amount: 0,
+                        actor: 'migration:vouchers',
+                        actorCallsign: null,
+                        at: '2026-11-02T10:00:00Z',
+                    },
+                ],
+            };
+
+            await act(async () => {
+                root.render(
+                    createElement(VoucherCard, {
+                        anchorUrl: 'https://community.test',
+                        identity,
+                        memberPubkey: 'pk_jane',
+                        initialCard: migrationCard,
+                    })
+                );
+            });
+
+            // Open budget history
+            const historyBtn = container.querySelector('button[aria-label="Budget history ›"]');
+            expect(historyBtn).not.toBeNull();
+            await act(async () => {
+                historyBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+
+            const historyText = container.querySelector('[data-testid="budget-history-section"]')?.textContent ?? '';
+            // Must contain "made a voucher by migration" and "Budget stopped by migration", NOT "@migration"
+            expect(historyText).toContain('made a voucher by migration');
+            expect(historyText).toContain('Budget stopped by migration');
+            expect(historyText).not.toContain('@migration');
+        });
+
+        it('omits uncomputed belowZero from passedOn summary line', async () => {
+            const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'viewer', createdAt: '2026-11-01' };
+
+            await act(async () => {
+                root.render(
+                    createElement(VoucherCard, {
+                        anchorUrl: 'https://community.test',
+                        identity,
+                        memberPubkey: 'pk_jane',
+                        initialCard: FIXTURE_VOUCHER_CARD,
+                    })
+                );
+            });
+
+            const text = container.textContent;
+            expect(text).toContain('Passed on: 50 of their 350 to 1 person');
+            expect(text).not.toMatch(/Passed on:.*below zero/);
+        });
     });
 
     describe('Make a voucher amount settings and API call (§10)', () => {
@@ -691,6 +823,68 @@ describe('vouchers on the phone (slice V2)', () => {
             expect(res.ok).toBe(false);
             const vouchersData = res.ok ? res.value : null;
             expect(vouchersData).toBeNull();
+        });
+    });
+
+    describe('Voucher search filtering and empty state (§10, §11)', () => {
+        const roleVouchersWithoutEntry: VoucherSummaryRow[] = [
+            {
+                memberPubkey: 'pk_role_alice',
+                callsign: 'alice_admin',
+                source: 'role',
+                entryId: null,
+                madeBy: 'pk_owner',
+                madeByCallsign: 'owner',
+                madeAt: '2026-11-01',
+                stoppedAt: null,
+                stopReason: null,
+                left: 1000,
+                held: 0,
+                heldInvites: 0,
+                vouched: 0,
+                peopleVouched: 0,
+                level: 1000,
+                belowZero: 0,
+                writtenOff: 0,
+                passedOn: { amount: 0, people: 0 },
+                invitesWithVouch: 0,
+                trading: { withOthers: 0, insideOnly: 0 },
+            },
+            {
+                memberPubkey: 'pk_role_bob',
+                callsign: 'bob_admin',
+                source: 'role',
+                entryId: null,
+                madeBy: 'pk_owner',
+                madeByCallsign: 'owner',
+                madeAt: '2026-11-01',
+                stoppedAt: null,
+                stopReason: null,
+                left: 1000,
+                held: 0,
+                heldInvites: 0,
+                vouched: 0,
+                peopleVouched: 0,
+                level: 1000,
+                belowZero: 0,
+                writtenOff: 0,
+                passedOn: { amount: 0, people: 0 },
+                invitesWithVouch: 0,
+                trading: { withOthers: 0, insideOnly: 0 },
+            },
+        ];
+
+        it('filters role vouchers without entry by query', () => {
+            const filterByQuery = (rvs: VoucherSummaryRow[], q: string) => {
+                const queryStr = q.trim().toLocaleLowerCase();
+                if (!queryStr) return rvs;
+                return rvs.filter((rv) => (rv.callsign || '').toLocaleLowerCase().includes(queryStr));
+            };
+
+            expect(filterByQuery(roleVouchersWithoutEntry, '').length).toBe(2);
+            expect(filterByQuery(roleVouchersWithoutEntry, 'alice').map((r) => r.callsign)).toEqual(['alice_admin']);
+            expect(filterByQuery(roleVouchersWithoutEntry, 'bob').map((r) => r.callsign)).toEqual(['bob_admin']);
+            expect(filterByQuery(roleVouchersWithoutEntry, 'nobody').length).toBe(0);
         });
     });
 });

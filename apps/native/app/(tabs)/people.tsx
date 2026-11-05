@@ -346,12 +346,10 @@ export default function PeopleScreen() {
     }, [anchorUrl, identity]);
 
     useEffect(() => {
-        if (view === 'invites') {
-            void reloadVouchers();
-        } else {
+        if (view !== 'invites') {
             setVouchersData(null);
         }
-    }, [view, reloadVouchers]);
+    }, [view]);
 
     useFocusEffect(
         useCallback(() => {

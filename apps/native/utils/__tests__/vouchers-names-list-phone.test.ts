@@ -440,6 +440,55 @@ describe('vouchers on the phone (slice V2)', () => {
             });
             expect(container.textContent).toContain('This community has frozen budget increases.');
         });
+
+        it('retains canChange and keeps budget controls mounted after setVoucherBudget succeeds', async () => {
+            const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'viewer', createdAt: '2026-11-01' };
+
+            // Server POST /api/names/vouchers/:member/budget returns card WITHOUT canChange property
+            const serverResponseWithoutCanChange = {
+                ...FIXTURE_VOUCHER_CARD,
+                level: 1500,
+                changed: true,
+            };
+            delete (serverResponseWithoutCanChange as any).canChange;
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => serverResponseWithoutCanChange,
+            });
+
+            await act(async () => {
+                root.render(
+                    createElement(VoucherCard, {
+                        anchorUrl: 'https://community.test',
+                        identity,
+                        memberPubkey: 'pk_jane',
+                        initialCard: FIXTURE_VOUCHER_CARD,
+                    })
+                );
+            });
+
+            // Click quick level 1,500
+            const btn1500 = container.querySelector('button[aria-label="1500"], button[aria-label="1,500"]');
+            await act(async () => {
+                btn1500?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+
+            const submitBtn = container.querySelector('button[aria-label^="Set budget to 1"]');
+            expect(submitBtn).not.toBeNull();
+
+            await act(async () => {
+                submitBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+
+            // Notice is displayed
+            expect(container.textContent).toMatch(/Budget set to 1,?500 Beans\./);
+
+            // Controls are STILL mounted because canChange was preserved!
+            const controlAfter = container.querySelector('[data-testid="set-budget-control"]');
+            expect(controlAfter).not.toBeNull();
+        });
     });
 
     describe('Make a voucher amount settings and API call (§10)', () => {

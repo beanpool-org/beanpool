@@ -71,7 +71,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
         try {
             const res = await setVoucherBudget(anchorUrl, identity, card.memberPubkey, targetLevel);
             if (res.ok) {
-                setCard(res.value);
+                setCard((prev) => ({ ...res.value, canChange: prev?.canChange ?? true }));
                 onVoucherUpdated?.(res.value);
                 setNotice(t('Budget set to {level} Beans.', { level: formatNumber(targetLevel) }));
             } else {
@@ -99,7 +99,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                         try {
                             const res = await stopNamesVoucher(anchorUrl, identity, card.memberPubkey);
                             if (res.ok) {
-                                setCard(res.value);
+                                setCard((prev) => ({ ...res.value, canChange: prev?.canChange ?? true }));
                                 onVoucherUpdated?.(res.value);
                                 setNotice(t('Budget stopped.'));
                             } else {

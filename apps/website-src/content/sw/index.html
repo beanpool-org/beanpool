@@ -1,4 +1,4 @@
-<!-- source-hash: 05e0cd4edec7d021 -->
+<!-- source-hash: d0fe67fc048d0284 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,6 +134,21 @@
                             <p>Sakinisha programu na ufungue kiungo au changanua msimbo wa QR uliopewa na mwanachama; mwaliko hufanya kazi mara moja na hudumu kwa siku 30.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">Maharagwe huishi katika jamii za wenyeji, kila moja kwenye seva yake yenyewe. Jamii ya kimataifa inakuelekeza na kukuongoza kwenye mojawapo. Inakuonyesha jinsi Maharagwe yanavyofanya kazi huko, kupitia mfano wa jamii.</p>
 
                     <div class="hero-logos-group">

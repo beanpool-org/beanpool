@@ -1,4 +1,4 @@
-<!-- source-hash: 05e0cd4edec7d021 -->
+<!-- source-hash: d0fe67fc048d0284 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,6 +134,21 @@
                             <p>অ্যাপটি ইনস্টল করুন এবং কোনো সদস্যের দেওয়া লিঙ্কটি খুলুন বা QR কোডটি স্ক্যান করুন; একটি আমন্ত্রণ একবার কাজ করে এবং ৩০ দিন স্থায়ী হয়।</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">শিম স্থানীয় সম্প্রদায়ে থাকে, প্রতিটি তার নিজস্ব সার্ভারে। বিশ্ব সম্প্রদায় আপনাকে চারপাশ ঘুরে দেখায় এবং একটি সম্প্রদায়ের পথ দেখায়। এটি একটি উদাহরণ সম্প্রদায়ের মাধ্যমে দেখায় কিভাবে সেখানে শিম কাজ করে।</p>
 
                     <div class="hero-logos-group">

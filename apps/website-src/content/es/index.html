@@ -1,4 +1,4 @@
-<!-- source-hash: 05e0cd4edec7d021 -->
+<!-- source-hash: d0fe67fc048d0284 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,6 +134,21 @@
                             <p>Instala la app y abre el enlace o escanea el código QR que te dio un miembro; una invitación funciona una vez y dura 30 días.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">Los Frijoles viven en comunidades locales, cada una en su propio servidor. La comunidad global te muestra el entorno y te orienta hacia una. Te muestra cómo funcionan los Frijoles allí, con una comunidad de ejemplo.</p>
 
                     <div class="hero-logos-group">

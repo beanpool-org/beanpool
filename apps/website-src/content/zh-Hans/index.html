@@ -1,4 +1,4 @@
-<!-- source-hash: 05e0cd4edec7d021 -->
+<!-- source-hash: d0fe67fc048d0284 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,6 +134,21 @@
                             <p>安装应用并打开成员给你的链接或扫描二维码；每个邀请仅限使用一次，有效期为 30 天。</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">豆子存在于本地社区中，每个社区运行在各自的服务器上。全球社区带你参观并引导你加入一个本地社区。它通过一个示范社区向你展示豆子在其中是如何运作的。</p>
 
                     <div class="hero-logos-group">

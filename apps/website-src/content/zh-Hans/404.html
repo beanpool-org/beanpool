@@ -1,4 +1,4 @@
-<!-- source-hash: 6261338053dcc061 -->
+<!-- source-hash: 87fc8445489b5a14 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,6 +82,21 @@
                         </div>
                     
         </div>
+        <script>
+        // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+        (function () {
+            var ua = navigator.userAgent || "";
+            var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+            var isAndroid = !isIOS && /android/i.test(ua);
+            if (!isIOS && !isAndroid) {
+                var btn = document.querySelector(".hero-door a.btn-primary");
+                var browserLine = document.querySelector(".hero-door .door-browser");
+                var lang = (document.documentElement && document.documentElement.lang) || "en";
+                if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                if (browserLine) browserLine.hidden = true;
+            }
+        })();
+        </script>
     </main>
 
 <footer>

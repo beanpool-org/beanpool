@@ -1,4 +1,4 @@
-<!-- source-hash: 05e0cd4edec7d021 -->
+<!-- source-hash: d0fe67fc048d0284 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,6 +134,21 @@
                             <p>Εγκαταστήστε την εφαρμογή και ανοίξτε τον σύνδεσμο ή σαρώστε τον κωδικό QR που σας έδωσε ένα μέλος· μια πρόσκληση λειτουργεί μία φορά και ισχύει για 30 ημέρες.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">Τα Φασόλια ζουν σε τοπικές κοινότητες, καθεμία στον δικό της διακομιστή. Η παγκόσμια κοινότητα σας ξεναγεί και σας καθοδηγεί προς μία από αυτές. Σας δείχνει πώς λειτουργούν τα Φασόλια εκεί, με μια παραδειγματική κοινότητα.</p>
 
                     <div class="hero-logos-group">

@@ -1,4 +1,4 @@
-<!-- source-hash: 05e0cd4edec7d021 -->
+<!-- source-hash: d0fe67fc048d0284 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,6 +134,21 @@
                             <p>ആപ്പ് ഇൻസ്റ്റാൾ ചെയ്ത് ഒരു അംഗം നിങ്ങൾക്ക് തന്ന ലിങ്ക് തുറക്കുകയോ ക്യുആർ കോഡ് സ്കാൻ ചെയ്യുകയോ ചെയ്യുക; ഒരു ക്ഷണം ഒരു തവണ മാത്രമേ പ്രവർത്തിക്കൂ, അതിന് 30 ദിവസത്തെ കാലാവധിയുണ്ട്.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">പയർ പ്രാദേശിക കമ്മ്യൂണിറ്റികളിലാണ് നിലനിൽക്കുന്നത്, ഓരോന്നും സ്വന്തം സെർവറിലാണ് പ്രവർത്തിക്കുന്നത്. ആഗോള കമ്മ്യൂണിറ്റി കാര്യങ്ങൾ പരിചയപ്പെടുത്തുകയും നിങ്ങളെ ഒരെണ്ണത്തിലേക്ക് നയിക്കുകയും ചെയ്യുന്നു. ഒരു മാതൃകാ കമ്മ്യൂണിറ്റിയിലൂടെ അവിടെ പയർ എങ്ങനെ പ്രവർത്തിക്കുന്നുവെന്ന് ഇത് കാണിച്ചുതരുന്നു.</p>
 
                     <div class="hero-logos-group">

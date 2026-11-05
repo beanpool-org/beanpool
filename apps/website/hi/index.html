@@ -219,6 +219,21 @@
                             <p>ऐप इंस्टॉल करें और किसी सदस्य द्वारा दिए गए लिंक को खोलें या क्यूआर कोड को स्कैन करें; एक आमंत्रण एक बार काम करता है और 30 दिनों तक वैध रहता है।</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">फलियाँ स्थानीय समुदायों में रहती हैं, प्रत्येक अपने स्वयं के सर्वर पर। वैश्विक समुदाय आपको इसका परिचय कराता है और किसी समुदाय तक ले जाता है। यह आपको एक उदाहरण समुदाय के साथ दिखाता है कि वहाँ फलियाँ कैसे काम करती हैं।</p>
 
                     <div class="hero-logos-group">

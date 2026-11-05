@@ -1,4 +1,4 @@
-<!-- source-hash: 05e0cd4edec7d021 -->
+<!-- source-hash: d0fe67fc048d0284 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,6 +134,21 @@
                             <p>برنامه را نصب کنید و پیوند یا کد QR که یکی از اعضا به شما داده است را باز یا اسکن کنید؛ هر دعوت‌نامه یک بار کار می‌کند و ۳۰ روز اعتبار دارد.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">لوبیاها در جامعه‌های محلی جریان دارند که هرکدام روی سرور خودشان قرار دارند. جامعه جهانی شما را راهنمایی می‌کند و به یکی از آن‌ها هدایت می‌نماید. این جامعه با یک نمونه نشان می‌دهد که لوبیا در آنجا چگونه کار می‌کند.</p>
 
                     <div class="hero-logos-group">

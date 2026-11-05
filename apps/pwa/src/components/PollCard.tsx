@@ -108,16 +108,77 @@ export function pollFacts(post: MarketplacePost, now = Date.now()) {
     return { openVote, isClosed, authorName, avatarSrc, options, totalVotes, sealed, answered };
 }
 
+/**
+ * The card's vote, the one path for the card and the grid's tile (PollGridTile, voted in place when the whole poll is in front
+ * of the member: Marty and Damo, 6 Nov 2026): votePoll, the node's answer drawn in place (`setLivePost`), and a change of vote
+ * asked first (#2907: "You voted for “{current}”. Change it to “{new}”?"). `onSent` is the card's own tidy-up after a vote (its
+ * Other line).
+ */
+export function usePollVote(
+    livePost: MarketplacePost,
+    setLivePost: (post: MarketplacePost) => void,
+    { identity, onVoteSuccess, onSent }: { identity?: BeanPoolIdentity | null; onVoteSuccess?: () => void; onSent?: () => void },
+) {
+    const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const { isClosed, options } = pollFacts(livePost);
+    const userVotedOptionId = livePost.userVotedOptionId;
+
+    const sendVote = async (optionId: string, typed?: string) => {
+        setVotingOptionId(optionId);
+        setError(null);
+        try {
+            const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
+            if (res?.post) {
+                setLivePost(res.post);
+            }
+            onSent?.();
+            onVoteSuccess?.();
+        } catch (err: any) {
+            setError(err.message || t('Could not record your vote.'));
+        } finally {
+            setVotingOptionId(null);
+        }
+    };
+
+    const handleVote = async (optionId: string, typed?: string) => {
+        if (isClosed) {
+            setError(t('This poll has ended and can no longer receive votes.'));
+            return;
+        }
+        if (!identity) {
+            setError(t('Please connect your member identity to vote.'));
+            return;
+        }
+
+        if (userVotedOptionId && userVotedOptionId !== optionId) {
+            const currentOpt = options.find(o => o.id === userVotedOptionId);
+            const currentLabel = currentOpt ? (currentOpt.other ? pollOtherLines.other() : currentOpt.text) : (userVotedOptionId ?? '');
+            const newOpt = options.find(o => o.id === optionId);
+            const newLabel = newOpt ? (newOpt.other ? pollOtherLines.other() : newOpt.text) : optionId;
+            if (!window.confirm(t('You voted for “{current}”. Change it to “{new}”?', { current: currentLabel, new: newLabel }))) {
+                return;
+            }
+        }
+
+        await sendVote(optionId, typed);
+    };
+
+    return { votingOptionId, error, setError, handleVote };
+}
+
 export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, onOpen, visitor = false, informal = false, localWays }: PollCardProps) {
     const decisionsMarked = marked(useFeatureMode('decisions'));
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
-    const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
     const [showVoters, setShowVoters] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [typingOther, setTypingOther] = useState(false);
     const [otherWords, setOtherWords] = useState('');
     const [ownerHere, setOwnerHere] = useState(false);
+    // The vote, the one path the grid's tile votes by too: after a vote the Other line closes and empties.
+    const { votingOptionId, error, setError, handleVote } = usePollVote(livePost, setLivePost, {
+        identity, onVoteSuccess, onSent: () => { setTypingOther(false); setOtherWords(''); },
+    });
 
     useEffect(() => {
         setLivePost(post);
@@ -152,47 +213,6 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
         void myNodeRoleOnce().then(role => { if (!cancelled && role === 'owner') setOwnerHere(true); });
         return () => { cancelled = true; };
     }, [asksRole]);
-
-    const sendVote = async (optionId: string, typed?: string) => {
-        setVotingOptionId(optionId);
-        setError(null);
-        try {
-            const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
-            if (res?.post) {
-                setLivePost(res.post);
-            }
-            setTypingOther(false);
-            setOtherWords('');
-            onVoteSuccess?.();
-        } catch (err: any) {
-            setError(err.message || t('Could not record your vote.'));
-        } finally {
-            setVotingOptionId(null);
-        }
-    };
-
-    const handleVote = async (optionId: string, typed?: string) => {
-        if (isClosed) {
-            setError(t('This poll has ended and can no longer receive votes.'));
-            return;
-        }
-        if (!identity) {
-            setError(t('Please connect your member identity to vote.'));
-            return;
-        }
-
-        if (userVotedOptionId && userVotedOptionId !== optionId) {
-            const currentOpt = options.find(o => o.id === userVotedOptionId);
-            const currentLabel = currentOpt ? (currentOpt.other ? pollOtherLines.other() : currentOpt.text) : (userVotedOptionId ?? '');
-            const newOpt = options.find(o => o.id === optionId);
-            const newLabel = newOpt ? (newOpt.other ? pollOtherLines.other() : newOpt.text) : optionId;
-            if (!window.confirm(t('You voted for “{current}”. Change it to “{new}”?', { current: currentLabel, new: newLabel }))) {
-                return;
-            }
-        }
-
-        await sendVote(optionId, typed);
-    };
 
     const handleClosePoll = async () => {
         if (!window.confirm(t('Are you sure you want to close this poll early? No more votes will be accepted.'))) {

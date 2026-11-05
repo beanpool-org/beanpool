@@ -11,6 +11,10 @@ import { act, render, screen, fireEvent, cleanup, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PollGridTile } from './PollGridTile';
 import { GRID_POLL_CELL } from './market-card-shell';
+import * as api from '../lib/api';
+
+// The card's own vote call (PollCard's usePollVote), stood in for: nothing here talks to a node.
+vi.mock('../lib/api', async () => ({ ...(await vi.importActual<object>('../lib/api')), votePoll: vi.fn(), closePoll: vi.fn() }));
 
 const DAY = 86_400_000;
 const four = [
@@ -29,12 +33,27 @@ const poll: any = {
 /** The answers' room as the page lays it out: `height` px tall, at 16 px text. */
 let room = 0;
 let observers: Array<() => void> = [];
+/**
+ * Each answer's words as the page lays them out at 320 px: a row holds `fits` characters of them (about what a 320 px
+ * window's tile holds at 12 px bold), so longer words are wider inside their box than it is, and cut with "…".
+ */
+let fits = Infinity;
+const wordsBox = (el: HTMLElement) => el.getAttribute('data-testid') === 'poll-grid-answer-words';
 beforeEach(() => {
     room = 0;
+    fits = Infinity;
     observers = [];
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
         configurable: true,
         get(this: HTMLElement) { return this.getAttribute('data-testid') === 'poll-grid-answers' ? room : 0; },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get(this: HTMLElement) { return wordsBox(this) ? Math.min(this.textContent!.length, fits) * 7 : 0; },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+        configurable: true,
+        get(this: HTMLElement) { return wordsBox(this) ? this.textContent!.length * 7 : 0; },
     });
     vi.stubGlobal('ResizeObserver', class {
         constructor(private cb: () => void) { observers.push(() => this.cb()); }
@@ -46,6 +65,8 @@ afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
     delete (HTMLElement.prototype as any).clientHeight;
+    delete (HTMLElement.prototype as any).clientWidth;
+    delete (HTMLElement.prototype as any).scrollWidth;
 });
 
 const draw = (post: any = poll, onOpen = vi.fn(), informal = false) => {
@@ -174,5 +195,183 @@ describe('the grid\'s poll tile', () => {
     it('a pinned poll shows the pin', () => {
         draw({ ...poll, pinnedAt: new Date().toISOString(), pinnedUntil: new Date(Date.now() + 3 * DAY).toISOString() });
         expect(screen.getByTestId('poll-pinned-chip').textContent).toBe('📌');
+    });
+});
+
+/**
+ * Voted in the tile when the WHOLE poll is in front of the member (Marty and Damo, 6 Nov 2026: "if there are 2+ more it should
+ * jump to the card mandatory so you are presented with all answers. Otherwise the poll will be loaded"); otherwise the tile
+ * opens the poll's page, as before.
+ */
+describe('the grid\'s poll tile, voted in place', () => {
+    const me: any = { publicKey: 'me-pk', privateKey: 'me-priv', callsign: 'Me' };
+    /** A short poll: three answers, every one whole in a 320 px tile. */
+    const short: any = {
+        ...poll, id: 'poll-short', title: 'Market day?', totalVotes: 5,
+        pollOptions: [
+            { id: 's1', text: 'Saturday', votes: 3, percentage: 60 },
+            { id: 's2', text: 'Sunday', votes: 2, percentage: 40 },
+            { id: 's3', text: 'Either', votes: 0, percentage: 0 },
+        ],
+    };
+    const votePoll = vi.mocked(api.votePoll);
+    beforeEach(() => {
+        votePoll.mockReset();
+        fits = 24;
+    });
+    const drawAs = (post: any, opts: { identity?: any; member?: boolean; onVoteSuccess?: () => void } = { identity: me }) => {
+        const onOpen = vi.fn();
+        render(<PollGridTile post={post} onOpen={onOpen} identity={opts.identity} member={opts.member} onVoteSuccess={opts.onVoteSuccess} />);
+        return onOpen;
+    };
+    const tile = () => screen.getByTestId('poll-grid-tile');
+    const answerButton = (name: RegExp) => screen.getByRole('button', { name });
+
+    it('a short poll, all of it in the tile: tapping an answer votes it once by the card\'s own call, and opens nothing', async () => {
+        room = 3 * 44 + 2 * 4; // three rows a finger's press tall, and the gaps
+        const onVoteSuccess = vi.fn();
+        votePoll.mockResolvedValue({ post: { ...short, totalVotes: 6, userVotedOptionId: 's2', pollOptions: [
+            { id: 's1', text: 'Saturday', votes: 3, percentage: 50 }, { id: 's2', text: 'Sunday', votes: 3, percentage: 50 }, { id: 's3', text: 'Either', votes: 0, percentage: 0 },
+        ] } } as any);
+        const onOpen = drawAs(short, { identity: me, onVoteSuccess });
+        expect(tile().getAttribute('data-votable')).toBe('true');
+        // The tile is no button now: its answers are, each named as the vote it casts, and the footer opens the poll.
+        expect(tile().getAttribute('role')).toBeNull();
+        expect(screen.getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([
+            'Vote: Saturday, 60%', 'Vote: Sunday, 40%', 'Vote: Either, 0%', 'Open poll: Market day?',
+        ]);
+        // Each row a finger's press tall at least.
+        for (const b of screen.getAllByTestId('poll-grid-answer')) expect(b.style.minHeight).toBe('44px');
+        expect(screen.getByTestId('poll-grid-action').textContent).toBe('Tap an answer to vote · Open poll ›');
+
+        await act(async () => { fireEvent.click(answerButton(/^Vote: Sunday/)); });
+        expect(votePoll).toHaveBeenCalledTimes(1);
+        expect(votePoll).toHaveBeenCalledWith('poll-short', 's2');
+        expect(onOpen).not.toHaveBeenCalled();
+        expect(onVoteSuccess).toHaveBeenCalledTimes(1);
+        // The bars and the ✓ follow the node's answer, in place.
+        const chosen = screen.getAllByTestId('poll-grid-answer').find(a => a.getAttribute('data-chosen') === 'true')!;
+        expect(chosen.textContent).toBe('Sunday50% ✓');
+        expect(chosen.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('the question, the author and the footer still open the poll; the footer by Enter and Space too', () => {
+        room = 200;
+        const onOpen = drawAs(short);
+        fireEvent.click(screen.getByTestId('poll-grid-question'));
+        fireEvent.click(screen.getByText('Damo (The IT guy)'));
+        const foot = screen.getByRole('button', { name: 'Open poll: Market day?' });
+        expect(foot.getAttribute('tabindex')).toBe('0');
+        fireEvent.click(foot);
+        fireEvent.keyDown(foot, { key: 'Enter' });
+        fireEvent.keyDown(foot, { key: ' ' });
+        expect(onOpen).toHaveBeenCalledTimes(5);
+        expect(votePoll).not.toHaveBeenCalled();
+    });
+
+    it('an answer row is a real button, in the tab order', () => {
+        room = 200;
+        drawAs(short);
+        const b = answerButton(/^Vote: Saturday/);
+        expect(b.tagName).toBe('BUTTON');
+        expect(b.getAttribute('type')).toBe('button');
+        b.focus();
+        expect(document.activeElement).toBe(b);
+    });
+
+    it('a poll with a "+N more" row never votes: the whole tile opens the page', () => {
+        room = 74; // three one-line rows: two answers and "+2 more"
+        fits = Infinity;
+        const onOpen = drawAs({ ...poll, pollOptions: four });
+        expect(screen.getByTestId('poll-grid-more').textContent).toBe('+2 more');
+        expect(tile().getAttribute('data-votable')).toBe('false');
+        expect(tile().getAttribute('data-vote-block')).toBe('more');
+        expect(screen.getAllByRole('button')).toEqual([tile()]);
+        fireEvent.click(screen.getAllByTestId('poll-grid-answer')[0]);
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(votePoll).not.toHaveBeenCalled();
+        expect(screen.getByTestId('poll-grid-action').textContent).toBe('Tap to vote ›');
+    });
+
+    it('an answer cut at 320 px never votes: the whole tile opens the page', () => {
+        room = 200;
+        // "Better matches with what people need" is wider than a 320 px row holds (24 characters here): cut with "…".
+        const onOpen = drawAs({ ...short, pollOptions: [...short.pollOptions.slice(0, 2), { id: 's3', text: 'Better matches with what people need', votes: 0, percentage: 0 }] });
+        expect(tile().getAttribute('data-vote-block')).toBe('cut');
+        expect(screen.getAllByRole('button')).toEqual([tile()]);
+        fireEvent.click(screen.getByText('Better matches with what people need'));
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(votePoll).not.toHaveBeenCalled();
+    });
+
+    it('rows that cannot each be a finger\'s press tall never vote', () => {
+        room = 3 * 44 + 2 * 4 - 1;
+        drawAs(short);
+        expect(tile().getAttribute('data-vote-block')).toBe('small');
+        expect(screen.getAllByRole('button')).toEqual([tile()]);
+    });
+
+    it('a poll with a typed Other opens the page, where its line to type is', () => {
+        room = 200;
+        const onOpen = drawAs({ ...short, pollOpenVote: true, pollOptions: [...short.pollOptions.slice(0, 2), { id: 'o', text: 'Other', other: true, votes: 0, percentage: 0 }] });
+        expect(tile().getAttribute('data-vote-block')).toBe('other');
+        fireEvent.click(screen.getByText('Saturday'));
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(votePoll).not.toHaveBeenCalled();
+    });
+
+    it('a sealed poll the member answered opens the page', () => {
+        room = 200;
+        drawAs({ ...short, pollAnswered: true, pollOptions: [...short.pollOptions.slice(0, 2), { id: 'o', text: 'Other', other: true, votes: 0, percentage: 0 }] });
+        // Sealed (anonymous, with Other) and answered: the footer says so, and the tile only opens.
+        expect(tile().getAttribute('data-votable')).toBe('false');
+        expect(screen.getByTestId('poll-grid-action').textContent).toBe('You answered ✓');
+        expect(screen.getAllByRole('button')).toEqual([tile()]);
+    });
+
+    it('a closed poll opens the page (its results)', () => {
+        room = 200;
+        const onOpen = drawAs({ ...short, status: 'completed' });
+        expect(tile().getAttribute('data-vote-block')).toBe('closed');
+        expect(screen.getByTestId('poll-grid-action').textContent).toBe('See results ›');
+        fireEvent.click(screen.getByText('Sunday'));
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(votePoll).not.toHaveBeenCalled();
+    });
+
+    it('a reader who is not signed in, or not a member here, opens the page', () => {
+        room = 200;
+        drawAs(short, { identity: null });
+        expect(tile().getAttribute('data-vote-block')).toBe('member');
+        cleanup();
+        drawAs(short, { identity: me, member: false });
+        expect(tile().getAttribute('data-vote-block')).toBe('member');
+    });
+
+    it('a change of vote asks first, as the card does; Keep my vote sends nothing, Change sends it', async () => {
+        room = 200;
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        try {
+            drawAs({ ...short, userVotedOptionId: 's1' });
+            await act(async () => { fireEvent.click(answerButton(/^Vote: Sunday/)); });
+            expect(confirm).toHaveBeenCalledWith('You voted for “Saturday”. Change it to “Sunday”?');
+            expect(votePoll).not.toHaveBeenCalled();
+            confirm.mockReturnValue(true);
+            votePoll.mockResolvedValue({ post: { ...short, userVotedOptionId: 's2' } } as any);
+            await act(async () => { fireEvent.click(answerButton(/^Vote: Sunday/)); });
+            expect(votePoll).toHaveBeenCalledTimes(1);
+            expect(votePoll).toHaveBeenCalledWith('poll-short', 's2');
+        } finally {
+            confirm.mockRestore();
+        }
+    });
+
+    it('a vote the node refuses says so on the footer\'s line, and nothing is marked chosen', async () => {
+        room = 200;
+        votePoll.mockRejectedValue(new Error('Could not record your vote.'));
+        drawAs(short);
+        await act(async () => { fireEvent.click(answerButton(/^Vote: Saturday/)); });
+        expect(screen.getByRole('alert').textContent).toBe('Could not record your vote.');
+        expect(screen.queryAllByTestId('poll-grid-chosen')).toHaveLength(0);
     });
 });

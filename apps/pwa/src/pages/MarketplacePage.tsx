@@ -4079,9 +4079,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         );
                                     }
                                     if (post.type === 'poll') {
-                                        // Two cells wide and one tile row tall at every column count, a read-only summary
-                                        // that fills its box; a click anywhere opens the poll's page, where it is voted
-                                        // (Marty, 5 Nov 2026: "yes two wide it is but make sure it filled correctly").
+                                        // Two cells wide and one tile row tall at every column count, a summary that fills
+                                        // its box (Marty, 5 Nov 2026: "yes two wide it is but make sure it filled correctly");
+                                        // voted in place when the whole poll is in front of a member, else a click anywhere
+                                        // opens the poll's page (Marty and Damo, 6 Nov 2026).
                                         return (
                                             <PollGridTile
                                                 key={post.id}
@@ -4089,6 +4090,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 testId={pinned ? 'market-pinned-tile' : undefined}
                                                 onOpen={() => setSelectedPost(post)}
                                                 informal={informalPolls}
+                                                // Voted in the tile when the whole poll is in front of a member (6 Nov 2026).
+                                                identity={identity}
+                                                member={!isVisitor && isMember !== false && isMember !== null}
+                                                onVoteSuccess={() => { refresh().catch(() => {}); }}
                                             />
                                         );
                                     }

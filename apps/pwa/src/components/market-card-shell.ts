@@ -195,6 +195,13 @@ export const GRID_POLL_ROW = 'relative flex-1 min-h-[1.375rem] min-w-0 flex item
  */
 export const GRID_POLL_ROW_MAX: Record<number, string> = { 1.6: 'max-h-[2.2rem]', 2: 'max-h-[2.75rem]', 2.4: 'max-h-[3.3rem]' };
 
+/**
+ * An answer row that votes (a tile voted in place, core's pollTileVoteBlock): a button laid out as the row (the start of the
+ * line, its pointer), its outline in the poll ink under a finger or the keyboard, and the focus ring inside the row, since the
+ * answers' room clips what is outside it. Its height (a finger's press, POLL_TILE_PRESS, at least) is set where it is drawn.
+ */
+export const GRID_POLL_PRESS = 'text-start cursor-pointer hover:border-bp-chip-poll-ink disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-nature-500';
+
 /** The row's outline: the card's own, or the poll ink round the member's own answer. */
 export const GRID_POLL_ROW_EDGE = {
     open: 'border-nature-200 dark:border-nature-800',

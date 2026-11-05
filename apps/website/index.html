@@ -229,7 +229,7 @@
                             var btn = document.querySelector('.hero-door a.btn-primary');
                             var browserLine = document.querySelector('.hero-door .door-browser');
                             var lang = (document.documentElement && document.documentElement.lang) || 'en';
-                            if (btn) btn.href = 'https://global.beanpool.org/?lang=' + encodeURIComponent(lang);
+                            if (btn) btn.href = lang === 'en' ? 'https://global.beanpool.org' : 'https://global.beanpool.org/?lang=' + encodeURIComponent(lang);
                             if (browserLine) browserLine.hidden = true;
                         }
                     })();

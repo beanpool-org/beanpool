@@ -471,12 +471,12 @@ test('on a computer (desktop UA), Try it now goes straight to global.beanpool.or
         for (const ua of [UA.mac, UA.windows]) {
             // Home page
             const home = visitDoor1({ pageFile: 'index.html', lang, ua });
-            assert.equal(home.href, `https://global.beanpool.org/?lang=${lang}`, `${lang}/index.html on ${ua}: button goes straight to global community`);
+            assert.equal(home.href, lang === 'en' ? 'https://global.beanpool.org' : `https://global.beanpool.org/?lang=${lang}`, `${lang}/index.html on ${ua}: button goes straight to global community`);
             assert.equal(home.hidden, true, `${lang}/index.html on ${ua}: browser line is hidden`);
 
             // 404 page
             const notFound = visitDoor1({ pageFile: '404.html', lang, ua });
-            assert.equal(notFound.href, `https://global.beanpool.org/?lang=${lang}`, `${lang}/404.html on ${ua}: button goes straight to global community`);
+            assert.equal(notFound.href, lang === 'en' ? 'https://global.beanpool.org' : `https://global.beanpool.org/?lang=${lang}`, `${lang}/404.html on ${ua}: button goes straight to global community`);
             assert.equal(notFound.hidden, true, `${lang}/404.html on ${ua}: browser line is hidden`);
         }
     }

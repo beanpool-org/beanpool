@@ -1471,6 +1471,7 @@ export default function PublicProfileScreen() {
                                     )}
                                     <Pressable
                                         accessibilityRole="button"
+                                        accessibilityState={{ disabled: vouchBusy || !profileVouchPreset, busy: vouchBusy }}
                                         disabled={vouchBusy || !profileVouchPreset}
                                         style={[styles.vouchSubmit, (vouchBusy || !profileVouchPreset) && { opacity: 0.5 }]}
                                         testID="profile-vouch-submit"
@@ -1480,15 +1481,25 @@ export default function PublicProfileScreen() {
                                             setVouchRefusal(null);
                                             setVouchSuccess(null);
                                             try {
-                                                const res = await vouchFromProfile(anchorUrl, identity, {
+                                                let res = await vouchFromProfile(anchorUrl, identity, {
                                                     memberPubkey: pubKeyStr,
                                                     vouchAmount: profileVouchPreset,
                                                     raise: isRaise,
                                                 });
+                                                let effectiveIsRaise = isRaise;
+                                                if (!effectiveIsRaise && !res.ok && (res.code === 'already_vouched' || /already vouched/i.test(res.message))) {
+                                                    effectiveIsRaise = true;
+                                                    res = await vouchFromProfile(anchorUrl, identity, {
+                                                        memberPubkey: pubKeyStr,
+                                                        vouchAmount: profileVouchPreset,
+                                                        raise: true,
+                                                    });
+                                                }
                                                 if (res.ok) {
-                                                    setVouchSuccess(isRaise
+                                                    setVouchSuccess(effectiveIsRaise
                                                         ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: res.total })
                                                         : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: profileVouchPreset }));
+                                                    setProfileVouchPreset(null);
                                                     const updated = await askMyVouching(anchorUrl, identity);
                                                     setMyVouching(updated);
                                                 } else {

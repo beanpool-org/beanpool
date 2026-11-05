@@ -100,4 +100,25 @@ describe('Native vouchers utils (slice V3)', () => {
             expect(res.message).toBe('@sam is below zero: a credit-line gift or a Decision can help.');
         }
     });
+
+    it('vouchFromProfile preserves error code on failure', async () => {
+        signedPosts.res = {
+            ok: false,
+            json: async () => ({
+                error: 'You’ve already vouched for @Sam.',
+                code: 'already_vouched',
+            }),
+        };
+
+        const res = await vouchFromProfile(ANCHOR, ID, {
+            memberPubkey: 'target-pk',
+            vouchAmount: 25,
+        });
+
+        expect(res.ok).toBe(false);
+        if (!res.ok) {
+            expect(res.code).toBe('already_vouched');
+            expect(res.message).toBe('You’ve already vouched for @Sam.');
+        }
+    });
 });

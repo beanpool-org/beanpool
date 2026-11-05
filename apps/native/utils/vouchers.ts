@@ -2,7 +2,6 @@
  * Native voucher helpers (slice V3): reading the member's budget (GET /api/vouchers/me)
  * and vouching for someone from their profile (POST /api/vouch).
  */
-import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 
 export interface AllocationHistoryLine {
@@ -43,13 +42,14 @@ export interface MyVouching {
 
 export type VouchProfileResult =
     | { ok: true; id: string; memberPubkey: string; amount: number; total: number; budget: unknown }
-    | { ok: false; message: string };
+    | { ok: false; message: string; code?: string };
 
 export async function askMyVouching(
     anchor: string,
     identity: BeanPoolIdentity,
 ): Promise<MyVouching | null> {
     try {
+        const { signedGet } = await import('./node-post');
         const res = await signedGet(anchor, '/api/vouchers/me', identity);
         if (!res.ok) return null;
         return (await res.json()) as MyVouching;
@@ -64,6 +64,7 @@ export async function vouchFromProfile(
     body: { memberPubkey: string; vouchAmount: number; raise?: boolean },
 ): Promise<VouchProfileResult> {
     try {
+        const { signedPost } = await import('./node-post');
         const res = await signedPost(anchor, '/api/vouch', body, identity);
         const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
         if (res.ok && data) {
@@ -82,7 +83,8 @@ export async function vouchFromProfile(
                 : typeof data?.message === 'string' && data.message.trim()
                   ? data.message
                   : 'Could not vouch.';
-        return { ok: false, message };
+        const code = typeof data?.code === 'string' ? data.code : undefined;
+        return { ok: false, message, code };
     } catch {
         return { ok: false, message: 'Could not vouch.' };
     }

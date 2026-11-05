@@ -1287,7 +1287,7 @@ export default function LedgerScreen() {
                     >
                         <Pressable
                             style={{ width: '100%', maxWidth: 440, maxHeight: '85%', backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default }}
-                            onPress={(e) => e.stopPropagation()}
+                            onPress={() => {}}
                         >
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                                 <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading }}>
@@ -1297,7 +1297,8 @@ export default function LedgerScreen() {
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Close')}
                                     onPress={() => setShowBudgetModal(false)}
-                                    style={{ padding: 4 }}
+                                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                    style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
                                 >
                                     <Text style={{ fontSize: 16, color: colors.text.muted }}>✕</Text>
                                 </Pressable>

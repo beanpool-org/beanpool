@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Keyboard, ActivityIndicator, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, ScrollView, TextInput, Keyboard, ActivityIndicator, DeviceEventEmitter, useWindowDimensions } from 'react-native';
 import { Alert } from '../../utils/keyboard-alert';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useKeepCaretVisible } from '../../components/useKeepCaretVisible';
@@ -31,6 +31,7 @@ import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { AuthorCard } from '../../components/AuthorCard';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { CategoryTile } from '../../components/CategoryTile';
+import { CardChip, useCardShell } from '../../components/market-card-shell';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import { blockUser } from '../../utils/blocklist';
@@ -48,7 +49,7 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -193,57 +194,85 @@ export default function PostDetailModal() {
         closeBtn: { backgroundColor: colors.action.cta, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
         closeBtnText: { color: colors.text.inverse, fontWeight: 'bold' },
 
-        header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
+        header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
         // Grows for a longer word than Back (up to 120, then the word shrinks), so it is never cut at 320dp and 1.3x.
-        backButton: { flexDirection: 'row', minWidth: 68, maxWidth: 120, height: 40, alignItems: 'center' },
+        backButton: { flexDirection: 'row', minWidth: 68, maxWidth: 120, minHeight: 48, alignItems: 'center' },
         backText: { color: colors.text.body, fontSize: 24, marginTop: -2 },
         headerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text.body, letterSpacing: 1, textTransform: 'uppercase' },
 
-        scroll: { paddingBottom: 60 },
+        // The page's column: 16 a side, as the event page's (DESIGN-detail-pages-fable.md §2.1); no block carries its own.
+        scroll: { padding: 16, paddingBottom: 60 },
 
-        // Type Badge
-        typeBadgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4 },
-        catBadge: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
-        catEmoji: { fontSize: 20 },
-        catLabel: { flexShrink: 1, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
-        timeAgo: { color: colors.text.muted, fontSize: 12, fontWeight: '600', flexShrink: 0, marginLeft: 8 },
+        // The rhythm (§2.3, as DESIGN-detail-pages-frame-fable.md §3 amends it): 8 between lines inside a part, 12 from the title
+        // to the terms box and from the box to the action, 16 from the action to the photo and from the photo to the quiet row,
+        // 16 between parts. Radii, chips, boxes and button heights from the style box (components/market-card-shell.ts).
+        // 1. The chips, wrapping, never shrunk; the time at the right, never pushed off.
+        chipLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
+        chipLineChips: { flex: 1, minWidth: 0 },
+        timeAgo: { color: colors.text.muted, fontSize: 12, fontWeight: '600', flexShrink: 0 },
 
-        // Title & Description
-        postTitle: { color: colors.text.body, fontSize: 24, fontWeight: '800', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
-        description: { color: colors.text.secondary, fontSize: 15, lineHeight: 22, paddingHorizontal: 20, paddingBottom: 16 },
+        // 4. The title: 22/800 in the heading's ink.
+        postTitle: { color: colors.text.heading, fontSize: 22, fontWeight: '800', lineHeight: 28, marginBottom: 12 },
+        // 10. The description: 15 on 22 in the body's ink.
+        description: { color: colors.text.body, fontSize: MARKET_CARD_TYPE.page.descriptionSize, lineHeight: MARKET_CARD_TYPE.page.descriptionLine, marginBottom: 16 },
 
-        // Photos
-        carouselWrap: { marginHorizontal: 20, marginBottom: 16 },
+        // 8. The photo: 4:3 of the column, under the column's corners; the tile 3:1 without one. 16 under the action (its
+        // last part's own gap is the take-up's 0, so the frame keeps 16 of its own above), 16 over the quiet row.
+        photoFrame: {
+            width: '100%', aspectRatio: SHELL.photo.grid.aspectWidth / SHELL.photo.grid.aspectHeight,
+            borderRadius: SHELL.radius, overflow: 'hidden', backgroundColor: colors.surface.subtle, marginTop: 16, marginBottom: 16,
+        },
+        tileBanner: { width: '100%', aspectRatio: 3, borderRadius: SHELL.radius, overflow: 'hidden', marginTop: 16, marginBottom: 16 },
 
-        // Price Card
-        priceCard: { marginHorizontal: 20, backgroundColor: colors.surface.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 20, alignItems: 'center', marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-        priceLabel: { color: colors.text.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 },
-        priceValue: { color: colors.text.body, fontSize: 36, fontWeight: '800' },
-        priceCurrency: { fontSize: 20, fontWeight: '500', color: colors.text.secondary },
+        // 6. The terms box: the page box, the label over the value, left-aligned. The value 18/800; a price 28/800, its unit 15/500.
+        termsBox: { marginBottom: 12 },
+        termsLabel: { marginBottom: 8 },
+        termsValue: { color: colors.text.heading, fontSize: MARKET_CARD_TYPE.page.termsValue.size, fontWeight: '800' },
+        termsNote: { color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 4 },
+        termsMore: { minHeight: MARKET_CARD_TYPE.page.buttonHeight, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: 12 },
+        termsMoreText: { fontSize: 14, fontWeight: '700', color: colors.text.link },
+        priceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+        priceValue: { color: colors.text.heading, fontSize: MARKET_CARD_TYPE.page.pagePrice.size, fontWeight: '800' },
+        priceUnit: { fontSize: 15, fontWeight: '500', color: colors.text.secondary, marginLeft: 2 },
+
+        // 9. The quiet row: Message and Share, each sized to its words and growing to share the line; wrapping by whole buttons.
+        quietRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start', marginBottom: 16 },
+        quietItem: { flexGrow: 1, flexBasis: 'auto', flexShrink: 0, maxWidth: '100%' },
+        quietButton: { borderWidth: 1.5, borderColor: colors.border.strong, backgroundColor: colors.surface.card, paddingHorizontal: 12 },
+        quietButtonText: { color: colors.text.body },
 
         // The author card's own styles live in components/AuthorCard.tsx.
         roughPlace: { color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: -8, marginBottom: 16 },
 
         // Own Post Actions
-        ownPostActions: { paddingHorizontal: 20, gap: 10 },
+        ownPostActions: { gap: 10 },
         editPostBtn: { backgroundColor: colors.action.cta, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
         editPostBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800' },
         deletePostBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: colors.feedback.danger.border },
         deletePostBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
-        pauseOfferBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: '#f59e0b' },
+        pauseOfferBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: colors.feedback.warning.border },
         pauseOfferBtnText: { color: colors.feedback.warning.fg, fontSize: 14, fontWeight: '700' },
 
         // Other's Post Actions
-        otherPostActions: { paddingHorizontal: 20, gap: 10 },
-        messageBtn: { backgroundColor: colors.surface.card, borderRadius: 14, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.border.default },
-        messageBtnText: { color: colors.text.body, fontSize: 16, fontWeight: '700' },
-        acceptBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+        otherPostActions: { gap: 10 },
+        // A Message button (the quiet row's, a deal's): the neutral outline, 48 tall, corners 12, the body's words 15/700 (§2.2).
+        messageBtn: {
+            backgroundColor: colors.surface.card, minHeight: MARKET_CARD_TYPE.page.buttonHeight, borderRadius: MARKET_CARD_TYPE.page.buttonRadius,
+            paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.border.strong,
+        },
+        messageInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', maxWidth: '100%' },
+        messageBtnText: { color: colors.text.body, fontSize: MARKET_CARD_TYPE.page.button.size, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
+        // The commit (Accept / Fulfill / Borrow, Release): the filled page button, 48 tall, corners 12, 15/700 (§2.2).
+        acceptBtn: {
+            minHeight: MARKET_CARD_TYPE.page.buttonHeight, borderRadius: MARKET_CARD_TYPE.page.buttonRadius,
+            paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', justifyContent: 'center',
+        },
         acceptBtnOffer: { backgroundColor: colors.brand.fill },
         acceptBtnNeed: { backgroundColor: colors.action.fab },
-        acceptBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800' },
+        acceptBtnText: { color: colors.text.inverse, fontSize: MARKET_CARD_TYPE.page.button.size, fontWeight: '700', textAlign: 'center' },
 
         // Edit Section
-        editSection: { marginHorizontal: 20, backgroundColor: colors.surface.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, padding: 16 },
+        editSection: { backgroundColor: colors.surface.card, borderRadius: SHELL.radius, borderWidth: 1, borderColor: colors.border.default, padding: 16 },
         editSectionTitle: { color: colors.text.body, fontSize: 18, fontWeight: '800', marginBottom: 16 },
         editTypeRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         editTypeBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.app, alignItems: 'center' },
@@ -271,7 +300,12 @@ export default function PostDetailModal() {
         editSaveBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
 
         // Transaction Logic Components
-        confirmBox: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, marginTop: 8, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+        // The deal boxes on the style box's numbers (§2.2): its corners, border, ground, padding and the one card shadow.
+        confirmBox: {
+            backgroundColor: colors.surface.card, borderRadius: SHELL.radius, padding: SHELL.textPadding, marginTop: 8, borderWidth: SHELL.borderWidth,
+            borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: SHELL.shadow.offsetY },
+            shadowOpacity: SHELL.shadow.opacity, shadowRadius: SHELL.shadow.blur, elevation: SHELL.shadow.elevation,
+        },
         confirmBoxTitle: { color: colors.text.body, fontSize: 15, fontWeight: '800', textAlign: 'center', marginBottom: 12 },
         confirmBoxLabel: { color: colors.text.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
         confirmBoxInput: { backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 16, paddingVertical: 14, color: colors.text.body, fontSize: 16, fontWeight: '600', textAlign: 'center', marginBottom: 8 },
@@ -283,12 +317,17 @@ export default function PostDetailModal() {
         cancelTxBtn: { marginTop: 12, borderWidth: 1, borderColor: colors.feedback.danger.border, backgroundColor: colors.surface.card, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
         cancelTxBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         requestsContainer: {
-            marginTop: 20,
+            marginTop: 16,
             backgroundColor: colors.surface.card,
-            borderRadius: 12,
-            padding: 16,
-            borderWidth: 1,
-            borderColor: colors.border.default
+            borderRadius: SHELL.radius,
+            padding: SHELL.textPadding,
+            borderWidth: SHELL.borderWidth,
+            borderColor: colors.border.default,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: SHELL.shadow.offsetY },
+            shadowOpacity: SHELL.shadow.opacity,
+            shadowRadius: SHELL.shadow.blur,
+            elevation: SHELL.shadow.elevation,
         },
         requestsTitle: {
             color: colors.text.body,
@@ -299,10 +338,10 @@ export default function PostDetailModal() {
         requestCard: {
             flexDirection: 'column',
             backgroundColor: colors.surface.app,
-            borderWidth: 1,
-            borderColor: colors.surface.subtle,
-            borderRadius: 8,
-            padding: 12,
+            borderWidth: SHELL.borderWidth,
+            borderColor: colors.border.default,
+            borderRadius: SHELL.radius,
+            padding: SHELL.textPadding,
             marginBottom: 8
         },
         requestName: {
@@ -528,6 +567,15 @@ export default function PostDetailModal() {
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
     // Keeps the field being typed in (the edit form, the rating comment, the reply box) above the keyboard.
     const { scrollRef: scrollViewRef, scrollProps: keepCaretVisible } = useKeepCaretVisible();
+    // The style box (components/market-card-shell.ts): the card's chips, the page's boxes and buttons, as the event page draws them.
+    const shell = useCardShell();
+    // The photo frame is 4:3 of the column (the screen less the page's 16 a side); the carousel needs the number.
+    const { width: screenWidth, fontScale } = useWindowDimensions();
+    const photoHeight = Math.round((screenWidth - 32) * SHELL.photo.grid.aspectHeight / SHELL.photo.grid.aspectWidth);
+    // The note under IN RETURN, once the member has asked for the whole of it ("More").
+    const [termsNoteOpen, setTermsNoteOpen] = useState(false);
+    // Where the take-up sits in the page, for the scroll that brings its confirmation into view.
+    const takeUpTop = useRef(0);
     // Contribution-first gate: accepting an Offer requires having listed one.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [showContributionRequired, setShowContributionRequired] = useState(false);
@@ -1099,7 +1147,7 @@ export default function PostDetailModal() {
         const confirming = showCompleteConfirm && releaseRowId === tx.id;
         const since = tx.createdAt ? formatDate(new Date(tx.createdAt), 'day-month') : '';
         return (
-            <View key={tx.id} testID={`deal-row-${tx.id}`} style={{ borderWidth: 1, borderColor: tx.id === pinnedTxId ? colors.brand.primary : colors.border.default, borderRadius: 10, padding: 12, gap: 8, marginBottom: 8 }}>
+            <View key={tx.id} testID={`deal-row-${tx.id}`} style={{ borderWidth: 1, borderColor: tx.id === pinnedTxId ? colors.brand.primary : colors.border.default, borderRadius: SHELL.radius, padding: SHELL.textPadding, gap: 8, marginBottom: 8 }}>
                 <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700' }}>
                     {listingDealLines.heldRow(otherName, Number((tx as any).credits ?? 0), since)}
                 </Text>
@@ -1392,6 +1440,19 @@ export default function PostDetailModal() {
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
 
+    // The peer's part of the page, as one condition (it was one block): the rating with the action, Message in the quiet row,
+    // the convenor's box and Report at the foot. Message is not drawn where the deal's own box has it (a deal pending to them).
+    const peerActions = !!identity && ((!isOwnPost && !isPulsePost) || post.status === 'pending' || post.status === 'completed' || !!activeTx);
+    const peerMessage = peerActions && !!targetPeerPubkey && !((post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee));
+    // The take-up on the first screen (DESIGN-detail-pages-frame-fable.md §2): the note under IN RETURN runs to seven or eight
+    // lines at 320 dp and 1.3x (the worldwide community's, which says what a local community does), so it clamps to three with
+    // "More", the frame's first fallback (§1.7). Only where it would run to six lines or more: below that, three lines and a 48 dp
+    // More are no shorter than the note. The lines are estimated as the page's own tests lay text out, half the font size a
+    // character across the box's inner width.
+    const termsNote = noBeansTermsNote(beansPreview);
+    const termsNoteLines = Math.ceil(termsNote.length / Math.max(1, (screenWidth - 32 - 2 * (SHELL.textPadding + SHELL.borderWidth)) / (13 * (fontScale || 1) * 0.5)));
+    const termsNoteClamped = !termsNoteOpen && termsNoteLines >= 6;
+
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header */}
@@ -1421,20 +1482,31 @@ export default function PostDetailModal() {
                 already measures this view's frame, so an offset only adds that many dp of blank space above the keyboard. */}
             <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
             <ScrollView ref={scrollViewRef} {...keepCaretVisible} contentContainerStyle={[styles.scroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 60 }]} keyboardShouldPersistTaps="handled">
-                {/* Type + Category Badge */}
-                <View style={styles.typeBadgeRow}>
-                    <View style={styles.catBadge}>
-                        <Text style={styles.catEmoji}>{isPulsePost ? '🗞️' : emoji}</Text>
-                        <Text style={[styles.catLabel, { color: isPulsePost ? colors.feedback.warning.fg : (isOffer ? colors.brand.primary : colors.market.need.fg) }]} numberOfLines={1}>
-                            {isPulsePost ? t('● DAILY PULSE') : post.repeatable
-                                ? t('● {type} · {category} · RECURRING', { type: isOffer ? t('OFFER') : t('NEED'), category: upperCase(categoryLabel(post.category)) })
-                                : t('● {type} · {category}', { type: isOffer ? t('OFFER') : t('NEED'), category: upperCase(categoryLabel(post.category)) })}
-                        </Text>
+                {/*
+                  * The page's parts in DESIGN-detail-pages-fable.md §2.1's order, as DESIGN-detail-pages-frame-fable.md §1.7 and §3 amend it,
+                  * the event page's (components/EventDetail.tsx): the chips, the title, the terms box, the whole action area, the photo, the
+                  * quiet row, the description, the person, the rest, Report. The action is on the first screen: at 320 x 569 and 1.3x text
+                  * the take-up's top is at or above 500 dp and its bottom on the screen (post-listing-states-render.test.ts, the stop).
+                  * Only where each part is drawn changed: the deal logic, its states and their words are as they were.
+                  */}
+                {/* 1. The chip row and the time: the list card's own chips, in its order (components/market-card-shell.ts), "3d ago" at the right. */}
+                <View style={styles.chipLine} testID="post-chip-row">
+                    <View style={[shell.chipRow, styles.chipLineChips]}>
+                        {isPulsePost ? (
+                            <CardChip shell={shell} role="warn" label={t('🗞️ DAILY PULSE')} testID="post-type-chip" />
+                        ) : (
+                            <CardChip shell={shell} role={isOffer ? 'offer' : 'need'} label={isOffer ? t('OFFER') : t('NEED')} testID="post-type-chip" />
+                        )}
+                        {isPostPinned(post) && <CardChip shell={shell} role="pinned" label={t('📌 PINNED')} testID="pinned-chip" />}
+                        {!isPulsePost && <CardChip shell={shell} role="quiet" label={emoji + ' ' + categoryLabel(post.category)} testID="post-category-chip" />}
+                        {!!post.repeatable && <CardChip shell={shell} role="quiet" label={t('↻ RECURRING')} testID="post-recurring-chip" />}
+                        {post.cash_also_needed === 1 && <CardChip shell={shell} role="warn" label={t('💸 CASH TOO')} />}
+                        {post.status === 'paused' && <CardChip shell={shell} role="warn" label={t('⏸ PAUSED')} />}
                     </View>
                     <Text style={styles.timeAgo} numberOfLines={1}>{getTimeAgo(post.created_at)}</Text>
                 </View>
                 {isPostPinned(post) && (
-                    <View style={{ marginHorizontal: 20, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} testID="pinned-detail-line">
+                    <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }} testID="pinned-detail-line">
                         <Text style={{ fontSize: 13, color: colors.text.secondary, fontWeight: '600', flex: 1 }} numberOfLines={2}>
                             {pinnedDetailLine(post)}
                         </Text>
@@ -1479,7 +1551,7 @@ export default function PostDetailModal() {
 
                 {/* Audience Scope Banner (Item 10) */}
                 {(post.audience_scope === 'group' || post.audienceScope === 'group' || !!post.target_group_id || !!post.targetGroupId) && (
-                    <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1.5, borderRadius: 12, padding: 12, marginHorizontal: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1.5, borderRadius: 12, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <MaterialCommunityIcons name="lock" size={18} color={colors.brand.primary} />
                         <Text style={{ fontSize: 13, fontWeight: '800', color: colors.brand.primary, flex: 1 }}>
                             {post.target_group_name || post.targetGroupName
@@ -1489,99 +1561,47 @@ export default function PostDetailModal() {
                     </View>
                 )}
 
-                {/* Photos or CategoryTile Banner */}
-                {photos.length === 0 && (
-                    <View style={{ width: '100%', aspectRatio: 3 / 1, borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
-                        <CategoryTile
-                            category={post.category}
-                            kind={isPulsePost ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')}
-                            size="banner"
-                        />
-                    </View>
-                )}
+                {/* 4. The loud line: the title. */}
+                <Text style={styles.postTitle} testID="post-title">{post.title}</Text>
 
-                {/* Title */}
-                <Text style={styles.postTitle}>{post.title}</Text>
-
-                {/* Description */}
-                <Text style={styles.description}>{post.description || t('No description provided.')}</Text>
-
-                <PostTagChips tags={post.tags} freeTags={listingFreeTags(post)} inset={20} />
-
-                {/* Photos */}
-                {photos.length > 0 && (
-                    <View style={styles.carouselWrap}>
-                        <PhotoCarousel photos={photos} />
-                    </View>
-                )}
-
-                {/* Price Card: where there are no Beans, what the poster would like in return is in the description. */}
-                {/* The words are one element to a screen reader; the marker's line sits beside them, in the card but outside
-                    that group, so VoiceOver reads it and reaches it as a button (review of #1852, finding 8). */}
+                {/*
+                  * 6. The terms box (§2.2): the label in small capitals, the value under it, left-aligned, on the style box's page box. Where
+                  * there are no Beans, what the poster would like in return is in the description. The words are one element to a screen
+                  * reader; the marker's line sits beside them, in the box but outside that group, so VoiceOver reads it and reaches it as a
+                  * button (review of #1852, finding 8).
+                  */}
                 {!isPulsePost && !showsBeans && (
-                    <View style={styles.priceCard} testID="no-beans-terms">
-                        <View style={{ alignSelf: 'stretch', alignItems: 'center' }} accessible accessibilityLabel={t('{terms}. {note}', { terms: t(NO_BEANS_TERMS.value), note: noBeansTermsNote(beansPreview) })}>
-                            <Text style={styles.priceLabel}>{t(NO_BEANS_TERMS.label)}</Text>
-                            <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{t(NO_BEANS_TERMS.value)}</Text>
-                            <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{noBeansTermsNote(beansPreview)}</Text>
+                    <View style={[shell.pageBox, styles.termsBox]} testID="no-beans-terms">
+                        <View accessible accessibilityLabel={t('{terms}. {note}', { terms: t(NO_BEANS_TERMS.value), note: noBeansTermsNote(beansPreview) })}>
+                            <Text style={[shell.boxLabel, styles.termsLabel]}>{t(NO_BEANS_TERMS.label)}</Text>
+                            <Text style={styles.termsValue}>{t(NO_BEANS_TERMS.value)}</Text>
+                            <Text style={styles.termsNote} testID="no-beans-terms-note" numberOfLines={termsNoteClamped ? 3 : undefined}>{termsNote}</Text>
                         </View>
-                        {beansPreview && <View style={{ paddingHorizontal: 16 }}><LocalCommunityMark variant="line" feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} /></View>}
+                        {/* The rest of the note: the words above are read whole to a screen reader; this shows them whole. */}
+                        {termsNoteClamped && (
+                            <Pressable onPress={() => setTermsNoteOpen(true)} style={styles.termsMore} accessibilityRole="button" accessibilityState={{ expanded: false }} testID="no-beans-terms-more">
+                                <Text style={styles.termsMoreText}>{t('More', undefined, 'show the rest of a text')}</Text>
+                            </Pressable>
+                        )}
+                        {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} />}
                     </View>
                 )}
                 {!isPulsePost && showsBeans && (
-                    <View style={styles.priceCard}>
-                        <Text style={styles.priceLabel}>{priceLabel}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={[shell.pageBox, styles.termsBox]} testID="price-terms">
+                        <Text style={[shell.boxLabel, styles.termsLabel]}>{priceLabel}</Text>
+                        <View style={styles.priceRow}>
                             <CurrencyDisplay amount={post.credits} style={styles.priceValue} asView={true} />
                             {/* The unit, a space after the amount: " / Hr". */}
-                            <Text style={[styles.priceCurrency, { marginLeft: 2 }]}>{priceUnitWords(post.price_type) ? ` ${priceUnitWords(post.price_type)}` : ''}</Text>
+                            <Text style={styles.priceUnit}>{priceUnitWords(post.price_type) ? ` ${priceUnitWords(post.price_type)}` : ''}</Text>
                         </View>
                     </View>
                 )}
 
-                {/* Author / Counterparty Card: components/AuthorCard.tsx, the one box an event's "HOSTED BY" is too. */}
-                {isOwnPost && targetPeerPubkey ? (
-                    <AuthorCard
-                        label={isOffer ? t('ACCEPTED BY') : t('PROVIDER')}
-                        pubkey={targetPeerPubkey}
-                        callsign={targetPeerCallsign}
-                        avatarUrl={targetPeerAvatar}
-                        rating={{ average: targetPeerAvgRating, count: targetPeerRatingCount }}
-                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: targetPeerPubkey, callsign: targetPeerCallsign } })}
-                    />
-                ) : (
-                    <AuthorCard
-                        label={t('POSTED BY')}
-                        pubkey={post.author_pubkey}
-                        callsign={cardAuthor}
-                        avatarUrl={post.author_avatar}
-                        rating={{ average: authorAvgRating, count: authorRatingCount }}
-                        // A visitors' view hides who posted (utils/posts-view.ts): there is no profile to open.
-                        disabled={isHiddenAuthor(post.author_pubkey)}
-                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: post.author_pubkey, callsign: cardAuthor } })}
-                    />
-                )}
-                {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md §4):
-                    said here, so a pin on the map is never taken for the door. A keeper reads their enterprise's exactly. */}
-                {placeShownRoughly({ authorPublicKey: post.author_pubkey, type: post.type, lat: post.lat, lng: post.lng }, identity?.publicKey, hostLetsInDefault(nodeProfile?.features))
-                    && !isOperatorOfAuthor && (
-                    <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: cardAuthor })}</Text>
-                )}
-
-                {/* Share with members, and outside the community where it allows it (front doors S6). */}
-                <SharePostButtons post={post} />
-
-                {!isOperatorOfAuthor && (
-                    <ShowOnGlobalHostRow
-                        event={listingForCopy(post, photos)}
-                        enabled={nodeProfile?.profile === 'local' && identity?.publicKey === post.author_pubkey && (post.audience_scope ?? 'public') === 'public' && !post.origin_node
-                            && typeof post.lat === 'number' && typeof post.lng === 'number' && ['active', 'paused', 'pending'].includes(post.status)}
-                        listing
-                    />
-                )}
-
-                {/* Action Buttons */}
-
+                {/*
+                  * 7. The action, the whole area as one block, right under the terms box (§2.4; DESIGN-detail-pages-frame-fable.md §1.7):
+                  * the deal an alert named, a deal under way, the author's own tools, the take-up and its confirmation, the requests, and
+                  * the rating once a deal is done. Each part is drawn as it was, only here, above the photo.
+                  */}
                 {/* The deal an alert named, when it is over: what became of it, above the listing as it stands for the reader now.
                     Not once the reader has taken the listing up again (a deal of their own held or asked for: no take-up left,
                     and not its own people): that deal's box is the page, as on the web. */}
@@ -1752,7 +1772,7 @@ export default function PostDetailModal() {
                                 onPress={() => {
                                     setShowDealsSheet(true);
                                 }}
-                                style={{ alignItems: 'center', marginTop: 8, paddingVertical: 4 }}
+                                style={{ alignItems: 'center', justifyContent: 'center', marginTop: 8, minHeight: 48 }}
                             >
                                 <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '500' }}>
                                     {t('All your deals ›')}
@@ -1778,7 +1798,7 @@ export default function PostDetailModal() {
                             accessibilityRole="button"
                             accessibilityLabel={t('All your deals')}
                             onPress={() => setShowDealsSheet(true)}
-                            style={{ alignItems: 'center', marginTop: 4, paddingVertical: 4 }}
+                            style={{ alignItems: 'center', justifyContent: 'center', marginTop: 4, minHeight: 48 }}
                         >
                             <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '500' }}>
                                 {t('All your deals ›')}
@@ -2005,7 +2025,7 @@ export default function PostDetailModal() {
                         </Text>
                     </View>
                 ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (
-                    <View style={styles.otherPostActions}>
+                    <View style={styles.otherPostActions} testID="post-take-up-area" onLayout={(e) => { takeUpTop.current = e.nativeEvent.layout.y; }}>
                         {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm ? (
                             <View style={styles.confirmBox}>
                                 <Text style={styles.confirmBoxTitle}>{isLoan ? t('Ask to borrow this?') : isOffer ? t('Accept this Offer?') : t('Offer to Fulfill?')}</Text>
@@ -2100,7 +2120,7 @@ export default function PostDetailModal() {
                                 </View>
                             </View>
                         ) : (
-                            <Pressable accessibilityRole="button" style={[styles.acceptBtn, isOffer ? styles.acceptBtnOffer : styles.acceptBtnNeed, (accepting || post.status === 'pending') && { opacity: 0.6 }]} disabled={accepting || post.status === 'pending'} onPress={async () => {
+                            <Pressable accessibilityRole="button" testID="post-take-up" style={[styles.acceptBtn, isOffer ? styles.acceptBtnOffer : styles.acceptBtnNeed, (accepting || post.status === 'pending') && { opacity: 0.6 }]} disabled={accepting || post.status === 'pending'} onPress={async () => {
                                 // A name AND a photo are required before you can accept or fulfil — routed to the setup wizard.
                                 const status = await getProfileStatus(identity);
                                 if (!status.complete) {
@@ -2117,8 +2137,9 @@ export default function PostDetailModal() {
                                 // Accepting an Offer extracts value → gated. Fulfilling a Need is a contribution → allowed.
                                 if (isOffer && blockedFromTrading) { setShowContributionRequired(true); } else {
                                     setShowAcceptConfirm(true);
-                                    // Scroll down so the confirmation box + Confirm button is visible
-                                    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 350);
+                                    // The confirmation opens where the button is, near the top now: scroll it up to the screen's top so
+                                    // its Confirm is in view (to the page's end, as when it was the last thing here, would scroll it away).
+                                    setTimeout(() => scrollViewRef.current?.scrollTo({ y: Math.max(0, takeUpTop.current - 16), animated: true }), 350);
                                 }
                             }}>
                                 <Text style={styles.acceptBtnText}>
@@ -2212,29 +2233,8 @@ export default function PostDetailModal() {
                     </View>
                 )}
 
-                {/* 4. Universal Actions for Peer (Message, Rate, Report) */}
-                {!!identity && ((!isOwnPost && !isPulsePost) || post.status === 'pending' || post.status === 'completed' || activeTx) && (
-                    <View style={[styles.otherPostActions, { marginTop: post.status === 'pending' || post.status === 'active' ? 10 : 0 }]}>
-                        {targetPeerPubkey && !((post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee)) && (
-                            <Pressable accessibilityRole="button" style={styles.messageBtn} onPress={async () => {
-                                if (!identity) return;
-                                try {
-                                    const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
-                                    if (conv) router.push(`/chat/${conv.id}`);
-                                } catch (e: any) {
-                                    Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
-                                }
-                            }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Text style={styles.messageBtnText}>{!isOwnPost ? t('💬 Message {name}', { name: targetPeerCallsign }) : t('💬 Message')}</Text>
-                                    {unreadCount > 0 && (
-                                        <View style={styles.unreadBadge}>
-                                            <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </Pressable>
-                        )}
+                {peerActions && (
+                    <View style={styles.otherPostActions}>
                         {identity && (post.status === 'completed' || activeTx?.status === 'completed') && (activeTx?.id || post.pending_transaction_id) && targetPeerPubkey && (
                             <View style={{ marginTop: 16 }}>
                                 <Pressable accessibilityRole="button" style={[styles.messageBtn, { borderColor: hasExistingRating ? colors.brand.primary : colors.feedback.warning.border, backgroundColor: hasExistingRating ? colors.feedback.success.bg : colors.feedback.warning.bg }]} onPress={() => setShowRatingForm(!showRatingForm)}>
@@ -2272,7 +2272,100 @@ export default function PostDetailModal() {
                                 )}
                             </View>
                         )}
+                    </View>
+                )}
 
+                {/*
+                  * 8. The photo, under the action (DESIGN-detail-pages-frame-fable.md §1.7, §3): 4:3, the column's width, under the
+                  * column's corners (the grid tile's frame, so the page shows the picture the member tapped), as the event page has it. No
+                  * photo: the category tile, 3:1, inside the column. 16 over the quiet row.
+                  */}
+                {photos.length > 0 ? (
+                    <View style={styles.photoFrame} testID="post-photo-frame">
+                        <PhotoCarousel photos={photos} height={photoHeight} borderRadius={SHELL.radius} />
+                    </View>
+                ) : (
+                    <View style={styles.tileBanner} testID="post-tile-banner">
+                        <CategoryTile
+                            category={post.category}
+                            kind={isPulsePost ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')}
+                            size="banner"
+                        />
+                    </View>
+                )}
+
+                {/* 9. The quiet row: Message {name} (its unread on it) and Share, in the neutral outline, wrapping by whole buttons, never cut. */}
+                <View style={styles.quietRow} testID="post-quiet-row">
+                    {peerMessage && (
+                        <Pressable accessibilityRole="button" style={[styles.messageBtn, styles.quietItem]} testID="post-message" onPress={async () => {
+                            if (!identity) return;
+                            try {
+                                const conv = await createConversationApi('dm', [targetPeerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
+                                if (conv) router.push(`/chat/${conv.id}`);
+                            } catch (e: any) {
+                                Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
+                            }
+                        }}>
+                            <View style={styles.messageInner}>
+                                <Text style={styles.messageBtnText}>{!isOwnPost ? t('💬 Message {name}', { name: targetPeerCallsign }) : t('💬 Message')}</Text>
+                                {unreadCount > 0 && (
+                                    <View style={styles.unreadBadge}>
+                                        <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </Pressable>
+                    )}
+                    {/* Share with members, and outside the community where it allows it (front doors S6): the one button and its sheet. */}
+                    <SharePostButtons post={post} style={styles.quietItem} buttonStyle={[shell.pageButton, styles.quietButton]} textStyle={[shell.pageButtonText, styles.quietButtonText]} />
+                </View>
+
+                {/* 10. The description and the tags, after the action and the photo (DESIGN-detail-pages-fable.md question 1). */}
+                <Text style={styles.description} testID="post-description">{post.description || t('No description provided.')}</Text>
+                <PostTagChips tags={post.tags} freeTags={listingFreeTags(post)} />
+
+                {/* 11. The person: the Author / Counterparty Card, components/AuthorCard.tsx, the one box an event's "HOSTED BY" is too. */}
+                {isOwnPost && targetPeerPubkey ? (
+                    <AuthorCard
+                        label={isOffer ? t('ACCEPTED BY') : t('PROVIDER')}
+                        pubkey={targetPeerPubkey}
+                        callsign={targetPeerCallsign}
+                        avatarUrl={targetPeerAvatar}
+                        rating={{ average: targetPeerAvgRating, count: targetPeerRatingCount }}
+                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: targetPeerPubkey, callsign: targetPeerCallsign } })}
+                    />
+                ) : (
+                    <AuthorCard
+                        label={t('POSTED BY')}
+                        pubkey={post.author_pubkey}
+                        callsign={cardAuthor}
+                        avatarUrl={post.author_avatar}
+                        rating={{ average: authorAvgRating, count: authorRatingCount }}
+                        // A visitors' view hides who posted (utils/posts-view.ts): there is no profile to open.
+                        disabled={isHiddenAuthor(post.author_pubkey)}
+                        onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: post.author_pubkey, callsign: cardAuthor } })}
+                    />
+                )}
+                {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md §4):
+                    said here, so a pin on the map is never taken for the door. A keeper reads their enterprise's exactly. */}
+                {placeShownRoughly({ authorPublicKey: post.author_pubkey, type: post.type, lat: post.lat, lng: post.lng }, identity?.publicKey, hostLetsInDefault(nodeProfile?.features))
+                    && !isOperatorOfAuthor && (
+                    <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: cardAuthor })}</Text>
+                )}
+
+                {/* 12. Show it on the global community (the author's). */}
+                {!isOperatorOfAuthor && (
+                    <ShowOnGlobalHostRow
+                        event={listingForCopy(post, photos)}
+                        enabled={nodeProfile?.profile === 'local' && identity?.publicKey === post.author_pubkey && (post.audience_scope ?? 'public') === 'public' && !post.origin_node
+                            && typeof post.lat === 'number' && typeof post.lng === 'number' && ['active', 'paused', 'pending'].includes(post.status)}
+                        listing
+                    />
+                )}
+
+                {/* 12, 13. The rest and Report, at the foot: the convenor's moderation, Report and Block, the reason box. */}
+                {peerActions && (
+                    <View style={styles.otherPostActions}>
                         {/* Convenor Post Moderation (Item 10) */}
                         {!isOwnPost && isConvenor && Boolean(post.target_group_id || post.targetGroupId) && (
                             <View style={{ marginTop: 14, padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colors.brand.primary, backgroundColor: colors.brand.tint }}>
@@ -2322,11 +2415,12 @@ export default function PostDetailModal() {
                             </View>
                         )}
 
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 12 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 16, marginTop: 12 }}>
                             <Pressable 
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Report Post')}
                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                style={{ minHeight: 48, justifyContent: 'center' }}
                                 onPress={() => {
                                     const next = !showReportForm;
                                     setShowReportForm(next);
@@ -2346,7 +2440,7 @@ export default function PostDetailModal() {
                                 accessibilityState={{ busy: isBlocking }}
                                 hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                                 disabled={isBlocking}
-                                style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingVertical: 4 }}
+                                style={{ flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingVertical: 4 }}
                                 onPress={() => {
                                     if (!post?.author_pubkey || isBlocking) return;
                                     const authorName = post.author_callsign;

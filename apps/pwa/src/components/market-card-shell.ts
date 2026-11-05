@@ -221,6 +221,8 @@ export const GRID_POLL_NOTE = 'm-0 shrink-0 min-w-0 truncate text-[11px] font-se
 /** The footer: the turnout and the ballot at the start, what a tap does at the end, one line, at the tile's foot. */
 export const GRID_POLL_FOOT = 'shrink-0 mt-auto pt-1.5 border-t border-nature-100 dark:border-nature-800 flex items-center gap-2 min-w-0 whitespace-nowrap text-[11px] leading-snug';
 export const GRID_POLL_ACTION = 'ms-auto shrink-0 font-bold text-bp-chip-poll-ink';
+/** On a tile voted in place: "Tap an answer to vote · Open poll ›", whose first half gives way with "…" (its second never does). */
+export const GRID_POLL_ACTION_HERE = 'ms-auto flex min-w-0 font-bold text-bp-chip-poll-ink';
 
 /** A grid tile's outer box: the list card's corners, border, ground and shadow, the photo on top, filling its cell. */
 const GRID_FRAME = 'relative flex flex-col h-full w-full min-w-0 overflow-hidden rounded-[14px] border shadow-sm';

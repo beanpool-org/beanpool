@@ -145,12 +145,13 @@ export function pollTileSummary({ totalVotes, closed, openVote }: { totalVotes: 
 
 /**
  * The footer's right: what a tap does, or that a sealed poll has the member's answer. On a tile voted in place (`votable`,
- * pollTileVoteBlock) it says both: an answer votes, the rest opens the poll.
+ * pollTileVoteBlock) it says both, "Tap an answer to vote · Open poll ›": `hint` is the first half, which gives way (cut with
+ * "…") when the line is short of room, and `words` the second, which never does. The turnout beside them gives way first.
  */
-export function pollTileAction({ closed, answered, votable = false }: { closed: boolean; answered: boolean; votable?: boolean }): { kind: 'vote' | 'results' | 'answered' | 'here'; words: string } {
+export function pollTileAction({ closed, answered, votable = false }: { closed: boolean; answered: boolean; votable?: boolean }): { kind: 'vote' | 'results' | 'answered' | 'here'; words: string; hint?: string } {
     if (closed) return { kind: 'results', words: t('See results ›') };
     if (answered) return { kind: 'answered', words: t('You answered ✓') };
-    if (votable) return { kind: 'here', words: t('Tap an answer to vote · Open poll ›') };
+    if (votable) return { kind: 'here', hint: t('Tap an answer to vote'), words: t('Open poll ›') };
     return { kind: 'vote', words: t('Tap to vote ›') };
 }
 

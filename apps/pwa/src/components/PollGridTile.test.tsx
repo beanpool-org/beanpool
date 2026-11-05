@@ -243,6 +243,7 @@ describe('the grid\'s poll tile, voted in place', () => {
         // Each row a finger's press tall at least.
         for (const b of screen.getAllByTestId('poll-grid-answer')) expect(b.style.minHeight).toBe('44px');
         expect(screen.getByTestId('poll-grid-action').textContent).toBe('Tap an answer to vote · Open poll ›');
+        expect(screen.getByTestId('poll-grid-hint').textContent).toBe('Tap an answer to vote · ');
 
         await act(async () => { fireEvent.click(answerButton(/^Vote: Sunday/)); });
         expect(votePoll).toHaveBeenCalledTimes(1);

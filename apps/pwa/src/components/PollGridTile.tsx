@@ -26,7 +26,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { MemberAvatar } from './MemberAvatar';
 import { pollFacts, pollStatusWords, usePollVote } from './PollCard';
 import {
-    CARD_INK, GRID_POLL_ACTION, GRID_POLL_ANSWER, GRID_POLL_ANSWERS, GRID_POLL_BAR, GRID_POLL_CELL, GRID_POLL_FOOT, GRID_POLL_GHOST,
+    CARD_INK, GRID_POLL_ACTION, GRID_POLL_ACTION_HERE, GRID_POLL_ANSWER, GRID_POLL_ANSWERS, GRID_POLL_BAR, GRID_POLL_CELL, GRID_POLL_FOOT, GRID_POLL_GHOST,
     GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_NOTE, GRID_POLL_PCT, GRID_POLL_PRESS, GRID_POLL_QUESTION, GRID_POLL_ROW,
     GRID_POLL_ROW_EDGE, GRID_POLL_ROW_MAX, GRID_POLL_TILE, chip, gridChip,
 } from './market-card-shell';
@@ -79,7 +79,6 @@ function useAnswersRoom() {
         const watch = new ResizeObserver(measure);
         watch.observe(el);
         return () => watch.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     return { ref, room };
 }
@@ -212,14 +211,18 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
 
                 <div data-testid="poll-grid-foot" className={GRID_POLL_FOOT} {...footButton}>
                     {/* A vote the node refused says so where the turnout was, on the same one line, so nothing moves. */}
+                    {/* On a tile voted in place the turnout gives way first, then "Tap an answer to vote"; "Open poll ›" never. */}
                     {error ? (
-                        <span role="alert" data-testid="poll-grid-error" className="min-w-0 truncate font-semibold text-red-600 dark:text-red-400">{error}</span>
+                        <span role="alert" data-testid="poll-grid-error" className={`min-w-0 truncate font-semibold text-red-600 dark:text-red-400${action.hint ? ' shrink-[100]' : ''}`}>{error}</span>
                     ) : (
-                        <span data-testid="poll-grid-summary" className={`min-w-0 truncate font-semibold ${CARD_INK.secondary}`}>
+                        <span data-testid="poll-grid-summary" className={`min-w-0 truncate font-semibold ${CARD_INK.secondary}${action.hint ? ' shrink-[100]' : ''}`}>
                             {pollTileSummary({ totalVotes, closed: isClosed, openVote })}
                         </span>
                     )}
-                    <span data-testid="poll-grid-action" data-kind={action.kind} className={GRID_POLL_ACTION}>{action.words}</span>
+                    <span data-testid="poll-grid-action" data-kind={action.kind} className={action.hint ? GRID_POLL_ACTION_HERE : GRID_POLL_ACTION}>
+                        {action.hint && <span data-testid="poll-grid-hint" className="min-w-0 truncate">{action.hint}{' · '}</span>}
+                        <span className="shrink-0">{action.words}</span>
+                    </span>
                 </div>
             </div>
         </div>

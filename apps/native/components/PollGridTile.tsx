@@ -187,8 +187,16 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
                 {informal && <Text style={styles.note} numberOfLines={1} testID="poll-informal-note">{t('💬 {note}', { note: t(LINES.informal) })}</Text>}
 
                 <Foot style={styles.foot} testID="poll-grid-foot" {...footProps}>
-                    <Text style={styles.summary} numberOfLines={1} testID="poll-grid-summary">{pollTileSummary({ totalVotes, closed: isClosed, openVote })}</Text>
-                    <Text style={styles.action} numberOfLines={1} testID={`poll-grid-action-${action.kind}`}>{action.words}</Text>
+                    {/* On a tile voted in place the turnout gives way first, then "Tap an answer to vote"; "Open poll ›" never. */}
+                    <Text style={[styles.summary, action.hint ? styles.summaryGivesWay : null]} numberOfLines={1} testID="poll-grid-summary">{pollTileSummary({ totalVotes, closed: isClosed, openVote })}</Text>
+                    {action.hint ? (
+                        <View style={styles.actionHere} testID={`poll-grid-action-${action.kind}`}>
+                            <Text style={[styles.action, styles.hint]} numberOfLines={1} testID="poll-grid-hint">{action.hint}{' · '}</Text>
+                            <Text style={styles.action} numberOfLines={1}>{action.words}</Text>
+                        </View>
+                    ) : (
+                        <Text style={styles.action} numberOfLines={1} testID={`poll-grid-action-${action.kind}`}>{action.words}</Text>
+                    )}
                 </Foot>
             </Tile>
         </View>
@@ -230,4 +238,8 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         },
         summary: { flexShrink: 1, minWidth: 0, fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         action: { flexShrink: 0, marginLeft: 'auto', fontSize: 11, fontWeight: '700', color: colors.market.poll.fg },
+        /** On a tile voted in place: the turnout gives way first (a far larger shrink), then the hint; "Open poll ›" never. */
+        summaryGivesWay: { flexShrink: 100 },
+        actionHere: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, minWidth: 0, marginLeft: 'auto' },
+        hint: { flexShrink: 1, minWidth: 0, marginLeft: 0 },
     });

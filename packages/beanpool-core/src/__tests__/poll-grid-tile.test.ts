@@ -184,7 +184,7 @@ describe('pollTilePressesFit: every row a finger\'s press tall', () => {
 
 describe('the words on a tile voted in place', () => {
     it('the footer says an answer votes and the rest opens the poll; closed and answered say what they said', () => {
-        expect(pollTileAction({ closed: false, answered: false, votable: true })).toEqual({ kind: 'here', words: 'Tap an answer to vote · Open poll ›' });
+        expect(pollTileAction({ closed: false, answered: false, votable: true })).toEqual({ kind: 'here', hint: 'Tap an answer to vote', words: 'Open poll ›' });
         expect(pollTileAction({ closed: false, answered: false, votable: false })).toEqual({ kind: 'vote', words: 'Tap to vote ›' });
         expect(pollTileAction({ closed: true, answered: false, votable: true }).kind).toBe('results');
     });

@@ -28,6 +28,8 @@ import { onlyAdminsInvite, readInviteRole, mayInviteHere, takesKnocks, type Invi
 interface Props extends LocalCommunityWays {
     identity: BeanPoolIdentity;
     initialView?: SubView;
+    navNonce?: number;
+    onViewChange?: (view: SubView) => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
     onOpenProfile?: (pubkey: string) => void;
     preview?: boolean;
@@ -81,8 +83,12 @@ function Avatar({ callsign, avatarUrl, pubkey, size = 40 }: { callsign: string; 
     );
 }
 
-export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOpenProfile, preview, canSeeKnocks, ...ways }: Props) {
+export function PeoplePage({ identity, initialView = 'friends', navNonce, onViewChange, onNavigate, onOpenProfile, preview, canSeeKnocks, ...ways }: Props) {
     const [view, setView] = useState<SubView>(initialView);
+    const switchView = (v: SubView) => {
+        setView(v);
+        onViewChange?.(v);
+    };
     const [friends, setFriends] = useState<FriendEntry[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(false);
@@ -105,7 +111,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         else if (e.key === 'End') next = SUB_VIEWS[SUB_VIEWS.length - 1];
         if (!next) return;
         e.preventDefault();
-        setView(next);
+        switchView(next);
         tabRefs.current[next]?.focus();
     };
 
@@ -159,7 +165,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
 
     useEffect(() => { loadFriends(); loadAddedYou(); }, []);
     useEffect(() => { if (view === 'community' && onDemand === false) loadMembers(); }, [view, onDemand]);
-    useEffect(() => { if (initialView) setView(initialView); }, [initialView]);
+    useEffect(() => { if (initialView) setView(initialView); }, [initialView, navNonce]);
 
     useEffect(() => {
         if (view !== 'community' || onDemand !== true) return;
@@ -349,7 +355,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                         aria-selected={view === v}
                         aria-controls={panelId(v)}
                         tabIndex={view === v ? 0 : -1}
-                        onClick={() => setView(v)}
+                        onClick={() => switchView(v)}
                         onKeyDown={onTabKeyDown}
                         // A tab never goes narrower than its longest word (no min-w-0; break-keep keeps a Chinese, Japanese or Korean
                         // name whole too), so a word is never split. Each tab starts from that width and shares what is left; where

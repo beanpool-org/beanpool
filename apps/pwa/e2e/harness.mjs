@@ -72,9 +72,10 @@ export async function launch() {
  * scheme and the stored Settings choice), `textScale` is the 1.3x font setting, and `posts` is the feed to answer
  * with (fixtures.POSTS unless a caller wants the poll somewhere else), and `communityInfo` is what /api/community/info says
  * (absent: answered 404, as a node older than the switch does, so no example cards). `timezoneId` is the reader's zone (absent:
- * this machine's). Returns once the feed has drawn.
+ * this machine's). `lang` draws the page in that language (`?lang=`, harness-main.tsx; absent: English). Returns once the feed
+ * has drawn.
  */
-export async function openMarket(browser, origin, { width, height = 1200, dark = false, textScale = 1, posts, storage = {}, communityInfo, timezoneId } = {}) {
+export async function openMarket(browser, origin, { width, height = 1200, dark = false, textScale = 1, posts, storage = {}, communityInfo, timezoneId, lang } = {}) {
     const context = await browser.newContext({
         viewport: { width, height },
         colorScheme: dark ? 'dark' : 'light',
@@ -108,7 +109,7 @@ export async function openMarket(browser, origin, { width, height = 1200, dark =
     await context.route('**/ws**', (route) => route.abort());
 
     const page = await context.newPage();
-    await page.goto(`${origin}/e2e/harness.html`, { waitUntil: 'load' });
+    await page.goto(`${origin}/e2e/harness.html${lang ? `?lang=${lang}` : ''}`, { waitUntil: 'load' });
     if (textScale !== 1) await page.addStyleTag({ content: TEXT_SCALE_CSS(textScale) });
 
     // The grid is drawn: wait for the feed rather than a timer.

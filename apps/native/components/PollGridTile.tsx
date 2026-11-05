@@ -118,7 +118,8 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         tile: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, marginBottom: 0, padding: SHELL.textPadding, gap: 6 },
         head: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
         chips: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0, overflow: 'hidden' },
-        author: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0, marginLeft: 'auto' },
+        /** The author gives way first (a far larger shrink), so the chips stay whole while there is room for them. */
+        author: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 100, minWidth: 0, marginLeft: 'auto' },
         authorText: { flexShrink: 1, fontSize: 12, fontWeight: '700', color: colors.text.secondary },
         /** The answers' room between the question and the footer: rows grow to fill it, then spread evenly. */
         answers: { flex: 1, minHeight: 0, justifyContent: 'space-evenly', overflow: 'hidden' },

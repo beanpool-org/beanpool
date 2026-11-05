@@ -92,7 +92,8 @@ export function PollGridTile({ post, onOpen, testId, informal = false }: PollGri
                         <span data-testid="poll-status" className={gridChip('quiet')}>{pollStatusWords(post, isClosed)}</span>
                         {pinned && <span data-testid="poll-pinned-chip" title={t('📌 PINNED')} className={chip('pinned')}><span aria-hidden="true">📌</span></span>}
                     </span>
-                    <span data-testid="poll-author" className="ms-auto flex items-center gap-1.5 min-w-0">
+                    {/* The author gives way first (a far larger shrink), so the chips stay whole while there is room for them. */}
+                    <span data-testid="poll-author" className="ms-auto flex items-center gap-1.5 min-w-0 shrink-[100]">
                         <MemberAvatar avatarUrl={avatarSrc} pubkey={post.authorPublicKey} callsign={authorName} size={18} className="shrink-0 border border-nature-200 dark:border-nature-700" />
                         <span className={`min-w-0 truncate text-xs font-bold ${CARD_INK.secondary}`}>{authorName}</span>
                     </span>

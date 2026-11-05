@@ -394,7 +394,8 @@ export const LOG_LINES = 50;
 /** The known floor's community-wide lines, as the shape's settings: a member's exception or the health lines are not. */
 export const KNOWN_FLOOR_ACTIONS: Readonly<Record<string, string>> = {
     confirmation: 'knownFloor.on', known_floor: 'knownFloor.floor', credit_cap: 'knownFloor.cap',
-    // The member's credit-line gift, set here or from the names list's settings (engine/vouchers.ts writeMemberGiftSetting).
+    // The member's credit-line gift, set only here (engine/vouchers.ts writeMemberGiftSetting); a line the names list's
+    // settings route wrote alone before it refused the gift (V1, #2911) is read here too.
     gift_setting: 'memberGift',
 };
 

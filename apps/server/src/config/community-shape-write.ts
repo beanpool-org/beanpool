@@ -46,7 +46,8 @@
  *               is written (`beans_off`).
  *   memberGift  0 (off) to 100, whole Beans: the most one member's credit-line gift may be (slice G1); refused wherever
  *               Beans are off once this request is written (`beans_off`). Its line is kept in the known floor's log too
- *               (`gift_setting`), stamped alike, as the names list's own settings route keeps it.
+ *               (`gift_setting`), stamped alike. A Core setting: changed only here (the names list's settings route
+ *               refuses it, 400 `moved_to_community_shape`).
  *   listed      refused on the global kind (`profile`); on refused while DIRECTORY_UNLISTED holds every push back.
  *   shareOutside refused on while the private preview is on (it shows visitors nothing). Set off, every link a member
  *               shared outside stops at once (engine/peek-tickets.ts stopAllPeekTickets), in the same transaction: set on

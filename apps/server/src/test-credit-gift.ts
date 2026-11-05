@@ -7,18 +7,25 @@
  *  2. What the signer may give (GET /api/credit/gift): offered with room someone gave them, never without.
  *  3. Refusals, each with its sentence and nothing written: unsigned and the password session, no trade yet, 101 over the
  *     setting of 100, not whole Beans, to yourself, to a key that never joined, to an enterprise, to a paused and to a
- *     frozen member (one sentence for both), from a frozen giver, from earned credit alone, from the known floor.
+ *     frozen member (one sentence for both), from a frozen giver, from earned credit alone, from the known floor; all of
+ *     it passed on, a sentence true for someone who gave theirs away (round 2, finding 4).
  *  4. Oldest first, with roots: two vouches held (Owen's, then Ada's), a gift of 75 writes two rows, 50 rooted at Owen
  *     and 25 at Ada, each naming the piece it was split from; the recipient's notice is kept; no `accounts` row moves.
  *  5. Only room the giver isn't using: below zero, a gift past what their line still covers is refused with the number,
  *     and that number is given.
+ * 5b. The line their offers unlock, not the whole line (round 2, the deciding review's finding 1): one live offer, 400
+ *     granted, 100 vouched, 250 owed: 50 is free, not 100; 51 refused; after 30 given a 1-Bean purchase still goes
+ *     through; the most the tab then offers is given and he is never paused (`frozen`), only at his limit.
  *  6. The recipient's line within the cap: one Bean past it refused, up to it given.
  *  7. The voucher card's Passed on line: what sits with the people it was passed on to, how many, how much of it below
  *     zero; a ring passing the same 100 round (A → B → C → A) reads "passed on 100, held by 1 person" (§5).
- *  8. The owner's setting: 0 turns the gift off (refused, and the tab not offered); back on, it gives again.
+ *  8. The owner's setting, a Core setting changed in Core settings only: the names list's settings route refuses it whole
+ *     (round 2, finding 2); 0 turns the gift off (refused, and the tab not offered), members told, a line in each log;
+ *     back on, it gives again; locked, no change without the owner's fresh proof, and with it the unlock line and an alert.
  *  9. Property test over random gift trees: Σ room rooted at each voucher never above their grants and top-ups; every
  *     gift row has a root and splits a piece of the giver's with that root; each member's room is their pieces' open
- *     parts; no piece is split past its amount; no `accounts` row moves.
+ *     parts; no piece is split past its amount; no gift pauses its giver (four givers owe on one offer's line); no
+ *     `accounts` row moves.
  * 10. The ledger audit sums to zero, and the balances are what they were before the first gift.
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -42,7 +49,10 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSwitchOverride, getProfileSwitches } from './config/node-profile.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import { setMemberPhoto, roomHeldOf, creditCap } from '@beanpool/engine';
-import { vouchFromProfile } from './engine/vouchers.js';
+import { vouchFromProfile, voucherSettings, VOUCHER_WORDS } from './engine/vouchers.js';
+import { CORE_SETTINGS_LOCK_KEY, coreLockRow } from './config/core-settings.js';
+import { createPasswordSession } from './admin-key-auth.js';
+import { setSecurityAlertHandler } from './services/security-signal.js';
 import { CREDIT_GIFT_WORDS, CreditGiftError, giveCreditLine } from './engine/credit-gift.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings } from './config/known-floor.js';
 import { listKeptNotices } from './engine/kept-notices.js';
@@ -151,9 +161,9 @@ async function main(): Promise<void> {
         const inv = generateInvite(owen.pk)!;
         require_(redeemInvite(inv.code, who.pk, who.name).success === true, `${who.name} joins`);
     };
-    const names = ['Ada', 'Dan', 'Mel', 'Sam', 'Kim', 'Lea', 'Kay', 'Ned', 'Pia', 'Fay', 'Ent', 'Zoe', 'Rin', 'Ria', 'Rex'];
-    const [ada, dan, mel, sam, kim, lea, kay, ned, pia, fay, ent, zoe, rin, ria, rex] = names.map(newId);
-    for (const who of [ada, dan, mel, sam, kim, lea, kay, ned, pia, fay, ent, zoe, rin, ria, rex]) enter(who);
+    const names = ['Ada', 'Dan', 'Mel', 'Sam', 'Kim', 'Lea', 'Kay', 'Ned', 'Pia', 'Fay', 'Ent', 'Zoe', 'Rin', 'Ria', 'Rex', 'Gus'];
+    const [ada, dan, mel, sam, kim, lea, kay, ned, pia, fay, ent, zoe, rin, ria, rex, gus] = names.map(newId);
+    for (const who of [ada, dan, mel, sam, kim, lea, kay, ned, pia, fay, ent, zoe, rin, ria, rex, gus]) enter(who);
     for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [dan, 'admin']] as const) {
         require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD())).status === 200, `${who.name} is made ${role}`);
     }
@@ -243,6 +253,14 @@ async function main(): Promise<void> {
     const kayGives = await gift(kay, kim, 25);
     assert(kayGives.status === 200 && kayGives.body?.amount === 25 && getMemberTrustProfile(kay.pk).knownGrant === 1000 && roomHeldOf(db, kay.pk) === 0,
         `3. the 25 is given, and her known floor is still 1,000 (${show(kayGives)})`);
+    // All of hers passed on: no tab, and the sentence is true of someone who gave theirs away (round 2, the review's
+    // finding 4: it said "nobody has given you any"), on the next read and on another try alike.
+    const kayAfter = await offerOf(kay);
+    const kayAgain = await gift(kay, kim, 1);
+    const NO_ROOM_NOW = 'You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.';
+    assert(kayAfter.body?.offered === false && kayAfter.body?.room === 0 && kayAfter.body?.why === NO_ROOM_NOW
+        && kayAgain.status === 409 && kayAgain.body?.code === 'no_room' && kayAgain.body?.error === NO_ROOM_NOW && CREDIT_GIFT_WORDS.noRoom === NO_ROOM_NOW,
+        `3. all of hers given: no tab, and a sentence true for someone who passed theirs on (${show(kayAfter)} | ${show(kayAgain)})`);
 
     // ── 4. Oldest first, with roots; no Bean moves ──────────────────────────────────────────────────────────────────
     const accountsBefore = accountsNow();
@@ -288,6 +306,46 @@ async function main(): Promise<void> {
     assert(allInUse.body?.canGive === 0 && allInUse.body?.why === CREDIT_GIFT_WORDS.allInUse,
         `5. what is left of his room is in use: nothing to give, and why (${show(allInUse)})`);
 
+    // ── 5b. The line his offers unlock, not his whole line (round 2, the deciding review's finding 1) ───────────────────
+    // The reviewer's case: one live offer, 400 granted and a trade's earned credit, 100 vouched by Owen, 250 owed. His whole
+    // line is 100 + 403, but one offer unlocks the 100 and 200 of the rest: 300. So 50 of the 100 is free, never all of it:
+    // all of it would leave him owing 250 on a line of 200, "Spending paused" (getBalance's `frozen`).
+    vouchFromProfile(owen.pk, { memberPubkey: gus.pk, vouchAmount: 100 });
+    deal(mel, gus);
+    db.prepare('UPDATE members SET earned_credit = 400 WHERE public_key = ?').run(gus.pk); // setup: a granted line, as 6 does
+    spendBelowZero(gus, mel, 250);
+    const gp = getMemberTrustProfile(gus.pk);
+    const gb = getBalance(gus.pk);
+    require_(gb.liveOffers === 1 && gb.balance === -250 && gb.usableFloor === -300 && !gb.frozen && gp.roomHeld === 100 && gp.earnedCredit > 0 && gp.otherAllowance > 200,
+        `Gus: one live offer, owes 250, usable floor -300, 100 vouched, ${gp.otherAllowance} earned and granted (${JSON.stringify({ live: gb.liveOffers, balance: gb.balance, usable: gb.usableFloor, frozen: gb.frozen })})`);
+    const gusOffer = await offerOf(gus);
+    assert(gusOffer.status === 200 && gusOffer.body?.canGive === 50 && gusOffer.body?.room === 100,
+        `5b. the tab offers 50 of his 100: what his one offer unlocks less what he owes (${show(gusOffer)})`);
+    const gusRows = giftRows();
+    const gus51 = await gift(gus, kim, 51);
+    assert(gus51.status === 409 && gus51.body?.code === 'in_use' && gus51.body?.error === 'You’re using part of your credit line, so you can give 50 Beans of it at most now.'
+        && giftRows() === gusRows && roomHeldOf(db, gus.pk) === 100,
+        `5b. 51 is refused with the 50 that is free, nothing written (${show(gus51)})`);
+    // A gift is not a spend, but it shrinks what he may spend by itself, never by more: 30 given, 20 still his to spend.
+    const gus30 = await gift(gus, kim, 30);
+    const g30 = getBalance(gus.pk);
+    const bought = transfer(gus.pk, mel.pk, 1, 'A purchase after a gift', 'escrow');
+    const g31 = getBalance(gus.pk);
+    assert(gus30.status === 200 && !g30.frozen && g30.usableFloor === -270 && !!bought && g31.balance === -251 && !g31.frozen,
+        `5b. after giving 30 he isn't paused (usable floor ${g30.usableFloor}), and a 1-Bean purchase still goes through (balance ${g31.balance}) (${show(gus30)})`);
+    // The most the tab offers now, given whole: never past what his offers unlock, so never paused; he is at his limit.
+    const gusMost = await offerOf(gus);
+    const most = gusMost.body?.canGive;
+    const gusAll = await gift(gus, kim, most);
+    const gAll = getBalance(gus.pk);
+    assert(most === 19 && gusAll.status === 200 && !gAll.frozen && gAll.balance === -251 && gAll.usableFloor === -251,
+        `5b. the most the tab offers (${most}) is given and he is not paused: balance ${gAll.balance}, usable floor ${gAll.usableFloor} (${show(gusAll)})`);
+    const gusNone = await offerOf(gus);
+    const gusOne = await gift(gus, kim, 1);
+    assert(gusNone.body?.canGive === 0 && gusNone.body?.why === CREDIT_GIFT_WORDS.allInUse && gusOne.status === 409 && gusOne.body?.code === 'in_use'
+        && roomHeldOf(db, gus.pk) === 51 && !getBalance(gus.pk).frozen,
+        `5b. the 51 left is all in use: nothing to give and why, 1 more refused, still not paused (${show(gusNone)} | ${show(gusOne)})`);
+
     // ── 6. The recipient's line within the cap ──────────────────────────────────────────────────────────────────────
     vouchFromProfile(dan.pk, { memberPubkey: rin.pk, vouchAmount: 100 });
     deal(rin, mel);
@@ -326,47 +384,90 @@ async function main(): Promise<void> {
         && heldRooted(rin.pk, dan.pk) === 60 && heldRooted(ria.pk, dan.pk) === 0 && heldRooted(rex.pk, dan.pk) === 0,
         `7. a ring passing the same 60 round is three rows rooted at Dan, and the card reads passed on 100 (Zoe's 40 and the ring's 60), held by 2 people (${JSON.stringify(danCard?.passedOn)})`);
 
-    // ── 8. The owner's setting ──────────────────────────────────────────────────────────────────────────────────────
-    const setOff = await call(owen, 'POST', '/api/names/vouchers/settings', { memberGift: 0 });
-    const offerOff = await offerOf(rin);
-    const giftOff = await gift(rin, kim, 10);
-    assert(setOff.status === 200 && setOff.body?.memberGift === 0 && offerOff.body?.offered === false && offerOff.body?.max === 0
-        && giftOff.status === 403 && giftOff.body?.code === 'gift_off' && giftOff.body?.error === CREDIT_GIFT_WORDS.off,
-        `8. 0 turns it off: the tab isn't offered and a gift is refused (${show(offerOff)} | ${show(giftOff)})`);
-    const setTen = await call(owen, 'POST', '/api/names/vouchers/settings', { memberGift: 10 });
-    const overTen = await gift(rin, kim, 11);
-    const ten = await gift(rin, kim, 10);
-    await call(owen, 'POST', '/api/names/vouchers/settings', { memberGift: 100 });
-    assert(setTen.status === 200 && overTen.status === 400 && overTen.body?.error === 'You can give up to 10 Beans of your credit line at once here.' && ten.status === 200,
-        `8. set to 10: 11 is refused with the new most, 10 is given (${show(overTen)})`);
-    // The same setting in Core settings (How this community works, the owners' page): 0 turns the tab off there too.
+    // ── 8. The owner's setting: a Core setting, changed in Core settings only ────────────────────────────────────────
     const SHAPE = '/api/local/admin/community-shape';
+    const shapeSet = (memberGift: unknown, headers: Record<string, string> = PASSWORD()) => call(null, 'POST', SHAPE, { changes: { memberGift } }, headers);
+    /** Every line either log keeps of the gift's setting, an unlock naming it included. */
+    const giftLines = () => count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'gift_setting'")
+        + count("SELECT COUNT(*) AS n FROM community_settings_log WHERE setting = 'memberGift' OR (setting = 'core.unlock' AND new_value = 'memberGift')");
     const shapeBefore = await call(null, 'GET', SHAPE, undefined, PASSWORD());
     assert(shapeBefore.status === 200 && JSON.stringify(shapeBefore.body?.settings?.memberGift) === JSON.stringify({ value: 100, configured: 100, source: 'default', lock: null })
         && shapeBefore.body?.core?.settings?.includes('memberGift'),
         `8. Core settings read the gift: 100, the default, and it is a core setting (${JSON.stringify(shapeBefore.body?.settings?.memberGift)})`);
-    const bad101 = await call(null, 'POST', SHAPE, { changes: { memberGift: 101 } }, PASSWORD());
-    const badHalf = await call(null, 'POST', SHAPE, { changes: { memberGift: 2.5 } }, PASSWORD());
+    // The names list's settings route takes the voucher budget only (round 2, the deciding review's finding 2: the gift set
+    // there skipped the lock's fresh proof, both logs, the owners' alert and the members' notice). Sent there, alone or
+    // beside the budget, the whole request is refused and nothing is written.
+    const listBefore = JSON.stringify(voucherSettings());
+    const linesBefore = giftLines();
+    const viaList = await call(owen, 'POST', '/api/names/vouchers/settings', { memberGift: 0 });
+    const viaListBoth = await call(owen, 'POST', '/api/names/vouchers/settings', { voucherBudget: 1500, memberGift: 0 });
+    assert(viaList.status === 400 && viaList.body?.code === 'moved_to_community_shape' && viaList.body?.error === VOUCHER_WORDS.giftInCoreSettings
+        && viaListBoth.status === 400 && viaListBoth.body?.code === 'moved_to_community_shape'
+        && JSON.stringify(voucherSettings()) === listBefore && giftLines() === linesBefore && (await offerOf(rin)).body?.offered === true,
+        `8. the names list's settings route refuses the gift, alone or beside the budget, and writes nothing (${show(viaList)} | ${show(viaListBoth)})`);
+    const budgetOnly = await call(owen, 'POST', '/api/names/vouchers/settings', { voucherBudget: 1500 });
+    const budgetBack = await call(owen, 'POST', '/api/names/vouchers/settings', { voucherBudget: 1000 });
+    assert(budgetOnly.status === 200 && budgetOnly.body?.voucherBudget === 1500 && budgetOnly.body?.memberGift === 100 && budgetBack.body?.voucherBudget === 1000,
+        `8. the voucher budget alone is still set there (${show(budgetOnly)})`);
+    const bad101 = await shapeSet(101);
+    const badHalf = await shapeSet(2.5);
     assert(bad101.status === 400 && badHalf.status === 400 && bad101.body?.error === 'A member’s credit-line gift is 0 (off) to 100 Beans.',
         `8. Core settings refuse 101 and 2.5 with the sentence (${show(bad101)})`);
-    const coreOff = await call(null, 'POST', SHAPE, { changes: { memberGift: 0 } }, PASSWORD());
-    const offerCoreOff = await offerOf(rin);
+    const coreOff = await shapeSet(0);
+    const offerOff = await offerOf(rin);
+    const giftOff = await gift(rin, kim, 10);
     const twin = db.prepare("SELECT c.at AS at FROM community_settings_log c WHERE c.setting = 'memberGift' ORDER BY c.id DESC LIMIT 1").get() as { at: string } | undefined;
     const twinLines = count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'gift_setting' AND at = ? AND old_value = '100' AND new_value = '0'", twin?.at ?? '');
-    // This change's lines (its stamp): the earlier 0 set from the names list's settings (above) is in the log too, its own.
-    const logged = (coreOff.body?.shape?.log as any[] | undefined)?.filter((l) => l.setting === 'memberGift' && l.at === twin?.at) ?? [];
-    const earlier = (coreOff.body?.shape?.log as any[] | undefined)?.filter((l) => l.setting === 'memberGift' && l.kept === 'known_floor_log') ?? [];
-    assert(coreOff.status === 200 && coreOff.body?.told === 'members' && coreOff.body?.shape?.settings?.memberGift?.value === 0 && offerCoreOff.body?.offered === false
-        && twinLines === 1 && logged.length === 1 && logged[0].kept === 'community_settings_log' && earlier.length === 3,
-        `8. set to 0 in Core settings: off, the tab not offered, members told, one line in each log, read once; the names list's three earlier changes read there too (${JSON.stringify({ status: coreOff.status, told: coreOff.body?.told, value: coreOff.body?.shape?.settings?.memberGift?.value, offered: offerCoreOff.body?.offered, twinLines, logged: logged.length, earlier: earlier.length })})`);
-    const coreOn = await call(null, 'POST', SHAPE, { changes: { memberGift: 100 } }, PASSWORD());
+    // Its line read once: the known floor's twin of it (stamped alike) is not a second line.
+    const logged = (coreOff.body?.shape?.log as any[] | undefined)?.filter((l) => l.setting === 'memberGift') ?? [];
+    assert(coreOff.status === 200 && coreOff.body?.told === 'members' && coreOff.body?.shape?.settings?.memberGift?.value === 0
+        && offerOff.body?.offered === false && offerOff.body?.max === 0
+        && giftOff.status === 403 && giftOff.body?.code === 'gift_off' && giftOff.body?.error === CREDIT_GIFT_WORDS.off
+        && twinLines === 1 && logged.length === 1 && logged[0].kept === 'community_settings_log' && logged[0].at === twin?.at,
+        `8. 0 in Core settings turns it off: the tab isn't offered, a gift is refused, members told, one line in each log, read once (${JSON.stringify({ status: coreOff.status, told: coreOff.body?.told, offered: offerOff.body?.offered, gift: giftOff.body?.code, twinLines, logged: logged.length })})`);
+    const setTen = await shapeSet(10);
+    const overTen = await gift(rin, kim, 11);
+    const ten = await gift(rin, kim, 10);
+    const coreOn = await shapeSet(100);
+    assert(setTen.status === 200 && overTen.status === 400 && overTen.body?.error === 'You can give up to 10 Beans of your credit line at once here.' && ten.status === 200,
+        `8. set to 10: 11 is refused with the new most, 10 is given (${show(overTen)})`);
     assert(coreOn.status === 200 && (await offerOf(rin)).body?.offered === true && coreOn.body?.shape?.settings?.memberGift?.source === 'default',
         `8. back to 100: the tab is offered again, and the row is gone (the default) (${show(coreOn)})`);
+    // Confirmed and locked: the names list's route still changes nothing, Core settings refuse without the owner's fresh
+    // proof, and with it write the unlock line before the change, alert the owners and tell the members, as every Core
+    // setting (config/community-shape-write.ts).
+    const alerts: string[] = [];
+    setSecurityAlertHandler((n) => { if (n.key === 'sec.settings') alerts.push(n.detail); });
+    db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CORE_SETTINGS_LOCK_KEY, coreLockRow(new Date().toISOString(), owen.pk)); // setup: Confirm and lock's row
+    const lockedBefore = { settings: JSON.stringify(voucherSettings()), lines: giftLines() };
+    const lockedList = await call(owen, 'POST', '/api/names/vouchers/settings', { memberGift: 0 });
+    const noProof = await shapeSet(0, { 'X-Admin-Session': createPasswordSession().sessionId });
+    assert(lockedList.status === 400 && lockedList.body?.code === 'moved_to_community_shape' && noProof.status === 401
+        && JSON.stringify(voucherSettings()) === lockedBefore.settings && giftLines() === lockedBefore.lines && alerts.length === 0,
+        `8. locked: the names list's route refuses, Core settings without the fresh proof refuse, nothing written, no alert (${show(lockedList)} | ${show(noProof)})`);
+    const proven = await shapeSet(50);
+    const unlockLines = db.prepare("SELECT setting, old_value, new_value, at FROM community_settings_log ORDER BY id DESC LIMIT 2").all().reverse() as { setting: string; old_value: string | null; new_value: string; at: string }[];
+    assert(proven.status === 200 && proven.body?.told === 'members' && voucherSettings().memberGift === 50
+        && unlockLines[0]?.setting === 'core.unlock' && unlockLines[0]?.new_value === 'memberGift' && unlockLines[1]?.setting === 'memberGift'
+        && unlockLines[1]?.old_value === '100' && unlockLines[1]?.new_value === '50' && unlockLines[0]?.at === unlockLines[1]?.at
+        && alerts.length === 1 && alerts[0].includes('Members giving part of their credit line (100 → 50)'),
+        `8. locked, with the fresh proof: written after a core.unlock line naming it, one owners' alert, members told (${JSON.stringify({ status: proven.status, lines: unlockLines.map((l) => [l.setting, l.old_value, l.new_value]), alerts })})`);
+    require_((await shapeSet(100)).status === 200 && voucherSettings().memberGift === 100, 'back to 100, with the proof');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(CORE_SETTINGS_LOCK_KEY); // setup: unlocked again for the rest
+    setSecurityAlertHandler(null);
 
     // ── 9. Property test over random gift trees ─────────────────────────────────────────────────────────────────────
     const vouchers = [owen, ada, dan];
     const crowd = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'].map(newId);
     for (const who of crowd) { enter(who); deal(who, mel); }
+    // Four of them owe on a line their one offer meters, as Gus did in 5b: 400 granted, 100 vouched, 250 spent. A gift may
+    // take only the room their offer's line doesn't need, so no gift below ever pauses its giver (checked at every step).
+    for (const [i, who] of crowd.slice(0, 4).entries()) {
+        db.prepare('UPDATE members SET earned_credit = 400 WHERE public_key = ?').run(who.pk); // setup: a granted line, as 6 does
+        vouchFromProfile(vouchers[i % vouchers.length].pk, { memberPubkey: who.pk, vouchAmount: 100 });
+        require_(!!transfer(who.pk, mel.pk, 250, 'A purchase for the suite', 'escrow') && getBalance(who.pk).balance === -250 && !getBalance(who.pk).frozen,
+            `${who.name} owes 250 on one offer's line (usable floor ${getBalance(who.pk).usableFloor})`);
+    }
     const people = [...crowd, sam, kim, rin, ria, rex];
     const allocated = (v: Id) => count("SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ? AND kind IN ('grant', 'top_up')", v.pk);
     const accountsAtStart = accountsNow();
@@ -388,13 +489,18 @@ async function main(): Promise<void> {
         } else {
             const from = people[rnd(people.length)];
             const to = people[rnd(people.length)];
-            try { giveCreditLine(from.pk, { memberPubkey: to.pk, amount: 1 + rnd(100) }); given++; } catch (e) {
+            const pausedBefore = getBalance(from.pk).frozen;
+            try {
+                giveCreditLine(from.pk, { memberPubkey: to.pk, amount: 1 + rnd(100) });
+                given++;
+                if (!pausedBefore && getBalance(from.pk).frozen) broken.push(`step ${step}: a gift paused ${from.name}'s spending`);
+            } catch (e) {
                 if (!(e instanceof CreditGiftError)) throw e;
                 refused++;
             }
         }
         for (const v of vouchers) {
-            const rooted = people.concat([lea, kay, zoe, owen, ada, dan, mel]).reduce((s, who) => s + heldRooted(who.pk, v.pk), 0);
+            const rooted = people.concat([lea, kay, zoe, gus, owen, ada, dan, mel]).reduce((s, who) => s + heldRooted(who.pk, v.pk), 0);
             if (rooted > allocated(v)) broken.push(`step ${step}: ${rooted} rooted at ${v.name} > ${allocated(v)} granted and topped up`);
             const negative = people.find((who) => heldRooted(who.pk, v.pk) < 0);
             if (negative) broken.push(`step ${step}: ${negative.name} holds less than nothing rooted at ${v.name}`);
@@ -407,7 +513,7 @@ async function main(): Promise<void> {
         if (rootless > 0) broken.push(`step ${step}: ${rootless} gift row(s) without their piece's root`);
     }
     assert(broken.length === 0 && given > 30 && refused > 0,
-        `9. over 300 random steps (${given} gifts, ${refused} refused, ${vouched} vouches): room rooted at each voucher never above their grants and top-ups, every row rooted, no piece split past its amount, each member's room their pieces' open parts${broken.length ? ` — ${broken.slice(0, 3).join(' | ')}` : ''}`);
+        `9. over 300 random steps (${given} gifts, ${refused} refused, ${vouched} vouches): room rooted at each voucher never above their grants and top-ups, every row rooted, no piece split past its amount, each member's room their pieces' open parts, no giver paused by a gift${broken.length ? ` — ${broken.slice(0, 3).join(' | ')}` : ''}`);
     assert(accountsNow() === accountsAtStart, '9. no accounts row moved across the random gifts');
 
     // ── 10. The audit ───────────────────────────────────────────────────────────────────────────────────────────────

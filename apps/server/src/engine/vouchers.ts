@@ -93,6 +93,7 @@ export const VOUCHER_WORDS = {
     notAdmin: word('Only an admin can be put on the credit committee. Every owner is on it already.'),
     ownerOnly: word('Only an owner changes this.'),
     badGift: word('A member’s credit-line gift is 0 (off) to 100 Beans.'),
+    giftInCoreSettings: word('Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.'),
     voucherEnded: word('The vouch on this invite ended before you joined; you start with no credit line'),
     frozen: word('Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.'),
     noticeTitle: word('Your budget to vouch from'),
@@ -148,8 +149,9 @@ export function memberGiftSetting(): number {
 
 /**
  * Writes the member_gift setting (the default removes the row) and its `gift_setting` line in the known floor's log,
- * inside the caller's transaction: the names list's settings route and How this community works (Core settings,
- * config/community-shape-write.ts), which stamps the line `at` as its own log's line, so the two read as one change.
+ * inside the caller's transaction. Its one caller is How this community works (Core settings,
+ * config/community-shape-write.ts), which stamps the line `at` as its own log's line, so the two read as one change: a
+ * Core setting is changed nowhere else (setVoucherSettings refuses it).
  */
 export function writeMemberGiftSetting(actor: string, before: number, value: number, at?: string): void {
     if (value === MEMBER_GIFT_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(MEMBER_GIFT_KEY);
@@ -547,13 +549,20 @@ export function setCreditCommittee(actor: string, body: { memberPubkey?: unknown
     return { memberPubkey: pk, committee: isOnCreditCommittee(pk) };
 }
 
-/** The owner's two settings (POST /api/names/vouchers/settings `{ voucherBudget?, memberGift? }`), each change a log line. */
+/**
+ * The owner's voucher budget setting (POST /api/names/vouchers/settings `{ voucherBudget }`), each change a log line.
+ * The members' credit-line gift is a Core setting (config/core-settings.ts, slice G1), so it is changed only under How this
+ * community works (POST /api/local/admin/community-shape `memberGift`), which asks the owner's fresh proof once the core
+ * settings are locked, writes the unlock line and the change in both logs, alerts the owners and tells the members. Sent
+ * here, the whole request is refused before anything is written (400 `moved_to_community_shape`), as node/config refuses
+ * the settings that moved there: half a save would look like a whole one (round 2 of #2912: this route skipped all four).
+ */
 export function setVoucherSettings(actor: string, body: { voucherBudget?: unknown; memberGift?: unknown }) {
     assertPlainTablesWritable();
     assertBeansOn();
     if (!isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', VOUCHER_WORDS.ownerOnly);
+    if (body.memberGift !== undefined) throw new VoucherError(400, 'moved_to_community_shape', VOUCHER_WORDS.giftInCoreSettings);
     if (body.voucherBudget !== undefined && !isBudgetLevel(body.voucherBudget)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
-    if (body.memberGift !== undefined && !isMemberGiftSetting(body.memberGift)) throw new VoucherError(400, 'bad_gift', VOUCHER_WORDS.badGift);
     const before = voucherSettings();
     // Each write names its key (test-replication-manifest reads every node_config write); the default removes the row.
     db.transaction(() => {
@@ -561,9 +570,6 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
             if (body.voucherBudget === VOUCHER_BUDGET_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(VOUCHER_BUDGET_KEY);
             else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(VOUCHER_BUDGET_KEY, String(body.voucherBudget));
             logLine(actor, 'budget_setting', null, before.voucherBudget, body.voucherBudget);
-        }
-        if (body.memberGift !== undefined && body.memberGift !== before.memberGift) {
-            writeMemberGiftSetting(actor, before.memberGift, body.memberGift as number);
         }
     })();
     return voucherSettings();

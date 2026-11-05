@@ -14,8 +14,8 @@
  *   - The giver: an active member here (not a visitor's row, not an enterprise), whose credit line and known floor aren't
  *     frozen, past their first completed trade (the gate sending Beans has: state-engine.ts transfer, `earnedCredit > 0`).
  *   - Only room someone gave them: at most what they hold of it.
- *   - Only room they aren't using: their line after the gift still covers what they owe (line ≥ debt), so a gift never
- *     leaves them past their own line.
+ *   - Only room they aren't using: the line their live offers unlock after the gift still covers what they owe (usable
+ *     line ≥ debt, the spending gate's own line: freeRoom), so a gift never pauses their spending.
  *   - The recipient: never the giver, an active member here (not paused, not frozen, not a visitor's row, not an
  *     enterprise), whose line, every source counted, stays within the community's cap with the gift. Checked only once
  *     the giver has passed every rule of theirs, so a key that may give nothing learns nothing about the member it
@@ -32,7 +32,7 @@
  * conservingTransaction. One plain db.transaction; its one read of a balance is the giver's own, for their debt.
  */
 import crypto from 'node:crypto';
-import { word, wordsFor } from '@beanpool/core';
+import { word, wordsFor, usableAllowance, offerCapForCount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey, getBalance, getMemberTrustProfile } from '../state-engine.js';
 import { creditCap } from '@beanpool/engine';
@@ -59,7 +59,8 @@ export const CREDIT_GIFT_WORDS = {
     notGiver: word('Only an active member of this community can give part of their credit line.'),
     giverFrozen: word('Your credit line is frozen, so you can’t give part of it until an admin unfreezes it.'),
     noTrade: word('You can give part of your credit line after your first completed trade, as with sending Beans.'),
-    noRoom: word('You can only pass on credit line someone gave you, and nobody has given you any. Your known floor and the credit you earned stay yours.'),
+    // True for someone who never held any and for someone who passed all theirs on (round 2: it said "nobody has given you any").
+    noRoom: word('You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.'),
     allInUse: word('You’re using the credit line someone gave you, so none of it is free to give now.'),
     noticeTitle: word('Part of a credit line, for you'),
 } as const;
@@ -104,13 +105,31 @@ function giverState(giver: string): GiverState {
     const p = getMemberTrustProfile(giver);
     if (p.earnedCredit <= 0) return state(0, 0, 'no_trade_yet', CREDIT_GIFT_WORDS.noTrade);
     if (room <= 0) return state(0, 0, 'no_room', CREDIT_GIFT_WORDS.noRoom);
-    // The line after giving g is min(cap, known + room + earned + granted − g); it must still cover the debt. Whole Beans.
-    const cap = creditCap(db);
-    const debt = Math.max(0, -getBalance(giver).balance);
-    const raw = p.knownGrant + room + p.otherAllowance;
-    const free = debt > cap ? 0 : Math.max(0, Math.min(room, Math.floor(raw - debt)));
+    const free = freeRoom(giver, p, room);
     if (free <= 0) return state(0, 0, 'in_use', CREDIT_GIFT_WORDS.allInUse);
     return state(Math.min(setting, free), free, null, null);
+}
+
+/**
+ * The room the giver isn't using: the most they may give so that the line their live offers unlock still covers what they
+ * owe, so a gift never pauses their spending (DESIGN-invites-and-names-list-fable.md: "so a gift never freezes the giver").
+ * The line is the one the spending gate reads (state-engine usableFloor, core usableAllowance), never the whole floor: one
+ * live offer unlocks the known grant and the room whole, the offer bands meter earned and granted credit (one offer: 200).
+ * With no live offer the line unlocks nothing, so only a giver who owes nothing gives (it changes no spend of theirs).
+ * Whole Beans. Round 2 of #2912: the floor counted earned and granted credit past the band, and a gift the tab offered
+ * left the giver owing more than their offers unlock, "Spending paused".
+ */
+function freeRoom(giver: string, p: ReturnType<typeof getMemberTrustProfile>, room: number): number {
+    const b = getBalance(giver);
+    const debt = Math.max(0, -b.balance);
+    const cap = creditCap(db);
+    const usableAfter = (g: number) => usableAllowance({ knownGrant: p.knownGrant, roomHeld: p.roomHeld - g, otherAllowance: p.otherAllowance, cap, liveOffers: b.liveOffers });
+    const most = b.liveOffers >= 1
+        ? Math.floor(p.knownGrant + p.roomHeld + Math.min(p.otherAllowance, offerCapForCount(b.liveOffers)) - debt)
+        : (debt > 0 ? 0 : room);
+    const free = Math.max(0, Math.min(room, most));
+    // Past the cap no part of the room covers anything more: the same line, read whole, must still cover the debt.
+    return free > 0 && usableAfter(free) >= debt ? free : 0;
 }
 
 /**

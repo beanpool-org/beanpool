@@ -3,7 +3,7 @@ slug: trust-badges
 title: Badges de mérite
 summary: Arrivant, Résident, Pilier et Doyen. Leur signification et pourquoi ils ne débloquent rien.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: a6cc3bb74fc395bb
+source-hash: 9cb2cc1e373c7763
 ---
 
 ## Ce que c'est
@@ -17,7 +17,7 @@ Votre badge de mérite montre le degré de confiance que vous avez acquis :
 
 Un membre qui n'a pas encore conclu d'échange porte la mention **FONDATEUR** sur ses publications.
 
-La confiance provient d'un parrainage à votre arrivée, des échanges conclus et de la confiance accordée par un administrateur. Dans une communauté qui confirme ses membres, être confirmé vous donne une limite de crédit plus élevée, pas un badge plus élevé : votre badge ne compte que ce que vous avez accompli, il n'indique donc jamais que vous êtes confirmé.
+La confiance provient des échanges menés à terme et de celle qu'un administrateur vous a accordée. Dans une communauté qui confirme ses membres, le fait d'être confirmé vous accorde un plafond de crédit plus élevé, et non un badge supérieur : votre badge reflète uniquement ce que vous avez accompli, et n'indique donc jamais votre statut confirmé.
 
 ## Ils ne débloquent rien
 

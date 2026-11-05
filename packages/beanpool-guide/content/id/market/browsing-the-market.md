@@ -4,7 +4,7 @@ title: Menjelajahi pasar
 summary: Cari Penawaran dan Permintaan dengan pencarian, filter, dan jarak.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Penawaran dan Permintaan dari orang di dekatmu. Cari, filter menurut kategori atau jarak, atau ketuk + TAMBAH POSTINGAN untuk pasang sendiri.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## Tab Pasar

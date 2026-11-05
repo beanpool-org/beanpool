@@ -4,7 +4,7 @@ title: Περιήγηση στην αγορά
 summary: Βρείτε Προσφορές και Ανάγκες με αναζήτηση, φίλτρα και απόσταση.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Προσφορές και Ανάγκες από άτομα κοντά σας. Αναζητήστε, φιλτράρετε κατά κατηγορία ή απόσταση, ή πατήστε + ΠΡΟΣΘΗΚΗ ΑΝΑΡΤΗΣΗΣ για να ανεβάσετε τη δική σας.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## Η καρτέλα Αγορά

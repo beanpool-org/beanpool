@@ -4,7 +4,7 @@ title: Esplorare il mercato
 summary: Trova Offerte e Richieste tramite ricerca, filtri e distanza.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Offerte e Richieste dalle persone vicine. Cerca, filtra per categoria o distanza, oppure tocca + PUBBLICA per inserire il tuo annuncio.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## La scheda Mercato

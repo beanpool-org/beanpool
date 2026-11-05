@@ -37,7 +37,7 @@ You can have one poll open at a time, and you can start one poll for the whole c
 
 Polls are in the Market. Tap **Polls** in the top row to see only polls. A poll is listed again once, under **Today**, the day before it closes.
 
-- Tap an answer to choose it. Tap another to change your mind, until the poll closes.
+- Tap an answer to choose it. Tap another to change your mind, until the poll closes: the app asks first. Tap **Change**, or **Keep my vote** to leave it (**OK** or **Cancel** in the web app).
 - The card shows how many chose each answer.
 - If a poll offers **Other**, tap it, type a short line (at most 140 characters) and tap **Send my answer**. Don't put your name.
 

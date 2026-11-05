@@ -3,7 +3,7 @@ slug: trust-badges
 title: Güven rozetleri
 summary: Yeni Gelen, Sakin, Temsilci ve Büyük. Anlamları ve neden ayrıcalık kilidi açmadıkları.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: a6cc3bb74fc395bb
+source-hash: 9cb2cc1e373c7763
 ---
 
 ## Nedirler
@@ -17,7 +17,7 @@ Güven rozetiniz ne kadar güven oluşturduğunuzu gösterir:
 
 Henüz takas yapmamış bir üye gönderilerinde **KURUCU** gösterir.
 
-Güven; katıldığınızdaki bir kefaletten, tamamlanan takaslardan ve bir yöneticinin verdiği güvenden gelir. Üyelerini teyit eden bir toplulukta teyit edilmiş olmak size daha yüksek bir kredi limiti verir, daha yüksek bir rozet değil: rozetiniz yalnızca yaptıklarınızı sayar, bu nedenle teyit edilmiş olduğunuzu asla göstermez.
+Güven, tamamlanan takaslardan ve bir yöneticinin verdiği güvenden gelir. Üyelerini onaylayan bir toplulukta, onaylanmış olmak daha yüksek bir rozet değil, daha yüksek bir kredi limiti sağlar: rozetiniz yalnızca yaptıklarınızı sayar, bu nedenle onaylandığınızı asla göstermez.
 
 ## Hiçbir şeyin kilidini açmazlar
 

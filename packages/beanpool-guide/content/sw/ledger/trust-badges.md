@@ -3,7 +3,7 @@ slug: trust-badges
 title: Beji za uaminifu
 summary: Mgeni, Mkazi, Msimamizi na Mzee. Maana yake, na kwa nini hazifungui kitu chochote.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: a6cc3bb74fc395bb
+source-hash: 9cb2cc1e373c7763
 ---
 
 ## Ni nini
@@ -17,7 +17,7 @@ Beji yako ya uaminifu huonyesha kiasi cha uaminifu ulichojenga:
 
 Mwanachama ambaye bado hajafanya biashara huonyesha **MWANZILISHI** kwenye machapisho yake.
 
-Uaminifu hutoka kwa dhamana unapojiunga, kutokana na biashara zilizokamilika, na kutokana na uaminifu ambao msimamizi amekupa. Katika jumuiya inayowathibitisha wanachama wake, kuthibitishwa kunakupa kikomo cha juu zaidi cha mkopo, si beji ya juu zaidi: beji yako huhesabu tu kile ulichofanya, kwa hivyo haionyeshi kamwe kuwa umethibitishwa.
+Uaminifu unatokana na biashara zilizokamilika na uaminifu uliotolewa na msimamizi. Katika jumuiya inayothibitisha wanachama wake, kuthibitishwa kunakupa kikomo cha juu cha mkopo, si beji ya juu: beji yako inahesabu tu kile ulichofanya, kwa hivyo haionyeshi kamwe kuwa umethibitishwa.
 
 ## Hazifungui chochote
 

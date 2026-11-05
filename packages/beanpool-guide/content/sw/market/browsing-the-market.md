@@ -4,7 +4,7 @@ title: Kuvinjari sokoni
 summary: Pata Ofa na Mahitaji kwa utafutaji, vichujio na umbali.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Ofa na Mahitaji kutoka kwa watu walio karibu. Tafuta, chagua kategoria au umbali, au gusa WEKA TANGAZO kuweka lako.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## Kichupo cha Soko

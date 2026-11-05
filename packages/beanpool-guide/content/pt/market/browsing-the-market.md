@@ -4,7 +4,7 @@ title: Explorar o Mercado
 summary: Encontre Ofertas e Pedidos com busca, filtros e distância.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Ofertas e Pedidos de pessoas perto de você. Busque, filtre por categoria ou distância, ou toque em + PUBLICAR para criar o seu.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## A aba Mercado

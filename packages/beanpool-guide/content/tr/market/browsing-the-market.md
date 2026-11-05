@@ -4,7 +4,7 @@ title: Pazarda gezinme
 summary: Arama, filtreler ve mesafe ile Teklifleri ve İhtiyaçları bulun.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Yakınınızdaki kişilerden Teklifler ve İhtiyaçlar. Arayın, filtreleyin veya kendinizinkini eklemek için + İLAN EKLE'ye dokunun.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## Pazar sekmesi

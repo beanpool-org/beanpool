@@ -114,6 +114,63 @@ test('member-facing words: no internal names, no code words, beans not Ʀ, badge
     }
 });
 
+test('§1.3: legacy vouching words and phrases are absent across the guide and operator manual', () => {
+    const files = [
+        ...fs.readdirSync(CONTENT_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => path.join(CONTENT_DIR, f)),
+        ...fs.readdirSync(OPERATORS_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => path.join(OPERATORS_DIR, f)),
+    ];
+    const banned = [
+        [/\bVouched in by\b/i, 'replaced by "Invited by" (§1.3)'],
+        [/\bAppointed vouchers?\b/i, 'appointed vouchers term removed (§1.3)'],
+        [/\bPromote\b(?:\*\*)?\s+and\s+(?:\*\*)?Demote\b/i, 'Promote and Demote removed (§1.3)'],
+        [/\bgive or take away vouching\b/i, 'vouching decisions removed (§1.3)'],
+        [/\bchoosing who may vouch\b/i, 'choosing who may vouch removed (§1.3)'],
+        [/\bVouch for Member\b/i, 'old profile vouch button removed (§1.3)'],
+        [/\bLight \(25\)/i, 'old preset names removed (§1.3)'],
+        [/\b(give|gives|giving)\s+(?:a\s+member|members)\s+the\s+right\s+to\s+vouch\b/i, 'decision effect removed (§1.3)'],
+        [/\b(take|takes|taking)\s+away\s+the\s+right\s+to\s+vouch\b/i, 'decision effect removed (§1.3)'],
+        [/\b25, 50 or 100\b/i, 'presets are 25, 50, 75 or 100 (§4)'],
+    ];
+    for (const file of files) {
+        const text = fs.readFileSync(file, 'utf8');
+        for (const [re, why] of banned) {
+            const m = re.exec(text);
+            assert.equal(m, null, `found "${m?.[0]}" in ${path.relative(path.resolve(CONTENT_DIR, '..'), file)} — ${why}`);
+        }
+    }
+});
+
+test("a translated page stamped with the English hash has the English page's headings, in count and order, in every language", () => {
+    // A translation's source-hash names the English it was drafted from. When it equals the English body hash, the apps and
+    // the website show the page as current, with no "This page is newer in English" note. A stamp written over a page that
+    // still lacks a section hides the gap from every reader (#2922's deciding pass: rules and polls, in all 24 languages),
+    // so a page keeps its old stamp until the whole page is drafted.
+    const bySlug = new Map(loadGuide(CONTENT_DIR).guides.map(g => [g.slug, g]));
+    const headings = (page) => page.blocks.filter(b => b.type === 'h2' || b.type === 'h3').map(b => b.type);
+    const wrong = [];
+    let current = 0;
+    for (const lang of GUIDE_LANGS) {
+        const langDir = path.join(CONTENT_DIR, lang);
+        if (!fs.existsSync(langDir)) continue;
+        for (const f of fs.readdirSync(langDir, { recursive: true }).map(String).filter(f => f.endsWith('.md')).sort()) {
+            const file = `content/${lang}/${f.split(path.sep).join('/')}`;
+            const page = parseGuideMarkdown(fs.readFileSync(path.join(langDir, f), 'utf8'), file, { isTranslated: true });
+            const english = bySlug.get(page.slug);
+            if (!english || page.sourceHash !== guideBodyHash(english)) continue;
+            current++;
+            const want = headings(english);
+            const got = headings(page);
+            if (want.join() !== got.join()) {
+                wrong.push(want.length === got.length
+                    ? `${file}: stamped current, but its headings are in another order than the English page's`
+                    : `${file}: stamped current, but it has ${got.length} headings where the English page has ${want.length}`);
+            }
+        }
+    }
+    assert.ok(current > 0, 'no translated page is stamped current, so this test checks nothing');
+    assert.deepEqual(wrong, []);
+});
+
 test('parser: the supported subset', () => {
     const g = parseGuideMarkdown('---\nslug: a-b\ntitle: T\nsummary: S\nrelated: c\n---\n\n## H\n\nOne\ntwo **bold**.\n\n- x\n- y\n\n### Sub\n', 'x.md');
     assert.deepEqual(g.blocks, [

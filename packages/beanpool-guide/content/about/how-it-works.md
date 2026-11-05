@@ -42,7 +42,7 @@ You can also send beans to someone as a gift, with no trade.
 
 You can spend a little more than you have, and go below zero. This is your **credit line**. It is a promise to help others later.
 
-Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). Someone your community has chosen to welcome newcomers can also give you a small start by vouching for you: 25, 50 or 100 beans.
+Your credit line starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count). A voucher can also give you a start by vouching for you on your invite or profile: 25, 50, 75 or 100 beans, from their voucher budget.
 
 Your credit line grows with your **trust**:
 
@@ -69,7 +69,7 @@ Some communities confirm who their members are. There, a confirmed member gets a
 
 ## Trust badges
 
-Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades. In a community that confirms its members, a confirmed member gets a higher credit limit, not a higher badge: their badge counts only what they have done.
+Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge comes from the trust you earned by trading and any trust an admin granted you. An admin can give a member a badge directly, without trades. In a community that confirms its members, a confirmed member gets a higher credit limit, not a higher badge: their badge counts only what they have done.
 
 - Resident from 200 trust.
 - Steward from 600 trust.

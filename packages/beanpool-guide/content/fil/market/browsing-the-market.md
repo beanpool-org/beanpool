@@ -4,7 +4,7 @@ title: Pag-browse sa merkado
 summary: Maghanap ng Mga Alok at Mga Kahilingan gamit ang paghahanap, mga filter at distansya.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Mga Alok at Kahilingan sa malapit. Maghanap, mag-filter ayon sa kategorya o distansya, o i-tap ang + MAGDAGDAG NG POST upang mag-post ng sarili.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## Ang tab ng Merkado

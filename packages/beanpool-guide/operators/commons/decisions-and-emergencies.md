@@ -15,7 +15,7 @@ The community governs itself through Decisions. Members propose and vote in the 
 - Votes are secret: members and admins see only the totals. See Privacy and what your server can see, for what the server itself keeps.
 - Each member can have one open Decision at a time. Frozen and suspended members cannot propose, and cannot vote, with one exception: someone suspended in an emergency still votes on every other Decision while the community votes on removing them, and counts in its turnout. Nobody votes on a Decision to remove them.
 
-What a passed Decision can do by itself: suspend or restore a member, freeze or unfreeze, give or take away vouching, remove an enterprise's lead keeper, and pay grants from the commons. A grant the commons cannot yet afford waits in a queue; only one can wait at a time, and it fails after 90 days.
+What a passed Decision can do by itself: suspend or restore a member, freeze or unfreeze, remove an enterprise's lead keeper, and pay grants from the commons. A grant the commons cannot yet afford waits in a queue; only one can wait at a time, and it fails after 90 days.
 
 Two other kinds of vote are not the community's. The keepers of an enterprise vote among themselves to pay Beans out of it, to remove a keeper, or to make another keeper the lead (see Enterprises, keepers and the commons). The members of a chat group vote on its lead convenor, its convenors, removing someone from the group, who may join, and closing it. Each runs 7 days, ends early once the result cannot change, and needs more than half of the people on its list to vote. They do not count towards a member's one open Decision. Settings does not show them, and **Halt this Decision** does not reach them: owners and admins hold no power over a group.
 

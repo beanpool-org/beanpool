@@ -4,7 +4,7 @@ title: Explorar el Mercado
 summary: Encuentra Ofertas y Necesidades con búsqueda, filtros y distancia.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Ofertas y Necesidades de personas cerca de ti. Busca, filtra por categoría o distancia, o toca + PUBLICAR para crear la tuya.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## La pestaña Mercado

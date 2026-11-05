@@ -4,7 +4,7 @@ title: Explorer le Marché
 summary: Trouver des Offres et Demandes grâce à la recherche, aux filtres et à la distance.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Offres et Demandes des personnes près de chez vous. Cherchez, filtrez par catégorie ou distance, ou touchez + PUBLIER pour créer la vôtre.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## L'onglet Marché

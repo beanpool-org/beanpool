@@ -231,15 +231,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
     }
 
     const titleName = entry?.text?.name?.trim() || (card.callsign ? `@${card.callsign}` : t('Voucher'));
-    const confirmedPart = card.callsign
-        ? (card.madeByCallsign
-            ? t('@{name}: confirmed by @{confBy}, {confDate}', {
-                name: card.callsign,
-                confBy: card.madeByCallsign,
-                confDate: dateWords(card.madeAt, 'day-month'),
-            })
-            : `@${card.callsign}`)
-        : '';
+    const confirmedPart = card.callsign ? `@${card.callsign}` : '';
     const madePart = card.source === 'role'
         ? t('made a voucher by role')
         : (card.madeByCallsign
@@ -307,10 +299,9 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                     </Text>
                     <Text style={styles.boxLine}>
                         {card.passedOn && card.passedOn.amount > 0
-                            ? tn(card.passedOn.people, 'Passed on: {amount} of their {vouched} to {n} person · {belowZero} of it below zero', 'Passed on: {amount} of their {vouched} to {n} people · {belowZero} of it below zero', {
+                            ? tn(card.passedOn.people, 'Passed on: {amount} of their {vouched} to {n} person', 'Passed on: {amount} of their {vouched} to {n} people', {
                                 amount: formatNumber(card.passedOn.amount),
                                 vouched: formatNumber(card.vouched),
-                                belowZero: 0,
                             })
                             : t('Passed on: 0')}
                     </Text>
@@ -464,14 +455,14 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                             <View style={styles.subList}>
                                 {card.history.map((h, idx) => {
                                     const dateStr = dateWords(h.at, 'day-month');
-                                    const actorName = h.actorCallsign || (h.actor.startsWith('migration:') ? 'migration' : h.actor);
+                                    const actorText = h.actorCallsign ? `@${h.actorCallsign}` : (h.actor.startsWith('migration:') ? t('migration') : h.actor);
                                     let line: string;
                                     if (h.kind === 'grant') {
-                                        line = t('+{amount} budget, made a voucher by @{name}, {date}', { amount: formatNumber(h.amount), name: actorName, date: dateStr });
+                                        line = t('+{amount} budget, made a voucher by {actor}, {date}', { amount: formatNumber(h.amount), actor: actorText, date: dateStr });
                                     } else if (h.kind === 'top_up') {
-                                        line = t('+{amount} top-up by @{name}, {date}', { amount: formatNumber(h.amount), name: actorName, date: dateStr });
+                                        line = t('+{amount} top-up by {actor}, {date}', { amount: formatNumber(h.amount), actor: actorText, date: dateStr });
                                     } else if (h.kind === 'lower') {
-                                        line = t('−{amount} lower by @{name}, {date}', { amount: formatNumber(-h.amount), name: actorName, date: dateStr });
+                                        line = t('−{amount} lower by {actor}, {date}', { amount: formatNumber(-h.amount), actor: actorText, date: dateStr });
                                     } else if (h.kind === 'hold') {
                                         if (h.for === 'profile' && h.person) {
                                             line = t('−{amount} held for @{name}, {date}', { amount: formatNumber(-h.amount), name: h.person.callsign, date: dateStr });
@@ -489,7 +480,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                                             line = t('+{amount} back, {date}', { amount: formatNumber(h.amount), date: dateStr });
                                         }
                                     } else if (h.kind === 'stop') {
-                                        line = t('Budget stopped by @{name}, {date}', { name: actorName, date: dateStr });
+                                        line = t('Budget stopped by {actor}, {date}', { actor: actorText, date: dateStr });
                                     } else {
                                         line = `${h.kind}: ${formatNumber(h.amount)} (${dateStr})`;
                                     }

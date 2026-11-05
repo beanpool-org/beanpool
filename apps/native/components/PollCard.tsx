@@ -81,7 +81,8 @@ interface PollCardProps {
     /**
      * The Market's view (slice C1, DESIGN-card-style-box-fable.md §2): in the compact view the poll is a compact row like a
      * listing's (the question, its quiet status, your answer ✓) that opens the poll's page; its answers are on that page,
-     * never on the row. The list and the grid draw the card.
+     * never on the row. The list and the grid draw the card. None: the poll's own page (app/post/[id].tsx), where the grid's
+     * poll tile sends members to vote (Marty, 5 Nov 2026), so each answer is shown whole there, as on the web's page.
      */
     viewMode?: 'list' | 'grid' | 'compact';
     /** The compact row's one press: the Market opens the poll's page (/post/{id}). */
@@ -144,7 +145,7 @@ export function pollFacts(post: any, now = Date.now()) {
     return { isClosed, authorName, avatarUrl, options, totalVotes, userVotedOptionId, votesList, openVote, sealed, answered };
 }
 
-export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode = 'list', onOpen, onOpenProfile }: PollCardProps) {
+export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode, onOpen, onOpenProfile }: PollCardProps) {
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
     // The style box (components/market-card-shell.ts): the card's shell, its chips and the compact row.
@@ -473,7 +474,8 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
                                             <Text style={styles.votedCheckText}>✓</Text>
                                         </View>
                                     ) : null}
-                                    <Text style={[styles.optionText, isVoted && styles.optionTextVoted]} numberOfLines={2}>
+                                    {/* Two lines in the Market's list; whole on the poll's page, where it is voted: a ballot answer cut short is not a choice. */}
+                                    <Text style={[styles.optionText, isVoted && styles.optionTextVoted]} numberOfLines={viewMode ? 2 : undefined} testID="poll-option-text">
                                         {optionText}
                                     </Text>
                                 </View>

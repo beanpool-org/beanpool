@@ -51,6 +51,7 @@ import { REMOVED_GATEWAY_SWITCHES } from './gateway.js';
 import { upgradeLegacyShape, type ShapeUpgrade } from './community-shape-upgrade.js';
 import { readRuleInstant } from './balance-rule.js';
 import { parseCoreLockRow } from './core-settings.js';
+import { isBudgetLevel, isMemberGiftSetting } from '@beanpool/core';
 
 export type { SyncCommunitySettings };
 
@@ -64,7 +65,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 /** node_config rows that are the community's. */
 export const COMMUNITY_NODE_CONFIG_KEYS = [
     'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
-    'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl',
+    'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'voucher_budget', 'member_gift', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl',
     'directory_promise', 'recovery_copies', 'balance_rule_from', 'removal_decider', 'core_settings_lock',
 ] as const;
 
@@ -235,6 +236,10 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     confirmation: orNull(oneOf('on', 'off')),
     known_floor: orNull(wholeBeans),
     credit_cap: orNull(wholeBeans),
+    // Vouchers (engine/vouchers.ts): an appointment's prefilled budget, 100 to 2,000 in 100s, and a member's credit-line
+    // gift, 0 (off) to 100; whole Beans as text, no row the default.
+    voucher_budget: orNull((v) => (typeof v === 'string' && /^\d{3,4}$/.test(v) && isBudgetLevel(Number(v)) ? v : BAD)),
+    member_gift: orNull((v) => (typeof v === 'string' && /^\d{1,3}$/.test(v) && isMemberGiftSetting(Number(v)) ? v : BAD)),
     // The Community health panel's two lines (engine/community-health.ts): whole numbers as text.
     health_debt_line_pct: orNull(wholeBeans),
     health_quiet_days: orNull(wholeBeans),

@@ -8,7 +8,9 @@
  *   POST /api/invite/asks/:id/withdraw    → { ok: true } | 404 `not_found`
  * An owner or admin, by nodeRoleOf; anyone else 403 `admins_only`:
  *   GET  /api/invite/asks?limit&offset    → { asks: [ask + askerPubkey, askerCallsign], total, limit, offset }
- *   POST /api/invite/asks/:id/send        → { ok: true } | 404 `not_found`
+ *   POST /api/invite/asks/:id/send        { vouchAmount? } → { ok: true } | 404 `not_found` | a vouch's refusal
+ *                                         (engine/vouchers.ts: 403 `not_a_voucher`, 400 `bad_amount`, 409 `frozen` or
+ *                                         `not_enough`; 403 `profile_no_beans` with Beans off)
  *   POST /api/invite/asks/:id/no          { reason? } → { ok: true } | 404 `not_found`
  *
  * All 404 `feature_off` where invites are off (routes/profile-feature-gate.ts). A standby refuses a write, 503 `standby`, and
@@ -23,6 +25,7 @@ import {
     answerNo, answerWithInvite, answersInviteAsks, listInviteAsks, makeInviteAsk, myInviteAsks, withdrawInviteAsk, type AskRefusal,
 } from '../engine/invite-asks.js';
 import { ADMINS_ONLY } from '../config/door.js';
+import { VoucherError } from '../engine/vouchers.js';
 import { INVITE_ASK_LIMITS, pushNoticeWords, word, wordsFor } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
@@ -181,8 +184,10 @@ export function createInviteAskRoutes(deps: RouteDeps): Router {
         if (refusedOnStandby(ctx)) return;
         let outcome: ReturnType<typeof answerWithInvite>;
         try {
-            outcome = answerWithInvite(String(ctx.params.id), admin);
+            outcome = answerWithInvite(String(ctx.params.id), admin, Date.now(), ((ctx as any).requestBody || {}).vouchAmount);
         } catch (e) {
+            // A vouch refused (engine/vouchers.ts): its status, code and sentence; the ask is still waiting.
+            if (e instanceof VoucherError) return answer(ctx, e.status, e.message, e.code);
             if (respondProfileRefusal(ctx, e)) return;
             throw e;
         }

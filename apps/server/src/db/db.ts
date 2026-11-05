@@ -1390,6 +1390,8 @@ export function initSchema() {
     // members_touch_updated_at trigger (which now whitelists them) compiles on already-live DBs.
     try { db.prepare(`ALTER TABLE members ADD COLUMN is_treasury INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN can_operate INTEGER DEFAULT 0`).run(); } catch { }
+    // The credit committee (engine/vouchers.ts), before schema.sql for the trigger's list, as can_operate.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN credit_committee INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE post_photos ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // ── Images out of the database (storage design §7) ─────────────────────────────────────────
@@ -1673,6 +1675,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
+    // The vouch an invite carries (engine/vouchers.ts), held from its maker's budget.
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN vouch_amount INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }

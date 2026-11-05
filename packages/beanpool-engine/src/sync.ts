@@ -530,6 +530,8 @@ export interface SyncCommunitySettings {
         confirmation?: string | null;
         known_floor?: string | null;
         credit_cap?: string | null;
+        voucher_budget?: string | null;
+        member_gift?: string | null;
         health_debt_line_pct?: string | null;
         health_quiet_days?: string | null;
         balance_rule_from?: string | null;

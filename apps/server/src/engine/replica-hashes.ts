@@ -121,7 +121,13 @@ export interface TableHashes {
  * engine/plain-tables.ts importTable), so neither refuses the other's rows, and each server's own first boot resets its
  * own copy the same way.
  */
-export const TABLE_HASHES_VERSION = 21;
+/**
+ * 22: vouchers (V1, engine/vouchers.ts): members gains credit_committee, invite_codes vouch_amount, and three new plain
+ * tables (vouchers, voucher_allocations, room_gifts). Raised for the same reason as 4: a standby updated before its main
+ * server hashes `members` and `invite_codes` over one more column each, and the new tables too. REPLICA_FORMAT stays:
+ * each side's import writes only the columns and tables its own database has.
+ */
+export const TABLE_HASHES_VERSION = 22;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

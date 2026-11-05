@@ -233,8 +233,16 @@ async function main(): Promise<void> {
     assert((await terms()).body?.known === false, 'and the join screen asks no consent');
     const logOff = ((await read()).body?.log as Array<{ action: string; oldValue: string; newValue: string }>)?.[0];
     assert(logOff?.action === 'confirmation' && logOff.oldValue === 'on' && logOff.newValue === 'off', `the log: on → off (${JSON.stringify(logOff)})`);
+    // The log is shared with the vouchers (engine/vouchers.ts; amend2 §2 and §3): seeding the founder as owner grants their
+    // role budget, one `budget_grant` line, which the design wants there. The known floor's own lines are counted (as
+    // test-known-floor-http counts them), and the whole log is held to no new line.
+    const VOUCHER_ACTIONS = new Set(['budget_grant', 'budget_topup', 'budget_lower', 'budget_setting', 'gift_setting', 'voucher_made', 'voucher_source', 'voucher_stopped', 'voucher_looked', 'committee']);
+    const logLines = async () => ((await read()).body?.log as Array<{ action: string }>) ?? [];
+    const linesBeforeAgain = (await logLines()).length;
     const again = await settings({ confirmation: false });
-    assert(again.status === 200 && ((await read()).body?.log as unknown[]).length === 1, 'switching it off again writes no second line');
+    const afterAgain = await logLines();
+    assert(again.status === 200 && afterAgain.filter((l) => !VOUCHER_ACTIONS.has(l.action)).length === 1 && afterAgain.length === linesBeforeAgain,
+        `switching it off again writes no second line (${afterAgain.map((l) => l.action).join(', ')})`);
     const on = await settings({ confirmation: true });
     assert(on.status === 200 && on.body?.confirmation === true, `the owner switches it back on (${show(on)})`);
     assert(dialRow() === null, `the default removes the row (${JSON.stringify(dialRow())})`);

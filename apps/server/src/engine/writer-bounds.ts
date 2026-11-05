@@ -38,6 +38,7 @@ import { db } from '../db/db.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { getNodeRole } from '../config/node-role.js';
 import { ownerAdminLimit, OWNER_ADMIN_LIMIT_NAME } from './owner-admin-limit.js';
+import { returnLapsedHolds } from './vouchers.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -309,7 +310,12 @@ export function ticketJoinRefusal(inviter: string, now = Date.now()): string | n
 export function pruneUnusedInvites(now = Date.now()): number {
     if (getNodeRole() !== 'primary') return 0;
     const days = Math.max(INVITE_LIFE_DAYS, WRITER_LIMITS.unusedInviteDays);
-    return db.prepare(`DELETE FROM invite_codes WHERE used_by IS NULL AND created_at < ?`).run(iso(now - days * DAY_MS)).changes;
+    // A vouch held on a code past its 30 days (every code this deletes is) back in its maker's budget first
+    // (engine/vouchers.ts), in one transaction with the delete.
+    return db.transaction(() => {
+        returnLapsedHolds(null, now);
+        return db.prepare(`DELETE FROM invite_codes WHERE used_by IS NULL AND created_at < ?`).run(iso(now - days * DAY_MS)).changes;
+    })();
 }
 
 let inviteTimer: ReturnType<typeof setInterval> | null = null;

@@ -72,7 +72,7 @@ import { startListingPull } from './federation-listings.js';
 import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
 import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
-import { startRecoverNoticeWatch } from './recover-command.js';
+import { startRecoverNoticeWatch, RECOVER_ACTOR } from './recover-command.js';
 import { startRestoreNoticeWatch } from './services/restore-points.js';
 import { logger } from './logger.js';
 import { bumpMembersVersion } from './engine/versions.js';
@@ -107,6 +107,7 @@ import { initAppStoreVersionChecks } from './app-store-versions.js';
 import { startApkMirror } from './services/apk-mirror.js';
 import { initShutdownRecovery, startFollowedUncleanStop } from './engine/shutdown-recovery.js';
 import { secureDataDirAtBoot } from './boot-file-safety.js';
+import { vouchingAfterRoleChange } from './engine/vouchers.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
 const PORT_HTTPS = Number(process.env.PORT_HTTPS ?? 8443);
@@ -174,6 +175,7 @@ async function main() {
         log: message => logger.security('AUTH', message),
         changed: () => { bumpMembersVersion(); noteTakeoverInputsChanged('beanpool recover added an owner'); },
         burnClaim: burnClaimFromShell,
+        roleChanged: (pubkey) => vouchingAfterRoleChange(pubkey, RECOVER_ACTOR),
     });
     // Step 2.52: a restore or a roll-back replaced the database before this start, and left a notice: everyone is told,
     // on the database now in place, and the log keeps it (services/restore-points.ts). Never blocks the boot.

@@ -234,7 +234,9 @@ export function offersRequiredForDepth(magnitude: number): number {
 // ===================== THE KNOWN FLOOR (community modes slice 4) =====================
 // In a community whose confirmation dial is on, a member an admin has confirmed (a live confirmation on the names
 // list) holds a known grant: the community's knownFloor, or that member's exception. The floor becomes
-//   floor = -min(creditCap, knownGrant + earned + granted)
+//   floor = -min(creditCap, knownGrant + roomHeld + earned + granted)
+// where roomHeld is the credit line a voucher's vouch or a member's gift gave them (vouch-presets.ts), received less
+// passed on, unlocked like the known grant by one live offer.
 // where creditCap is the community's cap (default CREDIT_FLOOR_CAP, owner-settable up to CREDIT_CAP_MAX). With the dial
 // off, or for an unconfirmed member, knownGrant is 0 and the cap is today's: nothing changes.
 
@@ -253,18 +255,23 @@ export function knownGrantFor(o: { dialOn: boolean; confirmed: boolean; knownFlo
     return Math.max(0, Math.min(o.cap, Math.floor(amount || 0)));
 }
 
-/** The credit allowance (the floor's magnitude): every source together, capped by the community's cap. */
-export function creditAllowance(o: { earned: number; granted: number; knownGrant: number; cap: number }): number {
-    return Math.min(o.cap, o.knownGrant + o.earned + o.granted);
+/**
+ * The credit allowance (the floor's magnitude): every source together, capped by the community's cap. `roomHeld`: the
+ * credit line people gave this member (a voucher's vouch, a member's gift: DESIGN-invites-and-names-list-amend2-fable.md
+ * §6), received less passed on; 0 when left out.
+ */
+export function creditAllowance(o: { earned: number; granted: number; knownGrant: number; roomHeld?: number; cap: number }): number {
+    return Math.min(o.cap, o.knownGrant + Math.max(0, o.roomHeld ?? 0) + o.earned + o.granted);
 }
 
 /**
- * How much of the allowance a member may use. The known part has one band: any live offer unlocks all of it, none
- * unlocks none (a confirmed person with an offer has answered "is this person really here?"). The rest (earned,
- * granted) keeps the offer bands. The sum stays within the cap. With knownGrant 0 this is min(other, offerCapForCount).
+ * How much of the allowance a member may use. The known part and the room someone gave them (`roomHeld`) have one band:
+ * any live offer unlocks all of it, none unlocks none (a confirmed person, or one a voucher stood behind, with an offer has
+ * answered "is this person really here?"). The rest (earned, granted) keeps the offer bands. The sum stays within the cap.
+ * With knownGrant and roomHeld 0 this is min(other, offerCapForCount).
  */
-export function usableAllowance(o: { knownGrant: number; otherAllowance: number; cap: number; liveOffers: number }): number {
-    const known = (o.liveOffers || 0) >= 1 ? o.knownGrant : 0;
+export function usableAllowance(o: { knownGrant: number; roomHeld?: number; otherAllowance: number; cap: number; liveOffers: number }): number {
+    const known = (o.liveOffers || 0) >= 1 ? o.knownGrant + Math.max(0, o.roomHeld ?? 0) : 0;
     return Math.min(o.cap, known + Math.min(o.otherAllowance, offerCapForCount(o.liveOffers)));
 }
 

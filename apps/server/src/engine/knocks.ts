@@ -599,7 +599,7 @@ export function notifyKnockReceived(_now = Date.now()): void {
 export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member' | 'key_invalidated' | 'admins_only';
 
 export type AnswerOutcome =
-    | { ok: true; knockId: string; status: 'approved'; invite: { code: string; expiresAt: string } }
+    | { ok: true; knockId: string; status: 'approved'; invite: { code: string; expiresAt: string; vouchAmount?: number } }
     | { ok: true; knockId: string; status: 'declined' }
     | { ok: false; reason: AnswerRefusal };
 
@@ -632,7 +632,12 @@ export interface KnockNamesBinding {
     entryId?: unknown;
 }
 
-export function approveKnock(id: string, member: string, now = Date.now(), names?: KnockNamesBinding): AnswerOutcome {
+/**
+ * `vouchAmount`: a vouch the invite carries, from the answering member's own budget, as on any invite (engine/vouchers.ts;
+ * amend2 §4, the design §2's "answering a request to join"); a refused vouch throws its VoucherError, and nothing commits.
+ * An invite bound to a names-list entry carries none (generateInvite): confirmed on joining, they get the known floor.
+ */
+export function approveKnock(id: string, member: string, now = Date.now(), names?: KnockNamesBinding, vouchAmount?: unknown): AnswerOutcome {
     return db.transaction((): AnswerOutcome => {
         // Where only admins invite (config/door.ts), a member who is no owner or admin answers nothing, before the
         // knock is looked at: the invite below would be refused just the same.
@@ -647,14 +652,15 @@ export function approveKnock(id: string, member: string, now = Date.now(), names
             assertNamesAdmin(member);
             entryId = names.entry !== undefined ? addEntry(member, names.entry).id : String(names.entryId);
         }
-        const invite = generateInvite(member, found.row.pubkey, undefined, entryId);
+        const invite = generateInvite(member, found.row.pubkey, undefined, entryId, vouchAmount);
         // generateInvite refuses only a key that isn't a member here (isNodeMember), which the route has ruled out. Thrown, so nothing commits.
         if (!invite) throw new Error('knock approval: the invite could not be made');
         db.prepare(`UPDATE join_requests SET status = 'approved', decided_by = ?, decided_at = ?, invite_code = ?, updated_at = ?
                     WHERE id = ? AND status = 'pending'`)
             .run(member, invite.createdAt, invite.code, invite.createdAt, id);
         const expires = Date.parse(invite.createdAt) + INVITE_LIFETIME_MS;
-        return { ok: true, knockId: id, status: 'approved', invite: { code: invite.code, expiresAt: iso(expires) } };
+        // The vouch the invite carries, only when it carries one: the answer says what was made, never what was asked.
+        return { ok: true, knockId: id, status: 'approved', invite: { code: invite.code, expiresAt: iso(expires), ...(invite.vouchAmount ? { vouchAmount: invite.vouchAmount } : {}) } };
     })();
 }
 

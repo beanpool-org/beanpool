@@ -865,7 +865,9 @@ export interface VouchersBlockData {
     };
 }
 
-export async function getMyVouching(): Promise<MyVouching> {
+export async function getMyVouching(): Promise<MyVouching | null> {
+    const identity = await loadIdentity();
+    if (!identity) return null;
     return request<MyVouching>('GET', '/api/vouchers/me');
 }
 

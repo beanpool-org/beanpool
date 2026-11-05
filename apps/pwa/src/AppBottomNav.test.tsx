@@ -80,6 +80,7 @@ vi.mock('./lib/api', () => ({
     getTreasuries: vi.fn(async () => []),
     getUnseenNotices: vi.fn(async () => []),
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 0 })),
+    getMyVouching: vi.fn(async () => null),
 }));
 
 vi.mock('./components/SyncStatus', () => ({

@@ -9,6 +9,7 @@
  *
  * Accessible radios, wrapping cleanly at 320 px with 1.3x text; each choice >= 44 px tall.
  */
+import { useId } from 'react';
 import { formatNumber, t, VOUCH_PRESETS, vouchPresets } from '@beanpool/core';
 
 export interface VouchPresetChoiceProps {
@@ -19,6 +20,7 @@ export interface VouchPresetChoiceProps {
 }
 
 export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal }: VouchPresetChoiceProps) {
+    const id = useId();
     const noneLeft = budgetLeft <= 0;
     const subtitle = noneLeft
         ? t(vouchPresets.noneLeft)
@@ -53,7 +55,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal }: 
                         >
                             <input
                                 type="radio"
-                                name="invite-vouch"
+                                name={`invite-vouch-${id}`}
                                 className="peer sr-only"
                                 checked={checked}
                                 disabled={disabled}
@@ -67,7 +69,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal }: 
                                     checked
                                         ? 'border-transparent bg-bp-commit-fill text-bp-commit-on'
                                         : disabled
-                                            ? 'border-nature-200 dark:border-nature-800 bg-nature-100 dark:bg-nature-900 text-nature-400 dark:text-nature-500'
+                                            ? 'border-nature-200 dark:border-nature-800 bg-nature-100 dark:bg-nature-900 text-nature-400 dark:text-nature-400'
                                             : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-950 dark:text-white hover:border-nature-300 dark:hover:border-nature-600'
                                 } peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500`}
                             >

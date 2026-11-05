@@ -119,6 +119,7 @@ describe('PublicProfilePage Vouching (§9)', () => {
         );
 
         await waitFor(() => expect(screen.getByTestId('profile-vouch')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('invite-vouch-25'));
         fireEvent.click(screen.getByTestId('profile-vouch-submit'));
 
         await waitFor(() => expect(screen.getByTestId('profile-vouch-refusal')).toBeInTheDocument());
@@ -162,5 +163,39 @@ describe('PublicProfilePage Vouching (§9)', () => {
         await waitFor(() => expect(screen.getByTestId('profile-vouch')).toBeInTheDocument());
         expect(screen.getByRole('heading', { name: 'Raise vouch for @sam' })).toBeInTheDocument();
         expect(screen.getByText(/You already vouched 50 Beans for @sam/)).toBeInTheDocument();
+    });
+
+    it('automatically retries with raise when server reports already_vouched', async () => {
+        const error: any = new Error("You've already vouched for @sam.");
+        error.code = 'already_vouched';
+        vi.mocked(vouchForMember)
+            .mockRejectedValueOnce(error)
+            .mockResolvedValueOnce({
+                id: 'gift-2',
+                memberPubkey: TARGET_PK,
+                amount: 25,
+                total: 50,
+                budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 5, level: 1000 },
+            });
+
+        render(
+            <PublicProfilePage
+                identity={IDENTITY}
+                pubkey={TARGET_PK}
+                onBack={() => {}}
+                onMessage={() => {}}
+                onNavigateTab={() => {}}
+                onNavigatePost={() => {}}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('invite-vouch-25'));
+        fireEvent.click(screen.getByTestId('profile-vouch-submit'));
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toBeInTheDocument());
+        expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Raised vouch for @sam to 50 Beans.');
+        expect(vouchForMember).toHaveBeenCalledTimes(2);
+        expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, 25, true);
     });
 });

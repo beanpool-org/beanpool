@@ -59,7 +59,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
         }
     };
 
-    const minLevel = card ? card.held : 100;
+    const minLevel = Math.max(100, Math.ceil((card?.held ?? 0) / 100) * 100);
     const maxLevel = 2000;
 
     return (
@@ -120,7 +120,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors ${
                                     activeTab === 'budget'
                                         ? 'bg-bp-commit-fill text-bp-commit-on'
-                                        : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 dark:hover:bg-nature-800'
+                                        : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 hover:text-nature-900 dark:hover:bg-nature-800 dark:hover:text-white'
                                 }`}
                             >
                                 {t('Their budget')}
@@ -131,7 +131,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors ${
                                     activeTab === 'history'
                                         ? 'bg-bp-commit-fill text-bp-commit-on'
-                                        : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 dark:hover:bg-nature-800'
+                                        : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 hover:text-nature-900 dark:hover:bg-nature-800 dark:hover:text-white'
                                 }`}
                             >
                                 {t('Budget history ({count})', { count: card.history.length })}
@@ -142,7 +142,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors ${
                                     activeTab === 'people'
                                         ? 'bg-bp-commit-fill text-bp-commit-on'
-                                        : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 dark:hover:bg-nature-800'
+                                        : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 hover:text-nature-900 dark:hover:bg-nature-800 dark:hover:text-white'
                                 }`}
                             >
                                 {t('See who they brought in ({count})', { count: card.people.length })}
@@ -297,7 +297,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                             </div>
                                             <div className="text-right">
                                                 {p.belowZero && (
-                                                    <span className="inline-block px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold text-[10px]">
+                                                    <span className="inline-block px-1.5 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink font-bold text-[10px]">
                                                         {t('below zero')}
                                                     </span>
                                                 )}

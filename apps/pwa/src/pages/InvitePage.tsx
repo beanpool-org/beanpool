@@ -520,7 +520,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                                 below: v.belowZero,
                                             })}
                                         </span>
-                                        <span className="text-nature-400 font-bold ml-2">›</span>
+                                        <span className="text-nature-400 dark:text-nature-300 font-bold ml-2">›</span>
                                     </button>
                                 ))}
                                 <button

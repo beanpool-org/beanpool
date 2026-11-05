@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
-    addFriendApi, submitRating, getPublicChannels, getTrustProfile, getMyVouching, vouchForMember,
+    addFriendApi, submitRating, getPublicChannels,
     type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo, type PublicCreatorChannel, type MyVouching
 } from '../lib/api';
+import * as api from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -71,9 +72,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [reviewComment, setReviewComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
     const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
-    const [trust, setTrust] = useState<any>(null);
     const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
-    const [profileVouchPreset, setProfileVouchPreset] = useState<number | null>(25);
+    const [profileVouchPreset, setProfileVouchPreset] = useState<number | null>(null);
     const [vouchBusy, setVouchBusy] = useState(false);
     const [vouchRefusal, setVouchRefusal] = useState<string | null>(null);
     const [vouchSuccess, setVouchSuccess] = useState<string | null>(null);
@@ -198,9 +198,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             isSelf ? getFriends(pubkey).catch(() => []) : getFriends(identity.publicKey).catch(() => []),
             // Viewer's own profile (when viewing someone else) — drives Collaboration Chemistry synergy card.
             isSelf ? Promise.resolve(null) : getMemberProfile(identity.publicKey, identity.publicKey).catch(() => null),
-            isSelf ? Promise.resolve(null) : getTrustProfile(pubkey).catch(() => null),
-            isSelf ? Promise.resolve(null) : getMyVouching().catch(() => null),
-        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerProf, trustData, vouchingData]) => {
+            isSelf ? Promise.resolve(null) : (typeof (api as any).getMyVouching === 'function' ? (api as any).getMyVouching().catch(() => null) : Promise.resolve(null)),
+        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerProf, vouchingData]) => {
             if (cancelled) return;
             if (prof) setProfile(prof);
             if (isSelf) {
@@ -208,7 +207,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             } else if (viewerProf) {
                 setViewerProfile(viewerProf);
             }
-            if (trustData) setTrust(trustData);
             if (vouchingData) setMyVouching(vouchingData);
             if (rat) {
                 setStats({ average: rat.average, count: rat.count, asProvider: rat.asProvider, asReceiver: rat.asReceiver });
@@ -427,37 +425,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
                 </div>
 
-                {/* Invited by */}
-                {trust?.vouchedInBy && (
-                    <div className="mx-4 mt-3 p-3 rounded-2xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm flex items-center gap-3" data-testid="profile-invited-by">
-                        {trust.vouchedInBy.kind === 'member' ? (
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <MemberAvatar avatarUrl={trust.vouchedInBy.avatarUrl} pubkey={trust.vouchedInBy.publicKey} callsign={trust.vouchedInBy.callsign || '?'} size={32} />
-                                <div className="flex-1 min-w-0">
-                                    <p className="m-0 text-sm font-bold text-nature-950 dark:text-white truncate">
-                                        {t('🌱 Invited by {name}', { name: trust.vouchedInBy.callsign ?? '' })}
-                                    </p>
-                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400 truncate">
-                                        {t('{tier} tier', { tier: tierWords(trust.vouchedInBy.tier) })}
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <span className="text-xl">🛡️</span>
-                                <div className="flex-1 min-w-0">
-                                    <p className="m-0 text-sm font-bold text-nature-950 dark:text-white truncate">
-                                        {trust.vouchedInBy.kind === 'founder' ? t('Founding member') : t('Invited directly by the system admin')}
-                                    </p>
-                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400 truncate">
-                                        {trust.vouchedInBy.kind === 'founder' ? t('Here since the community began') : t('Vetted by the admin at sign-up')}
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
                 {/* Vouch for @sam (V3 §9) */}
                 {!isSelf && myVouching?.voucher && (
                     <div className="mx-4 mt-4 p-4 rounded-2xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm" data-testid="profile-vouch">
@@ -499,13 +466,26 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 setVouchBusy(true);
                                 setVouchRefusal(null);
                                 setVouchSuccess(null);
+                                let res: any;
+                                let effectiveIsRaise = isRaise;
                                 try {
-                                    const res = await vouchForMember(pubkey, profileVouchPreset, isRaise);
-                                    setVouchSuccess(isRaise
-                                        ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: res.total })
+                                    try {
+                                        res = await api.vouchForMember(pubkey, profileVouchPreset, isRaise);
+                                    } catch (err: any) {
+                                        if (!isRaise && (err?.code === 'already_vouched' || (typeof err?.message === 'string' && /already vouched/i.test(err.message)))) {
+                                            effectiveIsRaise = true;
+                                            res = await api.vouchForMember(pubkey, profileVouchPreset, true);
+                                        } else {
+                                            throw err;
+                                        }
+                                    }
+                                    setVouchSuccess(effectiveIsRaise
+                                        ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: res?.total })
                                         : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || '', amount: profileVouchPreset }));
-                                    const updated = await getMyVouching();
-                                    setMyVouching(updated);
+                                    setProfileVouchPreset(null);
+                                    if (typeof (api as any).getMyVouching === 'function') {
+                                        void (api as any).getMyVouching().then(setMyVouching).catch(() => {});
+                                    }
                                 } catch (e: any) {
                                     const msg = typeof e?.message === 'string' && e.message ? e.message : typeof e?.error === 'string' && e.error ? e.error : t('Could not vouch.');
                                     setVouchRefusal(msg);

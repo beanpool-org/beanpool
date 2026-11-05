@@ -35,6 +35,7 @@ vi.mock('../lib/api', () => ({
     saveHomePreferences: vi.fn(async () => ({ success: true })),
     // The reader's own set (GET /api/community/me): none unless a test says (BeanID's verified member: Beans live).
     getCommunityMe: vi.fn(async () => ({ features: reader.value })),
+    getMyVouching: vi.fn(async () => null),
 }));
 const reader = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
 vi.mock('../lib/identity', async (orig) => ({

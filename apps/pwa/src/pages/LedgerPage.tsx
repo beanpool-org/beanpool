@@ -263,7 +263,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 }
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
-                getMyVouching().then(v => { if (isMountedRef.current) setMyVouching(v); }).catch(() => {});
+                if (typeof getMyVouching === 'function') {
+                    getMyVouching().then(v => { if (isMountedRef.current) setMyVouching(v); }).catch(() => {});
+                }
                 setTxns(txn);
                 if (mem) setMembers(mem.filter(m => m.publicKey !== myKey));
                 setError(null);

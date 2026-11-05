@@ -366,6 +366,18 @@ describe('Core settings — the walkthrough', () => {
         expect(screen.getByTestId('walk-next')).toBeDisabled();
     });
 
+    it('the review shows the members\' credit-line gift as it stands, so Confirm and lock never locks it unseen (G1)', async () => {
+        const gift = (configured: number) => shapeWith({ settings: { memberGift: { value: configured, configured, source: 'owner', lock: null } } as never });
+        const { sent } = await walk(gift(40), 'review');
+        expect(screen.getByTestId('walk-review-memberGift')).toHaveTextContent('On · up to 40 Beans');
+        fireEvent.click(screen.getByTestId('walk-confirm'));
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(sent[0].body.changes).toEqual({});
+        cleanup();
+        await walk(gift(0), 'review');
+        expect(screen.getByTestId('walk-review-memberGift')).toHaveTextContent('Off');
+    });
+
     it('a community with members opens at the review, with today\'s values, and confirms without a change', async () => {
         const { sent } = await walk(shapeWith(), 'review');
         expect(screen.getByTestId('core-walkthrough').getAttribute('data-step')).toBe('review');

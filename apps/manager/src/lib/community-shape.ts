@@ -471,6 +471,7 @@ export function getConsequenceSentence(
             return t('Confirmed members can owe up to {floor} Beans while they keep an offer listed.').replace('{floor}', floor.toLocaleString('en'));
         }
         case 'memberGift':
+            if (typeof targetValue !== 'number' || !Number.isInteger(targetValue)) return '';
             return targetValue === 0
                 ? t('Members can no longer give part of their credit line to each other. What was given stays given.')
                 : t("A member can give another up to {n} Beans of the credit line someone gave them, at once, after their first trade. Never the known floor or credit they earned.").replace('{n}', String(targetValue));

@@ -4168,9 +4168,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 )}
                                 <div className="flex flex-col gap-1.5">
                                     {items.map(post => {
+                                        // In the compact view an event and a poll are rows like a listing's (slice C1), so they keep the
+                                        // listings' rhythm: no margin of their own, as a listing's row has none (the column's gap only).
+                                        const rowWrap = viewMode === 'compact' ? 'w-full' : 'w-full my-1';
                                         if (post.type === 'event') {
                                             return (
-                                                <div key={post.id} className="w-full my-1">
+                                                <div key={post.id} className={rowWrap}>
                                                     <EventCard
                                                         post={post}
                                                         identity={identity}
@@ -4184,11 +4187,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         }
                                         if (post.type === 'poll') {
                                             return (
-                                                <div key={post.id} className="w-full my-1">
+                                                <div key={post.id} className={rowWrap}>
                                                     <PollCard
                                                         post={post}
                                                         identity={identity}
                                                         viewMode={viewMode}
+                                                        // The compact row opens the poll's page, as a listing's row opens its own.
+                                                        onOpen={() => setSelectedPost(post)}
                                                         onVoteSuccess={() => refresh()}
                                                         informal={informalPolls} localWays={markWays}
                                                     />

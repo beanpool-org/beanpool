@@ -113,7 +113,8 @@ describe('the Market: a small card opens its item, not its owner', () => {
         expect(screen.queryByRole('button', { name: "View Damo's profile" })).toBeNull();
     });
 
-    it.each(['grid', 'list', 'compact'] as const)('%s view: a poll card shows its poster, with no profile button', async (mode) => {
+    // Compact is below: since C1 the poll there is a compact row (the question, its status, your answer), with no poster on it.
+    it.each(['grid', 'list'] as const)('%s view: a poll card shows its poster, with no profile button', async (mode) => {
         localStorage.setItem('marketplace_view_mode', mode);
         stubNode([poll]);
         const onOpenProfile = vi.fn();
@@ -122,6 +123,27 @@ describe('the Market: a small card opens its item, not its owner', () => {
         expect(screen.getByText('Ada')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: "View Ada's profile" })).toBeNull();
         fireEvent.click(screen.getByText('Ada'));
+        expect(onOpenProfile).not.toHaveBeenCalled();
+    });
+
+    // C1 (DESIGN-card-style-box-fable.md §2): the compact view's poll is a row like a listing's that opens the poll's page, as a
+    // listing's row opens its own; its answers are on that page, never reachable from the row.
+    it('compact view: the poll is one row with no poster and nothing to vote with; a press opens the poll\'s page', async () => {
+        localStorage.setItem('marketplace_view_mode', 'compact');
+        stubNode([poll]);
+        const onOpenProfile = vi.fn();
+        render(<MarketplacePage identity={identity} isMember={true} transactions={[]} onRefreshTransactions={() => {}} onOpenProfile={onOpenProfile} />);
+        const row = await screen.findByRole('button', { name: /^Open poll: Where does the tool shed go\?/ });
+        expect(within(row).queryAllByRole('button')).toEqual([]);
+        expect(screen.queryByText('Ada')).toBeNull();
+        expect(screen.queryByRole('button', { name: /North gate/ })).toBeNull();
+        expect(screen.queryByRole('progressbar')).toBeNull();
+        expect(api.getMarketplacePosts).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'poll-shed' }));
+        fireEvent.click(row);
+        // The poll's page: Back to Market, and the poll with its answers to press.
+        await screen.findByRole('button', { name: /Back to Market/ });
+        expect(screen.getByRole('button', { name: /North gate/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Open poll: / })).toBeNull();
         expect(onOpenProfile).not.toHaveBeenCalled();
     });
 

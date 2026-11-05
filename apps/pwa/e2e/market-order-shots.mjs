@@ -25,20 +25,39 @@
  * longer than its row ends in an ellipsis), and the Elder's 3 px gold left border holds in dark as in light. The same
  * list again in Malayalam and German (`?lang=`), whose category words are longer still (`web-local-list-c-yesterday-ml-*`).
  *
+ * C1 (DESIGN-card-style-box-fable.md §2, the compact rows): the same community in the COMPACT view, with a poll the reader has
+ * answered, at 320 px x 1.3 and at 1280 px beside the sidebar (`web-local-compact-*`). Every event and the poll is a compact
+ * row like a listing's: one button; no taller than a listing's row and one line; its picture 32 square; its chip the one chip
+ * (10/800); the event's when whole; the poll's mark its chosen answer ✓; nothing on the poll's row to vote with.
+ *
+ * compact-kinds (the reviews of #2904): the compact view at 320 px x 1.3 in en, fr, de, ru, es and pt, and in every language
+ * whose catalog says "your time" before the time (found from core's catalogs: ja, zh-Hans, bn and ml today), the reader in
+ * Brisbane, with an event in person, one online, one read in another clock, one over two days and a pinned one the reader
+ * hosts, light and dark (`web-compact-kinds-{en,fr,de,ru,ja,bn}-*`). Fails when an event row overflows itself; when its EVENT
+ * chip or its mark is cut or past the row's content edge; when any piece of the when (or 📌 PINNED, or the state) is drawn
+ * cut, measured as drawn to the sub-pixel (its text against its own box, and its box against every box that clips it); when
+ * a one-day row has no whole piece holding the start's time (the plain row's, to the character) or that piece is cut or on
+ * the hidden line; when the online row's or the other clock's spoken name lacks the language's whole "your time" sentence; or
+ * when the row is taller than a listing's row and one line. Run it alone: `node e2e/market-order-shots.mjs <out-dir> compact-kinds`.
+ *
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global console, process, document -- Node, plus page.evaluate callbacks run in the browser */
+/* global console, process, document, window, localStorage, getComputedStyle, URL -- Node, plus page.evaluate callbacks run in the browser */
 import fs from 'node:fs';
 import path from 'node:path';
 import { startServer, launch, settle, TEXT_SCALE_CSS } from './harness.mjs';
 import { mockResponse, IDENTITY } from './fixtures.mjs';
 
 const out = process.argv[2];
-if (!out) {
-    console.error('usage: node e2e/market-order-shots.mjs <out-dir>');
+// An optional case name runs that case alone: `node e2e/market-order-shots.mjs <out-dir> compact-kinds`.
+const only = process.argv[3] ?? null;
+const CASES = ['local', 'lang', 'compact', 'local-1280', 'global', 'compact-kinds'];
+if (!out || (only && !CASES.includes(only))) {
+    console.error(`usage: node e2e/market-order-shots.mjs <out-dir> [${CASES.join('|')}]`);
     process.exit(2);
 }
+const run = (name) => !only || only === name;
 fs.mkdirSync(out, { recursive: true });
 
 const NOW = new Date(2026, 10, 3, 15, 0, 0);
@@ -67,6 +86,57 @@ const PINNED_EVENT = eventPost('ev-pin', 'Byron Bay Twilight Market - Every Satu
 
 const ELDER_TITLE = 'Meditation circle';
 
+// C1, the compact view only: the reader's answer on Repair Cafe, and the pinned event theirs to host (the node sends a host
+// the RSVP list), so the rows carry the longest marks.
+const COMPACT_MARKS = { 'ev-1': { myRsvp: 'interested' }, 'ev-pin': { eventRsvps: [] } };
+
+// C1: a poll the reader has answered, for the compact view only (the list view's checks count its cards without one).
+const POLL = {
+    ...listing('poll-1', 'What would make trading here easier for you?', 'Ana', at(10, 3, 10, 0), { category: 'community' }), type: 'poll',
+    description: 'Tell us what to build next.', userVotedOptionId: 'a', pollOpenVote: false, totalVotes: 5,
+    pollOptions: [{ id: 'a', text: 'Better matches between offers and needs', votes: 3, percentage: 60 }, { id: 'b', text: 'More events', votes: 2, percentage: 40 }],
+    pollClosesAt: new Date(2026, 10, 14, 16, 0).toISOString(),
+};
+
+// C1, the compact view in six languages (the review of #2904): an event of each kind the row's when reads differently, the
+// reader in Brisbane (UTC+10) and every clock given in UTC, so the case reads the same on any machine. Each carries a mark,
+// so the row's end holds the mark above EVENT, and the end is what a too-wide when pushed out of the row.
+const KINDS_ZONE = 'Australia/Brisbane';
+const kind = (id, title, startAt, endAt, startLocal, endLocal, tz, over = {}) => eventPost(id, title, at(10, 1, 9, 0), new Date(startAt), {
+    eventStartAt: startAt, eventEndAt: endAt, eventStartLocal: startLocal, eventEndLocal: endLocal, eventTz: tz, myRsvp: 'interested', ...over,
+});
+const KIND_EVENTS = [
+    // In person, on the reader's own clock: "SAT 7 NOV · 16:00–18:00".
+    kind('k-plain', 'Repair Cafe', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T16:00', '2026-11-07T18:00', KINDS_ZONE),
+    // Online, hosted from Sydney (UTC+11): the reader's own clock, "16:00–18:00 your time".
+    kind('k-online', 'Seed swap call', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T17:00', '2026-11-07T19:00', 'Australia/Sydney', { eventOnline: true, eventPlaceName: null }),
+    // In person in Sydney, read in Brisbane: the reader's clock again, "your time".
+    kind('k-zone', 'Harbour clean-up', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T17:00', '2026-11-07T19:00', 'Australia/Sydney'),
+    // Over two days: "SAT 7 NOV 16:00 –" / "SUN 8 NOV 10:00".
+    kind('k-days', 'Overnight working bee', '2026-11-07T06:00:00.000Z', '2026-11-08T00:00:00.000Z', '2026-11-07T16:00', '2026-11-08T10:00', KINDS_ZONE, { myRsvp: 'going' }),
+    // In person on the reader's clock, pinned, and the reader hosts it (the node sends a host the RSVP list): the longest mark,
+    // "You're hosting this event", with no ✓, and 📌 PINNED in the lines. The row the second review of #2904 drew "16:00–18:…".
+    kind('k-hosted', 'Byron Bay Twilight Market', '2026-11-07T06:00:00.000Z', '2026-11-07T08:00:00.000Z', '2026-11-07T16:00', '2026-11-07T18:00', KINDS_ZONE, {
+        myRsvp: null, eventRsvps: [], pinnedAt: at(10, 3, 9, 0), pinnedUntil: new Date(2026, 10, 10, 9, 0).toISOString(),
+    }),
+];
+// The sentence "your time" is said in ({time} where the time goes), per language, from core's catalogs; English is the key.
+const WORDS_DIR = new URL('../../../packages/beanpool-core/words/', import.meta.url);
+const YOUR_TIME = Object.fromEntries([
+    ['en', '{time} your time'],
+    ...fs.readdirSync(WORDS_DIR).filter(f => f.endsWith('.json'))
+        .map(f => [f.slice(0, -'.json'.length), JSON.parse(fs.readFileSync(new URL(f, WORDS_DIR), 'utf8'))['{time} your time']])
+        .filter(([, sentence]) => typeof sentence === 'string' && sentence.includes('{time}')),
+]);
+// The third review of #2904: where a language puts "your time" BEFORE the time (ja "あなたの時間：{time}"), the label's words
+// filled the row's second line and the time went to the hidden third. Every such catalog is run, found from the catalogs.
+const LABEL_FIRST = Object.keys(YOUR_TIME).filter(lang => YOUR_TIME[lang].split('{time}')[0].trim() !== '').sort();
+const KIND_LANGS = ['en', 'fr', 'de', 'ru', 'es', 'pt', ...LABEL_FIRST];
+// The languages pictured: four time-first and two label-first.
+const KIND_SHOTS = ['en', 'fr', 'de', 'ru', 'ja', 'bn'];
+// How far past the row's content edge a chip or a mark may end: a layout unit's worth (1/64 px), not a pixel.
+const EDGE = 0.02;
+
 const LOCAL = [
     listing('ana-1', 'Bike tune-up', 'Ana', at(10, 3, 14, 0)),
     listing('ana-2', 'Firewood, split', 'Ana', at(10, 3, 13, 30)),
@@ -90,15 +160,17 @@ const GLOBAL_POSTS = [
     listing('g-4', 'Spare ladder', 'Bo', at(10, 1, 10, 0), { distanceKm: 3, category: 'tools' }),
 ];
 
-async function open(browser, origin, { dark, global, width = 320, scale = 1.3, sidebar = false, lang = null }) {
-    const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce' });
+async function open(browser, origin, { dark, global, width = 320, scale = 1.3, sidebar = false, lang = null, view = 'list', timezoneId = null, feed = null }) {
+    const context = await browser.newContext({
+        viewport: { width, height: 900 }, colorScheme: dark ? 'dark' : 'light', reducedMotion: 'reduce', ...(timezoneId ? { timezoneId } : {}),
+    });
     await context.addInitScript(([mode, list]) => {
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
             localStorage.setItem('beanpool-theme-default-light-v1', 'done');
-            if (list) localStorage.setItem('marketplace_view_mode', 'list');
+            localStorage.setItem('marketplace_view_mode', list);
         } catch { /* a picture of the default theme is still a picture */ }
-    }, [dark ? 'dark' : 'light', true]);
+    }, [dark ? 'dark' : 'light', view]);
     const reads = [];
     await context.route('**/api/**', async (route) => {
         const url = new URL(route.request().url());
@@ -110,7 +182,10 @@ async function open(browser, origin, { dark, global, width = 320, scale = 1.3, s
             if (q.get('author') || q.get('id') || q.get('online')) body = [];
             else {
                 reads.push({ type: q.get('type'), sort: q.get('sort'), lat: q.get('lat') });
-                body = global ? GLOBAL_POSTS : (q.get('type') === 'event' ? LOCAL.filter(p => p.type === 'event') : LOCAL_FEED);
+                if (feed) body = q.get('type') === 'event' ? feed.filter(p => p.type === 'event') : feed;
+                else body = global ? GLOBAL_POSTS : (q.get('type') === 'event' ? LOCAL.filter(p => p.type === 'event') : view === 'compact' ? [POLL, ...LOCAL_FEED] : LOCAL_FEED);
+                // The compact rows' longest marks: Repair Cafe "Interested ✓", and the pinned event the reader hosts.
+                if (view === 'compact') body = body.map(p => ({ ...p, ...COMPACT_MARKS[p.id] }));
             }
         } else body = mockResponse(url.pathname, url.search, []);
         if (body === undefined) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not Found' }) });
@@ -215,6 +290,185 @@ function checkListCards(cards, { label, dark, maxWidth, photos, scale, count = 9
     check(listings.every(c => c.titleInk === INK.title), `${label}: a listing's title is the page's ink ${INK.title} (${JSON.stringify([...new Set(listings.map(c => c.titleInk))])})`);
 }
 
+/**
+ * Every compact row on the page (C1), measured: its kind, height, width, picture, its chip's type, and for an event its when
+ * (whole or cut) and for a poll its mark and anything on it to press besides the row. Waits for the photos to draw first.
+ */
+async function compactRows(page) {
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('[data-testid="compact-picture"]'))
+        .every(slot => !slot.querySelector('img') || !slot.querySelector('[data-testid="category-tile"]')), null, { timeout: 15_000 }).catch(() => {});
+    return page.evaluate(() => Array.from(document.querySelectorAll('[data-testid="listing-compact-row"], [data-testid="event-compact-row"], [data-testid="poll-compact-row"]')).map((row) => {
+        const r = row.getBoundingClientRect();
+        const kind = row.getAttribute('data-testid').split('-')[0];
+        const pic = row.querySelector('[data-testid="compact-picture"], .w-8.h-8');
+        const chipEl = row.querySelector('[data-testid="compact-type-chip"], [data-testid="event-type-chip"], [data-testid="poll-badge"]');
+        const chipCss = chipEl ? getComputedStyle(chipEl) : null;
+        const lines = row.querySelector('[data-testid="event-row-lines"]');
+        const whenPieces = Array.from(row.querySelectorAll('[data-testid="event-when"] > span[data-piece="whole"]'));
+        const line = row.querySelector('[data-testid="event-row-lines"], [data-testid="poll-compact-line"]');
+        // What is drawn, to the sub-pixel (the second review of #2904: scrollWidth and clientWidth are whole pixels, so a piece
+        // 0.08 px short of its text passed as whole while it drew "16:00–18:…"). EPS is a layout unit's worth (1/64 px).
+        const EPS = 0.02;
+        const textWidth = (el) => { const rg = document.createRange(); rg.selectNodeContents(el); return rg.getBoundingClientRect().width; };
+        const insetBox = (el, padding) => {
+            const b = el.getBoundingClientRect();
+            const s = getComputedStyle(el);
+            const px = (side) => parseFloat(s[`border${side}Width`]) + (padding ? parseFloat(s[`padding${side}`]) : 0);
+            return { left: b.left + px('Left'), right: b.right - px('Right'), top: b.top + px('Top'), bottom: b.bottom - px('Bottom') };
+        };
+        // The room inside an element's padding, to the sub-pixel (clientWidth is rounded to a whole pixel).
+        const room = (el) => { const c = insetBox(el, true); return c.right - c.left; };
+        // A piece that is never split (the when's date and time, 📌 PINNED, the state), as drawn: `own`, its text wider than its
+        // box (its own "…") or scrolling; `clipped`, its box partly outside any box that clips it, from its parent up to the
+        // row (the two-line block, the words column, the row, whose content edge counts too); `hidden`, wholly on a line the
+        // block does not show. A piece may be hidden; it may never be drawn in part.
+        const drawn = (el) => {
+            const b = el.getBoundingClientRect();
+            const own = el.scrollWidth > el.clientWidth || textWidth(el) > room(el) + EPS;
+            let clipped = false;
+            let hidden = false;
+            for (let a = el.parentElement; a; a = a.parentElement) {
+                const o = getComputedStyle(a);
+                const clips = o.overflowX !== 'visible' || o.overflowY !== 'visible';
+                if (clips || a === row) {
+                    const c = insetBox(a, a === row);
+                    if (b.top >= c.bottom - EPS || b.bottom <= c.top + EPS) hidden = true;
+                    else if (b.left < c.left - EPS || b.right > c.right + EPS || b.top < c.top - EPS || b.bottom > c.bottom + EPS) clipped = true;
+                }
+                if (a === row) break;
+            }
+            return { text: el.textContent, own, clipped: clipped && !hidden, hidden, shown: !own && !clipped && !hidden };
+        };
+        const linePieces = lines ? Array.from(lines.querySelectorAll('[data-testid="event-when"] > span[data-piece="whole"], [data-testid="event-pinned-chip"], [data-testid="event-state-badge"]')) : [];
+        const overlaps = (x, y) => {
+            if (!x || !y) return false;
+            const a = x.getBoundingClientRect();
+            const b = y.getBoundingClientRect();
+            return Math.min(a.right, b.right) - Math.max(a.left, b.left) > EPS && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > EPS;
+        };
+        return {
+            kind,
+            name: (row.querySelector('h3, [data-testid="event-row-title"], [data-testid="poll-row-question"]')?.textContent ?? '').slice(0, 40),
+            height: +r.height.toFixed(2), width: Math.round(r.width), over: row.scrollWidth > row.clientWidth + 1,
+            picture: pic ? `${Math.round(pic.getBoundingClientRect().width)}x${Math.round(pic.getBoundingClientRect().height)} r${getComputedStyle(pic).borderTopLeftRadius}` : null,
+            chip: chipCss ? `${chipCss.fontSize}/${chipCss.fontWeight}` : null,
+            // One short line's height: the line box the row's words are set on (`leading-snug`), as drawn.
+            lineHeight: line ? +parseFloat(getComputedStyle(line).lineHeight).toFixed(2) : null,
+            when: whenPieces.map(p => p.textContent).join(' ') || null,
+            // Each whole piece of the when as drawn, in order (checkCompactEnds finds the start's time among them), and the
+            // row's spoken name, which keeps the whole sentence.
+            whenDrawn: whenPieces.map(drawn),
+            spoken: row.getAttribute('aria-label') ?? '',
+            // The rule (the director's, for #2904): the when shows whole pieces, wrapping to a second line rather than cutting
+            // one. The start's date and its time (the first two whole pieces) are drawn whole and shown; every other piece that
+            // is never split (the end of a two-day event, 📌 PINNED, the state) is drawn whole or sits wholly on the line past
+            // the two the block shows, never drawn in part. No piece gives way, in any language.
+            pieces: linePieces.map(drawn),
+            whenWhole: lines ? (() => {
+                const start = whenPieces.slice(0, 2).map(drawn);
+                const rest = linePieces.filter(p => !whenPieces.slice(0, 2).includes(p)).map(drawn);
+                return start.length === 2 && start.every(p => p.shown) && rest.every(p => p.shown || (p.hidden && !p.own));
+            })() : null,
+            cut: linePieces.map(drawn).filter(p => p.own || p.clipped).map(p => `${p.text}${p.own ? ' (its own …)' : ''}${p.clipped ? ' (clipped)' : ''}`),
+            mark: row.querySelector('[data-testid="event-mark"], [data-testid="poll-mark"]')?.textContent ?? null,
+            ...(() => {
+                // The row's end, EVENT and the mark: the chip's and the mark's right edges measured from the row's content edge
+                // (inside the border and the padding; negative is past it); the chip drawn whole, its text inside its own box to
+                // the sub-pixel; the mark shown, its ✓ whole and inside the row; nothing the row holds overlapping the chip or
+                // the mark (the title, the two lines).
+                const css = getComputedStyle(row);
+                const inner = r.right - parseFloat(css.borderRightWidth) - parseFloat(css.paddingRight);
+                const markEl = row.querySelector('[data-testid="event-mark"], [data-testid="poll-mark"]');
+                const mr = markEl?.getBoundingClientRect();
+                const tick = markEl ? Array.from(markEl.querySelectorAll('span')).find(s => s.textContent.trim() === '✓') ?? null : null;
+                const title = row.querySelector('[data-testid="event-row-title"]');
+                return {
+                    scroll: `${row.scrollWidth}/${row.clientWidth}`,
+                    chipRight: chipEl ? +(inner - chipEl.getBoundingClientRect().right).toFixed(2) : null,
+                    chipWhole: chipEl ? drawn(chipEl).shown : null,
+                    chipText: chipEl?.textContent ?? null,
+                    markRight: mr ? +(inner - mr.right).toFixed(2) : null,
+                    markShown: mr ? mr.width >= 12 && mr.height > 0 && !drawn(markEl).clipped && !drawn(markEl).hidden : null,
+                    tickWhole: tick ? drawn(tick).shown : null,
+                    // The mark's words, where they give way at the end of their two lines (its own "…"; the ✓ stays).
+                    markGives: markEl ? Array.from(markEl.children).some(s => s !== tick && (s.scrollHeight > s.clientHeight + 1 || s.scrollWidth > s.clientWidth)) : null,
+                    wordsClear: chipEl ? ![title, lines].some(w => overlaps(w, chipEl) || overlaps(w, markEl)) && !overlaps(chipEl, markEl) : null,
+                    lines: lines ? Math.round(lines.getBoundingClientRect().height / parseFloat(getComputedStyle(lines).lineHeight)) : null,
+                };
+            })(),
+            controls: row.querySelectorAll('button, input, a, [role="button"], [role="progressbar"]').length,
+            isButton: row.tagName === 'BUTTON' || row.closest('[role="button"]') !== null,
+        };
+    }));
+}
+
+/** C1's checks on what compactRows() measured, at a text `scale`. */
+function checkCompactRows(rows, { label, maxWidth, scale }) {
+    const listings = rows.filter(r => r.kind === 'listing');
+    const events = rows.filter(r => r.kind === 'event');
+    const polls = rows.filter(r => r.kind === 'poll');
+    check(listings.length === 6 && events.length === 3 && polls.length === 1, `${label}: ${listings.length} listing rows, ${events.length} event rows, ${polls.length} poll row`);
+    // "A listing's row": the plainest listing's (the shortest), and "one line": the row's own short line, as drawn.
+    const listingRow = Math.min(...listings.map(r => r.height));
+    const oneLine = Math.max(...rows.filter(r => r.lineHeight !== null).map(r => r.lineHeight));
+    const bound = +(listingRow + oneLine + 0.5).toFixed(2);
+    const tall = [...events, ...polls].filter(r => r.height > bound);
+    check(tall.length === 0, `${label}: every event and poll row is a listing's row (${listingRow}px) and one line (${oneLine}px) at most, ${bound}px (${JSON.stringify([...events, ...polls].map(r => `${r.name}: ${r.height}`))})`);
+    check(rows.every(r => r.width <= maxWidth && !r.over), `${label}: no row wider than ${maxWidth}px or overflowing itself (${[...new Set(rows.map(r => r.width))].join(', ')})`);
+    const px = (n) => `${+(n * scale).toFixed(2)}px`;
+    const pics = [...new Set(rows.map(r => r.picture))];
+    const side = Math.round(32 * scale);
+    check(pics.length === 1 && pics[0] === `${side}x${side} r${px(8)}`, `${label}: every row's picture is 32 square, corners 8, at ${scale}x (${JSON.stringify(pics)})`);
+    const chips = [...new Set(rows.map(r => r.chip))];
+    check(chips.length === 1 && chips[0] === `${px(10)}/800`, `${label}: every row's type chip is the one chip, 10/800 (${JSON.stringify(chips)})`);
+    check([...events, ...polls].every(r => r.isButton && r.controls === 0), `${label}: each event and poll row is one button with nothing else to press on it`);
+    check(events.every(r => r.whenWhole), `${label}: every event row's date and time are whole and shown (${JSON.stringify(events.map(r => [r.when, r.whenWhole]))})`);
+    const garden = events.find(r => r.name.startsWith('Garden day'));
+    check(garden?.mark === 'Going ✓', `${label}: Garden day's row carries my answer, Going ✓ (${garden?.mark})`);
+    const repair = events.find(r => r.name.startsWith('Repair Cafe'));
+    const hosted = events.find(r => r.name.startsWith('Byron Bay'));
+    check(repair?.mark === 'Interested ✓' && hosted?.mark === "You're hosting this event", `${label}: the longest marks, Interested ✓ and You're hosting this event (${repair?.mark}; ${hosted?.mark})`);
+    check(polls[0]?.mark === 'Better matches between offers and needs ✓', `${label}: the poll's row carries my answer ✓ (${polls[0]?.mark})`);
+    return { listingRow, oneLine, bound, events: events.map(r => [r.name, r.height]), poll: polls.map(r => [r.name, r.height]) };
+}
+
+/**
+ * The reviews of #2904: in a language whose when runs wider than English's, an event's row holds its end AND its when. Every
+ * event row: nothing past the row (scrollWidth); the EVENT chip drawn whole (its text to the sub-pixel) and inside the row's
+ * content edge; the mark shown, its ✓ whole, inside that edge; nothing overlapping the chip or the mark; the start's date and
+ * time drawn whole and shown, and no piece that is never split drawn in part (compactRows' `drawn`); the row two short lines
+ * and a listing's row and one line at most.
+ */
+function checkCompactEnds(rows, { label, lang }) {
+    const events = rows.filter(r => r.kind === 'event');
+    check(events.length === KIND_EVENTS.length, `${label}: ${events.length} event rows (${KIND_EVENTS.length})`);
+    // The start's time, as the in-person row on the reader's own clock draws it (its when has no label: the date, then the
+    // time). Every other row on one day starts at the same instant on the same clock, so its when holds a whole piece with
+    // exactly this text, drawn whole and shown, wherever the language puts "your time" (the third review of #2904: in ja,
+    // zh-Hans, bn and ml the label came first and the time was on the hidden third line).
+    const plain = events.find(r => r.name.startsWith('Repair Cafe'));
+    const time = plain?.whenDrawn[1]?.text ?? null;
+    check(!!time && /\p{Nd}/u.test(time) && plain.whenDrawn.length === 2, `${label}: the plain row's when is its date and its time (${JSON.stringify(plain?.whenDrawn.map(p => p.text))})`);
+    const oneDay = events.filter(r => !r.name.startsWith('Overnight'));
+    const timeOf = (r) => r.whenDrawn.find(p => p.text === time) ?? null;
+    const show = (r) => `${r.name}: scroll ${r.scroll}, chip ${JSON.stringify(r.chipText)} ${r.chipRight}${r.chipWhole ? '' : ' CUT'}, mark ${r.markRight}${r.markShown ? '' : ' GONE'}${r.tickWhole === false ? ' ✓ CUT' : ''}${r.markGives ? ' (its words give way)' : ''} ${JSON.stringify(r.mark)}, when ${JSON.stringify(r.when)} ${r.whenWhole ? 'whole' : 'CUT'}${r.cut.length ? ` (cut: ${JSON.stringify(r.cut)})` : ''}${oneDay.includes(r) ? `, time ${!timeOf(r) ? 'MISSING' : timeOf(r).shown ? 'shown' : timeOf(r).hidden ? 'HIDDEN' : 'CUT'}` : ''}${r.wordsClear ? '' : ', words OVER the end'}, ${r.lines} lines, ${r.height}px`;
+    for (const r of events) {
+        const timeShown = !oneDay.includes(r) || !!timeOf(r)?.shown;
+        const ok = !r.over && r.chipWhole && r.chipRight >= -EDGE && r.markShown && r.markRight >= -EDGE && r.tickWhole !== false && r.wordsClear && r.whenWhole && timeShown;
+        check(ok, `${label}: ${show(r)}`);
+    }
+    // The row's spoken name keeps the whole sentence, in the language's own order ("あなたの時間：16:00–18:00"), whatever the
+    // row draws: the online row and the row read in another clock.
+    const sentence = time ? YOUR_TIME[lang]?.replace('{time}', time) : null;
+    const labelled = events.filter(r => r.name.startsWith('Seed swap') || r.name.startsWith('Harbour'));
+    check(!!sentence && labelled.length === 2 && labelled.every(r => r.spoken.includes(sentence)),
+        `${label}: the online row's and the other clock's spoken names say ${JSON.stringify(sentence)} (${JSON.stringify(labelled.map(r => r.spoken))})`);
+    const listingRow = Math.min(...rows.filter(r => r.kind === 'listing').map(r => r.height));
+    const oneLine = Math.max(...rows.filter(r => r.lineHeight !== null).map(r => r.lineHeight));
+    const bound = +(listingRow + oneLine + 0.5).toFixed(2);
+    check(events.every(r => r.height <= bound && r.lines <= 2), `${label}: every event row two short lines at most, a listing's row (${listingRow}px) and one line, ${bound}px (${JSON.stringify(events.map(r => [r.name, r.height, r.lines]))})`);
+}
+
 /** The headings and the card titles in page order (a heading is the small uppercase tracking-widest span). */
 const sequence = (page, titles) => page.evaluate((known) => {
     const out = [];
@@ -235,7 +489,7 @@ try {
     for (const dark of [false, true]) {
         const theme = dark ? 'dark' : 'light';
 
-        {
+        if (run('local')) {
             const { context, page, reads } = await open(browser, server.origin, { dark, global: false });
             const seq = await sequence(page, LOCAL.map(p => p.title));
             const wide = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -294,7 +548,7 @@ try {
             await context.close();
         }
 
-        for (const lang of ['ml', 'de']) {
+        for (const lang of run('lang') ? ['ml', 'de'] : []) {
             // #2873: the same list in a language whose category words run longer than English's (Malayalam "📜 മനോഭാവവും
             // തത്ത്വചിന്തയും", German "📜 Lebensart & Philosophie"): every chip still ends inside its card.
             const { context, page } = await open(browser, server.origin, { dark, global: false, lang });
@@ -312,7 +566,27 @@ try {
             await context.close();
         }
 
-        {
+        for (const [width, scale, sidebar] of run('compact') ? [[320, 1.3, false], [1280, 1, true]] : []) {
+            // C1: the compact view, at 320 x 1.3 and at 1280 beside the sidebar.
+            const { context, page } = await open(browser, server.origin, { dark, global: false, width, scale, sidebar, view: 'compact' });
+            const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+            check(wide <= width, `${theme} compact ${width}: nothing wider than the window (${wide}px)`);
+            const measured = checkCompactRows(await compactRows(page), { label: `${theme} compact ${width}`, maxWidth: sidebar ? width - SIDEBAR : width, scale });
+            console.log(`     ${theme} compact ${width}: ${JSON.stringify(measured)}`);
+            const tag = width === 320 ? '' : `-${width}`;
+            await page.screenshot({ path: path.join(out, `web-local-compact${tag}-a-${theme}.png`) });
+            if (width === 320) {
+                await page.evaluate(() => {
+                    const el = [...document.querySelectorAll('span.tracking-widest')].find(e => e.textContent.trim() === 'Yesterday');
+                    if (el) window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 200);
+                });
+                await page.waitForTimeout(150);
+                await page.screenshot({ path: path.join(out, `web-local-compact-b-${theme}.png`) });
+            }
+            await context.close();
+        }
+
+        if (run('local-1280')) {
             // A desktop window: 1280 px at 1x text, the Market beside the sidebar (the style box's W2 shot "web also 1280 + sidebar").
             const { context, page } = await open(browser, server.origin, { dark, global: false, width: 1280, scale: 1, sidebar: true });
             const wide = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -322,7 +596,7 @@ try {
             await context.close();
         }
 
-        {
+        if (run('global')) {
             const { context, page, reads } = await open(browser, server.origin, { dark, global: true });
             const m = await page.evaluate(() => ({
                 wide: document.documentElement.scrollWidth,
@@ -337,6 +611,30 @@ try {
             // Each card here has its distance line under who: the picture still runs the card's full height.
             checkListCards(await listCards(page), { label: `${theme} global 320`, dark, maxWidth: 320, photos: 0, scale: 1.3, count: 4, events: 0, elders: 0 });
             await page.screenshot({ path: path.join(out, `web-global-line-${theme}.png`) });
+            await context.close();
+        }
+
+        for (const lang of run('compact-kinds') ? KIND_LANGS : []) {
+            // The reviews of #2904: the compact view at 320 x 1.3 in the six first languages and every one that says "your time"
+            // before the time, an event of each kind (in person, online, read in another clock, over two days, pinned and
+            // hosted), the reader in Brisbane. Pictures in KIND_SHOTS.
+            const feed = [...LOCAL.filter(p => p.type !== 'event'), ...KIND_EVENTS];
+            const { context, page } = await open(browser, server.origin, { dark, global: false, lang, view: 'compact', timezoneId: KINDS_ZONE, feed });
+            const shown = await page.evaluate(() => document.documentElement.lang);
+            check(shown === lang, `${theme} kinds ${lang}: the page is in ${lang} (${shown})`);
+            const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+            check(wide <= 320, `${theme} kinds ${lang}: nothing wider than the screen (${wide}px)`);
+            checkCompactEnds(await compactRows(page), { label: `${theme} kinds ${lang} 320`, lang });
+            if (KIND_SHOTS.includes(lang)) {
+                await page.evaluate(() => document.querySelector('[data-testid="event-compact-row"]')?.scrollIntoView({ block: 'start' }));
+                await page.waitForTimeout(150);
+                await page.screenshot({ path: path.join(out, `web-compact-kinds-${lang}-${theme}.png`) });
+                // The rest of the event rows (in person, online, another clock, two days), under the listings: the first of them
+                // at the top, so all four sit above the floating "Create post" button (scrolled to the end, it hid the online row).
+                await page.evaluate(() => document.querySelectorAll('[data-testid="event-compact-row"]')[1]?.scrollIntoView({ block: 'start' }));
+                await page.waitForTimeout(150);
+                await page.screenshot({ path: path.join(out, `web-compact-kinds-${lang}-b-${theme}.png`) });
+            }
             await context.close();
         }
     }

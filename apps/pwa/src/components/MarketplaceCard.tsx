@@ -16,7 +16,7 @@ import { copyPriceLine, eventCopyOf, formatNumber, listingChipWords, pinLive, t,
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 import { styleUntilDrawn, useListPhotoSteps } from '../lib/use-list-photo-steps';
-import { CARD_INK, GRID_PHOTO, GRID_ROW, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard } from './market-card-shell';
+import { CARD_INK, COMPACT_END, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_ROW, COMPACT_TEXT, COMPACT_TITLE, GRID_PHOTO, GRID_ROW, GRID_SCRIM_PILL, GRID_TEXT, GRID_TITLE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard } from './market-card-shell';
 
 /** The grid's 4:3 frame anchors upright photos towards the top third (market-card-43). */
 const GRID_CROP: CSSProperties = { objectPosition: '50% 33%' };
@@ -190,14 +190,16 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         : elderCard ? 'border-l-4 border-l-amber-400 shadow-[0_4px_15px_rgba(251,191,36,0.1)]' : '';
 
     if (viewMode === 'compact') {
-        // Super Condensed row layout (doubles listings shown)
+        // The compact row, on the Market's style box (components/market-card-shell.ts COMPACT_*, slice C1): the same row an
+        // event's and a poll's are, as it was, with the box's one chip at its end (10/800, from the 8 px pill).
         return (
             <div
-                className={`bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl px-4 py-2.5 shadow-sm cursor-pointer transition-all duration-300 hover:shadow-md flex flex-row items-center justify-between w-full relative overflow-hidden ${elderStyleList}`}
+                data-testid="listing-compact-row"
+                className={`${COMPACT_ROW} ${elderStyleList}`}
             >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={COMPACT_LEAD}>
                     {/* Compact Category Picture / Tile */}
-                    <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                    <div className={COMPACT_PICTURE}>
                         {displayImage ? (
                             cardPicture(<CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />)
                         ) : (
@@ -206,8 +208,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     </div>
 
                     {/* Title and Author */}
-                    <div className="flex-1 min-w-0">
-                        <h3 dir="auto" className="font-extrabold text-sm text-nature-950 dark:text-white truncate">
+                    <div className={COMPACT_TEXT}>
+                        <h3 dir="auto" className={COMPACT_TITLE}>
                             {post.title}
                         </h3>
                         <span className="text-[10px] text-nature-500 flex items-center gap-1 flex-wrap min-w-0 break-words">
@@ -241,7 +243,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                 {/* The price and the type pill: side by side while there is room; on a narrow screen (320 px, 1.3x text) or
                     in a longer language the pill drops under the price, so the title keeps its width. */}
-                <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 ml-3 max-w-[45%]">
+                <div className={COMPACT_END}>
                     {/* Compact Price */}
                     {showPrice && (
                         <span className="font-black text-sm text-nature-950 dark:text-white flex items-center">
@@ -253,17 +255,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         </span>
                     )}
 
-                    {/* Daily Pulse or Needs/Offers pill */}
+                    {/* Daily Pulse or Needs/Offers: the box's one chip (10/800), its capitals from the words */}
                     {isPulse ? (
-                        <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">
-                            {t('PULSE')}
+                        <span data-testid="compact-type-chip" className={chip('warn')}>
+                            {upperCase(t('PULSE'))}
                         </span>
                     ) : (
-                        <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-                            post.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
-                            : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
-                        }`}>
-                            {typeWords(post.type)}
+                        <span data-testid="compact-type-chip" className={chip(post.type === 'offer' ? 'offer' : 'need')}>
+                            {upperCase(typeWords(post.type))}
                         </span>
                     )}
                 </div>

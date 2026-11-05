@@ -198,8 +198,9 @@ describe('PollCard (PWA)', () => {
             expect(screen.getByText('North Gate').className).not.toMatch(/(^|\s)truncate(\s|$)/);
         });
 
+        // Compact is not here: since C1 the poll is a compact row there, with no answers on it (PollCard.compact.test.tsx).
         it('leaves the single-column, truncating layout alone anywhere else', () => {
-            for (const viewMode of [undefined, 'list' as const, 'compact' as const]) {
+            for (const viewMode of [undefined, 'list' as const]) {
                 const view = render(<PollCard post={mockPost} identity={mockIdentity} viewMode={viewMode} />);
                 expect(optionsOf('North Gate').className).toBe('space-y-2 mb-3 mt-1');
                 expect(screen.getByText('North Gate').className).toMatch(/(^|\s)truncate(\s|$)/);
@@ -217,7 +218,7 @@ describe('PollCard (PWA)', () => {
             expect(screen.queryByText(/Re-voting overwrites/)).toBeNull();
             expect(screen.getByTestId('poll-anonymous-note')).toBeTruthy();
             grid.unmount();
-            for (const viewMode of [undefined, 'list' as const, 'compact' as const]) {
+            for (const viewMode of [undefined, 'list' as const]) {
                 const view = render(<PollCard post={anonymous} identity={mockIdentity} viewMode={viewMode} />);
                 expect(screen.getByTestId('poll-description').className).not.toContain('line-clamp');
                 expect(screen.getByText(/Anonymous vote · Re-voting overwrites choice/)).toBeTruthy();

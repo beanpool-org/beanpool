@@ -23,11 +23,20 @@ const me: any = { publicKey: 'me-pk', privateKey: 'k', callsign: 'Me' };
 afterEach(cleanup);
 
 describe('the poll card\'s poster', () => {
-    it.each(['grid', 'list', 'compact'] as const)('%s card: the poster is shown, with nothing to press to reach their profile', (viewMode) => {
+    it.each(['grid', 'list'] as const)('%s card: the poster is shown, with nothing to press to reach their profile', (viewMode) => {
         render(<PollCard post={post} identity={me} viewMode={viewMode} />);
         expect(screen.getByText('Alice')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: "View Alice's profile" })).toBeNull();
         expect(screen.getByTestId('poll-author')).toBeInTheDocument();
+    });
+
+    // Since C1 the compact view's poll is a compact row (the question, its status, your answer): no poster on it, and still
+    // nothing on it that opens a profile; its one button opens the poll.
+    it('compact row: no poster, and nothing to press to reach their profile', () => {
+        render(<PollCard post={post} identity={me} viewMode="compact" onOpen={vi.fn()} />);
+        expect(screen.queryByText('Alice')).toBeNull();
+        expect(screen.queryByRole('button', { name: "View Alice's profile" })).toBeNull();
+        expect(screen.getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([expect.stringMatching(/^Open poll: /)]);
     });
 
     it('the poll\'s own page: the poster is a button that opens their profile', () => {

@@ -56,6 +56,89 @@ export function eventTileWhenFor(post: EventTimeFields): EventTileWhen | null {
     return input ? tileWhen(input) : null;
 }
 
+/**
+ * The Market's compact row's when, as one string (slice C1; the phone's eventTileWhenFor `spoken`): "SAT 7 NOV · 16:00–21:00". Its
+ * clock is the viewer's own, as the tile's: where that differs from the place's (a Byron 16:00 read in Queensland) the row
+ * reads "SAT 7 NOV · 15:00–20:00 your time" rather than the place's clock with a note it has no room for; online, the
+ * viewer's own clock, "your time", as every card says it. '' without a readable start.
+ */
+export function eventRowWhen(post: EventTimeFields): string {
+    const parts = eventRowWhenParts(post);
+    return parts ? `${parts.first}${parts.sep}${parts.second}` : '';
+}
+
+/** The same when in its two halves (core's EventWhenParts), for a row that keeps each whole; null without a readable start. */
+export function eventRowWhenParts(post: EventTimeFields): EventWhenParts | null {
+    return rowWhenOf(post)?.parts ?? null;
+}
+
+/** A piece of the compact row's when: `whole`, one line never split (a date, a time); otherwise words that wrap and give way. */
+export interface EventRowWhenPiece {
+    text: string;
+    whole: boolean;
+}
+
+/** Where a sentence is split round its `{time}`: a character no time or sentence holds. */
+const TIME_SPLIT = '\u0001';
+
+/**
+ * The compact row's when in pieces (slice C1), the same words as eventRowWhen: the date, then the time, each whole; over two
+ * days the start's date, its time with the dash, the end's date and its time, each whole (at 320 x 1.3 the row's two lines
+ * hold the start, and the end follows where it fits: the tile, too, reads the start and leaves the end to the page). Where
+ * the clock is the reader's own, "your time" is split through its own sentence (core's `{time} your time`, as each language
+ * words it): the time a whole piece, the rest of the sentence after it, words that wrap and give way (a language that puts
+ * the label first has it moved after the time, so it can never push the time off the row's two lines). A half that does not
+ * read as core's date then time stays one whole piece. [] without a readable start.
+ */
+export function eventRowWhenPieces(post: EventTimeFields): EventRowWhenPiece[] {
+    const row = rowWhenOf(post);
+    if (!row) return [];
+    const { input, parts, labelled } = row;
+    const whole = (text: string): EventRowWhenPiece => ({ text, whole: true });
+    const words = (text: string): EventRowWhenPiece[] => (text ? [{ text, whole: false }] : []);
+    // A half ("SAT 7 NOV 16:00") as its date and its time, read from core's tile at that instant, in the row's own clock.
+    const dateAndTime = (half: string, at: EventWhenInput, dash = ''): EventRowWhenPiece[] => {
+        const tile = tileWhen(at);
+        return tile && half === `${tile.date} ${tile.timePieces[0]}`
+            ? [whole(tile.date), ...words(' '), whole(`${tile.timePieces[0]}${dash}`)]
+            : [whole(`${half}${dash}`)];
+    };
+    let second = parts.second;
+    let around: [string, string] = ['', ''];
+    if (labelled) {
+        const sentence = t('{time} your time', { time: TIME_SPLIT }).split(TIME_SPLIT);
+        if (sentence.length === 2 && second.length > sentence[0].length + sentence[1].length
+            && second.startsWith(sentence[0]) && second.endsWith(sentence[1])) {
+            around = [sentence[0], sentence[1]];
+            second = second.slice(sentence[0].length, second.length - sentence[1].length);
+        }
+    }
+    const rowInput: EventWhenInput = labelled ? { ...input, online: true } : input;
+    const overDays = parts.sep !== ' · ';
+    const start = overDays ? dateAndTime(parts.first, rowInput, ' –') : [whole(`${parts.first} ·`)];
+    const endAt: EventWhenInput | null = overDays && input.deviceEnd
+        ? { ...rowInput, startAt: input.endAt, startLocal: input.endLocal, endAt: null, endLocal: null, deviceStart: input.deviceEnd, deviceEnd: null }
+        : null;
+    const end = endAt ? dateAndTime(second, endAt) : [whole(second)];
+    // The time before its label, in every language (the third review of #2904): where a language puts "your time" BEFORE the
+    // time (ja "あなたの時間：{time}", bn, ml, zh-Hans), its words wrapped to fill the row's second line and pushed the time
+    // onto the third, which the row's two lines hide, so the row showed no time at all. The time is what the row is for: it
+    // comes straight after the date, and the label follows it, its words wrapping and giving way as they do after the time in
+    // the other languages. The colon or space that led into the time goes with the move ("16:00–18:00 あなたの時間"). The
+    // row's spoken name (eventRowWhen) keeps the whole sentence in the language's own order.
+    const lead = around[0].replace(/[\s:：]+$/u, '').trim();
+    return [...start, ...words(' '), ...end, ...words(lead ? ` ${lead}${around[1]}` : around[1])];
+}
+
+/** The row's when: its halves, the clocks they are read from, and whether they are the reader's own clock ("your time"). */
+function rowWhenOf(post: EventTimeFields): { input: EventWhenInput; parts: EventWhenParts; labelled: boolean } | null {
+    const input = eventWhenInput(post);
+    if (!input) return null;
+    const labelled = !!input.online || !!tileWhen(input)?.yours;
+    const parts = whenParts(labelled ? { ...input, online: true } : input);
+    return parts ? { input, parts, labelled } : null;
+}
+
 /** The node's clocks for an event and this browser's rendering of its instant: what core's when functions read. */
 function eventWhenInput(post: EventTimeFields): EventWhenInput | null {
     if (!post.eventStartAt) return null;

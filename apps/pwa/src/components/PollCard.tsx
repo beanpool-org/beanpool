@@ -30,14 +30,27 @@ import { LocalCommunityLine, type LocalCommunityWays } from './LocalCommunityMar
 import { LOCAL_COMMUNITY_LINES, pinLive, t, tn } from '@beanpool/core';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, pollIsSealed, pollOtherLines, pollOtherOption, POLL_OTHER_WORDS_MAX } from '@beanpool/core';
 import { PollOtherAnswers } from './PollOtherAnswers';
+import {
+    CARD_INK, COMPACT_END, COMPACT_LEAD, COMPACT_LINE, COMPACT_MARK, COMPACT_PICTURE, COMPACT_POLL_TILE, COMPACT_ROW, COMPACT_TEXT, COMPACT_TITLE,
+    COMPACT_WORD, LIST_TYPE, POLL_CARD, chip,
+} from './market-card-shell';
+
+/** Where the compact row splits its mark's one key (`{label} ✓`) round the answer: a character no answer holds. */
+const MARK_SPLIT = '\u0001';
 
 interface PollCardProps {
     post: MarketplacePost;
     identity?: BeanPoolIdentity | null;
     onVoteSuccess?: () => void;
     onOpenProfile?: (pubkey: string) => void;
-    /** Where the card is drawn. In the Market grid it is given two columns, so the answers get two columns too. */
+    /**
+     * Where the card is drawn. In the Market grid it is given two columns, so the answers get two columns too. In the compact
+     * view (slice C1, DESIGN-card-style-box-fable.md §2) the poll is a compact row like a listing's (the question, its quiet
+     * status, your answer ✓) that opens the poll's page (`onOpen`); its answers are on that page, never on the row.
+     */
     viewMode?: 'grid' | 'list' | 'compact';
+    /** The compact row's one press: the Market opens the poll's page, as a listing's row opens its own. */
+    onOpen?: () => void;
     /**
      * A visitor to the global lobby (G9b): the question, its answers and the counts, read only. No author row (the node
      * sends none), no voting, and no voter list.
@@ -49,7 +62,7 @@ interface PollCardProps {
     localWays?: LocalCommunityWays;
 }
 
-export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false, informal = false, localWays }: PollCardProps) {
+export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, onOpen, visitor = false, informal = false, localWays }: PollCardProps) {
     const decisionsMarked = marked(useFeatureMode('decisions'));
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
@@ -103,7 +116,8 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     const sealed = pollIsSealed(options, livePost.pollOpenVote);
     const answered = sealed && livePost.pollAnswered === true;
     // Only a card with words to offer asks; a member's card asks nothing. The node decides who reads.
-    const asksRole = offersOther && !visitor && !isAuthor && Boolean(identity);
+    // The compact row shows no answers' words, so a row asks nothing either.
+    const asksRole = offersOther && !visitor && !isAuthor && Boolean(identity) && viewMode !== 'compact';
     useEffect(() => {
         if (!asksRole) return;
         let cancelled = false;
@@ -172,29 +186,72 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
         return t('Closes in {n}d', { n: diffDays });
     };
 
+    const pinned = pinLive(post as any);
+
+    if (viewMode === 'compact') {
+        // The compact row (slice C1; the phone's, #2903): the poll's tile where a listing's picture is, the question on one line,
+        // then 📌 PINNED and its quiet status ("Closes in 11d", "Closed"), and, when the member has answered, that answer ✓ on a
+        // line of its own, the mark an event's row has (the answer gives way, the ✓ never does). A sealed poll (anonymous with
+        // Other) names no answer: the node cannot say which, and the page says that it has one. POLL at the end. The whole row
+        // is one button that opens the poll's page, where its answers are: no answer, no Close Poll and no voter list here.
+        const chosen = sealed ? undefined : options.find(o => o.id === userVotedOptionId);
+        const chosenText = chosen ? (chosen.other ? pollOtherLines.other() : chosen.text) : null;
+        const rowMark = chosenText ? t('{label} ✓', { label: chosenText }) : null;
+        // The one key, split where the answer goes, so each language keeps its own order; a key that cannot be split is drawn whole.
+        const markPieces = chosenText ? t('{label} ✓', { label: MARK_SPLIT }).split(MARK_SPLIT) : [];
+        const status = formatTimeRemaining();
+        return (
+            <div data-testid="poll-card" className="w-full min-w-0">
+                <button
+                    type="button"
+                    data-testid="poll-compact-row"
+                    onClick={onOpen}
+                    disabled={!onOpen}
+                    aria-label={[t('Open poll: {title}', { title: livePost.title }), status, rowMark].filter(Boolean).join(', ')}
+                    className={`${COMPACT_ROW} text-start disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500`}
+                >
+                    <span className={COMPACT_LEAD}>
+                        <span data-testid="compact-picture" className={COMPACT_PICTURE}>
+                            <span aria-hidden="true" className={COMPACT_POLL_TILE}>🗳️</span>
+                        </span>
+                        <span className={COMPACT_TEXT}>
+                            <span dir="auto" data-testid="poll-row-question" className={`block ${COMPACT_TITLE}`}>{livePost.title}</span>
+                            <span data-testid="poll-compact-line" className={`${COMPACT_LINE} font-medium ${CARD_INK.secondary}`}>
+                                {pinned && <><span data-testid="poll-pinned-chip" className={COMPACT_WORD.pinned}>{t('📌 PINNED')}</span>{' · '}</>}
+                                <span data-testid="poll-status">{status}</span>
+                            </span>
+                            {rowMark && (markPieces.length === 2 ? (
+                                <span data-testid="poll-mark" className={`flex min-w-0 text-[11px] leading-snug ${COMPACT_MARK}`}>
+                                    <span dir="auto" className="min-w-0 truncate">{markPieces[0]}{chosenText}</span>
+                                    {markPieces[1] && <span className="shrink-0 whitespace-pre">{markPieces[1]}</span>}
+                                </span>
+                            ) : (
+                                <span data-testid="poll-mark" className={`${COMPACT_LINE} ${COMPACT_MARK}`}>{rowMark}</span>
+                            ))}
+                        </span>
+                    </span>
+                    <span className={COMPACT_END}>
+                        <span data-testid="poll-badge" className={chip('poll')}><span aria-hidden="true">🗳️ </span>{t('POLL')}</span>
+                    </span>
+                </button>
+            </div>
+        );
+    }
+
     return (
-        <div className="bg-white dark:bg-nature-950 border-2 border-purple-200 dark:border-purple-900/60 rounded-2xl p-4 shadow-sm hover:shadow-md transition-all flex flex-col h-full relative overflow-hidden">
-            {/* Header: Badges & Actions */}
+        <div data-testid="poll-card" className={POLL_CARD}>
+            {/* Header: the chips from the style box (📌 PINNED, POLL in the poll's plum, its quiet status), Close Poll at the right */}
             <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    {pinLive(post as any) && (
-                        <span
-                            data-testid="poll-pinned-chip"
-                            className="bg-bp-chip-accent-tint text-bp-chip-accent-ink font-black text-[10px] tracking-wider uppercase px-2.5 py-1 rounded-lg border border-transparent shadow-xs"
-                        >
+                <div className="flex items-center gap-1 flex-wrap min-w-0">
+                    {pinned && (
+                        <span data-testid="poll-pinned-chip" className={chip('pinned')}>
                             {t('📌 PINNED')}
                         </span>
                     )}
-                    <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-black text-[10px] tracking-wider uppercase px-2.5 py-1 rounded-lg border border-purple-300/40">
+                    <span data-testid="poll-badge" className={chip('poll')}>
                         <span aria-hidden="true">🗳️ </span>{t('POLL')}
                     </span>
-                    <span
-                        className={`text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border ${
-                            isClosed
-                                ? 'bg-nature-100 text-nature-600 dark:bg-nature-800 dark:text-nature-300 border-nature-300/40'
-                                : 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800'
-                        }`}
-                    >
+                    <span data-testid="poll-status" className={chip('quiet')}>
                         {formatTimeRemaining()}
                     </span>
                 </div>
@@ -241,8 +298,8 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             </div>
             )}
 
-            {/* Question Title */}
-            <h3 className="font-extrabold text-base text-nature-950 dark:text-white mb-1 leading-snug">
+            {/* The question: the list card's loud line, 16/900 */}
+            <h3 dir="auto" className={`m-0 mb-1 break-words ${LIST_TYPE.loud} ${CARD_INK.title}`}>
                 {livePost.title}
             </h3>
 
@@ -250,7 +307,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* In the grid two lines at most, so the poll fits its 2 x 2 square (DESIGN-market-grid-sizes-fable.md §2.3); the
                 whole of it is on the poll's page. */}
             {livePost.description && (
-                <p data-testid="poll-description" className={`text-xs text-nature-600 dark:text-nature-400 mb-3 whitespace-pre-wrap leading-relaxed${isGrid ? ' line-clamp-2' : ''}`}>
+                <p data-testid="poll-description" className={`text-[13px] text-nature-600 dark:text-nature-400 mb-3 whitespace-pre-wrap leading-relaxed${isGrid ? ' line-clamp-2' : ''}`}>
                     {livePost.description}
                 </p>
             )}

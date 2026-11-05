@@ -22,12 +22,12 @@
  * shows the host controls here.
  */
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { copyCardLine, copyFromLine, eventCopyOf, pinLive, t, upperCase, word, placeShownRoughly, PLACE_WORDS, type WordKey } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
+    CLIENT_POST_TYPES, eventEditBlockedReason, eventRepeatCaption, eventRowWhen, eventRowWhenPieces, eventTileWhenFor, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
     eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
@@ -44,7 +44,9 @@ import { ListPhoto } from './ListPhoto';
 import { ImageLightbox } from './ImageLightbox';
 import { ReportModal } from './ReportModal';
 import {
-    BOX_LABEL, CARD_INK, EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
+    BOX_LABEL, CARD_INK, COMPACT_EVENT_BODY, COMPACT_EVENT_HEAD, COMPACT_EVENT_MARK, COMPACT_EVENT_TEXT, COMPACT_LEAD, COMPACT_LINES, COMPACT_MARK,
+    COMPACT_MARK_GIVES, COMPACT_PIECE, COMPACT_PICTURE, COMPACT_ROW, COMPACT_TITLE_GIVES, COMPACT_WORD,
+    EVENT_ANSWER, GRID_PHOTO, GRID_PHOTO_CROP, GRID_ROW, GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE,
     GRID_TIME_ROW, GRID_TYPE, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE,
     POP_UP_CLOSE_ROOM, chip, gridTile, listCard,
 } from './market-card-shell';
@@ -308,6 +310,9 @@ function EventWhen({ post, className, testId, hostLine = false, repeatLine = tru
 
 const YOUR_TIME = ' your time';
 
+/** Where the compact row splits its mark's one key (`{label} ✓`) round the answer: a character no answer holds. */
+const MARK_SPLIT = '\u0001';
+
 /**
  * Why the host cannot edit, as a member reads it: lib/events.ts's eventEditBlockedReason keeps the English (the map's
  * edit alert shares it), and its two sentences are word() keys here by that English, shown through t(); any other line
@@ -359,9 +364,9 @@ interface EventCardProps {
     /**
      * Which shape the feed is in, so the event is the same card as the offers beside it (MarketplaceCard): in the grid the
      * listing tile, on the same lattice (W3'); in the list the list card, the photo flush on the left; in compact the
-     * stacked lines with no photo, until the compact row joins the box (C1). Defaults to the grid, which is how the Market
-     * opens. A grid card asked for with `rsvpOnCard` draws the stacked card with its buttons: no screen asks for that since
-     * the map's pop-up became the list card (M1, #2881), whose buttons are the list branch's.
+     * listing's compact row, its 32 px picture beside the title, the when and the place (C1). Defaults to the grid, which is
+     * how the Market opens. A grid card asked for with `rsvpOnCard` draws the stacked card with its buttons: no screen asks
+     * for that since the map's pop-up became the list card (M1, #2881), whose buttons are the list branch's.
      */
     viewMode?: 'grid' | 'list' | 'compact';
     onOpen?: () => void;
@@ -397,8 +402,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     // The host gave the event a photo; the card showed everything but. It is read straight off the post, the way
     // the offer cards and the event page read theirs — there is no second resolver on the web client.
     const firstPhoto = p.photos && p.photos.length > 0 ? p.photos[0] : null;
-    // The grid card shows the photo above its lines; the list card is the style box's (below). Compact has no picture
-    // yet: its row joins the box in its own slice (C1, DESIGN-card-style-box-fable.md §4).
+    // The stacked card (below) shows the photo above its lines in the grid; the list card, the tile and the compact row are
+    // the style box's and draw their own.
     const hasPicture = viewMode === 'grid';
     const photo = hasPicture ? firstPhoto : null;
 
@@ -478,6 +483,101 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
                 {rsvpOnCard && rsvp.error && (
                     <p role="alert" className="basis-full m-0 px-3 pb-3 text-xs text-red-600 dark:text-red-400">{rsvp.error}</p>
                 )}
+            </div>
+        );
+    }
+
+    if (viewMode === 'compact') {
+        // The compact row (slice C1, DESIGN-card-style-box-fable.md §2; DESIGN-market-event-cards-fable.md §2.4): the listing's
+        // row from the style box (market-card-shell.ts COMPACT_*), so an event in the compact view is one row among the
+        // listings', a listing's height and one line more at 320 px and 1.3x text (market-order-shots.mjs measures it). The 32 px
+        // picture (the photo, or the event tile until it has drawn), then the title with EVENT at the row's end; then two lines
+        // at most (COMPACT_LINES): the when in the viewer's own clock ("your time" where it differs from the place's, as the tile
+        // reads it), its date and its time each whole, wrapping to the second line rather than cut, and on from it 📌 PINNED,
+        // the state and the place, each in its own ink, the place giving way. At 320 x 1.3 the date and the time take a line
+        // each; wider, it is all one line. The viewer's mark ("Going ✓", "You're hosting this event") is at the row's end beside
+        // those lines, and gives way before the when does; EVENT sits beside the title because beside the lines it left the
+        // when 72 px in French and 37 in German (market-card-shell.ts COMPACT_EVENT_HEAD). The counts are the page's. The
+        // whole row is one button that opens the event.
+        const rowWhen = eventRowWhen(p);
+        // The when's pieces (lib/events.ts eventRowWhenPieces): "SAT 7 NOV ·" and "16:00–21:00" whole, and "your time" split
+        // through its own sentence in every language, its words free to wrap and give way.
+        const whenPieces = eventRowWhenPieces(p);
+        const state = eventStateOf(p);
+        const pinned = pinLive(p as any);
+        const lock = p.audienceScope === 'group' || !!p.targetGroupId
+            ? t('🔒 Only {group} can see this', { group: p.targetGroupName || t('Group') })
+            : null;
+        const copyDistance = distanceKm == null ? '' : visitor ? visitorDistanceText(distanceKm) : formatDistance(distanceKm);
+        const rowPlace = copy?.from ? [copyFromLine(copy.from), copyDistance].filter(Boolean).join(' · ') : place;
+        const glyph = copy?.from ? '' : p.eventOnline ? '🌐 ' : '📍 ';
+        const rowMark = hosting ? t("You're hosting this event") : myAnswer;
+        // The answer's word, and the one key `{label} ✓` split where it goes (each language keeps its own order): the word gives
+        // way at the row's end, the ✓ never does, as on the poll's row. A key that cannot be split, and the host's line (no ✓),
+        // are drawn whole, giving way at their end.
+        const answerWord = !hosting && myAnswer ? (p.myRsvp === 'going' ? t('Going') : t('Interested')) : null;
+        const markPieces = answerWord ? t('{label} ✓', { label: MARK_SPLIT }).split(MARK_SPLIT) : [];
+        // What follows the when, ' · ' before each (the separator every line on a card uses).
+        const pieces = [
+            pinned ? <span key="pin" data-testid="event-pinned-chip" className={`${COMPACT_PIECE} ${COMPACT_WORD.pinned}`}>{t('📌 PINNED')}</span> : null,
+            state ? <span key="state" data-testid="event-state-badge" className={`${COMPACT_PIECE} ${state === 'updated' ? COMPACT_WORD.event : COMPACT_WORD.danger}`}>{stateWords(state)}</span> : null,
+            rowPlace || lock ? (
+                <span key="place">
+                    {lock && <span aria-hidden="true">🔒 </span>}
+                    {rowPlace && glyph && <span aria-hidden="true">{glyph}</span>}{rowPlace}
+                </span>
+            ) : null,
+        ].filter(Boolean);
+        const rowLabel = [openLabel, rowWhen, state ? stateWords(state) : null, rowMark, lock, copyLine].filter(Boolean).join(', ');
+        return (
+            <div data-testid="event-card" className="w-full min-w-0">
+                <button
+                    type="button"
+                    data-testid="event-compact-row"
+                    onClick={onOpen}
+                    disabled={!onOpen}
+                    aria-label={rowLabel}
+                    className={`${COMPACT_ROW} text-start disabled:cursor-default focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500`}
+                >
+                    <span className={COMPACT_LEAD}>
+                        <span data-testid="compact-picture" className={COMPACT_PICTURE}>
+                            <ListPhoto
+                                photo={firstPhoto}
+                                alt={p.title}
+                                className="w-full h-full object-cover"
+                                fallback={<CategoryTile kind="event" size="thumb" />}
+                            />
+                        </span>
+                        <span className={COMPACT_EVENT_TEXT}>
+                            <span data-testid="event-row-head" className={COMPACT_EVENT_HEAD}>
+                                <span dir="auto" data-testid="event-row-title" className={COMPACT_TITLE_GIVES}>{p.title}</span>
+                                <span data-testid="event-type-chip" className={chip('event')}>{upperCase(t('EVENT', undefined, 'event category tile label'))}</span>
+                            </span>
+                            <span data-testid="event-row-body" className={COMPACT_EVENT_BODY}>
+                                <span data-testid="event-row-lines" className={`${COMPACT_LINES} font-medium ${CARD_INK.secondary}`}>
+                                    <span data-testid="event-when" className={`font-bold ${CARD_INK.event}`}>
+                                        {whenPieces.map((piece, i) => (piece.whole
+                                            ? <span key={i} data-piece="whole" className={COMPACT_PIECE}>{piece.text}</span>
+                                            : piece.text.trim()
+                                                ? <span key={i} data-piece="words">{piece.text}</span>
+                                                : <Fragment key={i}>{piece.text}</Fragment>))}
+                                    </span>
+                                    {pieces.map((piece, i) => <Fragment key={i}>{(whenPieces.length > 0 || i > 0) && ' · '}{piece}</Fragment>)}
+                                </span>
+                                {rowMark && (
+                                    <span data-testid="event-mark" className={`${COMPACT_EVENT_MARK} ${COMPACT_MARK}`}>
+                                        {markPieces.length === 2 ? (
+                                            <>
+                                                <span className={COMPACT_MARK_GIVES}>{markPieces[0]}{answerWord}</span>
+                                                {markPieces[1] && <span className="shrink-0 whitespace-pre">{markPieces[1]}</span>}
+                                            </>
+                                        ) : <span className={COMPACT_MARK_GIVES}>{rowMark}</span>}
+                                    </span>
+                                )}
+                            </span>
+                        </span>
+                    </span>
+                </button>
             </div>
         );
     }
@@ -601,8 +701,8 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     );
 
     return (
-        // The stacked card: the compact view, until its row joins the box (C1), and a grid card asked for with `rsvpOnCard`
-        // (no screen since the map's pop-up became the list card, M1). Its band is core's event tint, not a raw violet class.
+        // The stacked card: a grid card asked for with `rsvpOnCard` (no screen since the map's pop-up became the list card, M1;
+        // the compact view is the compact row since C1). Its band is core's event tint, not a raw violet class.
         <div data-testid="event-card" className="w-full min-w-0 bg-white dark:bg-nature-950 border-2 border-bp-tile-event-tint rounded-2xl p-3 shadow-sm flex flex-col gap-2 overflow-hidden">
             <button
                 type="button"

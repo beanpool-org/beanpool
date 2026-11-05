@@ -62,6 +62,52 @@ interface PollCardProps {
     localWays?: LocalCommunityWays;
 }
 
+/**
+ * The poll's quiet status, as its card and its grid tile say it: Closed, Active (no end), or the time left. The words are the
+ * card's own, so the grid tile (PollGridTile) can never say it differently.
+ */
+export function pollStatusWords(post: MarketplacePost, isClosed: boolean, now = Date.now()): string {
+    if (isClosed) return t('Closed', undefined, 'poll');
+    const closesAt = post.pollClosesAt;
+    if (!closesAt) return t('Active', undefined, 'poll');
+    const diffMs = new Date(closesAt).getTime() - now;
+    if (diffMs <= 0) return t('Closed', undefined, 'poll');
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (diffHours < 24) return t('Closes in {n}h', { n: diffHours });
+    const diffDays = Math.floor(diffHours / 24);
+    return t('Closes in {n}d', { n: diffDays });
+}
+
+/**
+ * What the card knows about a poll, the one place it is read (the card and the grid tile, PollGridTile): its answers, its
+ * total, whether it has closed, its ballot (open vote, sealed) and whether a sealed poll has the member's answer.
+ */
+export function pollFacts(post: MarketplacePost, now = Date.now()) {
+    // Only a poll its creator made an open vote names its voters; a node before the choice sends no flag, and its polls
+    // showed voters to members, so a list that comes with the poll is shown there as before.
+    const openVote = post.pollOpenVote === true || (post.pollOpenVote === undefined && Array.isArray(post.pollVotes) && post.pollVotes.length > 0);
+    const isClosed = post.status === 'completed' || (post.pollClosesAt ? new Date(post.pollClosesAt).getTime() <= now : false);
+    const authorName = post.authorCallsign || (post.authorPublicKey ? post.authorPublicKey.slice(0, 6) : t('Anonymous'));
+    const avatarSrc = resolveAvatarUrl((post as any).authorAvatarUrl || (post as any).author_avatar);
+
+    const rawOptions = post.pollOptions;
+    let options: PollOption[] = [];
+    if (Array.isArray(rawOptions)) {
+        options = rawOptions;
+    } else if (typeof rawOptions === 'string') {
+        try {
+            options = JSON.parse(rawOptions);
+        } catch {
+            options = [];
+        }
+    }
+
+    const totalVotes = post.totalVotes ?? options.reduce((sum, o) => sum + (o.votes || 0), 0);
+    const sealed = pollIsSealed(options, post.pollOpenVote);
+    const answered = sealed && post.pollAnswered === true;
+    return { openVote, isClosed, authorName, avatarSrc, options, totalVotes, sealed, answered };
+}
+
 export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, onOpen, visitor = false, informal = false, localWays }: PollCardProps) {
     const decisionsMarked = marked(useFeatureMode('decisions'));
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
@@ -81,27 +127,8 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     // the full width of a page column, where a single answer column already fits: they are left exactly as they were.
     const isGrid = viewMode === 'grid';
 
-    // Only a poll its creator made an open vote names its voters; a node before the choice sends no flag, and its polls
-    // showed voters to members, so a list that comes with the poll is shown there as before.
-    const openVote = livePost.pollOpenVote === true || (livePost.pollOpenVote === undefined && Array.isArray(livePost.pollVotes) && livePost.pollVotes.length > 0);
+    const { openVote, isClosed, authorName, avatarSrc, options, totalVotes, sealed, answered } = pollFacts(livePost);
     const isAuthor = Boolean(identity?.publicKey && livePost.authorPublicKey === identity.publicKey);
-    const isClosed = livePost.status === 'completed' || (livePost.pollClosesAt ? new Date(livePost.pollClosesAt).getTime() <= Date.now() : false);
-    const authorName = livePost.authorCallsign || (livePost.authorPublicKey ? livePost.authorPublicKey.slice(0, 6) : t('Anonymous'));
-    const avatarSrc = resolveAvatarUrl((livePost as any).authorAvatarUrl || (livePost as any).author_avatar);
-
-    const rawOptions = livePost.pollOptions;
-    let options: PollOption[] = [];
-    if (Array.isArray(rawOptions)) {
-        options = rawOptions;
-    } else if (typeof rawOptions === 'string') {
-        try {
-            options = JSON.parse(rawOptions);
-        } catch {
-            options = [];
-        }
-    }
-
-    const totalVotes = livePost.totalVotes ?? options.reduce((sum, o) => sum + (o.votes || 0), 0);
     // Where its votes came from: only once an anonymous poll has closed. While it is open the card says nothing about it,
     // not even that it will (the node sends nothing then either: @beanpool/engine pollOriginsMayShow).
     const showOrigins = pollOriginsShown(isClosed, openVote);
@@ -113,8 +140,6 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     const optionsById = useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
 
     const offersOther = pollOtherOption(options) !== null;
-    const sealed = pollIsSealed(options, livePost.pollOpenVote);
-    const answered = sealed && livePost.pollAnswered === true;
     // Only a card with words to offer asks; a member's card asks nothing. The node decides who reads.
     // The compact row shows no answers' words, so a row asks nothing either.
     const asksRole = offersOther && !visitor && !isAuthor && Boolean(identity) && viewMode !== 'compact';
@@ -174,17 +199,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
         }
     };
 
-    const formatTimeRemaining = () => {
-        if (isClosed) return t('Closed', undefined, 'poll');
-        const closesAt = livePost.pollClosesAt;
-        if (!closesAt) return t('Active', undefined, 'poll');
-        const diffMs = new Date(closesAt).getTime() - Date.now();
-        if (diffMs <= 0) return t('Closed', undefined, 'poll');
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        if (diffHours < 24) return t('Closes in {n}h', { n: diffHours });
-        const diffDays = Math.floor(diffHours / 24);
-        return t('Closes in {n}d', { n: diffDays });
-    };
+    const formatTimeRemaining = () => pollStatusWords(livePost, isClosed);
 
     const pinned = pinLive(post as any);
 

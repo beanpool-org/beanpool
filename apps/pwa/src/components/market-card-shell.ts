@@ -150,10 +150,61 @@ export const POP_UP_CLOSE_ROOM = 'pe-8 min-h-6';
 export const GRID = 'grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4';
 
 /**
- * The poll's cell (§2.3): the whole row at two and three columns, where nothing sits beside it, at its own height; from four
- * columns up a 2 x 2 square that the tiles flow round. It fills its cell, so its turnout row sits at the square's foot.
+ * The poll's cell (Marty, 5 Nov 2026: "yes two wide it is but make sure it filled correctly. we dont want 2 wide with heaps of
+ * space"): two cells wide at every column count (the whole row at two) and ONE row tall, its partners' height, never its own.
+ * Its height comes from GRID_POLL_GHOST, a tile's box drawn invisible in it, and the tile is laid over the cell
+ * (GRID_POLL_TILE), so what the poll holds never makes the row taller. This replaces DESIGN-market-grid-sizes-fable.md §2.3's
+ * whole row at two and three columns and 2 x 2 square from four, for the grid only.
  */
-export const GRID_POLL_CELL = 'h-full col-span-2 md:col-span-3 lg:col-span-2 lg:row-span-2';
+export const GRID_POLL_CELL = 'relative col-span-2 min-w-0';
+
+/**
+ * A grid tile's height, drawn invisible inside the poll's cell: one tile's width (half the cell less half the gutter, `gap-4`),
+ * its 1 px border, the 4:3 photo at that width and the fixed text block (GRID_FRAME, GRID_PHOTO, GRID_TEXT). So the poll's
+ * cell is exactly a tile's height when nothing sits beside it, and the row stretches it to its partners' when they are taller.
+ */
+export const GRID_POLL_GHOST = 'invisible pointer-events-none flex flex-col w-[calc(50%-0.5rem)] border';
+export const GRID_POLL_GHOST_PHOTO = 'w-full aspect-[4/3] shrink-0';
+export const GRID_POLL_GHOST_TEXT = 'h-[7.0625rem] shrink-0';
+
+/**
+ * The poll's tile over its cell: POLL_CARD's corners, outline, ground and shadow, a column with 12 of padding; the header at
+ * its top, the footer at its foot, the answers in the room between (core's poll-grid-tile.ts). One button: it opens the poll.
+ */
+export const GRID_POLL_TILE = 'absolute inset-0 flex flex-col gap-1.5 min-w-0 overflow-hidden rounded-[14px] border shadow-sm hover:shadow-md transition-shadow '
+    + 'border-nature-200 dark:border-nature-800 bg-[var(--bg-card)] p-3 text-start cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500';
+
+/** The header row: the chips at the start, the author at the end, one line; each gives way with an ellipsis. */
+export const GRID_POLL_HEAD = 'shrink-0 flex items-center gap-2 min-w-0 overflow-hidden whitespace-nowrap';
+
+/** The question: the grid title's type, 14/800, clamped (2 lines, 3 when there are only 2 answers). */
+export const GRID_POLL_QUESTION = 'm-0 shrink-0 text-sm font-extrabold leading-snug break-words';
+
+/**
+ * The answers' room: what is left between the question and the footer. Rows grow to fill it, each up to 1.6 x its one line
+ * (core's POLL_GRID_TILE.rowGrow), then spread evenly, so there is never a band of blank in it.
+ */
+export const GRID_POLL_ANSWERS = 'flex-1 min-h-0 flex flex-col justify-evenly gap-1 overflow-hidden';
+
+/** One answer row: one line, at least 1.375rem, at most 2.2rem (1.6 x), the result bar behind it. */
+export const GRID_POLL_ROW = 'relative flex-1 min-h-[1.375rem] max-h-[2.2rem] min-w-0 flex items-center gap-2 px-2 rounded-lg overflow-hidden border text-xs leading-snug';
+
+/** The row's outline: the card's own, or the poll ink round the member's own answer. */
+export const GRID_POLL_ROW_EDGE = {
+    open: 'border-nature-200 dark:border-nature-800',
+    chosen: 'border-bp-chip-poll-ink',
+} as const;
+
+/** The result bar: the poll's plum tint, as wide as the answer's share, from the row's start. */
+export const GRID_POLL_BAR = 'absolute inset-y-0 start-0 bg-bp-chip-poll-tint';
+
+/** The answer's words (one line, ending in "…"), its percentage at the end, never cut. */
+export const GRID_POLL_ANSWER = 'relative min-w-0 flex-1 truncate font-bold';
+export const GRID_POLL_PCT = 'relative shrink-0 font-black text-bp-chip-poll-ink';
+
+/** The footer: the turnout and the ballot at the start, what a tap does at the end, one line, at the tile's foot. */
+export const GRID_POLL_FOOT = 'shrink-0 mt-auto pt-1.5 border-t border-nature-100 dark:border-nature-800 flex items-center gap-2 min-w-0 whitespace-nowrap text-[11px] leading-snug';
+export const GRID_POLL_ACTION = 'ms-auto shrink-0 font-bold text-bp-chip-poll-ink';
 
 /** A grid tile's outer box: the list card's corners, border, ground and shadow, the photo on top, filling its cell. */
 const GRID_FRAME = 'relative flex flex-col h-full w-full min-w-0 overflow-hidden rounded-[14px] border shadow-sm';

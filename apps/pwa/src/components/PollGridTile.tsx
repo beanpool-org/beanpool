@@ -12,14 +12,20 @@
  *
  * The rules are core's (poll-grid-tile.ts) and the card's (PollCard's pollFacts / pollStatusWords): the percentages and the ✓
  * the card shows, a sealed poll's "You answered ✓", a closed poll's "See results ›". The answers' room is measured: as many
- * one-line rows as fit, the rest as "+N more"; and each shown answer's words, cut when they are wider than their row.
+ * one-line rows as fit, the rest as "+N more"; and each shown answer's words, cut when they are wider than their row. The
+ * percentage beside them always keeps the room of "100% ✓", so a vote never changes that measure (#2926 review).
+ *
+ * A vote cast here holds the tile as it was when the member pressed, until it is counted: while it is sent, or while the node's
+ * refusal shows, the rows stay the buttons they were (the keyboard stays on the one pressed) and the answers shown stay those
+ * shown. The refusal shows whole under the answers; when the tile is short of room for it, the head, then the question, then
+ * the footer give way, only as far as the rows still need to be a finger's press tall, and come back with the next vote.
  */
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
     POLL_GRID_TILE, pinLive, pollOtherLines, pollOtherOption, pollTileAction, pollTileAnswerLabel, pollTileAnswers, pollTileLabel, pollTileMore,
     pollTileOpenLabel, pollTilePressesFit, pollTileQuestionLines, pollTileRowGrow, pollTileRowsThatFit, pollTileSummary, pollTileVoteBlock, t,
-    POLL_TILE_PRESS,
+    POLL_TILE_PRESS, type PollTileVoteBlock,
 } from '@beanpool/core';
 import { type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -27,12 +33,15 @@ import { MemberAvatar } from './MemberAvatar';
 import { pollFacts, pollStatusWords, usePollVote } from './PollCard';
 import {
     CARD_INK, GRID_POLL_ACTION, GRID_POLL_ACTION_HERE, GRID_POLL_ANSWER, GRID_POLL_ANSWERS, GRID_POLL_BAR, GRID_POLL_CELL, GRID_POLL_FOOT, GRID_POLL_GHOST,
-    GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_NOTE, GRID_POLL_PCT, GRID_POLL_PRESS, GRID_POLL_QUESTION, GRID_POLL_ROW,
-    GRID_POLL_ROW_EDGE, GRID_POLL_ROW_MAX, GRID_POLL_TILE, chip, gridChip,
+    GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_NOTE, GRID_POLL_PCT, GRID_POLL_PCT_SHOWN, GRID_POLL_PRESS, GRID_POLL_QUESTION,
+    GRID_POLL_REFUSAL, GRID_POLL_ROW, GRID_POLL_ROW_EDGE, GRID_POLL_ROW_MAX, GRID_POLL_TILE, chip, gridChip,
 } from './market-card-shell';
 
 /** The clamp's class for 2 or 3 lines, written out whole so Tailwind builds both. */
 const CLAMP: Record<number, string> = { 2: 'line-clamp-2', 3: 'line-clamp-3' };
+
+/** What gives way to a refusal on a tile short of room for it, in order: the head, the question (and the note), the footer. */
+const GIVE_WAY = { head: 1, question: 2, foot: 3 } as const;
 
 interface PollGridTileProps {
     post: MarketplacePost;
@@ -88,11 +97,18 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
     useEffect(() => { setLivePost(post); }, [post]);
     const { votingOptionId, error, handleVote } = usePollVote(livePost, setLivePost, { identity, onVoteSuccess });
+    // A vote cast here, until it is counted: being sent, or refused and saying so.
+    const holding = Boolean(votingOptionId) || Boolean(error);
 
     const { openVote, isClosed, authorName, avatarSrc, options, totalVotes, sealed, answered } = pollFacts(livePost);
     const { ref, room } = useAnswersRoom();
-    const { answers, more } = pollTileAnswers(options, { totalVotes, userVotedOptionId: livePost.userVotedOptionId, sealed, fit: room.fit });
-    const block = pollTileVoteBlock({
+    // While a vote is held, the answers shown and whether the tile votes are those of the press: the refusal's own lines take
+    // room from the answers, and must not hide one behind "+N more" or turn the rows back into a tile that only opens.
+    const heldFit = useRef(room.fit);
+    if (!holding) heldFit.current = room.fit;
+    const fit = holding ? heldFit.current : room.fit;
+    const { answers, more } = pollTileAnswers(options, { totalVotes, userVotedOptionId: livePost.userVotedOptionId, sealed, fit });
+    const live = pollTileVoteBlock({
         closed: isClosed,
         canVote: Boolean(identity) && member,
         other: pollOtherOption(options) !== null,
@@ -103,7 +119,20 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
         cut: room.cut,
         pressesFit: pollTilePressesFit(room.height, answers.length, room.gap),
     });
+    const heldBlock = useRef<PollTileVoteBlock | null>(live);
+    if (!holding) heldBlock.current = live;
+    const block = holding ? heldBlock.current : live;
     const votable = block === null;
+
+    // A refusal on a tile short of room for it: how much gives way (GIVE_WAY), measured after each draw, one step at a time,
+    // until the rows are each a finger's press tall again. It is the refusal's own: a new one, or none, starts from nothing.
+    const [give, setGive] = useState<{ error: string | null; n: number }>({ error: null, n: 0 });
+    const giveWay = error && give.error === error ? give.n : 0;
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!error || !votable || !el || giveWay >= GIVE_WAY.foot) return;
+        if (!pollTilePressesFit(el.clientHeight, answers.length, room.gap)) setGive({ error, n: giveWay + 1 });
+    });
     // How far a row may grow: further for a short poll, so two answers still fill a wide tile. A row that votes is a finger's
     // press tall at least (the room was measured to hold every row at that height).
     const grow = pollTileRowGrow(answers.length + (more > 0 ? 1 : 0));
@@ -112,6 +141,8 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
     const action = pollTileAction({ closed: isClosed, answered, votable });
     const pinned = pinLive(livePost as any);
     const label = pollTileLabel({ question: livePost.title, answerCount: options.length, totalVotes, closed: isClosed });
+    // The widest the percentage and the ✓ can be: the room every row keeps for them (GRID_POLL_PCT).
+    const pctRoom = `${t('{rate}%', { rate: 100 })} ✓`;
     const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
@@ -135,11 +166,12 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
             <div
                 {...tileButton}
                 data-testid="poll-grid-tile"
+                data-poll={livePost.id}
                 data-votable={votable ? 'true' : 'false'}
                 data-vote-block={block ?? ''}
                 className={GRID_POLL_TILE}
             >
-                <div data-testid="poll-grid-head" className={GRID_POLL_HEAD} {...opens}>
+                {giveWay < GIVE_WAY.head && <div data-testid="poll-grid-head" className={GRID_POLL_HEAD} {...opens}>
                     <span className="flex items-center gap-1 min-w-0">
                         <span data-testid="poll-badge" className={chip('poll')}><span aria-hidden="true">🗳️ </span>{t('POLL')}</span>
                         <span data-testid="poll-status" className={gridChip('quiet')}>{pollStatusWords(livePost, isClosed)}</span>
@@ -150,11 +182,11 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
                         <MemberAvatar avatarUrl={avatarSrc} pubkey={livePost.authorPublicKey} callsign={authorName} size={18} className="shrink-0 border border-nature-200 dark:border-nature-700" />
                         <span className={`min-w-0 truncate text-xs font-bold ${CARD_INK.secondary}`}>{authorName}</span>
                     </span>
-                </div>
+                </div>}
 
-                <h3 dir="auto" data-testid="poll-grid-question" className={`${GRID_POLL_QUESTION} ${CLAMP[pollTileQuestionLines(options.length)]} ${CARD_INK.title}`} {...opens}>
+                {giveWay < GIVE_WAY.question && <h3 dir="auto" data-testid="poll-grid-question" className={`${GRID_POLL_QUESTION} ${CLAMP[pollTileQuestionLines(options.length)]} ${CARD_INK.title}`} {...opens}>
                     {livePost.title}
-                </h3>
+                </h3>}
 
                 <div ref={ref} data-testid="poll-grid-answers" data-fit={room.fit ?? ''} className={GRID_POLL_ANSWERS}>
                     {answers.map(a => {
@@ -164,8 +196,8 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
                             <>
                                 <span aria-hidden="true" className={GRID_POLL_BAR} style={{ width: `${a.pct}%` }} />
                                 <span dir="auto" data-testid="poll-grid-answer-words" className={`${GRID_POLL_ANSWER} ${CARD_INK.title}`}>{words}</span>
-                                <span className={GRID_POLL_PCT}>
-                                    {t('{rate}%', { rate: a.pct })}{a.chosen && <span data-testid="poll-grid-chosen"> ✓</span>}
+                                <span data-testid="poll-grid-pct" data-room={pctRoom} className={GRID_POLL_PCT}>
+                                    <span className={GRID_POLL_PCT_SHOWN}>{t('{rate}%', { rate: a.pct })}{a.chosen && <span data-testid="poll-grid-chosen"> ✓</span>}</span>
                                 </span>
                             </>
                         );
@@ -180,8 +212,8 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
                                     aria-label={pollTileAnswerLabel(words ?? '', a.pct)}
                                     aria-pressed={a.chosen}
                                     aria-busy={votingOptionId === optionId}
-                                    disabled={Boolean(votingOptionId)}
-                                    onClick={() => { void handleVote(optionId); }}
+                                    aria-disabled={votingOptionId ? true : undefined}
+                                    onClick={() => { if (!votingOptionId) void handleVote(optionId); }}
                                     style={press}
                                     className={`${row} ${edge} ${GRID_POLL_PRESS}`}
                                 >
@@ -202,30 +234,28 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
                     )}
                 </div>
 
+                {/* A vote the node refused: whole, under the answers, read out as it appears. */}
+                {error && <p role="alert" data-testid="poll-grid-error" className={GRID_POLL_REFUSAL}>{error}</p>}
+
                 {/* On the global community the card's own note, one line: a count there decides nothing (lib/informal-polls.ts). */}
-                {informal && (
+                {informal && giveWay < GIVE_WAY.question && (
                     <p data-testid="poll-informal-note" className={GRID_POLL_NOTE}>
                         <span aria-hidden="true">💬 </span>{t('An informal poll; it decides nothing')}
                     </p>
                 )}
 
-                <div data-testid="poll-grid-foot" className={GRID_POLL_FOOT} {...footButton}>
-                    {/* A vote the node refused says so where the turnout was, on the same one line, so nothing moves. */}
+                {giveWay < GIVE_WAY.foot && <div data-testid="poll-grid-foot" className={GRID_POLL_FOOT} {...footButton}>
                     {/* On a tile voted in place the turnout gives way first, then "Tap an answer to vote"; "Open poll ›" never. */}
-                    {error ? (
-                        <span role="alert" data-testid="poll-grid-error" className={`min-w-0 truncate font-semibold text-red-600 dark:text-red-400${action.hint ? ' shrink-[100]' : ''}`}>{error}</span>
-                    ) : (
-                        <span data-testid="poll-grid-summary" className={`min-w-0 truncate font-semibold ${CARD_INK.secondary}${action.hint ? ' shrink-[100]' : ''}`}>
-                            {pollTileSummary({ totalVotes, closed: isClosed, openVote })}
-                        </span>
-                    )}
+                    <span data-testid="poll-grid-summary" className={`min-w-0 truncate font-semibold ${CARD_INK.secondary}${action.hint ? ' shrink-[100]' : ''}`}>
+                        {pollTileSummary({ totalVotes, closed: isClosed, openVote })}
+                    </span>
                     <span data-testid="poll-grid-action" data-kind={action.kind} className={action.hint ? GRID_POLL_ACTION_HERE : GRID_POLL_ACTION}>
                         {action.hint && <span data-testid="poll-grid-hint" className="min-w-0 truncate">{action.hint}</span>}
                         {/* The separator stays whole when the hint gives way: "Tap an answer to v… · Open poll ›". */}
                         {action.hint && <span aria-hidden="true" className="shrink-0 whitespace-pre">{' · '}</span>}
                         <span className="shrink-0">{action.words}</span>
                     </span>
-                </div>
+                </div>}
             </div>
         </div>
     );

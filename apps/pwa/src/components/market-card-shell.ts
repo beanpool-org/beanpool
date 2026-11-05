@@ -199,8 +199,10 @@ export const GRID_POLL_ROW_MAX: Record<number, string> = { 1.6: 'max-h-[2.2rem]'
  * An answer row that votes (a tile voted in place, core's pollTileVoteBlock): a button laid out as the row (the start of the
  * line, its pointer), its outline in the poll ink under a finger or the keyboard, and the focus ring inside the row, since the
  * answers' room clips what is outside it. Its height (a finger's press, POLL_TILE_PRESS, at least) is set where it is drawn.
+ * While a vote is sent it stays a button the keyboard is on (aria-disabled, the press ignored), never `disabled`, which drops
+ * the focus to the page (#2926 review).
  */
-export const GRID_POLL_PRESS = 'text-start cursor-pointer hover:border-bp-chip-poll-ink disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-nature-500';
+export const GRID_POLL_PRESS = 'text-start cursor-pointer hover:border-bp-chip-poll-ink aria-disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-nature-500';
 
 /** The row's outline: the card's own, or the poll ink round the member's own answer. */
 export const GRID_POLL_ROW_EDGE = {
@@ -213,7 +215,21 @@ export const GRID_POLL_BAR = 'absolute inset-y-0 start-0 bg-bp-chip-poll-tint';
 
 /** The answer's words (one line, ending in "…"), its percentage at the end, never cut. */
 export const GRID_POLL_ANSWER = 'relative min-w-0 flex-1 truncate font-bold';
-export const GRID_POLL_PCT = 'relative shrink-0 font-black text-bp-chip-poll-ink';
+/**
+ * The percentage, and the ✓ on the member's own answer. Its room is the widest it can take, "100% ✓" (its `data-room`, drawn
+ * invisible in the same grid cell), on every row, voted or not, so a vote never narrows the answer's words: a 35-character
+ * answer whole at 320 px before a vote was cut after it, and the tile stopped voting (#2926 review). GRID_POLL_PCT_SHOWN is
+ * what is seen, at the end of that room.
+ */
+export const GRID_POLL_PCT = 'relative shrink-0 grid justify-items-end font-black text-bp-chip-poll-ink after:invisible after:content-[attr(data-room)] after:[grid-area:1/1]';
+export const GRID_POLL_PCT_SHOWN = '[grid-area:1/1]';
+
+/**
+ * A vote the node refused, under the answers: whole, on as many lines as it takes (never cut, #2926 review), in the card's own
+ * red. While it shows, the tile's head, then its question, then its footer give way to it, only as far as the rows still need
+ * to be a finger's press tall (PollGridTile).
+ */
+export const GRID_POLL_REFUSAL = 'm-0 shrink-0 min-w-0 whitespace-normal break-words text-[11px] font-semibold leading-snug text-red-600 dark:text-red-400';
 
 /** The global community's note ("An informal poll; it decides nothing"), the card's own words on one line, in the poll ink. */
 export const GRID_POLL_NOTE = 'm-0 shrink-0 min-w-0 truncate text-[11px] font-semibold leading-snug text-bp-chip-poll-ink';

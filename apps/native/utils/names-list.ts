@@ -29,6 +29,7 @@
  *
  * A confirmation is a fact about a member, never a tier, and in this version it gates nothing.
  */
+import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, normaliseNamesEntryText, namesKeyCheckMatches,
@@ -40,7 +41,7 @@ import {
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
 import { communityAddress } from './push-pins';
-import type { BeanPoolIdentity } from './identity';
+import { KEY_ITEM_OPTIONS, type BeanPoolIdentity } from './identity';
 import type { HealthExceptionsBody, HealthLogLine } from './community-health';
 
 export const NAMES_PATH = '/api/names';
@@ -259,7 +260,9 @@ export interface VoucherSummaryRow {
     level: number;
     belowZero: number;
     writtenOff: number;
-    passedOn: { amount: number; people: number };
+    /** Room rooted at this voucher that moved on past the people they vouched for (§5 tracking (a)): how much, held by how
+     *  many people, and how much of it is held by someone below zero now (engine/vouchers.ts passedOnOf). */
+    passedOn: { amount: number; people: number; belowZero: number };
     invitesWithVouch: number;
     trading: { withOthers: number; insideOnly: number };
 }
@@ -306,8 +309,11 @@ export interface VoucherCardData extends VoucherSummaryRow {
     canChange: boolean;
 }
 
+/** The vouchers block (GET /api/names/vouchers): the node answers it only for owners and credit-committee admins. */
+export interface VouchersBlockBody { vouchers: VoucherSummaryRow[]; settings: VoucherSettings }
+
 export const fetchVouchers = (anchor: string, id: BeanPoolIdentity) =>
-    call<{ vouchers: VoucherSummaryRow[]; settings: VoucherSettings }>(anchor, id, 'GET', `${NAMES_PATH}/vouchers`);
+    call<VouchersBlockBody>(anchor, id, 'GET', `${NAMES_PATH}/vouchers`);
 
 export const fetchVoucherCard = (anchor: string, id: BeanPoolIdentity, memberPubkey: string) =>
     call<VoucherCardData>(anchor, id, 'GET', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}`);
@@ -360,14 +366,8 @@ export interface NamesPinStore {
 export const DEVICE_NAMES_STORE: NamesPinStore = {
     getItem: (k) => AsyncStorage.getItem(k),
     setItem: (k, v) => AsyncStorage.setItem(k, v),
-    getSecret: async (name) => {
-        const SecureStore = await import('expo-secure-store');
-        return SecureStore.getItemAsync(name);
-    },
-    setSecret: async (name, value) => {
-        const SecureStore = await import('expo-secure-store');
-        return SecureStore.setItemAsync(name, value, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
-    },
+    getSecret: (name) => SecureStore.getItemAsync(name),
+    setSecret: (name, value) => SecureStore.setItemAsync(name, value, KEY_ITEM_OPTIONS),
 };
 
 /**
@@ -918,9 +918,6 @@ export interface NamesOpened {
      * the card's estimate, before anything is read.
      */
     lost: number;
-    /** The community's vouchers and their numbers (vouchers block: owners and committee admins). */
-    vouchers?: VoucherSummaryRow[] | null;
-    voucherSettings?: VoucherSettings | null;
 }
 
 const callsignIn = (state: Pick<NamesState, 'callsigns' | 'admins'>, key: string): string =>
@@ -1241,18 +1238,13 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
 async function readTheList(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, opened: NamesResult<NamesOpened>): Promise<NamesResult<NamesOpened>> {
     if (!opened.ok || opened.value.plan.kind !== 'ready') return opened;
     const o = opened.value;
-    const [got, vGot] = await Promise.all([
-        fetchNamesList(anchor, identity, false, o.state.counts?.entries ?? 2000),
-        fetchVouchers(anchor, identity),
-    ]);
+    const got = await fetchNamesList(anchor, identity, false, o.state.counts?.entries ?? 2000);
     if (!got.ok) {
         // Nothing was said (round 15, :598): this open's words are kept for the next one, on the pin's chain.
         await withPin(identity.publicKey, anchor, () => keepUnsaid(store, identity.publicKey, anchor, o.notices));
         return got;
     }
     const list = got.value;
-    const vouchers = vGot.ok ? vGot.value.vouchers : null;
-    const voucherSettings = vGot.ok ? vGot.value.settings : null;
     return withPin(identity.publicKey, anchor, async (): Promise<NamesResult<NamesOpened>> => {
         await forgetSaid(store, identity.publicKey, anchor, o.notices);
         // Names this phone saw that are neither on the node nor deleted by an admin: a loss, said with its count.
@@ -1262,7 +1254,7 @@ async function readTheList(anchor: string, identity: BeanPoolIdentity, store: Na
         if (!now) {
             // The pin couldn't be read again (round 15, :690): nothing is saved, never the pin as the open had it, which would
             // undo a Remove, a check or a new key saved during the read. `seen` stays; the next ready read counts any loss.
-            return { ok: true, value: { ...o, list, lost: 0, vouchers, voucherSettings } };
+            return { ok: true, value: { ...o, list, lost: 0 } };
         }
         const before = new Set(o.pin.seen ?? []);
         const since = (now.seen ?? []).filter((id) => !before.has(id));
@@ -1276,7 +1268,6 @@ async function readTheList(anchor: string, identity: BeanPoolIdentity, store: Na
                 ...o, pin: after.pin, ring: namesRingKeys(after.pin), list, lost: gone,
                 notices: gone ? [...o.notices, NAMES_COPY.lostEntries(gone)] : o.notices,
                 toCheck: o.state.admins.filter((a) => a.pubkey !== identity.publicKey && !after.pin.trusted.includes(a.pubkey)),
-                vouchers, voucherSettings,
             },
         };
     });
@@ -1490,16 +1481,20 @@ export function holdersCheckedHere(state: Pick<NamesState, 'communityId' | 'gene
     return holders.filter((h) => justChecked.includes(h.toLowerCase()));
 }
 
-/** Every entry, opened where this phone can; open ones by name, then the locked ones. Vouchers sort first (§10). */
+/**
+ * Every entry, opened where this phone can; open ones by name, then the locked ones. With the vouchers block (the node's
+ * answer for the credit committee), each voucher's entry carries its row and the vouchers sort first (§10).
+ */
 export function openEntries(
     list: NamesListBody,
-    opened: Pick<NamesOpened, 'ring' | 'pin' | 'generations' | 'state'> & Partial<Pick<NamesOpened, 'justChecked'>> & { vouchers?: VoucherSummaryRow[] | null },
+    opened: Pick<NamesOpened, 'ring' | 'pin' | 'generations' | 'state'> & Partial<Pick<NamesOpened, 'justChecked'>>,
+    vouchers: VoucherSummaryRow[] | null = null,
 ): OpenedEntry[] {
     const live = new Map<string, ConfirmationRow>();
     for (const c of list.confirmations ?? []) if (c.status !== 'revoked') live.set(c.entryId, c);
     const vouchersByEntry = new Map<string, VoucherSummaryRow>();
     const vouchersByMember = new Map<string, VoucherSummaryRow>();
-    for (const v of opened.vouchers ?? []) {
+    for (const v of vouchers ?? []) {
         if (v.entryId) vouchersByEntry.set(v.entryId, v);
         vouchersByMember.set(v.memberPubkey, v);
     }

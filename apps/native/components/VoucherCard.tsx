@@ -1,20 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { t, tn, formatNumber, formatDate } from '@beanpool/core';
+import { t, tn, formatNumber, formatDate, VOUCHER_BUDGET_MAX } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import {
     fetchVoucherCard, setVoucherBudget, stopNamesVoucher,
     type VoucherCardData, type OpenedEntry,
 } from '../utils/names-list';
 import type { BeanPoolIdentity } from '../utils/identity';
+import {
+    acceptsBudgetLevel, nearestBudgetLevel, budgetLevelUp, budgetLevelDown, historyLineWords, voucherCardSubtitle,
+} from '../utils/voucher-rules';
 
 export interface VoucherCardProps {
     anchorUrl: string;
     identity: BeanPoolIdentity;
     memberPubkey: string;
     initialCard?: VoucherCardData | null;
+    /** The names list's entry for this voucher, when opened from the list: its name and its confirmation (§5's second line). */
     entry?: OpenedEntry | null;
+    /** A member's callsign from their key (the names list's own lookup), for who confirmed the entry. */
+    nameOf?: (pubkey: string) => string;
     onClose?: () => void;
     onVoucherUpdated?: (updated: VoucherCardData) => void;
 }
@@ -26,7 +32,7 @@ function dateWords(iso: string | null | undefined, pattern: 'day-month' | 'day-m
     return d && Number.isFinite(d.getTime()) ? formatDate(d, pattern) : '';
 }
 
-export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, entry, onClose, onVoucherUpdated }: VoucherCardProps) {
+export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, entry, nameOf, onClose, onVoucherUpdated }: VoucherCardProps) {
     const { colors } = useTheme();
     const [card, setCard] = useState<VoucherCardData | null>(initialCard ?? null);
     const [loading, setLoading] = useState(!initialCard);
@@ -35,7 +41,9 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
     const [notice, setNotice] = useState<string | null>(null);
     const [showPeople, setShowPeople] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
-    const [targetLevel, setTargetLevel] = useState<number>(initialCard ? initialCard.level : 1000);
+    // Where "Set budget to" starts: the nearest level the node takes (§10), never the card's own level when it is off the
+    // 100-step grid, as it is after most landed vouches (level = left + held).
+    const [targetLevel, setTargetLevel] = useState<number>(nearestBudgetLevel(initialCard?.level, initialCard?.held ?? 0));
 
     const loadCard = useCallback(async () => {
         if (!anchorUrl || !identity || !memberPubkey) return;
@@ -45,7 +53,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
             const res = await fetchVoucherCard(anchorUrl, identity, memberPubkey);
             if (res.ok) {
                 setCard(res.value);
-                setTargetLevel(res.value.level);
+                setTargetLevel(nearestBudgetLevel(res.value.level, res.value.held));
             } else {
                 setError(res.message);
             }
@@ -59,12 +67,12 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
             void loadCard();
         } else {
             setCard(initialCard);
-            setTargetLevel(initialCard.level);
+            setTargetLevel(nearestBudgetLevel(initialCard.level, initialCard.held));
         }
     }, [initialCard, loadCard]);
 
     const handleSetBudget = async () => {
-        if (!card || busy) return;
+        if (!card || busy || !acceptsBudgetLevel(targetLevel, card.held)) return;
         setBusy(true);
         setError(null);
         setNotice(null);
@@ -72,6 +80,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
             const res = await setVoucherBudget(anchorUrl, identity, card.memberPubkey, targetLevel);
             if (res.ok) {
                 setCard((prev) => ({ ...res.value, canChange: prev?.canChange ?? true }));
+                setTargetLevel(nearestBudgetLevel(res.value.level, res.value.held));
                 onVoucherUpdated?.(res.value);
                 setNotice(t('Budget set to {level} Beans.', { level: formatNumber(targetLevel) }));
             } else {
@@ -231,15 +240,12 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
     }
 
     const titleName = entry?.text?.name?.trim() || (card.callsign ? `@${card.callsign}` : t('Voucher'));
-    const confirmedPart = card.callsign ? `@${card.callsign}` : '';
-    const madePart = card.source === 'role'
-        ? t('made a voucher by role')
-        : (card.madeByCallsign
-            ? t('made a voucher by @{name}, {date}', { name: card.madeByCallsign, date: dateWords(card.madeAt, 'day-month') })
-            : '');
-    const subtitleLine = [confirmedPart, madePart].filter(Boolean).join(' · ');
+    const subtitleLine = voucherCardSubtitle(card, entry?.confirmation, nameOf);
 
-    const minAllowed = Math.max(100, Math.ceil((card.held || 0) / 100) * 100);
+    // The set-to control offers only levels the node takes: on the 100-step grid, at or above held, at most 2,000.
+    const stepDown = budgetLevelDown(targetLevel, card.held);
+    const stepUp = budgetLevelUp(targetLevel, card.held);
+    const canSet = acceptsBudgetLevel(targetLevel, card.held) && targetLevel !== card.level;
 
     return (
         <View style={styles.container}>
@@ -299,9 +305,10 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                     </Text>
                     <Text style={styles.boxLine}>
                         {card.passedOn && card.passedOn.amount > 0
-                            ? tn(card.passedOn.people, 'Passed on: {amount} of their {vouched} to {n} person', 'Passed on: {amount} of their {vouched} to {n} people', {
+                            ? tn(card.passedOn.people, 'Passed on: {amount} of their {vouched} to {n} person · {belowZero} of it below zero', 'Passed on: {amount} of their {vouched} to {n} people · {belowZero} of it below zero', {
                                 amount: formatNumber(card.passedOn.amount),
                                 vouched: formatNumber(card.vouched),
+                                belowZero: formatNumber(card.passedOn.belowZero ?? 0),
                             })
                             : t('Passed on: 0')}
                     </Text>
@@ -316,7 +323,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
 
                             <View style={styles.levelsRow}>
                                 {QUICK_LEVELS.map((lvl) => {
-                                    const disabled = lvl < minAllowed || lvl > 2000;
+                                    const disabled = !acceptsBudgetLevel(lvl, card.held) || lvl > VOUCHER_BUDGET_MAX;
                                     const active = targetLevel === lvl;
                                     return (
                                         <Pressable
@@ -337,9 +344,9 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
 
                             <View style={styles.stepperRow}>
                                 <Pressable
-                                    style={[styles.stepperBtn, (targetLevel <= minAllowed || busy) && styles.disabled]}
-                                    onPress={() => setTargetLevel((l) => Math.max(minAllowed, l - 100))}
-                                    disabled={targetLevel <= minAllowed || busy}
+                                    style={[styles.stepperBtn, (stepDown === null || busy) && styles.disabled]}
+                                    onPress={() => { if (stepDown !== null) setTargetLevel(stepDown); }}
+                                    disabled={stepDown === null || busy}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Decrease by 100')}
                                 >
@@ -349,9 +356,9 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                                     {t('Set budget to: {level}', { level: formatNumber(targetLevel) })}
                                 </Text>
                                 <Pressable
-                                    style={[styles.stepperBtn, (targetLevel >= 2000 || busy) && styles.disabled]}
-                                    onPress={() => setTargetLevel((l) => Math.min(2000, l + 100))}
-                                    disabled={targetLevel >= 2000 || busy}
+                                    style={[styles.stepperBtn, (stepUp === null || busy) && styles.disabled]}
+                                    onPress={() => { if (stepUp !== null) setTargetLevel(stepUp); }}
+                                    disabled={stepUp === null || busy}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Increase by 100')}
                                 >
@@ -360,9 +367,9 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                             </View>
 
                             <Pressable
-                                style={[styles.actionBtn, busy && styles.disabled]}
+                                style={[styles.actionBtn, (busy || !canSet) && styles.disabled]}
                                 onPress={() => { void handleSetBudget(); }}
-                                disabled={busy}
+                                disabled={busy || !canSet}
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Set budget to {level}', { level: formatNumber(targetLevel) })}
                             >
@@ -454,36 +461,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                         ) : (
                             <View style={styles.subList}>
                                 {card.history.map((h, idx) => {
-                                    const dateStr = dateWords(h.at, 'day-month');
-                                    const actorText = h.actorCallsign ? `@${h.actorCallsign}` : (h.actor.startsWith('migration:') ? t('migration') : h.actor);
-                                    let line: string;
-                                    if (h.kind === 'grant') {
-                                        line = t('+{amount} budget, made a voucher by {actor}, {date}', { amount: formatNumber(h.amount), actor: actorText, date: dateStr });
-                                    } else if (h.kind === 'top_up') {
-                                        line = t('+{amount} top-up by {actor}, {date}', { amount: formatNumber(h.amount), actor: actorText, date: dateStr });
-                                    } else if (h.kind === 'lower') {
-                                        line = t('−{amount} lower by {actor}, {date}', { amount: formatNumber(-h.amount), actor: actorText, date: dateStr });
-                                    } else if (h.kind === 'hold') {
-                                        if (h.for === 'profile' && h.person) {
-                                            line = t('−{amount} held for @{name}, {date}', { amount: formatNumber(-h.amount), name: h.person.callsign, date: dateStr });
-                                        } else {
-                                            line = t('−{amount} held for an invite, {date}', { amount: formatNumber(-h.amount), date: dateStr });
-                                        }
-                                    } else if (h.kind === 'return') {
-                                        if (h.why === 'expired') {
-                                            line = t('+{amount} back, invite expired, {date}', { amount: formatNumber(h.amount), date: dateStr });
-                                        } else if (h.why === 'stopped') {
-                                            line = t('+{amount} back, budget stopped, {date}', { amount: formatNumber(h.amount), date: dateStr });
-                                        } else if (h.why === 'not_landed') {
-                                            line = t('+{amount} back, vouch didn’t land, {date}', { amount: formatNumber(h.amount), date: dateStr });
-                                        } else {
-                                            line = t('+{amount} back, {date}', { amount: formatNumber(h.amount), date: dateStr });
-                                        }
-                                    } else if (h.kind === 'stop') {
-                                        line = t('Budget stopped by {actor}, {date}', { actor: actorText, date: dateStr });
-                                    } else {
-                                        line = `${h.kind}: ${formatNumber(h.amount)} (${dateStr})`;
-                                    }
+                                    const line = historyLineWords(h);
                                     return (
                                         <View key={`${h.kind}-${h.at}-${idx}`} style={styles.itemRow}>
                                             <Text style={styles.itemDetail}>{line}</Text>

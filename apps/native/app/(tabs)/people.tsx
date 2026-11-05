@@ -52,8 +52,10 @@ import { communityListEmpty, communityListNote, joinedWords, type CommunityListN
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { welcomeLineWords } from '../../components/welcome/welcome-lines';
 import { DoorRuleLine } from '../../components/DoorRuleLine';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchVouchers, type VoucherSummaryRow, type VoucherSettings } from '../../utils/names-list';
 import { VoucherCard } from '../../components/VoucherCard';
+import { VouchersBlock } from '../../components/VouchersBlock';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -176,25 +178,6 @@ export default function PeopleScreen() {
             position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: 8,
             backgroundColor: colors.feedback.warning.solid, justifyContent: 'center', alignItems: 'center',
             borderWidth: 2, borderColor: colors.text.inverse,
-        },
-
-        // Vouchers block for owners and committee admins (§11)
-        vouchersBlock: {
-            marginBottom: 24, padding: 16, borderRadius: 14, backgroundColor: colors.surface.card,
-            borderWidth: 1, borderColor: colors.border.default,
-        },
-        voucherRow: {
-            minHeight: 48, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default,
-            justifyContent: 'center',
-        },
-        voucherRowText: {
-            fontSize: 14, lineHeight: 20, color: colors.text.body, fontWeight: '500',
-        },
-        voucherAddRow: {
-            minHeight: 48, paddingTop: 14, justifyContent: 'center',
-        },
-        voucherAddText: {
-            fontSize: 15, fontWeight: '700', color: colors.brand.primary,
         },
     }));
 
@@ -1290,47 +1273,13 @@ export default function PeopleScreen() {
 
                             {(invitesPreview || (makesInvites && mayInvite)) && (
                             <>
-                            {/* Vouchers block: owners and credit-committee admins (§11) */}
+                            {/* Vouchers block (§11): only with the node's answer to GET /api/names/vouchers (owners and committee admins) */}
                             {vouchersData && (
-                                <View style={styles.vouchersBlock} testID="vouchers-block">
-                                    <Text style={styles.sectionHeader}>{t('Vouchers')}</Text>
-                                    <Text style={styles.sectionDesc}>
-                                        {t('Members with a budget to vouch for the people they invite.')}
-                                    </Text>
-                                    {vouchersData.vouchers.map((v) => (
-                                        <Pressable
-                                            key={v.memberPubkey}
-                                            style={styles.voucherRow}
-                                            onPress={() => setSelectedVoucherPubkey(v.memberPubkey)}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={t('{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›', {
-                                                name: v.callsign,
-                                                left: formatNumber(v.left),
-                                                budget: formatNumber(v.level),
-                                                vouched: formatNumber(v.peopleVouched),
-                                                belowZero: formatNumber(v.belowZero),
-                                            })}
-                                        >
-                                            <Text style={styles.voucherRowText}>
-                                                {t('{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›', {
-                                                    name: v.callsign,
-                                                    left: formatNumber(v.left),
-                                                    budget: formatNumber(v.level),
-                                                    vouched: formatNumber(v.peopleVouched),
-                                                    belowZero: formatNumber(v.belowZero),
-                                                })}
-                                            </Text>
-                                        </Pressable>
-                                    ))}
-                                    <Pressable
-                                        style={styles.voucherAddRow}
-                                        onPress={() => router.push('/names-list')}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={t('+ Make someone a voucher')}
-                                    >
-                                        <Text style={styles.voucherAddText}>{t('+ Make someone a voucher')}</Text>
-                                    </Pressable>
-                                </View>
+                                <VouchersBlock
+                                    vouchers={vouchersData.vouchers}
+                                    onOpen={setSelectedVoucherPubkey}
+                                    onMakeVoucher={() => router.push('/names-list')}
+                                />
                             )}
 
                             {/* GENERATE INVITE SECTION */}
@@ -1548,20 +1497,18 @@ export default function PeopleScreen() {
             </KeyboardAvoidingView>
 
             <Modal visible={!!selectedVoucherPubkey} animationType="slide" onRequestClose={() => setSelectedVoucherPubkey(null)}>
-                <View style={{ flex: 1, backgroundColor: colors.surface.page }}>
+                {/* A full-screen iOS Modal draws under the status bar: inside the safe area, as names-list.tsx's modals are. */}
+                <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface.page }} edges={['top', 'left', 'right', 'bottom']} testID="voucher-card-modal">
                     {anchorUrl && identity && selectedVoucherPubkey && (
                         <VoucherCard
                             anchorUrl={anchorUrl}
                             identity={identity}
                             memberPubkey={selectedVoucherPubkey}
                             onClose={() => setSelectedVoucherPubkey(null)}
-                            onVoucherUpdated={async () => {
-                                const res = await fetchVouchers(anchorUrl, identity);
-                                if (res.ok) setVouchersData(res.value);
-                            }}
+                            onVoucherUpdated={() => { void reloadVouchers(); }}
                         />
                     )}
-                </View>
+                </SafeAreaView>
             </Modal>
         </View>
     );

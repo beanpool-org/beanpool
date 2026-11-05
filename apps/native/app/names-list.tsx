@@ -41,10 +41,13 @@ import {
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmationLimit, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
-    inviteForNamesEntry, readBoundInvites, firstSentence, makeNamesVoucher,
-    type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
+    inviteForNamesEntry, readBoundInvites, firstSentence, makeNamesVoucher, fetchVouchers,
+    type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow, type VouchersBlockBody,
 } from '../utils/names-list';
 import { VoucherCard } from '../components/VoucherCard';
+import {
+    canMakeVoucher, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers, nearestBudgetLevel, budgetLevelUp, budgetLevelDown,
+} from '../utils/voucher-rules';
 import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, type BoundInvite } from '../utils/names-invite';
 import { makeOfflineTicket } from '../utils/member-statements';
 import {
@@ -114,7 +117,11 @@ export default function NamesListScreen() {
     const [mode, setMode] = useState<Mode>({ kind: 'list' });
     const [filter, setFilter] = useState<'all' | 'vouchers'>('all');
     const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
-    const [makeVoucherAmount, setMakeVoucherAmount] = useState(1000);
+    const [makeVoucherAmount, setMakeVoucherAmount] = useState(() => nearestBudgetLevel(null));
+    // The vouchers block, as the node answers GET /api/names/vouchers: it answers only owners and credit-committee admins,
+    // so having it IS being on the committee (null: refused, or not asked yet). Kept apart from `opened`, which the list's
+    // own actions replace, so a save never drops it.
+    const [voucherBlock, setVoucherBlock] = useState<VouchersBlockBody | null>(null);
     const [query, setQuery] = useState('');
     const [memberQuery, setMemberQuery] = useState('');
     const [name, setName] = useState('');
@@ -181,7 +188,9 @@ export default function NamesListScreen() {
             const url = await getAnchorUrl();
             if (!url) { setError(t('This phone isn’t connected to a community.')); return; }
             setAnchor(url);
-            await take(url, await openNamesList(url, identity, STORE));
+            const [result, vouchers] = await Promise.all([openNamesList(url, identity, STORE), fetchVouchers(url, identity)]);
+            setVoucherBlock(vouchers.ok ? vouchers.value : null);
+            await take(url, result);
         } finally {
             loadingRef.current = false;
             setLoading(false);
@@ -194,18 +203,11 @@ export default function NamesListScreen() {
     const state = opened?.state ?? null;
     const plan = opened?.plan ?? null;
     const list = opened?.list ?? null;
-    const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened) : []), [opened]);
+    const vouchers = voucherBlock?.vouchers ?? null;
+    const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened, vouchers) : []), [opened, vouchers]);
     const shown = useMemo(() => filterEntries(entries, query), [entries, query]);
-    const isCommittee = !!(opened?.vouchers !== null && opened?.vouchers !== undefined);
-    const roleVouchersWithoutEntry = useMemo(() => {
-        if (!opened?.vouchers) return [];
-        return opened.vouchers.filter((v) => !entries.some((e) => e.voucher?.memberPubkey === v.memberPubkey || e.confirmation?.memberPubkey === v.memberPubkey));
-    }, [opened?.vouchers, entries]);
-    const filteredRoleVouchers = useMemo(() => {
-        const q = query.trim().toLocaleLowerCase();
-        if (!q) return roleVouchersWithoutEntry;
-        return roleVouchersWithoutEntry.filter((rv) => (rv.callsign || '').toLocaleLowerCase().includes(q));
-    }, [roleVouchersWithoutEntry, query]);
+    const isCommittee = voucherBlock !== null;
+    const filteredRoleVouchers = useMemo(() => filterRoleVouchers(roleVouchersWithoutEntry(vouchers, entries), query), [vouchers, entries, query]);
     const filteredShown = useMemo(() => {
         if (filter === 'vouchers') {
             return shown.filter((e) => !!e.voucher);
@@ -820,12 +822,12 @@ export default function NamesListScreen() {
                                 <Text style={styles.entryNote}>{r.detail}</Text>
                             </View>
                         ))}
-                        {opened?.vouchers && (
+                        {vouchers && (
                             <>
                                 <Text style={styles.label} accessibilityRole="header">{t('VOUCHERS')}</Text>
                                 <Text style={styles.hint}>{t('Members who vouch for new joiners, and how much of their vouched credit was written off.')}</Text>
-                                {opened.vouchers.length === 0 ? <Text style={styles.hint}>{t('Nobody has a voucher budget.')}</Text> : null}
-                                {[...opened.vouchers].sort((a, b) => (b.writtenOff || 0) - (a.writtenOff || 0)).map((v) => (
+                                {vouchers.length === 0 ? <Text style={styles.hint}>{t('Nobody has a voucher budget.')}</Text> : null}
+                                {[...vouchers].sort((a, b) => (b.writtenOff || 0) - (a.writtenOff || 0)).map((v) => (
                                     <View key={v.memberPubkey} style={styles.entry}>
                                         <Text style={styles.entryName}>{callsignOf(v.memberPubkey) ? `@${callsignOf(v.memberPubkey)}` : v.callsign}</Text>
                                         <Text style={styles.entryNote}>
@@ -880,9 +882,9 @@ export default function NamesListScreen() {
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginVertical: 16 }}>
                     <Pressable
-                        style={[styles.smallBtn, (makeVoucherAmount <= 100 || off) && styles.disabled]}
-                        onPress={() => setMakeVoucherAmount((a) => Math.max(100, a - 100))}
-                        disabled={makeVoucherAmount <= 100 || off}
+                        style={[styles.smallBtn, (budgetLevelDown(makeVoucherAmount) === null || off) && styles.disabled]}
+                        onPress={() => setMakeVoucherAmount((a) => budgetLevelDown(a) ?? a)}
+                        disabled={budgetLevelDown(makeVoucherAmount) === null || off}
                         accessibilityRole="button"
                         accessibilityLabel={t('Decrease budget by 100')}
                     >
@@ -892,9 +894,9 @@ export default function NamesListScreen() {
                         {t('{amount} Beans', { amount: formatNumber(makeVoucherAmount) })}
                     </Text>
                     <Pressable
-                        style={[styles.smallBtn, (makeVoucherAmount >= 2000 || off) && styles.disabled]}
-                        onPress={() => setMakeVoucherAmount((a) => Math.min(2000, a + 100))}
-                        disabled={makeVoucherAmount >= 2000 || off}
+                        style={[styles.smallBtn, (budgetLevelUp(makeVoucherAmount) === null || off) && styles.disabled]}
+                        onPress={() => setMakeVoucherAmount((a) => budgetLevelUp(a) ?? a)}
+                        disabled={budgetLevelUp(makeVoucherAmount) === null || off}
                         accessibilityRole="button"
                         accessibilityLabel={t('Increase budget by 100')}
                     >
@@ -1041,8 +1043,8 @@ export default function NamesListScreen() {
                     <Text>{tn(state.counts.confirmed, '{n} confirmed', '{n} confirmed')}</Text>
                     {state.counts.awaitingSecond ? <Text>{' · '}</Text> : null}
                     {state.counts.awaitingSecond ? <Text>{tn(state.counts.awaitingSecond, '{n} waiting for a second admin', '{n} waiting for a second admin')}</Text> : null}
-                    {opened?.vouchers ? <Text>{' · '}</Text> : null}
-                    {opened?.vouchers ? <Text>{tn(opened.vouchers.length, '{n} voucher', '{n} vouchers')}</Text> : null}
+                    {vouchers ? <Text>{' · '}</Text> : null}
+                    {vouchers ? <Text>{tn(vouchers.length, '{n} voucher', '{n} vouchers')}</Text> : null}
                 </Text>
                 {filteredShown.map((e) => {
                     const acts = e.confirmation ? confirmationActions(e.confirmation, identity?.publicKey ?? '') : null;
@@ -1078,10 +1080,10 @@ export default function NamesListScreen() {
                             ))}
                             <View style={styles.buttonRow}>
                                 {e.voucher ? btn(t('See voucher card ›'), () => setSelectedVoucherPubkey(e.voucher!.memberPubkey), 'small') : null}
-                                {!e.voucher && isCommittee && e.confirmation?.status === 'confirmed' && e.confirmation.memberPubkey !== identity?.publicKey
+                                {canMakeVoucher(e, isCommittee, identity?.publicKey) && e.confirmation
                                     ? btn(t('Make a voucher'), () => {
-                                        setMakeVoucherAmount(opened?.voucherSettings?.voucherBudget ?? 1000);
-                                        setMode({ kind: 'make_voucher', entry: e, memberPubkey: e.confirmation!.memberPubkey, callsign: e.confirmation!.callsign || callsignOf(e.confirmation!.memberPubkey) || e.text?.name || '' });
+                                        setMakeVoucherAmount(nearestBudgetLevel(voucherBlock?.settings?.voucherBudget));
+                                        setMode({ kind: 'make_voucher', entry: e, memberPubkey: e.confirmation!.memberPubkey, callsign: voucherCallsignFor(e, callsignOf) });
                                     }, 'small')
                                     : null}
                                 {btn(e.text ? t('Change') : t('Type it again'), () => openForm(e), 'small')}
@@ -1237,6 +1239,7 @@ export default function NamesListScreen() {
                             identity={identity}
                             memberPubkey={selectedVoucherPubkey}
                             entry={entries.find((e) => e.voucher?.memberPubkey === selectedVoucherPubkey || e.confirmation?.memberPubkey === selectedVoucherPubkey) ?? null}
+                            nameOf={callsignOf}
                             onClose={() => setSelectedVoucherPubkey(null)}
                             onVoucherUpdated={() => { void load(); }}
                         />

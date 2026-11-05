@@ -27,6 +27,14 @@
  *     paused one's budget isn't raised either; both may be lowered.
  * 18. Each change the committee makes to a budget (made, raised, lowered, stopped) is a notice kept for the voucher, told
  *     live and pushed once it has committed.
+ * Round 2 of the deciding review (PR #2911):
+ * 19. No voucher answer carries an invite code, nor a piece of one, nor anything that redeems: the card to an admin off the
+ *     committee, to a committee admin and to an owner, the block, a set-to's and a stop's answers, the voucher's own read.
+ *     Each history line says what it was for instead: held for an invite, vouched on whom, back (expired, stopped).
+ * 20. An owner's or admin's budget made from their entry falls back to the role on a step-back or a revoke (same left and
+ *     held, one log line); Stop vouching refuses an owner's or admin's whatever its source; only an owner lowers an owner's.
+ * 21. The committee flag clears when an admin is made owner, logged, and stays off when they are made admin again.
+ * 22. The card's Trading line: per person, completed trades with someone outside the voucher's own, only inside, or none.
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -53,8 +61,9 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { pruneUnusedInvites } from './engine/writer-bounds.js';
 import {
     VOUCHER_WORDS, VOUCHERS_MIGRATION_ACTOR, budgetOf, grantMissingRoleBudgets, makeVoucher, setBudgetLevel, stopVoucher,
-    vouchFromProfile, returnLapsedHolds,
+    vouchFromProfile, returnLapsedHolds, isOnCreditCommittee,
 } from './engine/vouchers.js';
+import { grantNodeRole } from './engine/node-roles.js';
 // The whole module too, for one export read by name (tellVoucherNotice): a missing one is a failed check, not a load error.
 import * as vouchersModule from './engine/vouchers.js';
 import { getDoor, setDoor, DEFAULT_DOOR } from './config/door.js';
@@ -385,10 +394,17 @@ async function main(): Promise<void> {
     require_((await call(owen, 'POST', `/api/names/confirmations/${beaConf.id}/revoke`, {})).status === 200, 'Bea’s confirmation is revoked');
     assert((db.prepare('SELECT stop_reason FROM vouchers WHERE member_pubkey = ?').get(bea.pk) as any)?.stop_reason === 'revoked' && sumLines(bea.pk) === 0,
         '8. a revoked confirmation stops a list budget');
+    // Round 2 (deciding review finding 2(c)): this asserted that Stop vouching stops Ada's budget once it was moved to her
+    // entry, while she is still an admin. That left an admin with no budget, and was the way past the role's refusal: an
+    // owner or admin vouches by the role whatever the source (amend2 §2(b)), so both are refused now. Stop vouching still
+    // stops a member's list budget (Nia's in 7, Jen's in 18).
+    const adaBefore8 = budgetOf(ada.pk);
     const roleStop = await call(owen, 'DELETE', `/api/names/vouchers/${ada.pk}`);
     const ownerStop = await call(ada, 'DELETE', `/api/names/vouchers/${owen.pk}`);
-    assert(roleStop.status === 200 && ownerStop.status === 409 && ownerStop.body?.code === 'role_voucher',
-        `8. Stop vouching stops a list budget (Ada's, moved to her entry) and refuses a role's (${roleStop.status} ${show(ownerStop)})`);
+    const adaRow8 = db.prepare('SELECT source, stopped_at FROM vouchers WHERE member_pubkey = ?').get(ada.pk) as { source: string; stopped_at: string | null };
+    assert(roleStop.status === 409 && roleStop.body?.code === 'role_voucher' && ownerStop.status === 409 && ownerStop.body?.code === 'role_voucher'
+        && adaRow8.stopped_at === null && adaRow8.source === 'entry' && budgetOf(ada.pk).left === adaBefore8.left,
+        `8. Stop vouching refuses an admin's budget moved to her entry (Ada's) and an owner's by role, nothing stopped (${roleStop.status} ${roleStop.body?.code} | ${ownerStop.status} ${ownerStop.body?.code})`);
     const janeHeldBefore = budgetOf(jane.pk);
     const heldCode = h100a.body?.invite?.code as string;
     db.prepare("UPDATE invite_codes SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-31 days') WHERE code = ?").run(heldCode);
@@ -537,6 +553,12 @@ async function main(): Promise<void> {
         require_(redeemInvite(inv.code, who.pk, who.name).success === true, `${who.name} joins`);
     };
     require_(budgetOf(lou.pk).left === 1000, `Lou, an admin, holds 1,000 (${JSON.stringify(budgetOf(lou.pk))})`);
+    // An admin with no budget: one the shell made outside grantNodeRole, before the next boot's grant (§11). (Ada's budget
+    // was the one here before round 2; an admin's is never stopped while they hold the role now: see 8 and 20.)
+    const ned = newId('Ned');
+    enter(ned);
+    db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(ned.pk);
+    require_(!db.prepare('SELECT 1 FROM vouchers WHERE member_pubkey = ?').get(ned.pk), 'Ned, an admin the shell made, has no budget yet');
     const doorBefore = getDoor();
     setDoor('admins');
     const asked = await call(mel, 'POST', '/api/invite/asks', { firstName: 'Ivy', howKnown: 'Ivy keeps the stall by the station' });
@@ -545,10 +567,10 @@ async function main(): Promise<void> {
     const askWaiting = () => count('SELECT COUNT(*) AS n FROM invite_asks WHERE id = ?', askId);
     const invitesBefore15 = count('SELECT COUNT(*) AS n FROM invite_codes');
     const askSixty = await call(lou, 'POST', `/api/invite/asks/${askId}/send`, { vouchAmount: 60 });
-    const askByAda = await call(ada, 'POST', `/api/invite/asks/${askId}/send`, { vouchAmount: 25 });
-    assert(askSixty.status === 400 && askSixty.body?.error === VOUCHER_WORDS.badAmount && askByAda.status === 403 && askByAda.body?.code === 'not_a_voucher'
-        && askByAda.body?.error === VOUCHER_WORDS.notAVoucher && askWaiting() === 1 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore15,
-        `15. an ask's answer with a 60, or from an admin whose budget was stopped, is refused with the sentence; the ask still waits, no invite made (${show(askSixty)} | ${show(askByAda)})`);
+    const askByNed = await call(ned, 'POST', `/api/invite/asks/${askId}/send`, { vouchAmount: 25 });
+    assert(askSixty.status === 400 && askSixty.body?.error === VOUCHER_WORDS.badAmount && askByNed.status === 403 && askByNed.body?.code === 'not_a_voucher'
+        && askByNed.body?.error === VOUCHER_WORDS.notAVoucher && askWaiting() === 1 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore15,
+        `15. an ask's answer with a 60, or from an admin with no budget, is refused with the sentence; the ask still waits, no invite made (${show(askSixty)} | ${show(askByNed)})`);
     const askAnswered = await call(lou, 'POST', `/api/invite/asks/${askId}/send`, { vouchAmount: 50 });
     const askCode = (db.prepare('SELECT code, vouch_amount FROM invite_codes WHERE created_by = ? ORDER BY rowid DESC LIMIT 1').get(lou.pk) as { code: string; vouch_amount: number | null } | undefined)
         ?? { code: '', vouch_amount: null };
@@ -657,6 +679,177 @@ async function main(): Promise<void> {
     assert(typeof tellFn === 'function' && live?.[0]?.type === 'system_announcement' && live[0].body === told[1].body && live[0].noticeId === told[1].id && JSON.stringify(live[1]) === JSON.stringify([jen.pk])
         && JSON.stringify(pushed?.[0]) === JSON.stringify([jen.pk]) && pushed?.[6] === 'community.notice' && pushed?.[3] === told[1].body,
         `18. once the change has committed it goes live to Jen's own sockets with her kept copy's id, and out as a community.notice push (${JSON.stringify(heard).slice(0, 300)})`);
+
+    // ── 19. No invite code in any voucher answer (deciding review round 2, finding 1) ──────────────────────────────────
+    // An unused code is a bearer key to join that lands its vouch from the voucher's budget; the invites route keeps a
+    // member's codes to that member (GET /api/invite/mine). No message here prints a code: only counts and yes or no.
+    const keysOf = (v: unknown, out = new Set<string>()): Set<string> => {
+        if (Array.isArray(v)) v.forEach((x) => keysOf(x, out));
+        else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { out.add(k); keysOf(x, out); }
+        return out;
+    };
+    const stringsOf = (v: unknown, out = new Set<string>()): Set<string> => {
+        if (typeof v === 'string') out.add(v);
+        else if (Array.isArray(v)) v.forEach((x) => stringsOf(x, out));
+        else if (v && typeof v === 'object') Object.values(v).forEach((x) => stringsOf(x, out));
+        return out;
+    };
+    /** The code whole, in any case, or either of its two random parts (each has a letter, so no hex key or date holds one). */
+    const carries = (r: Res, code: string) => {
+        const parts = code.split('-').slice(1).filter((p) => /[A-Z]/.test(p));
+        return r.text.toUpperCase().includes(code.toUpperCase()) || r.text.toUpperCase().replace(/[^0-9A-Z]/g, '').includes(code.split('-').slice(1).join(''))
+            || parts.some((p) => r.text.includes(p));
+    };
+    const CODE_KEYS = ['code', 'ref', 'inviteCode', 'invite_code'];
+    const historyLine = (r: Res, kind: string, pred: (l: any) => boolean = () => true) => (r.body?.history as any[] | undefined)?.find((l) => l.kind === kind && pred(l));
+    const wren = newId('Wren');
+    const xan = newId('Xan');
+    enter(wren);
+    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(wren, owen), amount: 500 })).status === 201, 'Wren is made a voucher');
+    const wrenHeld = await generate(wren, 100);
+    const wrenCode = (wrenHeld.body?.invite?.code ?? '') as string;
+    require_(wrenHeld.status === 200 && /^INV-/.test(wrenCode) && budgetOf(wren.pk).held === 100, `Wren holds 100 on an invite not used yet (${wrenHeld.status})`);
+    require_((await call(lou, 'GET', '/api/names/vouchers')).status === 403 && !isOnCreditCommittee(lou.pk) && isOnCreditCommittee(ada.pk), 'Lou, an admin, is off the committee; Ada is on it');
+    const answers: Array<[string, Res]> = [
+        ['the card to an admin off the committee', await call(lou, 'GET', `/api/names/vouchers/${wren.pk}`)],
+        ['the card to a committee admin', await call(ada, 'GET', `/api/names/vouchers/${wren.pk}`)],
+        ['the card to an owner', await call(owen, 'GET', `/api/names/vouchers/${wren.pk}`)],
+        ['the vouchers block', await call(ada, 'GET', '/api/names/vouchers')],
+        ['a set-to answer', await setLevel(ada, wren, 600)],
+        ['the voucher’s own read', await call(wren, 'GET', '/api/vouchers/me')],
+    ];
+    const leaked = answers.filter(([, r]) => r.status !== 200 || carries(r, wrenCode) || CODE_KEYS.some((k) => keysOf(r.body).has(k))).map(([what, r]) => `${what} (${r.status})`);
+    assert(leaked.length === 0, `19. no answer carries the unused code, a piece of it, or a code or ref field: the card to an admin off the committee, a committee admin and an owner, the block, a set-to, the voucher's own read${leaked.length ? ` — leaked: ${leaked.join('; ')}` : ''}`);
+    const tried = [...new Set(answers.flatMap(([, r]) => [...stringsOf(r.body)]))];
+    const redeemedBy = tried.filter((s) => {
+        const probe = newId('Probe');
+        try { return redeemInvite(s, probe.pk, probe.name).success === true; } catch { return false; }
+    });
+    assert(tried.length > 20 && redeemedBy.length === 0 && budgetOf(wren.pk).held === 100,
+        `19. and nothing in them redeems: ${tried.length} strings tried, ${redeemedBy.length} joined, Wren's 100 still held`);
+    const heldLine = historyLine(answers[1][1], 'hold');
+    assert(heldLine?.for === 'invite' && heldLine.outcome === 'held' && heldLine.amount === -100 && typeof heldLine.inviteMadeAt === 'string' && heldLine.person === null,
+        `19. the history says what the hold is: held for an invite made ${heldLine?.inviteMadeAt?.slice(0, 10)}, not used yet (${JSON.stringify([heldLine?.kind, heldLine?.amount, heldLine?.for, heldLine?.outcome])})`);
+    const xanJoins = await redeem(xan, wrenCode);
+    const afterUse = await call(owen, 'GET', `/api/names/vouchers/${wren.pk}`);
+    const usedLine = historyLine(afterUse, 'hold', (l) => l.amount === -100);
+    assert(xanJoins.status === 200 && xanJoins.body?.vouch?.landed === 100 && usedLine?.outcome === 'vouched' && usedLine.person?.callsign === 'Xan' && !carries(afterUse, wrenCode),
+        `19. once redeemed the line says whom it vouched for, still no code (${JSON.stringify(usedLine?.person)})`);
+    const lapses = await generate(wren, 25);
+    const lapsedCode = (lapses.body?.invite?.code ?? '') as string;
+    db.prepare("UPDATE invite_codes SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-31 days') WHERE code = ?").run(lapsedCode);
+    returnLapsedHolds();
+    const stopsOn = await generate(wren, 50);
+    const stoppedCode = (stopsOn.body?.invite?.code ?? '') as string;
+    const wrenStop = await call(owen, 'DELETE', `/api/names/vouchers/${wren.pk}`);
+    const afterStop = await call(lou, 'GET', `/api/names/vouchers/${wren.pk}`);
+    const expired = historyLine(afterStop, 'return', (l) => l.amount === 25);
+    const stopped = historyLine(afterStop, 'return', (l) => l.amount === 50);
+    const backLine = historyLine(afterStop, 'hold', (l) => l.amount === -25);
+    assert(lapses.status === 200 && stopsOn.status === 200 && wrenStop.status === 200
+        && expired?.for === 'invite' && expired.why === 'expired' && typeof expired.inviteMadeAt === 'string' && backLine?.outcome === 'back'
+        && stopped?.for === 'invite' && stopped.why === 'stopped' && historyLine(afterStop, 'stop')?.amount < 0
+        && ![wrenStop, afterStop].some((r) => [wrenCode, lapsedCode, stoppedCode].some((c) => carries(r, c)) || CODE_KEYS.some((k) => keysOf(r.body).has(k))),
+        `19. a lapsed hold reads "back, invite expired", a stop's "back, budget stopped"; neither the stop's answer nor the card after it carries a code (${JSON.stringify([expired?.why, backLine?.outcome, stopped?.why])})`);
+    const stoppedStill = await redeem(newId('Yul'), stoppedCode);
+    assert(stoppedStill.status === 200 && stoppedStill.body?.vouch?.ended === VOUCHER_WORDS.voucherEnded,
+        `19. the code Wren gave out before the stop still lets its person in, with no vouch (${stoppedStill.status})`);
+
+    // ── 20. An owner's or admin's budget from their entry (deciding review round 2, finding 2) ─────────────────────────
+    // (a) Abe, an admin, is made a voucher from his entry (his budget's source moves to it), then steps back from it: he
+    // keeps the budget, by the role.
+    const rowOf = (pk: string) => db.prepare('SELECT source, entry_id, stopped_at FROM vouchers WHERE member_pubkey = ?').get(pk) as { source: string; entry_id: string | null; stopped_at: string | null };
+    const sourceLines = (pk: string) => db.prepare("SELECT actor_pubkey AS actor, old_value AS old, new_value AS new FROM known_floor_log WHERE action = 'voucher_source' AND member_pubkey = ?").all(pk) as { actor: string; old: string; new: string }[];
+    const abe = newId('Abe');
+    enter(abe);
+    grantNodeRole(abe.pk, 'admin', owen.pk);
+    const abeFlip = await call(ada, 'POST', '/api/names/vouchers', { entryId: confirm(abe, owen) });
+    require_(abeFlip.status === 201 && rowOf(abe.pk).source === 'entry' && budgetOf(abe.pk).left === 1000, `Abe, an admin, is made a voucher from his entry: the source moves, nothing new (${abeFlip.status})`);
+    const abeBudget = budgetOf(abe.pk);
+    const abeLines = lines(abe.pk).length;
+    const abeBack = await call(abe, 'POST', '/api/names/step-back', {});
+    const abeMe = await call(abe, 'GET', '/api/vouchers/me');
+    const abeInvite = await generate(abe, 25);
+    const abeAfter = budgetOf(abe.pk);
+    assert(abeBack.status === 200 && rowOf(abe.pk).source === 'role' && rowOf(abe.pk).entry_id === null && rowOf(abe.pk).stopped_at === null
+        && lines(abe.pk).length === abeLines + 1 && abeAfter.left === abeBudget.left - 25 && abeAfter.held === abeBudget.held + 25
+        && JSON.stringify(sourceLines(abe.pk)) === JSON.stringify([{ actor: abe.pk, old: 'entry', new: 'role' }])
+        && abeMe.body?.voucher === true && abeInvite.status === 200,
+        `20. (a) an admin who steps back from the entry his budget came from keeps it by the role: the same left and held, one log line, still a voucher (${abeBack.status}, ${JSON.stringify(rowOf(abe.pk))}, invite ${abeInvite.status})`);
+    // (b) Eve, a member voucher with 500, is made an admin; Lou, an admin off the committee, revokes her confirmation.
+    const eve = newId('Eve');
+    enter(eve);
+    const eveEntry = confirm(eve, owen);
+    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: eveEntry, amount: 500 })).status === 201, 'Eve is made a voucher with 500');
+    grantNodeRole(eve.pk, 'admin', owen.pk);
+    require_(lines(eve.pk).length === 1, 'made an admin, Eve gets no second budget');
+    const eveConf = db.prepare('SELECT id FROM confirmations WHERE entry_id = ?').get(eveEntry) as { id: string };
+    const eveRevoked = await call(lou, 'POST', `/api/names/confirmations/${eveConf.id}/revoke`, {});
+    const eveRow = rowOf(eve.pk);
+    assert(eveRevoked.status === 200 && eveRow.stopped_at === null && eveRow.source === 'role' && eveRow.entry_id === null && budgetOf(eve.pk).left === 500
+        && lines(eve.pk).length === 1 && JSON.stringify(sourceLines(eve.pk)) === JSON.stringify([{ actor: lou.pk, old: 'entry', new: 'role' }])
+        && (await call(eve, 'GET', '/api/vouchers/me')).body?.voucher === true,
+        `20. (b) a member voucher later made an admin keeps her 500 when an admin revokes her confirmation, by the role now (${eveRevoked.status}, ${JSON.stringify(eveRow)})`);
+    // (c) Ada, on the committee, makes Owen a voucher from his entry, then tries to stop and to lower his budget.
+    const ora = newId('Ora');
+    enter(ora);
+    grantNodeRole(ora.pk, 'owner', owen.pk);
+    require_(budgetOf(ora.pk).left === 1000, 'Ora is made an owner, with a budget by the role');
+    const owenEntry = confirm(owen, ada);
+    const owenFlip = await call(ada, 'POST', '/api/names/vouchers', { entryId: owenEntry });
+    require_(owenFlip.status === 201 && owenFlip.body?.source === 'entry', `Ada makes Owen a voucher from his entry: nothing new, the source moves (${owenFlip.status})`);
+    const owenSet = await setLevel(ora, owen, 1000);
+    require_(owenSet.status === 200 && budgetOf(owen.pk).level === 1000, `an owner sets another owner's budget, lower included: Ora sets Owen's to 1,000 (${show(owenSet)})`);
+    const owenLinesBefore = lines(owen.pk).length;
+    const adaStopsOwen = await call(ada, 'DELETE', `/api/names/vouchers/${owen.pk}`);
+    const adaLowersOwen = await setLevel(ada, owen, 500);
+    const linesAfterRefusals = lines(owen.pk).length;
+    const adaRaisesOwen = await setLevel(ada, owen, 1100);
+    const oraStopsOwen = await call(ora, 'DELETE', `/api/names/vouchers/${owen.pk}`);
+    const owenRow = db.prepare('SELECT stopped_at FROM vouchers WHERE member_pubkey = ?').get(owen.pk) as { stopped_at: string | null };
+    assert(adaStopsOwen.status === 409 && adaStopsOwen.body?.code === 'role_voucher' && /only another owner can lower it/.test(adaStopsOwen.body?.error ?? '')
+        && adaLowersOwen.status === 403 && adaLowersOwen.body?.code === 'owner_only' && linesAfterRefusals === owenLinesBefore
+        && adaRaisesOwen.status === 200 && budgetOf(owen.pk).level === 1100 && oraStopsOwen.status === 409 && oraStopsOwen.body?.code === 'role_voucher' && owenRow.stopped_at === null,
+        `20. (c) with Owen's budget moved to his entry, a committee admin can't stop it or lower it (nothing written), may still raise it, and no owner stops it either (${[adaStopsOwen, adaLowersOwen, adaRaisesOwen, oraStopsOwen].map((r) => `${r.status} ${r.body?.code ?? ''}`).join(' | ')}: "${adaStopsOwen.body?.error ?? ''}")`);
+
+    // ── 21. The committee flag clears with a promotion to owner (deciding review round 2, finding 3) ─────────────────────
+    const bob = newId('Bob');
+    enter(bob);
+    grantNodeRole(bob.pk, 'admin', owen.pk);
+    require_((await call(owen, 'POST', '/api/names/committee', { memberPubkey: bob.pk, on: true })).status === 200 && isOnCreditCommittee(bob.pk), 'Owen puts Bob, an admin, on the committee');
+    const bobFlag = () => (db.prepare('SELECT credit_committee FROM members WHERE public_key = ?').get(bob.pk) as { credit_committee: number }).credit_committee;
+    const bobLines = () => db.prepare("SELECT actor_pubkey AS actor, old_value AS old, new_value AS new FROM known_floor_log WHERE action = 'committee' AND member_pubkey = ? ORDER BY rowid").all(bob.pk) as { actor: string; old: string; new: string }[];
+    grantNodeRole(bob.pk, 'owner', owen.pk);
+    const flagAsOwner = bobFlag();
+    grantNodeRole(bob.pk, 'admin', owen.pk);
+    const bobBlock = await call(bob, 'GET', '/api/names/vouchers');
+    assert(flagAsOwner === 0 && bobFlag() === 0 && !isOnCreditCommittee(bob.pk) && bobBlock.status === 403 && bobBlock.body?.code === 'committee_only'
+        && JSON.stringify(bobLines().map((l) => [l.actor, l.old, l.new])) === JSON.stringify([[owen.pk, 'off', 'on'], [owen.pk, 'on', 'off']]),
+        `21. made owner, Bob's committee flag clears with a line in the log; made admin again he is off it until an owner puts him back (${JSON.stringify({ flagAsOwner, now: bobFlag(), block: bobBlock.status, lines: bobLines().length })})`);
+
+    // ── 22. The Trading line (deciding review round 2, finding 4; amend2 §5) ────────────────────────────────────────────
+    const [tia, tx, ty, tz] = [newId('Tia'), newId('Tex'), newId('Ty'), newId('Zed')];
+    for (const p of [tia, tx, ty, tz]) enter(p);
+    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(tia, owen), amount: 500 })).status === 201, 'Tia is made a voucher');
+    for (const p of [tx, ty, tz]) require_((await vouch(tia, p, 25)).status === 200, `Tia vouches 25 for ${p.name}`);
+    /** A deal as the marketplace records one, on the seller's live offer: setup only (the marketplace's own suites drive it). */
+    const deal = (seller: Id, buyer: Id, status: 'completed' | 'pending') => {
+        setMemberPhoto(db, seller.pk, FACE);
+        const post = createPost('offer', 'general', `${seller.name} sells`, 'A deal for the trading line', 10, 'fixed', seller.pk);
+        require_(!!post?.id, `${seller.name} lists an offer`);
+        db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 10, ?)')
+            .run(crypto.randomBytes(16).toString('hex'), post!.id, buyer.pk, seller.pk, status);
+    };
+    deal(tx, mel, 'completed');
+    deal(ty, tx, 'completed');
+    deal(tz, mel, 'pending');
+    const tiaCard = await call(owen, 'GET', `/api/names/vouchers/${tia.pk}`);
+    const markOf = (p: Id) => (tiaCard.body?.people as any[] | undefined)?.find((x) => x.memberPubkey === p.pk)?.trading;
+    const tiaRow = (await call(owen, 'GET', '/api/names/vouchers')).body?.vouchers?.find((v: any) => v.memberPubkey === tia.pk);
+    assert(tiaCard.status === 200 && JSON.stringify(tiaCard.body?.trading) === JSON.stringify({ withOthers: 1, insideOnly: 1 })
+        && markOf(tx) === 'others' && markOf(ty) === 'inside' && markOf(tz) === 'none' && JSON.stringify(tiaRow?.trading) === JSON.stringify({ withOthers: 1, insideOnly: 1 })
+        && !tiaCard.text.includes(mel.pk),
+        `22. Tia's card: "Trading: 1 with others · 1 inside only": Tex traded with Mel, Ty only with Tex, Zed's deal isn't done; no name of whom they traded with (${JSON.stringify({ trading: tiaCard.body?.trading, marks: [markOf(tx), markOf(ty), markOf(tz)] })})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

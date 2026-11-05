@@ -219,6 +219,21 @@
                             <p>Pasang aplikasinya dan buka tautan atau pindai kode QR yang diberikan oleh anggota; undangan berlaku satu kali dan aktif selama 30 hari.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">Kacang digunakan di komunitas lokal, masing-masing pada servernya sendiri. Komunitas global memperkenalkan cara kerjanya dan menghubungkan Anda ke salah satunya. Ini menunjukkan bagaimana Kacang bekerja di sana, dengan contoh komunitas.</p>
 
                     <div class="hero-logos-group">

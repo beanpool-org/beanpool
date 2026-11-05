@@ -179,6 +179,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const [giftOffer, setGiftOffer] = useState<CreditGiftOffer | null>(null);
     const [sendKind, setSendKind] = useState<'beans' | 'credit'>('beans');
     const [giftNote, setGiftNote] = useState<{ ok: boolean; words: string } | null>(null);
+    // After a gift the form closes on its own once "✓ Given!" has been read, as the phone's does (1.5 s): the tab may be
+    // gone by then, all of it given (round 2 of #2912).
+    useEffect(() => {
+        if (!giftNote?.ok) return;
+        const timer = setTimeout(() => { setShowSend(false); setGiftNote(null); }, 1500);
+        return () => clearTimeout(timer);
+    }, [giftNote]);
 
     // Search filter for recipient select dropdown
     const [memberSearch, setMemberSearch] = useState('');
@@ -449,6 +456,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     // when the node says part of the line can be given now.
     const giftTab = !preview && giftOffer?.offered === true;
     const giftOpen = giftTab && (giftOffer?.canGive ?? 0) > 0;
+    // The Wallet's Send: locked when neither can go, never while the form is open (round 2 of #2912: after giving all
+    // they could, a member with no Beans had a lock where Cancel was, and no way to close the form).
+    const sendLocked = !canSend && !giftOpen && !showSend;
     const ts = balanceInfo?.trustStats;
     const uniquePartners = ts?.uniquePartners ?? 0;
 
@@ -891,8 +901,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     </div>
                     ) : (
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
-                        {/* Locked only when neither Beans nor part of the credit line can go (the Credit line tab, G1). */}
-                        {!canSend && !giftOpen && (
+                        {/* Locked only when neither Beans nor part of the credit line can go (the Credit line tab, G1), and never
+                            while the form is open: a member who has just given all they could closes it with Cancel. */}
+                        {sendLocked && (
                             <div className="bg-nature-50 dark:bg-nature-900/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
                                     {earned <= 0
@@ -902,14 +913,14 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </div>
                         )}
                         <button
-                            onClick={() => { if (!canSend && !giftOpen) return; if (showSend) setShowSend(false); else openSend(); }}
-                            disabled={!canSend && !giftOpen}
+                            onClick={() => { if (showSend) { setShowSend(false); setGiftNote(null); } else if (!sendLocked) openSend(); }}
+                            disabled={sendLocked}
                             className={`w-full p-4 rounded-xl text-sm sm:text-[15px] break-words font-bold border-none cursor-pointer transition-all shadow-md ${
-                                !canSend && !giftOpen ? 'bg-nature-100 dark:bg-nature-800 text-nature-500 cursor-not-allowed opacity-60' :
+                                sendLocked ? 'bg-nature-100 dark:bg-nature-800 text-nature-500 cursor-not-allowed opacity-60' :
                                 showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-bp-commit-fill text-bp-commit-on hover:bg-bp-commit-hover'
                             }`}
                         >
-                            {!canSend && !giftOpen
+                            {sendLocked
                                 ? (earned <= 0 ? t('🔒 Send Beans (needs 1 completed trade)') : t('🔒 Send Beans (needs positive balance)'))
                                 : showSend ? t('✕ Cancel') : canSend ? <><span>💸</span> <span>{t('Send Beans')}</span></> : t('Give part of your credit line')}
                         </button>

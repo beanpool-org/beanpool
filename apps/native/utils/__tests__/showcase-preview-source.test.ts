@@ -72,7 +72,7 @@ describe('the preview sources', () => {
     it("the member's own Ledger in preview: every path to a node or a transfer returns first, and Send and Export are the marker", () => {
         const ledger = read('app/(tabs)/ledger.tsx');
         // Each of these reads the node or moves Beans; in preview each one's first line returns (or opens the sheet).
-        for (const fn of ['loadMembers = () =>', 'handleSend = async () =>', 'handleExport = async () =>', 'openSend = async () =>']) {
+        for (const fn of ['loadMembers = () =>', 'handleSend = async () =>', 'handleGift = async () =>', 'handleExport = async () =>', 'openSend = async () =>']) {
             const at = ledger.indexOf(fn);
             expect(at, fn).toBeGreaterThan(-1);
             expect(ledger.slice(at, at + 140), fn).toMatch(/\{\s*if \(preview( \|\| beansMode === undefined)?\) (return;|\{ setSheetOpen\(true\); return; \})/);

@@ -230,6 +230,23 @@ describe('Core settings — locked: Unlock to change', () => {
         expect(log).toHaveTextContent('🔓 Unlocked Beans');
         expect(log).toHaveTextContent('Beans: On → Off');
     });
+
+    it('the log names the members\' credit-line gift in words, as its row does, never its key (G1, round 2)', async () => {
+        const shape = locked();
+        const by = { kept: 'community_settings_log' as const, at: '2026-11-05T11:00:00.000Z', actor: 'o'.repeat(64), actorCallsign: 'ada', actorRole: 'owner', note: null };
+        shape.log = [
+            { ...by, id: '3', setting: 'memberGift', from: '100', to: '0' },
+            { ...by, id: '2', setting: 'core.unlock', from: null, to: 'memberGift' },
+            { ...by, id: '1', setting: 'advice.memberGift', from: null, to: null, actorRole: 'admin', note: 'Keep it on' },
+        ];
+        mockApi(shape);
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        const log = await screen.findByTestId('shape-audit-log');
+        expect(log).toHaveTextContent('Members giving part of their credit line: On · up to 100 Beans → Off');
+        expect(log).toHaveTextContent('🔓 Unlocked Members giving part of their credit line');
+        expect(log).toHaveTextContent('💬 Advised the owners about Members giving part of their credit line');
+        expect(log.textContent).not.toContain('memberGift');
+    });
 });
 
 describe('Core settings — not confirmed yet: offered, never forced', () => {

@@ -147,7 +147,7 @@ const REFUSALS = [
     'An enterprise can’t be given part of a credit line.',
     'Your credit line is frozen, so you can’t give part of it until an admin unfreezes it.',
     'You can give part of your credit line after your first completed trade, as with sending Beans.',
-    'You can only pass on credit line someone gave you, and nobody has given you any. Your known floor and the credit you earned stay yours.',
+    'You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.',
     'You hold 25 Beans of credit line someone gave you, so you can’t give 50.',
     'You’re using part of your credit line, so you can give 8 Beans of it at most now.',
     'You’re using the credit line someone gave you, so none of it is free to give now.',
@@ -303,6 +303,28 @@ describe('the Credit line tab beside Beans on Send (G1)', () => {
         await click(byTestId('send-kind-beans'), 'Beans');
         expect(byTestId('send-beans-locked')?.textContent).toBe('You can only send beans you currently hold — direct sends require a positive balance.');
         expect(buttonSaying('Confirm Transfer')).toBeNull();
+    });
+
+    it('Beans locked, and all of it given: the node\'s sentence for that, and Cancel still closes the form (round 2)', async () => {
+        node.balance = { ...HOLDER, balance: 0 };
+        node.offer = { offered: true, max: 100, room: 25, canGive: 25, why: null };
+        await render();
+        await click(byTestId('ledger-wallet-tab'), 'Wallet');
+        await click(byLabel('Give part of your credit line'), 'Give part of your credit line');
+        await pickMia();
+        await type(byLabel('Credit line to give'), '25');
+        const allGiven = 'You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.';
+        node.offer = { offered: false, max: 100, room: 0, canGive: 0, why: allGiven };
+        await click(buttonSaying('Give credit line'), 'Give credit line');
+        expect(node.gifts).toEqual([['/api/credit/gift', { memberPubkey: 'mia-key', amount: 25 }]]);
+        expect(text()).toContain('✓ Given!');
+        expect(byTestId('credit-gift-words')?.textContent).toBe(allGiven);
+        expect(text()).not.toContain('nobody has given you any');
+        // Nothing left to send or give, and the form still open: its button is Cancel, never the lock, and it closes it.
+        expect(text()).not.toContain('Send Beans (needs positive balance)');
+        await click(byLabel('Cancel'), 'Cancel');
+        expect(byTestId('credit-gift-words')).toBeNull();
+        expect(text()).toContain('Send Beans (needs positive balance)');
     });
 
     it('Beans locked and nothing to give: Send stays locked as before', async () => {

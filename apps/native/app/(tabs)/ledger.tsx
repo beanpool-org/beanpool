@@ -215,7 +215,8 @@ export default function LedgerScreen() {
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
     // The Credit line tab beside Beans on Send (slice G1, utils/credit-gift.ts): the node's answer at each load, never a
-    // copy; null (or not offered) is no tab. `sendKind`: which tab the form is on.
+    // copy; null (or not offered) is no tab. `sendKind`: which tab the form is on. Never read in preview (loadData,
+    // openSend and handleGift return first there), and never drawn there (giftTab).
     const [giftOffer, setGiftOffer] = useState<CreditGiftOffer | null>(null);
     const [sendKind, setSendKind] = useState<'beans' | 'credit'>('beans');
 
@@ -443,7 +444,7 @@ export default function LedgerScreen() {
     const loadData = () => {
         const gen = ++loadGen.current;
         if (beansMode === undefined) return;
-        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(sampleEscrowTotal()); setPledgeHistory([]); setGiftOffer(null); setHeldSample(true); return; }
+        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(sampleEscrowTotal()); setPledgeHistory([]); setHeldSample(true); return; }
         if (heldSample) { setBalanceState(NO_BALANCE); setTxns(NO_TXNS); setEscrowTotal(0); setHeldSample(false); }
         const latest = <T,>(set: (v: T) => void) => (v: T) => { if (gen === loadGen.current) set(v); };
         if (identity?.publicKey) {
@@ -543,7 +544,8 @@ export default function LedgerScreen() {
 
     // The Credit line tab: the node checks every rule and answers a refusal in its own sentence, shown as it comes.
     const handleGift = async () => {
-        if (preview || !sendTo || !sendAmount || !identity?.publicKey) return;
+        if (preview) return;
+        if (!sendTo || !sendAmount || !identity?.publicKey) return;
         if (!sendRead.ok && isAmbiguousAmount(sendRead.refusal)) { setSendError(amountRefusalWords(sendRead.refusal)); return; }
         const amount = sendRead.ok ? sendRead.value : NaN;
         if (isNaN(amount)) { setSendError(t('Enter a valid amount')); return; }
@@ -610,6 +612,12 @@ export default function LedgerScreen() {
     // when the node says part of the line can be given now.
     const giftTab = !preview && giftOffer?.offered === true;
     const giftOpen = giftTab && (giftOffer?.canGive ?? 0) > 0;
+    // The Wallet's Send: locked only when neither Beans nor part of the credit line can go, and never while the form is
+    // open, so a member who has just given all they could closes it with Cancel (round 2 of #2912, as on the web).
+    const sendLocked = !canSend && !giftOpen && !showSend;
+    const sendLabel = showSend ? t('Cancel')
+        : sendLocked ? (earned <= 0 ? t('Send Beans (needs 1 completed trade)') : t('Send Beans (needs positive balance)'))
+        : canSend ? t('Send Beans') : t('Give part of your credit line');
     const ts = balanceState.trustStats;
     const uniquePartners = ts?.uniquePartners || 0;
 
@@ -992,30 +1000,21 @@ export default function LedgerScreen() {
                 )}
 
                 {/* ── Send Beans ── (in preview the marker's action: it keeps its place and words, and opens the sheet) */}
-                {preview ? <LocalCommunityMark variant="action" feature="beans" label={t('Send Beans')} /> : (() => {
-                    // Locked only when neither Beans nor part of the credit line can go (the Credit line tab, G1).
-                    const locked = !canSend && !giftOpen;
-                    const label = locked
-                        ? (earned <= 0 ? t('Send Beans (needs 1 completed trade)') : t('Send Beans (needs positive balance)'))
-                        : showSend ? t('Cancel') : canSend ? t('Send Beans') : t('Give part of your credit line');
-                    return (
-                        <Pressable
-                            style={[styles.sendBtn, showSend && styles.sendBtnOpen, locked && styles.sendBtnLocked]}
-                            accessibilityRole="button"
-                            accessibilityLabel={locked ? undefined : label}
-                            onPress={showSend ? () => { setShowSend(false); setSendError(null); setSendSuccess(false); } : openSend}
-                        >
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                                <MaterialCommunityIcons
-                                    name={locked ? 'lock-outline' : showSend ? 'close' : 'send'}
-                                    size={17}
-                                    color={locked ? colors.text.secondary : showSend ? colors.text.heading : colors.text.inverse}
-                                />
-                                <Text style={[styles.sendBtnText, showSend && styles.sendBtnTextOpen, locked && { color: colors.text.secondary }]}>{label}</Text>
-                            </View>
-                        </Pressable>
-                    );
-                })()}
+                {preview ? <LocalCommunityMark variant="action" feature="beans" label={t('Send Beans')} /> : <Pressable
+                    style={[styles.sendBtn, showSend && styles.sendBtnOpen, sendLocked && styles.sendBtnLocked]}
+                    accessibilityRole="button"
+                    accessibilityLabel={sendLocked ? undefined : sendLabel}
+                    onPress={showSend ? () => { setShowSend(false); setSendError(null); setSendSuccess(false); } : openSend}
+                >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        <MaterialCommunityIcons
+                            name={sendLocked ? 'lock-outline' : showSend ? 'close' : 'send'}
+                            size={17}
+                            color={sendLocked ? colors.text.secondary : showSend ? colors.text.heading : colors.text.inverse}
+                        />
+                        <Text style={[styles.sendBtnText, showSend && styles.sendBtnTextOpen, sendLocked && { color: colors.text.secondary }]}>{sendLabel}</Text>
+                    </View>
+                </Pressable>}
 
                 {showSend && !preview && (
                     <View style={styles.sendForm}>

@@ -595,6 +595,7 @@ describe('vouchers on the phone (slice V2)', () => {
                     id: 'c1',
                     memberPubkey: 'pk_jane',
                     callsign: 'jane',
+                    status: 'confirmed',
                     entryId: 'e_jane',
                     confirmedBy: 'pk_other',
                     confirmedAt: '2026-10-15',

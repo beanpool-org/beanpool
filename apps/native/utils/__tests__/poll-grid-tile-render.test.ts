@@ -15,17 +15,32 @@ import { MARKET_CARD_SHELL, gridTextBlockHeight } from '@beanpool/core';
 
 /** Each View's onLayout, by its testID, so a test can lay out the answers' room. */
 const layouts = vi.hoisted(() => new Map<string, (e: unknown) => void>());
-type Props = { children?: ReactNode; testID?: string; accessibilityLabel?: string; accessibilityRole?: string; onPress?: () => void; style?: unknown; numberOfLines?: number; onLayout?: (e: unknown) => void };
+/** Each Text's onTextLayout, by its words, so a test can lay out an answer's words at its row's width. */
+const textLayouts = vi.hoisted(() => new Map<string, (e: unknown) => void>());
+type Props = {
+    children?: ReactNode; testID?: string; accessibilityLabel?: string; accessibilityRole?: string; onPress?: () => void; style?: unknown;
+    numberOfLines?: number; onLayout?: (e: unknown) => void; onTextLayout?: (e: unknown) => void; disabled?: boolean; accessibilityState?: Record<string, unknown>;
+    importantForAccessibility?: string;
+};
 vi.mock('react-native', () => {
-    const flat = (s: unknown): Record<string, unknown> => (Array.isArray(s) ? Object.assign({}, ...s.map(flat)) : (s && typeof s === 'object' ? s as Record<string, unknown> : {}));
-    const el = (tag: string) => ({ children, testID, accessibilityLabel, accessibilityRole, onPress, style, numberOfLines, onLayout }: Props) => {
+    const flat = (s: unknown): Record<string, unknown> => (typeof s === 'function' ? flat(s({ pressed: false }))
+        : Array.isArray(s) ? Object.assign({}, ...s.map(flat)) : (s && typeof s === 'object' ? s as Record<string, unknown> : {}));
+    const el = (tag: string) => ({ children, testID, accessibilityLabel, accessibilityRole, onPress, style, numberOfLines, onLayout, onTextLayout, disabled, accessibilityState, importantForAccessibility }: Props) => {
         if (testID && onLayout) layouts.set(testID, onLayout);
+        if (onTextLayout) textLayouts.set(String(children), onTextLayout);
         return createElement(tag, {
             'data-testid': testID, 'aria-label': accessibilityLabel, 'data-role': accessibilityRole, onClick: onPress,
-            'data-style': JSON.stringify(flat(style)), 'data-lines': numberOfLines,
+            'data-style': JSON.stringify(flat(style)), 'data-lines': numberOfLines, disabled,
+            'data-state': accessibilityState ? JSON.stringify(accessibilityState) : undefined,
+            // Out of sight and never read out (an answer's words measured unclamped): not what the member sees.
+            'data-unseen': importantForAccessibility === 'no' ? 'true' : undefined,
         }, children);
     };
-    return { View: el('div'), Text: el('span'), Pressable: el('button'), ActivityIndicator: () => null, Alert: { alert: vi.fn() }, StyleSheet: { create: <T,>(s: T) => s } };
+    return {
+        View: el('div'), Text: el('span'), Pressable: el('button'), ActivityIndicator: () => null, Alert: { alert: vi.fn() }, StyleSheet: { create: <T,>(s: T) => s },
+        // utils/keyboard-alert.ts asks whether a keyboard is up before it opens the card's Alert: none is, here.
+        Keyboard: { isVisible: () => false, dismiss: () => {}, addListener: () => ({ remove() {} }) },
+    };
 });
 const colours = new Proxy({}, { get: () => new Proxy({}, { get: () => '#000' }) });
 vi.mock('../../app/ThemeContext', () => ({
@@ -40,6 +55,8 @@ vi.mock('../node-profile', () => ({ INFORMAL_POLL_NOTE: 'An informal poll; it de
 vi.mock('../use-pin-role', () => ({ usePinRole: () => null }));
 
 import { PollGridTile } from '../../components/PollGridTile';
+import { Alert } from 'react-native';
+import { votePoll } from '../db';
 
 const DAY = 86_400_000;
 const four = [
@@ -61,10 +78,13 @@ const all = (id: string) => Array.from(host.querySelectorAll(`[data-testid="${id
 const styleOf = (el: Element | null) => JSON.parse(el?.getAttribute('data-style') ?? '{}');
 /** The answers' room is laid out this tall. */
 const layOut = async (height: number) => { await act(async () => { layouts.get('poll-grid-answers')!({ nativeEvent: { layout: { x: 0, y: 0, width: 280, height } } }); }); };
-const answers = () => [...all('poll-grid-answer'), ...all('poll-grid-answer-chosen')].map(a => a.textContent);
+/** What the member sees of an element: its words, less what is drawn out of sight. */
+const seen = (el: Element) => { const c = el.cloneNode(true) as Element; c.querySelectorAll('[data-unseen]').forEach(x => x.remove()); return c.textContent; };
+const answers = () => [...all('poll-grid-answer'), ...all('poll-grid-answer-chosen')].map(seen);
 
 beforeEach(() => {
     layouts.clear();
+    textLayouts.clear();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -131,7 +151,7 @@ describe('the phone grid\'s poll row', () => {
 
     it('the ✓ on the member\'s own answer, as the card shows it; none on a sealed poll, which says "You answered ✓"', async () => {
         await mount(createElement(PollGridTile, { post: poll({ userVotedOptionId: 'b' }), onOpen: vi.fn(), fontScale: 1 }));
-        expect(all('poll-grid-answer-chosen').map(a => a.textContent)).toEqual(['Faster responses when I post an offer0% ✓']);
+        expect(all('poll-grid-answer-chosen').map(seen)).toEqual(['Faster responses when I post an offer0% ✓']);
         await mount(createElement(PollGridTile, {
             post: poll({ userVotedOptionId: 'b', pollOptions: [...four, { id: 'o', text: 'Other', other: true, votes: 0, percentage: 0 }] }), onOpen: vi.fn(), fontScale: 1,
         }));
@@ -151,5 +171,160 @@ describe('the phone grid\'s poll row', () => {
         await mount(createElement(PollGridTile, { post: poll({ poll_open_vote: 1, totalVotes: 2 }), onOpen: vi.fn(), fontScale: 1, informal: true }));
         expect(q('poll-grid-summary')!.textContent).toBe('2 votes · Open vote');
         expect(q('poll-informal-note')!.textContent).toBe('💬 An informal poll; it decides nothing');
+    });
+});
+
+/**
+ * Voted in the tile when the WHOLE poll is in front of the member (Marty and Damo, 6 Nov 2026: "if there are 2+ more it should
+ * jump to the card mandatory so you are presented with all answers. Otherwise the poll will be loaded"); otherwise the tile
+ * opens the poll's page, as before.
+ */
+describe('the phone grid\'s poll tile, voted in place', () => {
+    const short = (extra: Record<string, unknown> = {}) => poll({
+        id: 'poll_short', title: 'Market day?', totalVotes: 5,
+        pollOptions: [
+            { id: 's1', text: 'Saturday', votes: 3, percentage: 60 },
+            { id: 's2', text: 'Sunday', votes: 2, percentage: 40 },
+            { id: 's3', text: 'Either', votes: 0, percentage: 0 },
+        ],
+        ...extra,
+    });
+    /**
+     * The answers' words laid out unclamped at their row's width on a 320 dp phone: a row holds `fits` characters (about what
+     * a 320 dp tile's row holds at 12 dp bold), so longer words take two lines there and are cut with "…" on the tile.
+     */
+    const layWords = async (fits = 24) => {
+        await act(async () => {
+            for (const [words, cb] of textLayouts) cb({ nativeEvent: { lines: Array.from({ length: Math.max(1, Math.ceil(words.length / fits)) }, () => ({})) } });
+        });
+    };
+    /** Lays out the room and every answer's words, as the phone does after its first draw. */
+    const layAll = async (height: number, fits = 24) => { await layOut(height); await layWords(fits); };
+    /** The buttons as a screen reader reads them (the author line is pressed, but read as what it says, not as a button). */
+    const buttons = () => Array.from(host.querySelectorAll('[data-role="button"]')) as HTMLElement[];
+    const press = async (el: Element | null | undefined) => { await act(async () => { (el as HTMLElement).click(); }); };
+    const tileOf = (id: string) => q(`market-poll-tile-${id}`)!;
+    beforeEach(() => {
+        vi.mocked(votePoll).mockReset();
+        vi.mocked(Alert.alert).mockReset();
+    });
+
+    it('a short poll, all of it in the tile: tapping an answer votes it once by the card\'s own call, and opens nothing', async () => {
+        const onOpen = vi.fn();
+        const onVoteSuccess = vi.fn();
+        vi.mocked(votePoll).mockResolvedValue({ post: short({ userVotedOptionId: 's2', totalVotes: 6, pollOptions: [
+            { id: 's1', text: 'Saturday', votes: 3, percentage: 50 }, { id: 's2', text: 'Sunday', votes: 3, percentage: 50 }, { id: 's3', text: 'Either', votes: 0, percentage: 0 },
+        ] }) } as any);
+        await mount(createElement(PollGridTile, { post: short(), onOpen, fontScale: 1.3, currentPubkey: 'me', onVoteSuccess }));
+        // Three rows a finger's press tall at 1.3x, and the gaps (5.2 at 1.3x).
+        await layAll(3 * 44 + 2 * 5.2);
+        // The tile is no button now: its answers are, each named as the vote it casts, and the footer opens the poll.
+        expect(tileOf('poll_short').tagName).toBe('DIV');
+        expect(buttons().map(b => b.getAttribute('aria-label'))).toEqual(['Vote: Saturday, 60%', 'Vote: Sunday, 40%', 'Vote: Either, 0%', 'Open poll: Market day?']);
+        expect(buttons().slice(0, 3).every(b => b.getAttribute('data-role') === 'button')).toBe(true);
+        // Each row a finger's press tall at least.
+        for (const b of buttons().slice(0, 3)) expect(styleOf(b).minHeight).toBeGreaterThanOrEqual(44);
+        expect(q('poll-grid-action-here')!.textContent).toBe('Tap an answer to vote · Open poll ›');
+
+        await press(buttons()[1]);
+        expect(votePoll).toHaveBeenCalledTimes(1);
+        expect(votePoll).toHaveBeenCalledWith('poll_short', 's2');
+        expect(onOpen).not.toHaveBeenCalled();
+        expect(onVoteSuccess).toHaveBeenCalledTimes(1);
+        // The bars and the ✓ follow the node's answer, in place.
+        expect(all('poll-grid-answer-chosen').map(seen)).toEqual(['Sunday50% ✓']);
+        expect(JSON.parse(all('poll-grid-answer-chosen')[0].getAttribute('data-state')!)).toMatchObject({ selected: true });
+    });
+
+    it('the question, the author line and the footer still open the poll', async () => {
+        const onOpen = vi.fn();
+        await mount(createElement(PollGridTile, { post: short(), onOpen, fontScale: 1, currentPubkey: 'me' }));
+        await layAll(200);
+        await press(q('poll-grid-question'));
+        await press(q('poll-grid-head'));
+        await press(q('poll-grid-foot'));
+        expect(onOpen).toHaveBeenCalledTimes(3);
+        expect(votePoll).not.toHaveBeenCalled();
+    });
+
+    it('nothing votes before the room and the words are laid out', async () => {
+        await mount(createElement(PollGridTile, { post: short(), onOpen: vi.fn(), fontScale: 1, currentPubkey: 'me' }));
+        expect(buttons()).toHaveLength(1);
+        await layOut(200);
+        expect(buttons()).toHaveLength(1);
+        await layWords();
+        expect(buttons()).toHaveLength(4);
+    });
+
+    it('a poll with a "+N more" row never votes: the whole tile opens the page', async () => {
+        const onOpen = vi.fn();
+        await mount(createElement(PollGridTile, { post: poll(), onOpen, fontScale: 1.3, currentPubkey: 'me' }));
+        await layAll(100, 1000);
+        expect(q('poll-grid-more')!.textContent).toBe('+2 more');
+        expect(buttons()).toHaveLength(1);
+        await press(all('poll-grid-answer')[0]);
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(votePoll).not.toHaveBeenCalled();
+        expect(q('poll-grid-action-vote')!.textContent).toBe('Tap to vote ›');
+    });
+
+    it('an answer cut at 320 dp never votes: the whole tile opens the page', async () => {
+        const onOpen = vi.fn();
+        const long = short({ pollOptions: [
+            { id: 's1', text: 'Saturday', votes: 3, percentage: 60 }, { id: 's2', text: 'Sunday', votes: 2, percentage: 40 },
+            { id: 's3', text: 'Better matches with what people need', votes: 0, percentage: 0 },
+        ] });
+        await mount(createElement(PollGridTile, { post: long, onOpen, fontScale: 1, currentPubkey: 'me' }));
+        await layAll(200);
+        expect(buttons()).toHaveLength(1);
+        await press(all('poll-grid-answer')[2]);
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(votePoll).not.toHaveBeenCalled();
+    });
+
+    it('rows that cannot each be a finger\'s press tall never vote', async () => {
+        await mount(createElement(PollGridTile, { post: short(), onOpen: vi.fn(), fontScale: 1, currentPubkey: 'me' }));
+        await layAll(3 * 44 + 2 * 4 - 1);
+        expect(buttons()).toHaveLength(1);
+    });
+
+    it('a poll with a typed Other, a sealed poll the member answered, a closed poll, and a reader not signed in: each opens the page', async () => {
+        const other = { id: 'o', text: 'Other', other: true, votes: 0, percentage: 0 };
+        const cases: Array<[Record<string, unknown>, string | null]> = [
+            [{ poll_open_vote: 1, pollOptions: [...(short().pollOptions as any[]).slice(0, 2), other] }, 'me'],
+            [{ pollAnswered: true, pollOptions: [...(short().pollOptions as any[]).slice(0, 2), other] }, 'me'],
+            [{ status: 'completed' }, 'me'],
+            [{}, null],
+        ];
+        for (const [extra, who] of cases) {
+            const onOpen = vi.fn();
+            await mount(createElement(PollGridTile, { post: short(extra), onOpen, fontScale: 1, currentPubkey: who }));
+            await layAll(200);
+            expect(buttons()).toHaveLength(1);
+            await press(all('poll-grid-answer')[0]);
+            expect(onOpen).toHaveBeenCalledTimes(1);
+            await act(async () => { root.unmount(); });
+            root = createRoot(host);
+        }
+        expect(votePoll).not.toHaveBeenCalled();
+    });
+
+    it('a change of vote asks first, as the card does; Keep my vote sends nothing, Change sends it', async () => {
+        await mount(createElement(PollGridTile, { post: short({ userVotedOptionId: 's1' }), onOpen: vi.fn(), fontScale: 1, currentPubkey: 'me' }));
+        await layAll(200);
+        await press(buttons()[1]);
+        expect(Alert.alert).toHaveBeenCalledTimes(1);
+        const [title, body, choices] = vi.mocked(Alert.alert).mock.calls[0] as unknown as [string, string, Array<{ text: string; onPress?: () => void }>];
+        expect(title).toBe('Change your vote?');
+        expect(body).toBe('You voted for “Saturday”. Change it to “Sunday”?');
+        expect(choices.map(c => c.text)).toEqual(['Keep my vote', 'Change']);
+        // Keep my vote: nothing is sent.
+        await act(async () => { choices[0].onPress?.(); });
+        expect(votePoll).not.toHaveBeenCalled();
+        // Change: the vote goes.
+        vi.mocked(votePoll).mockResolvedValue({ post: short({ userVotedOptionId: 's2' }) } as any);
+        await act(async () => { choices[1].onPress?.(); });
+        expect(votePoll).toHaveBeenCalledTimes(1);
+        expect(votePoll).toHaveBeenCalledWith('poll_short', 's2');
     });
 });

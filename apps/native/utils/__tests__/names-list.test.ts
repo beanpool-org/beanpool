@@ -2644,7 +2644,8 @@ describe('reads and refusals', () => {
         const exp = screen.slice(screen.indexOf('const exportPdf'), screen.indexOf('const setTwoAdmins'));
         expect(exp.indexOf('Alert.alert(COPY.exportTitle')).toBeLessThan(exp.indexOf('fetchNamesList(anchor, identity, true)'));
         expect(exp.indexOf('fetchNamesList(anchor, identity, true)')).toBeLessThan(exp.indexOf('printToFileAsync'));
-        expect(exp).toContain('openEntries(fresh.value, opened)');
+        // V2: the PDF carries each entry's voucher mark, so the export opens the entries with the vouchers list too.
+        expect(exp).toContain('openEntries(fresh.value, opened, vouchers)');
         expect(exp).toContain('deleteAsync(uri');
     });
 

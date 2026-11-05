@@ -41,7 +41,7 @@ let observers: Array<() => void> = [];
 let fits = Infinity;
 /**
  * Or a row of `rowChars` characters in all, laid out as the page does it: the percentage's column takes the wider of what it
- * shows and the room it keeps (its data-room, "100% ✓"), and the words get the rest. Null: the `fits` model above.
+ * shows and the room it keeps (its data-room, "100%", and the " ✓" its CSS adds: "100% ✓"), and the words get the rest. Null: the `fits` model above.
  */
 let rowChars: number | null = null;
 const wordsBox = (el: HTMLElement) => el.getAttribute('data-testid') === 'poll-grid-answer-words';
@@ -61,7 +61,8 @@ beforeEach(() => {
             if (!wordsBox(this)) return 0;
             if (rowChars === null) return Math.min(this.textContent!.length, fits) * 7;
             const pct = this.parentElement?.querySelector('[data-testid="poll-grid-pct"]');
-            const column = Math.max(pct?.textContent?.length ?? 0, pct?.getAttribute('data-room')?.length ?? 0);
+            const room = pct?.getAttribute('data-room');
+            const column = Math.max(pct?.textContent?.length ?? 0, room ? room.length + ' ✓'.length : 0);
             return Math.min(this.textContent!.length, rowChars - column) * 7;
         },
     });
@@ -484,9 +485,11 @@ describe('the grid\'s poll tile, before a vote and after it', () => {
         votePoll.mockResolvedValue({ post: voted(p) } as any);
         render(<PollGridTile post={p} onOpen={vi.fn()} identity={me} />);
         const rooms = () => screen.getAllByTestId('poll-grid-pct').map(x => x.getAttribute('data-room'));
-        expect(rooms()).toEqual(['100% ✓', '100% ✓']);
+        expect(rooms()).toEqual(['100%', '100%']);
+        // The ✓ the room keeps beside it is the class's own CSS content, after the percentage.
+        for (const x of screen.getAllByTestId('poll-grid-pct')) expect(x.className).toContain("after:content-[attr(data-room)_'_✓']");
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Vote: Saturday/ })); });
-        expect(rooms()).toEqual(['100% ✓', '100% ✓']);
+        expect(rooms()).toEqual(['100%', '100%']);
     });
 
     it.each([

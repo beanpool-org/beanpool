@@ -216,12 +216,12 @@ export const GRID_POLL_BAR = 'absolute inset-y-0 start-0 bg-bp-chip-poll-tint';
 /** The answer's words (one line, ending in "…"), its percentage at the end, never cut. */
 export const GRID_POLL_ANSWER = 'relative min-w-0 flex-1 truncate font-bold';
 /**
- * The percentage, and the ✓ on the member's own answer. Its room is the widest it can take, "100% ✓" (its `data-room`, drawn
+ * The percentage, and the ✓ on the member's own answer. Its room is the widest it can take, "100% ✓" (its `data-room` and a ✓, drawn
  * invisible in the same grid cell), on every row, voted or not, so a vote never narrows the answer's words: a 35-character
  * answer whole at 320 px before a vote was cut after it, and the tile stopped voting (#2926 review). GRID_POLL_PCT_SHOWN is
  * what is seen, at the end of that room.
  */
-export const GRID_POLL_PCT = 'relative shrink-0 grid justify-items-end font-black text-bp-chip-poll-ink after:invisible after:content-[attr(data-room)] after:[grid-area:1/1]';
+export const GRID_POLL_PCT = "relative shrink-0 grid justify-items-end font-black text-bp-chip-poll-ink after:invisible after:content-[attr(data-room)_'_✓'] after:[grid-area:1/1]";
 export const GRID_POLL_PCT_SHOWN = '[grid-area:1/1]';
 
 /**

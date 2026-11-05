@@ -152,7 +152,7 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
     const pinned = pinLive(livePost as any);
     const label = pollTileLabel({ question: livePost.title, answerCount: options.length, totalVotes, closed: isClosed });
     // The widest the percentage and the ✓ can be: the room every row keeps for them (GRID_POLL_PCT).
-    const pctRoom = `${t('{rate}%', { rate: 100 })} ✓`;
+    const pctRoom = t('{rate}%', { rate: 100 });
     const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();

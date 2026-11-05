@@ -74,6 +74,20 @@ export function useListPhotoSteps(photo: string | null | undefined, onFailed?: (
     };
 }
 
+/**
+ * A list card's photo never cross-fades (photo-white, Marty 5 Nov 2026, 1.2.100 on a Pixel 9 Pro: "the images would appear
+ * for a moment and then go white"). The photo loads twice: hidden, at the tile's size, then again once it has drawn and
+ * takes the card's own size (expo-image loads again for a new size). The Market's FlatList detaches the rows below the screen
+ * on Android (removeClippedSubviews), and a fade on a detached view only starts when the row is attached again. expo-image
+ * cross-fades between its two image views, and with both loads waiting on a detached row, the fade-out it set up for the
+ * first load is left on the view the second load drew on: when the row scrolls in, the photo fades in and that view is then
+ * cleared, the other one already was, and the slot is white with no event to the card (expo-image 55
+ * ExpoImageViewWrapper.onResourceReady). Measured on the emulator, 25 card photos in the list view: with a 150 ms fade every
+ * one below the first screen was empty once scrolled to (68 of 94 slots seen); with none, none was (0 of 775, over 8 passes
+ * down and up, light and dark). With no fade, each load swaps the views at once.
+ */
+export const LIST_PHOTO_TRANSITION = 0;
+
 /** While its photo has not drawn, the Image is kept out of the card's layout and unseen; the tile holds the slot. */
 export const HIDDEN_UNTIL_DRAWN = { position: 'absolute', opacity: 0 } as const;
 

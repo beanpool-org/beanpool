@@ -518,7 +518,6 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         style={styles.dealThumb}
                         contentFit="cover"
                         cachePolicy="memory-disk"
-                        transition={150}
                         fallback={(
                             <View style={[styles.dealThumb, styles.dealThumbFallback]}>
                                 <Text style={{ fontSize: 24, opacity: 0.5 }}>{isBuyer ? '🛒' : '🏷️'}</Text>
@@ -636,7 +635,6 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         style={styles.dealThumb}
                         contentFit="cover"
                         cachePolicy="memory-disk"
-                        transition={150}
                         fallback={(
                             <View style={[styles.dealThumb, styles.dealThumbFallback]}>
                                 <Text style={{ fontSize: 24, opacity: 0.5 }}>📦</Text>

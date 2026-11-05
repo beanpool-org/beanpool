@@ -3,7 +3,7 @@ import { View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-nat
 import { Image, type ImageContentPosition } from 'expo-image';
 import { CategoryTile, type CategoryTileKind, type CategoryTileSize } from './CategoryTile';
 import { refreshListingAfterPhotoError } from '../utils/photo-refresh';
-import { styleUntilDrawn, useListPhotoSteps } from './useListPhotoSteps';
+import { LIST_PHOTO_TRANSITION, styleUntilDrawn, useListPhotoSteps } from './useListPhotoSteps';
 
 /** Grid cards only: the 32 and 80 dp thumbnails stay centred, as they are on the web. */
 export const MARKET_GRID_CROP: ImageContentPosition = { top: '33%', left: '50%' };
@@ -22,7 +22,8 @@ export const MARKET_GRID_CROP: ImageContentPosition = { top: '33%', left: '50%' 
  * Never an empty slot while it loads either (card-photo-blank, Marty 4 Nov 2026: the same card showed an empty slot, no
  * photo and no tile, through two restarts): the tile holds the slot until the photo has actually drawn (onLoad), and a
  * photo that neither draws nor fails in time counts as failed (useListPhotoSteps). The Image is mounted from the start,
- * out of the layout and unseen, so it loads, and takes the slot once it has drawn.
+ * out of the layout and unseen, so it loads, and takes the slot once it has drawn. It never cross-fades: a fade left the
+ * photos of the cards below the first screen white once they scrolled in (photo-white, LIST_PHOTO_TRANSITION).
  *
  * The grid's 4:3 frame passes MARKET_GRID_CROP, so upright photos anchor towards the top third so heads/jar tops stay in (market-card-43).
  *
@@ -58,7 +59,7 @@ export function MarketCardPicture({ postId, cover, picture, category, kind, size
                 contentFit="cover"
                 contentPosition={contentPosition}
                 cachePolicy="memory-disk"
-                transition={150}
+                transition={LIST_PHOTO_TRANSITION}
                 onLoad={steps.onLoad}
                 onError={steps.onError}
                 onLoadStart={steps.onLoadStart}

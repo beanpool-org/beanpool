@@ -100,9 +100,8 @@ export function MobileHeader({
 }
 
 /**
- * The side bar's status (768 px and up): the needs-you icons on a row of their own, then the connection status with the
- * "?", Invite friends and Settings. The side bar is 256 px: its row holds the status and those three, and a row of icons beside them pushed
- * Settings off it, so they don't share it.
+ * The side bar's status (768 px and up): the needs-you icons on a row of their own, then the footer controls with the
+ * "?", Invite friends and Settings on line 1, and the connection status on line 2 under them so its time text is never cut.
  */
 export function SidebarStatus({ isGuest, identityPubkey, activeTab, onNavigate, settingsSeen, setShowSettings }: {
     isGuest: boolean | null;
@@ -115,14 +114,16 @@ export function SidebarStatus({ isGuest, identityPubkey, activeTab, onNavigate, 
     return (
         <>
             <NeedsYouIcons identityPubkey={identityPubkey} onNavigate={onNavigate} activeTab={activeTab} variant="sidebar" />
-            <div className="flex items-center justify-between px-2 py-1">
-                <SyncStatus isMember={!isGuest} />
+            <div className="flex flex-wrap items-center justify-between gap-y-1.5 px-2 py-1">
                 <SidebarControls
                     showSettings={settingsSeen}
                     setShowSettings={setShowSettings}
                     onNavigate={onNavigate}
                     isMember={!isGuest}
                 />
+                <div className="w-full flex items-center pt-0.5">
+                    <SyncStatus isMember={!isGuest} />
+                </div>
             </div>
         </>
     );

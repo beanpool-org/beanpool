@@ -112,13 +112,14 @@ vi.mock('./pages/ProjectsPage', () => ({
 }));
 vi.mock('./pages/MarketplacePage', () => ({ MarketplacePage: () => <div data-testid="marketplace-page" /> }));
 vi.mock('./pages/MessagesPage', () => ({ MessagesPage: () => <div data-testid="messages-page" /> }));
-vi.mock('./pages/PeoplePage', () => ({ PeoplePage: () => <div data-testid="people-page" /> }));
+vi.mock('./pages/PeoplePage', () => ({ PeoplePage: ({ initialView }: { initialView?: string }) => <div data-testid="people-page" data-initial-view={initialView} /> }));
 vi.mock('./pages/SettingsPage', () => ({
     SettingsPage: ({ onBack }: { onBack: () => void }) => <button onClick={onBack}>← Back</button>,
 }));
 
 const sidebar = () => document.querySelector('aside') as HTMLElement;
 const cog = () => within(sidebar()).getByTestId('sidebar-settings');
+const inviteButton = () => within(sidebar()).getByTestId('sidebar-invite');
 const profileButton = () => within(sidebar()).getByRole('button', { name: /View Profile/ });
 
 async function landed() {
@@ -240,6 +241,59 @@ describe('the sidebar\'s Settings cog opens Settings where the member sees it', 
         fireEvent.click(within(sidebar()).getByRole('button', { name: /Home/ }));
         await waitFor(() => expect(screen.queryByTestId('treasury-overlay')).toBeNull());
         expect(screen.getByTestId('home-page')).toBeInTheDocument();
+    });
+});
+
+describe('the Invite button opens People Invites where the member sees it', () => {
+    beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); standing.isMember = true; });
+
+    it('from the member\'s own profile: the sidebar\'s Invite button opens People Invites and the profile closes', async () => {
+        await landed();
+        fireEvent.click(profileButton());
+        expect(await screen.findByTestId('profile-overlay')).toHaveAttribute('data-pubkey', 'my-user-pubkey');
+
+        fireEvent.click(inviteButton());
+        const people = await screen.findByTestId('people-page');
+        expect(people).toBeInTheDocument();
+        expect(people).toHaveAttribute('data-initial-view', 'invites');
+        expect(screen.queryByTestId('profile-overlay')).toBeNull();
+    });
+
+    it('from an enterprise\'s page: the sidebar\'s Invite button opens People Invites and that page closes', async () => {
+        await landed();
+        fireEvent.click(within(sidebar()).getByRole('button', { name: /Commons/ }));
+        fireEvent.click(await screen.findByText('Open Treasury'));
+        await screen.findByTestId('treasury-overlay');
+
+        fireEvent.click(inviteButton());
+        const people = await screen.findByTestId('people-page');
+        expect(people).toBeInTheDocument();
+        expect(people).toHaveAttribute('data-initial-view', 'invites');
+        expect(screen.queryByTestId('treasury-overlay')).toBeNull();
+    });
+
+    it('from a tool: the sidebar\'s Invite button opens People Invites and the tool closes', async () => {
+        await landed();
+        fireEvent.click(screen.getByText('Open Tools'));
+        await screen.findByTestId('tools-overlay');
+
+        fireEvent.click(inviteButton());
+        const people = await screen.findByTestId('people-page');
+        expect(people).toBeInTheDocument();
+        expect(people).toHaveAttribute('data-initial-view', 'invites');
+        expect(screen.queryByTestId('tools-overlay')).toBeNull();
+    });
+
+    it('the mobile header\'s Invite button opens People Invites and closes overlays the same way', async () => {
+        await landed();
+        fireEvent.click(profileButton());
+        await screen.findByTestId('profile-overlay');
+
+        fireEvent.click(screen.getByTestId('header-invite'));
+        const people = await screen.findByTestId('people-page');
+        expect(people).toBeInTheDocument();
+        expect(people).toHaveAttribute('data-initial-view', 'invites');
+        expect(screen.queryByTestId('profile-overlay')).toBeNull();
     });
 });
 

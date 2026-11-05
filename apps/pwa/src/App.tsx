@@ -1095,7 +1095,10 @@ export function App() {
                         isGuest={isGuest}
                         identityPubkey={identity?.publicKey}
                         activeTab={activeTab}
-                        onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
+                        onNavigate={(tab, ctxId, txId) => {
+                            closePagesOver();
+                            navigateToTab(tab, ctxId, txId);
+                        }}
                         settingsSeen={settingsSeen}
                         setShowSettings={setSettingsFromCog}
                     />
@@ -1163,7 +1166,10 @@ export function App() {
                     settingsSeen={settingsSeen}
                     setShowSettings={setSettingsFromCog}
                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
-                    onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
+                    onNavigate={(tab, ctxId, txId) => {
+                        closePagesOver();
+                        navigateToTab(tab, ctxId, txId);
+                    }}
                 />
 
                 {/* Main Scrollable Canvas */}

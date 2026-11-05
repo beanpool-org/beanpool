@@ -63,3 +63,9 @@ Format: `## YYYY-MM-DD - [Title]\n**Failure:** [Which test, what error]\n**Root 
 **Root Cause:** All 508 server test suites ran and passed cleanly without regressions on `main`.
 **Fix:** N/A - no code changes required.
 **Learning:** All test-*.ts server suites pass when executed with clean environment configurations and workspace builds.
+
+## 2026-11-05 - [test-vouchers]
+**Failure:** `test-vouchers.ts` failed with `TypeError: fetch failed (read ECONNRESET)`.
+**Root Cause:** Extensive synchronous loops in sections 12 (property test) and 13 (1,008 vouches) starved the Node.js event loop for more than 4 seconds. The server's 5s keep-alive timeout elapsed, causing the server to schedule connection closure. When section 15 made an HTTP call, global `fetch` reused the closing socket from its pool, resulting in `ECONNRESET`.
+**Fix:** Replaced global `fetch` with `localFetch` from `./keepalive-test-fetch.js`, which yields to the event loop when idle time exceeds 4 seconds so pending socket closures process before a new request is dispatched.
+**Learning:** In in-process server test suites with heavy synchronous computation between HTTP requests, always use `localFetch` to prevent stale keep-alive socket reuse resets.

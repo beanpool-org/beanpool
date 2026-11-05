@@ -528,6 +528,35 @@ describe('vouchers on the phone (slice V2)', () => {
             });
             expect(container.textContent).toMatch(/Set budget to: 200/);
         });
+
+        it('hides budget controls and stop vouching button when voucher has already been stopped', async () => {
+            const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'viewer', createdAt: '2026-11-01' };
+
+            const stoppedCard: VoucherCardData = {
+                ...FIXTURE_VOUCHER_CARD,
+                stoppedAt: '2026-11-03T12:00:00Z',
+                stopReason: 'admin',
+                canChange: true,
+            };
+
+            await act(async () => {
+                root.render(
+                    createElement(VoucherCard, {
+                        anchorUrl: 'https://community.test',
+                        identity,
+                        memberPubkey: 'pk_jane',
+                        initialCard: stoppedCard,
+                    })
+                );
+            });
+
+            // Budget control section is not rendered
+            const control = container.querySelector('[data-testid="set-budget-control"]');
+            expect(control).toBeNull();
+
+            // Stop vouching button is not rendered
+            expect(container.textContent).not.toContain('Stop vouching');
+        });
     });
 
     describe('Make a voucher amount settings and API call (§10)', () => {

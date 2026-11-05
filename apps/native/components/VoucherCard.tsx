@@ -316,7 +316,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                     </Text>
 
                     {/* Set budget to control (§10) */}
-                    {card.canChange && (
+                    {card.canChange && !card.stoppedAt && (
                         <View style={styles.controlSection} testID="set-budget-control">
                             <Text style={styles.controlTitle}>{t('Set budget to')}</Text>
                             <Text style={styles.controlHint}>
@@ -391,7 +391,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                         <Text style={styles.toggleBtnText}>{t('See who they brought in ›')}</Text>
                     </Pressable>
 
-                    {card.canChange && card.source === 'entry' && (
+                    {card.canChange && card.source === 'entry' && !card.stoppedAt && (
                         <Pressable
                             style={[styles.dangerBtn, busy && styles.disabled]}
                             onPress={handleStopVoucher}

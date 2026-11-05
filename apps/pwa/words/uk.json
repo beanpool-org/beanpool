@@ -3641,7 +3641,6 @@
   "{title} by {name} on {platform}": "{title} від {name} на {platform}",
   "{title} · within {km} km": "{title} · у радіусі {km} км",
   "{title}, by {name}. Opens the Pulse.": "{title}, автор: {name}. Відкриває «Пульс».",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "Потрібно {voters} із {n} голосу",
     "few": "Потрібно {voters} із {n} голосів",
@@ -3863,7 +3862,6 @@
   "🖼️ Gallery": "🖼️ Галерея",
   "🗑️ Delete Group Post (Convenor)": "🗑️ Видалити публікацію групи (Координатор)",
   "🗑️ Delete Post": "🗑️ Видалити публікацію",
-  "🗞️ DAILY PULSE": "🗞️ ДУМКА ДНЯ",
   "🗞️ Daily Pulse": "🗞️ Щоденний пульс",
   "🗳️ Poll": "🗳️ Опитування",
   "🗳️ Polls": "🗳️ Опитування",

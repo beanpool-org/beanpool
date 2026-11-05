@@ -544,6 +544,36 @@ export function CommunityShapeSection({
                         </div>
                     </ShapeRow>
 
+                    {/* voucherBudget (slice V5), beside the known floor, on a server that has it */}
+                    {settings.voucherBudget !== undefined && (
+                        <ShapeRow
+                            id="voucherBudget"
+                            icon="🎟️"
+                            name={t('Budget per voucher')}
+                            summary={t('The budget each voucher starts with, to vouch for the people they invite (100 to 2,000 Beans in 100s; default 1,000).')}
+                            displayValue={t('{n} Beans').replace('{n}', settings.voucherBudget.value.toLocaleString('en'))}
+                            lock={settings.voucherBudget.lock}
+                            {...rowProps('voucherBudget', settings.voucherBudget.configured)}
+                        >
+                            <div className="space-y-3 pt-2">
+                                <label htmlFor="shape-voucher-budget" className="block text-xs font-bold text-nature-300 mb-1">
+                                    {t('Budget per voucher (Beans, 100 to 2,000 in 100s; default 1,000)')}
+                                </label>
+                                <input
+                                    id="shape-voucher-budget"
+                                    type="number"
+                                    min={100}
+                                    max={2000}
+                                    step={100}
+                                    value={typeof draftValue === 'number' ? draftValue : ''}
+                                    onChange={(e) => setDraftValue(e.target.value === '' ? null : Number(e.target.value))}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
+                                />
+                                {controls('voucherBudget', typeof draftValue !== 'number' || draftValue === settings.voucherBudget.configured || draftValue < 100 || draftValue > 2000 || draftValue % 100 !== 0)}
+                            </div>
+                        </ShapeRow>
+                    )}
+
                     {/* memberGift (slice G1), beside the known floor, on a server that has it: 0 turns the tab off in both apps */}
                     {settings.memberGift !== undefined && (
                         <ShapeRow

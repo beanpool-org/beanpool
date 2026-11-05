@@ -24,9 +24,9 @@ const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ 
 const events = vi.hoisted(() => ({ listeners: new Map<string, Set<(...args: unknown[]) => void>>() }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
-    const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
+    const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(8).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID, placeholder, onLayout, value, onChangeText, disabled } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID, placeholder, onLayout, value, onChangeText, disabled, numberOfLines } = props;
         useEffect(() => { onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 280, height: 40 } } }); }, []);
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
@@ -35,8 +35,15 @@ vi.mock('react-native', () => {
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (placeholder) attrs.placeholder = placeholder;
-        void flat(props.style);
+        // What yoga-dom-layout.ts lays out (the DP3 cases): the host's style as it was given, and a Text's line limit.
+        attrs['data-style'] = JSON.stringify(flat(typeof props.style === 'function' ? props.style({ pressed: false }) : props.style));
+        if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
         return createElement(tag, attrs, children);
+    };
+    // A scroll view around its content container, as the phone builds it: the page's column is the container's style.
+    const Scroll = function Scroll(props: Record<string, any>) {
+        return createElement('div', { 'data-style': JSON.stringify(flat(props.style)) },
+            createElement('div', { 'data-testid': props.horizontal ? undefined : 'post-column', 'data-style': JSON.stringify(flat(props.contentContainerStyle)) }, props.children));
     };
     const listener = () => ({ remove() {} });
     const absolute = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 };
@@ -44,7 +51,7 @@ vi.mock('react-native', () => {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
         Image: el('img'),
         Dimensions: { get: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }) },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), TouchableOpacity: el('button'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: Scroll, TextInput: el('input'), TouchableOpacity: el('button'),
         ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: absolute, absoluteFillObject: absolute, flatten: (s: unknown) => flat(s) },
@@ -134,6 +141,12 @@ const ME = { publicKey: 'me-key', callsign: 'Ana', privateKey: 'p' };
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/EventDetail', () => ({ EventDetail: () => null }));
+// The carousel as the frame hands it (event-page-shell-render.test.ts's stand-in): the height and the corners it was given.
+vi.mock('../../components/PhotoCarousel', () => ({
+    PhotoCarousel: (p: { height?: number; borderRadius?: number }) => createElement('div', {
+        'data-testid': 'post-carousel', 'data-height': String(p.height), 'data-radius': String(p.borderRadius), 'data-style': JSON.stringify({ height: p.height }),
+    }),
+}));
 vi.mock('../blocklist', () => ({ blockUser: async () => {}, getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 vi.mock('../profile-status', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../profile-status')>()),
@@ -145,6 +158,9 @@ vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls,
 import { LanguageProvider } from '../../components/LanguageProvider';
 import PostDetailScreen from '../../app/post/[id]';
 import { SHOWN_ON_GLOBAL_STORE_KEY } from '../storage-keys';
+import { layOut } from './yoga-dom-layout';
+import { MARKET_CARD_SHELL } from '@beanpool/core';
+import { lightColors, darkColors } from '../../constants/colors';
 
 const NODE = 'https://mullum.example';
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -692,4 +708,181 @@ describe('a poll has a page: its card under Back, the answers on it, its author 
         await press(host, 'Dee');
         expect(nav.to).toContainEqual({ pathname: '/public-profile', params: { publicKey: 'dee-key', callsign: 'Dee' } });
     });
+});
+
+/**
+ * Slice DP3 (DESIGN-detail-pages-fable.md §3; DESIGN-detail-pages-frame-fable.md §1.7, §2 and §3; Marty, 6 Nov 2026, on the
+ * item page beside the new event page: "Yes let's make them consistent"): app/post/[id].tsx in the event page's order, laid out
+ * with Yoga (yoga-dom-layout.ts) at the floor: 320 dp wide, 569 tall, the text at 1.3×, the status bar's 24 in, light and dark.
+ * The chips, the title, the terms box, the take-up, the 4:3 photo, the quiet row (Message, Share), the description, POSTED BY,
+ * Report; nothing wider than the screen; the share button inside the page's 16 dp column (it ran edge to edge).
+ *
+ * The fixtures are Marty's apples (a Need on the global community: Beans off, so the terms box says IN RETURN with the long
+ * note and the local community's line) and an Offer with Beans (45 B, a price and no note), each with a photo and without.
+ */
+describe('DP3: the listing page in the event page\'s order, at 320 × 569 and 1.3× text', () => {
+    const DAY = 86_400_000;
+    const PHOTO = JSON.stringify(['https://mullum.example/uploads/apples.webp']);
+    const APPLES = (over: Record<string, unknown> = {}) => listing({
+        id: 'p-apples', type: 'need', title: 'Apples needed', description: 'Looking for fresh apples', category: 'food',
+        author_pubkey: 'marty-key', author_callsign: 'Marty', credits: 0, repeatable: 1, photos: PHOTO, created_at: iso(Date.now() - 3 * DAY), ...over,
+    });
+    const POTTERY = (over: Record<string, unknown> = {}) => listing({ photos: PHOTO, ...over });
+    /** The global community as Marty's shot has it: Beans off and shown as the local community's (showcase), deals on. */
+    const onGlobalBeansOff = () => store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: {
+        profile: 'global', features: { beans: false, escrow: true, showcase: true, invites: true, decisions: false }, checkedAt: new Date().toISOString(),
+    } }));
+    const byId = (id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+    const spanWith = (text: string) => Array.from(host.querySelectorAll('span')).find((s) => s.textContent === text) as HTMLElement | undefined;
+    const styleOf = (el: Element | null | undefined): Record<string, any> => JSON.parse(el?.getAttribute('data-style') || '{}');
+    const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    /** Yoga's layout of the whole screen, and an element's box in screen coordinates. */
+    const screen = () => {
+        const layout = layOut(host.firstElementChild!, { width: 320, height: 569 }, { fontScale: 1.3 });
+        return (el: Element) => {
+            const b = layout.box(el);
+            let left = b.left; let top = b.top;
+            for (let p = el.parentElement; p && p !== host; p = p.parentElement) {
+                const pb = layout.box(p);
+                left += pb.left; top += pb.top;
+            }
+            return { left, top, width: b.width, height: b.height };
+        };
+    };
+    const takeUp = (abs: ReturnType<typeof screen>) => { const b = abs(byId('post-take-up')!); return { top: b.top, bottom: b.top + b.height }; };
+
+    for (const [theme, colors] of [['light', lightColors], ['dark', darkColors]] as const) {
+        it(`Marty's apples (${theme}): the chips, the title, IN RETURN, Offer to Fulfill, the photo, Message and Share, then POSTED BY`, async () => {
+            look.theme = theme;
+            onGlobalBeansOff();
+            await open(APPLES());
+            // The chip row: the list card's chips, each its own node, the time at the right.
+            const row = byId('post-chip-row')!;
+            expect(Array.from(row.querySelectorAll(':scope > div > div')).map((c) => c.textContent)).toEqual(['NEED', '🥕 Food', '↻ RECURRING']);
+            expect(styleOf(byId('post-type-chip'))).toMatchObject({ backgroundColor: colors.market.need.bg, borderRadius: 6 });
+            expect(row.textContent).toContain('3d ago');
+            expect(host.textContent).not.toContain('● NEED');
+            // The title 22/800; the terms box on the page box, left-aligned, IN RETURN and the long note.
+            expect(styleOf(byId('post-title'))).toMatchObject({ fontSize: 22, fontWeight: '800', color: colors.text.heading });
+            const terms = byId('no-beans-terms')!;
+            expect(styleOf(terms)).toMatchObject({ borderRadius: MARKET_CARD_SHELL.radius, padding: MARKET_CARD_SHELL.textPadding, backgroundColor: colors.surface.card, borderColor: colors.border.default });
+            expect(styleOf(terms).alignItems).toBeUndefined();
+            expect(styleOf(spanWith('IN RETURN'))).toMatchObject({ fontSize: 10, fontWeight: '800', letterSpacing: 1.5, color: colors.text.muted });
+            expect(styleOf(byId('no-beans-terms-note')).textAlign).toBeUndefined();
+            expect(byId('no-beans-terms-note')!.textContent).toContain('No Beans here yet. In a local community');
+
+            // The order: chips → title → the terms box → the take-up → the photo → Message, Share → description → POSTED BY → Report.
+            const take = byId('post-take-up')!;
+            expect(take.textContent).toBe('✋ Offer to Fulfill');
+            const message = byId('post-message')!;
+            const share = host.querySelector('[data-testid="share-open-button"]')!;
+            const posted = spanWith('POSTED BY')!;
+            const report = host.querySelector('[aria-label="Report Post"]')!;
+            for (const [a, b, what] of [
+                [row, byId('post-title')!, 'the chips, then the title'], [byId('post-title')!, terms, 'the title, then the terms'],
+                [terms, take, 'the terms, then the take-up'], [take, byId('post-photo-frame')!, 'the take-up, then the photo'],
+                [byId('post-photo-frame')!, message, 'the photo, then Message'], [message, share, 'Message, then Share'],
+                [share, byId('post-description')!, 'Share, then the description'], [take, posted, 'the take-up before POSTED BY'],
+                [byId('post-description')!, posted, 'the description, then POSTED BY'], [posted, report, 'POSTED BY, then Report'],
+            ] as const) expect(before(a, b), what).toBe(true);
+            expect(message.textContent).toBe('💬 Message Marty');
+
+            const abs = screen();
+            // The column pads 16: the share button sits inside it, never at the screen's edge.
+            expect(abs(byId('share-post')!).left).toBeCloseTo(16, 1);
+            expect(abs(byId('post-column')!).width).toBe(320);
+            // The quiet row in the neutral outline, 48 tall at least, inside the column.
+            for (const b of [message, share]) {
+                expect(styleOf(b)).toMatchObject({ borderColor: colors.border.strong, backgroundColor: colors.surface.card, minHeight: 48, borderRadius: 12 });
+                expect(abs(b).height).toBeGreaterThanOrEqual(48);
+                expect(abs(b).left).toBeGreaterThanOrEqual(15.5);
+                expect(abs(b).left + abs(b).width).toBeLessThanOrEqual(304.5);
+            }
+            // The take-up: the filled page button, the Need's orange, the column's width.
+            expect(styleOf(take)).toMatchObject({ backgroundColor: colors.action.fab, minHeight: 48, borderRadius: 12 });
+            expect(abs(take).width).toBeCloseTo(288, 0);
+            // The photo: 4:3 of the 288 dp column, under the column's corners, handed its height.
+            const frame = byId('post-photo-frame')!;
+            expect(abs(frame).width).toBeCloseTo(288, 0);
+            expect(abs(frame).height).toBeCloseTo(216, 0);
+            expect(styleOf(frame)).toMatchObject({ borderRadius: MARKET_CARD_SHELL.radius, overflow: 'hidden' });
+            expect(byId('post-carousel')!.getAttribute('data-height')).toBe('216');
+            // POSTED BY in the column, the page box, no margin of its own a side.
+            const postedBox = posted.parentElement!;
+            expect(abs(postedBox).left).toBeCloseTo(16, 1);
+            expect(abs(postedBox).width).toBeCloseTo(288, 0);
+            expect(styleOf(postedBox)).toMatchObject({ borderRadius: MARKET_CARD_SHELL.radius, marginBottom: 16 });
+            expect(styleOf(postedBox).marginHorizontal).toBeUndefined();
+            // Nothing is wider than the screen.
+            for (const el of Array.from(host.querySelectorAll('[data-style]'))) {
+                if (el.closest('[data-modal]') || el.parentElement?.closest('span')) continue;
+                const b = abs(el);
+                if (b.width === 0 && b.height === 0) continue;
+                expect(b.left + b.width, `${el.tagName} "${(el.textContent ?? '').slice(0, 40)}" ends at ${Math.round(b.left + b.width)}`).toBeLessThanOrEqual(320.5);
+            }
+            // The note clamps to three lines with "More" (the frame's first fallback); More shows it whole and goes.
+            expect(byId('no-beans-terms-note')!.getAttribute('data-lines')).toBe('3');
+            const more = byId('no-beans-terms-more')!;
+            expect(more.textContent).toBe('More');
+            expect(abs(more).height).toBeGreaterThanOrEqual(48);
+            expect(styleOf(more.querySelector('span')).color).toBe(colors.text.link);
+            await act(async () => { more.click(); });
+            await settle(2);
+            expect(byId('no-beans-terms-note')!.getAttribute('data-lines')).toBeNull();
+            expect(byId('no-beans-terms-more')).toBeNull();
+        });
+    }
+
+    it('an Offer with Beans: the price box left-aligned (45, its unit), Accept Offer on the brand fill, under it the photo', async () => {
+        await open(POTTERY({ price_type: 'hourly', credits: 30 }));
+        const terms = byId('price-terms')!;
+        expect(terms.textContent).toContain('ASKING PRICE');
+        expect(terms.textContent).toContain('30');
+        expect(terms.textContent).toContain('/ Hr');
+        expect(byId('no-beans-terms')).toBeNull();
+        const take = byId('post-take-up')!;
+        expect(take.textContent).toBe('🤝 Accept Offer');
+        expect(styleOf(take).backgroundColor).toBe(lightColors.brand.fill);
+        expect(before(terms, take) && before(take, byId('post-photo-frame')!)).toBe(true);
+        expect(before(take, spanWith('POSTED BY')!)).toBe(true);
+    });
+
+    /**
+     * The stop (DESIGN-detail-pages-frame-fable.md §2): at 320 × 569 with the text at 1.3× (the status bar's 24 in), with a photo
+     * and without, the take-up's top at or above 500 dp and its bottom on the 569 dp screen. The photo is under the take-up, so the
+     * take-up does not move with the picture. Measured here, Yoga, from the screen's top:
+     *
+     *                                                   the take-up's top · its bottom
+     *   Marty's apples (a Need, Beans off), as built      557.6   · 605.6   the note at eight lines: over the stop
+     *   the same, the note clamped to three, "More"       488.6   · 536.6   the frame's first fallback (§1.7)
+     *   an Offer with Beans (45 B, fixed)                315.65  · 363.65  a price and no note
+     *
+     * Each the same with a photo and without. The fixed top is the event page's: the status bar 24, the header 65, the column's 16.
+     */
+    const STOP = 500;
+    const SCREEN = 569;
+    const measured = async (row: Record<string, unknown>, prep: () => void) => {
+        act(() => root.unmount());
+        root = createRoot(host);
+        prep();
+        await open(row);
+        return takeUp(screen());
+    };
+    const onLocalBeansOn = () => store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: {
+        profile: 'local', features: { beans: true, escrow: true, enterprises: true, decisions: true, invites: true, showcase: false }, checkedAt: new Date().toISOString(),
+    } }));
+    for (const [name, row, prep, top] of [
+        ["Marty's apples with a photo", APPLES(), onGlobalBeansOff, 488.6],
+        ["Marty's apples without a photo", APPLES({ photos: '[]' }), onGlobalBeansOff, 488.6],
+        ['an Offer with Beans with a photo', POTTERY(), onLocalBeansOn, 315.65],
+        ['an Offer with Beans without a photo', POTTERY({ photos: '[]' }), onLocalBeansOn, 315.65],
+    ] as const) {
+        it(`${name}: the take-up's top at ${top} dp (≤ ${STOP}) and its bottom at ${top + 48} (≤ ${SCREEN})`, async () => {
+            const t = await measured(row, prep);
+            expect(t.top, `the take-up's top at ${t.top}`).toBeLessThanOrEqual(STOP);
+            expect(t.bottom, `its bottom at ${t.bottom}`).toBeLessThanOrEqual(SCREEN);
+            expect(t.top).toBeCloseTo(top, 1);
+            expect(t.bottom).toBeCloseTo(top + 48, 1);
+        });
+    }
 });

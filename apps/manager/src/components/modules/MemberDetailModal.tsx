@@ -10,6 +10,7 @@ import { ModalBackdrop } from '../common/ModalBackdrop';
 import { useTimeout } from '../../lib/use-timeout';
 import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fetchAdminDecisions, fetchRekeyStatusApi, fetchBranchPruneFigures } from '../../lib/node-client';
 import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
+import { MemberVoucherPanel } from './MemberVoucherPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { t } from '../../lib/fresh-proof';
 import { flagHeading } from '../../lib/flag-words';
@@ -648,14 +649,23 @@ export function MemberDetailModal({
                 {/* Action Controls */}
                 <div className="space-y-3 border-t border-nature-800 pt-4">
                     {nodeUrl && pubkey && memberStatus === 'active' && (
-                        <MemberKnownFloorPanel
-                            nodeUrl={nodeUrl}
-                            pubkey={pubkey}
-                            displayName={displayName}
-                            adminPassword={adminPassword}
-                            tfaToken={tfaToken}
-                            onChanged={onKnownFloorChanged}
-                        />
+                        <>
+                            <MemberKnownFloorPanel
+                                nodeUrl={nodeUrl}
+                                pubkey={pubkey}
+                                displayName={displayName}
+                                adminPassword={adminPassword}
+                                tfaToken={tfaToken}
+                                onChanged={onKnownFloorChanged}
+                            />
+                            <MemberVoucherPanel
+                                nodeUrl={nodeUrl}
+                                pubkey={pubkey}
+                                displayName={displayName}
+                                adminPassword={adminPassword}
+                                tfaToken={tfaToken}
+                            />
+                        </>
                     )}
                     {canSuspendHere && (
                         <div className="p-3 rounded-2xl bg-nature-900/60 border border-nature-800 space-y-2 text-xs" data-testid="suspend-panel">

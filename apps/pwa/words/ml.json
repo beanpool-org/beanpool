@@ -3399,7 +3399,6 @@
   "{title} by {name} on {platform}": "{platform}-ൽ {name} എഴുതിയ {title}",
   "{title} · within {km} km": "{title} · {km} കി.മീ ഉള്ളിൽ",
   "{title}, by {name}. Opens the Pulse.": "{title}, {name} എഴുതിയത്. പൾസ് തുറക്കും.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "ആവശ്യമായ {n} വോട്ടിൽ {voters} എണ്ണം",
     "other": "ആവശ്യമായ {n} വോട്ടുകളിൽ {voters} എണ്ണം"
@@ -3607,7 +3606,6 @@
   "🖼️ Gallery": "🖼️ ഗാലറി",
   "🗑️ Delete Group Post (Convenor)": "🗑️ ഗ്രൂപ്പ് പോസ്റ്റ് ഇല്ലാതാക്കുക (കൺവീനർ)",
   "🗑️ Delete Post": "🗑️ പോസ്റ്റ് ഇല്ലാതാക്കുക",
-  "🗞️ DAILY PULSE": "🗞️ പ്രതിദിന പൾസ്",
   "🗞️ Daily Pulse": "🗞️ പ്രതിദിന പൾസ്",
   "🗳️ Poll": "🗳️ പോൾ",
   "🗳️ Polls": "🗳️ വോട്ടെടുപ്പുകൾ",

@@ -73,7 +73,7 @@ import { issueAutomationToken } from './automation-tokens.js';
 import * as vouchersModule from './engine/vouchers.js';
 import { getDoor, setDoor, DEFAULT_DOOR } from './config/door.js';
 import { listKeptNotices } from './engine/kept-notices.js';
-import { setKnownFloorException } from './config/known-floor.js';
+import { setKnownFloorException, readKnownFloorLogFor } from './config/known-floor.js';
 import { localFetch } from './keepalive-test-fetch.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
@@ -443,6 +443,8 @@ async function main(): Promise<void> {
     assert(janeCard.status === 200 && janeCard.body?.writtenOff > 0 && janeCard.body?.people?.some((p: any) => p.memberPubkey === sam.pk && p.left === true && p.raised === true),
         `9. Jane's card sums what was written off and marks Sam gone and raised (${show(janeCard)})`);
     assert(count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'voucher_looked' AND member_pubkey = ?", jane.pk) === 1, '9. opening the card is a logged look');
+    assert(!readKnownFloorLogFor(jane.pk).some((l: { action: string }) => l.action === 'voucher_looked'),
+        "9. the look stays out of the member's known-floor panel, so it can't push real changes out of its window (#2923)");
     spendBelowZero(uma, mel, 10);
     const umaDebt = Math.abs(getBalance(uma.pk).balance);
     purgeMemberSelf(uma.pk);
@@ -456,10 +458,41 @@ async function main(): Promise<void> {
         ['POST', '/api/names/vouchers', { entryId: janeEntry, amount: 500 }], ['DELETE', `/api/names/vouchers/${jane.pk}`, undefined],
         ['POST', `/api/names/vouchers/${jane.pk}/budget`, { level: 500 }], ['POST', '/api/names/vouchers/settings', { voucherBudget: 500 }],
         ['POST', '/api/names/committee', { memberPubkey: ada.pk, on: false }], ['POST', '/api/vouch', { memberPubkey: mel.pk, vouchAmount: 25 }],
+        ['POST', '/api/admin/seed-invite', { type: 'standard', vouchAmount: 25 }],
     ];
     const byPassword = await Promise.all(writers.map(([m, p, b]) => call(null, m, p, b, PASSWORD())));
     assert(byPassword.every((r) => r.status === 401 || r.status === 403) && allLines() === linesBefore10,
         `10. the password session is refused on every writer, nothing written (${byPassword.map((r) => r.status).join(' ')})`);
+    assert(byPassword[6].status === 403 && (byPassword[6].body as any)?.code === 'not_a_voucher',
+        `10. seed-invite with vouchAmount under password session is refused 403 not_a_voucher (${byPassword[6].status})`);
+
+    // A signed voucher owner/admin CAN vouch via seed-invite:
+    const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+    const owenAdminSession = { 'x-admin-session': consumeHandshakeToken(mintHandshakeToken(owen.pk, 'owner').handshakeToken).sessionId! };
+    const owenBudgetBefore = count('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
+    const owenSeed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard', vouchAmount: 25 }, owenAdminSession);
+    assert(owenSeed.status === 200 && owenSeed.body?.vouchAmount === 25, `10. voucher admin can vouch on seed-invite (${show(owenSeed)})`);
+    const owenBudgetAfter = count('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
+    assert(owenBudgetBefore - owenBudgetAfter === 25, `10. 25 Beans held from voucher's budget for seed-invite (${owenBudgetBefore} -> ${owenBudgetAfter})`);
+
+    // Redeeming the seed invite lands the vouch from the issuing admin/owner (owen):
+    const rita = newId('rita');
+    const ritaRedeem = await redeem(rita, owenSeed.body.code);
+    assert(ritaRedeem.status === 200 && ritaRedeem.body?.success === true, `10. seed invite with vouch redeems successfully (${show(ritaRedeem)})`);
+    const ritaVouchGift = db.prepare("SELECT amount, from_pubkey, to_pubkey FROM room_gifts WHERE invite_code = ? AND kind = 'vouch'").get(owenSeed.body.code) as { amount: number; from_pubkey: string; to_pubkey: string } | undefined;
+    assert(ritaVouchGift && ritaVouchGift.amount === 25 && ritaVouchGift.from_pubkey === owen.pk && ritaVouchGift.to_pubkey === rita.pk,
+        `10. seed invite vouch lands from issuing admin owen (${JSON.stringify(ritaVouchGift)})`);
+
+    // Manager admin endpoints:
+    const meAdmin = await call(null, 'GET', '/api/local/admin/vouchers/me', undefined, owenAdminSession);
+    assert(meAdmin.status === 200 && meAdmin.body?.voucher === true && meAdmin.body?.budget?.left === budgetOf(owen.pk).left,
+        `10. /api/local/admin/vouchers/me under key session returns voucher status (${show(meAdmin)})`);
+    const mePw = await call(null, 'GET', '/api/local/admin/vouchers/me', undefined, PASSWORD());
+    assert(mePw.status === 200 && mePw.body?.voucher === false && mePw.body?.presets?.length === 4,
+        `10. /api/local/admin/vouchers/me under password session returns voucher: false (${show(mePw)})`);
+    const cardAdmin = await call(null, 'GET', `/api/local/admin/known-floor/vouchers/member/${owen.pk}`, undefined, owenAdminSession);
+    assert(cardAdmin.status === 200 && cardAdmin.body?.memberPubkey === owen.pk && cardAdmin.body?.left === budgetOf(owen.pk).left,
+        `10. /api/local/admin/known-floor/vouchers/member/:pubkey returns voucher card (${show(cardAdmin)})`);
 
     // ── 11. The boot's grant to an owner or admin who never had a budget ──────────────────────────────────────
     db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(kai.pk);

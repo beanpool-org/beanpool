@@ -3398,7 +3398,6 @@
   "{title} by {name} on {platform}": "{platform}-இல் {name}-இன் {title}",
   "{title} · within {km} km": "{title} · {km} கி.மீ.க்குள்",
   "{title}, by {name}. Opens the Pulse.": "{title}, {name} எழுதியது. பல்ஸ் திறக்கும்.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "தேவையான {n} வாக்கில் {voters}",
     "other": "தேவையான {n} வாக்குகளில் {voters}"
@@ -3606,7 +3605,6 @@
   "🖼️ Gallery": "🖼️ தொகுப்பு",
   "🗑️ Delete Group Post (Convenor)": "🗑️ குழுப் பதிவை நீக்கு (ஒருங்கிணைப்பாளர்)",
   "🗑️ Delete Post": "🗑️ பதிவை நீக்கு",
-  "🗞️ DAILY PULSE": "🗞️ நாள்தோறும் சிந்தனை",
   "🗞️ Daily Pulse": "🗞️ தினசரி துடிப்பு",
   "🗳️ Poll": "🗳️ வாக்கெடுப்பு",
   "🗳️ Polls": "🗳️ வாக்கெடுப்புகள்",

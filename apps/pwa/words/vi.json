@@ -3278,7 +3278,6 @@
   "{title} by {name} on {platform}": "{title} bởi {name} trên {platform}",
   "{title} · within {km} km": "{title} · trong vòng {km} km",
   "{title}, by {name}. Opens the Pulse.": "{title}, bởi {name}. Mở Nhịp đập.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "other": "{voters}/{n} phiếu cần thiết"
   },
@@ -3479,7 +3478,6 @@
   "🖼️ Gallery": "🖼️ Thư viện ảnh",
   "🗑️ Delete Group Post (Convenor)": "🗑️ Xóa bài đăng nhóm (Điều hành viên)",
   "🗑️ Delete Post": "🗑️ Xóa bài đăng",
-  "🗞️ DAILY PULSE": "🗞️ GÓC NHÌN MỖI NGÀY",
   "🗞️ Daily Pulse": "🗞️ Nhịp sống hàng ngày",
   "🗳️ Poll": "🗳️ Thăm dò",
   "🗳️ Polls": "🗳️ Thăm dò ý kiến",

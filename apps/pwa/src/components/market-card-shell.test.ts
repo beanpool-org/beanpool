@@ -391,6 +391,15 @@ describe('the page\'s parts hold core\'s numbers too (DESIGN-detail-pages-fable.
         expect(typeOf(PAGE_TYPE.description)).toEqual({ size: page.descriptionSize, weight: undefined, line: page.descriptionLine });
     });
 
+    it('the listing page\'s terms box: its value 18/800 and its price 28/800 are core\'s; its title 22/800 (DW3)', () => {
+        const value = typeOf(PAGE_TYPE.termsValue);
+        expect({ size: value.size, weight: value.weight }).toEqual({ size: page.termsValue.size, weight: page.termsValue.weight });
+        const price = typeOf(PAGE_TYPE.price);
+        expect({ size: price.size, weight: price.weight }).toEqual({ size: page.pagePrice.size, weight: page.pagePrice.weight });
+        const title = typeOf(PAGE_TYPE.listingTitle);
+        expect({ size: title.size, weight: title.weight }).toEqual({ size: 22, weight: 800 });
+    });
+
     it('every page colour is core\'s role or the card\'s own ground and inks: no raw violet, purple, blue or nature-950', () => {
         const all = [PAGE_BOX, ...Object.values(BOX_LABEL), ...Object.values(PAGE_BUTTON), ...Object.values(EVENT_ANSWER),
             ...Object.values(PAGE_TYPE), ...Object.values(PAGE_INK)].join(' ');

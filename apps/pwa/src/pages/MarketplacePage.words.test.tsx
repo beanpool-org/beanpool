@@ -565,7 +565,9 @@ describe('the Market in English', () => {
         await screen.findByRole('heading', { name: /Bicycle Repair/ });
         await settle();
         expect(bracketed()).toBe(0);
-        expect(screen.getByText('🟢 Offer · Services')).toBeInTheDocument();
+        // The header line ("🟢 Offer · Services") is the list card's chips on the page now (DESIGN-detail-pages-fable.md §2.8, DW3).
+        expect(screen.getByTestId('listing-type-chip').textContent).toBe('OFFER');
+        expect(screen.getByTestId('listing-category-chip').textContent).toBe('🤝 Services');
         expect(screen.getByText('Only Gardeners can see this')).toBeInTheDocument();
         expect(screen.getByText('/Hr')).toBeInTheDocument();
         expect(screen.getByText('≈ 0.5 hrs')).toBeInTheDocument();

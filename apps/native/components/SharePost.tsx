@@ -240,8 +240,17 @@ export function ShareButton({ post, onShareMembers, accessibilityLabel, style, b
     );
 }
 
-/** A listing's Share: the one button, and the members' link with the listing's title. */
-export function SharePostButtons({ post }: { post: any }) {
+/**
+ * A listing's Share: the one button, and the members' link with the listing's title. The listing's page draws it in its quiet
+ * row beside Message (DESIGN-detail-pages-fable.md §2.4): `style` is its place in that row, `buttonStyle` / `textStyle` the
+ * row's outline; without them it is the column it always was.
+ */
+export function SharePostButtons({ post, style, buttonStyle, textStyle }: {
+    post: any;
+    style?: StyleProp<ViewStyle>;
+    buttonStyle?: StyleProp<ViewStyle>;
+    textStyle?: StyleProp<TextStyle>;
+}) {
     const styles = useStyles(makeStyles);
 
     const shareWithMembers = async () => {
@@ -256,8 +265,8 @@ export function SharePostButtons({ post }: { post: any }) {
     };
 
     return (
-        <View style={styles.column} testID="share-post">
-            <ShareButton post={post} onShareMembers={shareWithMembers} accessibilityLabel={t('Share')} />
+        <View style={style ?? styles.column} testID="share-post">
+            <ShareButton post={post} onShareMembers={shareWithMembers} accessibilityLabel={t('Share')} buttonStyle={buttonStyle} textStyle={textStyle} oneLine={!!buttonStyle} />
         </View>
     );
 }

@@ -68,9 +68,9 @@
  * was set). The open door, the private preview, visitors
  * and connections are the server's: 400.
  */
-import { word, wordsFor, isMemberGiftSetting, type WordKey } from '@beanpool/core';
+import { word, wordsFor, isMemberGiftSetting, isBudgetLevel, type WordKey } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { VOUCHER_WORDS, writeMemberGiftSetting } from '../engine/vouchers.js';
+import { VOUCHER_WORDS, writeMemberGiftSetting, saveVoucherBudgetSetting } from '../engine/vouchers.js';
 import { getNodeConfig, updateNodeConfig, noticeToEveryMember, type NodeConfig } from '../state-engine.js';
 import { getNodeRole } from './node-role.js';
 import { getConfiguredSwitches, setSwitchOverride, type ProfileSwitch } from './node-profile.js';
@@ -127,7 +127,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 
 /** Checked and written in this order, so a request with two refusals is always refused for the same one. */
 const SETTINGS_IN_ORDER = [
-    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'memberGift', 'dmRequests', 'decisions', 'shareOutside', 'listed',
+    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'dmRequests', 'decisions', 'shareOutside', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
     'recoveryCopies', 'removalDecider',
 ] as const;
@@ -145,7 +145,7 @@ const NOT_CHANGED_HERE: Record<string, string> = {
 export const SETTING_NAMES: Record<ShapeSettingName, string> = {
     join: 'Who can join', wordsDoor: '12 words at the open door',
     doorCheck: 'A person check on busy days', knocks: 'Requests to join', beans: 'Beans',
-    knownFloor: 'Known floor for confirmed members', memberGift: 'Members giving part of their credit line',
+    knownFloor: 'Known floor for confirmed members', voucherBudget: 'Budget per voucher', memberGift: 'Members giving part of their credit line',
     dmRequests: 'First message from someone new',
     decisions: 'Community votes (Decisions)', shareOutside: 'Members may share listings outside the community',
     listed: 'Listed in the BeanPool directory',
@@ -172,6 +172,7 @@ const NOTICE = {
     floorOn: word("Your community's owners changed how it works: confirmed members can owe up to {floor} Beans now (the known floor)."),
     floorOff: word("Your community's owners changed how it works: confirmed members no longer have a known floor, and go back to the credit they have earned."),
     floorNow: word("Your community's owners changed how it works: confirmed members' known floor is now {floor} Beans."),
+    voucherBudget: word("Your community's owners changed how it works: the budget for each voucher is now {budget} Beans."),
     giftOn: word("Your community's owners changed how it works: a member can give another up to {max} Beans of the credit line someone gave them, at once."),
     giftOff: word("Your community's owners changed how it works: members no longer give part of their credit line to each other."),
     dmOn: word("Your community's owners changed how it works: a first message from someone new now waits until you accept it."),
@@ -207,6 +208,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'wordsDoor': return on ? tr(NOTICE.wordsOn) : tr(NOTICE.wordsOff);
         case 'knocks': return on ? tr(NOTICE.knocksOn) : tr(NOTICE.knocksOff);
         case 'beans': return on ? tr(NOTICE.beansOn) : tr(NOTICE.beansOff);
+        case 'voucherBudget': return tr(NOTICE.voucherBudget, { budget: beansAmount(Number(change.to)) });
         case 'memberGift': return change.to === '0' ? tr(NOTICE.giftOff) : tr(NOTICE.giftOn, { max: change.to });
         case 'dmRequests': return on ? tr(NOTICE.dmOn) : tr(NOTICE.dmOff);
         case 'decisions': return on ? tr(NOTICE.decisionsOn) : tr(NOTICE.decisionsOff);
@@ -271,6 +273,8 @@ interface ShapePlan {
     share: Partial<NodeConfig>;
     door: CommunityDoor | null;
     floorPlan: KnownFloorPlan | null;
+    /** The voucher budget to write (100 to 2,000 in 100s), or null for no change. */
+    budget: number | null;
     /** The member's credit-line gift to write (0 to 100), or null for no change. */
     gift: number | null;
     copies: RecoveryCopies | null;
@@ -306,7 +310,7 @@ export function shapeChangeAsksFreshProof(body: unknown): boolean {
  */
 export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshProof?: boolean } = {}): { shape: Shape; told: 'members' | 'nobody'; changed: string[] } {
     const plan = planShapeChanges(body);
-    const { before, note, planned, core, switches, share, door, floorPlan, gift, copies, decider, beansAfter } = plan;
+    const { before, note, planned, core, switches, share, door, floorPlan, budget, gift, copies, decider, beansAfter } = plan;
     const S = before.settings;
     const locked = before.core.lock !== null;
     // Read here, with the write that follows, whatever the route found: a lock written meanwhile still asks the proof.
@@ -334,6 +338,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshPr
         if (switches.some(([name, on]) => name === 'dmRequests' && on === false)) closeCopyDoors(at);
         if (door) setDoor(door);
         if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
+        if (budget !== null) saveVoucherBudgetSetting(by.actor, S.voucherBudget.configured, budget, at);
         if (gift !== null) writeMemberGiftSetting(by.actor, S.memberGift.configured, gift, at);
         if (Object.keys(share).length > 0) updateNodeConfig(share);
         if (copies) setRecoveryCopies(copies);
@@ -561,6 +566,18 @@ function planShapeChanges(body: unknown): ShapePlan {
         }
     }
 
+    // The budget each voucher starts with (slice V5): 100 to 2,000 in 100s; none without Beans once this request is written.
+    let budget: number | null = null;
+    if (asked.voucherBudget !== undefined) {
+        if (!isBudgetLevel(asked.voucherBudget)) bad('voucherBudget', VOUCHER_WORDS.badLevel);
+        const v = asked.voucherBudget as number;
+        if (v !== S.voucherBudget.configured) {
+            if (!beansAfter) refuse('voucherBudget', LOCKS_AFTER_A_CHANGE.beansOffBudget());
+            planned.push({ setting: 'voucherBudget', from: String(S.voucherBudget.configured), to: String(v) });
+            budget = v;
+        }
+    }
+
     // A member's credit-line gift (slice G1): the most one gift may be, 0 (off) to 100; none without Beans once this
     // request is written.
     let gift: number | null = null;
@@ -662,7 +679,7 @@ function planShapeChanges(body: unknown): ShapePlan {
         if (before.core.lock) throw new ShapeChangeError(409, 'core_locked', CORE_LOCKED_ALREADY);
         if (before.core.place.needed && !before.core.place.set) throw new ShapeChangeError(409, 'place_needed', CORE_PLACE_NEEDED);
     }
-    return { before, note, lock: lockAsked, planned, core, switches, share, door, floorPlan, gift, copies, decider, beansAfter };
+    return { before, note, lock: lockAsked, planned, core, switches, share, door, floorPlan, budget, gift, copies, decider, beansAfter };
 }
 
 /** The notice's title, as every member reads it. */

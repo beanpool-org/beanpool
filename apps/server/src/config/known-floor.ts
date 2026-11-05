@@ -153,9 +153,13 @@ export function readKnownFloorLog(limit = 100): KnownFloorLogLine[] {
         .map(r => ({ id: r.id, actor: r.actor_pubkey, action: r.action, memberPubkey: r.member_pubkey, oldValue: r.old_value, newValue: r.new_value, at: r.at }));
 }
 
-/** One member's lines in the log, newest first, each naming who made the change: what every admin reads on their panel. */
+/**
+ * One member's lines in the log, newest first, each naming who made the change: what every admin reads on their panel.
+ * A look at a voucher's card (`voucher_looked`, engine/vouchers.ts) stays in the log but not on this panel: it changes
+ * nothing about the member's floor, and a daily look would push real changes out of the panel's window (#2923 review).
+ */
 export function readKnownFloorLogFor(pk: string, limit = 20) {
-    return (db.prepare('SELECT * FROM known_floor_log WHERE member_pubkey = ? ORDER BY at DESC, rowid DESC LIMIT ?').all(pk, Math.max(1, Math.min(100, limit))) as any[])
+    return (db.prepare("SELECT * FROM known_floor_log WHERE member_pubkey = ? AND action <> 'voucher_looked' ORDER BY at DESC, rowid DESC LIMIT ?").all(pk, Math.max(1, Math.min(100, limit))) as any[])
         .map(r => ({ id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action,
             oldValue: r.old_value, newValue: r.new_value, at: r.at }));
 }

@@ -3400,7 +3400,6 @@
   "{title} by {name} on {platform}": "{title} por {name} no {platform}",
   "{title} · within {km} km": "{title} · a menos de {km} km",
   "{title}, by {name}. Opens the Pulse.": "{title}, por {name}. Abre o Pulso.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "{voters} de {n} voto necessário",
     "other": "{voters} de {n} votos necessários"
@@ -3608,7 +3607,6 @@
   "🖼️ Gallery": "🖼️ Galeria",
   "🗑️ Delete Group Post (Convenor)": "🗑️ Excluir anúncio do grupo (Coordenador)",
   "🗑️ Delete Post": "🗑️ Excluir anúncio",
-  "🗞️ DAILY PULSE": "🗞️ PULSO DIÁRIO",
   "🗞️ Daily Pulse": "🗞️ Pulso diário",
   "🗳️ Poll": "🗳️ Enquete",
   "🗳️ Polls": "🗳️ Votações",

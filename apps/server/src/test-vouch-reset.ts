@@ -346,8 +346,10 @@ async function main(): Promise<void> {
 
         // ── 4. hashes and an older copy ──
         const older = await third.send('older-copy', { maker: w.val.pk });
-        assert(older.version === 21 && older.mineVersion === 21 && older.theirs20IsNull === true,
-            `the hashes are version 21, and a node on 21 compares none made by 20: row counts only (${j(older)})`);
+        // 21 is the reset's; a later slice raises it again (22: vouchers, engine/replica-hashes.ts) and test-replica-hashes pins
+        // the current one. What the reset needs of it holds at 21 and after: a node past 20 compares no hash made by 20.
+        assert(older.version >= 21 && older.mineVersion === older.version && older.theirs20IsNull === true,
+            `the hashes are version 21 or later, and a node on it compares none made by 20: row counts only (${j(older)})`);
         assert(older.error === null && older.landed === true, `a version-20 main server's invite row with vouch_level lands here, the column left out (${j(older)})`);
         await third.kill();
         nodes.pop();

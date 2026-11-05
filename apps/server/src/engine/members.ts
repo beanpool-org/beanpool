@@ -8,6 +8,7 @@ import { ledger } from './ledger.js';
 import { foldName, getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
+import { vouchingAfterRoleChange } from './vouchers.js';
 import { PhotoTooBigError, photoValueRefusal } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, fitsTextLimit, replaceLoneSurrogates, word } from '@beanpool/core';
@@ -91,6 +92,8 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
                 `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
                  VALUES (?, 'owner', 'genesis')`
             ).run(adminPublicKey);
+            // The genesis owner vouches by the role from now, as one grantNodeRole made (engine/vouchers.ts; never throws).
+            vouchingAfterRoleChange(adminPublicKey, 'genesis');
         }
         // An owner role shows in the directory (members-snapshot.ts rebuilds on the version).
         bumpMembersVersion();
@@ -111,6 +114,7 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
             `INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by)
              VALUES (?, 'owner', 'genesis')`
         ).run(adminPublicKey);
+        vouchingAfterRoleChange(adminPublicKey, 'genesis');
     }
     console.log(`⛰️ Genesis member seeded: ${callsign}`);
     bumpMembersVersion();

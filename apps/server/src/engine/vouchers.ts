@@ -445,7 +445,7 @@ function pairOf(voucher: string, person: string): { total: number; vouchers: num
 }
 
 /** Inside a vouch's transaction: the vouch's room_gifts row, from the voucher's budget (its hold written by the caller). */
-function writeVouchRow(voucher: string, person: string, amount: number, inviteCode: string | null): string {
+function addVouchRow(voucher: string, person: string, amount: number, inviteCode: string | null): string {
     const id = newId();
     db.prepare(`INSERT INTO room_gifts (id, from_pubkey, to_pubkey, root_pubkey, kind, amount, invite_code, at) VALUES (?, ?, ?, ?, 'vouch', ?, ?, ?)`)
         .run(id, voucher, person, voucher, amount, inviteCode, now());
@@ -493,7 +493,7 @@ export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown
             if (pair.total > 0) throw new VoucherError(409, 'already_vouched', alreadyVouched(m.callsign));
             if (pair.vouchers >= VOUCHES_PER_PERSON) throw new VoucherError(409, 'three_vouches', threeVouches(m.callsign));
         }
-        id = writeVouchRow(voucher, person, amount, null);
+        id = addVouchRow(voucher, person, amount, null);
         addLine(voucher, 'hold', -amount, voucher, id);
     })();
     return { id, memberPubkey: person, amount, total: pairOf(voucher, person).total, budget: budgetOf(voucher) };
@@ -528,7 +528,7 @@ export function landInviteVouch(maker: string, code: string, joiner: string, amo
         addLine(maker, 'return', amount, 'node', code);
         return { ended: VOUCHER_WORDS.voucherEnded };
     }
-    writeVouchRow(maker, joiner, amount, code);
+    addVouchRow(maker, joiner, amount, code);
     return { landed: amount };
 }
 

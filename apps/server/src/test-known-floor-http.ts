@@ -158,6 +158,10 @@ async function main(): Promise<void> {
     const balanceOf = (who: Id) => call('GET', who, `/api/ledger/balance/${who.pk}`);
     const exception = (headers: Record<string, string>, body: unknown) => call('POST', null, '/api/local/admin/known-floor/exception', body, headers);
     const read = () => call('GET', null, '/api/local/admin/known-floor', undefined, owner);
+    // The vouchers' lines share this log (engine/vouchers.ts: a role's budget is granted with the role, so seeding an owner or
+    // making an admin writes one). The checks below count the known floor's own lines: no refused request here writes either.
+    const VOUCHER_ACTIONS = new Set(['budget_grant', 'budget_topup', 'budget_lower', 'budget_setting', 'gift_setting', 'voucher_made', 'voucher_stopped', 'voucher_looked', 'committee']);
+    const ownLines = <T extends { action: string }>(log: T[]) => log.filter((l) => !VOUCHER_ACTIONS.has(l.action));
     // The dial, the known floor and the cap are changed under How this community works (POST /api/local/admin/community-shape
     // `knownFloor`, slice S2; the known floor's own POST is gone): sent as its `knownFloor`, and read back as the settings.
     const asShapeChange = (body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }) => ({ changes: { knownFloor: {
@@ -240,7 +244,7 @@ async function main(): Promise<void> {
     assert(own.status === 403 && own.body?.code === 'own_floor', `an admin can't set their own (${show(own)})`);
     const kimTries = await call('POST', kim, '/api/local/admin/known-floor/exception', { memberPubkey: kim.pk, amount: 2000 });
     assert(kimTries.status === 401 || kimTries.status === 403, `a member who is no admin is refused (${show(kimTries)})`);
-    const logged = (await read()).body?.log as Array<{ action: string; memberPubkey: string | null; actor: string; oldValue: string; newValue: string }>;
+    const logged = ownLines((await read()).body?.log as Array<{ action: string; memberPubkey: string | null; actor: string; oldValue: string; newValue: string }>);
     const actions = logged.map(l => l.action);
     assert(actions.includes('confirmation') && actions.includes('exception_lowered') && actions.includes('exception_raised'),
         `the dial, the lowering and the raise are each a line in the log (${actions.join(',')})`);
@@ -485,7 +489,7 @@ async function main(): Promise<void> {
 
     // ── 8. one member's exception needs an owner's or admin's own key session ────────────────────
     console.log('── 8. who sets an exception ──');
-    const linesBefore = ((await read()).body?.log as unknown[]).length;
+    const linesBefore = ownLines((await read()).body?.log as { action: string }[]).length;
     const token = ownerTokenHeaders('admin');
     const byToken = await exception(token, { memberPubkey: kim.pk, amount: 2000 });
     assert(byToken.status === 403 && byToken.body?.code === 'key_session_only', `an automation token can't set one (${show(byToken)})`);
@@ -494,7 +498,7 @@ async function main(): Promise<void> {
     const byPassword = await exception(twoFa.headers(), { memberPubkey: kim.pk, amount: 2000 });
     assert(pwRead.status === 200 && byPassword.status === 403 && byPassword.body?.code === 'key_session_only',
         `the node password reads the settings but can't set one: it names nobody, so nobody could be kept from setting their own (${pwRead.status}; ${show(byPassword)})`);
-    assert(((await read()).body?.log as unknown[]).length === linesBefore, 'and neither wrote a line in the log');
+    assert(ownLines((await read()).body?.log as { action: string }[]).length === linesBefore, 'and neither wrote a line in the log');
     const byOwnerKey = await exception(owner, { memberPubkey: kim.pk, clear: true });
     assert(byOwnerKey.status === 200, `an owner's key session still can (${show(byOwnerKey)})`);
 

@@ -339,6 +339,29 @@ async function main(): Promise<void> {
     await call(owen, 'POST', '/api/names/vouchers/settings', { memberGift: 100 });
     assert(setTen.status === 200 && overTen.status === 400 && overTen.body?.error === 'You can give up to 10 Beans of your credit line at once here.' && ten.status === 200,
         `8. set to 10: 11 is refused with the new most, 10 is given (${show(overTen)})`);
+    // The same setting in Core settings (How this community works, the owners' page): 0 turns the tab off there too.
+    const SHAPE = '/api/local/admin/community-shape';
+    const shapeBefore = await call(null, 'GET', SHAPE, undefined, PASSWORD());
+    assert(shapeBefore.status === 200 && JSON.stringify(shapeBefore.body?.settings?.memberGift) === JSON.stringify({ value: 100, configured: 100, source: 'default', lock: null })
+        && shapeBefore.body?.core?.settings?.includes('memberGift'),
+        `8. Core settings read the gift: 100, the default, and it is a core setting (${JSON.stringify(shapeBefore.body?.settings?.memberGift)})`);
+    const bad101 = await call(null, 'POST', SHAPE, { changes: { memberGift: 101 } }, PASSWORD());
+    const badHalf = await call(null, 'POST', SHAPE, { changes: { memberGift: 2.5 } }, PASSWORD());
+    assert(bad101.status === 400 && badHalf.status === 400 && bad101.body?.error === 'A member’s credit-line gift is 0 (off) to 100 Beans.',
+        `8. Core settings refuse 101 and 2.5 with the sentence (${show(bad101)})`);
+    const coreOff = await call(null, 'POST', SHAPE, { changes: { memberGift: 0 } }, PASSWORD());
+    const offerCoreOff = await offerOf(rin);
+    const twin = db.prepare("SELECT c.at AS at FROM community_settings_log c WHERE c.setting = 'memberGift' ORDER BY c.id DESC LIMIT 1").get() as { at: string } | undefined;
+    const twinLines = count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'gift_setting' AND at = ? AND old_value = '100' AND new_value = '0'", twin?.at ?? '');
+    // This change's lines (its stamp): the earlier 0 set from the names list's settings (above) is in the log too, its own.
+    const logged = (coreOff.body?.shape?.log as any[] | undefined)?.filter((l) => l.setting === 'memberGift' && l.at === twin?.at) ?? [];
+    const earlier = (coreOff.body?.shape?.log as any[] | undefined)?.filter((l) => l.setting === 'memberGift' && l.kept === 'known_floor_log') ?? [];
+    assert(coreOff.status === 200 && coreOff.body?.told === 'members' && coreOff.body?.shape?.settings?.memberGift?.value === 0 && offerCoreOff.body?.offered === false
+        && twinLines === 1 && logged.length === 1 && logged[0].kept === 'community_settings_log' && earlier.length === 3,
+        `8. set to 0 in Core settings: off, the tab not offered, members told, one line in each log, read once; the names list's three earlier changes read there too (${JSON.stringify({ status: coreOff.status, told: coreOff.body?.told, value: coreOff.body?.shape?.settings?.memberGift?.value, offered: offerCoreOff.body?.offered, twinLines, logged: logged.length, earlier: earlier.length })})`);
+    const coreOn = await call(null, 'POST', SHAPE, { changes: { memberGift: 100 } }, PASSWORD());
+    assert(coreOn.status === 200 && (await offerOf(rin)).body?.offered === true && coreOn.body?.shape?.settings?.memberGift?.source === 'default',
+        `8. back to 100: the tab is offered again, and the row is gone (the default) (${show(coreOn)})`);
 
     // ── 9. Property test over random gift trees ─────────────────────────────────────────────────────────────────────
     const vouchers = [owen, ada, dan];

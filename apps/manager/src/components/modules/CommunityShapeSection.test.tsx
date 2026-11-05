@@ -301,6 +301,39 @@ describe('CommunityShapeSection — Owner editing and saving single changes', ()
         });
     });
 
+    it('the members\' credit-line gift sits beside the known floor and saves { memberGift: 0 } to turn it off (G1)', async () => {
+        const shape = makeDefaultShape({ memberGift: { value: 100, configured: 100, source: 'default', lock: null } });
+        const fetchMock = mockShapeApi(shape);
+
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-memberGift')).toHaveTextContent('On · up to 100 Beans'));
+        // Beside the known floor: the row right after it.
+        const rows = Array.from(document.querySelectorAll('[data-testid^="shape-val-"]')).map((el) => el.getAttribute('data-testid'));
+        expect(rows.indexOf('shape-val-memberGift')).toBe(rows.indexOf('shape-val-knownFloor') + 1);
+
+        fireEvent.click(screen.getByTestId('shape-expand-memberGift'));
+        const input = screen.getByLabelText(/Most one gift can be/i);
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        fireEvent.change(input, { target: { value: '0' } });
+        expect(screen.getByText('Members can no longer give part of their credit line to each other. What was given stays given.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
+
+        const postCall = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
+        expect(JSON.parse(postCall![1].body).changes).toEqual({ memberGift: 0 });
+    });
+
+    it('the gift row reads Off at 0, and a server from before it has no row', async () => {
+        mockShapeApi(makeDefaultShape({ memberGift: { value: 0, configured: 0, source: 'owner', lock: null } }));
+        const { unmount } = render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-memberGift')).toHaveTextContent('Off'));
+        unmount();
+        mockShapeApi(makeDefaultShape());
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-knownFloor')).toBeInTheDocument());
+        expect(screen.queryByTestId('shape-val-memberGift')).toBeNull();
+    });
+
     it('client validation: refuses known floor above cap before sending', async () => {
         const shape = makeDefaultShape();
         const fetchMock = mockShapeApi(shape);

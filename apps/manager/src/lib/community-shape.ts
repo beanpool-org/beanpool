@@ -52,6 +52,8 @@ export interface ShapeSettings {
         includes: { escrow: boolean; enterprises: boolean; treasuries: boolean; crowdfund: boolean };
     };
     knownFloor: ShapeSetting<KnownFloorShape>;
+    /** The most of their credit line a member may give another at once, 0 (off) to 100 (slice G1). Absent on a server from before it. */
+    memberGift?: ShapeSetting<number>;
     dmRequests?: ShapeSetting<boolean>;
     decisions: ShapeSetting<boolean>;
     /** Members may share one post outside the community (front doors S6). Absent on a server from before it. */
@@ -118,7 +120,7 @@ export interface Shape {
  * The Core settings, in the shape's names. The server sends its own list (`core.settings`); this one is the page's, and
  * lib/community-shape.test.ts holds the two equal. Everything else on the shape is everyday and lives where it is used.
  */
-export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
+export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
 export type CoreSettingKey = (typeof CORE_SETTINGS)[number];
 export const isCoreSetting = (k: string): k is CoreSettingKey => (CORE_SETTINGS as readonly string[]).includes(k);
 
@@ -468,6 +470,10 @@ export function getConsequenceSentence(
             const floor = kf.floor ?? s.knownFloor.value.floor;
             return t('Confirmed members can owe up to {floor} Beans while they keep an offer listed.').replace('{floor}', floor.toLocaleString('en'));
         }
+        case 'memberGift':
+            return targetValue === 0
+                ? t('Members can no longer give part of their credit line to each other. What was given stays given.')
+                : t("A member can give another up to {n} Beans of the credit line someone gave them, at once, after their first trade. Never the known floor or credit they earned.").replace('{n}', String(targetValue));
         case 'dmRequests':
             return targetValue === true
                 ? t("A member's first message to someone who hasn't added them, written to them or traded with them waits until that person accepts.")

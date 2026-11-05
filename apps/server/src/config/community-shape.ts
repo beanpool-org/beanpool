@@ -73,6 +73,7 @@ import { isPrivatePreview, PRIVATE_PREVIEW_ENV } from './private-preview.js';
 import { DOOR_KEY, doorFor, doorFromRow, isCommunityDoor, type CommunityDoor } from './door.js';
 import { RECOVERY_COPIES_KEY, isRecoveryCopies, recoveryCopiesFromRow, type RecoveryCopies } from './recovery-copies.js';
 import { REMOVAL_DECIDER_KEY, isRemovalDecider, removalDeciderFromRow, type RemovalDecider } from './removal-decider.js';
+import { MEMBER_GIFT_KEY, memberGiftFromRow } from '../engine/vouchers.js';
 import { JURY_MIN_POOL, jurySnapshotDate } from '@beanpool/core';
 import { removalJuryPool } from '../decisions-engine.js';
 import { keptCommunitySettings, parseCommunitySettings } from './community-settings.js';
@@ -138,6 +139,11 @@ export interface ShapeSettings {
     /** `includes`: what holds Beans, each off with them (lockToLedger), never a switch of its own on the page (design Q9). */
     beans: ShapeSetting<boolean> & { includes: { escrow: boolean; enterprises: boolean; treasuries: boolean; crowdfund: boolean } };
     knownFloor: ShapeSetting<KnownFloorShape>;
+    /**
+     * The most of their credit line a member may give another at once (slice G1, engine/credit-gift.ts): 0 (off) to 100,
+     * 100 out of the box. Runs 0 where Beans are off (`beans_off`), whatever is set.
+     */
+    memberGift: ShapeSetting<number>;
     /** Message requests (#2392): only on a build that has the switch. */
     dmRequests?: ShapeSetting<boolean>;
     decisions: ShapeSetting<boolean>;
@@ -254,6 +260,7 @@ const LOCK_WORDS = {
     invitesOff: 'Off while no new members are taken: a request to join is answered with an invite, and this community makes none.',
     unlockInvites: 'Take new members again, with any member or only admins inviting, and requests to join follow their own setting.',
     beansOffFloor: 'This community has no Beans, so it has no known floor.',
+    beansOffGift: 'This community has no Beans, so members give no part of a credit line.',
     openByKind: (profile: NodeProfile, words: boolean, fromOverrides: boolean) =>
         `Anyone joins with ${words ? '12 secret words or a sign-in' : 'a sign-in'}, and nobody makes invites: `
         + (fromOverrides ? "this server's own rows set that (nodeProfile.openJoin, nodeProfile.invites)" : `this server's kind (${profile}) sets that`)
@@ -301,6 +308,7 @@ export const LOCKS_AFTER_A_CHANGE = {
             : lock('ledger_moved', LOCK_WORDS.pauseBehindShutDoor(setBy), LOCK_WORDS.unlockPause);
     },
     beansOff: (): ShapeLock => lock('beans_off', LOCK_WORDS.beansOffFloor),
+    beansOffGift: (): ShapeLock => lock('beans_off', LOCK_WORDS.beansOffGift),
     unlisted: (): ShapeLock => lock('server_env', HELD_BACK_UNLISTED_MESSAGE),
 };
 
@@ -316,6 +324,7 @@ interface CommunityRows {
     confirmation: string | null;
     knownFloor: string | null;
     creditCap: string | null;
+    memberGift: string | null;
     recoveryCopies: string | null;
     removalDecider: string | null;
     coreLock: string | null;
@@ -339,6 +348,7 @@ function ownRows(): CommunityRows {
         confirmation: row(CONFIRMATION_DIAL_KEY),
         knownFloor: row(KNOWN_FLOOR_KEY),
         creditCap: row(CREDIT_CAP_KEY),
+        memberGift: row(MEMBER_GIFT_KEY),
         recoveryCopies: row(RECOVERY_COPIES_KEY),
         removalDecider: row(REMOVAL_DECIDER_KEY),
         coreLock: row(CORE_SETTINGS_LOCK_KEY),
@@ -368,6 +378,7 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
             confirmation: copied(CONFIRMATION_DIAL_KEY, own.confirmation),
             knownFloor: copied(KNOWN_FLOOR_KEY, own.knownFloor),
             creditCap: copied(CREDIT_CAP_KEY, own.creditCap),
+            memberGift: copied(MEMBER_GIFT_KEY, own.memberGift),
             recoveryCopies: copied(RECOVERY_COPIES_KEY, own.recoveryCopies),
             removalDecider: copied(REMOVAL_DECIDER_KEY, own.removalDecider),
             coreLock: copied(CORE_SETTINGS_LOCK_KEY, own.coreLock),
@@ -381,7 +392,11 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
 
 export const LOG_LINES = 50;
 /** The known floor's community-wide lines, as the shape's settings: a member's exception or the health lines are not. */
-export const KNOWN_FLOOR_ACTIONS: Readonly<Record<string, string>> = { confirmation: 'knownFloor.on', known_floor: 'knownFloor.floor', credit_cap: 'knownFloor.cap' };
+export const KNOWN_FLOOR_ACTIONS: Readonly<Record<string, string>> = {
+    confirmation: 'knownFloor.on', known_floor: 'knownFloor.floor', credit_cap: 'knownFloor.cap',
+    // The member's credit-line gift, set here or from the names list's settings (engine/vouchers.ts writeMemberGiftSetting).
+    gift_setting: 'memberGift',
+};
 
 function callsignOf(actor: string): string | null {
     const name = adminActorName(actor);
@@ -469,6 +484,13 @@ export function readShape(): Shape {
         source: rows.confirmation !== null || rows.knownFloor !== null || rows.creditCap !== null ? 'owner' : 'default',
         lock: s.beans ? null : lock('beans_off', LOCK_WORDS.beansOffFloor),
     };
+    const gift = memberGiftFromRow(rows.memberGift);
+    const memberGift: ShapeSetting<number> = {
+        value: s.beans ? gift : 0,
+        configured: gift,
+        source: rows.memberGift !== null ? 'owner' : 'default',
+        lock: s.beans ? null : lock('beans_off', LOCK_WORDS.beansOffGift),
+    };
 
     const switches = cfg as unknown as Record<string, boolean>;
     const running = s as unknown as Record<string, boolean>;
@@ -511,6 +533,7 @@ export function readShape(): Shape {
             includes: { escrow: s.escrow, enterprises: s.enterprises, treasuries: s.treasuries, crowdfund: s.crowdfund },
         },
         knownFloor,
+        memberGift,
         ...(dmRequests ? { dmRequests } : {}),
         decisions: plain('decisions'),
         shareOutside: {

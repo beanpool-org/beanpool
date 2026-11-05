@@ -86,7 +86,7 @@ beforeEach(() => {
 
 describe('Core settings — the lib holds the server list', () => {
     it('the page lists the settings the server calls Core', () => {
-        expect([...CORE_SETTINGS]).toEqual(['join', 'wordsDoor', 'beans', 'knownFloor', 'decisions', 'shareOutside', 'recoveryCopies']);
+        expect([...CORE_SETTINGS]).toEqual(['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies']);
     });
     it('the three one-way changes have their typed words, and nothing else has one', () => {
         expect(typedWordFor('beans', false)).toBe('off');

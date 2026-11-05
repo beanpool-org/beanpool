@@ -135,11 +135,26 @@ export function voucherBudgetSetting(): number {
     return isBudgetLevel(n) ? n : VOUCHER_BUDGET_DEFAULT;
 }
 
-/** The most of their credit line a member may give at once (slice G1): the owner's setting, 0 (off) to 100. */
-export function memberGiftSetting(): number {
-    const raw = configRow(MEMBER_GIFT_KEY);
+/** The member_gift row as the setting it is: 0 (off) to 100; no row, or one that isn't a setting, the default (100). */
+export function memberGiftFromRow(raw: string | null): number {
     const n = raw === null ? NaN : Number(raw);
     return isMemberGiftSetting(n) ? n : MEMBER_GIFT_DEFAULT;
+}
+
+/** The most of their credit line a member may give at once (slice G1): the owner's setting, 0 (off) to 100. */
+export function memberGiftSetting(): number {
+    return memberGiftFromRow(configRow(MEMBER_GIFT_KEY));
+}
+
+/**
+ * Writes the member_gift setting (the default removes the row) and its `gift_setting` line in the known floor's log,
+ * inside the caller's transaction: the names list's settings route and How this community works (Core settings,
+ * config/community-shape-write.ts), which stamps the line `at` as its own log's line, so the two read as one change.
+ */
+export function writeMemberGiftSetting(actor: string, before: number, value: number, at?: string): void {
+    if (value === MEMBER_GIFT_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(MEMBER_GIFT_KEY);
+    else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(MEMBER_GIFT_KEY, String(value));
+    logLine(actor, 'gift_setting', null, before, value, at);
 }
 
 export function voucherSettings() {
@@ -151,9 +166,9 @@ export function voucherSettings() {
 
 // ── The log every owner and admin reads (known_floor_log, config/known-floor.ts) ─────────────────────────────────────
 
-function logLine(actor: string, action: string, member: string | null, oldValue: unknown, newValue: unknown): void {
-    db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(newId(), actor, action, member, oldValue == null ? null : String(oldValue), newValue == null ? null : String(newValue));
+function logLine(actor: string, action: string, member: string | null, oldValue: unknown, newValue: unknown, at: string = now()): void {
+    db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(newId(), actor, action, member, oldValue == null ? null : String(oldValue), newValue == null ? null : String(newValue), at);
 }
 
 // ── Who ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -548,9 +563,7 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
             logLine(actor, 'budget_setting', null, before.voucherBudget, body.voucherBudget);
         }
         if (body.memberGift !== undefined && body.memberGift !== before.memberGift) {
-            if (body.memberGift === MEMBER_GIFT_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(MEMBER_GIFT_KEY);
-            else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(MEMBER_GIFT_KEY, String(body.memberGift));
-            logLine(actor, 'gift_setting', null, before.memberGift, body.memberGift);
+            writeMemberGiftSetting(actor, before.memberGift, body.memberGift as number);
         }
     })();
     return voucherSettings();

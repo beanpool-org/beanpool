@@ -30,12 +30,15 @@
  * row like a listing's: one button; no taller than a listing's row and one line; its picture 32 square; its chip the one chip
  * (10/800); the event's when whole; the poll's mark its chosen answer ✓; nothing on the poll's row to vote with.
  *
- * compact-kinds (the reviews of #2904): the compact view at 320 px x 1.3 in en, fr, de, ru, es and pt, the reader in Brisbane,
- * with an event in person, one online, one read in another clock, one over two days and a pinned one the reader hosts, light
- * and dark (`web-compact-kinds-{en,fr,de,ru}-*`). Fails when an event row overflows itself; when its EVENT chip or its mark is
- * cut or past the row's content edge; when any piece of the when (or 📌 PINNED, or the state) is drawn cut, measured as drawn
- * to the sub-pixel (its text against its own box, and its box against every box that clips it), in any of the six; or when
- * the row is taller than a listing's row and one line. Run it alone: `node e2e/market-order-shots.mjs <out-dir> compact-kinds`.
+ * compact-kinds (the reviews of #2904): the compact view at 320 px x 1.3 in en, fr, de, ru, es and pt, and in every language
+ * whose catalog says "your time" before the time (found from core's catalogs: ja, zh-Hans, bn and ml today), the reader in
+ * Brisbane, with an event in person, one online, one read in another clock, one over two days and a pinned one the reader
+ * hosts, light and dark (`web-compact-kinds-{en,fr,de,ru,ja,bn}-*`). Fails when an event row overflows itself; when its EVENT
+ * chip or its mark is cut or past the row's content edge; when any piece of the when (or 📌 PINNED, or the state) is drawn
+ * cut, measured as drawn to the sub-pixel (its text against its own box, and its box against every box that clips it); when
+ * a one-day row has no whole piece holding the start's time (the plain row's, to the character) or that piece is cut or on
+ * the hidden line; when the online row's or the other clock's spoken name lacks the language's whole "your time" sentence; or
+ * when the row is taller than a listing's row and one line. Run it alone: `node e2e/market-order-shots.mjs <out-dir> compact-kinds`.
  *
  * Needs Chromium for Playwright once:
  *   pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
@@ -117,7 +120,20 @@ const KIND_EVENTS = [
         myRsvp: null, eventRsvps: [], pinnedAt: at(10, 3, 9, 0), pinnedUntil: new Date(2026, 10, 10, 9, 0).toISOString(),
     }),
 ];
-const KIND_LANGS = ['en', 'fr', 'de', 'ru', 'es', 'pt'];
+// The sentence "your time" is said in ({time} where the time goes), per language, from core's catalogs; English is the key.
+const WORDS_DIR = new URL('../../../packages/beanpool-core/words/', import.meta.url);
+const YOUR_TIME = Object.fromEntries([
+    ['en', '{time} your time'],
+    ...fs.readdirSync(WORDS_DIR).filter(f => f.endsWith('.json'))
+        .map(f => [f.slice(0, -'.json'.length), JSON.parse(fs.readFileSync(new URL(f, WORDS_DIR), 'utf8'))['{time} your time']])
+        .filter(([, sentence]) => typeof sentence === 'string' && sentence.includes('{time}')),
+]);
+// The third review of #2904: where a language puts "your time" BEFORE the time (ja "あなたの時間：{time}"), the label's words
+// filled the row's second line and the time went to the hidden third. Every such catalog is run, found from the catalogs.
+const LABEL_FIRST = Object.keys(YOUR_TIME).filter(lang => YOUR_TIME[lang].split('{time}')[0].trim() !== '').sort();
+const KIND_LANGS = ['en', 'fr', 'de', 'ru', 'es', 'pt', ...LABEL_FIRST];
+// The languages pictured: four time-first and two label-first.
+const KIND_SHOTS = ['en', 'fr', 'de', 'ru', 'ja', 'bn'];
 // How far past the row's content edge a chip or a mark may end: a layout unit's worth (1/64 px), not a pixel.
 const EDGE = 0.02;
 
@@ -339,6 +355,10 @@ async function compactRows(page) {
             // One short line's height: the line box the row's words are set on (`leading-snug`), as drawn.
             lineHeight: line ? +parseFloat(getComputedStyle(line).lineHeight).toFixed(2) : null,
             when: whenPieces.map(p => p.textContent).join(' ') || null,
+            // Each whole piece of the when as drawn, in order (checkCompactEnds finds the start's time among them), and the
+            // row's spoken name, which keeps the whole sentence.
+            whenDrawn: whenPieces.map(drawn),
+            spoken: row.getAttribute('aria-label') ?? '',
             // The rule (the director's, for #2904): the when shows whole pieces, wrapping to a second line rather than cutting
             // one. The start's date and its time (the first two whole pieces) are drawn whole and shown; every other piece that
             // is never split (the end of a two-day event, 📌 PINNED, the state) is drawn whole or sits wholly on the line past
@@ -419,14 +439,30 @@ function checkCompactRows(rows, { label, maxWidth, scale }) {
  * time drawn whole and shown, and no piece that is never split drawn in part (compactRows' `drawn`); the row two short lines
  * and a listing's row and one line at most.
  */
-function checkCompactEnds(rows, { label }) {
+function checkCompactEnds(rows, { label, lang }) {
     const events = rows.filter(r => r.kind === 'event');
     check(events.length === KIND_EVENTS.length, `${label}: ${events.length} event rows (${KIND_EVENTS.length})`);
-    const show = (r) => `${r.name}: scroll ${r.scroll}, chip ${JSON.stringify(r.chipText)} ${r.chipRight}${r.chipWhole ? '' : ' CUT'}, mark ${r.markRight}${r.markShown ? '' : ' GONE'}${r.tickWhole === false ? ' ✓ CUT' : ''}${r.markGives ? ' (its words give way)' : ''} ${JSON.stringify(r.mark)}, when ${JSON.stringify(r.when)} ${r.whenWhole ? 'whole' : 'CUT'}${r.cut.length ? ` (cut: ${JSON.stringify(r.cut)})` : ''}${r.wordsClear ? '' : ', words OVER the end'}, ${r.lines} lines, ${r.height}px`;
+    // The start's time, as the in-person row on the reader's own clock draws it (its when has no label: the date, then the
+    // time). Every other row on one day starts at the same instant on the same clock, so its when holds a whole piece with
+    // exactly this text, drawn whole and shown, wherever the language puts "your time" (the third review of #2904: in ja,
+    // zh-Hans, bn and ml the label came first and the time was on the hidden third line).
+    const plain = events.find(r => r.name.startsWith('Repair Cafe'));
+    const time = plain?.whenDrawn[1]?.text ?? null;
+    check(!!time && /\p{Nd}/u.test(time) && plain.whenDrawn.length === 2, `${label}: the plain row's when is its date and its time (${JSON.stringify(plain?.whenDrawn.map(p => p.text))})`);
+    const oneDay = events.filter(r => !r.name.startsWith('Overnight'));
+    const timeOf = (r) => r.whenDrawn.find(p => p.text === time) ?? null;
+    const show = (r) => `${r.name}: scroll ${r.scroll}, chip ${JSON.stringify(r.chipText)} ${r.chipRight}${r.chipWhole ? '' : ' CUT'}, mark ${r.markRight}${r.markShown ? '' : ' GONE'}${r.tickWhole === false ? ' ✓ CUT' : ''}${r.markGives ? ' (its words give way)' : ''} ${JSON.stringify(r.mark)}, when ${JSON.stringify(r.when)} ${r.whenWhole ? 'whole' : 'CUT'}${r.cut.length ? ` (cut: ${JSON.stringify(r.cut)})` : ''}${oneDay.includes(r) ? `, time ${!timeOf(r) ? 'MISSING' : timeOf(r).shown ? 'shown' : timeOf(r).hidden ? 'HIDDEN' : 'CUT'}` : ''}${r.wordsClear ? '' : ', words OVER the end'}, ${r.lines} lines, ${r.height}px`;
     for (const r of events) {
-        const ok = !r.over && r.chipWhole && r.chipRight >= -EDGE && r.markShown && r.markRight >= -EDGE && r.tickWhole !== false && r.wordsClear && r.whenWhole;
+        const timeShown = !oneDay.includes(r) || !!timeOf(r)?.shown;
+        const ok = !r.over && r.chipWhole && r.chipRight >= -EDGE && r.markShown && r.markRight >= -EDGE && r.tickWhole !== false && r.wordsClear && r.whenWhole && timeShown;
         check(ok, `${label}: ${show(r)}`);
     }
+    // The row's spoken name keeps the whole sentence, in the language's own order ("あなたの時間：16:00–18:00"), whatever the
+    // row draws: the online row and the row read in another clock.
+    const sentence = time ? YOUR_TIME[lang]?.replace('{time}', time) : null;
+    const labelled = events.filter(r => r.name.startsWith('Seed swap') || r.name.startsWith('Harbour'));
+    check(!!sentence && labelled.length === 2 && labelled.every(r => r.spoken.includes(sentence)),
+        `${label}: the online row's and the other clock's spoken names say ${JSON.stringify(sentence)} (${JSON.stringify(labelled.map(r => r.spoken))})`);
     const listingRow = Math.min(...rows.filter(r => r.kind === 'listing').map(r => r.height));
     const oneLine = Math.max(...rows.filter(r => r.lineHeight !== null).map(r => r.lineHeight));
     const bound = +(listingRow + oneLine + 0.5).toFixed(2);
@@ -579,21 +615,23 @@ try {
         }
 
         for (const lang of run('compact-kinds') ? KIND_LANGS : []) {
-            // The review of #2904: the compact view at 320 x 1.3 in six languages, an event of each kind (in person, online, read
-            // in another clock, over two days, pinned and hosted), the reader in Brisbane. Pictures in en, fr, de and ru.
+            // The reviews of #2904: the compact view at 320 x 1.3 in the six first languages and every one that says "your time"
+            // before the time, an event of each kind (in person, online, read in another clock, over two days, pinned and
+            // hosted), the reader in Brisbane. Pictures in KIND_SHOTS.
             const feed = [...LOCAL.filter(p => p.type !== 'event'), ...KIND_EVENTS];
             const { context, page } = await open(browser, server.origin, { dark, global: false, lang, view: 'compact', timezoneId: KINDS_ZONE, feed });
             const shown = await page.evaluate(() => document.documentElement.lang);
             check(shown === lang, `${theme} kinds ${lang}: the page is in ${lang} (${shown})`);
             const wide = await page.evaluate(() => document.documentElement.scrollWidth);
             check(wide <= 320, `${theme} kinds ${lang}: nothing wider than the screen (${wide}px)`);
-            checkCompactEnds(await compactRows(page), { label: `${theme} kinds ${lang} 320` });
-            if (['en', 'fr', 'de', 'ru'].includes(lang)) {
+            checkCompactEnds(await compactRows(page), { label: `${theme} kinds ${lang} 320`, lang });
+            if (KIND_SHOTS.includes(lang)) {
                 await page.evaluate(() => document.querySelector('[data-testid="event-compact-row"]')?.scrollIntoView({ block: 'start' }));
                 await page.waitForTimeout(150);
                 await page.screenshot({ path: path.join(out, `web-compact-kinds-${lang}-${theme}.png`) });
-                // The rest of the event rows (in person, online, another clock, two days), under the listings.
-                await page.evaluate(() => [...document.querySelectorAll('[data-testid="event-compact-row"]')].pop()?.scrollIntoView({ block: 'end' }));
+                // The rest of the event rows (in person, online, another clock, two days), under the listings: the first of them
+                // at the top, so all four sit above the floating "Create post" button (scrolled to the end, it hid the online row).
+                await page.evaluate(() => document.querySelectorAll('[data-testid="event-compact-row"]')[1]?.scrollIntoView({ block: 'start' }));
                 await page.waitForTimeout(150);
                 await page.screenshot({ path: path.join(out, `web-compact-kinds-${lang}-b-${theme}.png`) });
             }

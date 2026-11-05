@@ -7,8 +7,11 @@
  * jsdom does no layout, so the row's height is held here by its parts (the listing row's frame, a one-line title and a block
  * of two short lines at most, the when's date and time each whole in it, never narrower than its widest one) and measured in
  * Chromium by e2e/market-order-shots.mjs (no taller than a listing's row and one line at 320 px x 1.3; every piece of the
- * when drawn whole, to the sub-pixel, in en, fr, de, ru, es and pt; EVENT and the mark inside the row).
+ * when drawn whole, to the sub-pixel, in en, fr, de, ru, es and pt and every language that says "your time" before the time;
+ * EVENT and the mark inside the row).
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { EventCard } from './EventCard';
@@ -42,6 +45,13 @@ afterEach(() => { cleanup(); document.documentElement.style.fontSize = ''; });
 
 /** The when's pieces as drawn: a whole piece (COMPACT_PIECE) or the words of a sentence round the time. */
 const pieces = () => Array.from(screen.getByTestId('event-when').children).map((c): [string | null, string] => [c.getAttribute('data-piece'), c.textContent ?? '']);
+
+/** Every core catalog whose "{time} your time" puts the label before the time (ja "あなたの時間：{time}"), read from the catalogs. */
+const CORE_WORDS = path.resolve(__dirname, '../../../../packages/beanpool-core/words');
+const LABEL_FIRST = fs.readdirSync(CORE_WORDS).filter(f => f.endsWith('.json')).map(f => f.slice(0, -'.json'.length)).filter((lang) => {
+    const sentence = JSON.parse(fs.readFileSync(path.join(CORE_WORDS, `${lang}.json`), 'utf8'))['{time} your time'];
+    return typeof sentence === 'string' && sentence.split('{time}')[0].trim() !== '';
+}).sort();
 
 /** Runs `body` with a language's real catalogs (this app's words, core's words and core's dates), as the app loads them. */
 async function inLanguage(lang: string, body: () => void) {
@@ -163,29 +173,45 @@ describe('the event\'s compact row (C1)', () => {
 
     // The review of #2904: "your time" was split off with an English suffix test, so in every other language the time and its
     // label were one whole piece, 159–235 px against ~110 of room at 320 x 1.3. It is split through the sentence itself
-    // (core's `{time} your time`), so the time is a whole piece in every language and the label sits where the language puts it.
+    // (core's `{time} your time`), so the time is a whole piece in every language. The third review: where the language puts
+    // the label BEFORE the time (ja "あなたの時間：{time}"), the row kept that order, the label's words filled the second line
+    // and the time went to the hidden third: no time on the row at all. The time now comes straight after the date in every
+    // language and the label follows it, the colon that led into the time gone with the move; the spoken name keeps the whole
+    // sentence in the language's own order. The pinned labels, then every catalog that puts the label first, found from them.
     it.each([
-        ['ru', ' по вашему времени', 'after'],
-        ['de', ' deine Zeit', 'after'],
-        ['ja', 'あなたの時間：', 'before'],
-    ])('in %s the time is a whole piece of its own and the rest of "{time} your time" is its words (%s)', async (lang, label, side) => {
+        ['ru', ' по вашему времени'],
+        ['de', ' deine Zeit'],
+        ['ja', ' あなたの時間'],
+        ['zh-Hans', ' 你的当地时间'],
+        ...LABEL_FIRST.filter(lang => lang !== 'ja' && lang !== 'zh-Hans').map((lang): [string, null] => [lang, null]),
+    ])('in %s the time is a whole piece straight after the date and the rest of "{time} your time" follows it', async (lang, label) => {
         await inLanguage(lang, () => {
+            const sentence = t('{time} your time', { time: '\u0001' });
             const online = { ...event, eventOnline: true, eventPlaceName: undefined, eventTz: 'Pacific/Noumea', eventStartLocal: '2030-09-28T10:00', eventEndLocal: '2030-09-28T13:00' };
             const zone = { ...event, eventTz: 'Pacific/Noumea', eventStartLocal: '2030-09-28T10:00', eventEndLocal: '2030-09-28T13:00' };
             for (const post of [online, zone]) {
                 renderRow(post, { distanceKm: null });
                 const got = pieces();
-                const time = got.findIndex(([kind, text]) => kind === 'whole' && /^\d{1,2}[:.]\d\d/.test(text));
-                expect(time).toBeGreaterThan(0);
-                // The time alone, no label in it; the label is the sentence's own words, on the language's side of it.
-                expect(got[time][1]).not.toMatch(/[^\d:.–\s-]/);
-                expect(got[side === 'after' ? time + 1 : time - 1]).toEqual(['words', label]);
-                expect(got.filter(([kind]) => kind === 'words')).toEqual([['words', label]]);
-                // The pieces read the sentence as core words it.
-                expect(screen.getByTestId('event-when').textContent).toContain(t('{time} your time', { time: got[time][1] }));
+                // The date, the time, then the label's words: nothing between the date and the time to push it off the row.
+                expect(got.map(([kind]) => kind)).toEqual(['whole', 'whole', 'words']);
+                const time = got[1][1];
+                // The time alone, no label in it.
+                expect(time).toMatch(/^\d{1,2}[:.]\d\d/);
+                expect(time).not.toMatch(/[^\d:.–\s-]/);
+                // The label is the sentence's own words, after the time.
+                if (label !== null) expect(got[2]).toEqual(['words', label]);
+                const words = got[2][1].trim();
+                expect(words.length).toBeGreaterThan(0);
+                expect(sentence.replace('\u0001', '')).toContain(words);
+                // The row's spoken name says the sentence as core words it, in the language's own order.
+                expect(screen.getByTestId('event-compact-row').getAttribute('aria-label')).toContain(t('{time} your time', { time }));
                 cleanup();
             }
         });
+    });
+
+    it('the label-first catalogs are found (ja, zh-Hans, bn and ml today), so the case above runs each one', () => {
+        expect(LABEL_FIRST).toEqual(expect.arrayContaining(['bn', 'ja', 'ml', 'zh-Hans']));
     });
 
     it('over two days, the start\'s date and its time and the end\'s date and its time are each a whole piece', () => {

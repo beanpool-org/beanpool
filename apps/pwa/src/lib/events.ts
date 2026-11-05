@@ -86,8 +86,9 @@ const TIME_SPLIT = '\u0001';
  * days the start's date, its time with the dash, the end's date and its time, each whole (at 320 x 1.3 the row's two lines
  * hold the start, and the end follows where it fits: the tile, too, reads the start and leaves the end to the page). Where
  * the clock is the reader's own, "your time" is split through its own sentence (core's `{time} your time`, as each language
- * words it): the time a whole piece, the rest of the sentence, in the language's own order and spacing, words that wrap and
- * give way. A half that does not read as core's date then time stays one whole piece. [] without a readable start.
+ * words it): the time a whole piece, the rest of the sentence after it, words that wrap and give way (a language that puts
+ * the label first has it moved after the time, so it can never push the time off the row's two lines). A half that does not
+ * read as core's date then time stays one whole piece. [] without a readable start.
  */
 export function eventRowWhenPieces(post: EventTimeFields): EventRowWhenPiece[] {
     const row = rowWhenOf(post);
@@ -119,7 +120,14 @@ export function eventRowWhenPieces(post: EventTimeFields): EventRowWhenPiece[] {
         ? { ...rowInput, startAt: input.endAt, startLocal: input.endLocal, endAt: null, endLocal: null, deviceStart: input.deviceEnd, deviceEnd: null }
         : null;
     const end = endAt ? dateAndTime(second, endAt) : [whole(second)];
-    return [...start, ...words(' '), ...words(around[0]), ...end, ...words(around[1])];
+    // The time before its label, in every language (the third review of #2904): where a language puts "your time" BEFORE the
+    // time (ja "あなたの時間：{time}", bn, ml, zh-Hans), its words wrapped to fill the row's second line and pushed the time
+    // onto the third, which the row's two lines hide, so the row showed no time at all. The time is what the row is for: it
+    // comes straight after the date, and the label follows it, its words wrapping and giving way as they do after the time in
+    // the other languages. The colon or space that led into the time goes with the move ("16:00–18:00 あなたの時間"). The
+    // row's spoken name (eventRowWhen) keeps the whole sentence in the language's own order.
+    const lead = around[0].replace(/[\s:：]+$/u, '').trim();
+    return [...start, ...words(' '), ...end, ...words(lead ? ` ${lead}${around[1]}` : around[1])];
 }
 
 /** The row's when: its halves, the clocks they are read from, and whether they are the reader's own clock ("your time"). */

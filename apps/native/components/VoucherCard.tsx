@@ -247,7 +247,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
             : '');
     const subtitleLine = [confirmedPart, madePart].filter(Boolean).join(' · ');
 
-    const minAllowed = Math.max(100, card.held);
+    const minAllowed = Math.max(100, Math.ceil((card.held || 0) / 100) * 100);
 
     return (
         <View style={styles.container}>

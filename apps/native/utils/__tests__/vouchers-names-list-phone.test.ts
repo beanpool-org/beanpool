@@ -489,6 +489,45 @@ describe('vouchers on the phone (slice V2)', () => {
             const controlAfter = container.querySelector('[data-testid="set-budget-control"]');
             expect(controlAfter).not.toBeNull();
         });
+
+        it('calculates minAllowed rounded to multiples of 100 when held amount is not a multiple of 100', async () => {
+            const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'viewer', createdAt: '2026-11-01' };
+
+            // held: 125 (e.g. presets of 50 + 75). minAllowed must be ceil(125/100)*100 = 200.
+            const cardWithNon100Held: VoucherCardData = {
+                ...FIXTURE_VOUCHER_CARD,
+                held: 125,
+                level: 300,
+            };
+
+            await act(async () => {
+                root.render(
+                    createElement(VoucherCard, {
+                        anchorUrl: 'https://community.test',
+                        identity,
+                        memberPubkey: 'pk_jane',
+                        initialCard: cardWithNon100Held,
+                    })
+                );
+            });
+
+            // Level starts at 300
+            expect(container.textContent).toMatch(/Set budget to: 300/);
+
+            // Step down once: 300 - 100 = 200 (which equals minAllowed = 200)
+            const minusBtn = container.querySelector('button[aria-label="Decrease by 100"]');
+            expect(minusBtn).not.toBeNull();
+            await act(async () => {
+                minusBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toMatch(/Set budget to: 200/);
+
+            // Stepping down again is disabled or clamped to minAllowed 200 (never 125 or 100)
+            await act(async () => {
+                minusBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toMatch(/Set budget to: 200/);
+        });
     });
 
     describe('Make a voucher amount settings and API call (§10)', () => {

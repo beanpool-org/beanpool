@@ -227,6 +227,14 @@ router.post('/api/local/verify-password', async (ctx) => {
     ctx.body = { success: true, ...(tfaSession ? { tfaSessionToken: tfaSession } : {}) };
 });
 
+/** A voucher's refusal (engine/vouchers.ts), in its own status, code and sentence. */
+function respondVoucherRefusal(ctx: any, e: unknown): boolean {
+    if (!(e instanceof VoucherError)) return false;
+    ctx.status = e.status;
+    ctx.body = { error: e.message, code: e.code, ...(e.extra || {}) };
+    return true;
+}
+
 // Admin: Generate invite codes — supports tiered genesis invites.
 // Same auth as every other admin route (checkAdminAuth): the node password, or a key-signed session of a member
 // who holds owner or admin in node_roles. Moderators are refused: checkAdminAuth already refuses their sessions,
@@ -234,7 +242,7 @@ router.post('/api/local/verify-password', async (ctx) => {
 // as well as owner.
 router.post('/api/admin/seed-invite', async (ctx) => {
     if (!rateLimit(ctx)) return;
-    const { type: inviteType } = (ctx as any).requestBody || {};
+    const { type: inviteType, vouchAmount } = (ctx as any).requestBody || {};
 
     if (!(await checkAdminAuth(ctx as any))) {
         logger.security('AUTH', 'Unauthorized attempt to generate invite code.');
@@ -272,11 +280,24 @@ router.post('/api/admin/seed-invite', async (ctx) => {
                 || members[0];
         }
         if (genesisMember) {
-            const invite = adminGenerateInvite(genesisMember.publicKey, genesisType, undefined, issuedBy);
+            let invite: ReturnType<typeof adminGenerateInvite>;
+            try {
+                invite = adminGenerateInvite(genesisMember.publicKey, genesisType, undefined, issuedBy, vouchAmount);
+            } catch (e) {
+                if (respondVoucherRefusal(ctx, e) || respondProfileRefusal(ctx, e)) return;
+                throw e;
+            }
             if (invite) {
                 logger.security('ADMIN', `Seed invite generated: ${inviteLogTag(invite.code)} [${genesisType}] issued by ${issuedBy}`, { issuedBy, inviteTag: inviteLogTag(invite.code), type: genesisType, authRole: role });
                 const tierLabels: Record<string, string> = { standard: '🥚 Newcomer', trusted: '🏠 Resident', ambassador: '🏛️ Steward', elder: '⛰️ Elder' };
-                ctx.body = { success: true, code: invite.code, type: genesisType, tierLabel: tierLabels[genesisType], message: `${tierLabels[genesisType]} invite generated` };
+                ctx.body = {
+                    success: true,
+                    code: invite.code,
+                    type: genesisType,
+                    tierLabel: tierLabels[genesisType],
+                    message: `${tierLabels[genesisType]} invite generated`,
+                    ...(invite.vouchAmount ? { vouchAmount: invite.vouchAmount } : {}),
+                };
                 return;
             }
         }
@@ -296,7 +317,13 @@ router.post('/api/admin/seed-invite', async (ctx) => {
     const pubKeyHex = pubKeyDer.subarray(-32).toString('hex');
 
     seedGenesisMember(pubKeyHex, 'Admin');
-    const invite = adminGenerateInvite(pubKeyHex, genesisType, undefined, issuedBy);
+    let invite: ReturnType<typeof adminGenerateInvite>;
+    try {
+        invite = adminGenerateInvite(pubKeyHex, genesisType, undefined, issuedBy, vouchAmount);
+    } catch (e) {
+        if (respondVoucherRefusal(ctx, e) || respondProfileRefusal(ctx, e)) return;
+        throw e;
+    }
     if (!invite) {
         ctx.status = 500;
         ctx.body = { error: 'Failed to generate seed invite' };
@@ -304,7 +331,13 @@ router.post('/api/admin/seed-invite', async (ctx) => {
     }
 
     logger.security('ADMIN', `Seed invite generated: ${inviteLogTag(invite.code)} [${genesisType}] issued by ${issuedBy}`, { issuedBy, inviteTag: inviteLogTag(invite.code), type: genesisType, authRole: role });
-    ctx.body = { success: true, code: invite.code, type: genesisType, message: 'Genesis member created + seed invite generated' };
+    ctx.body = {
+        success: true,
+        code: invite.code,
+        type: genesisType,
+        message: 'Genesis member created + seed invite generated',
+        ...(invite.vouchAmount ? { vouchAmount: invite.vouchAmount } : {}),
+    };
 });
 
 
@@ -1214,14 +1247,6 @@ router.post('/api/invite/generate', async (ctx) => {
     }
     ctx.body = { success: true, invite };
 });
-
-/** A voucher's refusal (engine/vouchers.ts), in its own status, code and sentence. */
-function respondVoucherRefusal(ctx: any, e: unknown): boolean {
-    if (!(e instanceof VoucherError)) return false;
-    ctx.status = e.status;
-    ctx.body = { error: e.message, code: e.code, ...(e.extra || {}) };
-    return true;
-}
 
 // A vouch from a member's profile (engine/vouchers.ts vouchFromProfile; DESIGN-invites-and-names-list-amend2-fable.md §4 Q1,
 // Marty's §9): `{ memberPubkey, vouchAmount, raise? }`, from the signer's own budget, landing at once. The signer is the

@@ -1849,17 +1849,49 @@ export async function undoRequestLimit(nodeUrl: string, pubkey: string, adminPas
     await burstRequest(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/request-limit/undo`, 'POST', {}, adminPassword, tfaToken);
 }
 
+export interface MyVouchingResponse {
+    voucher: boolean;
+    budget?: {
+        left: number;
+        level: number;
+        held: number;
+        vouched: number;
+    };
+    source?: string;
+    presets: number[];
+    vouchMax: number;
+    budgetMax: number;
+}
+
+export async function fetchMyVouching(
+    nodeUrl: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<MyVouchingResponse | null> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/vouchers/me');
+    const res = await fetch(endpoint, {
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    }).catch(() => null);
+    if (!res || !res.ok) return null;
+    return res.json().catch(() => null);
+}
+
 export async function generateNodeInvite(
     nodeUrl: string,
     adminPassword?: string,
     type: 'standard' | 'trusted' | 'ambassador' | 'elder' = 'standard',
-    tfaToken?: string
-): Promise<{ success: boolean; code: string; type: string }> {
+    tfaToken?: string,
+    vouchAmount?: number | null
+): Promise<{ success: boolean; code: string; type: string; vouchAmount?: number }> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/admin/seed-invite');
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...passwordField(adminPassword), type }),
+        body: JSON.stringify({
+            ...passwordField(adminPassword),
+            type,
+            ...(typeof vouchAmount === 'number' && vouchAmount > 0 ? { vouchAmount } : {}),
+        }),
     });
     if (!res.ok) {
         // The node's own words (e.g. 'Invalid password', 'Only an owner or admin of this node can issue invites').

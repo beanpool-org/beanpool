@@ -1948,7 +1948,10 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
                             {activeTab === 'invites' && (
                                 <SectionErrorBoundary sectionName="Invites Module" resetKey={activeProfileId || activeNode?.id}>
-                                    <InvitesModule activeNode={activeNode} />
+                                    <InvitesModule
+                                        activeNode={activeNode}
+                                        viewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
+                                    />
                                 </SectionErrorBoundary>
                             )}
 

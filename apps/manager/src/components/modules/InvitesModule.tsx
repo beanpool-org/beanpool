@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { generateNodeInvite, getTfaSessionToken } from '../../lib/node-client';
+import { fetchMyVouching, generateNodeInvite, getTfaSessionToken, type MyVouchingResponse } from '../../lib/node-client';
 import { generateOfflineQrUrl } from '../../lib/qr';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
+import type { RolesViewer } from './NodeRolesPanel';
+import { formatCount, VOUCH_PRESETS } from '@beanpool/core';
 
 interface InvitesModuleProps {
     activeNode: NodeProfile;
+    viewer?: RolesViewer;
 }
 
 export type InviteTier = 'standard' | 'trusted' | 'ambassador' | 'elder';
@@ -17,9 +20,10 @@ export interface GeneratedInviteItem {
     tier: InviteTier;
     fullUrl: string;
     qrDataUrl: string;
+    vouchAmount?: number | null;
 }
 
-export function InvitesModule({ activeNode }: InvitesModuleProps) {
+export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
     const [inviteCount, setInviteCount] = useState(5);
     const [inviteTier, setInviteTier] = useState<InviteTier>('standard');
     const [generatedTokens, setGeneratedTokens] = useState<GeneratedInviteItem[]>([]);
@@ -29,13 +33,43 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
     const [previewQrItem, setPreviewQrItem] = useState<GeneratedInviteItem | null>(null);
     const [showPrintSheet, setShowPrintSheet] = useState(false);
     const [generateError, setGenerateError] = useState<{ reason: string; issued: number; requested: number } | null>(null);
+    // The manager's own refusal (the batch doesn't fit the budget), said under the amounts: not the node's words.
+    const [batchError, setBatchError] = useState<string | null>(null);
+    const [vouchData, setVouchData] = useState<MyVouchingResponse | null>(null);
+    const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
 
     useEffect(() => {
         setGeneratedTokens([]);
         setPreviewQrItem(null);
         setShowPrintSheet(false);
         setGenerateError(null);
+        setSelectedPreset(null);
     }, [activeNode?.id]);
+
+    // The viewer as a value, not the object: AppBody makes a new viewer on every render, and the effect below would reset
+    // the chosen preset and re-read the budget each time (#2923 review).
+    const viewerKey = viewer?.kind === 'key' ? `key:${viewer.memberPubkey}:${viewer.role}` : (viewer?.kind ?? 'none');
+
+    useEffect(() => {
+        setSelectedPreset(null);
+        if (viewer?.kind !== 'key' || (viewer.role !== 'owner' && viewer.role !== 'admin')) {
+            setVouchData(null);
+            return;
+        }
+        let mounted = true;
+        void fetchMyVouching(
+            activeNode.url,
+            nodeCredential(activeNode),
+            activeNode ? getTfaSessionToken(activeNode.id) : undefined
+        ).then((res) => {
+            if (mounted) {
+                setVouchData(res && res.voucher ? res : null);
+            }
+        });
+        return () => {
+            mounted = false;
+        };
+    }, [activeNode?.id, activeNode?.url, viewerKey]);
 
     const buildFullUrl = (code: string) => {
         const cleanNodeUrl = activeNode?.url ? activeNode.url.replace(/\/$/, '') : 'https://test.beanpool.org';
@@ -44,21 +78,45 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
 
     // Every code shown here was issued by the node. When the node refuses, we stop and say why: a code the node
     // never issued would be printed on a card and fail at the door.
+    // A chosen amount the budget can no longer cover is let go, so a card never asks for more than is left.
+    useEffect(() => {
+        const left = vouchData?.budget?.left ?? 0;
+        if (selectedPreset !== null && selectedPreset > left) setSelectedPreset(null);
+    }, [vouchData?.budget?.left, selectedPreset]);
+    useEffect(() => { setBatchError(null); }, [selectedPreset, inviteCount]);
+
     const issueInvites = async (count: number, keep: GeneratedInviteItem[]) => {
+        // The whole batch must fit the budget before the first card is made: never four cards and a refused fifth.
+        const leftNow = vouchData?.budget?.left ?? 0;
+        if (selectedPreset !== null && selectedPreset * count > leftNow) {
+            setBatchError(`Not enough budget left for ${count} cards at ${selectedPreset} each: ${formatCount(leftNow)} left. Choose fewer cards or a smaller amount.`);
+            return;
+        }
+        setBatchError(null);
         setIsGenerating(true);
         setGenerateError(null);
         const items: GeneratedInviteItem[] = [...keep];
         try {
             for (let i = 0; i < count; i++) {
                 let code: string;
+                let issuedVouchAmount: number | undefined;
                 try {
-                    const res = await generateNodeInvite(
-                        activeNode.url,
-                        nodeCredential(activeNode),
-                        inviteTier,
-                        activeNode ? getTfaSessionToken(activeNode.id) : undefined
-                    );
+                    const res = selectedPreset
+                        ? await generateNodeInvite(
+                            activeNode.url,
+                            nodeCredential(activeNode),
+                            inviteTier,
+                            activeNode ? getTfaSessionToken(activeNode.id) : undefined,
+                            selectedPreset
+                        )
+                        : await generateNodeInvite(
+                            activeNode.url,
+                            nodeCredential(activeNode),
+                            inviteTier,
+                            activeNode ? getTfaSessionToken(activeNode.id) : undefined
+                        );
                     code = res.code;
+                    issuedVouchAmount = typeof res.vouchAmount === 'number' ? res.vouchAmount : undefined;
                 } catch (err: unknown) {
                     setGenerateError({
                         reason: err instanceof Error && err.message ? err.message : 'The node could not be reached',
@@ -76,9 +134,19 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     tier: inviteTier,
                     fullUrl,
                     qrDataUrl,
+                    vouchAmount: issuedVouchAmount,
                 });
             }
             setGeneratedTokens(items);
+            if (viewer?.kind === 'key' && (viewer.role === 'owner' || viewer.role === 'admin')) {
+                void fetchMyVouching(
+                    activeNode.url,
+                    nodeCredential(activeNode),
+                    activeNode ? getTfaSessionToken(activeNode.id) : undefined
+                ).then((res) => {
+                    if (res && res.voucher) setVouchData(res);
+                });
+            }
         } finally {
             setIsGenerating(false);
         }
@@ -114,7 +182,8 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
     const getShareMessage = (item: GeneratedInviteItem) => {
         const nodeName = activeNode?.name || 'Sovereign Node';
         const tierName = getTierBadge(item.tier);
-        return `🌱 You're invited to join BeanPool on node "${nodeName}"!\nSingle-use onboarding pass (${tierName}): ${item.code}\n\nTap the link to get started:\n${item.fullUrl}\n\n(Note: This single-use invite link is valid for 30 days)`;
+        const vouchPart = typeof item.vouchAmount === 'number' && item.vouchAmount > 0 ? `\n🤝 Vouch: ${item.vouchAmount} Beans` : '';
+        return `🌱 You're invited to join BeanPool on node "${nodeName}"!\nSingle-use onboarding pass (${tierName}): ${item.code}${vouchPart}\n\nTap the link to get started:\n${item.fullUrl}\n\n(Note: This single-use invite link is valid for 30 days)`;
     };
 
     const handleCopyAllMessages = () => {
@@ -167,6 +236,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-size: 11px; font-weight: bold; color: #4b5563; text-transform: uppercase; letter-spacing: 1px;">Single-Use Onboarding Code:</div>
                         <div style="font-size: 26px; font-weight: 900; color: #166534; font-family: monospace; letter-spacing: 2px; margin: 4px 0 10px 0;">${escapeHtml(item.code)}</div>
+                        ${typeof item.vouchAmount === 'number' && item.vouchAmount > 0 ? `<div style="font-size: 12px; font-weight: bold; color: #166534; margin-bottom: 8px;">🤝 Vouch: ${escapeHtml(String(item.vouchAmount))} Beans included</div>` : ''}
                         <div style="font-size: 12px; color: #374151; margin-bottom: 6px; font-weight: 600;">
                             Scan the large QR code with your phone camera or visit:
                         </div>
@@ -319,6 +389,56 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             </div>
                         </div>
                     </div>
+
+                    {vouchData?.voucher && (
+                        <div className="space-y-1.5 sm:col-span-2 pt-2 border-t border-nature-800" data-testid="vouch-preset-section">
+                            <div className="flex justify-between items-center">
+                                <label className="text-nature-400 font-extrabold uppercase text-[10px] tracking-wider block">
+                                    Vouch for them
+                                </label>
+                                <span className="text-[11px] text-nature-400" data-testid="vouch-budget-left">
+                                    {vouchData.budget
+                                        ? `From your budget: ${formatCount(vouchData.budget.left)} of ${formatCount(vouchData.budget.level)} left`
+                                        : null}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap" role="radiogroup" aria-label="Vouch amount per card">
+                                {[null, ...VOUCH_PRESETS].map((preset) => {
+                                    const label = preset === null ? 'None' : String(preset);
+                                    const isSelected = selectedPreset === preset;
+                                    const left = vouchData.budget?.left ?? 0;
+                                    const disabled = preset !== null && (preset > left || left === 0);
+                                    return (
+                                        <button
+                                            key={label}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={isSelected}
+                                            disabled={disabled || isGenerating}
+                                            onClick={() => setSelectedPreset(preset)}
+                                            title={disabled ? 'Not enough budget left' : undefined}
+                                            className={`flex-1 min-w-[50px] py-2 rounded-xl text-xs font-bold transition-all border ${
+                                                isSelected
+                                                    ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border-terra-500/50'
+                                                    : disabled
+                                                    ? 'bg-nature-950/50 text-nature-600 border-nature-900 cursor-not-allowed'
+                                                    : 'bg-nature-950 text-nature-400 border-nature-800 hover:border-nature-700'
+                                            }`}
+                                            data-testid={`vouch-preset-${label}`}
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {batchError && (
+                                <p role="alert" data-testid="vouch-batch-error" className="m-0 text-[11px] font-semibold text-red-300">{batchError}</p>
+                            )}
+                            {vouchData.budget && vouchData.budget.left === 0 && (
+                                <p className="text-[11px] text-amber-300 m-0">No budget left. Ask an owner for more.</p>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -429,7 +549,14 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                     <div className="space-y-1.5 flex-1 min-w-0">
                                         <div className="flex justify-between items-start flex-wrap gap-1">
                                             <code className="text-emerald-400 font-bold text-sm tracking-widest">{item.code}</code>
-                                            <span className="text-[9px] font-bold text-nature-500 uppercase bg-nature-900 px-2 py-0.5 rounded">{getTierBadge(item.tier)}</span>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <span className="text-[9px] font-bold text-nature-500 uppercase bg-nature-900 px-2 py-0.5 rounded">{getTierBadge(item.tier)}</span>
+                                                {typeof item.vouchAmount === 'number' && item.vouchAmount > 0 && (
+                                                    <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800" data-testid="card-vouch-badge">
+                                                        🤝 {item.vouchAmount} Beans vouched
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="text-[10px] text-nature-400 truncate font-mono bg-nature-900/60 p-1.5 rounded border border-nature-800/80">{item.fullUrl}</div>
                                         <div className="flex gap-2 pt-1">
@@ -520,6 +647,11 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                             <div className="text-3xl font-black font-mono text-emerald-900 tracking-wider">
                                                 {item.code}
                                             </div>
+                                            {typeof item.vouchAmount === 'number' && item.vouchAmount > 0 && (
+                                                <div className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded inline-block">
+                                                    🤝 Vouch: {item.vouchAmount} Beans
+                                                </div>
+                                            )}
                                             <div className="text-xs text-gray-700 font-medium">
                                                 Scan the large QR code with your camera or open this URL in your web browser:
                                             </div>
@@ -571,6 +703,9 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         <div className="space-y-1 text-xs font-mono">
                             <div className="text-emerald-400 font-bold text-lg tracking-wider">{previewQrItem.code}</div>
                             <div className="text-nature-300 text-[11px] font-bold">Granted Tier: {getTierBadge(previewQrItem.tier)}</div>
+                            {typeof previewQrItem.vouchAmount === 'number' && previewQrItem.vouchAmount > 0 && (
+                                <div className="text-emerald-400 text-xs font-bold">🤝 Vouch: {previewQrItem.vouchAmount} Beans</div>
+                            )}
                             <div className="text-nature-400 text-[10px] break-all pt-1">{previewQrItem.fullUrl}</div>
                         </div>
 

@@ -301,6 +301,27 @@ describe('CommunityShapeSection — Owner editing and saving single changes', ()
         });
     });
 
+    it('the voucher budget sits beside the known floor and saves { voucherBudget: 1500 } (V5)', async () => {
+        const shape = makeDefaultShape({ voucherBudget: { value: 1000, configured: 1000, source: 'default', lock: null } });
+        const fetchMock = mockShapeApi(shape);
+
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-voucherBudget')).toHaveTextContent('1,000 Beans'));
+        const rows = Array.from(document.querySelectorAll('[data-testid^="shape-val-"]')).map((el) => el.getAttribute('data-testid'));
+        expect(rows.indexOf('shape-val-voucherBudget')).toBe(rows.indexOf('shape-val-knownFloor') + 1);
+
+        fireEvent.click(screen.getByTestId('shape-expand-voucherBudget'));
+        const input = screen.getByLabelText(/Budget per voucher/i);
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        fireEvent.change(input, { target: { value: '1500' } });
+        expect(screen.getByText(/New vouchers start with a budget of 1,500 Beans/i)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
+
+        const postCall = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
+        expect(JSON.parse(postCall![1].body).changes).toEqual({ voucherBudget: 1500 });
+    });
+
     it('the members\' credit-line gift sits beside the known floor and saves { memberGift: 0 } to turn it off (G1)', async () => {
         const shape = makeDefaultShape({ memberGift: { value: 100, configured: 100, source: 'default', lock: null } });
         const fetchMock = mockShapeApi(shape);

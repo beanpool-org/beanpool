@@ -182,9 +182,9 @@ async function main(): Promise<void> {
     // ── 1. Before the lock ──────────────────────────────────────────────────────────────────────
     console.log('── 1. before the lock: nothing changes ──');
     let sh = readShape();
-    assert(isDeepStrictEqual([...sh.core.settings], ['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'])
+    assert(isDeepStrictEqual([...sh.core.settings], ['join', 'wordsDoor', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'])
         && sh.core.settings === CORE_SETTINGS,
-        `the shape names the eight Core settings (the member's credit-line gift, slice G1, the eighth), the constant itself (${JSON.stringify(sh.core.settings)})`);
+        `the shape names the nine Core settings (voucher budget, slice V5, the ninth), the constant itself (${JSON.stringify(sh.core.settings)})`);
     assert(sh.core.lock === null && isDeepStrictEqual(sh.core.place, { needed: true, set: false }),
         `not locked, and a local community needs its place, not set yet (${JSON.stringify(sh.core)})`);
     for (const s of sh.core.settings) assert(s in sh.settings || s === 'wordsDoor', `${s} is a setting of the shape`);
@@ -355,6 +355,11 @@ async function main(): Promise<void> {
         /Known floor for confirmed members, the floor \(\d+ → 1300\); Known floor for confirmed members, the cap \(\d+ → 3000\)/);
     await refusedClean("where members' copies go, from a computer", () => post({ changes: { recoveryCopies: 'none' } }, asComputer()), 403, 'phone_required');
     await provenChange("where members' copies go, from the phone", { recoveryCopies: 'none' }, asPhone(), {}, 'recoveryCopies', /\(vault → none\)/);
+    await refusedClean('the voucher budget, from a computer', () => post({ changes: { voucherBudget: 1500 } }, asComputer()), 403, 'phone_required');
+    nMark = noticeMark();
+    await provenChange('the voucher budget, from the phone', { voucherBudget: 1500 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1000 → 1500\)/);
+    assert(noticesSince(nMark).some((x) => /budget for each voucher is now 1,500 Beans/.test(x.body)), 'voucher budget changed, and members are told');
+    await provenChange('the voucher budget back to 1000', { voucherBudget: 1000 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1500 → 1000\)/);
     {
         // Two Core settings in one request: one proof, a core.unlock line before each.
         const m = logMark();

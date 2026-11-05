@@ -142,8 +142,9 @@ export function adminGenerateInvite(
     adminPubkey: string,
     genesisType: GenesisInviteType = 'standard',
     intendedFor?: string,
-    issuedBy?: string
-): InviteCode | null {
+    issuedBy?: string,
+    vouchAmount?: unknown,
+): (InviteCode & { vouchAmount?: number }) | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     // `adminPubkey` is the member the code hangs off in the invite tree (the genesis member, routes/community.ts), not
@@ -152,15 +153,21 @@ export function adminGenerateInvite(
     const admin = getMember(db, adminPubkey);
     if (!admin || !canInvite(adminPubkey)) return null;
 
+    const vouch = vouchAmount === undefined || vouchAmount === null ? null : checkInviteVouch(issuedBy || '', vouchAmount);
+
     recordActivity(adminPubkey);
 
     const code = generateShortCode();
     const createdAt = new Date().toISOString();
 
-    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, genesis_type, intended_for, issued_by) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(code, adminPubkey, createdAt, genesisType, intendedFor || null, issuedBy || null);
+    db.transaction(() => {
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, genesis_type, intended_for, issued_by, vouch_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .run(code, adminPubkey, createdAt, genesisType, intendedFor || null, issuedBy || null, vouch);
+        if (vouch && issuedBy) holdForInvite(issuedBy, code, vouch);
+    })();
 
-    const invite: InviteCode = { code, createdBy: adminPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
+    const invite: InviteCode & { vouchAmount?: number } = { code, createdBy: adminPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
+    if (vouch) invite.vouchAmount = vouch;
     const tierLabel = genesisType === 'standard' ? '🥚' : genesisType === 'trusted' ? '🏠' : genesisType === 'ambassador' ? '🏛️' : '⛰️';
     console.log(`🎟️  Admin Genesis Invite generated: ${inviteLogTag(code)} [${genesisType} ${tierLabel}] by ${admin.callsign}`);
     return invite;
@@ -312,7 +319,8 @@ export function redeemInvite(
         const outcome = invite.names_entry_id ? confirmByInvite(invite.created_by, invite.names_entry_id, publicKey) : null;
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ? WHERE code COLLATE NOCASE = ?")
             .run(publicKey, new Date().toISOString(), outcome, code);
-        if (invite.vouch_amount) vouch = landInviteVouch(invite.created_by, invite.code, publicKey, invite.vouch_amount);
+        const voucherMaker = invite.issued_by || invite.created_by;
+        if (invite.vouch_amount) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount);
         return m;
     })();
     if (!member) {

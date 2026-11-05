@@ -23,8 +23,8 @@ import {
  * step's Confirm and lock, and leaving writes nothing. A community with members opens it at the review (§7): its choices
  * are already made, so Confirm and lock sends no change at all.
  */
-/** `memberGift` is a review row only, never a step: it is changed on its own row, beside the known floor. */
-export type WalkStep = 'intro' | 'place' | 'join' | 'wordsDoor' | 'beans' | 'knownFloor' | 'memberGift' | 'decisions' | 'shareOutside' | 'recoveryCopies' | 'review';
+/** `voucherBudget` and `memberGift` are review rows only, never steps: they are changed on their own rows, beside the known floor. */
+export type WalkStep = 'intro' | 'place' | 'join' | 'wordsDoor' | 'beans' | 'knownFloor' | 'voucherBudget' | 'memberGift' | 'decisions' | 'shareOutside' | 'recoveryCopies' | 'review';
 
 export interface CoreDraft {
     join: 'members' | 'admins';
@@ -352,7 +352,9 @@ export function CoreWalkthrough({ activeNode, shape, startAt = 'intro', onLeave,
                         {reviewRow('beans', '🫘', t('Beans'), draft.beans ? t('On') : t('Off'), Boolean(serverHeld('beans')))}
                         {draft.beans && reviewRow('knownFloor', '🤝', t('Known floor for confirmed members'),
                             draft.knownFloor.on ? t('On · {floor} Beans').replace('{floor}', draft.knownFloor.floor.toLocaleString('en')) : t('Off'), Boolean(serverHeld('knownFloor')))}
-                        {/* A Core setting with no step of its own (slice G1): shown as it stands, so Confirm and lock never locks what isn't seen. */}
+                        {/* A Core setting with no step of its own (slices G1, V5): shown as it stands, so Confirm and lock never locks what isn't seen. */}
+                        {draft.beans && s.voucherBudget && reviewRow('voucherBudget', '🎟️', t('Budget per voucher'),
+                            t('{n} Beans').replace('{n}', s.voucherBudget.configured.toLocaleString('en')), false)}
                         {draft.beans && s.memberGift && reviewRow('memberGift', '🎁', t('Members giving part of their credit line'),
                             s.memberGift.configured > 0 ? t('On · up to {n} Beans').replace('{n}', s.memberGift.configured.toLocaleString('en')) : t('Off'), false)}
                         {reviewRow('decisions', '🗳️', t('Community votes (Decisions)'), draft.decisions ? t('On') : t('Off'), Boolean(serverHeld('decisions')))}

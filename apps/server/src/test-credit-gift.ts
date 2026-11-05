@@ -441,6 +441,9 @@ async function main(): Promise<void> {
     db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?)').run(CORE_SETTINGS_LOCK_KEY, coreLockRow(new Date().toISOString(), owen.pk)); // setup: Confirm and lock's row
     const lockedBefore = { settings: JSON.stringify(voucherSettings()), lines: giftLines() };
     const lockedList = await call(owen, 'POST', '/api/names/vouchers/settings', { memberGift: 0 });
+    const lockedBudget = await call(owen, 'POST', '/api/names/vouchers/settings', { voucherBudget: 1500 });
+    assert(lockedBudget.status === 403 && lockedBudget.body?.code === 'core_locked',
+        `8. locked: names list route refuses voucher budget with core_locked (${show(lockedBudget)})`);
     const noProof = await shapeSet(0, { 'X-Admin-Session': createPasswordSession().sessionId });
     assert(lockedList.status === 400 && lockedList.body?.code === 'moved_to_community_shape' && noProof.status === 401
         && JSON.stringify(voucherSettings()) === lockedBefore.settings && giftLines() === lockedBefore.lines && alerts.length === 0,

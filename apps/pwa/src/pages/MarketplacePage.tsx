@@ -7,11 +7,11 @@
  */
 
 import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
-import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, openListingLabel, type PostType } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, openListingLabel, typeWords, type PostType } from '../lib/marketplace';
 import { AuthorCard } from '../components/AuthorCard';
 import { useCoversScreen } from '../lib/screen-cover';
 import { nodeRefusal } from '../lib/node-refusal';
-import { MarketplaceCard, typeWords } from '../components/MarketplaceCard';
+import { MarketplaceCard } from '../components/MarketplaceCard';
 import { BOX_LABEL, GRID, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE, chip } from '../components/market-card-shell';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';

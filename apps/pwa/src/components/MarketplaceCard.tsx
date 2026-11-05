@@ -10,7 +10,7 @@
  */
 
 import { type CSSProperties, type ReactNode } from 'react';
-import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, typeWords, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
 import { copyPriceLine, eventCopyOf, formatNumber, listingChipWords, pinLive, t, upperCase, type ListingChip } from '@beanpool/core';
 import { Sentence } from './Sentence';
@@ -20,11 +20,6 @@ import { CARD_INK, COMPACT_END, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_ROW, COMP
 
 /** The grid's 4:3 frame anchors upright photos towards the top third (market-card-43). */
 const GRID_CROP: CSSProperties = { objectPosition: '50% 33%' };
-
-/** A listing's type on its badge (the badge's `uppercase` class puts it in capitals); a type this build doesn't know, as written. The listing's page draws the same chip. */
-export function typeWords(type: string): string {
-    return type === 'offer' ? t('offer', undefined, 'post type') : type === 'need' ? t('need', undefined, 'post type') : String(type ?? '');
-}
 
 /** The unit after a price ("/hr"), as the web card always wrote it; nothing for a fixed price. */
 function priceUnit(priceType: string | undefined): string {

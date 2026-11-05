@@ -351,11 +351,17 @@ export function makeVoucher(actor: string, body: { entryId?: unknown; amount?: u
     return voucherCard(pk);
 }
 
+/** A budget that hasn't stopped, whatever the account's state (a paused voucher's too): what the committee stops or sets. */
+function openBudgetRow(pk: string): VoucherRow | undefined {
+    const row = voucherRow(pk);
+    return row && !row.stopped_at ? row : undefined;
+}
+
 /** Stop vouching (DELETE /api/names/vouchers/:member): a list budget only; a role budget ends with the role. */
 export function stopVoucher(actor: string, member: unknown) {
     assertCommittee(actor);
     const pk = memberKey(member);
-    const live = liveVoucher(pk);
+    const live = openBudgetRow(pk);
     if (!live) throw new VoucherError(404, 'not_voucher', notVoucher(callsignOf(pk)));
     if (live.source === 'role') throw new VoucherError(409, 'role_voucher', roleVoucher(callsignOf(pk)));
     db.transaction(() => stopBudget(pk, actor, 'stopped'))();
@@ -370,7 +376,7 @@ export function stopVoucher(actor: string, member: unknown) {
 export function setBudgetLevel(actor: string, member: unknown, body: { level?: unknown }) {
     assertCommittee(actor);
     const pk = memberKey(member);
-    if (!liveVoucher(pk)) throw new VoucherError(404, 'not_voucher', notVoucher(callsignOf(pk)));
+    if (!openBudgetRow(pk)) throw new VoucherError(404, 'not_voucher', notVoucher(callsignOf(pk)));
     if (pk === actor) throw new VoucherError(403, 'own_budget', VOUCHER_WORDS.ownBudget);
     const level = body.level;
     if (!isBudgetLevel(level)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
@@ -517,14 +523,16 @@ export function holdForInvite(maker: string, code: string, amount: number): void
 /**
  * At the redeem of an invite that carries a vouch, inside the redeem's transaction: the vouch lands on the joiner as a
  * room_gifts row if its hold is still live (no `return`: its maker's budget was not stopped since), and is their maker's one
- * vouch for them (a joiner is new: no vouch yet, never three). Otherwise nothing lands, and the joiner is told.
+ * vouch for them (a joiner is new: no vouch yet, never three). Otherwise nothing lands, and the joiner is told. Never a
+ * refusal: the joiner joins either way. With Beans switched off since the code was made (before any Bean moved: the ledger
+ * keeps them on after), no room lands either, and the hold goes back to its maker.
  */
 export function landInviteVouch(maker: string, code: string, joiner: string, amount: number): { landed: number } | { ended: string } {
     const hold = db.prepare(`SELECT -h.amount AS amount FROM voucher_allocations h WHERE h.member_pubkey = ? AND h.ref = ? AND ${OPEN_HOLD}`)
         .get(maker, code) as { amount: number } | undefined;
-    if (!hold || hold.amount !== amount) return { ended: VOUCHER_WORDS.voucherEnded };
+    if (!hold || hold.amount !== amount || !isVouchPreset(amount)) return { ended: VOUCHER_WORDS.voucherEnded };
     const pair = pairOf(maker, joiner);
-    if (pair.total > 0 || pair.vouchers >= VOUCHES_PER_PERSON) {
+    if (!getProfileSwitches().beans || pair.total > 0 || pair.vouchers >= VOUCHES_PER_PERSON) {
         addLine(maker, 'return', amount, 'node', code);
         return { ended: VOUCHER_WORDS.voucherEnded };
     }

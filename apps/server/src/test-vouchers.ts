@@ -116,6 +116,11 @@ function confirm(member: Id, by: Id, awaitingSecond = false): string {
     return entryId;
 }
 
+/** The code an engine call refused with, or '' when it went through. */
+function vouchOrRefusal(fn: () => unknown): string {
+    try { fn(); return ''; } catch (e) { return (e as { code?: string }).code ?? String(e); }
+}
+
 async function join(owner: Id, who: Id): Promise<void> {
     const made = await generate(owner);
     require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with ${owner.name}'s invite (${show(made)})`);
@@ -186,6 +191,8 @@ async function main(): Promise<void> {
 
     // ── 10a. Beans off, before any Bean moves (a node whose ledger moved keeps Beans on: node-profile lockToLedger) ────
     const janeEntryOff = confirm(jane, owen);
+    const madeBeforeOff = await generate(owen, 25);
+    require_(madeBeforeOff.status === 200 && madeBeforeOff.body?.invite?.vouchAmount === 25, 'Owen holds 25 on an invite while Beans are on');
     setSwitchOverride('beans', false);
     require_(!getProfileSwitches().beans, 'Beans are switched off (no Bean has moved yet)');
     const linesBeforeOff = allLines();
@@ -196,6 +203,11 @@ async function main(): Promise<void> {
     ];
     assert(off.every((r) => r.status === 403 && r.body?.code === 'profile_no_beans') && allLines() === linesBeforeOff,
         `10. with Beans off every writer is refused, nothing written (${off.map((r) => `${r.status} ${r.body?.code}`).join(', ')})`);
+    const offJoiner = newId('Ola');
+    const offRedeem = await redeem(offJoiner, madeBeforeOff.body?.invite?.code);
+    assert(offRedeem.status === 200 && offRedeem.body?.vouch?.ended === VOUCHER_WORDS.voucherEnded && roomOf(offJoiner.pk) === 0
+        && count("SELECT COUNT(*) AS n FROM voucher_allocations WHERE kind = 'return' AND ref = ?", madeBeforeOff.body?.invite?.code) === 1,
+        `10. a vouched invite redeemed with Beans off joins with no room, its hold back to its maker (${show(offRedeem)})`);
     require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: lou.pk, role: 'admin' }, PASSWORD())).status === 200, 'Lou is made an admin while Beans are off');
     assert(!db.prepare('SELECT 1 FROM vouchers WHERE member_pubkey = ?').get(lou.pk), '10. a role granted with Beans off writes no budget');
     setSwitchOverride('beans', true);
@@ -331,6 +343,18 @@ async function main(): Promise<void> {
     const danVouch = await vouch(dan, mel, 25);
     assert(danVouch.status === 403 && danVouch.body?.code === 'not_a_voucher', '7. and he vouches no more');
 
+    // ── 7b. A paused voucher: no vouch while it lasts, and the committee still reaches the budget ─────────────────
+    const lou2 = newId('Nia');
+    await join(owen, lou2);
+    require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(lou2, owen), amount: 500 })).status === 201, 'Nia is made a voucher');
+    db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(lou2.pk);
+    const pausedVouch = vouchOrRefusal(() => vouchFromProfile(lou2.pk, { memberPubkey: mel.pk, vouchAmount: 25 }));
+    const pausedLower = await setLevel(owen, lou2, 100);
+    const pausedStop = await call(owen, 'DELETE', `/api/names/vouchers/${lou2.pk}`);
+    assert(pausedVouch === 'not_a_voucher' && pausedLower.status === 200 && pausedStop.status === 200 && sumLines(lou2.pk) === 0,
+        `7. a paused voucher can't vouch, and the committee can still lower and stop their budget (${pausedVouch} ${pausedLower.status} ${pausedStop.status})`);
+    db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(lou2.pk);
+
     // ── 8. A revoked confirmation; expiry ───────────────────────────────────────────────────────────────────────
     const beaConf = db.prepare('SELECT id FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(bea.pk) as { id: string };
     require_((await call(owen, 'POST', `/api/names/confirmations/${beaConf.id}/revoke`, {})).status === 200, 'Bea’s confirmation is revoked');
@@ -411,7 +435,7 @@ async function main(): Promise<void> {
         targets.push(k.pk);
     }
     const levels = [50, 100, 150, 300, 500, 900, 1000, 1500, 1800, 2000, 2100];
-    let violations: string[] = [];
+    const violations: string[] = [];
     let ops = 0;
     for (let step = 0; step < 400; step++) {
         const op = rand(6);

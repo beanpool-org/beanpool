@@ -175,11 +175,7 @@ describe('no sentence left that contradicts the rule (review of #2746)', () => {
      */
     const WAIT = /\b(stay|stays|staying|remain|remains|been) in debit\b|\bin debit for\b/i;
     /** S3's pages, named under "Until S3 merges": S3's meaning check must not keep the phrase. */
-    const S3_WAITS = [
-        'apps/website/privacy.html',
-        'packages/beanpool-guide/content/settings/what-the-admins-can-see.md',
-        'packages/beanpool-guide/operators/people/running-a-known-community.md',
-    ];
+    const S3_WAITS: string[] = []; // all three of S3's pages say it as the server tests it since #2922
     const tip = () => HOME_TIPS.find(t => t.id === 'private')!;
     const coreCatalogs = () => readdirSync(join(ROOT, 'packages/beanpool-core/words')).filter(f => f.endsWith('.json'));
     const read = (dir: string, file: string) => JSON.parse(readFileSync(join(ROOT, dir, file), 'utf8')) as Record<string, string>;

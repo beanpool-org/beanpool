@@ -112,7 +112,7 @@ A community's admins can turn invites off for the whole community.
 
 **Vouching on an invite.** If you are a voucher (owners and admins by role, and members set as vouchers on the names list by an owner or committee admin), **Invites** also shows **Vouch for them**: **None**, **25**, **50**, **75** or **100**, taken from your voucher budget. Under the choices, it shows your unspent budget ("From your budget: 550 of 1,000 left"). A preset above what is left is greyed ("Not enough budget left"), and with nothing left it says "No budget left. Ask an owner for more." Pick an amount and that amount is held from your budget. When the person joins with the invite, they receive that starting credit line from your budget.
 
-- If an invite expires without being used, or you delete it, the held amount returns to your budget.
+- If an invite expires without being used, the held amount returns to your budget.
 - If you stop being a voucher before they join, they still join, with no credit line.
 - A ticket made without a connection cannot carry a vouch.
 - There are no vouchers where a community has no Beans, so the global community does not show this.

@@ -614,11 +614,12 @@ async function main(): Promise<void> {
         'both say that look is logged where the admins and the owner read it (section 8)');
     assert(/opens the list of balances, the node records who and when;/.test(policy) && /can see who opened it and when/.test(guide),
         'both say an opening of the list records who and when, not whose (section 6: exceptions_opened has no subject)');
-    assert(/except in the four cases below/.test(policy) && (policy.match(/<h2>8\.[\s\S]*?<\/ul>/)?.[0].match(/<li><strong>(Only with your consent|When an admin removes|When the community votes|The server's operator)/g) ?? []).length === 4,
-        'the policy counts its cases as it lists them: consent, removal, a vote, the operator');
+    assert(/except in the four cases below/.test(policy) && (policy.match(/<h2>8\.[\s\S]*?<\/ul>/)?.[0].match(/<li><strong>(Only once an admin has confirmed you|When an admin removes|When the community votes|The server's operator)/g) ?? []).length === 4,
+        'the policy counts its cases as it lists them: confirmed, removal, a vote, the operator');
     assert(/sees your balance and how many trades you have open/.test(policy) && /sees your balance and how many trades you have open/.test(guide),
         'both name the open-trade count the removal preview answers (pendingEscrowsCount)');
-    assert(/take your consent back at any time/.test(policy) && /take your consent back at any time/.test(guide), 'both say consent can be withdrawn at any time (section 6c)');
+    assert(/nothing to agree to and nothing to withdraw/.test(policy) && /nothing to agree to and nothing to withdraw/.test(guide) && !/consent back/.test(policy + guide),
+        'both say the rule comes with being confirmed: nothing to agree to or withdraw (#2746)');
     // What every admin sees of trades, whatever a member agreed to (review r4176931267): /api/local/admin/disputes (a pending
     // trade, or one an admin settled: both members, the listing, the price, their shared chat), /admin/data memberStats
     // (finished and cancelled counts, the finished ones' total) and the health flags naming members. Since queue item 29
@@ -645,7 +646,7 @@ async function main(): Promise<void> {
     // Fix round 1 (r4177560405; Marty 2026-09-29: trust numbers stay visible to every member): every text names what the
     // trust profile (POST /api/trust/profile) shows of a member's trades, to every member, admins included, unlogged.
     const trustProfile = "Every member, admins included, sees each member's trust profile: how many of their trades were finished and how many were cancelled, and the share finished, how many Bean payments they have sent to or received from members plus the trades they have finished, with how many different members they have paid, been paid by or traded with, how many payments and trades they have done with the member looking, and their Trust Points. It isn't logged, because every member can see it.";
-    assert(policy.includes(`<li><strong>What any admin can see of trades,</strong> in any community and whatever you agreed to: ${tradeList}. ${loggedTrades}; ${loggedAlerts}. The owner and the admins can see that log. ${statsTotals} ${trustProfile} Nothing else of anyone's trades.</li>`),
+    assert(policy.includes(`<li><strong>What any admin can see of trades,</strong> in any community, confirmed or not: ${tradeList}. ${loggedTrades}; ${loggedAlerts}. The owner and the admins can see that log. ${statsTotals} ${trustProfile} Nothing else of anyone's trades.</li>`),
         'the policy lists what any admin sees of trades (the stranded escrows too), says every look at a trade is logged and an alerts look once in 24 hours per admin and member, the owner sees the log, member stats carry only totals, every member sees the trust profile, and nothing else');
     assert(operatorPage.includes(`What every admin can see of trades, in any community, is: ${tradeList}. ${loggedTrades}; ${loggedAlerts}. Both go in Community health, as a list of its own beside the one where the owner and the admins see who opened the exceptions and who looked at a balance; a background check of the alerts, which shows no names, isn't a look and isn't logged. The member stats show how many posts each member has up and messages they have sent, and of trades only the whole community's totals, never one member's. ${trustProfile}`),
         'the operator page lists the same, logged in its own list where the owner reads it, the background check unlogged, totals only in member stats, the trust profile');

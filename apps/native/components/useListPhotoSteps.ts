@@ -82,8 +82,9 @@ export function useListPhotoSteps(photo: string | null | undefined, onFailed?: (
  * cross-fades between its two image views, and with both loads waiting on a detached row, the fade-out it set up for the
  * first load is left on the view the second load drew on: when the row scrolls in, the photo fades in and that view is then
  * cleared, the other one already was, and the slot is white with no event to the card (expo-image 55
- * ExpoImageViewWrapper.onResourceReady). Measured on the emulator, 22 cards: with a 150 ms fade every card photo below the
- * first screen was empty once scrolled to; with none, none was. With no fade, each load swaps the views at once.
+ * ExpoImageViewWrapper.onResourceReady). Measured on the emulator, 25 card photos in the list view: with a 150 ms fade every
+ * one below the first screen was empty once scrolled to (68 of 94 slots seen); with none, none was (0 of 775, over 8 passes
+ * down and up, light and dark). With no fade, each load swaps the views at once.
  */
 export const LIST_PHOTO_TRANSITION = 0;
 

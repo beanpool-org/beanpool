@@ -7,9 +7,11 @@
  *   E people below zero (stored balance) · F people who would lose credit they are using · G open voucher Decisions.
  * F or G above zero: STOP, no deploy (exit code 2). Otherwise exit code 0.
  *
- * One line, from the director's machine (the release's image, pulled but not started, against the running node's data;
- * <user>@<host> and <tag> as deploy.sh names them, the folder deploy.sh's PROJECT_DIR):
- *   ssh <user>@<host> 'cd ~/BeanPool && sudo docker run --rm --entrypoint node -v "$PWD/data:/data" ghcr.io/beanpool-org/beanpool-node:<tag> apps/server/dist/vouch-reset-measure.js /data/state.db'
+ * One line, from the director's machine (the release's image, pulled but not started, against the running node's data:
+ * --volumes-from the running container, so it finds /data whatever folder or volume the node keeps it in; the image's
+ * working directory is /app/apps/server, hence dist/…; <user>@<host> and <project> as deploy-targets.conf names them,
+ * e.g. root@ssh-vic.beanpool.org and beanpool-castlemaine; <tag> the release's image tag):
+ *   ssh <user>@<host> 'C=$(sudo docker ps -q --filter label=com.docker.compose.project=<project> --filter label=com.docker.compose.service=beanpool-node); sudo docker run --rm --entrypoint node --volumes-from "$C" ghcr.io/beanpool-org/beanpool-node:<tag> dist/vouch-reset-measure.js /data/state.db'
  * Locally, against a copy of a data dir: node --import tsx apps/server/src/vouch-reset-measure.ts <dir>/state.db
  *
  * It never imports db/db.ts, which opens the database read-write and runs the boot's migrations as it loads.

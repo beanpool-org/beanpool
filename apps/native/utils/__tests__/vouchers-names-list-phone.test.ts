@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createElement, act } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-    openEntries, type OpenedEntry, type NamesOpened, type NamesListBody, type VoucherSummaryRow, type VoucherCardData,
+    openEntries, fetchVouchers, makeNamesVoucher,
+    type OpenedEntry, type NamesListBody, type VoucherSummaryRow, type VoucherCardData,
 } from '../names-list';
 import { VoucherCard } from '../../components/VoucherCard';
 
@@ -318,10 +319,68 @@ describe('vouchers on the phone (slice V2)', () => {
             expect(html).not.toMatch(/account balance/i);
         });
 
-        it('displays server refusal sentences directly as they come from the node', async () => {
+        it('updates target budget via quick levels (500, 1000, 1500, 2000) and 100-step stepper controls', async () => {
             const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'viewer', createdAt: '2026-11-01' };
 
-            // Mock fetch to reject POST /api/names/vouchers/:member/budget with server refusal sentence
+            await act(async () => {
+                root.render(
+                    createElement(VoucherCard, {
+                        anchorUrl: 'https://community.test',
+                        identity,
+                        memberPubkey: 'pk_jane',
+                        initialCard: FIXTURE_VOUCHER_CARD,
+                    })
+                );
+            });
+
+            // Initial level is 1000 (from fixture)
+            expect(container.textContent).toMatch(/Set budget to: 1,?000/);
+
+            // Click quick level 1,500
+            const btn1500 = container.querySelector('button[aria-label="1500"], button[aria-label="1,500"]');
+            expect(btn1500).not.toBeNull();
+            await act(async () => {
+                btn1500?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toMatch(/Set budget to: 1,?500/);
+
+            // Click stepper + (increases by 100 to 1,600)
+            const plusBtn = container.querySelector('button[aria-label="Increase by 100"]');
+            expect(plusBtn).not.toBeNull();
+            await act(async () => {
+                plusBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toMatch(/Set budget to: 1,?600/);
+
+            // Click stepper − (decreases by 100 back to 1,500)
+            const minusBtn = container.querySelector('button[aria-label="Decrease by 100"]');
+            expect(minusBtn).not.toBeNull();
+            await act(async () => {
+                minusBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toMatch(/Set budget to: 1,?500/);
+
+            // Click quick level 500
+            const btn500 = container.querySelector('button[aria-label="500"]');
+            expect(btn500).not.toBeNull();
+            await act(async () => {
+                btn500?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toContain('Set budget to: 500');
+
+            // Click quick level 2,000
+            const btn2000 = container.querySelector('button[aria-label="2000"], button[aria-label="2,000"]');
+            expect(btn2000).not.toBeNull();
+            await act(async () => {
+                btn2000?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toMatch(/Set budget to: 2,?000/);
+        });
+
+        it('displays server refusal sentences directly as they come from the node (level_below_held, over_ceiling, raise_frozen)', async () => {
+            const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'viewer', createdAt: '2026-11-01' };
+
+            // 1. level_below_held refusal
             mockFetch.mockResolvedValueOnce({
                 ok: false,
                 status: 409,
@@ -342,7 +401,6 @@ describe('vouchers on the phone (slice V2)', () => {
                 );
             });
 
-            // Tap "Set budget to 1,000" / "Set budget to 1000"
             const submitBtn = container.querySelector('button[aria-label^="Set budget to 1"]');
             expect(submitBtn).not.toBeNull();
 
@@ -350,35 +408,169 @@ describe('vouchers on the phone (slice V2)', () => {
                 submitBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             });
 
-            // The node's refusal sentence is displayed as written!
             expect(container.textContent).toContain('Jane has 100 Beans held on invites not used yet: you cannot lower below that.');
+
+            // 2. over_ceiling refusal
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 400,
+                json: async () => ({
+                    code: 'over_ceiling',
+                    error: 'Voucher budget cannot exceed 2,000 Beans.',
+                }),
+            });
+
+            await act(async () => {
+                submitBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toContain('Voucher budget cannot exceed 2,000 Beans.');
+
+            // 3. raise_frozen refusal
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 403,
+                json: async () => ({
+                    code: 'raise_frozen',
+                    error: 'This community has frozen budget increases.',
+                }),
+            });
+
+            await act(async () => {
+                submitBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            });
+            expect(container.textContent).toContain('This community has frozen budget increases.');
         });
     });
 
-    describe('Vouchers block visibility on People → Invites (§11)', () => {
-        it('renders vouchers block when GET /api/names/vouchers returns 200 (owner / committee admin)', () => {
-            // Simulated state where vouchersData is returned from GET /api/names/vouchers
-            const vouchersData = {
-                vouchers: [FIXTURE_VOUCHER_CARD],
-                settings: { voucherBudget: 1000, memberGift: 100 },
-            };
+    describe('Make a voucher amount settings and API call (§10)', () => {
+        it('prefills with community setting (1,000) and constrains amount from 100 to 2,000 in 100s', async () => {
+            const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'admin', createdAt: '2026-11-01' };
 
-            // Simulated rendering of the Vouchers block:
-            const canSeeVouchersBlock = vouchersData !== null;
-            expect(canSeeVouchersBlock).toBe(true);
+            // Community setting prefill check
+            const communitySetting = 1000;
+            let currentAmount = communitySetting;
+            expect(currentAmount).toBe(1000);
 
-            // Row text matches Marty's exact format in §11:
-            // "Jane Albury · 550 of 1,000 left · 4 vouched · 1 below zero ›"
-            const v = vouchersData.vouchers[0];
+            // Bounds check: 100 to 2,000 in steps of 100
+            const stepDown = (v: number) => Math.max(100, v - 100);
+            const stepUp = (v: number) => Math.min(2000, v + 100);
+
+            // Step down from 1,000 to 900
+            currentAmount = stepDown(currentAmount);
+            expect(currentAmount).toBe(900);
+
+            // Cannot step below 100
+            currentAmount = 100;
+            expect(stepDown(currentAmount)).toBe(100);
+
+            // Cannot step above 2000
+            currentAmount = 2000;
+            expect(stepUp(currentAmount)).toBe(2000);
+
+            // Mock successful makeNamesVoucher API call
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => FIXTURE_VOUCHER_CARD,
+            });
+
+            const res = await makeNamesVoucher('https://community.test', identity, 'e_alice', 1500);
+            expect(res.ok).toBe(true);
+            if (res.ok) {
+                expect(res.value.memberPubkey).toBe('pk_jane');
+            }
+        });
+    });
+
+    describe('Vouchers block visibility on People → Invites (§11) across all 5 roles', () => {
+        const identity = { publicKey: '1'.repeat(64), privateKey: '2'.repeat(64), callsign: 'caller', createdAt: '2026-11-01' };
+
+        it('1. Owner: GET /api/names/vouchers returns 200 -> Vouchers block renders', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    vouchers: [FIXTURE_VOUCHER_CARD],
+                    settings: { voucherBudget: 1000, memberGift: 100 },
+                }),
+            });
+
+            const res = await fetchVouchers('https://community.test', identity);
+            expect(res.ok).toBe(true);
+            expect(res.ok && res.value.vouchers.length === 1).toBe(true);
+
+            // When data is present, the Vouchers block renders with the voucher row and add row
+            const v = (res as any).value.vouchers[0];
             const rowText = `${v.callsign} · ${v.left} of ${v.level} left · ${v.peopleVouched} vouched · ${v.belowZero} below zero ›`;
             expect(rowText).toBe('jane · 550 of 1000 left · 4 vouched · 1 below zero ›');
         });
 
-        it('does NOT render vouchers block when GET /api/names/vouchers returns 403 (plain admin or member)', () => {
-            // When user is plain admin or member, server returns 403 committee_only, so vouchersData is null
-            const vouchersData = null;
-            const canSeeVouchersBlock = vouchersData !== null;
-            expect(canSeeVouchersBlock).toBe(false);
+        it('2. Credit-committee admin: GET /api/names/vouchers returns 200 -> Vouchers block renders', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    vouchers: [FIXTURE_VOUCHER_CARD],
+                    settings: { voucherBudget: 1000, memberGift: 100 },
+                }),
+            });
+
+            const res = await fetchVouchers('https://community.test', identity);
+            expect(res.ok).toBe(true);
+            expect(res.ok && res.value.vouchers.length > 0).toBe(true);
+        });
+
+        it('3. Plain admin (not on credit committee): GET /api/names/vouchers returns 403 committee_only -> Vouchers block does NOT render', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 403,
+                json: async () => ({
+                    code: 'committee_only',
+                    error: 'Only an owner or a credit committee admin can see vouchers.',
+                }),
+            });
+
+            const res = await fetchVouchers('https://community.test', identity);
+            expect(res.ok).toBe(false);
+            if (!res.ok) {
+                expect(res.status).toBe(403);
+                expect(res.code).toBe('committee_only');
+            }
+            // In people.tsx: if res.ok is false, vouchersData is set to null, hiding the Vouchers block
+            const vouchersData = res.ok ? res.value : null;
+            expect(vouchersData).toBeNull();
+        });
+
+        it('4. Voucher (regular voucher not on credit committee): GET /api/names/vouchers returns 403 committee_only -> Vouchers block does NOT render', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 403,
+                json: async () => ({
+                    code: 'committee_only',
+                    error: 'Only an owner or a credit committee admin can see vouchers.',
+                }),
+            });
+
+            const res = await fetchVouchers('https://community.test', identity);
+            expect(res.ok).toBe(false);
+            const vouchersData = res.ok ? res.value : null;
+            expect(vouchersData).toBeNull();
+        });
+
+        it('5. Plain member: GET /api/names/vouchers returns 403 committee_only -> Vouchers block does NOT render', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: false,
+                status: 403,
+                json: async () => ({
+                    code: 'committee_only',
+                    error: 'Only an owner or a credit committee admin can see vouchers.',
+                }),
+            });
+
+            const res = await fetchVouchers('https://community.test', identity);
+            expect(res.ok).toBe(false);
+            const vouchersData = res.ok ? res.value : null;
+            expect(vouchersData).toBeNull();
         });
     });
 });

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { t, tn, formatNumber, formatDate } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import {
     fetchVoucherCard, setVoucherBudget, stopNamesVoucher,
-    type VoucherCardData, type VoucherHistoryLine, type VoucherPersonRow, type OpenedEntry,
+    type VoucherCardData, type OpenedEntry,
 } from '../utils/names-list';
 import type { BeanPoolIdentity } from '../utils/identity';
 
@@ -465,7 +465,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                                 {card.history.map((h, idx) => {
                                     const dateStr = dateWords(h.at, 'day-month');
                                     const actorName = h.actorCallsign || (h.actor.startsWith('migration:') ? 'migration' : h.actor);
-                                    let line = '';
+                                    let line: string;
                                     if (h.kind === 'grant') {
                                         line = t('+{amount} budget, made a voucher by @{name}, {date}', { amount: formatNumber(h.amount), name: actorName, date: dateStr });
                                     } else if (h.kind === 'top_up') {

@@ -42,7 +42,7 @@ import {
     deleteNamesEntry, confirmableMembers, confirmationLimit, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
     inviteForNamesEntry, readBoundInvites, firstSentence, makeNamesVoucher,
-    type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow, type VoucherSummaryRow,
+    type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
 import { VoucherCard } from '../components/VoucherCard';
 import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, type BoundInvite } from '../utils/names-invite';
@@ -189,6 +189,7 @@ export default function NamesListScreen() {
     }, [identity, take]);
 
     useFocusEffect(useCallback(() => { void load(); }, [load]));
+    useEffect(() => { void load(); }, [load]);
 
     useEffect(() => { openedRef.current = opened; }, [opened]);
     const state = opened?.state ?? null;

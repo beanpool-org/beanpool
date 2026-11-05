@@ -3399,7 +3399,6 @@
   "{title} by {name} on {platform}": "{title} na {name} kwenye {platform}",
   "{title} · within {km} km": "{title} · ndani ya km {km}",
   "{title}, by {name}. Opens the Pulse.": "{title}, na {name}. Inafungua Mapigo.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "{voters} kati ya kura {n} inayohitajika",
     "other": "{voters} kati ya kura {n} zinazohitajika"
@@ -3607,7 +3606,6 @@
   "🖼️ Gallery": "🖼️ Matunzio",
   "🗑️ Delete Group Post (Convenor)": "🗑️ Futa Tangazo la Kikundi (Mratibu)",
   "🗑️ Delete Post": "🗑️ Futa Tangazo",
-  "🗞️ DAILY PULSE": "🗞️ MAPIGO YA KILA SIKU",
   "🗞️ Daily Pulse": "🗞️ Mapigo ya Kila Siku",
   "🗳️ Poll": "🗳️ Kura ya maoni",
   "🗳️ Polls": "🗳️ Kura za Maoni",

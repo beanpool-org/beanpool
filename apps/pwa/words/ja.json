@@ -3278,7 +3278,6 @@
   "{title} by {name} on {platform}": "{platform}での{name}による「{title}」",
   "{title} · within {km} km": "{title} · {km}km圏内",
   "{title}, by {name}. Opens the Pulse.": "{title}、{name}。「パルス」を開きます。",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "other": "必要な{n}票のうち{voters}票"
   },
@@ -3479,7 +3478,6 @@
   "🖼️ Gallery": "🖼️ ギャラリー",
   "🗑️ Delete Group Post (Convenor)": "🗑️ グループの投稿を削除（世話人）",
   "🗑️ Delete Post": "🗑️ 投稿を削除",
-  "🗞️ DAILY PULSE": "🗞️ 今日のパルス",
   "🗞️ Daily Pulse": "🗞️ デイリーパルス",
   "🗳️ Poll": "🗳️ 投票",
   "🗳️ Polls": "🗳️ 投票",

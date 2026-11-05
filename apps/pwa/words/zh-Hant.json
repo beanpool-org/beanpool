@@ -3278,7 +3278,6 @@
   "{title} by {name} on {platform}": "{name} 在 {platform} 上發布的《{title}》",
   "{title} · within {km} km": "{title} · {km} 公里內",
   "{title}, by {name}. Opens the Pulse.": "{title}，來自 {name}。會開啟「動態」。",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "other": "需要 {n} 票中的 {voters} 票"
   },
@@ -3479,7 +3478,6 @@
   "🖼️ Gallery": "🖼️ 相簿",
   "🗑️ Delete Group Post (Convenor)": "🗑️ 刪除群組貼文（召集人）",
   "🗑️ Delete Post": "🗑️ 刪除貼文",
-  "🗞️ DAILY PULSE": "🗞️ 每日動態",
   "🗞️ Daily Pulse": "🗞️ 每日動態",
   "🗳️ Poll": "🗳️ 投票",
   "🗳️ Polls": "🗳️ 投票",

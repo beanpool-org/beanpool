@@ -595,6 +595,7 @@ export const SUITES = [
     'test-invite-bound-name',
     'test-vouch-reset',
     'test-vouchers',
+    'test-credit-gift',
     'test-invite-asks',
     'test-names-copy',
     'test-names-access-log-migration',

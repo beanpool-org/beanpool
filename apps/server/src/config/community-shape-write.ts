@@ -44,6 +44,10 @@
  *               A local community may switch Beans off before anything moved (Q1).
  *   knownFloor  { on, floor, cap }, the known floor's own checks (400); refused wherever Beans are off once this request
  *               is written (`beans_off`).
+ *   memberGift  0 (off) to 100, whole Beans: the most one member's credit-line gift may be (slice G1); refused wherever
+ *               Beans are off once this request is written (`beans_off`). Its line is kept in the known floor's log too
+ *               (`gift_setting`), stamped alike. A Core setting: changed only here (the names list's settings route
+ *               refuses it, 400 `moved_to_community_shape`).
  *   listed      refused on the global kind (`profile`); on refused while DIRECTORY_UNLISTED holds every push back.
  *   shareOutside refused on while the private preview is on (it shows visitors nothing). Set off, every link a member
  *               shared outside stops at once (engine/peek-tickets.ts stopAllPeekTickets), in the same transaction: set on
@@ -64,8 +68,9 @@
  * was set). The open door, the private preview, visitors
  * and connections are the server's: 400.
  */
-import { word, wordsFor, type WordKey } from '@beanpool/core';
+import { word, wordsFor, isMemberGiftSetting, type WordKey } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { VOUCHER_WORDS, writeMemberGiftSetting } from '../engine/vouchers.js';
 import { getNodeConfig, updateNodeConfig, noticeToEveryMember, type NodeConfig } from '../state-engine.js';
 import { getNodeRole } from './node-role.js';
 import { getConfiguredSwitches, setSwitchOverride, type ProfileSwitch } from './node-profile.js';
@@ -122,7 +127,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 
 /** Checked and written in this order, so a request with two refusals is always refused for the same one. */
 const SETTINGS_IN_ORDER = [
-    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'dmRequests', 'decisions', 'shareOutside', 'listed',
+    'join', 'wordsDoor', 'doorCheck', 'knocks', 'beans', 'knownFloor', 'memberGift', 'dmRequests', 'decisions', 'shareOutside', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
     'recoveryCopies', 'removalDecider',
 ] as const;
@@ -140,7 +145,8 @@ const NOT_CHANGED_HERE: Record<string, string> = {
 export const SETTING_NAMES: Record<ShapeSettingName, string> = {
     join: 'Who can join', wordsDoor: '12 words at the open door',
     doorCheck: 'A person check on busy days', knocks: 'Requests to join', beans: 'Beans',
-    knownFloor: 'Known floor for confirmed members', dmRequests: 'First message from someone new',
+    knownFloor: 'Known floor for confirmed members', memberGift: 'Members giving part of their credit line',
+    dmRequests: 'First message from someone new',
     decisions: 'Community votes (Decisions)', shareOutside: 'Members may share listings outside the community',
     listed: 'Listed in the BeanPool directory',
     shareLocation: 'Share location & radius', shareMemberCount: 'Share member count', shareEmail: 'Share email',
@@ -166,6 +172,8 @@ const NOTICE = {
     floorOn: word("Your community's owners changed how it works: confirmed members can owe up to {floor} Beans now (the known floor)."),
     floorOff: word("Your community's owners changed how it works: confirmed members no longer have a known floor, and go back to the credit they have earned."),
     floorNow: word("Your community's owners changed how it works: confirmed members' known floor is now {floor} Beans."),
+    giftOn: word("Your community's owners changed how it works: a member can give another up to {max} Beans of the credit line someone gave them, at once."),
+    giftOff: word("Your community's owners changed how it works: members no longer give part of their credit line to each other."),
     dmOn: word("Your community's owners changed how it works: a first message from someone new now waits until you accept it."),
     dmOff: word("Your community's owners changed how it works: every message now arrives straight away."),
     decisionsOn: word("Your community's owners changed how it works: community votes are on."),
@@ -199,6 +207,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'wordsDoor': return on ? tr(NOTICE.wordsOn) : tr(NOTICE.wordsOff);
         case 'knocks': return on ? tr(NOTICE.knocksOn) : tr(NOTICE.knocksOff);
         case 'beans': return on ? tr(NOTICE.beansOn) : tr(NOTICE.beansOff);
+        case 'memberGift': return change.to === '0' ? tr(NOTICE.giftOff) : tr(NOTICE.giftOn, { max: change.to });
         case 'dmRequests': return on ? tr(NOTICE.dmOn) : tr(NOTICE.dmOff);
         case 'decisions': return on ? tr(NOTICE.decisionsOn) : tr(NOTICE.decisionsOff);
         case 'shareOutside': return on ? tr(NOTICE.shareOutsideOn) : tr(NOTICE.shareOutsideOff);
@@ -262,6 +271,8 @@ interface ShapePlan {
     share: Partial<NodeConfig>;
     door: CommunityDoor | null;
     floorPlan: KnownFloorPlan | null;
+    /** The member's credit-line gift to write (0 to 100), or null for no change. */
+    gift: number | null;
     copies: RecoveryCopies | null;
     decider: RemovalDecider | null;
     beansAfter: boolean;
@@ -295,7 +306,7 @@ export function shapeChangeAsksFreshProof(body: unknown): boolean {
  */
 export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshProof?: boolean } = {}): { shape: Shape; told: 'members' | 'nobody'; changed: string[] } {
     const plan = planShapeChanges(body);
-    const { before, note, planned, core, switches, share, door, floorPlan, copies, decider, beansAfter } = plan;
+    const { before, note, planned, core, switches, share, door, floorPlan, gift, copies, decider, beansAfter } = plan;
     const S = before.settings;
     const locked = before.core.lock !== null;
     // Read here, with the write that follows, whatever the route found: a lock written meanwhile still asks the proof.
@@ -323,6 +334,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshPr
         if (switches.some(([name, on]) => name === 'dmRequests' && on === false)) closeCopyDoors(at);
         if (door) setDoor(door);
         if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
+        if (gift !== null) writeMemberGiftSetting(by.actor, S.memberGift.configured, gift, at);
         if (Object.keys(share).length > 0) updateNodeConfig(share);
         if (copies) setRecoveryCopies(copies);
         if (decider) setRemovalDecider(decider);
@@ -549,6 +561,19 @@ function planShapeChanges(body: unknown): ShapePlan {
         }
     }
 
+    // A member's credit-line gift (slice G1): the most one gift may be, 0 (off) to 100; none without Beans once this
+    // request is written.
+    let gift: number | null = null;
+    if (asked.memberGift !== undefined) {
+        if (!isMemberGiftSetting(asked.memberGift)) bad('memberGift', VOUCHER_WORDS.badGift);
+        const v = asked.memberGift as number;
+        if (v !== S.memberGift.configured) {
+            if (!beansAfter) refuse('memberGift', LOCKS_AFTER_A_CHANGE.beansOffGift());
+            planned.push({ setting: 'memberGift', from: String(S.memberGift.configured), to: String(v) });
+            gift = v;
+        }
+    }
+
     // Message requests: only on a build that has the switch.
     if (asked.dmRequests !== undefined) {
         const v = boolOf('dmRequests', asked.dmRequests);
@@ -637,7 +662,7 @@ function planShapeChanges(body: unknown): ShapePlan {
         if (before.core.lock) throw new ShapeChangeError(409, 'core_locked', CORE_LOCKED_ALREADY);
         if (before.core.place.needed && !before.core.place.set) throw new ShapeChangeError(409, 'place_needed', CORE_PLACE_NEEDED);
     }
-    return { before, note, lock: lockAsked, planned, core, switches, share, door, floorPlan, copies, decider, beansAfter };
+    return { before, note, lock: lockAsked, planned, core, switches, share, door, floorPlan, gift, copies, decider, beansAfter };
 }
 
 /** The notice's title, as every member reads it. */

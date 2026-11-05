@@ -39,7 +39,8 @@
  *   GET    /api/names/vouchers/:member              → card { …row, history, people, canChange } (any owner or admin; logged)
  *   DELETE /api/names/vouchers/:member              → card: Stop vouching (a list budget; 409 role_voucher for a role's)
  *   POST   /api/names/vouchers/:member/budget       { level } → card + changed: set the budget to a level (100 to 2,000)
- *   POST   /api/names/vouchers/settings             { voucherBudget?, memberGift? } → settings (an owner)
+ *   POST   /api/names/vouchers/settings             { voucherBudget } → settings (an owner); `memberGift` is a Core setting,
+ *                                                     refused here whole (400 moved_to_community_shape): Core settings change it
  *   POST   /api/names/committee                     { memberPubkey, on } → { memberPubkey, committee } (an owner)
  * Making a voucher, each set-to change and Stop vouching are each a notice to the voucher (Marty's §10.2): kept in the
  * writer's transaction, then told live and pushed (community.notice) once it has committed. A set-to raises a budget only

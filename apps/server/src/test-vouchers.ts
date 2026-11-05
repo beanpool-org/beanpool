@@ -456,10 +456,22 @@ async function main(): Promise<void> {
         ['POST', '/api/names/vouchers', { entryId: janeEntry, amount: 500 }], ['DELETE', `/api/names/vouchers/${jane.pk}`, undefined],
         ['POST', `/api/names/vouchers/${jane.pk}/budget`, { level: 500 }], ['POST', '/api/names/vouchers/settings', { voucherBudget: 500 }],
         ['POST', '/api/names/committee', { memberPubkey: ada.pk, on: false }], ['POST', '/api/vouch', { memberPubkey: mel.pk, vouchAmount: 25 }],
+        ['POST', '/api/admin/seed-invite', { type: 'standard', vouchAmount: 25 }],
     ];
     const byPassword = await Promise.all(writers.map(([m, p, b]) => call(null, m, p, b, PASSWORD())));
     assert(byPassword.every((r) => r.status === 401 || r.status === 403) && allLines() === linesBefore10,
         `10. the password session is refused on every writer, nothing written (${byPassword.map((r) => r.status).join(' ')})`);
+    assert(byPassword[6].status === 403 && (byPassword[6].body as any)?.code === 'not_a_voucher',
+        `10. seed-invite with vouchAmount under password session is refused 403 not_a_voucher (${byPassword[6].status})`);
+
+    // A signed voucher owner/admin CAN vouch via seed-invite:
+    const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+    const owenAdminSession = { 'x-admin-session': consumeHandshakeToken(mintHandshakeToken(owen.pk, 'owner').handshakeToken).sessionId! };
+    const owenBudgetBefore = count('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
+    const owenSeed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard', vouchAmount: 25 }, owenAdminSession);
+    assert(owenSeed.status === 200 && owenSeed.body?.vouchAmount === 25, `10. voucher admin can vouch on seed-invite (${show(owenSeed)})`);
+    const owenBudgetAfter = count('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
+    assert(owenBudgetBefore - owenBudgetAfter === 25, `10. 25 Beans held from voucher's budget for seed-invite (${owenBudgetBefore} -> ${owenBudgetAfter})`);
 
     // ── 11. The boot's grant to an owner or admin who never had a budget ──────────────────────────────────────
     db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(kai.pk);

@@ -481,5 +481,41 @@ describe('InvitesModule', () => {
             expect(screen.getByTestId('vouch-preset-100')).toBeDisabled();
         });
     });
+
+    describe('presets hold across renders and fit the whole batch (#2923 review)', () => {
+        const OWNER_KEY: any = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
+        const voucher = (left: number) => ({ voucher: true, budget: { left, level: 1000, held: 0, vouched: 1000 - left },
+            presets: [25, 50, 75, 100], vouchMax: 100, budgetMax: 2000 });
+
+        it('five cards at 25 with 100 left: refused before the first card, with the reason, and nothing is made', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(100) as any);
+            render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
+            await waitFor(() => expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument());
+            await userEvent.click(screen.getByRole('button', { name: '5' }));
+            await userEvent.click(screen.getByTestId('vouch-preset-25'));
+            await userEvent.click(screen.getByRole('button', { name: /Generate 5 Pass/i }));
+            expect(await screen.findByText(/Not enough budget left for 5 cards at 25 each/)).toBeInTheDocument();
+            expect(nodeClient.generateNodeInvite).not.toHaveBeenCalled();
+        });
+
+        it('a new viewer object for the same person keeps the chosen amount and reads the budget once', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(550) as any);
+            const view = render(<InvitesModule activeNode={mockNode} viewer={{ ...OWNER_KEY }} />);
+            await waitFor(() => expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument());
+            await userEvent.click(screen.getByTestId('vouch-preset-50'));
+            expect(screen.getByTestId('vouch-preset-50')).toHaveAttribute('aria-checked', 'true');
+            view.rerender(<InvitesModule activeNode={mockNode} viewer={{ ...OWNER_KEY }} />);
+            expect(screen.getByTestId('vouch-preset-50')).toHaveAttribute('aria-checked', 'true');
+            expect(nodeClient.fetchMyVouching).toHaveBeenCalledTimes(1);
+        });
+
+        it('the amounts are a radio group a screen reader can read', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue(voucher(550) as any);
+            render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
+            await waitFor(() => expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument());
+            const radios = screen.getAllByRole('radio');
+            expect(radios.map(r => r.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false', 'false', 'false']);
+        });
+    });
 });
 

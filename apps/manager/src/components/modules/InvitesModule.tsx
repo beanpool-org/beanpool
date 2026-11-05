@@ -33,6 +33,8 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
     const [previewQrItem, setPreviewQrItem] = useState<GeneratedInviteItem | null>(null);
     const [showPrintSheet, setShowPrintSheet] = useState(false);
     const [generateError, setGenerateError] = useState<{ reason: string; issued: number; requested: number } | null>(null);
+    // The manager's own refusal (the batch doesn't fit the budget), said under the amounts: not the node's words.
+    const [batchError, setBatchError] = useState<string | null>(null);
     const [vouchData, setVouchData] = useState<MyVouchingResponse | null>(null);
     const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
 
@@ -43,6 +45,10 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
         setGenerateError(null);
         setSelectedPreset(null);
     }, [activeNode?.id]);
+
+    // The viewer as a value, not the object: AppBody makes a new viewer on every render, and the effect below would reset
+    // the chosen preset and re-read the budget each time (#2923 review).
+    const viewerKey = viewer?.kind === 'key' ? `key:${viewer.memberPubkey}:${viewer.role}` : (viewer?.kind ?? 'none');
 
     useEffect(() => {
         setSelectedPreset(null);
@@ -63,7 +69,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
         return () => {
             mounted = false;
         };
-    }, [activeNode?.id, activeNode?.url, viewer]);
+    }, [activeNode?.id, activeNode?.url, viewerKey]);
 
     const buildFullUrl = (code: string) => {
         const cleanNodeUrl = activeNode?.url ? activeNode.url.replace(/\/$/, '') : 'https://test.beanpool.org';
@@ -72,7 +78,21 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
 
     // Every code shown here was issued by the node. When the node refuses, we stop and say why: a code the node
     // never issued would be printed on a card and fail at the door.
+    // A chosen amount the budget can no longer cover is let go, so a card never asks for more than is left.
+    useEffect(() => {
+        const left = vouchData?.budget?.left ?? 0;
+        if (selectedPreset !== null && selectedPreset > left) setSelectedPreset(null);
+    }, [vouchData?.budget?.left, selectedPreset]);
+    useEffect(() => { setBatchError(null); }, [selectedPreset, inviteCount]);
+
     const issueInvites = async (count: number, keep: GeneratedInviteItem[]) => {
+        // The whole batch must fit the budget before the first card is made: never four cards and a refused fifth.
+        const leftNow = vouchData?.budget?.left ?? 0;
+        if (selectedPreset !== null && selectedPreset * count > leftNow) {
+            setBatchError(`Not enough budget left for ${count} cards at ${selectedPreset} each: ${formatCount(leftNow)} left. Choose fewer cards or a smaller amount.`);
+            return;
+        }
+        setBatchError(null);
         setIsGenerating(true);
         setGenerateError(null);
         const items: GeneratedInviteItem[] = [...keep];
@@ -392,6 +412,8 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                                         <button
                                             key={label}
                                             type="button"
+                                            role="radio"
+                                            aria-checked={isSelected}
                                             disabled={disabled || isGenerating}
                                             onClick={() => setSelectedPreset(preset)}
                                             title={disabled ? 'Not enough budget left' : undefined}
@@ -409,6 +431,9 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                                     );
                                 })}
                             </div>
+                            {batchError && (
+                                <p role="alert" data-testid="vouch-batch-error" className="m-0 text-[11px] font-semibold text-red-300">{batchError}</p>
+                            )}
                             {vouchData.budget && vouchData.budget.left === 0 && (
                                 <p className="text-[11px] text-amber-300 m-0">No budget left. Ask an owner for more.</p>
                             )}

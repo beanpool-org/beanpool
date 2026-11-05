@@ -73,7 +73,7 @@ import { issueAutomationToken } from './automation-tokens.js';
 import * as vouchersModule from './engine/vouchers.js';
 import { getDoor, setDoor, DEFAULT_DOOR } from './config/door.js';
 import { listKeptNotices } from './engine/kept-notices.js';
-import { setKnownFloorException } from './config/known-floor.js';
+import { setKnownFloorException, readKnownFloorLogFor } from './config/known-floor.js';
 import { localFetch } from './keepalive-test-fetch.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
@@ -443,6 +443,8 @@ async function main(): Promise<void> {
     assert(janeCard.status === 200 && janeCard.body?.writtenOff > 0 && janeCard.body?.people?.some((p: any) => p.memberPubkey === sam.pk && p.left === true && p.raised === true),
         `9. Jane's card sums what was written off and marks Sam gone and raised (${show(janeCard)})`);
     assert(count("SELECT COUNT(*) AS n FROM known_floor_log WHERE action = 'voucher_looked' AND member_pubkey = ?", jane.pk) === 1, '9. opening the card is a logged look');
+    assert(!readKnownFloorLogFor(jane.pk).some((l: { action: string }) => l.action === 'voucher_looked'),
+        "9. the look stays out of the member's known-floor panel, so it can't push real changes out of its window (#2923)");
     spendBelowZero(uma, mel, 10);
     const umaDebt = Math.abs(getBalance(uma.pk).balance);
     purgeMemberSelf(uma.pk);

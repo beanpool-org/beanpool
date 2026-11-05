@@ -111,7 +111,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
             setTotal(prev => { const n = Math.max(0, prev - 1); onCount?.(n); return n; });
             setRefusal(null);
             setDone(verb === 'approve' ? t('You invited {name}. Their app will find the invite by itself.', { name: req.callsign }) : null);
-            askMyVouching(anchorUrl, identity).then(setMyVouching).catch(() => {});
+            if (verb === 'approve' && chosenVouch) askMyVouching(anchorUrl, identity).then(setMyVouching).catch(() => {});
             // More are waiting than this page shows (it holds the first 20): read it again, so the next ones come up and
             // the count is the node's.
             if (Math.max(0, total - 1) > left) load();

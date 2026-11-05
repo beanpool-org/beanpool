@@ -36,10 +36,17 @@
  * The poll-tiles case (5 Nov 2026): a 4-answer poll beside events, a 2-answer and a 6-answer poll, at 320, 320 x 1.3, 768,
  * 1024 and 1280, in English and German (`--only=poll-tiles`; its pictures are poll-tiles-<width>-<lang>-<scheme>.png).
  *
+ * The poll-vote case (Marty and Damo, 6 Nov 2026: voted in the tile only when the whole poll is in front of the member): a
+ * two-answer poll, voted in place at every width; a three-answer one, voted in place where three 44 px rows fit (1280), and
+ * opening at 320 where they do not; and the 4-answer poll whose answers are cut or hidden, which never is; at 320, 320 x 1.3
+ * and 1280 (`--only=poll-vote`). On every poll tile voted in place, in every case: no answer row is
+ * cut (its words wider than their box, or the row past the answers' room) and each is a finger's press tall (44 px).
+ *
  * `--miss=self-start` puts #1092's cell back (`self-start`, no `h-full`), `--miss=block` lets the text block take its own
  * height, `--miss=time-one-line` makes an event's time one shrinking line (the end piece cut instead of dropped whole), and
  * `--miss=dash-first` moves the dash onto the start piece, `--miss=poll-square` puts the 2 x 2 poll back (the band Marty
- * saw) and `--miss=poll-own-height` lets the poll take its own height: each must make this exit non-zero (a check that cannot fail is
+ * saw), `--miss=poll-own-height` lets the poll take its own height and `--miss=poll-press-short` squashes a tile voted in
+ * place back to one-line rows (under 44 px): each must make this exit non-zero (a check that cannot fail is
  * not a check). `--only=<case>[,<case>]` runs those cases.
  *
  * Nothing here talks to a node: every /api call is answered from e2e/fixtures.mjs (harness.mjs).
@@ -57,7 +64,7 @@ const out = args.find(a => !a.startsWith('--'));
 const miss = (args.find(a => a.startsWith('--miss=')) || '').slice('--miss='.length) || null;
 const only = (args.find(a => a.startsWith('--only=')) || '').slice('--only='.length) || null;
 if (!out) {
-    console.error('usage: node e2e/market-grid-shots.mjs <out-dir> [--miss=self-start|block|time-one-line|dash-first|poll-square|poll-own-height] [--only=<case>]');
+    console.error('usage: node e2e/market-grid-shots.mjs <out-dir> [--miss=self-start|block|time-one-line|dash-first|poll-square|poll-own-height|poll-press-short] [--only=<case>]');
     process.exit(2);
 }
 const MISSES = {
@@ -71,6 +78,8 @@ const MISSES = {
     'poll-square': '[data-testid="poll-grid-cell"] { grid-row: span 2 / span 2 !important; }',
     // The poll's tile in the flow, at its own height, instead of over a tile's invisible box.
     'poll-own-height': '[data-testid="poll-grid-tile"] { position: static !important; } [data-testid="poll-grid-ghost"] { display: none !important; }',
+    // A tile voted in place whose answer rows are one line tall again (22 px), under a finger's 44 px press.
+    'poll-press-short': '[data-votable="true"] [data-testid="poll-grid-answer"] { min-height: 0 !important; max-height: 1.375rem !important; }',
     'dash-first': () => {
         for (const row of document.querySelectorAll('[data-testid="event-tile-time"]')) {
             const [start, end] = row.querySelectorAll('[data-testid="event-time-piece"]');
@@ -192,6 +201,20 @@ const POLL_6 = poll({
     pollOptions: ['Bread and sourdough', 'Bike repair for beginners', 'Seed saving and swapping', 'Basic carpentry', 'Composting at home', 'Phone and computer help']
         .map((text, i) => ({ id: `s${i}`, text, votes: [4, 3, 2, 2, 1, 0][i], percentage: [33, 25, 17, 17, 8, 0][i] })),
 });
+/** A short poll, all of it in a 320 px tile: three one-word answers. */
+const POLL_SHORT = poll({
+    id: 'p-short', title: 'Market day?', totalVotes: 5, createdAt: iso(-0.5 * HOUR),
+    pollOptions: [
+        { id: 'm1', text: 'Saturday', votes: 3, percentage: 60 },
+        { id: 'm2', text: 'Sunday', votes: 2, percentage: 40 },
+        { id: 'm3', text: 'Either', votes: 0, percentage: 0 },
+    ],
+});
+/** Two one-word answers under a one-line question: the most a 320 px tile at 1.3x text holds a press tall. */
+const POLL_YES = poll({
+    id: 'p-yes', title: 'Bring a plate?', totalVotes: 4, createdAt: iso(-0.75 * HOUR),
+    pollOptions: [{ id: 'y1', text: 'Yes', votes: 3, percentage: 75 }, { id: 'y2', text: 'No', votes: 1, percentage: 25 }],
+});
 /** The brief's widths and languages for the poll's tile. */
 const POLL_WIDTHS = ['320', '320-x1.3', '768-shim', '1024-shim', '1280-shim', '1920-shim'];
 const POLL_LANGS = ['en', 'de'];
@@ -212,6 +235,19 @@ const CASES = [
     {
         name: 'poll-tiles', pins: [], widths: POLL_WIDTHS, langs: POLL_LANGS, polls: 3,
         posts: [POLL_4, ...EVENTS.map(e => e.post), POLL_2, ...POSTS.filter(p => p.type !== 'poll'), POLL_6],
+    },
+    // Voted in the tile (6 Nov 2026): the two-answer poll in place at every width; the three-answer one where its three rows
+    // can each be 44 px tall (at 320 px the room holds two: measured 6 Nov, it opens there); the 4-answer poll never (its
+    // answers are cut or behind "+N more").
+    {
+        name: 'poll-vote', pins: [], widths: ['320', '320-x1.3', '1280-shim'], polls: 4,
+        posts: [POLL_YES, POLL_2, POLL_SHORT, ...POSTS.filter(p => p.type !== 'poll'), POLL_4],
+        votable: (spec) => ({
+            [POLL_YES.title]: true,
+            [POLL_2.title]: (spec.textScale ?? 1) === 1,
+            [POLL_SHORT.title]: spec.width >= 768,
+            [POLL_4.title]: false,
+        }),
     },
 ];
 
@@ -320,7 +356,23 @@ function measure() {
                     }
                     if (el.getAttribute('data-testid') === 'poll-grid-answers' && el.scrollHeight > el.clientHeight + 1) overflows.push(`the answers need ${el.scrollHeight}px in ${el.clientHeight}px: a row is cut`);
                 }
+                // Voted in place (PollGridTile's data-votable): each answer row whole, inside the answers' room, a press tall.
+                const votable = tile.getAttribute('data-votable') === 'true';
+                const pressMisses = [];
+                if (votable) {
+                    const roomBox = tile.querySelector('[data-testid="poll-grid-answers"]').getBoundingClientRect();
+                    for (const rowEl of tile.querySelectorAll('[data-testid="poll-grid-answer"]')) {
+                        const rr = rowEl.getBoundingClientRect();
+                        const words = rowEl.querySelector('[data-testid="poll-grid-answer-words"]');
+                        const name = `answer "${words?.textContent ?? rowEl.textContent}"`;
+                        if (rowEl.tagName !== 'BUTTON') pressMisses.push(`${name} is no button`);
+                        if (rr.height < 44 - 0.5) pressMisses.push(`${name} is ${rr.height.toFixed(1)}px tall, under a 44 px press`);
+                        if (rr.top < roomBox.top - 0.5 || rr.bottom > roomBox.bottom + 0.5) pressMisses.push(`${name} runs out of the answers' room`);
+                        if (words && words.scrollWidth > words.clientWidth) pressMisses.push(`${name} is cut (${words.scrollWidth} > ${words.clientWidth})`);
+                    }
+                }
                 poll = {
+                    votable, block: tile.getAttribute('data-vote-block') || null, pressMisses,
                     bands, overflows,
                     answers: tile.querySelectorAll('[data-testid="poll-grid-answer"]').length,
                     more: tile.querySelector('[data-testid="poll-grid-more"]')?.textContent ?? null,
@@ -345,8 +397,8 @@ function measure() {
     };
 }
 
-/** Every check for one measured page; returns the misses. */
-function check(m, spec, pins, events = []) {
+/** Every check for one measured page; returns the misses. `votable`: each named poll's question, and whether it must be voted in place. */
+function check(m, spec, pins, events = [], votable = null) {
     const misses = [];
     const fail = (msg) => misses.push(msg);
     const block = BLOCK_REM * m.root;
@@ -391,6 +443,7 @@ function check(m, spec, pins, events = []) {
             if (tile && p.tracksHeight > tile + 1) fail(`${name}'s row is ${p.tracksHeight.toFixed(1)}px for tiles of ${tile.toFixed(1)}px: the poll made it taller`);
             for (const b of p.poll?.bands ?? []) if (b.px > 32) fail(`${name} has a ${b.px.toFixed(1)}px blank band between ${b.between}`);
             for (const x of p.poll?.overflows ?? []) fail(`${name}: ${x}`);
+            for (const x of p.poll?.pressMisses ?? []) fail(`${name} (voted in place): ${x}`);
         }
         // No empty cell a later one-cell tile could have taken.
         const filled = g.rows.map(() => new Array(g.cols).fill(false));
@@ -401,6 +454,15 @@ function check(m, spec, pins, events = []) {
             if (empty && later) fail(`${at}row ${r + 1} has ${empty} empty cell(s) and a tile drawn below it`);
         });
     });
+    // The case's polls that must, or must not, be voted in place (6 Nov 2026).
+    if (votable) {
+        const polls = m.grids.flatMap(g => g.cells.filter(c => c.kind === 'poll' && c.poll));
+        for (const [question, want] of Object.entries(votable)) {
+            const c = polls.find(x => x.poll.question === question);
+            if (!c) { fail(`no poll tile for "${question}"`); continue; }
+            if (c.poll.votable !== want) fail(`poll "${question}" ${c.poll.votable ? 'is voted in place' : `opens (${c.poll.block})`}; expected it to ${want ? 'be voted in place' : 'open'}`);
+        }
+    }
     // The case's events, each drawn as a tile with the rows it is here for (so the zone and the copy really were read).
     const tiles = m.grids.flatMap(g => g.cells.filter(c => c.kind === 'event' && c.ev));
     for (const e of events) {
@@ -439,7 +501,7 @@ function report(m) {
         for (const c of g.cells) {
             const what = c.kind === 'event' && c.ev
                 ? ` | ${c.ev.rows.join(' | ')} | time shows "${c.ev.time}" (${c.ev.shownPieces} of ${c.ev.pieces})${c.ev.mark ? ` | mark "${c.ev.mark}"` : ''}${c.ev.lock ? ' | 🔒' : ''}`
-                : c.kind === 'poll' && c.poll ? ` ${c.colSpan} x ${c.rowSpan}, ${c.poll.answers} answer row(s)${c.poll.more ? ` + "${c.poll.more}"` : ''}, widest band ${Math.max(0, ...c.poll.bands.map(b => b.px)).toFixed(0)}px` : '';
+                : c.kind === 'poll' && c.poll ? ` ${c.colSpan} x ${c.rowSpan}, ${c.poll.answers} answer row(s)${c.poll.more ? ` + "${c.poll.more}"` : ''}, widest band ${Math.max(0, ...c.poll.bands.map(b => b.px)).toFixed(0)}px, ${c.poll.votable ? 'voted in place' : `opens (${c.poll.block})`}` : '';
             console.log(`      r${c.row + 1}c${c.col + 1} ${c.kind.padEnd(7)} ${c.pinned ? '📌 ' : ''}tile ${c.tileH.toFixed(0)}${c.blockH ? ` block ${c.blockH.toFixed(1)}` : ''}${what}  "${c.label}"`);
         }
     }
@@ -470,7 +532,7 @@ try {
                 const unexpected = [...new Set(unrouted)].filter(p => !ANSWERED_404.has(p));
                 if (unexpected.length) problems.push(`${name}: unanswered API paths ${unexpected.join(', ')}`);
                 const m = await page.evaluate(measure);
-                const misses = check(m, spec, kase.pins, kase.events);
+                const misses = check(m, spec, kase.pins, kase.events, kase.votable ? kase.votable(spec) : null);
                 if (kase.needs && !m.grids.some(g => g.cells.some(c => c.kind === kase.needs))) misses.push(`no ${kase.needs} tile drawn`);
                 const polls = m.grids.flatMap(g => g.cells.filter(c => c.kind === 'poll')).length;
                 if (kase.polls && polls !== kase.polls) misses.push(`${polls} poll tile(s) drawn (expected ${kase.polls})`);

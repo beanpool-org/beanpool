@@ -239,6 +239,93 @@ export const secondConfirmation = (anchor: string, id: BeanPoolIdentity, confirm
     call<{ id: string; status: ConfirmationStatus }>(anchor, id, 'POST', `${NAMES_PATH}/confirmations/${encodeURIComponent(confirmationId)}/second`, {});
 export const revokeConfirmation = (anchor: string, id: BeanPoolIdentity, confirmationId: string) =>
     call<{ id: string; status: ConfirmationStatus }>(anchor, id, 'POST', `${NAMES_PATH}/confirmations/${encodeURIComponent(confirmationId)}/revoke`, {});
+
+// ── Vouchers (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §2 to §5, Marty's §10 and §11) ──────────
+
+export interface VoucherSummaryRow {
+    memberPubkey: string;
+    callsign: string;
+    source: 'role' | 'entry' | null;
+    entryId: string | null;
+    madeBy: string | null;
+    madeByCallsign: string | null;
+    madeAt: string | null;
+    stoppedAt: string | null;
+    stopReason: string | null;
+    left: number;
+    held: number;
+    heldInvites: number;
+    vouched: number;
+    peopleVouched: number;
+    level: number;
+    belowZero: number;
+    writtenOff: number;
+    /** Room rooted at this voucher that moved on past the people they vouched for (§5 tracking (a)): how much, held by how
+     *  many people, and how much of it is held by someone below zero now (engine/vouchers.ts passedOnOf). */
+    passedOn: { amount: number; people: number; belowZero: number };
+    invitesWithVouch: number;
+    trading: { withOthers: number; insideOnly: number };
+}
+
+export interface VoucherSettings {
+    voucherBudget: number;
+    memberGift: number;
+    presets: number[];
+    vouchMax: number;
+    vouchesPerPerson: number;
+    budgetMax: number;
+}
+
+export interface VoucherHistoryLine {
+    kind: string;
+    amount: number;
+    actor: string;
+    actorCallsign: string | null;
+    at: string;
+    for?: 'invite' | 'profile';
+    inviteMadeAt?: string | null;
+    outcome?: 'held' | 'vouched' | 'back';
+    why?: 'expired' | 'stopped' | 'not_landed';
+    person?: { memberPubkey: string; callsign: string } | null;
+}
+
+export interface VoucherPersonRow {
+    memberPubkey: string;
+    callsign: string;
+    joinedAt: string | null;
+    amount: number;
+    raised: boolean;
+    byInvite: boolean;
+    belowZero: boolean;
+    left: boolean;
+    writtenOff: number;
+    vouchesForMe: boolean;
+    trading: 'others' | 'inside' | 'none';
+}
+
+export interface VoucherCardData extends VoucherSummaryRow {
+    history: VoucherHistoryLine[];
+    people: VoucherPersonRow[];
+    canChange: boolean;
+}
+
+/** The vouchers block (GET /api/names/vouchers): the node answers it only for owners and credit-committee admins. */
+export interface VouchersBlockBody { vouchers: VoucherSummaryRow[]; settings: VoucherSettings }
+
+export const fetchVouchers = (anchor: string, id: BeanPoolIdentity) =>
+    call<VouchersBlockBody>(anchor, id, 'GET', `${NAMES_PATH}/vouchers`);
+
+export const fetchVoucherCard = (anchor: string, id: BeanPoolIdentity, memberPubkey: string) =>
+    call<VoucherCardData>(anchor, id, 'GET', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}`);
+
+export const makeNamesVoucher = (anchor: string, id: BeanPoolIdentity, entryId: string, amount?: number) =>
+    call<VoucherCardData>(anchor, id, 'POST', `${NAMES_PATH}/vouchers`, { entryId, ...(amount !== undefined ? { amount } : {}) });
+
+export const stopNamesVoucher = (anchor: string, id: BeanPoolIdentity, memberPubkey: string) =>
+    call<VoucherCardData>(anchor, id, 'DELETE', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}`);
+
+export const setVoucherBudget = (anchor: string, id: BeanPoolIdentity, memberPubkey: string, level: number) =>
+    call<VoucherCardData & { changed: boolean }>(anchor, id, 'POST', `${NAMES_PATH}/vouchers/${encodeURIComponent(memberPubkey)}/budget`, { level });
 /** Deletes an entry; once the node says it's gone, this phone stops counting it as seen (an honest delete is no loss). */
 export async function deleteNamesEntry(anchor: string, id: BeanPoolIdentity, entryId: string, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<{ id: string }>> {
     const done = await call<{ id: string }>(anchor, id, 'DELETE', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}`);
@@ -1323,6 +1410,8 @@ export interface OpenedEntry {
     checkedHere: string[];
     /** The live confirmation against it (confirmed or waiting for a second admin), if any. */
     confirmation: ConfirmationRow | null;
+    /** If this entry's member is a voucher now (DESIGN-invites-and-names-list-amend2-fable.md §2, §10). */
+    voucher?: VoucherSummaryRow | null;
 }
 
 type CheckedRecords = { gens: Map<string, NamesGeneration>; newest: Map<string, NamesShare> };
@@ -1392,10 +1481,23 @@ export function holdersCheckedHere(state: Pick<NamesState, 'communityId' | 'gene
     return holders.filter((h) => justChecked.includes(h.toLowerCase()));
 }
 
-/** Every entry, opened where this phone can; open ones by name, then the locked ones. */
-export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring' | 'pin' | 'generations' | 'state'> & Partial<Pick<NamesOpened, 'justChecked'>>): OpenedEntry[] {
+/**
+ * Every entry, opened where this phone can; open ones by name, then the locked ones. With the vouchers block (the node's
+ * answer for the credit committee), each voucher's entry carries its row and the vouchers sort first (§10).
+ */
+export function openEntries(
+    list: NamesListBody,
+    opened: Pick<NamesOpened, 'ring' | 'pin' | 'generations' | 'state'> & Partial<Pick<NamesOpened, 'justChecked'>>,
+    vouchers: VoucherSummaryRow[] | null = null,
+): OpenedEntry[] {
     const live = new Map<string, ConfirmationRow>();
     for (const c of list.confirmations ?? []) if (c.status !== 'revoked') live.set(c.entryId, c);
+    const vouchersByEntry = new Map<string, VoucherSummaryRow>();
+    const vouchersByMember = new Map<string, VoucherSummaryRow>();
+    for (const v of vouchers ?? []) {
+        if (v.entryId) vouchersByEntry.set(v.entryId, v);
+        vouchersByMember.set(v.memberPubkey, v);
+    }
     const out = (list.entries ?? []).map((e): OpenedEntry => {
         const key = opened.ring[e.keyId];
         let text: NamesEntryText | null = null;
@@ -1410,12 +1512,19 @@ export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring
         const holders = all.filter((a) => sending.has(a.pubkey)).map((a) => a.callsign);
         const checkedHere = all.filter((a) => checked.has(a.pubkey)).map((a) => a.callsign);
         const notTrusting = all.filter((a) => !sending.has(a.pubkey) && !checked.has(a.pubkey)).map((a) => a.callsign);
+        const conf = live.get(e.id) ?? null;
+        const voucher = vouchersByEntry.get(e.id) ?? (conf ? vouchersByMember.get(conf.memberPubkey) : null) ?? null;
         return {
             id: e.id, keyId: e.keyId, createdAt: e.createdAt, updatedAt: e.updatedAt, text, locked,
-            key: text ? null : namesKeyLabel(opened.pin, opened.generations, e.keyId), holders, notTrusting, checkedHere, confirmation: live.get(e.id) ?? null,
+            key: text ? null : namesKeyLabel(opened.pin, opened.generations, e.keyId), holders, notTrusting, checkedHere, confirmation: conf,
+            voucher,
         };
     });
     return out.sort((a, b) => {
+        // Vouchers sort FIRST automatically (§10):
+        const aV = !!a.voucher;
+        const bV = !!b.voucher;
+        if (aV !== bV) return aV ? -1 : 1;
         if (!a.text || !b.text) return a.text ? -1 : b.text ? 1 : a.createdAt.localeCompare(b.createdAt);
         return a.text.name.localeCompare(b.text.name, undefined, { sensitivity: 'base' });
     });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { AddedYouLines } from '../../components/AddedYouLines';
-import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter, Modal } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -52,6 +52,10 @@ import { communityListEmpty, communityListNote, joinedWords, type CommunityListN
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { welcomeLineWords } from '../../components/welcome/welcome-lines';
 import { DoorRuleLine } from '../../components/DoorRuleLine';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { fetchVouchers, type VoucherSummaryRow, type VoucherSettings } from '../../utils/names-list';
+import { VoucherCard } from '../../components/VoucherCard';
+import { VouchersBlock } from '../../components/VouchersBlock';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -213,6 +217,8 @@ export default function PeopleScreen() {
     const [tierName, setTierName] = useState('');
     const [isGuest, setIsGuest] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
+    const [vouchersData, setVouchersData] = useState<{ vouchers: VoucherSummaryRow[]; settings: VoucherSettings } | null>(null);
+    const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
 
     const [members, setMembers] = useState<any[]>([]);
     // The search the list on screen was read for, set with it; null until the first read lands. Only a list read for no
@@ -313,12 +319,28 @@ export default function PeopleScreen() {
         }
     }, [view]);
 
+    const reloadVouchers = useCallback(async (url?: string) => {
+        const u = url || anchorUrl;
+        if (!u || !identity) return;
+        const res = await fetchVouchers(u, identity);
+        if (res.ok) setVouchersData(res.value);
+        else setVouchersData(null);
+    }, [anchorUrl, identity]);
+
+    useEffect(() => {
+        if (view !== 'invites') {
+            setVouchersData(null);
+        }
+    }, [view]);
+
     useFocusEffect(
         useCallback(() => {
             if (view === 'community' && listNote === 'noArea') {
                 loadMembers('', sortOption);
+            } else if (view === 'invites') {
+                void reloadVouchers();
             }
-        }, [view, listNote, sortOption, membersOnDemand])
+        }, [view, listNote, sortOption, membersOnDemand, reloadVouchers])
     );
 
     useEffect(() => {
@@ -1251,6 +1273,15 @@ export default function PeopleScreen() {
 
                             {(invitesPreview || (makesInvites && mayInvite)) && (
                             <>
+                            {/* Vouchers block (§11): only with the node's answer to GET /api/names/vouchers (owners and committee admins) */}
+                            {vouchersData && (
+                                <VouchersBlock
+                                    vouchers={vouchersData.vouchers}
+                                    onOpen={setSelectedVoucherPubkey}
+                                    onMakeVoucher={() => router.push('/names-list')}
+                                />
+                            )}
+
                             {/* GENERATE INVITE SECTION */}
                             <Text style={styles.sectionHeader}>{t('📤 Invite Someone')}</Text>
                             <Text style={styles.sectionDesc}>{t('Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.')}</Text>
@@ -1464,6 +1495,21 @@ export default function PeopleScreen() {
 
 
             </KeyboardAvoidingView>
+
+            <Modal visible={!!selectedVoucherPubkey} animationType="slide" onRequestClose={() => setSelectedVoucherPubkey(null)}>
+                {/* A full-screen iOS Modal draws under the status bar: inside the safe area, as names-list.tsx's modals are. */}
+                <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface.page }} edges={['top', 'left', 'right', 'bottom']} testID="voucher-card-modal">
+                    {anchorUrl && identity && selectedVoucherPubkey && (
+                        <VoucherCard
+                            anchorUrl={anchorUrl}
+                            identity={identity}
+                            memberPubkey={selectedVoucherPubkey}
+                            onClose={() => setSelectedVoucherPubkey(null)}
+                            onVoucherUpdated={() => { void reloadVouchers(); }}
+                        />
+                    )}
+                </SafeAreaView>
+            </Modal>
         </View>
     );
 }

@@ -8,7 +8,7 @@ import { type AppColors } from '../constants/colors';
 
 
 /** Which entries are things you press. Each has minHeight ≥ 48. */
-export const NAMES_TOUCH_TARGETS = ['backButton', 'primaryBtn', 'secondaryBtn', 'dangerBtn', 'smallBtn', 'pickRow', 'switchRow', 'input', 'search'] as const;
+export const NAMES_TOUCH_TARGETS = ['backButton', 'primaryBtn', 'secondaryBtn', 'dangerBtn', 'smallBtn', 'pickRow', 'switchRow', 'input', 'search', 'chip'] as const;
 
 /** Text entries and the background each sits on, for the contrast check. */
 export const NAMES_TEXT_ON = {
@@ -36,6 +36,10 @@ export const NAMES_TEXT_ON = {
     keyCardText: 'keyCard',
     codeText: 'keyCard',
     scannerText: 'scanner',
+    // Vouchers (slice V2): the Voucher tag on an entry, and the chips (the Vouchers filter, Make a voucher's amounts).
+    voucherTagText: 'voucherTag',
+    chipText: 'chip',
+    chipTextActive: 'chipActive',
 } as const;
 
 export function namesListStyleSpec(colors: AppColors) {
@@ -86,6 +90,19 @@ export function namesListStyleSpec(colors: AppColors) {
         entryNote: { fontSize: 14, lineHeight: 20, color: colors.text.body },
         entryMeta: { fontSize: 13, lineHeight: 18, color: colors.text.secondary },
         lockedText: { fontSize: 14, lineHeight: 20, color: colors.feedback.warning.fg },
+
+        voucherTag: { alignSelf: 'flex-start' as const, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong },
+        voucherTagText: { fontSize: 12, fontWeight: '700' as const, color: colors.text.heading },
+
+        chipRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 },
+        chip: {
+            minHeight: 48, minWidth: 80, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 24,
+            backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong,
+            alignItems: 'center' as const, justifyContent: 'center' as const,
+        },
+        chipActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
+        chipText: { fontSize: 14, fontWeight: '600' as const, color: colors.text.body },
+        chipTextActive: { color: colors.text.inverse, fontWeight: '700' as const },
 
         input: {
             minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1,

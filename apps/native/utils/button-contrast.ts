@@ -193,8 +193,14 @@ function findCreate(n: ts.Node, hops = 0, want?: string): ts.ObjectLiteralExpres
     const visit = (x: ts.Node) => {
         if (found) return;
         if (isStyleSheetCreate(x)) {
-            const arg = x.arguments[0];
-            if (!want && arg && ts.isObjectLiteralExpression(unwrap(arg))) found = unwrap(arg) as ts.ObjectLiteralExpression;
+            const arg = x.arguments[0] ? unwrap(x.arguments[0]) : undefined;
+            if (!want && arg && ts.isObjectLiteralExpression(arg)) found = arg;
+            // StyleSheet.create(spec(colors)): the plain object the spec function returns (the names list's
+            // utils/names-list-style.ts, one of FOLLOWED_MODULES), read with the colours it is handed.
+            else if (!want && arg && ts.isCallExpression(arg) && ts.isIdentifier(arg.expression) && hops < 3) {
+                const decl = findDecl(arg.expression.text, arg) ?? importedDecl(arg.expression.text, arg);
+                if (decl && ts.isFunctionLike(decl)) found = returnedObject(decl);
+            }
             return;
         }
         if (want) {
@@ -224,7 +230,24 @@ function findCreate(n: ts.Node, hops = 0, want?: string): ts.ObjectLiteralExpres
  * Why a list and not every import (style box P2, 5 Nov 2026): following every relative import reads 14 more files and finds
  * two pairs under the bar in tools/ui.tsx that are not this change's to fix; that widening is its own change.
  */
-const FOLLOWED_MODULES = new Set(['components/market-card-shell']);
+const FOLLOWED_MODULES = new Set(['components/market-card-shell', 'utils/names-list-style']);
+
+/** The object literal a style-spec function returns: `(c) => ({ ... })`, or the first top-level `return { ... }` of its body. */
+function returnedObject(fn: ts.SignatureDeclaration): ts.ObjectLiteralExpression | undefined {
+    const body = (fn as ts.FunctionLikeDeclaration).body;
+    if (!body) return undefined;
+    if (!ts.isBlock(body)) {
+        const e = unwrap(body);
+        return ts.isObjectLiteralExpression(e) ? e : undefined;
+    }
+    for (const st of body.statements) {
+        if (ts.isReturnStatement(st) && st.expression) {
+            const e = unwrap(st.expression);
+            return ts.isObjectLiteralExpression(e) ? e : undefined;
+        }
+    }
+    return undefined;
+}
 let readModule: (rel: string) => string | null = () => null;
 const parsedModules = new Map<string, ts.SourceFile | null>();
 

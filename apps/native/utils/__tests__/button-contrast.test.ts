@@ -614,6 +614,42 @@ describe('a table built in the style box module is followed there', () => {
     });
 });
 
+// The names list (app/names-list.tsx) builds its table as `StyleSheet.create(namesListStyleSpec(colors))`, the spec a plain
+// object in utils/names-list-style.ts (vouchers V2 round 3): the scanner follows the call into the object the spec returns.
+describe('a table made by StyleSheet.create(spec(colors)) from the names list\'s style module is read there', () => {
+    const FILE_NL = 'app/names-list.tsx';
+    const SCREEN = `
+        import { namesListStyleSpec } from '../utils/names-list-style';
+        export default function NamesList() {
+            const styles = useStyles(({ colors }) => StyleSheet.create(namesListStyleSpec(colors)));
+            return <View style={styles.chip}><Text style={styles.chipText}>Vouchers</Text></View>;
+        }`;
+    const specModule = (ink: string) => `
+        export function namesListStyleSpec(colors) {
+            return {
+                chip: { minHeight: 48, backgroundColor: colors.surface.card },
+                chipText: { fontSize: 14, color: ${ink} },
+            };
+        }`;
+
+    it('reads the chip and its words from the spec, in both themes', () => {
+        const r = scanSource(FILE_NL, SCREEN, [], { 'utils/names-list-style.ts': specModule('colors.text.body') });
+        expect(r.stats.unreadTables.size).toBe(0);
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1 });
+        expect(r.findings).toEqual([]);
+    });
+
+    it('sees a pair under the bar in the spec (the following can fail)', () => {
+        const r = scanSource(FILE_NL, SCREEN, [], { 'utils/names-list-style.ts': specModule('colors.surface.card') });
+        expect(r.findings.length).toBeGreaterThan(0);
+        expect(r.findings[0].words).toMatchObject({ expr: 'colors.surface.card', in: 'utils/names-list-style.ts' });
+    });
+
+    it('without the module, the table is still a missing one', () => {
+        expect(scanSource(FILE_NL, SCREEN).stats.unreadTables.get(FILE_NL)).toEqual(['styles']);
+    });
+});
+
 // The style box's chips and tones (5 Nov 2026): a `<CardChip role=...>` is a ground and its words inside a component the scanner
 // cannot see into, and `shell.tones.<role>.bg` / `.fg` is a plain object the module builds, not a StyleSheet table. Both are
 // read from the module's `chipTones(colors)`, in the theme being measured, so a chip or a card that reads them is measured.

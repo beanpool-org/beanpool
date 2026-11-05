@@ -7,7 +7,7 @@ beforeEach(() => forgetRecentLookups());
 import React from 'react';
 import { LedgerPage } from './LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getBalance, getMembers, getMemberCards, getTransactions, sendTransfer, saveHomePreferences } from '../lib/api';
+import { getBalance, getMembers, getMemberCards, getTransactions, sendTransfer, saveHomePreferences, getMyVouching } from '../lib/api';
 import { addDateWords, setLanguage } from '@beanpool/core';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import { onSyncActivity } from '../lib/sync';
@@ -35,6 +35,7 @@ vi.mock('../lib/api', () => ({
     saveHomePreferences: vi.fn(async () => ({ success: true })),
     // The reader's own set (GET /api/community/me): none unless a test says (BeanID's verified member: Beans live).
     getCommunityMe: vi.fn(async () => ({ features: reader.value })),
+    getMyVouching: vi.fn(async () => null),
 }));
 const reader = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
 vi.mock('../lib/identity', async (orig) => ({
@@ -677,5 +678,61 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
         await confirm();
         expect(sendTransfer).not.toHaveBeenCalled();
         expect(screen.getByText('The amount is a number of Beans above 0, to the cent.')).toBeInTheDocument();
+    });
+
+    it('renders budget history modal without raw enum words or 64-hex keys', async () => {
+        vi.mocked(getMyVouching).mockResolvedValueOnce({
+            voucher: true,
+            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
+            presets: [25, 50, 75, 100],
+            vouchMax: 100,
+            budgetMax: 2000,
+            vouchedBy: [],
+            history: [
+                {
+                    kind: 'grant',
+                    amount: 1000,
+                    actor: 'owner-pk-'.padEnd(64, '0'),
+                    actorCallsign: 'marty',
+                    at: '2026-11-05T00:00:00.000Z',
+                },
+                {
+                    kind: 'hold',
+                    amount: -100,
+                    actor: 'me-pk-'.padEnd(64, '0'),
+                    actorCallsign: 'ana',
+                    at: '2026-11-05T01:00:00.000Z',
+                    for: 'invite',
+                },
+                {
+                    kind: 'return',
+                    amount: 100,
+                    actor: 'node',
+                    actorCallsign: null,
+                    at: '2026-11-05T02:00:00.000Z',
+                    for: 'invite',
+                    why: 'expired',
+                },
+                {
+                    kind: 'top_up',
+                    amount: 500,
+                    actor: 'admin-pk-'.padEnd(64, '0'),
+                    actorCallsign: 'damo',
+                    at: '2026-11-05T03:00:00.000Z',
+                },
+            ],
+        });
+
+        render(<LedgerPage identity={identity} />);
+        const budgetBtn = await screen.findByTestId('ledger-budget-row');
+        fireEvent.click(budgetBtn);
+
+        const modal = await screen.findByRole('dialog');
+        const modalText = modal.textContent || '';
+        expect(modalText).toContain('marty');
+        expect(modalText).toContain('damo');
+        expect(modalText).not.toMatch(/\b(hold|return|top_up|grant|expired|stopped|not_landed)\b/);
+        expect(modalText).not.toMatch(/[0-9a-f]{64}/);
+        expect(modalText).not.toMatch(/actor:\s*/i);
     });
 });

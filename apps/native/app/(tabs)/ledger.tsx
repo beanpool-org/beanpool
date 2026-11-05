@@ -37,7 +37,10 @@ import { palette } from '../../constants/colors';
 import {
     PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents,
     t, tn, word, formatDate, formatNumber, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, type TierName, type WordKey,
+    ledgerVouchedBy, ledgerBudget, formatHistoryLine,
 } from '@beanpool/core';
+import { askMyVouching, type MyVouching } from '../../utils/vouchers';
+import { Modal } from 'react-native';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { richWords } from '../../components/info-content/rich-words';
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
@@ -195,6 +198,8 @@ export default function LedgerScreen() {
     const [showTrustInfo, setShowTrustInfo] = useState(false);
     const [trustInfoTab, setTrustInfoTab] = useState<'levels' | 'perks'>('levels');
     const [showSliderInfo, setShowSliderInfo] = useState(false);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [showBudgetModal, setShowBudgetModal] = useState(false);
 
     const [showSend, setShowSend] = useState(false);
     const [members, setMembers] = useState<{ publicKey: string; callsign: string }[]>([]);
@@ -454,6 +459,11 @@ export default function LedgerScreen() {
             getBlockedUsers().then(list => setBlocked(new Set(list))).catch(() => {});
             getEscrowTotal(identity.publicKey).then(latest(setEscrowTotal)).catch(() => {});
             getPledgeHistory(identity.publicKey).then(latest(setPledgeHistory)).catch(() => {});
+            AsyncStorage.getItem('beanpool_anchor_url').then(anchor => {
+                if (anchor && identity) {
+                    askMyVouching(anchor, identity).then(latest(setMyVouching)).catch(() => {});
+                }
+            }).catch(() => {});
         }
     };
 
@@ -1244,6 +1254,11 @@ export default function LedgerScreen() {
                             <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>
                                 {t('You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)')}
                             </Text>
+                            {balanceState.vouchedBy && balanceState.vouchedBy.length > 0 && (
+                                <Text testID="ledger-vouched-by" style={{ fontSize: 12, fontWeight: '700', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.primary, marginTop: 6 }}>
+                                    {balanceState.vouchedBy.map((v: any) => ledgerVouchedBy(v.callsign)).join(' · ')}
+                                </Text>
+                            )}
                         </View>
                     </View>
                 </View>
@@ -1259,6 +1274,11 @@ export default function LedgerScreen() {
                     {knownFrozenPartNote(balanceState) && (
                         <Text style={{ fontSize: 11.5, color: colors.text.body, lineHeight: 16, marginTop: 8 }}>{knownFrozenPartNote(balanceState)}</Text>
                     )}
+                    {balanceState.vouchedBy && balanceState.vouchedBy.length > 0 && (
+                        <Text testID="ledger-vouched-by" style={{ fontSize: 12, fontWeight: '700', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.primary, marginTop: 6 }}>
+                            {balanceState.vouchedBy.map((v: any) => ledgerVouchedBy(v.callsign)).join(' · ')}
+                        </Text>
+                    )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {balanceState.frozen && (
                         <Text style={{ fontSize: 11.5, color: colors.feedback.warning.fg, lineHeight: 16, marginTop: 8 }}>
@@ -1269,6 +1289,23 @@ export default function LedgerScreen() {
                         </Text>
                     )}
                 </Pressable>
+            )}
+
+            {/* Voucher budget button (V3) */}
+            {myVouching?.voucher && myVouching.budget && (
+                <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                    <Pressable
+                        accessibilityRole="button"
+                        testID="ledger-budget-row"
+                        onPress={() => setShowBudgetModal(true)}
+                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 12, backgroundColor: colors.surface.subtle, borderRadius: 12 }}
+                    >
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading }}>
+                            {ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                        </Text>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.muted }}>›</Text>
+                    </Pressable>
+                </View>
             )}
 
             {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
@@ -1324,6 +1361,86 @@ export default function LedgerScreen() {
             <TrustInfoModal isOpen={showTrustInfo} onClose={() => setShowTrustInfo(false)} initialTab={trustInfoTab} />
             <SliderInfoModal isOpen={showSliderInfo} onClose={() => setShowSliderInfo(false)} />
             {preview && <LocalCommunitySheet feature="beans" visible={sheetOpen} onClose={() => setSheetOpen(false)} />}
+
+            {/* Voucher Budget Modal (V3) */}
+            {showBudgetModal && myVouching?.budget && (
+                <Modal
+                    visible={showBudgetModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowBudgetModal(false)}
+                >
+                    <Pressable
+                        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}
+                        onPress={() => setShowBudgetModal(false)}
+                    >
+                        <Pressable
+                            style={{ width: '100%', maxWidth: 440, maxHeight: '85%', backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default }}
+                            onPress={() => {}}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading }}>
+                                    {t('Your budget to vouch from')}
+                                </Text>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('Close')}
+                                    onPress={() => setShowBudgetModal(false)}
+                                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                    style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+                                >
+                                    <Text style={{ fontSize: 16, color: colors.text.muted }}>✕</Text>
+                                </Pressable>
+                            </View>
+
+                            <ScrollView showsVerticalScrollIndicator={false}>
+                                <View style={{ padding: 12, borderRadius: 12, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, marginBottom: 12 }}>
+                                    <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, marginBottom: 4 }}>
+                                        {t('{left} of {total} left', { left: formatNumber(myVouching.budget.left), total: formatNumber(myVouching.budget.level) })}
+                                    </Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 2 }}>
+                                        {t('Vouched {amount} to {people} who joined', { amount: formatNumber(myVouching.budget.vouched), people: tn(myVouching.budget.peopleVouched, '{n} person', '{n} people') })}
+                                    </Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.secondary }}>
+                                        {t('Held {amount} on {invites} not used yet', { amount: formatNumber(myVouching.budget.held), invites: tn(myVouching.budget.heldInvites, '{n} invite', '{n} invites') })}
+                                    </Text>
+                                </View>
+
+                                <View style={{ marginBottom: 12 }}>
+                                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading, marginBottom: 8 }}>
+                                        {t('Budget history')}
+                                    </Text>
+                                    {!myVouching.history || myVouching.history.length === 0 ? (
+                                        <Text style={{ fontSize: 12, color: colors.text.muted, padding: 8 }}>{t('No budget history yet.')}</Text>
+                                    ) : (
+                                        myVouching.history.map((h, i) => (
+                                            <View key={i} style={{ padding: 10, borderRadius: 10, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, marginBottom: 6 }}>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                                    <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: colors.text.heading }}>
+                                                        {formatHistoryLine(h)}
+                                                    </Text>
+                                                    <Text style={{ fontSize: 11, color: colors.text.muted, flexShrink: 0 }}>
+                                                        {h.at ? formatDate(new Date(h.at), 'day-month-year') : ''}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                        ))
+                                    )}
+                                </View>
+
+                                <View style={{ padding: 12, borderRadius: 12, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default }}>
+                                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text.heading, marginBottom: 4 }}>
+                                        {t('Ask for more')}
+                                    </Text>
+                                    <Text style={{ fontSize: 12, color: colors.text.secondary, lineHeight: 18 }}>
+                                        {t('To get a bigger budget to vouch from, ask an owner of this community.')}
+                                    </Text>
+                                </View>
+                            </ScrollView>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+            )}
         </View>
     );
 }

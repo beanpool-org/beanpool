@@ -29,8 +29,8 @@ export const askAnAdmin = (anchorUrl: string, identity: BeanPoolIdentity, firstN
 export const takeBackAsk = (anchorUrl: string, identity: BeanPoolIdentity, id: string) => post(anchorUrl, identity, one(id, 'withdraw'), {});
 
 /** "Send invite". */
-export const sendInviteForAsk = (anchorUrl: string, identity: BeanPoolIdentity, id: string) =>
-    post(anchorUrl, identity, one(id, 'send'), {});
+export const sendInviteForAsk = (anchorUrl: string, identity: BeanPoolIdentity, id: string, vouchAmount?: number) =>
+    post(anchorUrl, identity, one(id, 'send'), typeof vouchAmount === 'number' ? { vouchAmount } : {});
 
 export const sayNoToAsk = (anchorUrl: string, identity: BeanPoolIdentity, id: string, reason: string) =>
     post(anchorUrl, identity, one(id, 'no'), reason.trim() ? { reason: reason.trim() } : {});

@@ -193,6 +193,7 @@ vi.mock('../lib/api', () => ({
     getFriends: vi.fn(async () => []),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
     groupKeysNet: { get: vi.fn(), post: vi.fn() },
+    getMyVouching: vi.fn(async () => null),
 }));
 
 describe('web DM chat header', () => {

@@ -25,7 +25,7 @@ async function post(path: string, body: Record<string, unknown>): Promise<Invite
 export const askAnAdmin = (firstName: string, howKnown: string) => post(ASKS, { firstName: firstName.trim(), howKnown: howKnown.trim() });
 export const takeBackAsk = (id: string) => post(one(id, 'withdraw'), {});
 /** "Send invite". */
-export const sendInviteForAsk = (id: string) => post(one(id, 'send'), {});
+export const sendInviteForAsk = (id: string, vouchAmount?: number) => post(one(id, 'send'), vouchAmount ? { vouchAmount } : {});
 export const sayNoToAsk = (id: string, reason: string) => post(one(id, 'no'), reason.trim() ? { reason: reason.trim() } : {});
 
 async function read<T>(path: string, parse: (raw: unknown) => T | null): Promise<T | null> {

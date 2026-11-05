@@ -27,9 +27,13 @@ export type InviteForShare = { ok: true; code: string } | { ok: false; offline: 
  * Ask the node for an invite. `offline`: it gave no answer at all, and no ticket is made. A refusal says the node's words (in
  * the member's language where the page knows them), and nothing is shared.
  */
-export async function makeInviteForShare(publicKey: string, make: typeof generateInvite = generateInvite): Promise<InviteForShare> {
+export async function makeInviteForShare(
+    publicKey: string,
+    make: typeof generateInvite = generateInvite,
+    vouchAmount?: number,
+): Promise<InviteForShare> {
     try {
-        const res = await make(publicKey);
+        const res = vouchAmount !== undefined ? await make(publicKey, undefined, vouchAmount) : await make(publicKey);
         const code = res?.invite?.code;
         return typeof code === 'string' && code ? { ok: true, code } : { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
     } catch (e) {
@@ -38,6 +42,10 @@ export async function makeInviteForShare(publicKey: string, make: typeof generat
         if (typeof status !== 'number') return { ok: false, offline: true, message: t(INVITE_SHARE_WORDS.offline) };
         const refusal = invitesOffRefusal(e) ?? adminsOnlyRefusal(e) ?? pausedRefusal(e);
         if (refusal) return { ok: false, offline: false, message: refusal };
+        if (vouchAmount !== undefined) {
+            const serverMsg = typeof (e as any)?.message === 'string' && (e as any).message ? (e as any).message : typeof (e as any)?.error === 'string' && (e as any).error ? (e as any).error : null;
+            if (serverMsg) return { ok: false, offline: false, message: serverMsg };
+        }
         return { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
     }
 }

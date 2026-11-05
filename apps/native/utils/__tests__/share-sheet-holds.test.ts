@@ -106,9 +106,12 @@ beforeEach(() => {
     ctl.shared.length = 0; ctl.share = null; ctl.peek = null; ctl.invite = null; ctl.inviteFetches.length = 0;
     vi.mocked(signedRequestWithMethod).mockClear();
     vi.mocked(Alert.alert).mockClear();
-    vi.stubGlobal('fetch', async (_url: string, init: { signal?: AbortSignal }) => {
-        ctl.inviteFetches.push({ signal: init?.signal });
-        return ctl.invite ? ctl.invite.promise : { ok: true, status: 200, json: async () => ({ success: true, invite: { code: 'INV-AB12-CD34' } }) };
+    vi.stubGlobal('fetch', async (url: string, init: { signal?: AbortSignal }) => {
+        if (typeof url === 'string' && url.includes('/api/invite/generate')) {
+            ctl.inviteFetches.push({ signal: init?.signal });
+            return ctl.invite ? ctl.invite.promise : { ok: true, status: 200, json: async () => ({ success: true, invite: { code: 'INV-AB12-CD34' } }) };
+        }
+        return { ok: true, status: 200, json: async () => ({ voucher: false }) };
     });
 });
 afterEach(() => {

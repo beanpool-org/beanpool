@@ -7,6 +7,8 @@ import {
     fetchJoinRequests, approveJoinRequest, declineJoinRequest, joinRequestAge, KNOCK_UNREACHABLE_TEXT,
     type JoinRequest,
 } from '../utils/knock-inbox';
+import { askMyVouching, rereadMyVouching, type MyVouching } from '../utils/vouchers';
+import { VouchPresetChoice } from './VouchPresetChoice';
 import { t, tn, word } from '@beanpool/core';
 
 /**
@@ -43,6 +45,8 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
 }) {
     const { colors } = useTheme();
     const [requests, setRequests] = useState<JoinRequest[] | null>(null);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [vouchPresets, setVouchPresets] = useState<Record<string, number | null>>({});
     const [total, setTotal] = useState(0);
     const [hidden, setHidden] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -75,6 +79,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
 
     const load = useCallback(async () => {
         if (!canSee) return;
+        askMyVouching(anchorUrl, identity).then(setMyVouching).catch(() => setMyVouching(null));
         const r = await fetchJoinRequests(anchorUrl, identity);
         if (r.ok) {
             setRequests(r.knocks);
@@ -95,8 +100,9 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
 
     const answer = async (req: JoinRequest, verb: 'approve' | 'decline') => {
         setBusy(req.id);
+        const chosenVouch = myVouching?.voucher ? (vouchPresets[req.id] ?? undefined) : undefined;
         const r = verb === 'approve'
-            ? await approveJoinRequest(anchorUrl, identity, req.id)
+            ? await approveJoinRequest(anchorUrl, identity, req.id, chosenVouch)
             : await declineJoinRequest(anchorUrl, identity, req.id);
         setBusy(null);
         if (r.ok) {
@@ -105,6 +111,8 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
             setTotal(prev => { const n = Math.max(0, prev - 1); onCount?.(n); return n; });
             setRefusal(null);
             setDone(verb === 'approve' ? t('You invited {name}. Their app will find the invite by itself.', { name: req.callsign }) : null);
+            // A failed re-read keeps the presets as they were (utils/vouchers.ts rereadMyVouching).
+            if (verb === 'approve' && chosenVouch) void rereadMyVouching(anchorUrl, identity, setMyVouching);
             // More are waiting than this page shows (it holds the first 20): read it again, so the next ones come up and
             // the count is the node's.
             if (Math.max(0, total - 1) > left) load();
@@ -146,6 +154,16 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
                         </View>
                     </View>
                     <Text style={styles.message}>{req.message}</Text>
+                    {myVouching?.voucher && (
+                        <View style={{ marginTop: 8 }}>
+                            <VouchPresetChoice
+                                value={vouchPresets[req.id] ?? null}
+                                onChange={(val) => setVouchPresets(prev => ({ ...prev, [req.id]: val }))}
+                                budgetLeft={myVouching.budget?.left ?? 0}
+                                budgetTotal={myVouching.budget?.level ?? 0}
+                            />
+                        </View>
+                    )}
                     <View style={styles.actions}>
                         <Pressable
                             style={[styles.invite, busy === req.id && { opacity: 0.6 }]}

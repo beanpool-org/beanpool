@@ -95,12 +95,12 @@ export async function fetchJoinRequests(
     }
 }
 
-async function answer(anchorUrl: string, identity: BeanPoolIdentity, id: string, verb: 'approve' | 'decline'): Promise<AnswerResult> {
+async function answer(anchorUrl: string, identity: BeanPoolIdentity, id: string, verb: 'approve' | 'decline', body: Record<string, unknown> = {}): Promise<AnswerResult> {
     try {
-        const res = await signedPost(anchorUrl, `${KNOCKS_PATH}/${encodeURIComponent(id)}/${verb}`, {}, identity);
+        const res = await signedPost(anchorUrl, `${KNOCKS_PATH}/${encodeURIComponent(id)}/${verb}`, body, identity);
         if (!res.ok) return { ok: false, message: (await errorText(res)) ?? UNREACHABLE };
-        const body = await res.json().catch(() => null) as { knock?: { status?: unknown } } | null;
-        const status = body?.knock?.status;
+        const data = await res.json().catch(() => null) as { knock?: { status?: unknown } } | null;
+        const status = data?.knock?.status;
         return status === 'approved' || status === 'declined' ? { ok: true, status } : { ok: true, status: verb === 'approve' ? 'approved' : 'declined' };
     } catch {
         return { ok: false, message: UNREACHABLE };
@@ -108,8 +108,8 @@ async function answer(anchorUrl: string, identity: BeanPoolIdentity, id: string,
 }
 
 /** "Invite": the node makes an invite for the applicant's key, from this member. */
-export function approveJoinRequest(anchorUrl: string, identity: BeanPoolIdentity, id: string): Promise<AnswerResult> {
-    return answer(anchorUrl, identity, id, 'approve');
+export function approveJoinRequest(anchorUrl: string, identity: BeanPoolIdentity, id: string, vouchAmount?: number): Promise<AnswerResult> {
+    return answer(anchorUrl, identity, id, 'approve', typeof vouchAmount === 'number' ? { vouchAmount } : {});
 }
 
 /** "Not now": the applicant keeps hearing "no answer yet". */

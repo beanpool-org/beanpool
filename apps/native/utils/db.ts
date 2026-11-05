@@ -1730,6 +1730,7 @@ export async function refreshBalanceFromServer(pubkey: string) {
                 frozen: !!balData.frozen,
                 knownFrozen: balData.knownFrozen === true,
                 creditFrozen: balData.creditFrozen === true,
+                vouchedBy: Array.isArray(balData.vouchedBy) ? balData.vouchedBy : [],
             });
             const prevTierStr = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
             if (prevTierStr !== newTierStr) {
@@ -1773,6 +1774,7 @@ export async function getBalance(pubkey: string) {
     let frozen = false;        // v3: debt below usable floor → spending paused
     let knownFrozen = false;   // the community's admins froze this member's known floor (utils/credit-line-card.ts)
     let creditFrozen = false;  // … or their whole line (the manager's Freeze)
+    let vouchedBy: any[] = [];
 
     // Background fetch to ensure parity
     refreshBalanceFromServer(pubkey).catch(() => null);
@@ -1804,6 +1806,7 @@ export async function getBalance(pubkey: string) {
             frozen = !!parsed.frozen;
             knownFrozen = parsed.knownFrozen === true;
             creditFrozen = parsed.creditFrozen === true;
+            vouchedBy = Array.isArray(parsed.vouchedBy) ? parsed.vouchedBy : [];
         }
     } catch { /* ignore */ }
 
@@ -1831,6 +1834,7 @@ export async function getBalance(pubkey: string) {
         frozen,
         knownFrozen,
         creditFrozen,
+        vouchedBy,
     };
 }
 

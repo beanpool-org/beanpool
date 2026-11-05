@@ -1219,7 +1219,7 @@ router.post('/api/invite/generate', async (ctx) => {
 function respondVoucherRefusal(ctx: any, e: unknown): boolean {
     if (!(e instanceof VoucherError)) return false;
     ctx.status = e.status;
-    ctx.body = { error: e.message, code: e.code };
+    ctx.body = { error: e.message, code: e.code, ...(e.extra || {}) };
     return true;
 }
 

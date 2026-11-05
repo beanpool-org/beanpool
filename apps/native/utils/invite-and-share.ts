@@ -52,6 +52,7 @@ export const INVITE_FOR_SHARE_WAIT_MS = 15_000;
  */
 export async function makeInviteForShare(
     anchorUrl: string, identity: BeanPoolIdentity, features: NodeFeatures | null | undefined, deps: MakeInviteDeps = {},
+    vouchAmount?: number,
 ): Promise<InviteForShare> {
     const offline: InviteForShare = { ok: false, offline: true, message: t(INVITE_SHARE_WORDS.offline) };
     const stop = new AbortController();
@@ -60,7 +61,7 @@ export async function makeInviteForShare(
         timer = setTimeout(() => { stop.abort(); resolve(offline); }, INVITE_FOR_SHARE_WAIT_MS);
     });
     try {
-        return await Promise.race([askForInvite(anchorUrl, identity, features, deps, stop.signal, offline), limit]);
+        return await Promise.race([askForInvite(anchorUrl, identity, features, deps, stop.signal, offline, vouchAmount), limit]);
     } finally {
         clearTimeout(timer);
     }
@@ -69,11 +70,14 @@ export async function makeInviteForShare(
 async function askForInvite(
     anchorUrl: string, identity: BeanPoolIdentity, features: NodeFeatures | null | undefined,
     deps: MakeInviteDeps, signal: AbortSignal, offline: InviteForShare,
+    vouchAmount?: number,
 ): Promise<InviteForShare> {
     const doFetch = deps.fetchImpl ?? fetch;
     const notMade: InviteForShare = { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
     const url = `${anchorUrl}/api/invite/generate`;
-    const body = JSON.stringify({ publicKey: identity.publicKey });
+    const payload: { publicKey: string; vouchAmount?: number } = { publicKey: identity.publicKey };
+    if (typeof vouchAmount === 'number') payload.vouchAmount = vouchAmount;
+    const body = JSON.stringify(payload);
     let res: Response;
     try {
         // Loaded when a tap needs it: the key's crypto is not read by a screen that only draws the button.
@@ -89,8 +93,14 @@ async function askForInvite(
         const code = data?.success && typeof data.invite?.code === 'string' ? data.invite.code : '';
         return code ? { ok: true, code } : notMade;
     }
-    const said = await res.json().catch(() => null) as { error?: unknown } | null;
+    const said = await res.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
     const refusal = invitesOffRefusal(res.status, said, features) ?? adminsOnlyRefusal(res.status, said) ?? pausedRefusal(res.status, said);
     if (refusal) return { ok: false, offline: false, message: refusal };
+    if (typeof said?.error === 'string' && said.error) {
+        return { ok: false, offline: false, message: said.error };
+    }
+    if (typeof said?.message === 'string' && said.message) {
+        return { ok: false, offline: false, message: said.message };
+    }
     return notMade;
 }

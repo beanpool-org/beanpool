@@ -47,6 +47,7 @@ vi.mock('../lib/api', () => ({
     getFriends: vi.fn(async () => []),
     submitRating: vi.fn(),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
+    getMyVouching: vi.fn(async () => null),
 }));
 
 const me: BeanPoolIdentity = { publicKey: 'my-pubkey', privateKey: 'k', callsign: 'Alice', createdAt: '2026-01-01T00:00:00.000Z' };

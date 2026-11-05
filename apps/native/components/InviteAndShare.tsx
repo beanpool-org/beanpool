@@ -20,6 +20,8 @@ import { onlyAdminsInvite, type InviteRole } from '../utils/invite-entries';
 import { inviteLink } from '../utils/names-invite';
 import { makeInviteForShare, offersInviteAndShare } from '../utils/invite-and-share';
 import type { BeanPoolIdentity } from '../utils/identity';
+import { askMyVouching, rereadMyVouching, type MyVouching } from '../utils/vouchers';
+import { VouchPresetChoice } from './VouchPresetChoice';
 
 export interface InviteAndShare {
     /** This member may invite here: the sheet offers the way. */
@@ -29,6 +31,9 @@ export interface InviteAndShare {
     clearNote: () => void;
     /** Make the invite and hand it to the share sheet: true once it went to the share sheet, false when nothing was shared. */
     make: () => Promise<boolean>;
+    myVouching?: MyVouching | null;
+    vouchPreset?: number | null;
+    setVouchPreset?: (v: number | null) => void;
 }
 
 /**
@@ -42,6 +47,8 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
     const adminsOnly = onlyAdminsInvite(features);
     const [who, setWho] = useState<{ anchor: string; identity: BeanPoolIdentity; guest: boolean } | null>(null);
     const [role, setRole] = useState<InviteRole | undefined>(undefined);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [vouchPreset, setVouchPreset] = useState<number | null>(null);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
 
@@ -58,6 +65,7 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
                 const guest = await isGuestNode(anchor).catch(() => false);
                 if (alive) setWho({ anchor, identity, guest });
                 if (guest) return;
+                askMyVouching(anchor, identity).then((mv) => { if (alive) setMyVouching(mv); }).catch(() => {});
                 if (adminsOnly) {
                     const { askNodeRole, readPersistedNodeRole } = await import('../utils/node-admin');
                     const heard = await askNodeRole(anchor, identity);
@@ -77,12 +85,16 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
         if (!who) return false;
         setBusy(true);
         setNote(null);
+        const chosenVouch = myVouching?.voucher ? vouchPreset : null;
         try {
-            const made = await makeInviteForShare(who.anchor, who.identity, features);
+            const made = await makeInviteForShare(who.anchor, who.identity, features, {}, chosenVouch !== null ? chosenVouch : undefined);
             if (!made.ok) {
                 setNote(made.message);
                 return false;
             }
+            setVouchPreset(null);
+            // A failed re-read keeps the presets as they were (utils/vouchers.ts rereadMyVouching).
+            void rereadMyVouching(who.anchor, who.identity, setMyVouching);
             await Share.share({ message: `${post.title}\n${inviteLink(who.anchor, made.code, post.id)}`, title: post.title });
             return true;
         } catch (e: any) {
@@ -93,7 +105,7 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
         }
     };
 
-    return { offered, busy, note, clearNote: () => setNote(null), make };
+    return { offered, busy, note, clearNote: () => setNote(null), make, myVouching, vouchPreset, setVouchPreset };
 }
 
 /**
@@ -107,6 +119,14 @@ export function InviteAndSharePanel({ invite, onMake, held = false }: { invite: 
         <View style={styles.block} testID="invite-and-share">
             <View style={styles.panel} testID="invite-and-share-panel">
                 <Text style={styles.panelText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.panel)}</Text>
+                {invite.myVouching?.voucher && invite.setVouchPreset && (
+                    <VouchPresetChoice
+                        value={invite.vouchPreset ?? null}
+                        onChange={invite.setVouchPreset}
+                        budgetLeft={invite.myVouching.budget?.left ?? 0}
+                        budgetTotal={invite.myVouching.budget?.level ?? 0}
+                    />
+                )}
                 <Pressable onPress={onMake} disabled={off} style={[styles.make, off && { opacity: 0.6 }]} accessibilityRole="button"
                     accessibilityState={{ disabled: off }} testID="invite-and-share-make">
                     <Text style={styles.makeText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.make)}</Text>

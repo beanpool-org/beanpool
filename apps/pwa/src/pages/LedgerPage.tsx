@@ -17,14 +17,15 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
-    getBalance, getTransactions, sendTransfer, request, saveHomePreferences,
-    type BalanceInfo, type TierInfo, type Transaction, type Member, type MarketplaceTransaction
+    getBalance, getTransactions, sendTransfer, request, saveHomePreferences, getMyVouching,
+    type BalanceInfo, type TierInfo, type Transaction, type Member, type MarketplaceTransaction, type MyVouching
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
+import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerVouchedBy, ledgerBudget, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -160,6 +161,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     viewerIsMemberRef.current = viewerIsMember;
     const [ownBalanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const balanceInfo = sample ? sample.balance : ownBalanceInfo;
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [showBudgetModal, setShowBudgetModal] = useState(false);
     const [txns, setTxns] = useState<Transaction[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
@@ -277,6 +280,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
                 setGiftOffer(gift);
+                if (typeof getMyVouching === 'function') {
+                    getMyVouching().then(v => { if (isMountedRef.current) setMyVouching(v); }).catch(() => {});
+                }
                 setTxns(txn);
                 if (mem) setMembers(mem.filter(m => m.publicKey !== myKey));
                 setError(null);
@@ -597,6 +603,11 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">
                                 {t('You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)')}
                             </div>
+                            {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
+                                <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
+                                    {balanceInfo.vouchedBy.map(v => ledgerVouchedBy(v.callsign)).join(' · ')}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -606,6 +617,11 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} knownGrant={balanceInfo?.knownGrant ?? 0} />
                     {knownFrozenPartNote(balanceInfo ?? {}) && (
                         <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo ?? {})}</p>
+                    )}
+                    {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
+                        <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
+                            {balanceInfo.vouchedBy.map(v => ledgerVouchedBy(v.callsign)).join(' · ')}
+                        </div>
                     )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {frozen && (
@@ -617,6 +633,22 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 { limit: Math.abs(usableFloor) })}</span>
                         </div>
                     )}
+                </div>
+            )}
+
+            {myVouching?.voucher && myVouching.budget && (
+                <div className="mb-4">
+                    <button
+                        type="button"
+                        onClick={() => setShowBudgetModal(true)}
+                        className="w-full text-left bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-3.5 shadow-sm flex items-center justify-between gap-2 hover:bg-oat-50 dark:hover:bg-nature-800/40 cursor-pointer transition-colors border-0"
+                        data-testid="ledger-budget-row"
+                    >
+                        <span className="text-sm font-extrabold text-nature-900 dark:text-white">
+                            {ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                        </span>
+                        <span className="text-nature-400 font-bold ml-1">›</span>
+                    </button>
                 </div>
             )}
 
@@ -1229,6 +1261,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 onClose={() => setShowCommonsInfo(false)} 
                 commonsBalance={balanceInfo?.commonsBalance ?? 0} 
             />
+
+            {showBudgetModal && myVouching?.budget && (
+                <MyBudgetModal
+                    vouching={myVouching as MyVouching & { budget: NonNullable<MyVouching['budget']> }}
+                    onClose={() => setShowBudgetModal(false)}
+                />
+            )}
         </div>
     );
 }

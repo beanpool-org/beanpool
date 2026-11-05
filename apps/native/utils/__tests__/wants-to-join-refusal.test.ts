@@ -43,7 +43,10 @@ vi.mock('../../app/ThemeContext', () => {
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: vi.fn(async () => ({})) }));
 const post = vi.hoisted(() => ({ answer: (_path: string): Response => new Response('{}') }));
-vi.mock('../node-post', () => ({ signedPost: vi.fn(async (_anchor: string, path: string) => post.answer(path)) }));
+vi.mock('../node-post', () => ({
+    signedPost: vi.fn(async (_anchor: string, path: string) => post.answer(path)),
+    signedGet: vi.fn(async () => json(200, null)),
+}));
 
 import { WantsToJoin } from '../../components/WantsToJoin';
 import type { BeanPoolIdentity } from '../identity';

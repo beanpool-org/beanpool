@@ -18,6 +18,8 @@ vi.mock('../components/CommonsInfoModal', () => ({ CommonsInfoModal: () => null 
 vi.mock('../lib/blocklist', () => ({ getBlockedUsers: vi.fn(() => []), onBlocklistUpdated: vi.fn(() => () => {}) }));
 vi.mock('../lib/api', () => ({
     getBalance: vi.fn(),
+    // V3: the Ledger asks whether this member is a voucher (null = not one), beside the gift offer.
+    getMyVouching: vi.fn(async () => null),
     getTransactions: vi.fn(async () => []),
     getMembers: vi.fn(async () => []),
     getMemberCards: vi.fn(async () => []),

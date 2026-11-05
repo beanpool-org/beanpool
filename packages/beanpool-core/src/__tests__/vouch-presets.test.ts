@@ -1,0 +1,155 @@
+import { describe, it, expect } from 'vitest';
+import {
+    VOUCH_PRESETS,
+    VOUCH_MAX,
+    VOUCHES_PER_PERSON,
+    VOUCHER_BUDGET_MIN,
+    VOUCHER_BUDGET_MAX,
+    isVouchPreset,
+    isBudgetLevel,
+    formatHistoryLine,
+    type HistoryLineLike,
+} from '../vouch-presets.js';
+
+describe('vouch-presets core logic and history line formatting', () => {
+    it('validates presets and budget levels', () => {
+        expect(VOUCH_PRESETS).toEqual([25, 50, 75, 100]);
+        expect(VOUCH_MAX).toBe(100);
+        expect(VOUCHES_PER_PERSON).toBe(3);
+        expect(VOUCHER_BUDGET_MIN).toBe(100);
+        expect(VOUCHER_BUDGET_MAX).toBe(2000);
+
+        expect(isVouchPreset(25)).toBe(true);
+        expect(isVouchPreset(50)).toBe(true);
+        expect(isVouchPreset(75)).toBe(true);
+        expect(isVouchPreset(100)).toBe(true);
+        expect(isVouchPreset(30)).toBe(false);
+
+        expect(isBudgetLevel(100)).toBe(true);
+        expect(isBudgetLevel(500)).toBe(true);
+        expect(isBudgetLevel(1000)).toBe(true);
+        expect(isBudgetLevel(2000)).toBe(true);
+        expect(isBudgetLevel(2100)).toBe(false);
+        expect(isBudgetLevel(150)).toBe(false);
+    });
+
+    it('formats grant lines in plain words without keys or raw enums', () => {
+        const h1: HistoryLineLike = {
+            kind: 'grant',
+            amount: 1000,
+            actor: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+            actorCallsign: 'marty',
+            at: '2026-11-05T00:00:00Z',
+        };
+        const text1 = formatHistoryLine(h1);
+        expect(text1).toBe('+1000 budget, made a voucher by @marty');
+        expect(text1).not.toMatch(/[0-9a-f]{64}/i);
+        expect(text1).not.toMatch(/\bgrant\b/i);
+
+        const h2: HistoryLineLike = {
+            kind: 'grant',
+            amount: 1000,
+            actor: 'node:claim',
+            actorCallsign: null,
+            at: '2026-11-05T00:00:00Z',
+        };
+        const text2 = formatHistoryLine(h2);
+        expect(text2).toBe('+1000 budget, made a voucher');
+        expect(text2).not.toMatch(/node:claim/);
+        expect(text2).not.toMatch(/\bgrant\b/i);
+    });
+
+    it('formats top-up and lower lines', () => {
+        const hTop: HistoryLineLike = {
+            kind: 'top_up',
+            amount: 500,
+            actor: 'a'.repeat(64),
+            actorCallsign: 'damo',
+            at: '2026-11-05T00:00:00Z',
+        };
+        const textTop = formatHistoryLine(hTop);
+        expect(textTop).toBe('+500 top-up by @damo');
+        expect(textTop).not.toMatch(/[0-9a-f]{64}/i);
+        expect(textTop).not.toMatch(/\btop_up\b/i);
+
+        const hLower: HistoryLineLike = {
+            kind: 'lower',
+            amount: -200,
+            actor: 'a'.repeat(64),
+            actorCallsign: 'damo',
+            at: '2026-11-05T00:00:00Z',
+        };
+        const textLower = formatHistoryLine(hLower);
+        expect(textLower).toBe('−200 budget lowered by @damo');
+        expect(textLower).not.toMatch(/[0-9a-f]{64}/i);
+        expect(textLower).not.toMatch(/\blower\b/i);
+    });
+
+    it('formats hold and return lines', () => {
+        const hHoldInvite: HistoryLineLike = {
+            kind: 'hold',
+            amount: -100,
+            actor: 'b'.repeat(64),
+            at: '2026-11-05T00:00:00Z',
+            for: 'invite',
+        };
+        const textHold = formatHistoryLine(hHoldInvite);
+        expect(textHold).toBe('−100 held for an invite');
+        expect(textHold).not.toMatch(/\bhold\b/i);
+
+        const hHoldProfile: HistoryLineLike = {
+            kind: 'hold',
+            amount: -50,
+            actor: 'b'.repeat(64),
+            at: '2026-11-05T00:00:00Z',
+            for: 'profile',
+            person: { memberPubkey: 'c'.repeat(64), callsign: 'sam' },
+        };
+        const textHoldProfile = formatHistoryLine(hHoldProfile);
+        expect(textHoldProfile).toBe('−50 vouched for @sam');
+        expect(textHoldProfile).not.toMatch(/[0-9a-f]{64}/i);
+
+        const hReturnExpired: HistoryLineLike = {
+            kind: 'return',
+            amount: 100,
+            actor: 'node',
+            at: '2026-11-05T00:00:00Z',
+            why: 'expired',
+        };
+        const textExpired = formatHistoryLine(hReturnExpired);
+        expect(textExpired).toBe('+100 back, invite expired');
+        expect(textExpired).not.toMatch(/\breturn\b/i);
+
+        const hReturnStopped: HistoryLineLike = {
+            kind: 'return',
+            amount: 100,
+            actor: 'node',
+            at: '2026-11-05T00:00:00Z',
+            why: 'stopped',
+        };
+        expect(formatHistoryLine(hReturnStopped)).toBe('+100 back, budget stopped');
+
+        const hReturnNotLanded: HistoryLineLike = {
+            kind: 'return',
+            amount: 100,
+            actor: 'node',
+            at: '2026-11-05T00:00:00Z',
+            why: 'not_landed',
+        };
+        expect(formatHistoryLine(hReturnNotLanded)).toBe('+100 back, invite not landed');
+    });
+
+    it('formats stop budget lines', () => {
+        const hStop: HistoryLineLike = {
+            kind: 'stop',
+            amount: -450,
+            actor: 'd'.repeat(64),
+            actorCallsign: 'marty',
+            at: '2026-11-05T00:00:00Z',
+        };
+        const textStop = formatHistoryLine(hStop);
+        expect(textStop).toBe('−450 budget stopped by @marty');
+        expect(textStop).not.toMatch(/[0-9a-f]{64}/i);
+        expect(textStop).not.toMatch(/\bstop\b/i);
+    });
+});

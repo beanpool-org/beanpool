@@ -229,6 +229,8 @@ async function refusalError(res: Response): Promise<Error> {
     if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
     // And the number a limit refusal names (a place watch's `watch_limit`), for the screen's own sentence.
     if (typeof err.limit === 'number' && Number.isInteger(err.limit) && err.limit > 0) (error as Error & { limit?: number }).limit = err.limit;
+    // And an existing vouch amount for a member (`already_vouched`), for the raise confirmation prompt.
+    if (typeof err.prior === 'number' && Number.isInteger(err.prior) && err.prior > 0) (error as Error & { prior?: number }).prior = err.prior;
     // And the deal a refusal names (a deal already under way on the listing, `deal_open`), for the screen to open it.
     if (typeof err.transactionId === 'string') (error as Error & { transactionId?: string }).transactionId = err.transactionId;
     return error;
@@ -543,10 +545,19 @@ export interface InviteCode {
     usedBy: string | null;
     usedAt: string | null;
     intendedFor?: string;
+    vouchAmount?: number;
 }
 
-export async function generateInvite(publicKey: string, intendedFor?: string): Promise<{ success: boolean; invite: InviteCode }> {
-    return request('POST', '/api/invite/generate', { publicKey, intendedFor });
+export async function generateInvite(
+    publicKey: string,
+    intendedFor?: string,
+    vouchAmount?: number,
+): Promise<{ success: boolean; invite: InviteCode }> {
+    return request('POST', '/api/invite/generate', {
+        publicKey,
+        intendedFor: intendedFor || undefined,
+        ...(vouchAmount !== undefined ? { vouchAmount } : {}),
+    });
 }
 
 export interface InviteCheck { valid: boolean; reason?: string; inviterCallsign?: string | null; communityName?: string | null }
@@ -757,9 +768,10 @@ export async function getJoinRequests(offset: number = 0): Promise<JoinRequestsR
 }
 
 /** "Invite" (`approve`: the node makes an invite for the applicant's key, from this member) or "Not now" (`decline`). */
-export async function answerJoinRequest(id: string, verb: 'approve' | 'decline'): Promise<JoinRequestAnswer> {
+export async function answerJoinRequest(id: string, verb: 'approve' | 'decline', vouchAmount?: number): Promise<JoinRequestAnswer> {
     try {
-        const res = await signedFetch('POST', `${JOIN_REQUESTS_PATH}/${encodeURIComponent(id)}/${verb}`, {});
+        const payload = verb === 'approve' && vouchAmount !== undefined ? { vouchAmount } : {};
+        const res = await signedFetch('POST', `${JOIN_REQUESTS_PATH}/${encodeURIComponent(id)}/${verb}`, payload);
         if (!res.ok) return { ok: false, message: await joinRequestRefusal(res) };
         const body = await res.json().catch(() => null) as { knock?: { status?: unknown } } | null;
         const status = body?.knock?.status;
@@ -767,6 +779,129 @@ export async function answerJoinRequest(id: string, verb: 'approve' | 'decline')
     } catch {
         return { ok: false, message: null };
     }
+}
+
+// ===================== VOUCHERS =====================
+
+export interface MyVouching {
+    voucher: boolean;
+    budget?: {
+        left: number;
+        held: number;
+        heldInvites: number;
+        vouched: number;
+        peopleVouched: number;
+        level: number;
+    };
+    source?: 'role' | 'entry';
+    history?: VoucherHistoryLine[];
+    presets: number[];
+    vouchMax: number;
+    budgetMax: number;
+    vouchedBy: { memberPubkey: string; callsign: string; amount: number; at: string }[];
+}
+
+export interface VoucherHistoryLine {
+    kind: string;
+    amount: number;
+    actor: string;
+    actorCallsign: string | null;
+    at: string;
+    for?: 'invite' | 'profile';
+    inviteMadeAt?: string | null;
+    outcome?: 'held' | 'vouched' | 'back';
+    why?: 'expired' | 'stopped' | 'not_landed';
+    person?: { memberPubkey: string; callsign: string } | null;
+}
+
+export interface VoucherSummary {
+    memberPubkey: string;
+    callsign: string;
+    source: 'role' | 'entry' | null;
+    entryId: string | null;
+    madeBy: string | null;
+    madeByCallsign: string;
+    madeAt: string | null;
+    stoppedAt: string | null;
+    stopReason: string | null;
+    left: number;
+    held: number;
+    heldInvites: number;
+    vouched: number;
+    peopleVouched: number;
+    level: number;
+    belowZero: number;
+    writtenOff: number;
+    passedOn: { amount: number; people: number };
+    invitesWithVouch: number;
+    trading: { withOthers: number; insideOnly: number };
+}
+
+export interface VoucherCardData extends VoucherSummary {
+    history: VoucherHistoryLine[];
+    people: {
+        memberPubkey: string;
+        callsign: string;
+        joinedAt: string | null;
+        amount: number;
+        raised: boolean;
+        byInvite: boolean;
+        belowZero: boolean;
+        left: boolean;
+        writtenOff: number;
+        vouchesForMe: boolean;
+        trading: 'others' | 'inside' | 'none';
+    }[];
+    canChange?: boolean;
+}
+
+export interface VouchersBlockData {
+    vouchers: VoucherSummary[];
+    settings: {
+        voucherBudget: number;
+        memberGift: number;
+        presets: number[];
+        vouchMax: number;
+        vouchesPerPerson: number;
+        budgetMax: number;
+    };
+}
+
+export async function getMyVouching(): Promise<MyVouching | null> {
+    const identity = await loadIdentity();
+    if (!identity) return null;
+    return request<MyVouching>('GET', '/api/vouchers/me');
+}
+
+export async function vouchForMember(
+    memberPubkey: string,
+    vouchAmount: number,
+    raise?: boolean,
+): Promise<{ id: string; memberPubkey: string; amount: number; total: number; budget: any }> {
+    return request('POST', '/api/vouch', {
+        memberPubkey,
+        vouchAmount,
+        ...(raise ? { raise: true } : {}),
+    });
+}
+
+export async function getVouchersBlock(): Promise<VouchersBlockData> {
+    return request<VouchersBlockData>('GET', '/api/names/vouchers');
+}
+
+export async function getVoucherCard(memberPubkey: string): Promise<VoucherCardData> {
+    return request<VoucherCardData>('GET', `/api/names/vouchers/${encodeURIComponent(memberPubkey)}`);
+}
+
+export async function setVoucherBudget(
+    memberPubkey: string,
+    level: number,
+): Promise<VoucherCardData & { changed: boolean }> {
+    return request('POST', `/api/names/vouchers/${encodeURIComponent(memberPubkey)}/budget`, { level });
+}
+
+export async function getTrustProfile(targetPubkey: string): Promise<any> {
+    return request('POST', '/api/trust/profile', { targetPubkey });
 }
 
 // ===================== PROFILES =====================
@@ -1346,6 +1481,12 @@ export interface BalanceInfo {
     /** The community's admins froze your known floor (an exception) / your whole line (the manager's Freeze). Absent from an older node. */
     knownFrozen?: boolean;
     creditFrozen?: boolean;
+    vouchedBy?: Array<{
+        memberPubkey: string;
+        callsign: string;
+        amount: number;
+        at: string;
+    }>;
 }
 
 export interface Transaction {

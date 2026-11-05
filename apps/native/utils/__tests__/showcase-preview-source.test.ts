@@ -114,8 +114,9 @@ describe('the preview sources', () => {
         expect(post.match(/\{beansPreview && <LocalCommunityMark variant="line" feature="beans" text=\{t\(LOCAL_COMMUNITY_LINES\.price\)\} \/>\}/g)).toHaveLength(2);
         // The terms box's words are one element to a screen reader, and the line is outside that group, so VoiceOver
         // reads it and reaches it as a button (review of #1852, finding 8); the note says "in a local community" only in
-        // preview (finding 7).
-        expect(post).toMatch(/<View style=\{\[shell\.pageBox, styles\.termsBox\]\} testID="no-beans-terms">\s*<View [^>]*accessible accessibilityLabel=\{t\('\{terms\}\. \{note\}', \{ terms: t\(NO_BEANS_TERMS\.value\), note: noBeansTermsNote\(beansPreview\) \}\)\}>(?:(?!<View)[\s\S])*?<\/View>\s*\{beansPreview && <LocalCommunityMark variant="line"/);
+        // preview (finding 7). Between the two, only the note's "More" (DP3: the note clamps to three lines), itself outside the
+        // group so it can be reached.
+        expect(post).toMatch(/<View style=\{\[shell\.pageBox, styles\.termsBox\]\} testID="no-beans-terms">\s*<View [^>]*accessible accessibilityLabel=\{t\('\{terms\}\. \{note\}', \{ terms: t\(NO_BEANS_TERMS\.value\), note: noBeansTermsNote\(beansPreview\) \}\)\}>(?:(?!<View)[\s\S])*?<\/View>\s*(?:\{\/\*[^*]*\*\/\}\s*\{termsNoteClamped && \(\s*<Pressable (?:(?!<View)[\s\S])*?testID="no-beans-terms-more">(?:(?!<View)[\s\S])*?<\/Pressable>\s*\)\}\s*)?\{beansPreview && <LocalCommunityMark variant="line"/);
         expect(post).not.toMatch(/\{NO_BEANS_TERMS\.note\}/);
         expect(post).toMatch(/escrowPreview && \(\s*<View style=\{styles\.otherPostActions\}>\s*<LocalCommunityMark variant="action" feature="escrow" label=\{t\(LOCAL_COMMUNITY_LINES\.dealAction\)/);
         // The line in the member's language since words S3b: the same line, through t().

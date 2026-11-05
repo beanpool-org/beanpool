@@ -194,9 +194,9 @@ export default function PostDetailModal() {
         closeBtn: { backgroundColor: colors.action.cta, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
         closeBtnText: { color: colors.text.inverse, fontWeight: 'bold' },
 
-        header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
+        header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
         // Grows for a longer word than Back (up to 120, then the word shrinks), so it is never cut at 320dp and 1.3x.
-        backButton: { flexDirection: 'row', minWidth: 68, maxWidth: 120, height: 40, alignItems: 'center' },
+        backButton: { flexDirection: 'row', minWidth: 68, maxWidth: 120, minHeight: 48, alignItems: 'center' },
         backText: { color: colors.text.body, fontSize: 24, marginTop: -2 },
         headerTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text.body, letterSpacing: 1, textTransform: 'uppercase' },
 
@@ -1772,7 +1772,7 @@ export default function PostDetailModal() {
                                 onPress={() => {
                                     setShowDealsSheet(true);
                                 }}
-                                style={{ alignItems: 'center', marginTop: 8, paddingVertical: 4 }}
+                                style={{ alignItems: 'center', justifyContent: 'center', marginTop: 8, minHeight: 48 }}
                             >
                                 <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '500' }}>
                                     {t('All your deals ›')}
@@ -1798,7 +1798,7 @@ export default function PostDetailModal() {
                             accessibilityRole="button"
                             accessibilityLabel={t('All your deals')}
                             onPress={() => setShowDealsSheet(true)}
-                            style={{ alignItems: 'center', marginTop: 4, paddingVertical: 4 }}
+                            style={{ alignItems: 'center', justifyContent: 'center', marginTop: 4, minHeight: 48 }}
                         >
                             <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '500' }}>
                                 {t('All your deals ›')}
@@ -2415,11 +2415,12 @@ export default function PostDetailModal() {
                             </View>
                         )}
 
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 12 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 16, marginTop: 12 }}>
                             <Pressable 
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Report Post')}
                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                                style={{ minHeight: 48, justifyContent: 'center' }}
                                 onPress={() => {
                                     const next = !showReportForm;
                                     setShowReportForm(next);
@@ -2439,7 +2440,7 @@ export default function PostDetailModal() {
                                 accessibilityState={{ busy: isBlocking }}
                                 hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
                                 disabled={isBlocking}
-                                style={{ flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingVertical: 4 }}
+                                style={{ flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingVertical: 4 }}
                                 onPress={() => {
                                     if (!post?.author_pubkey || isBlocking) return;
                                     const authorName = post.author_callsign;

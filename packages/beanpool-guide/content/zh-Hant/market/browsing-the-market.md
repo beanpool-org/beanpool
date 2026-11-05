@@ -4,7 +4,7 @@ title: 瀏覽市集
 summary: 透過搜尋、分類篩選和距離範圍尋找提供與需求。
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: 來自附近鄰居的提供與需求。按類別或距離搜尋篩選，或點擊「發布刊登」發布你自己的貼文。
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## 「市集」分頁

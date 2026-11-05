@@ -4,7 +4,7 @@ title: Перегляд ринку
 summary: Знаходьте Пропозиції та Потреби за допомогою пошуку, фільтрів і відстані.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Пропозиції та Потреби від людей поблизу. Шукайте, фільтруйте за категорією чи відстанню або торкніться ДОДАТИ ОГОЛОШЕННЯ.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## Вкладка «Ринок»

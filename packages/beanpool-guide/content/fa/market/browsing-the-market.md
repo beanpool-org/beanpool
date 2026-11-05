@@ -4,7 +4,7 @@ title: گشت‌وگذار در بازار
 summary: یافتن پیشنهادها و نیازها با جستجو، فیلترها و فاصله.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: پیشنهادها و نیازهای افراد نزدیک شما. جستجو کنید، بر اساس دسته‌بندی یا فاصله فیلتر کنید، یا برای ثبت پست روی + ثبت پست بزنید.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## برگه بازار

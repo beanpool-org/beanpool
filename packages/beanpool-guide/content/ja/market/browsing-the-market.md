@@ -4,7 +4,7 @@ title: マーケットの閲覧
 summary: 検索、フィルター、距離を利用して提供と求めを探します。
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: 近隣の人々からの提供や求めです。検索、カテゴリや距離での絞り込み、または「+ 投稿を作成」で自身も投稿できます。
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## マーケットタブ

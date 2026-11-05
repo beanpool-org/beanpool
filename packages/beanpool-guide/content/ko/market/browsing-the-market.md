@@ -4,7 +4,7 @@ title: 장터 둘러보기
 summary: 검색, 필터, 거리 설정을 통해 제공과 요청을 찾아보세요.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: 이웃들의 제공과 요청이에요. 검색하거나 카테고리·거리별로 필터링하고, ‘+ 글쓰기’를 눌러 직접 글을 올려보세요.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## 장터 탭

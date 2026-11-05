@@ -4,7 +4,7 @@ title: Im Markt stöbern
 summary: Angebote und Gesuche über Suche, Filter und Entfernung finden.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 help: Angebote und Gesuche aus deiner Nähe. Suchen, nach Kategorie oder Distanz filtern, oder mit + BEITRAG ERSTELLEN inserieren.
-source-hash: bead66070bddc246
+source-hash: 24606918c00ac034
 ---
 
 ## Der Tab „Markt“

@@ -74,6 +74,7 @@ import * as vouchersModule from './engine/vouchers.js';
 import { getDoor, setDoor, DEFAULT_DOOR } from './config/door.js';
 import { listKeptNotices } from './engine/kept-notices.js';
 import { setKnownFloorException } from './config/known-floor.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
 let BASE = '';
@@ -113,7 +114,7 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
         h['X-Timestamp'] = String(ts);
         h['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${BASE}${urlPath}`, { method, headers: h, body: method === 'GET' ? undefined : raw });
+    const res = await localFetch(`${BASE}${urlPath}`, { method, headers: h, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
     let parsed: any;
     try { parsed = JSON.parse(text); } catch { parsed = undefined; }

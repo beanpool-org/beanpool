@@ -229,6 +229,8 @@ export default function PostDetailModal() {
         termsLabel: { marginBottom: 8 },
         termsValue: { color: colors.text.heading, fontSize: MARKET_CARD_TYPE.page.termsValue.size, fontWeight: '800' },
         termsNote: { color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginTop: 4 },
+        termsMore: { minHeight: MARKET_CARD_TYPE.page.buttonHeight, justifyContent: 'center', alignSelf: 'flex-start', paddingRight: 12 },
+        termsMoreText: { fontSize: 14, fontWeight: '700', color: colors.text.link },
         priceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
         priceValue: { color: colors.text.heading, fontSize: MARKET_CARD_TYPE.page.pagePrice.size, fontWeight: '800' },
         priceUnit: { fontSize: 15, fontWeight: '500', color: colors.text.secondary, marginLeft: 2 },
@@ -568,8 +570,10 @@ export default function PostDetailModal() {
     // The style box (components/market-card-shell.ts): the card's chips, the page's boxes and buttons, as the event page draws them.
     const shell = useCardShell();
     // The photo frame is 4:3 of the column (the screen less the page's 16 a side); the carousel needs the number.
-    const { width: screenWidth } = useWindowDimensions();
+    const { width: screenWidth, fontScale } = useWindowDimensions();
     const photoHeight = Math.round((screenWidth - 32) * SHELL.photo.grid.aspectHeight / SHELL.photo.grid.aspectWidth);
+    // The note under IN RETURN, once the member has asked for the whole of it ("More").
+    const [termsNoteOpen, setTermsNoteOpen] = useState(false);
     // Where the take-up sits in the page, for the scroll that brings its confirmation into view.
     const takeUpTop = useRef(0);
     // Contribution-first gate: accepting an Offer requires having listed one.
@@ -1440,6 +1444,14 @@ export default function PostDetailModal() {
     // the convenor's box and Report at the foot. Message is not drawn where the deal's own box has it (a deal pending to them).
     const peerActions = !!identity && ((!isOwnPost && !isPulsePost) || post.status === 'pending' || post.status === 'completed' || !!activeTx);
     const peerMessage = peerActions && !!targetPeerPubkey && !((post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee));
+    // The take-up on the first screen (DESIGN-detail-pages-frame-fable.md §2): the note under IN RETURN runs to seven or eight
+    // lines at 320 dp and 1.3x (the worldwide community's, which says what a local community does), so it clamps to three with
+    // "More", the frame's first fallback (§1.7). Only where it would run to six lines or more: below that, three lines and a 48 dp
+    // More are no shorter than the note. The lines are estimated as the page's own tests lay text out, half the font size a
+    // character across the box's inner width.
+    const termsNote = noBeansTermsNote(beansPreview);
+    const termsNoteLines = Math.ceil(termsNote.length / Math.max(1, (screenWidth - 32 - 2 * (SHELL.textPadding + SHELL.borderWidth)) / (13 * (fontScale || 1) * 0.5)));
+    const termsNoteClamped = !termsNoteOpen && termsNoteLines >= 6;
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -1563,8 +1575,14 @@ export default function PostDetailModal() {
                         <View accessible accessibilityLabel={t('{terms}. {note}', { terms: t(NO_BEANS_TERMS.value), note: noBeansTermsNote(beansPreview) })}>
                             <Text style={[shell.boxLabel, styles.termsLabel]}>{t(NO_BEANS_TERMS.label)}</Text>
                             <Text style={styles.termsValue}>{t(NO_BEANS_TERMS.value)}</Text>
-                            <Text style={styles.termsNote} testID="no-beans-terms-note">{noBeansTermsNote(beansPreview)}</Text>
+                            <Text style={styles.termsNote} testID="no-beans-terms-note" numberOfLines={termsNoteClamped ? 3 : undefined}>{termsNote}</Text>
                         </View>
+                        {/* The rest of the note: the words above are read whole to a screen reader; this shows them whole. */}
+                        {termsNoteClamped && (
+                            <Pressable onPress={() => setTermsNoteOpen(true)} style={styles.termsMore} accessibilityRole="button" accessibilityState={{ expanded: false }} testID="no-beans-terms-more">
+                                <Text style={styles.termsMoreText}>{t('More', undefined, 'show the rest of a text')}</Text>
+                            </Pressable>
+                        )}
                         {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} />}
                     </View>
                 )}

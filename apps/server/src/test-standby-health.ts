@@ -494,7 +494,10 @@ async function main(): Promise<void> {
         // Version 19: a new table, decision_jury_pools (the pool a removal jury was drawn from, slice J1).
         // Version 20: decision_electors with answered_at and reminded_at (a removal juror's Serve and reminders, slice J2b).
         // Version 21: the vouching reset (R0): members and invite_codes without the four old vouch columns.
-        assert(snap?.tableHashes?.v === 21 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 22: vouchers (V1): members with credit_committee, invite_codes with vouch_amount, and three new tables,
+        // vouchers, voucher_allocations and room_gifts (engine/vouchers.ts), each hashed in the whole copy a standby checks.
+        assert(snap?.tableHashes?.v === 22 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers',
+            'vouchers', 'voucher_allocations', 'room_gifts'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

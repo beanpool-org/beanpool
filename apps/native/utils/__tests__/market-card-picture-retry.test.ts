@@ -26,10 +26,10 @@ vi.mock('react-native', () => {
 });
 const events = vi.hoisted(() => ({ start: null as null | (() => void), progress: null as null | (() => void) }));
 vi.mock('expo-image', () => ({
-    Image: ({ source, onError, onLoad, onLoadStart, onProgress }: { source?: { uri?: string }; onError?: () => void; onLoad?: () => void; onLoadStart?: () => void; onProgress?: () => void }) => {
+    Image: ({ source, onError, onLoad, onLoadStart, onProgress, transition }: { source?: { uri?: string }; onError?: () => void; onLoad?: () => void; onLoadStart?: () => void; onProgress?: () => void; transition?: unknown }) => {
         events.start = onLoadStart ?? null;
         events.progress = onProgress ?? null;
-        return createElement('img', { 'data-src': source?.uri, onError, onLoad });
+        return createElement('img', { 'data-src': source?.uri, 'data-transition': JSON.stringify(transition ?? null), onError, onLoad });
     },
 }));
 vi.mock('../../app/ThemeContext', async () => {
@@ -188,6 +188,40 @@ describe('MarketCardPicture: never an empty slot while the photo loads', () => {
         expect(img()?.getAttribute('data-src')).toBe(`${COVER}&size=thumb2`);
         expect(tile()).toBeNull();
         expect(healed.calls).toEqual([]);
+    });
+});
+
+// photo-white (Marty, 5 Nov 2026, 1.2.100 on a Pixel 9 Pro: "the images would appear for a moment and then go white"). Every
+// card photo loads twice: hidden at the tile's 80 x 80, then again once it has drawn and stretches to the card's height. A
+// card below the first screen gets both loads while Android has it detached (the FlatList's removeClippedSubviews), and
+// expo-image's cross-fade then leaves its two image views both cleared when the card scrolls in: measured on the emulator,
+// every card photo below the first screen was an empty white slot with a 150 ms fade, and none with no fade. So the photo
+// is never cross-faded; the tile gives way to it as soon as it has drawn.
+const fades = () => {
+    const t = JSON.parse(img()?.getAttribute('data-transition') ?? 'null');
+    return typeof t === 'number' ? t > 0 : !!(t && typeof t === 'object' && (t as { duration?: number }).duration! > 0);
+};
+
+describe('MarketCardPicture: the photo never cross-fades, so a card that scrolls in keeps its photo', () => {
+    it('has no fade while it loads, once it has drawn, and on every step down', async () => {
+        await show(COVER);
+        expect(img()).not.toBeNull();
+        expect(fades()).toBe(false);
+        await load();
+        expect(tile()).toBeNull();
+        expect(fades()).toBe(false);
+        await show(COVER_2);
+        await fail();
+        expect(img()?.getAttribute('data-src')).toBe(`${COVER_2}&size=thumb2&retry=1`);
+        expect(fades()).toBe(false);
+        await fail();
+        expect(img()?.getAttribute('data-src')).toBe(COVER_2);
+        expect(fades()).toBe(false);
+    });
+
+    it('a shop banner has no fade either', async () => {
+        await show(null, BANNER);
+        expect(fades()).toBe(false);
     });
 });
 

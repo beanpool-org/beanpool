@@ -15,10 +15,10 @@ import { createRoot, type Root } from 'react-dom/client';
 
 const progress = vi.hoisted(() => ({ last: null as null | (() => void), start: null as null | (() => void) }));
 vi.mock('expo-image', () => ({
-    Image: ({ source, onError, onLoad, onLoadStart, onProgress, accessibilityLabel, style }: { source?: { uri?: string }; onError?: () => void; onLoad?: () => void; onLoadStart?: () => void; onProgress?: () => void; accessibilityLabel?: string; style?: unknown }) => {
+    Image: ({ source, onError, onLoad, onLoadStart, onProgress, accessibilityLabel, style, transition }: { source?: { uri?: string }; onError?: () => void; onLoad?: () => void; onLoadStart?: () => void; onProgress?: () => void; accessibilityLabel?: string; style?: unknown; transition?: unknown }) => {
         progress.last = onProgress ?? null;
         progress.start = onLoadStart ?? null;
-        return createElement('img', { 'data-src': source?.uri, 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(style), onError, onLoad });
+        return createElement('img', { 'data-src': source?.uri, 'aria-label': accessibilityLabel, 'data-style': JSON.stringify(style), 'data-transition': JSON.stringify(transition ?? null), onError, onLoad });
     },
 }));
 
@@ -96,6 +96,30 @@ describe('ListPhoto', () => {
         expect(drawn()).not.toBeNull();
         await show(PHOTO_2);
         expect(img()?.getAttribute('data-src')).toBe(`${PHOTO_2}&size=thumb2`);
+    });
+});
+
+// photo-white (Marty, 5 Nov 2026, 1.2.100: "the images would appear for a moment and then go white"): a photo that loads
+// again while Android has its row detached, then scrolls in, is left with both of expo-image's views cleared when it
+// cross-fades (components/useListPhotoSteps.ts LIST_PHOTO_TRANSITION). A small card's photo never fades, whatever its caller
+// asks: the deals sheet asked for 150 ms.
+describe('ListPhoto: the photo never cross-fades', () => {
+    const fades = () => {
+        const t = JSON.parse(img()?.getAttribute('data-transition') ?? 'null');
+        return typeof t === 'number' ? t > 0 : !!(t && typeof t === 'object' && (t as { duration?: number }).duration! > 0);
+    };
+
+    it('has no fade while it loads or once it has drawn, even when its caller asks for one', async () => {
+        await act(async () => { root.render(createElement(ListPhoto as any, { photo: PHOTO, fallback, style: { width: 48 }, transition: 150 }) as any); });
+        expect(img()).not.toBeNull();
+        expect(fades()).toBe(false);
+        await load();
+        expect(drawn()).toBeNull();
+        expect(fades()).toBe(false);
+        await act(async () => { root.render(createElement(ListPhoto as any, { photo: PHOTO_2, fallback, style: { width: 48 }, transition: { duration: 150 } }) as any); });
+        await fail();
+        expect(img()?.getAttribute('data-src')).toBe(`${PHOTO_2}&size=thumb2&retry=1`);
+        expect(fades()).toBe(false);
     });
 });
 

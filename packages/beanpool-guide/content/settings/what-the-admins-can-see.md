@@ -46,7 +46,7 @@ That comes with being confirmed: there is nothing to agree to and nothing to wit
 
 - If you are in debit past either line, your account shows on the admins' phones with your balance and your credit line, so an admin who knows you can have a word. That list shows nothing else about you, and none of your trades.
 - Every time an admin opens that list, the other admins and the owner can see who opened it and when.
-- If nobody has confirmed you, or your community doesn't confirm members, that list never shows you.
+- If nobody has confirmed you, or your community doesn't confirm members, that list doesn't show you, with one exception: if you step back from being confirmed while owing more than your ordinary credit line, you stay on it until you are back within that line.
 
 Only an owner moves the two lines. A tighter line applies 14 days after the change, and "How this community works" says from when; a looser one applies at once.
 

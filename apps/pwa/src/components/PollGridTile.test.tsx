@@ -30,26 +30,40 @@ const poll: any = {
     pollOpenVote: false,
 };
 
-/** The answers' room as the page lays it out: `height` px tall, at 16 px text. */
+/** The answers' room as the page lays it out: `height` px tall, at 16 px text; or, where a test needs it, as what is shown leaves. */
 let room = 0;
+let roomNow: (() => number) | null = null;
 let observers: Array<() => void> = [];
 /**
  * Each answer's words as the page lays them out at 320 px: a row holds `fits` characters of them (about what a 320 px
  * window's tile holds at 12 px bold), so longer words are wider inside their box than it is, and cut with "…".
  */
 let fits = Infinity;
+/**
+ * Or a row of `rowChars` characters in all, laid out as the page does it: the percentage's column takes the wider of what it
+ * shows and the room it keeps (its data-room, "100% ✓"), and the words get the rest. Null: the `fits` model above.
+ */
+let rowChars: number | null = null;
 const wordsBox = (el: HTMLElement) => el.getAttribute('data-testid') === 'poll-grid-answer-words';
 beforeEach(() => {
     room = 0;
+    roomNow = null;
     fits = Infinity;
+    rowChars = null;
     observers = [];
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
         configurable: true,
-        get(this: HTMLElement) { return this.getAttribute('data-testid') === 'poll-grid-answers' ? room : 0; },
+        get(this: HTMLElement) { return this.getAttribute('data-testid') === 'poll-grid-answers' ? (roomNow ? roomNow() : room) : 0; },
     });
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
         configurable: true,
-        get(this: HTMLElement) { return wordsBox(this) ? Math.min(this.textContent!.length, fits) * 7 : 0; },
+        get(this: HTMLElement) {
+            if (!wordsBox(this)) return 0;
+            if (rowChars === null) return Math.min(this.textContent!.length, fits) * 7;
+            const pct = this.parentElement?.querySelector('[data-testid="poll-grid-pct"]');
+            const column = Math.max(pct?.textContent?.length ?? 0, pct?.getAttribute('data-room')?.length ?? 0);
+            return Math.min(this.textContent!.length, rowChars - column) * 7;
+        },
     });
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
         configurable: true,
@@ -367,12 +381,162 @@ describe('the grid\'s poll tile, voted in place', () => {
         }
     });
 
-    it('a vote the node refuses says so on the footer\'s line, and nothing is marked chosen', async () => {
+    it('a vote the node refuses says so, whole, under the answers; the footer keeps its words, and nothing is marked chosen', async () => {
         room = 200;
         votePoll.mockRejectedValue(new Error('Could not record your vote.'));
         drawAs(short);
         await act(async () => { fireEvent.click(answerButton(/^Vote: Saturday/)); });
-        expect(screen.getByRole('alert').textContent).toBe('Could not record your vote.');
+        const refusal = screen.getByRole('alert');
+        expect(refusal.textContent).toBe('Could not record your vote.');
+        expect(refusal.getAttribute('data-testid')).toBe('poll-grid-error');
+        // Its own block, after the answers and before the footer, on as many lines as it takes: never one cut line.
+        expect(refusal.previousElementSibling).toBe(screen.getByTestId('poll-grid-answers'));
+        expect(refusal.nextElementSibling).toBe(screen.getByTestId('poll-grid-foot'));
+        expect(refusal.className).toContain('whitespace-normal');
+        expect(refusal.className).not.toMatch(/truncate|whitespace-nowrap|line-clamp/);
+        expect(within(screen.getByTestId('poll-grid-foot')).queryByRole('alert')).toBeNull();
+        expect(screen.getByTestId('poll-grid-summary').textContent).toBe('5 votes · Anonymous');
+        expect(screen.getByTestId('poll-grid-action').textContent).toBe('Tap an answer to vote · Open poll ›');
         expect(screen.queryAllByTestId('poll-grid-chosen')).toHaveLength(0);
+    });
+
+    /** The longest refusal a node sends to a vote (apps/server/src/engine/posts.ts votePoll). */
+    const LONGEST = 'You have already answered this poll, and nothing links your answer to you, so it cannot be changed.';
+
+    it('a refusal on a tile short of room for it: the head, then the question give way, never the rows, the refusal or the footer', async () => {
+        // Two rows a press tall and their gap fit exactly; the refusal takes 40 px of them, and the head or the question,
+        // hidden, gives 26 px back each (what the page does at 320 px, in round numbers).
+        const two = { ...short, pollOptions: short.pollOptions.slice(0, 2) };
+        roomNow = () => 2 * 44 + 4
+            - (screen.queryByTestId('poll-grid-error') ? 40 : 0)
+            + (screen.queryByTestId('poll-grid-head') ? 0 : 26)
+            + (screen.queryByTestId('poll-grid-question') ? 0 : 26);
+        votePoll.mockRejectedValue(new Error(LONGEST));
+        drawAs(two);
+        expect(tile().getAttribute('data-votable')).toBe('true');
+        const row = answerButton(/^Vote: Saturday/);
+        row.focus();
+        await act(async () => { fireEvent.click(row); });
+        expect(screen.getByRole('alert').textContent).toBe(LONGEST);
+        // The head gave way, then the question; with them gone the rows are a press tall again, so the footer stays.
+        expect(screen.queryByTestId('poll-grid-head')).toBeNull();
+        expect(screen.queryByTestId('poll-grid-question')).toBeNull();
+        expect(screen.getByTestId('poll-grid-foot')).toBeInTheDocument();
+        expect(screen.getByTestId('poll-grid-summary').textContent).toBe('5 votes · Anonymous');
+        // The tile still votes, by the same rows, and the keyboard is still on the one pressed.
+        expect(tile().getAttribute('data-votable')).toBe('true');
+        expect(screen.getAllByTestId('poll-grid-answer').map(b => b.tagName)).toEqual(['BUTTON', 'BUTTON']);
+        expect(document.activeElement).toBe(row);
+        // The next press clears the refusal, and the head and the question come back.
+        votePoll.mockResolvedValue({ post: { ...two, userVotedOptionId: 's1' } } as any);
+        await act(async () => { fireEvent.click(row); });
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByTestId('poll-grid-head')).toBeInTheDocument();
+        expect(screen.getByTestId('poll-grid-question')).toBeInTheDocument();
+        expect(tile().getAttribute('data-votable')).toBe('true');
+    });
+
+    it('the keyboard stays on the row while its vote is sent, and after it; a second press meanwhile sends nothing', async () => {
+        room = 200;
+        let answer!: (v: unknown) => void;
+        votePoll.mockReturnValue(new Promise(r => { answer = r; }) as any);
+        drawAs(short);
+        const row = answerButton(/^Vote: Sunday/);
+        row.focus();
+        await act(async () => { fireEvent.click(row); });
+        // Sending: still a button the keyboard is on, said to be busy and unavailable, never `disabled` (which drops focus).
+        expect(document.activeElement).toBe(row);
+        expect(row.hasAttribute('disabled')).toBe(false);
+        expect(row.getAttribute('aria-disabled')).toBe('true');
+        expect(row.getAttribute('aria-busy')).toBe('true');
+        await act(async () => { fireEvent.click(answerButton(/^Vote: Saturday/)); fireEvent.click(row); });
+        expect(votePoll).toHaveBeenCalledTimes(1);
+        await act(async () => { answer({ post: { ...short, userVotedOptionId: 's2' } }); });
+        expect(document.activeElement).toBe(row);
+        expect(row.getAttribute('aria-pressed')).toBe('true');
+        expect(row.hasAttribute('aria-disabled')).toBe(false);
+    });
+});
+
+/**
+ * A vote never turns the tile off (#2926 review): every row keeps the room of the widest percentage and the ✓ ("100% ✓"),
+ * voted or not, so the same poll is voted in place, or opens, before a vote and after it. jsdom lays out no text, so a row
+ * here is 42 characters in all, the percentage's column the wider of what it shows and the room it keeps (rowChars above).
+ */
+describe('the grid\'s poll tile, before a vote and after it', () => {
+    const me: any = { publicKey: 'me-pk', privateKey: 'me-priv', callsign: 'Me' };
+    const votePoll = vi.mocked(api.votePoll);
+    const two = (a: string, b = 'No') => ({
+        ...poll, id: 'poll-edge', title: 'Where should we meet?', totalVotes: 4,
+        pollOptions: [{ id: 'e1', text: a, votes: 3, percentage: 75 }, { id: 'e2', text: b, votes: 1, percentage: 25 }],
+    });
+    /** The node's answer to a vote on e1: one more vote there, the ✓ on it. */
+    const voted = (p: any) => ({ ...p, totalVotes: 5, userVotedOptionId: 'e1', pollOptions: [{ ...p.pollOptions[0], votes: 4, percentage: 80 }, { ...p.pollOptions[1], percentage: 20 }] });
+    const tile = () => screen.getByTestId('poll-grid-tile');
+    beforeEach(() => {
+        votePoll.mockReset();
+        room = 200;
+        rowChars = 42;
+    });
+
+    it('every row keeps the room of "100% ✓", voted or not', async () => {
+        const p = two('Saturday');
+        votePoll.mockResolvedValue({ post: voted(p) } as any);
+        render(<PollGridTile post={p} onOpen={vi.fn()} identity={me} />);
+        const rooms = () => screen.getAllByTestId('poll-grid-pct').map(x => x.getAttribute('data-room'));
+        expect(rooms()).toEqual(['100% ✓', '100% ✓']);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /^Vote: Saturday/ })); });
+        expect(rooms()).toEqual(['100% ✓', '100% ✓']);
+    });
+
+    it.each([
+        ['36 characters, whole beside "100% ✓"', 'Saturday morning, by the market hall'],
+        ['35 characters (the review\'s)', 'Saturday morning at the market hall'],
+        ['34 characters', 'Sunday morning at the bowling club'],
+    ])('%s: voted in place before the vote and after it, the footer\'s words the same', async (_name, words) => {
+        const p = two(words);
+        votePoll.mockResolvedValue({ post: voted(p) } as any);
+        const onVoteSuccess = vi.fn();
+        render(<PollGridTile post={p} onOpen={vi.fn()} identity={me} onVoteSuccess={onVoteSuccess} />);
+        expect(tile().getAttribute('data-votable')).toBe('true');
+        const action = screen.getByTestId('poll-grid-action').textContent;
+        expect(action).toBe('Tap an answer to vote · Open poll ›');
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: new RegExp(`^Vote: ${words}`) })); });
+        expect(onVoteSuccess).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('poll-grid-chosen')).toBeInTheDocument();
+        expect(tile().getAttribute('data-votable')).toBe('true');
+        expect(tile().getAttribute('data-vote-block')).toBe('');
+        expect(screen.getByTestId('poll-grid-action').textContent).toBe(action);
+        // And when the Market's list comes back with it (its refresh after the vote).
+        cleanup();
+        render(<PollGridTile post={voted(p)} onOpen={vi.fn()} identity={me} />);
+        expect(tile().getAttribute('data-votable')).toBe('true');
+    });
+
+    it('a 38-character answer, wider than a row holds beside "100% ✓": it opens, before a vote on the page and after it', () => {
+        // Beside "75%" alone it would fit, and beside "80% ✓" it would not: the flip the review measured, now never voted in place.
+        const p = two('Saturday morning, beside the town hall');
+        expect(p.pollOptions[0].text).toHaveLength(38);
+        render(<PollGridTile post={p} onOpen={vi.fn()} identity={me} />);
+        expect(tile().getAttribute('data-vote-block')).toBe('cut');
+        cleanup();
+        render(<PollGridTile post={voted(p)} onOpen={vi.fn()} identity={me} />);
+        expect(tile().getAttribute('data-vote-block')).toBe('cut');
+    });
+
+    it('a 50-character answer is cut and opens, before a vote on the page and after it', () => {
+        const p = two('Saturday morning at the market hall, near the gate');
+        expect(p.pollOptions[0].text).toHaveLength(50);
+        const onOpen = vi.fn();
+        render(<PollGridTile post={p} onOpen={onOpen} identity={me} />);
+        expect(tile().getAttribute('data-vote-block')).toBe('cut');
+        expect(screen.getByTestId('poll-grid-action').textContent).toBe('Tap to vote ›');
+        cleanup();
+        render(<PollGridTile post={voted(p)} onOpen={onOpen} identity={me} />);
+        expect(tile().getAttribute('data-vote-block')).toBe('cut');
+        expect(screen.getByTestId('poll-grid-action').textContent).toBe('Tap to vote ›');
+        fireEvent.click(tile());
+        expect(onOpen).toHaveBeenCalledTimes(1);
+        expect(votePoll).not.toHaveBeenCalled();
     });
 });

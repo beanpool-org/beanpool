@@ -84,10 +84,20 @@ function useAnswersRoom() {
     useLayoutEffect(measure);
     useLayoutEffect(() => {
         const el = ref.current;
-        if (!el || typeof ResizeObserver === 'undefined') return;
-        const watch = new ResizeObserver(measure);
-        watch.observe(el);
-        return () => watch.disconnect();
+        if (!el) return;
+        const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+        watch?.observe(el);
+        // Again once the page's fonts have loaded: words measured in a fallback font were not the poll's (seen 6 Nov: a tile
+        // measured cut at its first draw was whole at the next, with nothing in the poll changed).
+        const fonts = typeof document === 'undefined' ? undefined : document.fonts;
+        let alive = true;
+        fonts?.ready?.then(() => { if (alive) measure(); }).catch(() => {});
+        fonts?.addEventListener?.('loadingdone', measure);
+        return () => {
+            alive = false;
+            watch?.disconnect();
+            fonts?.removeEventListener?.('loadingdone', measure);
+        };
     }, []);
     return { ref, room };
 }

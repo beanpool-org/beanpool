@@ -238,7 +238,7 @@ const POLL_YES = poll({
     pollOptions: [{ id: 'y1', text: 'Yes', votes: 3, percentage: 75 }, { id: 'y2', text: 'No', votes: 1, percentage: 25 }],
 });
 /**
- * On the edge of fitting (#2926 review): the reviewer's 34-, 35- and 36-character answers; 30 characters, which a 320 px tile
+ * On the edge of fitting (#2926 review): the reviewer's two-answer poll, 35 and 34 characters; 30 characters, which a 320 px tile
  * holds beside "100% ✓"; and 50, which no 320 px tile holds. Each, and the two refused below, as their node answers a vote.
  */
 const POLL_HALL = poll({
@@ -246,7 +246,6 @@ const POLL_HALL = poll({
     pollOptions: [
         { id: 'h1', text: 'Saturday morning at the market hall', votes: 3, percentage: 75 },
         { id: 'h2', text: 'Sunday morning at the bowling club', votes: 1, percentage: 25 },
-        { id: 'h3', text: 'Saturday morning at the market halls', votes: 0, percentage: 0 },
     ],
 });
 const POLL_WHOLE = poll({
@@ -304,8 +303,8 @@ const CASES = [
             [POLL_4.title]: false,
         }),
     },
-    // Voted, and refused (#2926 review). The 34-36 character answers vote in place at 1280; the 50-character one nowhere (cut at
-    // 1280 too, measured 6 Nov); at 320 px the 34-36 character ones do not fit beside
+    // Voted, and refused (#2926 review). The 34-35 character answers vote in place at 1280; the 50-character one nowhere (cut at
+    // 1280 too, measured 6 Nov); at 320 px the 34-35 character ones do not fit beside
     // "100% ✓" (209 px of words in 196 at 1x, measured 6 Nov), so that tile opens, before the vote and after it alike.
     {
         name: 'poll-vote-after', pins: [], widths: ['320', '320-x1.3', '1280-shim'], polls: 5,

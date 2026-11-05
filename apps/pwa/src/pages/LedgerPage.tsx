@@ -387,7 +387,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const usableFloor = balanceInfo?.usableFloor ?? floor; // v3: how deep you may go NOW (gated by live offers)
     const liveOffers = balanceInfo?.liveOffers ?? 0;       // v3: currently-live Offer count
     const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
-    const activated = balanceInfo?.activated;   // has a credit line at all (earned/vouched/granted)
+    const activated = balanceInfo?.activated;   // has a credit line at all (earned/granted/known)
     const earned = balanceInfo?.earnedCredit ?? 0;     // from the saturating value curve
     // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
     // its tierCredit, the credit that tier is read from (what they did, never the known grant), so the badge above and the
@@ -395,7 +395,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const level = memberLevel(balanceInfo);
     const totalCredit = level.credit;
     const ec = totalCredit;                            // "trust" shown to the user
-    const notEarned = Math.max(0, totalCredit - earned); // vouch + grants — fixed, not grown by trading
+    const notEarned = Math.max(0, totalCredit - earned); // grants — fixed, not grown by trading
     const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
     const avgRating = balanceInfo?.avgRating ?? 0;
     const reviewCount = balanceInfo?.reviewCount ?? 0;
@@ -411,7 +411,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const creditsToNext = nextTier ? Math.max(0, nextTier.min - totalCredit) : 0;
 
     // Value needed for the next tier: invert the curve for the earned credit it requires
-    // (vouch + grants are fixed), minus value already traded → rough "new partners" count.
+    // (grants are fixed), minus value already traded → rough "new partners" count.
     const targetEarned = nextTier ? Math.max(0, nextTier.min - notEarned) : 0;
     const valueToNext = nextTier ? Math.max(0, valueForEarned(targetEarned) - qualifiedValue) : 0;
     const partnersToNext = nextTier && Number.isFinite(valueToNext)
@@ -690,7 +690,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         </div>
 
                         <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{selCurrent && selLevel === 0 && floor < 0
-                            // Your own Newcomer level with your credit line already open (a vouch, or the admins' confirmation): not
+                            // Your own Newcomer level with your credit line already open (a grant, or the admins' confirmation): not
                             // the blurb's 'your first completed trade … opens your credit line' right above a floor below zero.
                             ? t("Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.")
                             : t(sel.blurb)}</p>

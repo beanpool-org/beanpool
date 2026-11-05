@@ -1166,8 +1166,8 @@ describe('2FA session token transmission in node client admin actions', () => {
         vi.stubGlobal('fetch', fetchMock);
     });
 
-    it('freezeNodeUser, updateNodeUserTier, updateNodeUserVoucher, updateNodeUserOperator, and generateNodeInvite send X-Admin-2FA-Session header when tfaToken is provided', async () => {
-        const { freezeNodeUser, updateNodeUserTier, updateNodeUserVoucher, updateNodeUserOperator, generateNodeInvite } = await import('./node-client');
+    it('freezeNodeUser, updateNodeUserTier, updateNodeUserOperator, and generateNodeInvite send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+        const { freezeNodeUser, updateNodeUserTier, updateNodeUserOperator, generateNodeInvite } = await import('./node-client');
 
         await freezeNodeUser('https://node.example.com', 'pub123', true, 'secret123', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
@@ -1175,11 +1175,6 @@ describe('2FA session token transmission in node client admin actions', () => {
         fetchMock.mockClear();
 
         await updateNodeUserTier('https://node.example.com', 'pub123', 'Resident', 'secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
-
-        fetchMock.mockClear();
-
-        await updateNodeUserVoucher('https://node.example.com', 'pub123', true, 'secret123', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
 
         fetchMock.mockClear();
@@ -1702,13 +1697,12 @@ describe('normalizeNodeData boundary normalization', () => {
         expect(normalized.reports?.[1].reporterPubkey).toBe('');
     });
 
-    it('normalizes member aliases (isVoucher, isOperator, can_operate, callsign)', () => {
+    it('normalizes member aliases (isOperator, can_operate, callsign)', () => {
         const raw = {
             members: [
                 {
                     pubkey: 'pk_alias_1',
                     callsign: 'Maverick',
-                    isVoucher: true,
                     can_operate: true,
                     standing: 'Steward',
                 },
@@ -1717,7 +1711,6 @@ describe('normalizeNodeData boundary normalization', () => {
                     displayName: 'Goose',
                     callsign: 'Bradley',
                     isOperator: true,
-                    canVouch: true,
                 },
             ],
         };
@@ -1725,13 +1718,11 @@ describe('normalizeNodeData boundary normalization', () => {
         const normalized = normalizeNodeData(raw);
         expect(normalized.members?.[0].name).toBe('Maverick');
         expect(normalized.members?.[0].callsign).toBe('Maverick');
-        expect(normalized.members?.[0].canVouch).toBe(true);
         expect(normalized.members?.[0].canOperate).toBe(true);
         expect(normalized.members?.[0].tier).toBe('Steward');
 
         expect(normalized.members?.[1].name).toBe('Goose');
         expect(normalized.members?.[1].callsign).toBe('Bradley');
-        expect(normalized.members?.[1].canVouch).toBe(true);
         expect(normalized.members?.[1].canOperate).toBe(true);
     });
 

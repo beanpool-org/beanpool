@@ -32,7 +32,7 @@ const PEER = 'peer-pubkey-123456789';
 const archetype = (primary: string, secondary: string) => JSON.stringify({ primary, secondary, mode: 'quick', updatedAt: '2026-10-01T00:00:00Z' });
 const peerProfile = (over: Record<string, unknown> = {}) => ({
     publicKey: PEER, callsign: 'Bob', avatar: 'https://example.org/bob.jpg', bio: 'Fixes bikes on Sundays', role: 'member',
-    joinedAt: '2026-03-14T00:00:00Z', elderVouchedBy: 'sponsor-pk', elderVouchedByCallsign: 'Carol', archetype: archetype('weaver', 'connector'),
+    joinedAt: '2026-03-14T00:00:00Z', archetype: archetype('weaver', 'connector'),
     ...over,
 });
 const myProfile = (over: Record<string, unknown> = {}) => ({
@@ -52,11 +52,10 @@ vi.mock('../lib/api', () => ({
         ],
     })),
     getMarketplacePosts: vi.fn(async () => [{ id: 'p1', type: 'offer', title: 'Sourdough loaves', status: 'active', credits: 12, photos: null }]),
-    getBalance: vi.fn(async () => ({ balance: 12.5, floor: -50, earnedCredit: 140, canVouch: true, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 3 } })),
+    getBalance: vi.fn(async () => ({ balance: 12.5, floor: -50, earnedCredit: 140, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 3 } })),
     getRatingsGiven: vi.fn(async () => ({ ratings: [{ id: 'r1', stars: 4, comment: '', target_callsign: 'Dan', transactionId: 'tx1', targetPubkey: 'dan-pk', createdAt: '2026-08-01T00:00:00Z' }] })),
     getFriends: vi.fn(async () => [{ publicKey: 'f1' }, { publicKey: 'f2' }]),
     submitRating: vi.fn(async () => ({})),
-    vouchMemberApi: vi.fn(async () => ({})),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
 }));
 
@@ -85,7 +84,7 @@ const openPeer = () => render(<PublicProfilePage identity={ME} pubkey={PEER} onB
 const openSelf = () => render(<PublicProfilePage identity={ME} pubkey={ME.publicKey} onBack={() => {}} onMessage={() => {}} onNavigatePost={() => {}} onEditProfile={() => {}} onNavigateTab={() => {}} />);
 
 describe('a member\'s profile in the pseudo-locale: every word on it came through t() (words W3)', () => {
-    it('another member, both quizzes taken: the header, the banner, the vouch, Collaboration Chemistry, the ratings and a listing', async () => {
+    it('another member, both quizzes taken: the header, the banner, Collaboration Chemistry, the ratings and a listing', async () => {
         await showIn('xx');
         openPeer();
         expect(await screen.findByText('Fixes bikes on Sundays', { exact: false })).toBeInTheDocument();
@@ -104,13 +103,19 @@ describe('a member\'s profile in the pseudo-locale: every word on it came throug
         expect(unwrapped(said)).toEqual([]);
     });
 
-    it('a member nobody has vouched for, to a viewer who may vouch: the three levels', async () => {
-        vi.mocked(api.getMemberProfile).mockImplementation(async (pk: string) => (pk === PEER ? peerProfile({ elderVouchedBy: null, elderVouchedByCallsign: null }) : myProfile()) as any);
-        await showIn('xx');
+    it('nothing on a profile says vouch (the reset, R0): another member\'s, and my own', async () => {
+        vi.mocked(api.getBalance).mockClear();
         openPeer();
-        expect(await screen.findByText(xx('🤝 Vouch — extend a credit line (no beans leave your wallet)'))).toBeInTheDocument();
-        for (const level of ['Light', 'Standard', 'Deep']) expect(screen.getByText(xx(level))).toBeInTheDocument();
-        expect(unwrapped()).toEqual([]);
+        expect(await screen.findByText('Collaboration tip:')).toBeInTheDocument();
+        expect(await screen.findByText('Sourdough loaves')).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/vouch/i);
+        // Another's profile asks no balance at all: mine only ever drove a vouch button there.
+        expect(api.getBalance).not.toHaveBeenCalled();
+        cleanup();
+        openSelf();
+        await waitFor(() => expect(api.getBalance).toHaveBeenCalledWith(ME.publicKey));
+        expect(await screen.findByText('Bakes on Fridays', { exact: false })).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/vouch/i);
     });
 
     it('the quiz cards: the viewer has not taken it; the member has not; neither has', async () => {
@@ -154,7 +159,6 @@ describe('a member\'s profile in the pseudo-locale: every word on it came throug
         expect(await screen.findByText('Collaboration tip:')).toBeInTheDocument();
         expect(bracketed()).toBe(0);
         expect(screen.getByText('📅 Joined March 2026')).toBeInTheDocument();
-        expect(screen.getByText('🤝 Vouched by Carol')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Collaborate with Bob' })).toBeInTheDocument();
     });
 });

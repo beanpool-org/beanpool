@@ -19,9 +19,8 @@ vi.mock('../lib/api', async () => {
     return {
         ...actual,
         myNodeRoleOnce: vi.fn(),
-        // The real Invite and share button asks the node for the role and the vouch standing itself.
+        // The real Invite and share button asks the node for the role itself.
         request: vi.fn(),
-        getBalance: vi.fn(),
     };
 });
 
@@ -61,7 +60,6 @@ describe('SharePostButtons — share-says table rows (web)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(api.request).mockResolvedValue({ role: null });
-        vi.mocked(api.getBalance).mockResolvedValue({ canVouch: false } as any);
     });
 
     it('Row 1: Sharing outside on — keeps both buttons, says members only and 7 days line', async () => {

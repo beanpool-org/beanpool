@@ -37,7 +37,6 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
                 callsign: 'Alice',
                 invitedBy: 'genesis',
                 earnedCredit: 1400,
-                canVouch: true,
                 standing: 'GOOD',
             },
             {
@@ -45,7 +44,6 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
                 callsign: 'Bob',
                 invitedBy: 'pk_alice_genesis_0000000000',
                 earnedCredit: 600,
-                canVouch: false,
                 standing: 'GOOD',
             },
             {
@@ -53,7 +51,6 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
                 callsign: 'Charlie',
                 invitedBy: 'pk_bob_level1_000000000000',
                 earnedCredit: 200,
-                canVouch: false,
                 standing: 'FROZEN',
             },
         ],
@@ -122,7 +119,8 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         expect(screen.getByText(/⛰️ Elder/i)).toBeInTheDocument();
         expect(screen.getByText(/🏛️ Steward/i)).toBeInTheDocument();
         expect(screen.getByText(/🏠 Resident/i)).toBeInTheDocument();
-        expect(screen.getByText('🤝 Voucher')).toBeInTheDocument();
+        // The reset (R0): no voucher mark and no voucher filter; vouchers come back from the names list (V5).
+        expect(screen.queryByText(/voucher/i)).toBeNull();
         expect(screen.getByText(/🚩 1/i)).toBeInTheDocument(); // Charlie report
 
         // Toggle Stats on Bob
@@ -148,9 +146,9 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         expect(totals).toHaveTextContent('Volume: 200 Beans');
         expect(totals).toHaveTextContent('Cancelled: 1');
 
-        // Test Filter: 🤝 Vouchers
-        const voucherFilterBtn = screen.getByRole('button', { name: /🤝 Vouchers/i });
-        await userEvent.click(voucherFilterBtn);
+        // Test Filter: ⏸️ Frozen (Charlie)
+        const frozenFilterBtn = screen.getByRole('button', { name: /⏸️ Frozen/i });
+        await userEvent.click(frozenFilterBtn);
         expect(screen.getByText(/Showing 1 of 3 members/i)).toBeInTheDocument();
 
         // Reset Filter: All
@@ -229,7 +227,6 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
                     callsign: null,
                     invitedBy: { nested: 'obj' },
                     earnedCredit: 'thousand',
-                    canVouch: 'sure',
                 },
                 null,
                 'invalid-member-entry',
@@ -435,9 +432,9 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
             />
         );
 
-        // Turn on a filter
-        const voucherFilterBtn = screen.getByRole('button', { name: /🤝 Vouchers/i });
-        await userEvent.click(voucherFilterBtn);
+        // Turn on a filter: Frozen matches Charlie, so Alice's branch shows as the way to him
+        const frozenFilterBtn = screen.getByRole('button', { name: /⏸️ Frozen/i });
+        await userEvent.click(frozenFilterBtn);
 
         // Find disclosure button for Alice (has children)
         const aliceBtn = screen.getByRole('button', { name: /Collapse Alice branch/i });

@@ -192,7 +192,6 @@ vi.mock('../lib/api', () => ({
     getRatingsGiven: vi.fn(async () => ({ ratings: [] })),
     getFriends: vi.fn(async () => []),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
-    vouchMemberApi: vi.fn(async () => ({ success: true })),
     groupKeysNet: { get: vi.fn(), post: vi.fn() },
 }));
 

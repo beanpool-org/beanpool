@@ -26,7 +26,7 @@ import { JuryPanel, JuryTurnoutBox } from './JuryPanel';
  */
 const EFFECT_WORDS: Readonly<Record<string, WordKey>> = {
     suspend_member: word('Suspend Member'), unsuspend_member: word('Unsuspend Member'), freeze_credit: word('Freeze Credit'),
-    unfreeze_credit: word('Unfreeze Credit'), grant_voucher: word('Grant Voucher'), revoke_voucher: word('Revoke Voucher'),
+    unfreeze_credit: word('Unfreeze Credit'),
     remove_lead_keeper: word('Remove Lead Keeper'), reinstate_member: word('Reinstate Member'), keep_suspension: word('Keep Suspension?'),
     remove_member: word('Remove Member'), grant_enterprise: word('Grant Enterprise'), grant_hardship: word('Grant Hardship'),
     write_off_deficit: word('Write Off Deficit'), forgive_debt: word('Forgive Debt'),

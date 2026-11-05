@@ -36,11 +36,10 @@ vi.mock('../lib/api', () => ({
     registerMember: vi.fn(async () => null),
     getMemberRatings: vi.fn(async () => ({ average: 0, count: 0, asProvider: { average: 0, count: 0 }, asReceiver: { average: 0, count: 0 }, ratings: [] })),
     getMarketplacePosts: vi.fn(async () => []),
-    getBalance: vi.fn(async () => ({ balance: 1, floor: -50, earnedCredit: 0, canVouch: false, tier: { name: 'Green Bean', emoji: '🌱' } })),
+    getBalance: vi.fn(async () => ({ balance: 1, floor: -50, earnedCredit: 0, tier: { name: 'Green Bean', emoji: '🌱' } })),
     getRatingsGiven: vi.fn(async () => ({ ratings: [] })),
     getFriends: vi.fn(async () => []),
     submitRating: vi.fn(async () => ({})),
-    vouchMemberApi: vi.fn(async () => ({})),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
 }));
 

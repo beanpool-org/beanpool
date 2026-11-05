@@ -156,40 +156,32 @@ describe('answering', () => {
     const ASK = { ...SAM, askerPubkey: 'k'.repeat(64), askerCallsign: 'Mel' };
     it('shows nothing to someone the node refuses, or with nothing waiting', async () => {
         const calls = stub(() => json(403, { error: 'no', code: 'admins_only' }));
-        const { container } = render(<InviteAsksToAnswer offersVouch={false} />);
+        const { container } = render(<InviteAsksToAnswer />);
         await waitFor(() => expect(calls.length).toBe(1));
         expect(container.textContent).toBe('');
     });
 
-    it('names who asked, fences the words, and sends an invite with None by default', async () => {
+    it('names who asked, fences the words, and sends an invite that carries nothing else', async () => {
         let asks = [ASK];
         const calls = stub((url, init) => {
             if (init?.method === 'POST') { asks = []; return json(200, { ok: true }); }
             return json(200, { asks, total: asks.length });
         });
-        render(<InviteAsksToAnswer offersVouch={false} />);
+        render(<InviteAsksToAnswer />);
         const row = await screen.findByTestId('invite-ask-a1');
         expect(within(row).getByText('Asked by Mel')).toBeTruthy();
         expect(within(row).getByTestId('invite-ask-fence').querySelector('b')).toBeNull();
-        expect(within(row).queryByText('Vouch for them')).toBeNull();
+        // The reset (R0): no choice on the answer, and no word of vouching.
+        expect(within(row).queryByRole('radio')).toBeNull();
+        expect(row.textContent).not.toMatch(/vouch/i);
         fireEvent.click(within(row).getByRole('button', { name: 'Send invite' }));
         expect((await screen.findByRole('status')).textContent).toBe('Sent. The code is with the member now.');
         expect(calls.find((c) => c.method === 'POST')).toEqual({ url: '/api/invite/asks/a1/send', method: 'POST', body: {} });
     });
 
-    it('offers the vouch to someone who can give one, and sends the level chosen', async () => {
-        const calls = stub((url, init) => (init?.method === 'POST' ? json(200, { ok: true }) : json(200, { asks: [ASK], total: 1 })));
-        render(<InviteAsksToAnswer offersVouch />);
-        const row = await screen.findByTestId('invite-ask-a1');
-        fireEvent.click(within(row).getByRole('radio', { name: '50 Beans' }));
-        fireEvent.click(within(row).getByRole('button', { name: 'Send invite' }));
-        await waitFor(() => expect(calls.some((c) => c.method === 'POST')).toBe(true));
-        expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ vouchLevel: 2 });
-    });
-
     it('No opens a short reason, and sends it', async () => {
         const calls = stub((url, init) => (init?.method === 'POST' ? json(200, { ok: true }) : json(200, { asks: [ASK], total: 1 })));
-        render(<InviteAsksToAnswer offersVouch={false} />);
+        render(<InviteAsksToAnswer />);
         const row = await screen.findByTestId('invite-ask-a1');
         fireEvent.click(within(row).getByTestId('invite-ask-no-a1'));
         const reason = within(row).getByTestId('invite-ask-reason-a1') as HTMLInputElement;
@@ -202,7 +194,7 @@ describe('answering', () => {
 
     it('says when another admin got there first', async () => {
         stub((url, init) => (init?.method === 'POST' ? json(404, { error: 'This ask is no longer waiting. It may have been answered or taken back.', code: 'not_found' }) : json(200, { asks: [ASK], total: 1 })));
-        render(<InviteAsksToAnswer offersVouch={false} />);
+        render(<InviteAsksToAnswer />);
         fireEvent.click(await screen.findByTestId('invite-ask-invite-a1'));
         expect((await screen.findByRole('alert')).textContent).toBe('This ask is no longer waiting. It may have been answered or taken back.');
     });

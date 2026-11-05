@@ -37,12 +37,11 @@ describe('what a tap asks the node for', () => {
     const made = (code: string) => (async () => ({ success: true, invite: { code } } as any));
     const refused = (status: number, code: string | undefined, message: string) => (async () => { throw Object.assign(new Error(message), { status, code }); });
 
-    it('an invite, with the vouch level only when one is chosen', async () => {
+    it('an invite, asked with the member\'s key and nothing else', async () => {
         const calls: unknown[][] = [];
         const make = (async (...a: unknown[]) => { calls.push(a); return { success: true, invite: { code: 'INV-AB12-CD34' } }; }) as any;
-        expect(await makeInviteForShare('pk', null, make)).toEqual({ ok: true, code: 'INV-AB12-CD34' });
-        expect(await makeInviteForShare('pk', 2, make)).toEqual({ ok: true, code: 'INV-AB12-CD34' });
-        expect(calls).toEqual([['pk', undefined, undefined], ['pk', undefined, 2]]);
+        expect(await makeInviteForShare('pk', make)).toEqual({ ok: true, code: 'INV-AB12-CD34' });
+        expect(calls).toEqual([['pk']]);
     });
 
     it('is the link a share carries: the community, the invite and the listing', () => {
@@ -53,19 +52,19 @@ describe('what a tap asks the node for', () => {
 
     it('never an offline ticket: with no answer it says so', async () => {
         const down = async () => { throw new TypeError('Failed to fetch'); };
-        const r = await makeInviteForShare('pk', null, down as any);
+        const r = await makeInviteForShare('pk', down as any);
         expect(r).toMatchObject({ ok: false, offline: true });
         expect((r as { message: string }).message).toContain('needs a connection');
     });
 
     it('a refusal says the node\'s words; a reply with no code is no invite', async () => {
-        expect(await makeInviteForShare('pk', null, refused(403, 'admins_only', 'Only admins invite here.') as any)).toEqual({ ok: false, offline: false, message: 'Only admins invite here.' });
-        expect(await makeInviteForShare('pk', null, refused(404, 'feature_off', 'This community takes no invites.') as any)).toEqual({ ok: false, offline: false, message: 'This community takes no invites.' });
-        expect(await makeInviteForShare('pk', null, refused(403, 'paused', 'Your account here is paused.') as any)).toEqual({ ok: false, offline: false, message: 'Your account here is paused.' });
-        expect(await makeInviteForShare('pk', 3, refused(400, undefined, 'A vouch on an invite is 25, 50 or 100 Beans, or none.') as any))
-            .toEqual({ ok: false, offline: false, message: 'A vouch on an invite is 25, 50 or 100 Beans, or none.' });
-        expect(await makeInviteForShare('pk', null, (async () => ({ success: true })) as any)).toEqual({ ok: false, offline: false, message: 'The invite was not made.' });
-        expect(await makeInviteForShare('pk', null, made('') as any)).toMatchObject({ ok: false });
+        expect(await makeInviteForShare('pk', refused(403, 'admins_only', 'Only admins invite here.') as any)).toEqual({ ok: false, offline: false, message: 'Only admins invite here.' });
+        expect(await makeInviteForShare('pk', refused(404, 'feature_off', 'This community takes no invites.') as any)).toEqual({ ok: false, offline: false, message: 'This community takes no invites.' });
+        expect(await makeInviteForShare('pk', refused(403, 'paused', 'Your account here is paused.') as any)).toEqual({ ok: false, offline: false, message: 'Your account here is paused.' });
+        // Any other refusal: the invite was not made, and nothing is shared.
+        expect(await makeInviteForShare('pk', refused(400, undefined, 'Something else.') as any)).toEqual({ ok: false, offline: false, message: 'The invite was not made.' });
+        expect(await makeInviteForShare('pk', (async () => ({ success: true })) as any)).toEqual({ ok: false, offline: false, message: 'The invite was not made.' });
+        expect(await makeInviteForShare('pk', made('') as any)).toMatchObject({ ok: false });
     });
 });
 

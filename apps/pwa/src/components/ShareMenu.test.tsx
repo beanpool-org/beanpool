@@ -22,7 +22,7 @@ vi.mock('../lib/features', async () => {
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
     return {
-        ...actual, myNodeRoleOnce: vi.fn(), request: vi.fn(), getBalance: vi.fn(),
+        ...actual, myNodeRoleOnce: vi.fn(), request: vi.fn(),
         getNodeApiUrl: () => 'https://mullum.beanpool.org',
     };
 });
@@ -52,7 +52,6 @@ const itemTexts = () => within(menu()).getAllByRole('menuitem').map(i => i.textC
 beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.request).mockResolvedValue({ role: null });
-    vi.mocked(api.getBalance).mockResolvedValue({ canVouch: false } as any);
     vi.mocked(api.myNodeRoleOnce).mockResolvedValue(null);
 });
 afterEach(() => { cleanup(); delete (navigator as any).share; });

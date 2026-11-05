@@ -8,7 +8,7 @@ import { type AppColors } from '../constants/colors';
 
 
 /** Which entries are things you press. Each has minHeight ≥ 48. */
-export const NAMES_TOUCH_TARGETS = ['backButton', 'primaryBtn', 'secondaryBtn', 'dangerBtn', 'smallBtn', 'pickRow', 'switchRow', 'input', 'search'] as const;
+export const NAMES_TOUCH_TARGETS = ['backButton', 'primaryBtn', 'secondaryBtn', 'dangerBtn', 'smallBtn', 'pickRow', 'switchRow', 'input', 'search', 'chip'] as const;
 
 /** Text entries and the background each sits on, for the contrast check. */
 export const NAMES_TEXT_ON = {
@@ -36,6 +36,10 @@ export const NAMES_TEXT_ON = {
     keyCardText: 'keyCard',
     codeText: 'keyCard',
     scannerText: 'scanner',
+    // Vouchers (slice V2): the Voucher tag on an entry, and the chips (the Vouchers filter, Make a voucher's amounts).
+    voucherTagText: 'voucherTag',
+    chipText: 'chip',
+    chipTextActive: 'chipActive',
 } as const;
 
 export function namesListStyleSpec(colors: AppColors) {

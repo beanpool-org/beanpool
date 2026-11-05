@@ -734,6 +734,29 @@ function tradingOf(pk: string): Map<string, TradingMark> {
     return new Map(rows.map((r) => [r.pk, r.outside > 0 ? 'others' : r.deals > 0 ? 'inside' : 'none']));
 }
 
+/**
+ * The card's Passed on line (amend2 §5 "Passed on: 50 of their 350 to 1 person · 0 of it below zero"; slice G1,
+ * engine/credit-gift.ts): of the room rooted at this voucher, what sits now with the members it was passed on to as a
+ * gift (each gift piece's open part: its amount less what was split from it again), how many members hold it, and how
+ * much of it is held by someone below zero now. "Of their 350" is the card's `vouched`: a gift only splits a vouch, so
+ * this is never more. A ring passing the same 100 round (A → B → C → A) reads "passed on 100 … held by 1 person" (§5);
+ * a piece whose holder left was stamped written off and counts in the written-off line, not here. No balance figure:
+ * "below zero" marks the room, never by how much.
+ */
+function passedOnOf(pk: string): { amount: number; people: number; belowZero: number } {
+    const pieces = (db.prepare(`SELECT g.to_pubkey AS holder,
+            g.amount - COALESCE((SELECT SUM(c.amount) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
+        FROM room_gifts g WHERE g.kind = 'gift' AND g.root_pubkey = ? AND g.written_off IS NULL`).all(pk) as { holder: string; open: number }[])
+        .filter((p) => p.open > 0);
+    const holders = new Set(pieces.map((p) => p.holder));
+    const below = new Set([...holders].filter((h) => belowZeroNow(h)));
+    return {
+        amount: pieces.reduce((s, p) => s + p.open, 0),
+        people: holders.size,
+        belowZero: pieces.filter((p) => below.has(p.holder)).reduce((s, p) => s + p.open, 0),
+    };
+}
+
 /** One voucher's numbers (the vouchers block's row, the card's head). No balance figure: "below zero" is a count. */
 export function voucherSummary(pk: string) {
     const row = voucherRow(pk);
@@ -741,14 +764,13 @@ export function voucherSummary(pk: string) {
     const people = db.prepare(`SELECT DISTINCT to_pubkey AS pk FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ?`).all(pk) as { pk: string }[];
     const below = people.filter((p) => belowZeroNow(p.pk)).length;
     const writtenOff = (db.prepare('SELECT COALESCE(SUM(written_off), 0) AS n FROM room_gifts WHERE root_pubkey = ?').get(pk) as { n: number }).n;
-    const passed = db.prepare(`SELECT COALESCE(SUM(amount), 0) AS n, COUNT(DISTINCT to_pubkey) AS c FROM room_gifts WHERE kind = 'gift' AND root_pubkey = ?`).get(pk) as { n: number; c: number };
     const sent = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ? AND vouch_amount IS NOT NULL').get(pk) as { n: number }).n;
     const marks = [...tradingOf(pk).values()];
     return {
         memberPubkey: pk, callsign: callsignOf(pk), source: row?.source ?? null, entryId: row?.entry_id ?? null,
         madeBy: row?.made_by ?? null, madeByCallsign: callsignOf(row?.made_by), madeAt: row?.made_at ?? null,
         stoppedAt: row?.stopped_at ?? null, stopReason: row?.stop_reason ?? null,
-        ...b, belowZero: below, writtenOff, passedOn: { amount: passed.n, people: passed.c }, invitesWithVouch: sent,
+        ...b, belowZero: below, writtenOff, passedOn: passedOnOf(pk), invitesWithVouch: sent,
         trading: { withOthers: marks.filter((m) => m === 'others').length, insideOnly: marks.filter((m) => m === 'inside').length },
     };
 }

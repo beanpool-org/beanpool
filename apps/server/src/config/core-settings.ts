@@ -2,7 +2,7 @@
  * Core settings: set once, when a community starts, then locked (scratch/fable-design/DESIGN-core-settings-fable.md §2,
  * §8.1-§8.3; slice C1, the server half; Marty accepted the design's five answers on 31 Oct 2026).
  *
- * Seven of the settings How this community works holds are the community's foundations: members joined under them, a
+ * Eight of the settings How this community works holds are the community's foundations (the eighth, members giving part of their credit line, came with slice G1): members joined under them, a
  * change to them is one-way, or they are money (design §1.2). An owner confirms them once ("Confirm and lock", POST
  * /api/local/admin/community-shape with `lock: true`), which writes one row, `core_settings_lock`. After that, a change to
  * any of them asks the owner's fresh proof every time (admin-auth.ts requireFreshProof: the phone's unlock within 90 s
@@ -30,7 +30,7 @@ import type { CommunityDoor } from './door.js';
 export const CORE_SETTINGS_LOCK_KEY = 'core_settings_lock';
 
 /** The Core settings, in the shape's names (config/community-shape.ts); every other setting there is everyday. */
-export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
+export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
 export type CoreSettingName = (typeof CORE_SETTINGS)[number];
 
 export const isCoreSettingName = (s: string): s is CoreSettingName => (CORE_SETTINGS as readonly string[]).includes(s);

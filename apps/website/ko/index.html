@@ -219,6 +219,21 @@
                             <p>앱을 설치하고 멤버에게 받은 링크를 열거나 QR 코드를 스캔하세요. 초대장은 한 번만 쓸 수 있고 30일 동안 유효해요.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">콩은 각자의 서버에서 운영되는 로컬 커뮤니티에 있어요. 글로벌 커뮤니티는 둘러보기를 제공하고 로컬 커뮤니티로 안내해 줘요. 예시 커뮤니티를 통해 그곳에서 콩이 어떻게 작동하는지 보여줘요.</p>
 
                     <div class="hero-logos-group">

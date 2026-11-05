@@ -1,4 +1,4 @@
-<!-- source-hash: 05e0cd4edec7d021 -->
+<!-- source-hash: e0be08c8fedd1523 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,6 +134,21 @@
                             <p>செயலியை நிறுவி, ஓர் உறுப்பினர் உங்களுக்கு அளித்த இணைப்பைத் திறக்கவும் அல்லது QR குறியீட்டை ஸ்கேன் செய்யவும்; ஓர் அழைப்பு ஒரு முறை மட்டுமே செயல்படும், 30 நாட்கள் செல்லுபடியாகும்.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">பயறுகள் உள்ளூர் சமூகங்களில் வாழ்கின்றன, ஒவ்வொன்றும் தனக்கான சொந்த சர்வரில் இயங்குகின்றன. உலகளாவிய சமூகம் உங்களை வழிநடத்தி ஒன்றிற்கு அழைத்துச் செல்லும். ஒரு மாதிரி சமூகம் மூலம் அங்கே பயறுகள் எவ்வாறு செயல்படுகின்றன என்பதை இது உங்களுக்குக் காட்டுகிறது.</p>
 
                     <div class="hero-logos-group">

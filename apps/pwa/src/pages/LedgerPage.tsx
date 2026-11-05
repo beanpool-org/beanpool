@@ -34,6 +34,7 @@ import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } fr
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
 import { t, tn, word, splitBold, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatDate, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type WordKey } from '@beanpool/core';
 import { useReadsOwn, resetReaderFeaturesOnce } from '../lib/features';
+import { getCreditGiftOffer, giveCreditLine, type CreditGiftOffer } from '../lib/credit-gift';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 
 export const LEDGER_MODE_WAIT_CAP_MS = 10_000;
@@ -172,6 +173,19 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const [sendAmount, setSendAmount] = useState('');
     const [sendMemo, setSendMemo] = useState('');
     const [sending, setSending] = useState(false);
+    // The Credit line tab beside Beans on Send (slice G1, lib/credit-gift.ts): the node's answer at each refresh, never a
+    // copy; null (or not offered) is no tab. `sendKind`: which tab the form is on; `giftNote`: the node's refusal or the
+    // given line, in the form.
+    const [giftOffer, setGiftOffer] = useState<CreditGiftOffer | null>(null);
+    const [sendKind, setSendKind] = useState<'beans' | 'credit'>('beans');
+    const [giftNote, setGiftNote] = useState<{ ok: boolean; words: string } | null>(null);
+    // After a gift the form closes on its own once "✓ Given!" has been read, as the phone's does (1.5 s): the tab may be
+    // gone by then, all of it given (round 2 of #2912).
+    useEffect(() => {
+        if (!giftNote?.ok) return;
+        const timer = setTimeout(() => { setShowSend(false); setGiftNote(null); }, 1500);
+        return () => clearTimeout(timer);
+    }, [giftNote]);
 
     // Search filter for recipient select dropdown
     const [memberSearch, setMemberSearch] = useState('');
@@ -242,7 +256,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         if (refreshPromiseRef.current) return refreshPromiseRef.current;
         const p = (async () => {
             try {
-                const [bal, txn, mem] = await Promise.all([
+                const [bal, txn, mem, gift] = await Promise.all([
                     getBalance(myKey).catch(() => null),
                     getTransactions(myKey).catch(() => []),
                     // null, not [], when the list couldn't be read (the node busy with heavy lists answers 503):
@@ -250,6 +264,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     // Read only once the node has said it reads whole (the effect below reads them when it says so).
                     // A 403 members_on_demand turns the switch on (getMembersWhole): the picker then searches.
                     membersOnDemandRef.current === false && refreshedOnceRef.current ? getMembersWhole().catch(() => null) : null,
+                    getCreditGiftOffer(),
                 ]);
                 // The balance is the point of this screen, so a balance that failed to load is a
                 // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
@@ -261,6 +276,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 }
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
+                setGiftOffer(gift);
                 setTxns(txn);
                 if (mem) setMembers(mem.filter(m => m.publicKey !== myKey));
                 setError(null);
@@ -382,6 +398,42 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
         }
     }
 
+    // The Credit line tab: the node checks every rule and answers a refusal in its own sentence, shown as it comes.
+    async function handleGift() {
+        if (!sendTo || !sendAmount) return;
+        if (!sendRead.ok && isAmbiguousAmount(sendRead.refusal)) {
+            setGiftNote({ ok: false, words: amountRefusalWords(sendRead.refusal) });
+            return;
+        }
+        const amount = sendRead.ok ? sendRead.value : NaN;
+        if (Number.isNaN(amount)) {
+            setGiftNote({ ok: false, words: t('Enter a valid amount') });
+            return;
+        }
+        setSending(true);
+        setGiftNote(null);
+        try {
+            await giveCreditLine(sendTo, amount);
+            setSendTo('');
+            setSendAmount('');
+            setGiftNote({ ok: true, words: t('✓ Given!') });
+            await refresh();
+        } catch (e: any) {
+            setGiftNote({ ok: false, words: e?.message || t('Transfer failed') });
+        } finally {
+            setSending(false);
+        }
+    }
+
+    /** Opens Send: on Beans when they can go, else on the Credit line tab; the node's offer read again as it opens. */
+    function openSend() {
+        setActiveTab('financials');
+        setSendKind(canSend ? 'beans' : 'credit');
+        setGiftNote(null);
+        setShowSend(true);
+        getCreditGiftOffer().then((o) => { if (isMountedRef.current) setGiftOffer(o); });
+    }
+
     const balance = balanceInfo?.balance ?? 0;
     const floor = balanceInfo?.floor ?? 0;              // earned credit LIMIT (how deep you could go)
     const usableFloor = balanceInfo?.usableFloor ?? floor; // v3: how deep you may go NOW (gated by live offers)
@@ -400,6 +452,13 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const avgRating = balanceInfo?.avgRating ?? 0;
     const reviewCount = balanceInfo?.reviewCount ?? 0;
     const canSend = balance > 0 && earned > 0;          // gate: positive balance AND at least 1 completed trade (earnedCredit > 0)
+    // The Credit line tab is there when the node offers it (0 in the owner's setting: never), and opens Send on its own
+    // when the node says part of the line can be given now.
+    const giftTab = !preview && giftOffer?.offered === true;
+    const giftOpen = giftTab && (giftOffer?.canGive ?? 0) > 0;
+    // The Wallet's Send: locked when neither can go, never while the form is open (round 2 of #2912: after giving all
+    // they could, a member with no Beans had a lock where Cancel was, and no way to close the form).
+    const sendLocked = !canSend && !giftOpen && !showSend;
     const ts = balanceInfo?.trustStats;
     const uniquePartners = ts?.uniquePartners ?? 0;
 
@@ -623,12 +682,12 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800" style={{ borderColor: tier.border }}>
                             {/* In preview Send is the marker's action, as on the Wallet tab: never a lock. */}
                             {preview ? <LocalCommunityAction feature="beans" label={t('Send Beans')} className="text-xs" {...ways} /> : <button
-                                onClick={() => { if (canSend) { setActiveTab('financials'); setShowSend(true); } }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 dark:text-nature-300 cursor-default'}`}
+                                onClick={() => { if (canSend || giftOpen) openSend(); }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend || giftOpen ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 dark:text-nature-300 cursor-default'}`}
                                 style={{ font: 'inherit' }}
                             >
-                                <span>{canSend ? '💸' : '🔒'}</span>
-                                <span>{canSend ? t('Send Beans') : earned <= 0 ? t('Send (needs 1st trade)') : t('Send (needs +ve balance)')}</span>
+                                <span>{canSend || giftOpen ? '💸' : '🔒'}</span>
+                                <span>{canSend ? t('Send Beans') : giftOpen ? t('Give part of your credit line') : earned <= 0 ? t('Send (needs 1st trade)') : t('Send (needs +ve balance)')}</span>
                             </button>}
                             {/* Not in preview: inviting is off on a node that previews Beans (global), and its Invites tab says so. */}
                             {!preview && <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
@@ -842,7 +901,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     </div>
                     ) : (
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
-                        {!canSend && (
+                        {/* Locked only when neither Beans nor part of the credit line can go (the Credit line tab, G1), and never
+                            while the form is open: a member who has just given all they could closes it with Cancel. */}
+                        {sendLocked && (
                             <div className="bg-nature-50 dark:bg-nature-900/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
                                     {earned <= 0
@@ -852,28 +913,49 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </div>
                         )}
                         <button
-                            onClick={() => canSend && setShowSend(!showSend)}
-                            disabled={!canSend}
+                            onClick={() => { if (showSend) { setShowSend(false); setGiftNote(null); } else if (!sendLocked) openSend(); }}
+                            disabled={sendLocked}
                             className={`w-full p-4 rounded-xl text-sm sm:text-[15px] break-words font-bold border-none cursor-pointer transition-all shadow-md ${
-                                !canSend ? 'bg-nature-100 dark:bg-nature-800 text-nature-500 cursor-not-allowed opacity-60' :
+                                sendLocked ? 'bg-nature-100 dark:bg-nature-800 text-nature-500 cursor-not-allowed opacity-60' :
                                 showSend ? 'bg-nature-800 text-white hover:bg-nature-900' : 'bg-bp-commit-fill text-bp-commit-on hover:bg-bp-commit-hover'
                             }`}
                         >
-                            {!canSend
+                            {sendLocked
                                 ? (earned <= 0 ? t('🔒 Send Beans (needs 1 completed trade)') : t('🔒 Send Beans (needs positive balance)'))
-                                : showSend ? t('✕ Cancel') : <><span>💸</span> <span>{t('Send Beans')}</span></>}
+                                : showSend ? t('✕ Cancel') : canSend ? <><span>💸</span> <span>{t('Send Beans')}</span></> : t('Give part of your credit line')}
                         </button>
 
                         {/* Send Form */}
                         {showSend && (
                             <div className="animate-in fade-in slide-in-from-top-2 bg-nature-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 mt-4 shadow-inner">
+                                {giftTab && (
+                                    <div role="tablist" data-testid="send-kind-tabs" className="flex gap-2 mb-3">
+                                        {([['beans', t('Beans')], ['credit', t('Credit line')]] as const).map(([kind, name]) => (
+                                            <button
+                                                key={kind}
+                                                type="button"
+                                                role="tab"
+                                                aria-selected={sendKind === kind}
+                                                data-testid={`send-kind-${kind}`}
+                                                onClick={() => { setSendKind(kind); setGiftNote(null); }}
+                                                className={`flex-1 min-w-0 min-h-[44px] px-2 py-2 rounded-xl border text-sm font-bold break-words cursor-pointer transition-all ${
+                                                    sendKind === kind
+                                                        ? 'bg-bp-commit-fill text-bp-commit-on border-transparent'
+                                                        : 'bg-white dark:bg-nature-950 text-nature-600 dark:text-nature-300 border-nature-200 dark:border-nature-800'
+                                                }`}
+                                            >
+                                                {name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="relative mb-3">
                                     <button
                                         onClick={() => setShowMemberPicker(!showMemberPicker)}
                                         className="w-full p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-[15px] font-medium text-left flex justify-between items-center shadow-sm cursor-pointer"
                                     >
                                         <span>{selectedMember?.callsign || t('Select recipient...')}</span>
-                                        <span className="text-nature-400 text-xs">▼</span>
+                                        <span className="text-nature-600 dark:text-nature-400 text-xs" aria-hidden="true">▼</span>
                                     </button>
 
                                     {showMemberPicker && (
@@ -903,6 +985,53 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                     )}
                                 </div>
 
+                                {sendKind === 'credit' ? (() => {
+                                    const canGive = giftOffer?.canGive ?? 0;
+                                    const off = sending || !sendTo || !sendAmount || canGive <= 0;
+                                    return (
+                                        <>
+                                            {/* What the node says can be given now, or the node's own sentence for why nothing can. */}
+                                            <p data-testid="credit-gift-words" className="text-sm text-nature-700 dark:text-nature-300 leading-relaxed mb-3 break-words">
+                                                {canGive > 0
+                                                    ? (selectedMember
+                                                        ? t('Give @{name} part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { name: selectedMember.callsign, max: formatNumber(canGive) })
+                                                        : t('Give part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { max: formatNumber(canGive) }))
+                                                    : (giftOffer?.why ?? '')}
+                                            </p>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                aria-label={t('Credit line to give')}
+                                                placeholder={t('Amount (B)')}
+                                                value={sendAmount}
+                                                onChange={(e) => setSendAmount(e.target.value)}
+                                                className="w-full p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-[#d97757] outline-none shadow-sm transition-all"
+                                            />
+                                            {giftNote && (
+                                                <p data-testid="credit-gift-note" role={giftNote.ok ? 'status' : 'alert'} className={`rounded-xl p-3 mb-4 text-sm font-bold text-center break-words border ${giftNote.ok
+                                                    ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                                                    : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300'}`}>
+                                                    {giftNote.words}
+                                                </p>
+                                            )}
+                                            <button
+                                                onClick={handleGift}
+                                                disabled={off}
+                                                className={`w-full p-3.5 rounded-xl text-[15px] font-bold border-none transition-all shadow-md ${off
+                                                    ? 'bg-nature-300 dark:bg-nature-800 text-nature-500 cursor-not-allowed'
+                                                    : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on cursor-pointer'}`}
+                                            >
+                                                {sending ? t('Giving…') : t('Give credit line')}
+                                            </button>
+                                        </>
+                                    );
+                                })() : !canSend ? (
+                                    <p data-testid="send-beans-locked" className="text-xs text-nature-500 dark:text-nature-400 font-medium text-center">
+                                        {earned <= 0
+                                            ? t('🔒 Direct sends unlock after your first completed trade on the Marketplace, and require a positive balance.')
+                                            : t('🔒 You can only send beans you currently hold — direct sends require a positive balance.')}
+                                    </p>
+                                ) : (<>
                                 {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's,
                                     and hands back "" for it; parseAmount reads what was typed (#2202). */}
                                 <input
@@ -946,6 +1075,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 >
                                     {sending ? t('Sending...') : t('Confirm Transfer')}
                                 </button>
+                                </>)}
                             </div>
                         )}
                     </div>

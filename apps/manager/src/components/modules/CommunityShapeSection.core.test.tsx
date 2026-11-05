@@ -86,7 +86,7 @@ beforeEach(() => {
 
 describe('Core settings — the lib holds the server list', () => {
     it('the page lists the settings the server calls Core', () => {
-        expect([...CORE_SETTINGS]).toEqual(['join', 'wordsDoor', 'beans', 'knownFloor', 'decisions', 'shareOutside', 'recoveryCopies']);
+        expect([...CORE_SETTINGS]).toEqual(['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies']);
     });
     it('the three one-way changes have their typed words, and nothing else has one', () => {
         expect(typedWordFor('beans', false)).toBe('off');
@@ -230,6 +230,23 @@ describe('Core settings — locked: Unlock to change', () => {
         expect(log).toHaveTextContent('🔓 Unlocked Beans');
         expect(log).toHaveTextContent('Beans: On → Off');
     });
+
+    it('the log names the members\' credit-line gift in words, as its row does, never its key (G1, round 2)', async () => {
+        const shape = locked();
+        const by = { kept: 'community_settings_log' as const, at: '2026-11-05T11:00:00.000Z', actor: 'o'.repeat(64), actorCallsign: 'ada', actorRole: 'owner', note: null };
+        shape.log = [
+            { ...by, id: '3', setting: 'memberGift', from: '100', to: '0' },
+            { ...by, id: '2', setting: 'core.unlock', from: null, to: 'memberGift' },
+            { ...by, id: '1', setting: 'advice.memberGift', from: null, to: null, actorRole: 'admin', note: 'Keep it on' },
+        ];
+        mockApi(shape);
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        const log = await screen.findByTestId('shape-audit-log');
+        expect(log).toHaveTextContent('Members giving part of their credit line: On · up to 100 Beans → Off');
+        expect(log).toHaveTextContent('🔓 Unlocked Members giving part of their credit line');
+        expect(log).toHaveTextContent('💬 Advised the owners about Members giving part of their credit line');
+        expect(log.textContent).not.toContain('memberGift');
+    });
 });
 
 describe('Core settings — not confirmed yet: offered, never forced', () => {
@@ -364,6 +381,18 @@ describe('Core settings — the walkthrough', () => {
         fireEvent.change(screen.getByLabelText(/Known floor \(Beans\)/), { target: { value: '4000' } });
         expect(screen.getByRole('alert')).toHaveTextContent("The known floor can't be more than the cap.");
         expect(screen.getByTestId('walk-next')).toBeDisabled();
+    });
+
+    it('the review shows the members\' credit-line gift as it stands, so Confirm and lock never locks it unseen (G1)', async () => {
+        const gift = (configured: number) => shapeWith({ settings: { memberGift: { value: configured, configured, source: 'owner', lock: null } } as never });
+        const { sent } = await walk(gift(40), 'review');
+        expect(screen.getByTestId('walk-review-memberGift')).toHaveTextContent('On · up to 40 Beans');
+        fireEvent.click(screen.getByTestId('walk-confirm'));
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(sent[0].body.changes).toEqual({});
+        cleanup();
+        await walk(gift(0), 'review');
+        expect(screen.getByTestId('walk-review-memberGift')).toHaveTextContent('Off');
     });
 
     it('a community with members opens at the review, with today\'s values, and confirms without a change', async () => {

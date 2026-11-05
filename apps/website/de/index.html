@@ -219,6 +219,21 @@
                             <p>Installiere die App und öffne den Link oder scanne den QR-Code, den dir ein Mitglied gegeben hat; eine Einladung funktioniert einmal und ist 30 Tage gültig.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">Bohnen leben in lokalen Gemeinschaften, jede auf ihrem eigenen Server. Die globale Gemeinschaft führt dich herum und leitet dich zu einer. Sie zeigt dir anhand einer Beispielgemeinschaft, wie Bohnen dort funktionieren.</p>
 
                     <div class="hero-logos-group">

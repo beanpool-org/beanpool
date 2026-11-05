@@ -50,7 +50,7 @@ function lockDate(iso: string | null | undefined): string | null {
 }
 
 /**
- * Core settings (was "How this community works"; DESIGN-core-settings-fable.md): the seven settings members joined under, one-way
+ * Core settings (was "How this community works"; DESIGN-core-settings-fable.md): the eight settings members joined under, one-way
  * changes and money. An owner walks through them once and locks them; after that every change is Unlock to change, with the
  * owner's fresh proof. The everyday rules that used to share this page sit where they are used (EverydayRuleRows).
  */
@@ -543,6 +543,38 @@ export function CommunityShapeSection({
                             )}
                         </div>
                     </ShapeRow>
+
+                    {/* memberGift (slice G1), beside the known floor, on a server that has it: 0 turns the tab off in both apps */}
+                    {settings.memberGift !== undefined && (
+                        <ShapeRow
+                            id="memberGift"
+                            icon="🎁"
+                            name={t('Members giving part of their credit line')}
+                            summary={t('A member may give another part of the credit line someone gave them, beside Beans on Send: up to this much at once.')}
+                            displayValue={settings.memberGift.value > 0
+                                ? t('On · up to {n} Beans').replace('{n}', settings.memberGift.value.toLocaleString('en'))
+                                : t('Off')}
+                            lock={settings.memberGift.lock}
+                            {...rowProps('memberGift', settings.memberGift.configured)}
+                        >
+                            <div className="space-y-3 pt-2">
+                                <label htmlFor="shape-member-gift" className="block text-xs font-bold text-nature-300 mb-1">
+                                    {t('Most one gift can be (Beans, 0 to 100; 0 is off)')}
+                                </label>
+                                <input
+                                    id="shape-member-gift"
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={1}
+                                    value={typeof draftValue === 'number' ? draftValue : ''}
+                                    onChange={(e) => setDraftValue(e.target.value === '' ? null : Number(e.target.value))}
+                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-terra-500"
+                                />
+                                {controls('memberGift', typeof draftValue !== 'number' || draftValue === settings.memberGift.configured)}
+                            </div>
+                        </ShapeRow>
+                    )}
 
                     {/* decisions */}
                     <ShapeRow

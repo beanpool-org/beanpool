@@ -81,6 +81,36 @@ export const LEGAL_PAGES = Object.freeze([
 
 export const ALL_PAGES = Object.freeze([...TRANSLATED_PAGES, ...LEGAL_PAGES]);
 
+/**
+ * Device detection snippet shared between global.html, index.html and 404.html (global-direct).
+ * Identifies iOS (including iPadOS reporting as Mac with touch) and Android.
+ */
+export const DEVICE_DETECTION_CODE = [
+    "var ua = navigator.userAgent || '';",
+    "var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);",
+    "var isAndroid = !isIOS && /android/i.test(ua);"
+].join('\n');
+
+/**
+ * Inline script for index.html and 404.html: on a computer, sends Door 1 straight to global.beanpool.org with the page's lang
+ * and hides the browser line under it. Phones keep relative /global.
+ */
+export const GLOBAL_DIRECT_SCRIPT = `                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || '';
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector('.hero-door a.btn-primary');
+                            var browserLine = document.querySelector('.hero-door .door-browser');
+                            var lang = (document.documentElement && document.documentElement.lang) || 'en';
+                            if (btn) btn.href = lang === 'en' ? 'https://global.beanpool.org' : 'https://global.beanpool.org/?lang=' + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>`;
+
 /** Accessible name words for the top menu language selector per language. */
 export const CHOOSE_LANGUAGE_WORDS = Object.freeze({
     en: 'Choose language',
@@ -780,6 +810,13 @@ export function checkWebsite() {
         if (current.includes('class="nav-menu"') && !current.includes('phone-lang-menu')) {
             errors.push(`apps/website/${page} missing phone language button in top menu`);
         }
+
+        // website-global-direct: index.html and 404.html carry the global-direct inline script
+        if (page === 'index.html' || page === '404.html') {
+            if (!/var\s+isIOS\s*=\s*\/iphone\|ipad\|ipod\/i\.test\(ua\)/.test(current)) {
+                errors.push(`apps/website/${page} missing global-direct inline script`);
+            }
+        }
     }
 
     // Verify translation sources are not inside published apps/website/
@@ -888,6 +925,13 @@ export function checkWebsite() {
                 }
                 if (!/\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*true\b/.test(actualHtml)) {
                     errors.push(`apps/website/${lang}/${page} missing IOS_OPEN_DOOR_LIVE = true in script`);
+                }
+            }
+
+            // website-global-direct: index.html and 404.html carry the global-direct inline script
+            if (page === 'index.html' || page === '404.html') {
+                if (!/var\s+isIOS\s*=\s*\/iphone\|ipad\|ipod\/i\.test\(ua\)/.test(actualHtml) || !actualHtml.includes('.door-browser')) {
+                    errors.push(`apps/website/${lang}/${page} missing global-direct inline script`);
                 }
             }
 

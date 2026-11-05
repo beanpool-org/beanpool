@@ -178,13 +178,15 @@ export type AskAnswerOutcome = { ok: true; asker: string } | { ok: false; reason
 
 /**
  * "Send invite": in one transaction the invite, the ask's delete and the notice that holds the code, so an invite nobody
- * can read is never made. A refusal of the invite (the admin's limit) throws, and nothing commits.
+ * can read is never made. A refusal of the invite (the admin's limit) throws, and nothing commits. `vouchAmount`: a vouch
+ * the invite carries, from the answering admin's own budget, as on any invite (engine/vouchers.ts; amend2 §4, the design
+ * §2's "answering an ask"); a refused vouch throws its VoucherError before anything is written, and nothing commits.
  */
-export function answerWithInvite(id: string, admin: string, now = Date.now()): AskAnswerOutcome {
+export function answerWithInvite(id: string, admin: string, now = Date.now(), vouchAmount?: unknown): AskAnswerOutcome {
     return db.transaction((): AskAnswerOutcome => {
         const row = liveAsk(id, now);
         if (!row) return { ok: false, reason: 'not_found' };
-        const invite = generateInvite(admin, undefined, () => assertMayMakeInvite(admin));
+        const invite = generateInvite(admin, undefined, () => assertMayMakeInvite(admin), undefined, vouchAmount);
         if (!invite) throw new Error('an ask could not be answered: the invite was not made');
         deletePlainRows('invite_asks', 'id = ?', id);
         const kept = keepNotice(row.asker_pubkey, INVITE_ASK_WORDS.noticeTitle, INVITE_ASK_WORDS.noticeBody,

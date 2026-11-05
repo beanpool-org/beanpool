@@ -103,7 +103,7 @@ function assertInvitesOn(): void {
  * Refused (VoucherError, before the limit and before any write) from a non-voucher, for any other amount or more than is
  * left, and where Beans are off. Never on an invite bound to a names-list entry (it gives the known floor instead).
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown): InviteCode | null {
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown): (InviteCode & { namesEntryId?: string; vouchAmount?: number }) | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);

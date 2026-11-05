@@ -52,7 +52,7 @@ import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js'
 import { HealthError, healthSummary, knownRule, openExceptions, readHealthAccessLog, setHealthSettings, stepBackFromConfirmed } from '../engine/community-health.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
-import { getMember, isVisitorKey, generateInvite } from '../state-engine.js';
+import { getMember, isVisitorKey, generateInvite, broadcast, dispatchPushNotification } from '../state-engine.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { getNodeProfile } from '../config/node-profile.js';
@@ -66,7 +66,7 @@ import type { RouteDeps } from './types.js';
 import { word } from '@beanpool/core';
 import {
     VoucherError, VOUCHER_WORDS, isOnCreditCommittee, vouchersBlock, makeVoucher, readVoucherCard, stopVoucher, setBudgetLevel,
-    setVoucherSettings, setCreditCommittee,
+    setVoucherSettings, setCreditCommittee, tellVoucherNotice, type TellVoucher,
 } from '../engine/vouchers.js';
 
 const STANDBY_NAMES = word('This server is a standby copy of the community, not its main server. The names list opens on the main server, which logs who reads it; this copy keeps it, sealed, for a take-over.');
@@ -244,11 +244,13 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
         if (!isOnCreditCommittee(actor)) throw new VoucherError(403, 'committee_only', VOUCHER_WORDS.committeeOnly);
         return vouchersBlock();
     }));
-    router.post('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor, body) => makeVoucher(actor, body), 201));
+    // Making a voucher, setting a budget and stopping one each tell the voucher (§10.2), once the change has committed.
+    const tell: TellVoucher = (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification });
+    router.post('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor, body) => makeVoucher(actor, body, tell), 201));
     router.post('/api/names/vouchers/settings', (ctx) => asAdmin(ctx, (actor, body) => setVoucherSettings(actor, body)));
     router.get('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => readVoucherCard(actor, ctx.params.member)));
-    router.delete('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => stopVoucher(actor, ctx.params.member)));
-    router.post('/api/names/vouchers/:member/budget', (ctx) => asAdmin(ctx, (actor, body) => setBudgetLevel(actor, ctx.params.member, body)));
+    router.delete('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => stopVoucher(actor, ctx.params.member, tell)));
+    router.post('/api/names/vouchers/:member/budget', (ctx) => asAdmin(ctx, (actor, body) => setBudgetLevel(actor, ctx.params.member, body, tell)));
     router.post('/api/names/committee', (ctx) => asAdmin(ctx, (actor, body) => setCreditCommittee(actor, body)));
 
     // The signer's own locked copy, and nobody else's: no parameter names an owner.

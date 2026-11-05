@@ -12,7 +12,9 @@
  * Any member (tiers gate nothing), signed; where only admins invite (the door, config/door.ts), only an owner or admin,
  * and anyone else is answered 403 `admins_only`:
  *   GET  /api/join/knocks?limit&offset          → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt }], total, limit, offset }
- *   POST /api/join/knocks/:id/approve           → { knock: { id, status: 'approved' }, invite: { code, expiresAt } }
+ *   POST /api/join/knocks/:id/approve           { vouchAmount?, namesEntry?, namesEntryId? }
+ *                                               → { knock: { id, status: 'approved' }, invite: { code, expiresAt, vouchAmount? } }
+ *                                               (a vouch from the answerer's own budget, engine/vouchers.ts: its refusals)
  *   POST /api/join/knocks/:id/decline           → { knock: { id, status: 'declined' } }   ("Not now")
  * The operator (the admin session or password, like the rest of Settings):
  *   GET  /api/local/admin/knocks                → { acceptKnocks, takingKnocks, open }
@@ -77,6 +79,7 @@ import {
 import { openJoinKeyInvalidated } from '../engine/open-join.js';
 import { mayInviteHere, ADMINS_ONLY, ADMINS_ONLY_ANSWER_MESSAGE } from '../config/door.js';
 import { NamesListError } from '../engine/names-list.js';
+import { VoucherError } from '../engine/vouchers.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
@@ -362,11 +365,15 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         const names = body.namesEntry !== undefined || body.namesEntryId !== undefined
             ? { entry: body.namesEntry as { id?: unknown; ciphertext?: unknown; keyId?: unknown } | undefined, entryId: body.namesEntryId }
             : undefined;
+        // `vouchAmount`: a vouch the invite carries, from the answering member's own budget (engine/vouchers.ts).
         let outcome: ReturnType<typeof approveKnock>;
         try {
-            outcome = approveKnock(String(ctx.params.id), member, Date.now(), names);
+            outcome = approveKnock(String(ctx.params.id), member, Date.now(), names, body.vouchAmount);
         } catch (e) {
             if (e instanceof NamesListError) return answer(ctx, e.status, e.message, e.code);
+            // A vouch refused, or Beans off for one: its status, code and sentence; the request to join is still waiting.
+            if (e instanceof VoucherError) return answer(ctx, e.status, e.message, e.code);
+            if (respondProfileRefusal(ctx, e)) return;
             throw e;
         }
         if (!outcome.ok) return refuseAnswer(ctx, outcome.reason);

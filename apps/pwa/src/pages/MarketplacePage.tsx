@@ -419,6 +419,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [deleting, setDeleting] = useState<string | null>(null);
     const [toggling, setToggling] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // A refusal from a control below the photo (Message, the convenor's Delete) shows beside that control, not on the
+    // action's line above the photo, which a phone-width page has scrolled away by then (DW3 review, #2924).
+    const [bodyError, setBodyError] = useState<{ at: 'message' | 'convenor'; words: string } | null>(null);
     // The node refused its listings: this reader is no member of this local community (MembersOnlyListings).
     const [membersOnly, setMembersOnly] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -637,7 +640,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // NOT folded into the capacity refresh, as suggested: that would refetch the allowance on every card a
     // member opens, and the allowance only moves when a commission or a settlement lands — both of which
     // already refresh it explicitly.
-    useEffect(() => { setCommissionResult(null); }, [selectedPost?.id]);
+    useEffect(() => { setCommissionResult(null); setBodyError(null); }, [selectedPost?.id]);
 
     const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
 
@@ -1351,7 +1354,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // the server-side relay can't resolve their node and the message would sit
                 // here undelivered while looking sent. Say so plainly until cross-community
                 // messaging is real.
-                setError(t("This post is hosted by another community. Messaging across communities isn't available yet."));
+                setBodyError({ at: 'message', words: t("This post is hosted by another community. Messaging across communities isn't available yet.") });
                 return;
             } else {
                 // Local post — existing flow
@@ -1365,7 +1368,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             }
         } catch (e: any) {
-            setError(nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')));
+            setBodyError({ at: 'message', words: nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')) });
         } finally {
             setMessaging(false);
         }
@@ -3350,6 +3353,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     {t("This post is from another community — messaging across communities isn't available yet.")}
                                 </p>
                             )}
+                            {bodyError?.at === 'message' && (
+                                <p data-testid="listing-message-error" role="alert" className="m-0 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 text-red-600 dark:text-red-300 text-sm text-center">{bodyError.words}</p>
+                            )}
                         </div>
 
                         {/* 10. The description and the tags: reading comes after the action (Marty's pick 1). */}
@@ -3435,7 +3441,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             setSelectedTxId(null);
                                             refresh();
                                         } catch (e: any) {
-                                            setError(e.message || t('Failed to delete post as convenor'));
+                                            setBodyError({ at: 'convenor', words: e.message || t('Failed to delete post as convenor') });
                                         } finally {
                                             setDeleting(null);
                                         }
@@ -3447,6 +3453,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 >
                                     {deleting === selectedPost.id ? t('Deleting...') : t('🗑️ Delete Group Post (Convenor)')}
                                 </button>
+                                {bodyError?.at === 'convenor' && (
+                                    <p data-testid="listing-convenor-error" role="alert" className="m-0 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 text-red-600 dark:text-red-300 text-sm text-center">{bodyError.words}</p>
+                                )}
                             </div>
                         )}
 

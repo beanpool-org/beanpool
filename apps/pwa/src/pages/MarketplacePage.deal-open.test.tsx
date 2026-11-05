@@ -93,6 +93,23 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); backToEnglish(); });
 
+describe('a refusal from a control under the photo shows beside it (DW3 review, #2924)', () => {
+    it('a refused Message: its words under the Message button, not on the action line above the photo', async () => {
+        stubNode([course]);
+        vi.spyOn(api, 'createConversationApi').mockRejectedValue(new Error('The node said not now'));
+        render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-course" onPostOpened={() => {}}
+            transactions={[]} onRefreshTransactions={vi.fn()} />);
+        await screen.findByRole('heading', { name: /Pottery course/ });
+        await settle();
+        const message = screen.getByTestId('listing-message');
+        fireEvent.click(message);
+        const shown = await screen.findByTestId('listing-message-error');
+        expect(shown).toHaveTextContent('The node said not now');
+        expect(message.compareDocumentPosition(shown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByTestId('listing-action')).not.toHaveTextContent('The node said not now');
+    });
+});
+
 describe('a deal already under way on the listing (deal_open)', () => {
     it('a recurring Offer taken up again: the words, the deals refreshed, and the listing at the deal in place of Accept', async () => {
         stubNode([course]);

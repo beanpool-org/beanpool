@@ -4,6 +4,7 @@ import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { bumpMembersVersion } from './versions.js';
 import { KEY_HELD_FOR_REKEY, NODE_HAS_OWNER_SQL } from './owner-sql.js';
+import { vouchingAfterRoleChange } from './vouchers.js';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 export type NodeRole = MemberNodeRole;
@@ -316,6 +317,8 @@ export function dropNodeRoleRow(pubkey: string, by: RoleChangeBy): NodeRole | nu
     const actorRole = actorRoleOf(by.actor);
     const row = db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pubkey) as { role: NodeRole } | undefined;
     if (!row || db.prepare('DELETE FROM node_roles WHERE member_pubkey = ?').run(pubkey).changes === 0) return null;
+    // A budget the role gave ends with it, and the credit committee's place (engine/vouchers.ts; never throws).
+    vouchingAfterRoleChange(pubkey, by.actor);
     const role = row.role;
     // Their own act (an account deleted) names no actor role: the role they held is the one they lost.
     const whoActed = by.actor === pubkey ? '' : ` ${HOW[actorRole]}`;
@@ -326,6 +329,8 @@ export function dropNodeRoleRow(pubkey: string, by: RoleChangeBy): NodeRole | nu
 
 /** A role a suspension held aside, given back (decisions-engine restoreSuspendedNodeRole): told as a grant is. */
 export function noteNodeRoleBack(pubkey: string, role: NodeRole, by: RoleChangeBy): void {
+    // An owner or admin given their role back vouches by it again, as one granted it (engine/vouchers.ts; never throws).
+    vouchingAfterRoleChange(pubkey, by.actor);
     const actorRole = actorRoleOf(by.actor);
     noteRoleAlert(`Someone was made ${withArticle(role)} again, ${by.how} ${HOW[actorRole]}.`, () => heldNodeRoleOf(pubkey) === role,
         { actor: by.actor, actorRole, high: role === 'owner' });
@@ -459,6 +464,9 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
              VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?, ?, ?)`
         ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass, madeAt, madeBy);
         if (currentRole !== role) noteRoleChanged(targetPubkey);
+        // An owner or admin vouches by the role, with a budget from the day it is granted (actor: who granted it); one made
+        // a moderator loses a budget the role gave, and the credit committee's place (engine/vouchers.ts; never throws).
+        vouchingAfterRoleChange(targetPubkey, actorPubkey);
     })();
     bumpMembersVersion();
     noteTakeoverInputsChanged(`${role} role granted`);
@@ -524,6 +532,8 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
         if (db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role).changes > 0) {
             noteRoleChanged(targetPubkey);
             removed = true;
+            // A budget the role gave ends with it, and the credit committee's place (engine/vouchers.ts; never throws).
+            vouchingAfterRoleChange(targetPubkey, actorPubkey);
         }
     })();
     bumpMembersVersion();

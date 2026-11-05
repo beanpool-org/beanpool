@@ -36,6 +36,7 @@ import {
     isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
+import { VoucherError, vouchFromProfile, myVouching } from '../engine/vouchers.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { pushKeyHex } from '../engine/push-notices.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
@@ -1185,7 +1186,9 @@ router.post('/api/community/register', async (ctx) => {
 // ===================== INVITE API (PUBLIC) =====================
 
 router.post('/api/invite/generate', async (ctx) => {
-    const { publicKey, intendedFor } = (ctx as any).requestBody || {};
+    // `vouchAmount`: a vouch the invite carries, a voucher's preset from their budget (engine/vouchers.ts); refused with
+    // its sentence from anyone else, for any other amount, or for more than is left, before anything is written.
+    const { publicKey, intendedFor, vouchAmount } = (ctx as any).requestBody || {};
     if (!publicKey) {
         ctx.status = 400;
         ctx.body = { error: 'publicKey is required' };
@@ -1196,7 +1199,10 @@ router.post('/api/invite/generate', async (ctx) => {
     // comes first), before anything is written. Where only admins
     // invite (config/door.ts), a member who is no owner or admin is answered 403 `admins_only` before the limit.
     let invite: ReturnType<typeof generateInvite>;
-    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
+    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey), undefined, vouchAmount); } catch (e) {
+        if (respondVoucherRefusal(ctx, e) || respondProfileRefusal(ctx, e)) return;
+        throw e;
+    }
     if (!invite) {
         ctx.status = 403;
         // A member whose account is paused brings nobody in while it lasts (removal by vote S1), and is told so.
@@ -1206,6 +1212,46 @@ router.post('/api/invite/generate', async (ctx) => {
         return;
     }
     ctx.body = { success: true, invite };
+});
+
+/** A voucher's refusal (engine/vouchers.ts), in its own status, code and sentence. */
+function respondVoucherRefusal(ctx: any, e: unknown): boolean {
+    if (!(e instanceof VoucherError)) return false;
+    ctx.status = e.status;
+    ctx.body = { error: e.message, code: e.code };
+    return true;
+}
+
+// A vouch from a member's profile (engine/vouchers.ts vouchFromProfile; DESIGN-invites-and-names-list-amend2-fable.md §4 Q1,
+// Marty's §9): `{ memberPubkey, vouchAmount, raise? }`, from the signer's own budget, landing at once. The signer is the
+// voucher; the body names only the person vouched for. Every rule is checked in the vouch's own transaction.
+router.post('/api/vouch', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'no-store');
+    try {
+        ctx.body = vouchFromProfile(actor, (ctx as any).requestBody || {});
+    } catch (e) {
+        if (respondVoucherRefusal(ctx, e) || respondProfileRefusal(ctx, e)) return;
+        throw e;
+    }
+});
+
+// The signer's own vouching (any member): whether they are a voucher now, what is left and held, their budget's history,
+// the presets, and who vouched for them. Whether the vouch control shows comes from here each time, never a phone's copy.
+router.get('/api/vouchers/me', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = myVouching(actor);
 });
 
 /**
@@ -1321,8 +1367,9 @@ router.post('/api/invite/redeem', async (ctx) => {
         return;
     }
     // For a publicKey that is already a member this answers before the code is checked as used. The public card only:
-    // the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
-    ctx.body = { success: true, member: redeemedCard(ctx, result, joiner), alreadyMember: result.alreadyMember };
+    // the whole row carried that member's contact details whatever they chose. The apps read avatarUrl. `vouch`: the
+    // credit line the invite's vouch gave them (`landed`), or the sentence saying it ended before they joined (`ended`).
+    ctx.body = { success: true, member: redeemedCard(ctx, result, joiner), alreadyMember: result.alreadyMember, ...(result.vouch ? { vouch: result.vouch } : {}) };
 });
 
 router.post('/api/invite/redeem-offline', async (ctx) => {
@@ -1689,6 +1736,8 @@ router.get('/api/ledger/balance/:publicKey', async (ctx) => {
         isBlockedFromTrading: offerFirst && !listedOffer,
         // Gate 2 (offer covenant): must keep a LIVE Offer to spend into a negative balance.
         hasLiveOffer: hasLiveOffer(publicKey),
+        // Who vouched for them and how much (engine/vouchers.ts; amend2 §6 `vouchedBy`): their own Ledger only, never a profile.
+        vouchedBy: myVouching(publicKey).vouchedBy,
     };
 });
 

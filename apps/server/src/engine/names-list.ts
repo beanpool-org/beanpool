@@ -72,6 +72,7 @@ import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.js';
 import { recordDepartedDebt, openDebtOfEntry, debtRecord, startWorkOff, workOffGoesLive, endWorkOff } from './names-debts.js';
+import { vouchingAfterRevoke } from './vouchers.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -594,6 +595,8 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
         log(actor, 'revoke', row.entry_id, row.member_pubkey);
         // A work-off confirmation revoked: the repayment flag and the 0 floor end with it (engine/names-debts.ts).
         endWorkOff(actor, row.member_pubkey, row.id);
+        // A budget made from the list ends with the confirmation; room already given stays (engine/vouchers.ts).
+        vouchingAfterRevoke(row.member_pubkey, actor);
     })();
     return { id: row.id, status: 'revoked' };
 }
@@ -615,6 +618,7 @@ export function stepBack(member: string, owesPastOrdinaryLine: () => boolean): {
             .run(member, row.id);
         log(member, 'revoke', row.entry_id, member);
         endWorkOff(member, member, row.id);
+        vouchingAfterRevoke(member, member);
         owing = owesPastOrdinaryLine();
         if (owing) db.prepare('UPDATE confirmations SET stepped_back_owing = 1 WHERE id = ?').run(row.id);
     })();

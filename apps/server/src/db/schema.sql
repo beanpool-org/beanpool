@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS members (
     -- drive a treasury (post its offers/needs, approve/release its escrow) from the Commons tab.
     -- Named 'operate' to dodge the 'Steward' tier and 'node role' (topology) name collisions.
     can_operate INTEGER DEFAULT 0,
+    -- On the credit committee (DESIGN-invites-and-names-list-fable.md §5.4; engine/vouchers.ts): an admin an owner put on it
+    -- makes and stops vouchers and sets their budgets, as every owner does. Cleared when they stop being an admin. Also
+    -- added by db.ts's ALTER before this file runs, for the touch trigger's list below.
+    credit_committee INTEGER DEFAULT 0,
     -- #127: declared HERE as well as by the guarded ALTER in db.ts, because the ALTER now runs BEFORE
     -- db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
     -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
@@ -175,6 +179,10 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- (the joiner is a member either way). Declared here for the same reason as genesis_type.
     names_entry_id TEXT,
     names_bind_outcome TEXT,
+    -- The vouch the invite carries (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §4): one of core's
+    -- VOUCH_PRESETS, held from its maker's budget when the code was made and landing on the joiner at the redeem. NULL for
+    -- every other invite; an offline ticket never carries one. Declared here for the same reason as genesis_type.
+    vouch_amount INTEGER,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -1462,7 +1470,7 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_ref, avatar_bytes, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    archetype, credit_frozen, is_treasury, can_operate, joined_at, public_key,
+    archetype, credit_frozen, is_treasury, can_operate, credit_committee, joined_at, public_key,
     legacy_credit_floor, earned_surplus, working_capital_ceiling,
     purpose, goal_amount, deadline_at, lifecycle, paused,
     paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,
@@ -1997,6 +2005,61 @@ CREATE TABLE IF NOT EXISTS known_floor_log (
     at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+-- Vouchers (DESIGN-invites-and-names-list-amend2-fable.md §2, §3; engine/vouchers.ts): who vouches now, since when and by
+-- whose hand. A member is one by role (an owner or admin, `source` 'role') or because an owner or credit-committee admin
+-- made them one from their confirmed names-list entry ('entry', `entry_id`). One row per member: made one again after a
+-- stop, the row is written again. No total here: a budget is a sum over voucher_allocations.
+CREATE TABLE IF NOT EXISTS vouchers (
+    member_pubkey  TEXT PRIMARY KEY,
+    source         TEXT NOT NULL CHECK (source IN ('role', 'entry')),
+    entry_id       TEXT,
+    made_by        TEXT NOT NULL,
+    made_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    stopped_at     DATETIME,
+    stopped_by     TEXT,
+    stop_reason    TEXT CHECK (stop_reason IS NULL OR stop_reason IN ('role_lost', 'stopped', 'revoked', 'departed')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- The allocation ledger (amend2 §3): every line of a voucher's budget, append-only. `amount` is signed by its kind: grant,
+-- top_up and return add; lower, hold and stop take away. What is left is the sum. `ref`: the invite code a hold or its
+-- return is for, or the room_gifts id of a vouch from a profile. Nothing here is a Bean.
+CREATE TABLE IF NOT EXISTS voucher_allocations (
+    id             TEXT PRIMARY KEY,
+    member_pubkey  TEXT NOT NULL,
+    kind           TEXT NOT NULL CHECK (kind IN ('grant', 'top_up', 'lower', 'hold', 'return', 'stop')),
+    amount         INTEGER NOT NULL CHECK ((kind IN ('grant', 'top_up', 'return') AND amount > 0) OR (kind IN ('lower', 'hold', 'stop') AND amount < 0)),
+    actor          TEXT NOT NULL,
+    ref            TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_voucher_allocations_member ON voucher_allocations(member_pubkey, at);
+CREATE INDEX IF NOT EXISTS idx_voucher_allocations_ref ON voucher_allocations(ref) WHERE ref IS NOT NULL;
+
+-- Room: credit line one member gave another (amend2 §3, §6), a credit-limit input (engine trust.ts roomHeldOf), never a
+-- Bean. A voucher's vouch (`kind` 'vouch', out of their budget: at an invite's redeem, `invite_code`, or from a profile) or
+-- a member's gift of part of their own (kind 'gift', slice G1, `source_gift_id` the piece it was split from). `root_pubkey`
+-- is the voucher every piece traces to, copied at each split. `written_off`: what of it a departed holder's debt used,
+-- stamped when they left (the Commons' row stays the record of truth).
+CREATE TABLE IF NOT EXISTS room_gifts (
+    id              TEXT PRIMARY KEY,
+    from_pubkey     TEXT NOT NULL,
+    to_pubkey       TEXT NOT NULL,
+    root_pubkey     TEXT NOT NULL,
+    kind            TEXT NOT NULL CHECK (kind IN ('vouch', 'gift')),
+    amount          INTEGER NOT NULL CHECK (amount > 0),
+    source_gift_id  TEXT,
+    invite_code     TEXT,
+    at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    written_off     REAL,
+    written_off_at  DATETIME,
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_room_gifts_to ON room_gifts(to_pubkey, kind);
+CREATE INDEX IF NOT EXISTS idx_room_gifts_from ON room_gifts(from_pubkey, kind);
+CREATE INDEX IF NOT EXISTS idx_room_gifts_root ON room_gifts(root_pubkey);
 
 -- Every change to how this community works (config/community-shape.ts; DESIGN-community-shape-settings-fable.md §2.5): one
 -- row per setting changed, newest the highest id, which the owners' page reads as the shape's `version`. Every owner and

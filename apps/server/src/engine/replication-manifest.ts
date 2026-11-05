@@ -172,7 +172,7 @@ export const TABLES: Record<string, TableEntry> = {
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
         columns: cols(`public_key callsign joined_at invited_by invite_code home_node_url avatar_ref avatar_bytes bio contact_value contact_visibility status
-            credit_frozen is_treasury can_operate earned_credit earned_surplus working_capital_ceiling
+            credit_frozen is_treasury can_operate credit_committee earned_credit earned_surplus working_capital_ceiling
             legacy_credit_floor profile_updated_at archetype purpose goal_amount deadline_at lifecycle paused paused_at paused_by
             paused_floor_snapshot wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
             location_updated_at updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at
@@ -434,7 +434,7 @@ export const TABLES: Record<string, TableEntry> = {
     group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
     group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
     // Every invite already sent, and who used which.
-    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome vouch_amount updated_at'),
     // A replacement phone's code an operator issued.
     rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status wrong_matches kind'),
     // The phones that asked for a code, and the digits each shows (engine/rekey-redeem.ts): a promoted standby shows the admin
@@ -470,6 +470,11 @@ export const TABLES: Record<string, TableEntry> = {
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
     known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
     known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
+    // Vouchers and their budgets (engine/vouchers.ts): who vouches, every line of each budget, and the credit line each vouch
+    // or member's gift gave. Plain rows, no name; a promoted standby carries on every budget and every member's line.
+    vouchers: plain('member_pubkey source entry_id made_by made_at stopped_at stopped_by stop_reason updated_at'),
+    voucher_allocations: plain('id member_pubkey kind amount actor ref at updated_at'),
+    room_gifts: plain('id from_pubkey to_pubkey root_pubkey kind amount source_gift_id invite_code at written_off written_off_at updated_at'),
     // Every change to how this community works (config/community-shape.ts): the owners' accountability, as the known floor's
     // log is, and a server that takes over shows the same lines and carries on the same ids.
     community_settings_log: plain('id actor_pubkey actor_role setting old_value new_value note at updated_at'),
@@ -764,6 +769,8 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     confirmation: { kind: 'community-settings', reason: 'the confirmation dial: whether a confirmed member holds the known floor (config/known-floor.ts)' },
     known_floor: { kind: 'community-settings', reason: "the community's known floor in Beans (config/known-floor.ts)" },
     credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
+    voucher_budget: { kind: 'community-settings', reason: "what a voucher's appointment is prefilled with, 100 to 2,000 Beans (engine/vouchers.ts)" },
+    member_gift: { kind: 'community-settings', reason: "the most of their credit line a member may give at once, 0 (off) to 100 (engine/vouchers.ts)" },
     health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
     health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
     balance_rule_from: { kind: 'community-settings', reason: "when the rule on what the admins can see starts here, written once (config/balance-rule.ts)" },

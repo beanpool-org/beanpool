@@ -30,6 +30,7 @@ import { ticketBinding } from './member-signature.js';
 import { ticketJoinRefusal } from './writer-bounds.js';
 import { inviteLogTag } from '../sanitize-message.js';
 import { assertMayBindInvite, confirmByInvite } from './names-list.js';
+import { checkInviteVouch, holdForInvite, landInviteVouch } from './vouchers.js';
 
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
@@ -96,7 +97,13 @@ function assertInvitesOn(): void {
  * Where only admins invite (the door, config/door.ts), a member who is no owner or admin here gets DoorClosedError (403
  * `admins_only`), after the member check and before the limit: a knock's answer included (engine/knocks.ts).
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string): InviteCode | null {
+/**
+ * `vouchAmount`: a vouch the invite carries (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §4), one of
+ * core's VOUCH_PRESETS from a voucher's budget, held when the code is made and landing on the joiner at the redeem.
+ * Refused (VoucherError, before the limit and before any write) from a non-voucher, for any other amount or more than is
+ * left, and where Beans are off. Never on an invite bound to a names-list entry (it gives the known floor instead).
+ */
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchAmount?: unknown): InviteCode | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);
@@ -105,6 +112,7 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     // An invite bound to a names-list entry (community modes slice 3): only an admin who could confirm someone against
     // that entry now, and never one with a live confirmation (NamesListError, before the limit and before any write).
     const boundEntry = namesEntryId === undefined ? null : assertMayBindInvite(inviterPubkey, namesEntryId);
+    const vouch = vouchAmount === undefined || vouchAmount === null || boundEntry ? null : checkInviteVouch(inviterPubkey, vouchAmount);
     beforeWrite?.();
 
     recordActivity(inviterPubkey);
@@ -112,11 +120,16 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     const code = generateShortCode();
     const createdAt = new Date().toISOString();
 
-    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id) VALUES (?, ?, ?, ?, ?)`)
-      .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry);
+    // The code and its vouch's hold together, or neither.
+    db.transaction(() => {
+        db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_amount) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry, vouch);
+        if (vouch) holdForInvite(inviterPubkey, code, vouch);
+    })();
 
-    const invite: InviteCode & { namesEntryId?: string } = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
+    const invite: InviteCode & { namesEntryId?: string; vouchAmount?: number } = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
     if (boundEntry) invite.namesEntryId = boundEntry;
+    if (vouch) invite.vouchAmount = vouch;
     // Never the code itself: it lets anyone join for 30 days. Its tag lets an operator follow it (FABLE-sec-errors M2).
     console.log(`🎟️  Invite generated: ${inviteLogTag(code)} by ${inviter.callsign}`);
     return invite;
@@ -203,7 +216,7 @@ export function redeemInvite(
     publicKey: string,
     callsign: string,
     joinerSigned = false,
-): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
+): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean; vouch?: { landed: number } | { ended: string } } {
     assertPlainTablesWritable();
     assertInvitesOn();
     // One key, one spelling (engine/member-key.ts), before any lookup or write: a member's key in capitals is no other
@@ -289,14 +302,17 @@ export function redeemInvite(
         return { success: false, error: INVITER_GONE };
     }
 
-    // Register member FIRST — invite_codes.used_by has FK to members(public_key). One transaction with the code's use
-    // and, for an invite bound to a names-list entry, the confirmation (confirmByInvite): never a member without them.
+    // Register member FIRST — invite_codes.used_by has FK to members(public_key). One transaction with the code's use,
+    // for an invite bound to a names-list entry the confirmation (confirmByInvite), and for one carrying a vouch the room
+    // it gives (engine/vouchers.ts landInviteVouch): never a member without them.
+    let vouch: { landed: number } | { ended: string } | undefined;
     const member = db.transaction(() => {
         const m = registerMemberInternal(broadcast, publicKey, callsign, invite.created_by, code);
         if (!m) return null;
         const outcome = invite.names_entry_id ? confirmByInvite(invite.created_by, invite.names_entry_id, publicKey) : null;
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ? WHERE code COLLATE NOCASE = ?")
             .run(publicKey, new Date().toISOString(), outcome, code);
+        if (invite.vouch_amount) vouch = landInviteVouch(invite.created_by, invite.code, publicKey, invite.vouch_amount);
         return m;
     })();
     if (!member) {
@@ -314,7 +330,7 @@ export function redeemInvite(
         }
     }
 
-    return { success: true, member };
+    return vouch ? { success: true, member, vouch } : { success: true, member };
 }
 
 /**

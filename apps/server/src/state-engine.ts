@@ -44,6 +44,7 @@ import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
+import { grantMissingRoleBudgets, voucherBudgetSetting, vouchingOnDeparture } from './engine/vouchers.js';
 import { startSweepingRecoveryCollections } from './engine/recovery-release.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { noteRemovedNewcomer } from './engine/door-signal.js';
@@ -1037,6 +1038,13 @@ function runMainServerMigrations(): void {
     // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
     migrateConsolidateConversations();
     repairConsolidatedMessagesMetadata();
+
+    // Vouchers (engine/vouchers.ts): every owner and admin who never had a budget gets one, actor `migration:vouchers`, so a
+    // community's owners and admins vouch on the day this lands. Stored rows only, no balance read; never throws.
+    try {
+        const granted = grantMissingRoleBudgets();
+        if (granted > 0) logger.info('SYS', `Vouchers: ${granted} owner(s) and admin(s) given a budget of ${voucherBudgetSetting()} Beans to vouch from.`, { granted });
+    } catch (e) { console.warn('[Vouchers] Could not give owners and admins their budgets:', e); }
 
     // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
     // every Commons group gets its chat (decision 3). Both idempotent; tombstones carry the delete to backups.
@@ -2186,7 +2194,7 @@ export function searchMemberDirectoryRows(prefix: string, limit: number): Direct
 export { generateInvite, adminGenerateInvite };
 
 /** `joinerSigned`: the request carries a fresh signature by `publicKey` itself, the only way a visitor's row joins. */
-export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
+export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): ReturnType<typeof redeemInviteEngine> {
     return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned);
 }
 
@@ -2520,6 +2528,7 @@ export function getMemberTrustProfile(publicKey: string): {
     earnedCredit: number;
     grantedCredit: number;
     knownGrant: number;
+    roomHeld: number;
     otherAllowance: number;
     qualifiedValue: number;
     avgRating: number;
@@ -2816,8 +2825,8 @@ function roundedBalance(publicKey: string): number {
     return Math.round(ledger.getAccount(publicKey).balance * 100) / 100;
 }
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; tierCredit: number; earnedCredit: number; commonsBalance: number; activated: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
-    const { floor, tier, tierCredit, earnedCredit, activated, knownGrant, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; roomHeld: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; tierCredit: number; earnedCredit: number; commonsBalance: number; activated: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
+    const { floor, tier, tierCredit, earnedCredit, activated, knownGrant, roomHeld, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
     const balance = roundedBalance(publicKey);
     const liveOffers = liveOfferCount(publicKey);
     const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
@@ -2829,6 +2838,9 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         usableFloor: uFloor,
         // The known floor's part of the limit (community modes slice 4): one live offer unlocks all of it. 0 elsewhere.
         knownGrant: isTreasury ? 0 : knownGrant,
+        // The credit line a voucher's vouch or a member's gift gave them (amend2 §6): like the known grant, one live offer
+        // unlocks all of it (core usableAllowance). 0 elsewhere.
+        roomHeld: isTreasury ? 0 : roomHeld,
         liveOffers,
         frozen: balance < uFloor,
         // knownFrozen / creditFrozen: the community's admins froze this member's known floor (an exception,
@@ -3739,10 +3751,11 @@ export function usableFloor(publicKey: string): number {
 function usableFloorWithKnownPledge(publicKey: string, extraKnownPledged: number): number {
     const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!m?.is_treasury) {
-        const { floor, knownGrant, otherAllowance } = engine.getMemberTrustProfile(db, publicKey, extraKnownPledged);
-        if (knownGrant <= 0) return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
-        // A confirmed member in a known community: one band for the known grant, the bands for the rest (slice 4).
-        const usable = usableAllowance({ knownGrant, otherAllowance, cap: engine.creditCap(db), liveOffers: liveOfferCount(publicKey) });
+        const { floor, knownGrant, roomHeld, otherAllowance } = engine.getMemberTrustProfile(db, publicKey, extraKnownPledged);
+        if (knownGrant <= 0 && roomHeld <= 0) return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+        // A confirmed member in a known community, or one a voucher or a member gave a credit line: one band for the known
+        // grant and that room together, the bands for the rest (slice 4; amend2 §6).
+        const usable = usableAllowance({ knownGrant, roomHeld, otherAllowance, cap: engine.creditCap(db), liveOffers: liveOfferCount(publicKey) });
         return Math.max(floor, -usable);
     }
 
@@ -9026,6 +9039,9 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
         dropWithheldNotesOf(publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
         dropNamesListHoldOf(publicKey, 'removed', balance);
+        // Any budget to vouch from stops, and the room they held is stamped with the debt the Commons paid (engine/vouchers.ts):
+        // the Commons' row above is the record, unchanged; this never throws.
+        vouchingOnDeparture(publicKey, actor, balance);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -9292,6 +9308,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
         // The entry an admin keeps is the community's record, not theirs: an admin deletes it.
         dropNamesListHoldOf(publicKey, 'account_deleted', balance);
+        // As adminPruneUser: a budget stops, and the room they held is stamped with the debt the Commons paid (never throws).
+        vouchingOnDeparture(publicKey, publicKey, balance);
         // 8. Last, so a line logged above is caught too: their name and key out of this server's log, as "a deleted member"
         // (data-at-rest report F5, logger.ts scrubMemberFromLogs). With the keys a re-key replaced, which a re-key's
         // line names. Not in a try, as deleteAllShares above: a line left behind would keep their name.

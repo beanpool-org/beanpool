@@ -31,6 +31,17 @@
  *                                                     other_community, 403 not_yours, 409 stale_copy { seq }, 413 copy_too_big,
  *                                                     429 too_many_copies (30 an hour per admin)
  *
+ * Vouchers (engine/vouchers.ts; DESIGN-invites-and-names-list-amend2-fable.md §2 to §5, Marty's §9 to §11). Every writer is
+ * an owner's or a credit-committee admin's (403 `committee_only` for any other admin), with Beans on (403
+ * `profile_no_beans`), and never their own budget (403 `own_budget`):
+ *   GET    /api/names/vouchers                      → { vouchers: [row], settings } (the vouchers block: owners and committee)
+ *   POST   /api/names/vouchers                      { entryId, amount? } → 201 card: a confirmed entry's member made a voucher
+ *   GET    /api/names/vouchers/:member              → card { …row, history, people, canChange } (any owner or admin; logged)
+ *   DELETE /api/names/vouchers/:member              → card: Stop vouching (a list budget; 409 role_voucher for a role's)
+ *   POST   /api/names/vouchers/:member/budget       { level } → card + changed: set the budget to a level (100 to 2,000)
+ *   POST   /api/names/vouchers/settings             { voucherBudget?, memberGift? } → settings (an owner)
+ *   POST   /api/names/committee                     { memberPubkey, on } → { memberPubkey, committee } (an owner)
+ *
  * Refusals, before anything is read or written: unsigned 401; a key that isn't an active member's here 403
  * `not_member`; a member, a moderator or a visitor 403 `admins_only`; the global node 404 `feature_off` (it keeps no
  * names list: nobody there is confirmed by name, design §5); a standby 409 `standby`, reads included, since a read
@@ -53,6 +64,10 @@ import {
 } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
 import { word } from '@beanpool/core';
+import {
+    VoucherError, VOUCHER_WORDS, isOnCreditCommittee, vouchersBlock, makeVoucher, readVoucherCard, stopVoucher, setBudgetLevel,
+    setVoucherSettings, setCreditCommittee,
+} from '../engine/vouchers.js';
 
 const STANDBY_NAMES = word('This server is a standby copy of the community, not its main server. The names list opens on the main server, which logs who reads it; this copy keeps it, sealed, for a take-over.');
 const GLOBAL_NAMES = word('The global community keeps no names list: nobody there is confirmed by name. Each local community keeps its own.');
@@ -97,7 +112,9 @@ function admin(ctx: any): string | null {
 }
 
 function respond(ctx: any, e: unknown): void {
-    if (e instanceof DebtError || e instanceof HealthError) return answer(ctx, e.status, e.message, e.code);
+    if (e instanceof DebtError || e instanceof HealthError || e instanceof VoucherError) return answer(ctx, e.status, e.message, e.code);
+    // Beans off (a voucher's every writer), a standby: their own status and code.
+    if (respondProfileRefusal(ctx, e)) return;
     if (e instanceof NamesListError) {
         answer(ctx, e.status, e.message, e.code);
         if (e.extra) ctx.body = { ...e.extra, ...ctx.body };
@@ -221,6 +238,18 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
         if (Object.keys(body).length > 0) throw new NamesListError(403, 'not_yours', word('Each member steps back for themselves.'));
         return stepBackFromConfirmed(actor);
     }));
+
+    // Vouchers (engine/vouchers.ts). The block is the committee's: an admin who isn't on it reads a voucher's card only.
+    router.get('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor) => {
+        if (!isOnCreditCommittee(actor)) throw new VoucherError(403, 'committee_only', VOUCHER_WORDS.committeeOnly);
+        return vouchersBlock();
+    }));
+    router.post('/api/names/vouchers', (ctx) => asAdmin(ctx, (actor, body) => makeVoucher(actor, body), 201));
+    router.post('/api/names/vouchers/settings', (ctx) => asAdmin(ctx, (actor, body) => setVoucherSettings(actor, body)));
+    router.get('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => readVoucherCard(actor, ctx.params.member)));
+    router.delete('/api/names/vouchers/:member', (ctx) => asAdmin(ctx, (actor) => stopVoucher(actor, ctx.params.member)));
+    router.post('/api/names/vouchers/:member/budget', (ctx) => asAdmin(ctx, (actor, body) => setBudgetLevel(actor, ctx.params.member, body)));
+    router.post('/api/names/committee', (ctx) => asAdmin(ctx, (actor, body) => setCreditCommittee(actor, body)));
 
     // The signer's own locked copy, and nobody else's: no parameter names an owner.
     router.get('/api/names/copy', (ctx) => asAdmin(ctx, (actor) => readNamesCopyOf(actor)));

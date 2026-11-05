@@ -335,6 +335,16 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('money_requests', 'payer_pubkey');
     move('known_floor_log', 'actor_pubkey');
     move('known_floor_log', 'member_pubkey');
+    // A voucher's budget, the lines that wrote it, and the credit line each vouch or gift gave, beside invited_by (engine/vouchers.ts):
+    // the budget and the room follow the person.
+    move('vouchers', 'member_pubkey');
+    move('vouchers', 'made_by');
+    move('vouchers', 'stopped_by');
+    move('voucher_allocations', 'member_pubkey');
+    move('voucher_allocations', 'actor');
+    move('room_gifts', 'from_pubkey');
+    move('room_gifts', 'to_pubkey');
+    move('room_gifts', 'root_pubkey');
     move('community_settings_log', 'actor_pubkey');
     // The old key's locked copy of its names-list record (engine/names-list.ts): sealed to the old key, so the new one
     // can't open it; it goes, never moves. On the main server with a tombstone; a standby drops it here as well.

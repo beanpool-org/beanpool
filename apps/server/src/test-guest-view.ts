@@ -1066,8 +1066,8 @@ async function main(): Promise<void> {
             return realSetTimeout(fn, tarpit ? 0 : ms, ...args);
         }) as unknown as typeof setTimeout;
         try {
-        // Bob brought Alice in and vouches for her as an elder, and they are friends: her trust profile names him, with his face.
-        db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
+        // Bob brought Alice in, and they are friends: her trust profile names him, with his face.
+        db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(bob.pk, alice.pk);
         db.prepare('INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?), (?, ?)').run(alice.pk, bob.pk, bob.pk, alice.pk);
         // What a pruned account still holds, since pruning leaves its rows: it convenes a group Alice is in, and it is in a
         // DM with Alice, who reacted to its messages and wrote one of her own there.
@@ -1132,7 +1132,7 @@ async function main(): Promise<void> {
             }
             const m = await call('POST', grid, '/api/trust/profile', { targetPubkey: alice.pk });
             const face = m.body?.vouchedInBy?.avatarUrl as string | undefined;
-            assert(m.status === 200 && m.body?.callsign === 'SentinelAlice' && m.body?.vouchedInBy?.publicKey === bob.pk && m.body?.elderVouch?.publicKey === bob.pk
+            assert(m.status === 200 && m.body?.callsign === 'SentinelAlice' && m.body?.vouchedInBy?.publicKey === bob.pk
                 && !!face && KEYED_FACE.test(face) && (await call('GET', null, face)).status === 200,
                 `a member reads it as before: her name, and Bob who brought her in, with a face that opens (${m.status})`);
         }
@@ -1416,7 +1416,7 @@ async function main(): Promise<void> {
             'GET /api/local/admin/unlock/:sessionId', 'POST /api/local/admin/unlock/:sessionId', 'POST /api/local/admin/unlock/cancel',
             'POST /api/local/admin/users/:pubkey/elder', 'POST /api/local/admin/users/:pubkey/freeze', 'POST /api/local/admin/users/:pubkey/operator',
             'POST /api/local/admin/users/:pubkey/prune', 'POST /api/local/admin/users/:pubkey/status', 'POST /api/local/admin/users/:pubkey/suspend',
-            'POST /api/local/admin/users/:pubkey/tier', 'POST /api/local/admin/users/:pubkey/voucher', 'GET /api/local/admin/web-visits',
+            'POST /api/local/admin/users/:pubkey/tier', 'GET /api/local/admin/web-visits',
             'POST /api/local/admin/ws-connections', 'POST /api/local/admin/ws-ticket',
             'POST /api/local/change-password', 'GET /api/local/community-info', 'GET /api/local/connectors', 'POST /api/local/connectors',
             'POST /api/local/connectors/connect', 'POST /api/local/connectors/credit-cap', 'POST /api/local/connectors/disconnect',
@@ -1465,7 +1465,7 @@ async function main(): Promise<void> {
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',
             'POST /api/pricing-guide/reports/:id/status',
-            'GET /api/profile/:publicKey', 'POST /api/profile/unvouch', 'POST /api/profile/update', 'POST /api/profile/vouch',
+            'GET /api/profile/:publicKey', 'POST /api/profile/update',
             'GET /api/pulse/daily', 'GET /api/pulse/feed', 'GET /api/pulse/items/:id/thumbnail', 'GET /api/pulse/oauth/config',
             'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
@@ -1920,7 +1920,7 @@ async function main(): Promise<void> {
         // (2026-10-01), so a code's holder who names someone else's key is refused and gets no card; only that member's own
         // signed redeem gets it. A pruned account is refused every read it signs, here as on every node (#1177 settles
         // #1156's call: it passed the gated reads here until then). A HEAD to a gated read is refused as its GET is on every node.
-        db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
+        db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(bob.pk, alice.pk);
         const tp = await call('POST', outsider, '/api/trust/profile', { targetPubkey: alice.pk });
         assert(tp.status === 403 && tp.body?.code === 'members_only' && leaks(tp.text).length === 0,
             `a non-member signer is refused Alice's trust profile, naming nobody (${tp.status} ${tp.text.slice(0, 80)})`);

@@ -11,10 +11,10 @@
  *  2. Its standby S takes its first copy with the loop's own first pull (before G9's fix only an operator's force-resync
  *     got a new standby one).
  *  3. More of the community, over two deltas: new members, a transfer from an account that held Beans at the first copy,
- *     granted credit, a voucher and vouched members at 50 and 25, a
+ *     granted credit, two members given a Resident badge, a
  *     group of one, a trade in escrow, a resolved dispute, a recategorised listing and one that needs cash, holiday, a notification
  *     opt-out, push tokens, a frozen member, a keeper with a pledge, a keeper's wage owed, the enterprise paused.
- *  4. More, then a whole copy: the vouch at 25 withdrawn, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
+ *  4. More, then a whole copy: one of those badges taken back, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
  *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a message with empty
  *     metadata, a pending request, a rating with no comment, an empty bio and archetype, a group renamed), the pricing
@@ -28,7 +28,7 @@
  *     ports: reads (the board as a guest, a member and a keeper; a phone's full sync and a delta; balances; the
  *     enterprise; each member's own view; the pricing guide after each server's hourly cycle; the directory; notices)
  *     and writes (accept a listing from before; a keeper posts for the enterprise; request a holiday member's listing; a
- *     vouch; a frozen member's poll;
+ *     member edits their card; a frozen member's poll;
  *     approve a pending request; redeem the unused invite; the Decision sweep eight days on; a push of each category;
  *     the ledger audit a take-over runs).
  *  9. KNOWN_GAPS, strict: every difference is listed with its gap id, and every listed one still differs. A fix PR
@@ -464,9 +464,8 @@ async function main(): Promise<void> {
         for (const who of [cy, hal]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
         const knitters = built('Hal starts a group on his own', await S_(hal, '/api/groups', { name: 'Knitters', description: 'Anyone who knits' }));
         const knittersId = knitters.group?.id ?? knitters.id;
-        built('the admin makes Bo a voucher', await A(`/api/local/admin/users/${bo.pk}/voucher`, { grant: true }));
-        built('Bo vouches for Eve', await S_(bo, '/api/profile/vouch', { targetPubkey: eve.pk, level: 2 }));
-        built('and for Lou', await S_(bo, '/api/profile/vouch', { targetPubkey: lou.pk, level: 1 }));
+        built('the admin gives Eve a Resident badge', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
+        built('and Lou one', await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Resident' }));
         await offer(eve, 'Mending', 2);
         const deeCash = await offer(dee, 'Kindling', 3, { cashAlsoNeeded: true });
         await deal(cy, dee, deeCash.id, false); // held in escrow, and still there at the take-over
@@ -539,7 +538,7 @@ async function main(): Promise<void> {
 
         // ── 4. More, then a whole copy ──
         console.log('\n— 4. more, then a whole copy —');
-        built('Bo withdraws his vouch for Lou, which the last pull copied', await S_(bo, '/api/profile/unvouch', { targetPubkey: lou.pk }));
+        built("the admin takes Lou's badge back, which the last pull copied", await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Newcomer' }));
         built('Hal, its lead and only member, leaves Knitters: it has no lead now', await api(m, 'DELETE', `/api/groups/${knittersId}/members/${hal.pk}`, { as: hal }));
         built('Kip puts 2 Beans in the project pot', await S_(kip, `/api/treasury/${seed.publicKey}/pledge`, { amount: 2 }));
         const wind = built('Dee starts an enterprise, Wind Co', await S_(dee, '/api/treasury', { name: 'Wind Co', purpose: 'Closing down soon' }));
@@ -560,7 +559,7 @@ async function main(): Promise<void> {
         }));
         built('and sets its own thresholds', await A('/api/admin/thresholds', { inactiveMemberDays: 45 }));
         built('Gwen proposes a Decision', await S_(gwen, '/api/commons/decisions', {
-            title: 'Make Cy a voucher', description: 'Cy has helped half the street', touches: 'member', effect: 'grant_voucher', subject: cy.pk,
+            title: "Freeze Cy's credit", description: 'Cy has gone quiet with deals half done', touches: 'member', effect: 'freeze_credit', subject: cy.pk,
         }));
         // Ann's removal of Rex, proposed before removal by vote S3 (a member proposes none since), closing in a few seconds.
         const removal = await main.send('removal-from-before', {
@@ -756,7 +755,7 @@ async function main(): Promise<void> {
             title: 'Puncture kits', description: 'Made in the workshop', credits: 2, category: 'tools', photos: [TINY_PNG],
         }));
         await both("request a holiday member's listing", postAs(eve, '/api/marketplace/posts/request', { postId: boOffer.id, buyerPublicKey: eve.pk }));
-        await both('a vouch by the voucher', postAs(bo, '/api/profile/vouch', { targetPubkey: hal.pk, level: 1 }));
+        await both('a member edits their card', postAs(hal, '/api/profile/update', { bio: 'Knits on Sundays, mends on Mondays' }));
         await both("a frozen member's poll", postAs(fay, '/api/marketplace/posts', {
             type: 'poll', title: 'Picnic date?', description: 'Pick one', authorPublicKey: fay.pk, credits: 0,
             pollOptions: ['Saturday', 'Sunday'],

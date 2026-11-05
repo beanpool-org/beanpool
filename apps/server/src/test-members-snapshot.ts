@@ -4,7 +4,7 @@
  *
  * Boots the real server (read auth on, the fresh-download default) and reads through the real middleware:
  *   1. Every write to a field the directory answer carries moves the members version (the rule a snapshot depends on):
- *      a join, a rename, an archetype, a photo saved with its profile, a vouch and its removal, a tier set by an admin,
+ *      a join, a rename, an archetype, a photo saved with its profile, a tier set by an admin,
  *      a node role granted and revoked, a member pruned.
  *   2. The full directory is byte for byte an unshared build of the same rows, plain and gzipped (Accept-Encoding),
  *      and so are the delta (`updatedAfter`) and the nearest-first read (`lat`/`lng`), which never touch the snapshot.
@@ -124,7 +124,6 @@ async function main() {
             avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
             profileUpdatedAt: r.profile_updated_at || null,
             earnedCredit: r.earned_credit ?? 0,
-            elderVouchedBy: r.elder_vouched_by || null,
             archetype: r.archetype || null,
         }));
         return JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
@@ -151,8 +150,6 @@ async function main() {
     moves('an archetype', () => se.updateProfile(people[6].pk, { archetype: 'gardener' }));
     moves('an archetype cleared', () => se.updateProfile(people[6].pk, { archetype: null }));
     moves('a photo saved with its profile', () => se.updateProfile(people[7].pk, { avatar: PNG_1PX }));
-    moves('a vouch', () => se.vouchMember(owner.pk, people[8].pk));
-    moves('a vouch removed', () => se.unvouchMember(owner.pk, people[8].pk));
     moves('a tier set by an admin', () => se.adminSetTier(people[9].pk, 'trusted' as any));
     moves('a node role granted', () => grantNodeRole(people[10].pk, 'admin', owner.pk));
     moves('a node role revoked', () => revokeNodeRole(people[10].pk, 'admin', owner.pk));
@@ -269,7 +266,7 @@ async function main() {
         const text = (await get('/api/members', id)).body.toString('utf8');
         assert(!text.includes('contact-secret-') && !/"contact/i.test(text), `${who}: no contact value or contact field`);
         const row = JSON.parse(text)[0];
-        assert(Object.keys(row).join(',') === 'publicKey,callsign,joinedAt,nodeRole,avatarUrl,profileUpdatedAt,earnedCredit,elderVouchedBy,archetype', `${who}: the row's fields are today's, no more`);
+        assert(Object.keys(row).join(',') === 'publicKey,callsign,joinedAt,nodeRole,avatarUrl,profileUpdatedAt,earnedCredit,archetype', `${who}: the row's fields are today's, no more`);
     }
 
     console.log(`\n${passed}/${run} passed`);

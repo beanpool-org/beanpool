@@ -3,19 +3,14 @@
  * §1.1 and §0 row 11, slice E0).
  *
  * Every door in both apps that opens a profile by key (a post's author, a deal's other side, the map's preview…) opened
- * the member Trust Profile for an enterprise too: the profile shape said nothing about what the key was, and a voucher
- * could vouch for an enterprise, which its page then showed as trust ("Vouched by Damo"). The apps now replace that
- * screen with the enterprise page when the profile they load says `isTreasury`.
+ * the member Trust Profile for an enterprise too: the profile shape said nothing about what the key was. The apps now
+ * replace that screen with the enterprise page when the profile they load says `isTreasury`.
  *
  * Boots the real server (port 0, read auth as a fresh download has it) and proves:
  *   1. An enterprise's profile says so: getProfile, GET /api/profile/:key and the trust profile the phone reads
  *      (POST /api/trust/profile) each carry `isTreasury: true`; a project's too.
  *   2. A member's profile is unchanged: no `isTreasury` key on either read, every field as it was.
- *   3. vouchMember refuses an enterprise key in a sentence, and writes nothing (no voucher, no vouch credit, no
- *      profile_updated_at); POST /api/profile/vouch answers 400 with that sentence. A member is still vouched for.
- *   4. A vouch given to an enterprise before this change is left as it is (inert for credit): the row keeps it, and the
- *      voucher may still withdraw it, even while the enterprise is below 0 (a member below 0 still may not).
- *   5. The node's own accounts, BeanPool and Daily Pulse, are treasury rows but not enterprises: no `isTreasury` on
+ *   3. The node's own accounts, BeanPool and Daily Pulse, are treasury rows but not enterprises: no `isTreasury` on
  *      either read, so the Pulse card's author door opens BeanPool's profile with its channels. A real enterprise,
  *      one made without a photo included, still says `isTreasury`.
  *
@@ -77,15 +72,13 @@ async function post(path: string, payload: unknown, id: Id): Promise<{ status: n
     return { status: res.status, body: json };
 }
 
-const REFUSAL = 'An enterprise is kept, not vouched for.';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 
 async function main() {
-    console.log('An enterprise is never a member\'s Trust Profile, and is never vouched for...\n');
+    console.log('An enterprise is never a member\'s Trust Profile...\n');
     const { initTls } = await import('./services/tls.js');
     const {
-        initStateEngine, createTreasury, getProfile, getTrustProfileForViewer, vouchMember, unvouchMember, adminSetVoucher, getBalance,
-        getMemberTrustProfile, reconcileLedgerFromDb,
+        initStateEngine, createTreasury, getProfile, getTrustProfileForViewer,
     } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { initAdminPassword } = await import('./config/local-config.js');
@@ -108,10 +101,9 @@ async function main() {
         return id;
     };
 
-    const damo = member('Damo');        // an appointed voucher, and the enterprise's keeper
-    const rosa = member('Rosa');        // a plain member, vouched for by Damo
+    const damo = member('Damo');        // the enterprise's keeper
+    const rosa = member('Rosa');        // a plain member
     const kofi = member('Kofi');        // a plain member who reads the profiles
-    adminSetVoucher(damo.pubKeyHex, true);
     const { publicKey: enterprise } = createTreasury("Damo's Enterprise", AVATAR, 0, { purpose: 'We fix bikes', leadKeeperPubkey: damo.pubKeyHex });
     const { publicKey: project } = createTreasury('Village Hall Roof', AVATAR, 0, { purpose: 'A new roof', lifecycle: 'bounded', goalAmount: 500 });
 
@@ -130,7 +122,7 @@ async function main() {
 
     // ── 2. A member's profile is unchanged ──
     console.log('── 2. a member\'s profile is unchanged ──');
-    const MEMBER_PROFILE_KEYS = ['archetype', 'avatar', 'bio', 'callsign', 'contact', 'elderVouchedBy', 'elderVouchedByCallsign', 'joinedAt', 'publicKey', 'status'];
+    const MEMBER_PROFILE_KEYS = ['archetype', 'avatar', 'bio', 'callsign', 'contact', 'joinedAt', 'publicKey', 'status'];
     const rosaProfile = getProfile(rosa.pubKeyHex, kofi.pubKeyHex) as Record<string, unknown> | null;
     assert(!!rosaProfile && !('isTreasury' in rosaProfile), `a member's profile carries no isTreasury key (keys: ${Object.keys(rosaProfile ?? {}).sort().join(', ')})`);
     assert(JSON.stringify(Object.keys(rosaProfile ?? {}).sort()) === JSON.stringify(MEMBER_PROFILE_KEYS), "a member's profile has exactly the fields it had");
@@ -140,63 +132,12 @@ async function main() {
     const rosaTrust = getTrustProfileForViewer(kofi.pubKeyHex, rosa.pubKeyHex) as Record<string, unknown> | null;
     assert(!!rosaTrust && !('isTreasury' in rosaTrust), "a member's trust profile carries no isTreasury key");
 
-    // ── 3. A vouch for an enterprise is refused, in a sentence, and writes nothing ──
-    console.log('── 3. a vouch for an enterprise is refused ──');
-    const rowOf = (pk: string) => db.prepare('SELECT elder_vouched_by, vouch_credit, profile_updated_at FROM members WHERE public_key = ?').get(pk) as { elder_vouched_by: string | null; vouch_credit: number | null; profile_updated_at: string | null };
-    const before = rowOf(enterprise);
-    let refusal = '';
-    try { vouchMember(damo.pubKeyHex, enterprise, 2); } catch (e: any) { refusal = String(e?.message ?? e); }
-    assert(refusal === REFUSAL, `vouchMember(voucher, enterprise) throws "${REFUSAL}" (got "${refusal}")`);
-    const after = rowOf(enterprise);
-    assert(after.elder_vouched_by === before.elder_vouched_by && after.vouch_credit === before.vouch_credit && after.profile_updated_at === before.profile_updated_at,
-        `the refused vouch wrote nothing (before ${JSON.stringify(before)}, after ${JSON.stringify(after)})`);
-    let projectRefusal = '';
-    try { vouchMember(damo.pubKeyHex, project, 1); } catch (e: any) { projectRefusal = String(e?.message ?? e); }
-    assert(projectRefusal === REFUSAL, `a project is refused the same way (got "${projectRefusal}")`);
-    const vouchHttp = await post('/api/profile/vouch', { targetPubkey: enterprise, level: 1 }, damo);
-    assert(vouchHttp.status === 400 && vouchHttp.body?.error === REFUSAL, `POST /api/profile/vouch for an enterprise → 400 "${REFUSAL}" (got ${vouchHttp.status}, ${JSON.stringify(vouchHttp.body)})`);
-    assert(rowOf(enterprise).elder_vouched_by === null, 'and the enterprise is still vouched by nobody');
-    // A member is vouched for as before.
-    const rosaVouch = await post('/api/profile/vouch', { targetPubkey: rosa.pubKeyHex, level: 2 }, damo);
-    assert(rosaVouch.status === 200 && rosaVouch.body?.success === true, `a member is still vouched for (got ${rosaVouch.status}, ${JSON.stringify(rosaVouch.body)})`);
-    assert(rowOf(rosa.pubKeyHex).elder_vouched_by === damo.pubKeyHex && getMemberTrustProfile(rosa.pubKeyHex).floor === -50, "the member's vouch is recorded with its floor");
-
-    // ── 4. A vouch an enterprise already has is left as it is ──
-    console.log('── 4. a vouch given before stays as it is ──');
-    // As a node from before this change wrote it (the tester's "Vouched by Damo").
-    db.prepare('UPDATE members SET elder_vouched_by = ?, vouch_credit = 25 WHERE public_key = ?').run(damo.pubKeyHex, enterprise);
-    assert(rowOf(enterprise).elder_vouched_by === damo.pubKeyHex, 'an existing vouch for an enterprise is left on its row');
-    assert(getProfile(enterprise, kofi.pubKeyHex)?.elderVouchedBy === damo.pubKeyHex, 'and its profile still names the voucher (the apps never draw it for this key)');
-    // An enterprise trades below 0 on its keepers' pledges, and a vouch adds nothing to that line (trust.ts's treasury
-    // branch returns before it reads vouch_credit): the "back to 0 first" rule, which keeps a member from being left
-    // below a floor the vouch held up, would only shut the voucher in (review of #2367).
-    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(enterprise);
-    db.prepare(`UPDATE accounts SET balance = -30 WHERE public_key = ?`).run(enterprise);
-    reconcileLedgerFromDb(); // getBalance reads the in-memory ledger: resync it from the raw update
-    assert(getBalance(enterprise).balance === -30, `the enterprise is below 0 (balance ${getBalance(enterprise).balance})`);
-    const floorBefore = getMemberTrustProfile(enterprise).floor;
-    let withdrawal = '';
-    try { unvouchMember(damo.pubKeyHex, enterprise); } catch (e: any) { withdrawal = String(e?.message ?? e); }
-    assert(withdrawal === '' && rowOf(enterprise).elder_vouched_by === null, `the voucher may still withdraw it, with the enterprise below 0 (got "${withdrawal}")`);
-    assert(getMemberTrustProfile(enterprise).floor === floorBefore, `and the enterprise's floor is where it was (${floorBefore} → ${getMemberTrustProfile(enterprise).floor})`);
-    db.prepare(`UPDATE accounts SET balance = 0 WHERE public_key = ?`).run(enterprise);
-    reconcileLedgerFromDb();
-    // A member below 0 still keeps their vouch until they are back at 0, as before.
-    db.prepare(`UPDATE accounts SET balance = -5 WHERE public_key = ?`).run(rosa.pubKeyHex);
-    reconcileLedgerFromDb();
-    let memberWithdrawal = '';
-    try { unvouchMember(damo.pubKeyHex, rosa.pubKeyHex); } catch (e: any) { memberWithdrawal = String(e?.message ?? e); }
-    assert(memberWithdrawal.includes('negative balance') && rowOf(rosa.pubKeyHex).elder_vouched_by === damo.pubKeyHex,
-        `a member below 0 keeps their vouch (got "${memberWithdrawal}")`);
-    db.prepare(`UPDATE accounts SET balance = 0 WHERE public_key = ?`).run(rosa.pubKeyHex);
-    reconcileLedgerFromDb();
-
-    // ── 5. The node's own accounts are not enterprises ──
+    // ── 3. The node's own accounts are not enterprises ──
     // BeanPool owns the curated learn channel (seeded at every boot) and every channel an admin adds; Daily Pulse posts
     // the day's entry. Both are treasury rows, so the People directory leaves them out, but neither has keepers or a
     // purpose: the Pulse card's author door opened an empty "BeanPool" enterprise page instead of its profile with its
     // channels (deciding review of #2367).
-    console.log('── 5. the node\'s own accounts are not enterprises ──');
+    console.log('── 3. the node\'s own accounts are not enterprises ──');
     const { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } = await import('./engine/pulse-seed.js');
     const { ensurePulseTreasury } = await import('./daily-pulse.js');
     const { getAllProfiles } = await import('./state-engine.js');

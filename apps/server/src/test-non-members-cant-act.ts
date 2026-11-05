@@ -21,8 +21,8 @@
  *     redeems, and the pre-flight check says so; a live member's and an admin's invites still redeem, the admin's
  *     even after the genesis member it hangs the code on has been pruned.
  *  5. The sweep, every other signed write that reaches another member or moves Beans: a pruned convenor runs the group
- *     no more (members, roles, invites, requests, details, lead, chat, posts, succession); a pruned voucher neither
- *     vouches nor unvouches; a pruned account rates, reports and reacts to nobody; the old key of a member being
+ *     no more (members, roles, invites, requests, details, lead, chat, posts, succession); a pruned account rates,
+ *     reports and reacts to nobody; the old key of a member being
  *     re-keyed opens, approves and buys no trade, messages and reacts to nobody, and pledges none of the member's Beans.
  *     A pruned convenor edits no event in its group (4109566615): the event is unchanged and nobody going is pushed that
  *     it moved; a live convenor still edits one, and the people going are told.
@@ -70,7 +70,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, transfer, createPost, acceptPost, requestPost, completePostTransaction,
     createGroup, joinGroup, rsvpEvent, postEventThreadMessage, adminPruneUser, COMMUNITY_DECISION_ACTOR, seedGenesisMember,
-    postGroupThreadMessage, vouchMember, createConversation, sendMessage, getBalance, proposeGroupConvenor,
+    postGroupThreadMessage, createConversation, sendMessage, getBalance, proposeGroupConvenor,
     purgeMemberSelf, pausePost, resumePost, updatePost,
 } from './state-engine.js';
 import { createCrowdfundProject } from './db/db.js';
@@ -299,7 +299,7 @@ async function main(): Promise<void> {
     const tRekeyee = requestPost(rekeyeeOffer.id, bob.pubKeyHex);
 
     // For the sweep (section 5): Pruney runs two groups, with Bob's chat line and post in one and Carol asking to join
-    // the other; Pruney can vouch and has vouched for Carol, and has a DM with Alice. Rekeyee has a request waiting
+    // the other; Pruney has a DM with Alice. Rekeyee has a request waiting
     // on them, a DM with Bob, and Beans to pledge.
     const carol = makeMember('CarolNM');
     offer(carol, 'Carol plums');
@@ -309,8 +309,6 @@ async function main(): Promise<void> {
     if (!bobGroupPost) throw new Error('could not post to the group');
     const askGroup = createGroup({ name: 'Seed library NM', createdBy: pruney.pubKeyHex, joinPolicy: 'request_to_join' } as any);
     joinGroup(askGroup.id, carol.pubKeyHex);
-    db.prepare('UPDATE members SET can_vouch = 1 WHERE public_key = ?').run(pruney.pubKeyHex);
-    vouchMember(pruney.pubKeyHex, carol.pubKeyHex, 1);
     const pruneyDm = createConversation('dm', [pruney.pubKeyHex, alice.pubKeyHex], pruney.pubKeyHex)!;
     const aliceDmText = lockedDm(); // a DM goes in encrypted
     const aliceDmLine = sendMessage(pruneyDm.id, alice.pubKeyHex, aliceDmText.ciphertext, aliceDmText.nonce)!;
@@ -590,15 +588,8 @@ async function main(): Promise<void> {
             await signedFetch('POST', `/api/groups/${quietGroup.id}/succession/${opened.proposal.id}/vote`, pruney, { choice: 'no' }));
         assert(!db.prepare('SELECT 1 FROM group_convenor_votes WHERE voter_pubkey = ?').get(pruney.pubKeyHex), 'and no vote is recorded');
 
-        // Vouching hands out a credit floor; a pruned voucher's can_vouch outlasts the prune.
-        const vouchOf = (pk: string) => db.prepare('SELECT elder_vouched_by, vouch_credit FROM members WHERE public_key = ?').get(pk) as any;
-        // These four answered 400, the engine's own refusal; since 4109713263 the middleware refuses a closed account first.
+        // These two answered 400, the engine's own refusal; since 4109713263 the middleware refuses a closed account first.
         const closedAccount = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'account_closed';
-        const vouch = await signedFetch('POST', '/api/profile/vouch', pruney, { targetPubkey: bob.pubKeyHex });
-        assert(closedAccount(vouch) && !vouchOf(bob.pubKeyHex)?.elder_vouched_by, `a pruned voucher vouches for nobody (got ${vouch.status})`);
-        const unvouch = await signedFetch('POST', '/api/profile/unvouch', pruney, { targetPubkey: carol.pubKeyHex });
-        assert(closedAccount(unvouch) && vouchOf(carol.pubKeyHex)?.elder_vouched_by === pruney.pubKeyHex,
-            `nor takes Carol's vouch away (got ${unvouch.status})`);
 
         // Ratings and reports land on another member's record.
         const rating = await signedFetch('POST', '/api/ratings', pruney,

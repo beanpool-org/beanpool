@@ -17,11 +17,10 @@
  *      versions still move: an unrelated member's held ETag of the list gets the list again (200, not 304), with the
  *      new photo and name, the delta from before the edit has them, and the board shows the new name on the member's
  *      listing.
- *   3. Global, a change of standing is no card edit and still reaches every member: a tier badge, a vouch. The
+ *   3. Global, a change of standing is no card edit and still reaches every member: a tier badge, a credit freeze. The
  *      operator's node_config row nodeProfile.announceProfiles = true puts card edits back on every socket.
- *   4. The member list never misses a change: a node role granted and revoked, a vouch and its withdrawal, and a tier
- *      badge each move the list's ETag (a held one is answered 200) and put the member's row in the next delta, with
- *      the new role, voucher or credit. Neither moved for a role, and none was in a delta (#1467's finding).
+ *   4. The member list never misses a change: a node role granted and revoked, and a tier badge each move the list's
+ *      ETag (a held one is answered 200) and put the member's row in the next delta, with the new role or credit. Neither moved for a role, and none was in a delta (#1467's finding).
  *
  * On origin/main sections 2 and 4 fail; 1 and 3 pin what must not change, and pass there by design.
  *
@@ -233,11 +232,10 @@ async function main() {
         await sleep(300);
         const members = ['piaPhone', 'piaWeb', 'dan', 'gus', 'olive', 'vic'] as const;
         assert(members.every(k => heard(s[k], pia.pubKeyHex) === 1), `a tier badge reaches every member's socket (${report(s, pia.pubKeyHex)})`);
-        se.adminSetVoucher(gus.pubKeyHex, true);
         const m2 = marks(s);
-        se.vouchMember(gus.pubKeyHex, pia.pubKeyHex, 1);
+        se.adminSetCreditFrozen(pia.pubKeyHex, true);
         await sleep(300);
-        assert(members.every(k => heard(s[k], pia.pubKeyHex, m2[k]) === 1), `so does a vouch (${report(s, pia.pubKeyHex, m2)})`);
+        assert(members.every(k => heard(s[k], pia.pubKeyHex, m2[k]) === 1), `so does a credit freeze (${report(s, pia.pubKeyHex, m2)})`);
 
         db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(`${NODE_PROFILE_KEY}.announceProfiles`, 'true');
         const m3 = marks(s);
@@ -270,8 +268,6 @@ async function main() {
         }
         await afterChange('a node role granted', () => grantNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), 'nodeRole', r => r.nodeRole === 'moderator');
         await afterChange('a node role revoked', () => revokeNodeRole(wes.pubKeyHex, 'moderator', 'owner:password'), 'nodeRole', r => r.nodeRole === null);
-        await afterChange('a vouch', () => se.vouchMember(gus.pubKeyHex, wes.pubKeyHex, 1), 'elderVouchedBy', r => r.elderVouchedBy === gus.pubKeyHex);
-        await afterChange('a vouch withdrawn', () => se.unvouchMember(gus.pubKeyHex, wes.pubKeyHex), 'elderVouchedBy', r => r.elderVouchedBy === null);
         await afterChange('a tier badge', () => se.adminSetTier(wes.pubKeyHex, 'Steward'), 'earnedCredit', r => r.earnedCredit > 0);
     }
 

@@ -276,7 +276,7 @@ async function main() {
 
         const decisionId = crypto.randomUUID();
         db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, franchise, status, opens_at, closes_at, created_at, updated_at)
-                    VALUES (?, ?, 'A decision', 'A decision for the test', 'member', 'grant_voucher', '1m1v', 'open',
+                    VALUES (?, ?, 'A decision', 'A decision for the test', 'member', 'freeze_credit', '1m1v', 'open',
                             strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now','+7 days'),
                             strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(decisionId, subject.pub);
         const dSpoof = await send('GET', `/api/commons/decisions/${decisionId}?voterPubkey=${subject.pub}`, undefined);

@@ -489,11 +489,12 @@ async function main(): Promise<void> {
         // Version 11: posts with shown_price (a copy's price at home, in words, slice G1′).
         // Version 12: confirmations with stepped_back_owing (the balance rule, S1).
         // Version 14: posts with shown_takes_questions (the door on a copy, slice GD), on top of 13.
-        // Version 17: a new table, invite_asks (a member asks an admin to invite someone), on top of 16's vouch_level.
+        // Version 17: a new table, invite_asks (a member asks an admin to invite someone), on top of 16 (invite_codes' old vouch column).
         // Version 18: message_attachments becomes a copied table (chat photos, slice G4), with sha256, bytes and updated_at.
         // Version 19: a new table, decision_jury_pools (the pool a removal jury was drawn from, slice J1).
         // Version 20: decision_electors with answered_at and reminded_at (a removal juror's Serve and reminders, slice J2b).
-        assert(snap?.tableHashes?.v === 20 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
+        // Version 21: the vouching reset (R0): members and invite_codes without the four old vouch columns.
+        assert(snap?.tableHashes?.v === 21 && ['members', 'member_photos', 'groups', 'group_pictures', 'shops', 'shop_photos', 'accounts', 'transactions', 'posts', 'messages', 'poll_answers'].every((t) => /^[0-9a-f]{64}$/.test(hashed[t]?.hash ?? ''))
             && !('tombstones' in hashed) && typeof snap.signature === 'string',
             `M's whole copy carries its table hashes, signed with the rest, tombstones left out (${brief(Object.keys(hashed))})`);
         let rec = await standby.send('record');

@@ -205,7 +205,7 @@ async function runSuite() {
             title: 'Unauthenticated proposal',
             description: 'Should fail with 401',
             touches: 'member',
-            effect: 'grant_voucher',
+            effect: 'freeze_credit',
             subject: charlie,
         },
     });
@@ -219,7 +219,7 @@ async function runSuite() {
             title: 'Dave decision',
             description: 'Should fail: no completed trade',
             touches: 'member',
-            effect: 'grant_voucher',
+            effect: 'freeze_credit',
             subject: charlie,
         },
     });
@@ -234,7 +234,7 @@ async function runSuite() {
             title: 'Eve decision',
             description: 'Should fail due to credit_frozen',
             touches: 'member',
-            effect: 'grant_voucher',
+            effect: 'freeze_credit',
             subject: charlie,
         },
     });
@@ -248,7 +248,7 @@ async function runSuite() {
             title: 'Enterprise decision',
             description: 'Should fail because enterprise cannot propose',
             touches: 'member',
-            effect: 'grant_voucher',
+            effect: 'freeze_credit',
             subject: charlie,
         },
     });
@@ -301,7 +301,7 @@ async function runSuite() {
             title: 'Second proposal by Alice',
             description: 'Should fail due to 1 open decision limit',
             touches: 'member',
-            effect: 'grant_voucher',
+            effect: 'freeze_credit',
             subject: charlie,
         },
     });
@@ -329,10 +329,10 @@ async function runSuite() {
         actor: bob,
         body: {
             authorPubkey: bob,
-            title: 'Let Charlie vouch for newcomers',
-            description: 'Charlie has completed 50 trades and knows the newcomers well',
+            title: "Pause Charlie's credit for now",
+            description: 'A pause on Charlie\'s credit line while his last trades are looked into',
             touches: 'member',
-            effect: 'grant_voucher',
+            effect: 'freeze_credit',
             subject: charlie,
         },
     });

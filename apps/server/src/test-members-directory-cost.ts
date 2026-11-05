@@ -114,21 +114,20 @@ async function main() {
             avatarUrl: oldAvatarUrl(m.publicKey, given.get(m.publicKey)),
             profileUpdatedAt: m.profileUpdatedAt,
             earnedCredit: m.earnedCredit ?? 0,
-            elderVouchedBy: m.elderVouchedBy || null,
             archetype: m.archetype || null,
         }));
         return JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
     };
 
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status,
-                                   profile_updated_at, earned_credit, elder_vouched_by, archetype, is_treasury, is_visitor, area_lat, area_lng)
-                               VALUES (@pk, @callsign, @joined, NULL, 'TEST', @status, @profile, @earned, @elder, @archetype,
+                                   profile_updated_at, earned_credit, archetype, is_treasury, is_visitor, area_lat, area_lng)
+                               VALUES (@pk, @callsign, @joined, NULL, 'TEST', @status, @profile, @earned, @archetype,
                                    @treasury, @visitor, @lat, @lng)`);
     // A photo goes in by its one writer (member_photos, and the row's avatar_ref), as a profile save puts it there.
     const row = (pk: string, callsign: string, o: Partial<Record<string, unknown>> = {}) => {
         const { avatar = null, ...rest } = o as Record<string, unknown> & { avatar?: string | null };
         insert.run({
-            pk, callsign, joined: '2026-03-01T00:00:00.000Z', status: 'active', profile: null, earned: 0, elder: null,
+            pk, callsign, joined: '2026-03-01T00:00:00.000Z', status: 'active', profile: null, earned: 0,
             archetype: null, treasury: 0, visitor: 0, lat: null, lng: null, ...rest,
         });
         given.set(pk, avatar);
@@ -145,7 +144,7 @@ async function main() {
         row(reader.pubKeyHex, 'Reader', { joined: '2026-06-01T00:00:00.000Z', lat: -28.5, lng: 153.5 });
         row(elder, 'Elder', { joined: '2026-01-01T00:00:00.000Z', earned: 1400, archetype: 'gardener', lat: -28.6, lng: 153.6 });
         row(admin, 'Admin', { joined: '2026-02-01T00:00:00.000Z', avatar: photo, profile: '2026-05-05T05:05:05.555Z',
-            elder, lat: 51.5, lng: -0.1 });
+            lat: 51.5, lng: -0.1 });
         row(keypair().pubKeyHex, 'Bundled', { avatar: 'bundled://avatars/fox.png', earned: null });
         row(keypair().pubKeyHex, 'SelfRef', { avatar: '/api/avatar/abc?size=thumb', archetype: '' });
         row(keypair().pubKeyHex, 'Pruned', { status: 'pruned', profile: '2026-09-01T00:00:00.000Z' });
@@ -158,7 +157,7 @@ async function main() {
         row(keypair().pubKeyHex, 'LegacyNumericProfile', { profile: 1727000000000 });
         row(keypair().pubKeyHex, 'NumericJoined', { joined: 5 });
         row(keypair().pubKeyHex, 'NoJoined', { joined: null, profile: '2026-08-08T00:00:00.000Z' });
-        row(keypair().pubKeyHex, 'Ünïcødé 名前 😀', { joined: '2025-12-31T23:59:59.999Z', elder: '' });
+        row(keypair().pubKeyHex, 'Ünïcødé 名前 😀', { joined: '2025-12-31T23:59:59.999Z' });
         row(keypair().pubKeyHex, 'Oldest', { joined: '2024-01-01T00:00:00.000Z' });
         db.prepare(`INSERT INTO node_roles (member_pubkey, role) VALUES (?, 'admin')`).run(admin);
     })();
@@ -228,7 +227,7 @@ async function main() {
             row((i + 1).toString(16).padStart(64, '0'), `m${i}`, {
                 joined: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
                 profile: i % 3 === 0 ? new Date(Date.UTC(2026, 0, 1) + i * 60_000 + 30_000).toISOString() : null,
-                earned: i % 7, archetype: i % 5 === 0 ? 'maker' : null, elder: i % 11 === 0 ? elder : null,
+                earned: i % 7, archetype: i % 5 === 0 ? 'maker' : null,
             });
         }
     })();

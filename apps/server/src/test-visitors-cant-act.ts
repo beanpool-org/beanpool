@@ -11,7 +11,7 @@
  * a third, where as lead she approved a request to keep it that is still waiting out its objection window.
  * Every request goes over HTTP through the real signature middleware, or over /ws.
  *
- *  1. The table: each write a member may make that a key with no row can't (#1182 item 4 rows 4-12: vouching, rating,
+ *  1. The table: each write a member may make that a key with no row can't (#1182 item 4 rows 5-12: rating,
  *     reporting, posting and poll votes, trades, groups, RSVPs and event chat, crowdfund pledges; and the rest the
  *     sweep found: the People list area, friends, the profile, holiday mode, enterprises and keeping one, projects,
  *     crowdfunds and a crowdfund pledged to through an enterprise's pledge route, Decisions, Pulse channels, recovery,
@@ -320,7 +320,6 @@ async function main(): Promise<void> {
     completePostTransaction(miaBuys.id, mia.pk);
     const aliceBuys = acceptPost(offer(bob, 'Bob bread').id, alice.pk);
     completePostTransaction(aliceBuys.id, alice.pk);
-    db.prepare('UPDATE members SET can_vouch = 1 WHERE public_key = ?').run(mia.pk);
 
     // What the table's writes reach: listings, a poll, an event with a private note, a group, a crowdfund, a Decision.
     const aliceOffer = offer(alice, 'Alice lemons');
@@ -337,8 +336,8 @@ async function main(): Promise<void> {
     const enterprise = createTreasury('Seed bank VA', AVATAR, 0, { leadKeeperPubkey: alice.pk, purpose: 'Seeds for everyone' } as any);
     const keyOf = (t: any): string => t.publicKey ?? t.treasury?.publicKey;
     const enterpriseKey = keyOf(enterprise);
-    const decision = createDecision({ authorPubkey: alice.pk, title: 'Carol vouches', description: 'Carol has helped many of us',
-        touches: 'member', effect: 'grant_voucher', subject: carol.pk } as any) as any;
+    const decision = createDecision({ authorPubkey: alice.pk, title: "Freeze Carol's credit", description: 'Carol has deals half done',
+        touches: 'member', effect: 'freeze_credit', subject: carol.pk } as any) as any;
     // Enterprises for a visitor's keeper's rows (section 1b): Lena leads an orchard; Cody and Quinn keep, and ask to keep, an
     // apiary the visitor leads; nobody keeps the mill.
     const lena = makeMember('LenaVA');
@@ -409,8 +408,7 @@ async function main(): Promise<void> {
     };
     const ok = (r: Res) => r.status >= 200 && r.status < 300;
     const cases: Case[] = [
-        // #1182 item 4, rows 4-12.
-        { name: 'vouch (row 4)', method: 'POST', path: () => '/api/profile/vouch', body: () => ({ targetPubkey: carol.pk, level: 1 }) },
+        // #1182 item 4, rows 5-12 (row 4, the vouch, went with the vouching reset, R0).
         { name: 'rate a completed trade (row 5)', method: 'POST', path: () => '/api/ratings',
             body: a => ({ raterPubkey: a.pk, targetPubkey: a === vera ? bob.pk : alice.pk, stars: 5, comment: 'Lovely', transactionId: a === vera ? veraTrade : miaBuys.id }) },
         { name: 'report a post (row 6)', method: 'POST', path: () => '/api/reports',
@@ -449,7 +447,7 @@ async function main(): Promise<void> {
         { name: 'start a crowdfund', method: 'POST', path: () => '/api/crowdfund/projects',
             body: a => ({ creatorPubkey: a.pk, title: `Kiln for ${a.name}`, description: 'A kiln', goalAmount: 50 }) },
         { name: 'propose a Decision', method: 'POST', path: () => '/api/commons/decisions',
-            body: a => ({ title: `Bob vouches (${a.name})`, description: 'Bob has helped many of us', touches: 'member', effect: 'grant_voucher', subject: bob.pk }) },
+            body: a => ({ title: `Freeze Bob's credit (${a.name})`, description: 'Bob has deals half done', touches: 'member', effect: 'freeze_credit', subject: bob.pk }) },
         { name: 'vote on a Decision', method: 'POST', path: () => `/api/commons/decisions/${decision.id}/vote`, body: () => ({ support: true }) },
         { name: 'add a Pulse channel', method: 'POST', path: () => '/api/member/channels',
             body: a => ({ platform: 'youtube', url: `https://www.youtube.com/@${a.name.toLowerCase()}`, category: 'food' }) },
@@ -710,7 +708,7 @@ async function main(): Promise<void> {
         ...lockedDm(), emoji: '👍', stars: 5, reason: 'spam', callsign: `Swept ${a.name}`,
         bio: 'Swept', text: 'Swept line', message: 'Swept line', status: 'going', support: true, choice: 'yes', optionId: 'a', enabled: false,
         duration: '8h', offsets: [60], lat: -28.5, lng: 153.5, radiusKm: 10, name: `Swept ${a.name}`, goalAmount: 10, requestedAmount: 10,
-        platform: 'youtube', url: `https://www.youtube.com/@swept${a.name.toLowerCase()}`, touches: 'member', effect: 'grant_voucher', subject: bob.pk,
+        platform: 'youtube', url: `https://www.youtube.com/@swept${a.name.toLowerCase()}`, touches: 'member', effect: 'freeze_credit', subject: bob.pk,
         token: 'ExponentPushToken[swept]', preferences: { chat: true },
     });
     {

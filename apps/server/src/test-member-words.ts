@@ -467,7 +467,7 @@ async function testFamilies({ owner, ann, bob, se, db }: People): Promise<void> 
     await family('community, preferences', 'You may only read your own preferences', 'GET', ann, `/api/members/preferences?publicKey=${owner.pk}`);
 
     // The engine's refusals through a route (state-engine.ts): a sentence, and one with a value in it.
-    await family('trust, vouching', 'You cannot vouch for yourself', 'POST', ann, '/api/profile/vouch', { targetPubkey: ann.pk });
+    await family('the Commons, an amount not to the cent', 'The amount is a number of Beans above 0, to the cent.', 'POST', ann, '/api/commons/pay', { amount: 0.001 });
     await family('the Commons, a payment', 'You hold 0 Beans: you can pay the Commons only what you hold.', 'POST', ann, '/api/commons/pay', { amount: 5 });
 
     // Enterprises, the community's Decisions and a group's votes (routes/treasury.ts, decisions-engine.ts).

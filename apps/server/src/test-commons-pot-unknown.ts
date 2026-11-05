@@ -20,7 +20,7 @@
  *   S  a passed remove_member of Eve                        its start (a suspension) carried out in the pause
  *   R1 a removal of Dan whose grace window has ended        waits; at the mend a fresh 24-hour window, then carried out
  *   R2 a removal of Hal whose grace window has ended        waits; at the mend a fresh window, in which it is halted
- *   O  an open vote (grant_voucher on Cara)                 halted in the pause
+ *   O  an open vote (freeze_credit on Cara)                 halted in the pause
  *   H  a removal of Gus in its grace window                 halted in the pause: Gus is a member again
  * and listings: three with no deal (removed in the pause: single, bulk, through a report) and one with a held deal
  * (refused in the pause words), an enterprise Ivy keeps (its sweep refused in the pause words), and a grant proposal.
@@ -111,7 +111,7 @@ async function child(): Promise<void> {
             add('S', 'member', 'remove_member', k.eve, null, 'passed', at(-1), null);
             add('R1', 'member', 'remove_member', k.dan, null, 'execution_pending_grace', at(-8), at(-1));
             add('R2', 'member', 'remove_member', k.hal, null, 'execution_pending_grace', at(-8), at(-1));
-            add('O', 'member', 'grant_voucher', k.cara, null, 'open', at(6), null);
+            add('O', 'member', 'freeze_credit', k.cara, null, 'open', at(6), null);
             add('H', 'member', 'remove_member', k.gus, null, 'execution_pending_grace', at(-4), at(3));
             // Dan, Hal and Gus as the start of their removal left them: suspended, credit frozen.
             for (const pk of [k.dan, k.hal, k.gus]) db.prepare("UPDATE members SET status = 'disabled', credit_frozen = 1 WHERE public_key = ?").run(pk);

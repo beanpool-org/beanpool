@@ -146,9 +146,9 @@ async function main() {
         `info says global, with formal Decisions off (${info.status} ${JSON.stringify(info.body?.features)})`);
 
     const effects = [...Object.keys(de.TOUCHES_FOR_EFFECT), 'set_rule'];
-    // 22 effects (the three an enterprise's keepers' vote carries out included: pay_out, remove_keeper, replace_lead; and the
+    // 20 effects (the three an enterprise's keepers' vote carries out included: pay_out, remove_keeper, replace_lead; and the
     // five a chat group's vote carries out: set_group_role … close_group) + one unknown.
-    assert(effects.length === 23 && effects.includes('close_group') && effects.includes('pay_out') && effects.includes('keep_suspension') && effects.includes('remove_lead_keeper') && effects.includes('forgive_debt'),
+    assert(effects.length === 21 && effects.includes('close_group') && effects.includes('pay_out') && effects.includes('keep_suspension') && effects.includes('remove_lead_keeper') && effects.includes('forgive_debt'),
         `every effect there is, the system's own and an unknown one (${effects.join(', ')})`);
     for (const effect of effects) {
         for (const who of [carol, olga]) {
@@ -162,7 +162,7 @@ async function main() {
     assert(count('SELECT COUNT(*) AS c FROM decisions') === 0, 'and no Decision was written');
 
     const before = existing('freeze_credit', dave);
-    const closedBefore = existing('grant_voucher', dave, { status: 'executed', closesAt: new Date(Date.now() - DAY).toISOString() });
+    const closedBefore = existing('freeze_credit', dave, { status: 'executed', closesAt: new Date(Date.now() - DAY).toISOString() });
     const vote = await call('POST', `/api/commons/decisions/${before}/vote`, { support: true }, bob);
     assert(featureOff(vote), `voting on a Decision already open: 404 feature_off (${show(vote)})`);
     const noSuch = await call('POST', `/api/commons/decisions/${crypto.randomUUID()}/vote`, { support: false }, bob);

@@ -120,7 +120,7 @@ function main() {
     assert(indexes.includes('idx_decisions_member_author_open') && indexes.includes('idx_decisions_tick_open'),
         `the decisions indexes are rebuilt (got ${indexes.join(', ')})`);
     let dupOpen = '';
-    try { insert.run('dup-open', 'author-keep', 'Second', 'member', 'grant_voucher', '1m1v', 'open'); } catch (e: any) { dupOpen = e.message; }
+    try { insert.run('dup-open', 'author-keep', 'Second', 'member', 'freeze_credit', '1m1v', 'open'); } catch (e: any) { dupOpen = e.message; }
     assert(/UNIQUE constraint failed/.test(dupOpen), 'one-open-Decision-per-author is still enforced by its index');
 
     ripOutLegacyVoting(db);

@@ -4641,7 +4641,6 @@
   "You voted for “{current}”. Change it to “{new}”?": "شما به «{current}» رأی دادید. به «{new}» تغییر کند؟",
   "Invite friends": "دعوت از دوستان",
   "{time} your time": "{time} به وقت شما",
-  "Your deals": "معاملات شما",
   "Failed to load voucher card": "بارگیری کارت ضامن ناموفق بود",
   "Could not set budget": "تنظیم بودجه انجام نشد",
   "{name} · Voucher": "{name} · ضامن",

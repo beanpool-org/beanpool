@@ -8,7 +8,7 @@ import * as path from 'node:path';
 
 const root = path.resolve(__dirname, '../../../..');
 const readCatalog = (dir: string, lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(root, dir, `${lang}.json`), 'utf8'));
-const langs = fs.readdirSync(path.join(root, 'packages/beanpool-core/words')).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5));
+const langs = fs.readdirSync(path.join(root, 'packages/beanpool-core/words')).filter((f) => f.endsWith('.json') && f !== 'en.sources.json').map((f) => f.slice(0, -5));
 
 describe('the rename in the catalogs', () => {
     it('no catalog of either app or core still has a "My Deals" key or sentence', () => {

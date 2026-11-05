@@ -4641,7 +4641,6 @@
   "You voted for “{current}”. Change it to “{new}”?": "आपने “{current}” के लिए वोट दिया था। इसे “{new}” में बदलें?",
   "Invite friends": "मित्रों को आमंत्रित करें",
   "{time} your time": "{time} आपका समय",
-  "Your deals": "आपके सौदे",
   "Failed to load voucher card": "गारंटीकर्ता कार्ड लोड करने में विफल",
   "Could not set budget": "बजट सेट नहीं किया जा सका",
   "{name} · Voucher": "{name} · गारंटीकर्ता",

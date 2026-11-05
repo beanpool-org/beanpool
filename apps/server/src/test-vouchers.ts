@@ -21,6 +21,12 @@
  * 12. Property test: across random sequences no voucher's lines sum below zero and left + held never passes 2,000.
  * 13. A thousand vouches: the ledger audit sums to zero, and no Bean moved.
  * 14. A standby's copy carries the three tables.
+ * 15. The ask's answer and the knock's answer carry a vouch, refused with the sentence as any invite's is.
+ * 16. A hold whose code lapsed is back in the budget at once: a read and a vouch don't wait for the hourly prune.
+ * 17. A frozen voucher (known floor or whole line): no vouch, a held code's vouch goes back at the redeem, no raise; a
+ *     paused one's budget isn't raised either; both may be lowered.
+ * 18. Each change the committee makes to a budget (made, raised, lowered, stopped) is a notice kept for the voucher, told
+ *     live and pushed once it has committed.
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -32,7 +38,7 @@ import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, exportSyncState, getBalance, adminPruneUser, purgeMemberSelf, transfer, createPost as rawCreatePost,
-    generateInvite, redeemInvite, runLedgerAudit, usableFloor, COMMUNITY_DECISION_ACTOR,
+    generateInvite, redeemInvite, runLedgerAudit, usableFloor, COMMUNITY_DECISION_ACTOR, adminSetCreditFrozen, adminSetUserStatus,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
@@ -49,6 +55,11 @@ import {
     VOUCHER_WORDS, VOUCHERS_MIGRATION_ACTOR, budgetOf, grantMissingRoleBudgets, makeVoucher, setBudgetLevel, stopVoucher,
     vouchFromProfile, returnLapsedHolds,
 } from './engine/vouchers.js';
+// The whole module too, for one export read by name (tellVoucherNotice): a missing one is a failed check, not a load error.
+import * as vouchersModule from './engine/vouchers.js';
+import { getDoor, setDoor } from './config/door.js';
+import { listKeptNotices } from './engine/kept-notices.js';
+import { setKnownFloorException } from './config/known-floor.js';
 
 const createPost = wrapCreatePost(rawCreatePost);
 let BASE = '';
@@ -503,6 +514,135 @@ async function main(): Promise<void> {
         && ['vouchers', 'voucher_allocations', 'room_gifts'].every((t) => (TABLES as any)[t]?.plain === true)
         && JSON.stringify(TABLES.invite_codes).includes('vouch_amount') && JSON.stringify(TABLES.members).includes('credit_committee'),
         `14. a standby's whole copy carries every row of the three tables, and the two columns (${JSON.stringify(carried)})`);
+
+    // ── 15. The ask's answer and the knock's answer carry a vouch (the design §2's four places; amend2 §4) ─────────
+    // Owen's HTTP invites above reached the owners' daily invite limit: from here people join on invites the engine makes
+    // (as §12 and §13 do), and Lou, an admin with the 1,000 the boot gave him, answers through the routes.
+    const enter = (who: Id) => {
+        const inv = generateInvite(owen.pk)!;
+        require_(redeemInvite(inv.code, who.pk, who.name).success === true, `${who.name} joins`);
+    };
+    require_(budgetOf(lou.pk).left === 1000, `Lou, an admin, holds 1,000 (${JSON.stringify(budgetOf(lou.pk))})`);
+    const doorBefore = getDoor();
+    setDoor('admins');
+    const asked = await call(mel, 'POST', '/api/invite/asks', { firstName: 'Ivy', howKnown: 'Ivy keeps the stall by the station' });
+    require_(asked.status === 201 && typeof asked.body?.ask?.id === 'string', `Mel asks an admin to invite Ivy (${show(asked)})`);
+    const askId = asked.body.ask.id as string;
+    const askWaiting = () => count('SELECT COUNT(*) AS n FROM invite_asks WHERE id = ?', askId);
+    const invitesBefore15 = count('SELECT COUNT(*) AS n FROM invite_codes');
+    const askSixty = await call(lou, 'POST', `/api/invite/asks/${askId}/send`, { vouchAmount: 60 });
+    const askByAda = await call(ada, 'POST', `/api/invite/asks/${askId}/send`, { vouchAmount: 25 });
+    assert(askSixty.status === 400 && askSixty.body?.error === VOUCHER_WORDS.badAmount && askByAda.status === 403 && askByAda.body?.code === 'not_a_voucher'
+        && askByAda.body?.error === VOUCHER_WORDS.notAVoucher && askWaiting() === 1 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore15,
+        `15. an ask's answer with a 60, or from an admin whose budget was stopped, is refused with the sentence; the ask still waits, no invite made (${show(askSixty)} | ${show(askByAda)})`);
+    const askAnswered = await call(lou, 'POST', `/api/invite/asks/${askId}/send`, { vouchAmount: 50 });
+    const askCode = (db.prepare('SELECT code, vouch_amount FROM invite_codes WHERE created_by = ? ORDER BY rowid DESC LIMIT 1').get(lou.pk) as { code: string; vouch_amount: number | null } | undefined)
+        ?? { code: '', vouch_amount: null };
+    assert(askAnswered.status === 200 && askWaiting() === 0 && askCode.vouch_amount === 50
+        && count("SELECT COUNT(*) AS n FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'hold' AND ref = ?", lou.pk, askCode.code) === 1,
+        `15. Lou answers the ask with a 50: the invite carries it, held from his budget with the code (${show(askAnswered)})`);
+    setDoor(doorBefore);
+    const ivy = newId('Ivy');
+    const ivyJoins = await redeem(ivy, askCode.code);
+    assert(ivyJoins.status === 200 && ivyJoins.body?.vouch?.landed === 50 && roomOf(ivy.pk) === 50, `15. and it lands on whoever joins with it (${show(ivyJoins)})`);
+    const kit = newId('Kit');
+    const knocked = await call(kit, 'POST', '/api/join/knock', { callsign: 'Kit', message: 'Hello from Kit, I live nearby and bake bread.' });
+    require_(knocked.status === 201, `Kit asks to join (${show(knocked)})`);
+    const knockId = (db.prepare('SELECT id FROM join_requests WHERE pubkey = ?').get(kit.pk) as { id: string }).id;
+    const knockSixty = await call(lou, 'POST', `/api/join/knocks/${knockId}/approve`, { vouchAmount: 60 });
+    const knockStill = (db.prepare('SELECT status FROM join_requests WHERE id = ?').get(knockId) as { status: string }).status;
+    assert(knockSixty.status === 400 && knockSixty.body?.error === VOUCHER_WORDS.badAmount && knockStill === 'pending',
+        `15. a knock's answer with a 60 is refused with the sentence, and the request still waits (${show(knockSixty)}, ${knockStill})`);
+    const knockAnswered = await call(lou, 'POST', `/api/join/knocks/${knockId}/approve`, { vouchAmount: 75 });
+    const kitJoins = await redeem(kit, knockAnswered.body?.invite?.code);
+    assert(knockAnswered.status === 200 && knockAnswered.body?.invite?.vouchAmount === 75 && kitJoins.status === 200 && kitJoins.body?.vouch?.landed === 75 && roomOf(kit.pk) === 75,
+        `15. Lou answers Kit's knock with a 75: the answer says so, and it lands when Kit joins (${show(knockAnswered)} | ${show(kitJoins)})`);
+    const plainKnocker = newId('Pip');
+    require_((await call(plainKnocker, 'POST', '/api/join/knock', { callsign: 'Pip', message: 'Hello from Pip, I live nearby too.' })).status === 201, 'Pip asks to join');
+    const pipKnock = (db.prepare('SELECT id FROM join_requests WHERE pubkey = ?').get(plainKnocker.pk) as { id: string }).id;
+    const pipAnswered = await call(lou, 'POST', `/api/join/knocks/${pipKnock}/approve`, {});
+    assert(pipAnswered.status === 200 && pipAnswered.body?.invite?.code && !('vouchAmount' in (pipAnswered.body?.invite ?? {})),
+        `15. a knock answered with no vouch says none (${show(pipAnswered)})`);
+
+    // ── 16. A hold whose code lapsed is back at once, before the hourly prune writes its return ─────────────────────
+    const [quin, rae] = [newId('Quin'), newId('Rae')];
+    for (const q of [quin, rae]) { enter(q); makeVoucher(owen.pk, { entryId: confirm(q, owen), amount: 100 }); }
+    const quinHeld = await generate(quin, 100);
+    const raeHeld = await generate(rae, 100);
+    require_(quinHeld.status === 200 && raeHeld.status === 200 && budgetOf(quin.pk).left === 0 && budgetOf(rae.pk).left === 0, 'Quin and Rae each hold their whole 100 on an invite');
+    for (const r of [quinHeld, raeHeld]) db.prepare("UPDATE invite_codes SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-31 days') WHERE code = ?").run(r.body?.invite?.code);
+    const quinMe = await call(quin, 'GET', '/api/vouchers/me');
+    assert(quinMe.body?.budget?.left === 100 && quinMe.body?.budget?.held === 0 && sumLines(quin.pk) === 0,
+        `16. a hold whose code lapsed reads as back in the budget at once, its return line not written yet (${show(quinMe)})`);
+    const quinAgain = await generate(quin, 50);
+    const raeVouch = await vouch(rae, mel, 25);
+    assert(quinAgain.status === 200 && raeVouch.status === 200,
+        `16. so an invite with a vouch, or a profile vouch, from it passes without waiting for the prune (${show(quinAgain)} | ${show(raeVouch)})`);
+    assert(count("SELECT COUNT(*) AS n FROM voucher_allocations WHERE kind = 'return' AND ref = ?", quinHeld.body?.invite?.code) === 1
+        && budgetOf(quin.pk).left === 50 && budgetOf(quin.pk).held === 50 && sumLines(quin.pk) === 50,
+        `16. the writer wrote the lapsed hold's return first, once: 50 left, 50 held (${JSON.stringify(budgetOf(quin.pk))})`);
+
+    // ── 17. A frozen voucher: nothing more out of the budget, no raise; a lower still passes (design §5.2, §5.6) ─────
+    const [fay, gus, hal] = [newId('Fay'), newId('Gus'), newId('Hal')];
+    for (const v of [fay, gus, hal]) { enter(v); makeVoucher(owen.pk, { entryId: confirm(v, owen), amount: 500 }); }
+    const gusHeld = await generate(gus, 50);
+    require_(gusHeld.status === 200 && budgetOf(gus.pk).held === 50, 'Gus holds 50 on an invite before any freeze');
+    setKnownFloorException(owen.pk, { memberPubkey: fay.pk, frozen: true });
+    const linesBefore17 = allLines();
+    const invitesBefore17 = count('SELECT COUNT(*) AS n FROM invite_codes');
+    const fayVouch = await vouch(fay, mel, 25);
+    const fayInvite = await generate(fay, 25);
+    assert(fayVouch.status === 409 && fayVouch.body?.code === 'frozen' && fayVouch.body?.error === VOUCHER_WORDS.frozen && fayInvite.status === 409 && fayInvite.body?.code === 'frozen'
+        && allLines() === linesBefore17 && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBefore17,
+        `17. with Fay's known floor frozen she can't vouch from a profile or on an invite: the sentence, nothing written (${show(fayVouch)} | ${show(fayInvite)})`);
+    const fayRaise = await setLevel(owen, fay, 1000);
+    const fayLower = await setLevel(owen, fay, 200);
+    assert(fayRaise.status === 409 && fayRaise.body?.code === 'frozen' && /credit line is frozen/.test(fayRaise.body?.error ?? '') && fayLower.status === 200 && budgetOf(fay.pk).left === 200,
+        `17. her budget can't be raised while it lasts, and can still be lowered (${show(fayRaise)} | ${fayLower.status})`);
+    adminSetCreditFrozen(gus.pk, true);
+    const gusJoiner = newId('Gil');
+    const gilJoins = await redeem(gusJoiner, gusHeld.body?.invite?.code);
+    assert(gilJoins.status === 200 && gilJoins.body?.vouch?.ended === VOUCHER_WORDS.voucherEnded && roomOf(gusJoiner.pk) === 0
+        && count("SELECT COUNT(*) AS n FROM voucher_allocations WHERE kind = 'return' AND ref = ?", gusHeld.body?.invite?.code) === 1 && budgetOf(gus.pk).left === 500,
+        `17. a code Gus held before his whole line was frozen joins with no vouch while it lasts, the 50 back in his budget (${show(gilJoins)})`);
+    adminSetCreditFrozen(gus.pk, false);
+    const gusLater = await vouch(gus, gusJoiner, 25);
+    assert(gusLater.status === 200 && roomOf(gusJoiner.pk) === 25, `17. unfrozen, Gus may vouch for Gil from his profile: the pair has no vouch yet (${show(gusLater)})`);
+    adminSetUserStatus(hal.pk, 'disabled');
+    const halRaise = await setLevel(owen, hal, 1000);
+    const halLower = await setLevel(owen, hal, 300);
+    assert(halRaise.status === 409 && halRaise.body?.code === 'paused' && halLower.status === 200 && budgetOf(hal.pk).left === 300,
+        `17. a paused voucher's budget can't be raised while it lasts, and can be lowered (${show(halRaise)} | ${halLower.status})`);
+    adminSetUserStatus(hal.pk, 'active');
+
+    // ── 18. Each change the committee makes to a budget is a notice to its voucher (Marty's §10.2) ─────────────────
+    const jen = newId('Jen');
+    enter(jen);
+    const voucherNotices = () => listKeptNotices(jen.pk).filter((n) => n.data.kind === 'voucher_budget');
+    const jenMade = await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(jen, owen), amount: 800 });
+    const jenUp = await setLevel(owen, jen, 1500);
+    const jenSame = await setLevel(owen, jen, 1500);
+    const jenBad = await setLevel(owen, jen, 150);
+    const jenDown = await setLevel(owen, jen, 600);
+    const jenStop = await call(owen, 'DELETE', `/api/names/vouchers/${jen.pk}`);
+    const told = voucherNotices();
+    assert(jenMade.status === 201 && jenUp.status === 200 && jenSame.body?.changed === false && jenBad.status === 400 && jenDown.status === 200 && jenStop.status === 200
+        && JSON.stringify(told.map((n) => n.data.change)) === '["made","raised","lowered","stopped"]'
+        && told.every((n) => n.title === VOUCHER_WORDS.noticeTitle)
+        && told[0].body === 'You’re a voucher now: you have a budget of 800 Beans to vouch for people, up to 100 each.'
+        && told[1].body === 'Your budget to vouch from was raised to 1500 Beans. You have 1500 of it left to vouch with.'
+        && told[2].body === 'Your budget to vouch from was lowered to 600 Beans. You have 600 of it left to vouch with.'
+        && told[3].body === VOUCHER_WORDS.noticeStopped,
+        `18. made, raised, lowered and stopped are each a notice kept for Jen; the same level and a refused one are none (${JSON.stringify(told.map((n) => [n.data.change, n.body]))})`);
+    const heard: { live: unknown[][]; pushed: unknown[][] } = { live: [], pushed: [] };
+    const hooks = { broadcast: (...a: unknown[]) => { heard.live.push(a); }, dispatchPushNotification: (...a: unknown[]) => { heard.pushed.push(a); } };
+    const tellFn = vouchersModule.tellVoucherNotice as ((n: unknown, h: typeof hooks) => void) | undefined;
+    tellFn?.({ to: jen.pk, title: told[1].title, body: told[1].body, id: told[1].id, data: told[1].data }, hooks);
+    const live = heard.live[0] as [{ type: string; title: string; body: string; noticeId?: string }, string[]] | undefined;
+    const pushed = heard.pushed[0] as unknown[] | undefined;
+    assert(typeof tellFn === 'function' && live?.[0]?.type === 'system_announcement' && live[0].body === told[1].body && live[0].noticeId === told[1].id && JSON.stringify(live[1]) === JSON.stringify([jen.pk])
+        && JSON.stringify(pushed?.[0]) === JSON.stringify([jen.pk]) && pushed?.[6] === 'community.notice' && pushed?.[3] === told[1].body,
+        `18. once the change has committed it goes live to Jen's own sockets with her kept copy's id, and out as a community.notice push (${JSON.stringify(heard).slice(0, 300)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

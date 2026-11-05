@@ -145,7 +145,7 @@ export interface ProfileSwitches {
      *  members' and listings' versions still move, so anyone's next read has the new card. Measured on the global node's
      *  load rehearsal (scratch/global-node/REPORT-global-load-rehearsal.md §3): 2,400 photos set in a minute to 3,500
      *  sockets were 8.4 million frames, a whole core, before each app's sync of about ten requests. A change to a
-     *  member's standing (a suspension, a vouch, holiday, a re-key) is not an edit of their card, and goes to every
+     *  member's standing (a suspension, a grant, holiday, a re-key) is not an edit of their card, and goes to every
      *  member's socket as before. */
     announceProfiles: boolean;
     /** A member's phone may ask for its own set of listings (`nearby=1` on the posts sync read, routes/marketplace.ts):
@@ -314,7 +314,6 @@ export interface NodeFeatures {
      *  where it is true: a server from before it would refuse the event, or keep it from everyone but its host. */
     onlineEvents: boolean;
     pins: boolean;
-    inviteVouch: boolean;
     /** A member can ask an admin to invite someone here: with `door` 'admins', what core offersInviteAsk reads. */
     inviteAsks: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
@@ -598,9 +597,6 @@ export function getNodeFeatures(): NodeFeatures {
         onlineEvents: true,
         // And pins (engine/pins.ts): an app offers one only where the node says so (DESIGN-pinning-fable.md §2.11).
         pins: true,
-        // And a vouch on an invite (engine/invites.ts), which means nothing where there are no Beans: an app offers one
-        // only where the node says so, so a phone newer than its node never shows a choice the node would drop.
-        inviteVouch: s.beans,
         // And an ask that an admin invite someone (engine/invite-asks.ts): answered with an invite, so never where invites
         // are off. An app offers one only where the node says so, and where only admins invite (`door`).
         inviteAsks: s.invites,

@@ -12,17 +12,17 @@ describe('the known floor (community modes slice 4)', () => {
     });
 
     it('an unconfirmed member (or known mode off) gets today\'s formula exactly', () => {
-        for (const [v, e, g] of [[0, 0, 0], [25, 0, 0], [100, 1920, 0], [50, 300, 1400], [0, 1920, 1400]]) {
-            expect(creditAllowance({ vouch: v, earned: e, granted: g, knownGrant: 0, cap: CREDIT_CAP_DEFAULT }))
-                .toBe(Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, v + e + g));
+        for (const [e, g] of [[0, 0], [25, 0], [1920, 0], [300, 1400], [1920, 1400]]) {
+            expect(creditAllowance({ earned: e, granted: g, knownGrant: 0, cap: CREDIT_CAP_DEFAULT }))
+                .toBe(Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, e + g));
         }
     });
 
     it('a confirmed member adds the known grant, capped by the community cap', () => {
-        expect(creditAllowance({ vouch: 0, earned: 0, granted: 0, knownGrant: 1000, cap: 2000 })).toBe(1000);
-        expect(creditAllowance({ vouch: 50, earned: 1500, granted: 0, knownGrant: 1000, cap: 2000 })).toBe(2000);
-        expect(creditAllowance({ vouch: 50, earned: 1500, granted: 0, knownGrant: 3000, cap: 5000 })).toBe(4550);
-        expect(creditAllowance({ vouch: 0, earned: 1920, granted: 0, knownGrant: 5000, cap: 5000 })).toBe(5000);
+        expect(creditAllowance({ earned: 0, granted: 0, knownGrant: 1000, cap: 2000 })).toBe(1000);
+        expect(creditAllowance({ earned: 1500, granted: 50, knownGrant: 1000, cap: 2000 })).toBe(2000);
+        expect(creditAllowance({ earned: 1500, granted: 50, knownGrant: 3000, cap: 5000 })).toBe(4550);
+        expect(creditAllowance({ earned: 1920, granted: 0, knownGrant: 5000, cap: 5000 })).toBe(5000);
     });
 
     it('the known grant: knownFloor when confirmed with the dial on, else 0; an exception overrides it up to the cap', () => {

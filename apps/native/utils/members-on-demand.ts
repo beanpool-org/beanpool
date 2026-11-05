@@ -1,8 +1,8 @@
 /**
  * Members on demand (DESIGN-global-members-by-area §2.2, #1792): on a community whose profile says
  * `features.membersOnDemand` (the worldwide one), this phone never reads the directory whole. It holds the cards it can
- * show a reason for, the "referenced" keys: its own, everyone it chats with, trades with, rates or is rated by, its
- * friends and whoever vouched it in. Listing authors are not in it: the by-area posts row carries their name and face.
+ * show a reason for, the "referenced" keys: its own, everyone it chats with, trades with, rates or is rated by, and its
+ * friends. Listing authors are not in it: the by-area posts row carries their name and face.
  * After each landed cycle it asks the node for the referenced cards it lacks, `keys=` at most 100 at a time and at most
  * three requests a cycle (the rest the next cycle), re-checks the 100 held cards it fetched longest ago, and past 1,000
  * cards drops the oldest ones nothing references. Nothing here deletes a card for a read that did not land.

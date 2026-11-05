@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
-    addFriendApi, submitRating, vouchMemberApi, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
+    addFriendApi, submitRating, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
     type PublicCreatorChannel
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -9,7 +9,7 @@ import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, word, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, type QuizResult } from '@beanpool/core';
 import { ListPhoto } from '../components/ListPhoto';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
@@ -22,13 +22,6 @@ import { LocalCommunityLine } from '../components/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { tierWords } from '../lib/trust-tier';
 import { Sentence } from '../components/Sentence';
-
-/** A vouch's three levels, and the credit floor each hands out. The names are word() keys, shown through t(). */
-const VOUCH_LEVELS = [
-    { level: 1, label: word('Light', 'vouch level'), amount: '−25' },
-    { level: 2, label: word('Standard', 'vouch level'), amount: '−50' },
-    { level: 3, label: word('Deep', 'vouch level'), amount: '−100' },
-] as const;
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -67,8 +60,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [loading, setLoading] = useState(true);
 
     const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
-    const [viewerBalance, setViewerBalance] = useState<BalanceInfo | null>(null);
-    const [vouching, setVouching] = useState(false);
     const [given, setGiven] = useState<Rating[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
     const [isFriend, setIsFriend] = useState(false);
@@ -178,8 +169,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             .then(res => { if (!cancelled) setChannels(res.channels || []); })
             .catch(() => { if (!cancelled) setChannels([]); });
 
-        // The reader's own balance (their trust card, or the vouch button on someone else's) is Beans: where they are in
-        // preview (the global node) it is never asked (lib/features readsOwn), and the line takes the card's slot.
+        // The reader's own balance (their trust card, on their own profile) is Beans: where they are in preview (the global
+        // node) it is never asked (lib/features readsOwn), and the line takes the card's slot. Someone else's profile asks none.
         const ownBalance = (key: string) => readsOwn('beans').then((reads) => (reads ? getBalance(key) : null)).catch(() => null);
         // The profile first, on its own: an enterprise's key goes to its page as soon as the node has said what it is.
         const profileRead = getMemberProfile(pubkey, identity.publicKey).catch(() => null);
@@ -198,11 +189,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             isSelf ? ownBalance(pubkey) : Promise.resolve(null),
             isSelf ? getRatingsGiven(pubkey).catch(() => ({ ratings: [] })) : Promise.resolve({ ratings: [] }),
             isSelf ? getFriends(pubkey).catch(() => []) : getFriends(identity.publicKey).catch(() => []),
-            // Viewer's own balance (when viewing someone else) — drives the Elder vouch button.
-            isSelf ? Promise.resolve(null) : ownBalance(identity.publicKey),
             // Viewer's own profile (when viewing someone else) — drives Collaboration Chemistry synergy card.
             isSelf ? Promise.resolve(null) : getMemberProfile(identity.publicKey, identity.publicKey).catch(() => null),
-        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerBal, viewerProf]) => {
+        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerProf]) => {
             if (cancelled) return;
             if (prof) setProfile(prof);
             if (isSelf) {
@@ -210,7 +199,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             } else if (viewerProf) {
                 setViewerProfile(viewerProf);
             }
-            if (viewerBal) setViewerBalance(viewerBal as BalanceInfo);
             if (rat) {
                 setStats({ average: rat.average, count: rat.count, asProvider: rat.asProvider, asReceiver: rat.asReceiver });
                 setRatings(rat.ratings || []);
@@ -236,26 +224,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);
         return '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
-    };
-
-    // Vouch: an appointed voucher (admin-granted can_vouch capability) can vouch for anyone.
-    // Gated on the viewer's server-provided canVouch — NOT their tier. A vouch hands out the
-    // chosen level's credit floor, lifting the newcomer's no-overdraft gate.
-    const viewerCanVouch = !!(isSelf ? balanceInfo : viewerBalance)?.canVouch;
-    const canVouch = !isSelf && viewerCanVouch && !profile?.elderVouchedBy;
-
-    const handleVouch = async (level: 1 | 2 | 3) => {
-        if (vouching) return;
-        setVouching(true);
-        try {
-            await vouchMemberApi(pubkey, level);
-            const fresh = await getMemberProfile(pubkey, identity.publicKey).catch(() => null);
-            if (fresh) setProfile(fresh);
-        } catch (e) {
-            alert(e instanceof Error ? e.message : t('Could not vouch for this member'));
-        } finally {
-            setVouching(false);
-        }
     };
 
     const handleAddFriend = async () => {
@@ -390,12 +358,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         </div>
                     )}
 
-                    {profile?.elderVouchedBy && (
-                        <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold">
-                            {profile.elderVouchedByCallsign ? t('🤝 Vouched by {name}', { name: profile.elderVouchedByCallsign }) : t('🤝 Vouched by a sponsor')}
-                        </div>
-                    )}
-
                     {!isSelf && (
                         isBlocked ? (
                             <div className="mt-4 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-bold flex flex-wrap items-center gap-2 break-words">
@@ -440,25 +402,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     {/* Syndicated Creator Channels (The Pulse, Phase 1) */}
                     <ChannelChips channels={channels} />
 
-                    {canVouch && (
-                        <div className="mt-3 w-full max-w-sm">
-                            <div className="text-xs font-semibold text-nature-500 dark:text-nature-400 text-center mb-1.5">{t('🤝 Vouch — extend a credit line (no beans leave your wallet)')}</div>
-                            <div className="flex gap-2 justify-center">
-                                {VOUCH_LEVELS.map(({ level: lvl, amount: amt }, i) => (
-                                    <button
-                                        key={lvl}
-                                        onClick={() => handleVouch(lvl)}
-                                        disabled={vouching}
-                                        className="flex-1 bg-bp-gold-fill hover:bg-bp-gold-hover disabled:opacity-60 text-bp-gold-on border-none rounded-xl px-3 py-2 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex flex-col items-center leading-tight"
-                                    >
-                                        <span className="text-[13px]">{t(VOUCH_LEVELS[i].label)}</span>
-                                        <span className="text-[11px] opacity-90 font-mono">{amt}</span>
-                                    </button>
-                                ))}
-                            </div>
-                            {vouching && <div className="text-xs text-center text-nature-400 mt-1">{t('Vouching…')}</div>}
-                        </div>
-                    )}
                 </div>
 
                 {/* ─── Collaboration Chemistry ─── */}

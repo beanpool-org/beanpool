@@ -1478,7 +1478,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  * table, checked against this database's own `PRAGMA table_info` (a name the copy carries is never put in SQL unchecked),
  * with the main server's `updated_at`. No value here outlives the copy's: the main server is this standby's only writer
  * and the puller refuses an older copy, so a row that differs in any column is written, whatever its stamp (a withdrawn
- * vouch, a lifted freeze, an unset pin). A column this table has and the copy doesn't name (a standby newer than its main
+ * grant, a lifted freeze, an unset pin). A column this table has and the copy doesn't name (a standby newer than its main
  * server) keeps its own value, or its default on a new row.
  *
  * Never a value this table's own rules refuse (its CHECKs and NOT NULLs, db/table-rules.ts RowRules): a main server whose
@@ -1924,7 +1924,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             const memberRules = (remote.members ?? []).some((rm) => isPlainObject(rm?.standing)) ? new RowRules(db, 'members') : null;
             for (const rm of remote.members ?? []) {
                 // The main server's whole row (design G2a, §4.1): every column as it holds it. The special cases below (the
-                // visitor's mark never lowered by a copy, the owner's delete kept, the first voucher kept) are for a main
+                // visitor's mark never lowered by a copy, the owner's delete kept) are for a main
                 // server older than that, which sends its members as a fixed list of fields.
                 if (memberRules && isPlainObject(rm.standing)) {
                     if (typeof rm.publicKey !== 'string' || !rm.publicKey) { conflictsSkipped++; continue; }
@@ -1942,9 +1942,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 }
                 const existing = db.prepare("SELECT updated_at, is_visitor, board_standing_changed_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null; board_standing_changed_at: string | null } | undefined;
                 if (!existing) {
-                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
+                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, bio, contact_value, contact_visibility, status, last_active_at, archetype, updated_at, moderation_muted_until,
                                 area_lat, area_lng, area_updated_at, is_visitor, deleted_by_owner_at, board_standing_changed_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
@@ -1956,7 +1956,6 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rm.contactVisibility || null,
                         rm.status || 'active',
                         rm.lastActiveAt || null,
-                        rm.elderVouchedBy || null,
                         rm.archetype || null,
                         rm.updatedAt || rm.joinedAt,
                         mutedUntil(rm),
@@ -2007,7 +2006,6 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         contact_visibility = ?,
                         status = ?,
                         last_active_at = ?,
-                        elder_vouched_by = COALESCE(elder_vouched_by, ?),
                         archetype = ?,
                         moderation_muted_until = ?,
                         area_lat = ?,
@@ -2024,7 +2022,6 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rm.contactVisibility || null,
                         rm.status || 'active',
                         rm.lastActiveAt || null,
-                        rm.elderVouchedBy || null,
                         rm.archetype || null,
                         mutedUntil(rm),
                         ...importedArea(rm),

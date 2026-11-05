@@ -166,13 +166,13 @@ const STAMPED_BY_STANDBY = "the import doesn't write it, so the standby's own cl
 
 export const TABLES: Record<string, TableEntry> = {
     // ── What a standby copies (engine sync.ts exportSyncState → engine/sync.ts importRemoteState) ──
-    // A member's whole row, verbatim (`standing`, engine/sync.ts importRemoteState, G2a): an enterprise, a vouch, a freeze,
+    // A member's whole row, verbatim (`standing`, engine/sync.ts importRemoteState, G2a): an enterprise, a freeze,
     // granted credit, a pause, a map pin and every other column, with the main server's stamps (the import sets the
     // members' touch triggers aside while it writes them).
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
         columns: cols(`public_key callsign joined_at invited_by invite_code home_node_url avatar_ref avatar_bytes bio contact_value contact_visibility status
-            elder_vouched_by can_vouch vouch_credit credit_frozen is_treasury can_operate earned_credit earned_surplus working_capital_ceiling
+            credit_frozen is_treasury can_operate earned_credit earned_surplus working_capital_ceiling
             legacy_credit_floor profile_updated_at archetype purpose goal_amount deadline_at lifecycle paused paused_at paused_by
             paused_floor_snapshot wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
             location_updated_at updated_at moderation_muted_until area_lat area_lng area_updated_at is_visitor deleted_by_owner_at
@@ -434,7 +434,7 @@ export const TABLES: Record<string, TableEntry> = {
     group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
     group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
     // Every invite already sent, and who used which.
-    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome vouch_level updated_at'),
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
     // A replacement phone's code an operator issued.
     rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status wrong_matches kind'),
     // The phones that asked for a code, and the digits each shows (engine/rekey-redeem.ts): a promoted standby shows the admin

@@ -43,7 +43,6 @@ function renderPrune(posts: any[], onRefresh = vi.fn()) {
             onFreezeUser={vi.fn()}
             onPruneUser={vi.fn()}
             onUpdateTier={vi.fn()}
-            onToggleVoucher={vi.fn()}
             onToggleOperator={vi.fn()}
             initialSubTab="moderation"
         />

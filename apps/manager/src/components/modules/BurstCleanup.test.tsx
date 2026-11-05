@@ -283,7 +283,6 @@ describe('Triage & Moderation (owners and admins) with bursts', () => {
             onFreezeUser={vi.fn()}
             onPruneUser={vi.fn()}
             onUpdateTier={vi.fn()}
-            onToggleVoucher={vi.fn()}
             onToggleOperator={vi.fn()}
             initialSubTab="moderation"
         />,

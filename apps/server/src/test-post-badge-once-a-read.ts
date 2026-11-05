@@ -9,7 +9,7 @@
  * is kept between reads, so a change shows at the next one.
  *
  * Boots the real server on the global profile and reads through the real middleware over HTTPS, signed as a member:
- *   1. The same bytes, through several states (tiers set, trades completed, a line frozen, a vouch, a tier taken back):
+ *   1. The same bytes, through several states (tiers set, trades completed, a line frozen, a grant, a tier taken back):
  *      for the board, a deep page, the map, a sync read and a category, each post's badge is the author's badge worked
  *      out fresh at that state, and the body is that, byte for byte.
  *   2. What a read works out: a warm board read of 60 posts by 12 authors works out each author's trust profile once
@@ -129,7 +129,7 @@ async function main() {
         ['tiers set', () => { se.adminSetTier(authors[0].pubKeyHex, 'Resident'); se.adminSetTier(authors[1].pubKeyHex, 'Steward'); }],
         ['trades completed', () => { for (let i = 0; i < 30; i++) trade(2 + (i % 5), (i + 7) % 12, 40 + i * 7); }],
         ['a line frozen', () => { db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(authors[2].pubKeyHex); }],
-        ['a vouch', () => { db.prepare('UPDATE members SET elder_vouched_by = ?, vouch_credit = 50 WHERE public_key = ?').run(authors[0].pubKeyHex, authors[9].pubKeyHex); }],
+        ['a grant written to the row', () => { db.prepare('UPDATE members SET earned_credit = 50 WHERE public_key = ?').run(authors[9].pubKeyHex); }],
         ['a tier taken back', () => { se.adminSetTier(authors[1].pubKeyHex, 'Newcomer'); }],
     ];
     const seenBadges = new Set<number>();

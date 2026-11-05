@@ -7,7 +7,7 @@
  *      tierForCredit(authorEnergyCycled) is the author's real tier. Before: it was the earned lane alone,
  *      so a granted Elder's cards said Newcomer.
  *   2. The admin member list (/api/local/admin/data) reports the same tier. Before: it read the granted
- *      column only and called any appointed voucher an Elder.
+ *      column only.
  *   3. A member whose whole line the admins froze keeps their tier on their cards and in the admin list, as on their
  *      own profile. Before: the card read the floor (0 while frozen) and showed Newcomer, which gave the freeze away.
  *
@@ -48,17 +48,12 @@ async function main() {
     await initTls();
     initStateEngine();
 
-    // Granted credit sitting on each side of every boundary, plus a vouched-only member and a voucher.
+    // Granted credit sitting on each side of every boundary.
     const cases: Array<[string, number]> = [
         ['tier-g0', 0], ['tier-g199', 199], ['tier-g200', 200], ['tier-g599', 599],
         ['tier-g600', 600], ['tier-g1399', 1399], ['tier-g1400', 1400],
     ];
     for (const [pk, granted] of cases) { seedMember(pk, granted); seedOffer(`post-${pk}`, pk); }
-    seedMember('tier-voucher');
-    db.prepare(`UPDATE members SET can_vouch = 1 WHERE public_key = 'tier-voucher'`).run();
-    seedMember('tier-vouched');
-    db.prepare(`UPDATE members SET elder_vouched_by = 'tier-voucher', vouch_credit = 100 WHERE public_key = 'tier-vouched'`).run();
-    seedOffer('post-tier-vouched', 'tier-vouched');
     // The same granted credit with the whole line frozen (members.credit_frozen, the manager's "Freeze").
     const frozenCases: Array<[string, number]> = [['tier-frozen-g200', 200], ['tier-frozen-g600', 600], ['tier-frozen-g1400', 1400]];
     for (const [pk, granted] of frozenCases) {
@@ -68,7 +63,7 @@ async function main() {
     }
 
     // 1. Post author tier input
-    for (const [pk, granted] of [...cases, ['tier-vouched', 100] as [string, number], ...frozenCases]) {
+    for (const [pk, granted] of [...cases, ...frozenCases]) {
         const post = getPosts({ id: `post-${pk}` })[0];
         const own = getMemberTrustProfile(pk);
         const line = own.creditFrozen ? 0 : -own.floor;
@@ -93,12 +88,10 @@ async function main() {
     assert(res.status === 200, `admin data returns 200 (got ${res.status})`);
     const body = await res.json() as any;
     const byPk = new Map<string, any>((body.members ?? []).map((m: any) => [m.publicKey, m]));
-    for (const pk of [...cases.map(c => c[0]), 'tier-vouched', 'tier-voucher', ...frozenCases.map(c => c[0])]) {
+    for (const pk of [...cases.map(c => c[0]), ...frozenCases.map(c => c[0])]) {
         const own = getMemberTrustProfile(pk).tier.name;
         assert(byPk.get(pk)?.tier === own, `admin list: ${pk} is ${own} (got ${byPk.get(pk)?.tier})`);
     }
-    assert(byPk.get('tier-voucher')?.canVouch === true && byPk.get('tier-voucher')?.tier === 'Newcomer',
-        'an appointed voucher with no credit is a Newcomer who can vouch — vouching is not a tier');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

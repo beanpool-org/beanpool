@@ -115,7 +115,7 @@ try {
                         return json(route, id ? POSTS.filter((x) => x.id === id) : (url.searchParams.get('author') ? [] : POSTS));
                     }
                     if (p === '/api/node-admin/me') return json(route, { role: null });
-                    if (p.startsWith('/api/ledger/balance')) return json(route, { balance: 100, floor: -500, usableFloor: 0, canVouch: false, isBlockedFromTrading: false, keeperOf: [] });
+                    if (p.startsWith('/api/ledger/balance')) return json(route, { balance: 100, floor: -500, usableFloor: 0, isBlockedFromTrading: false, keeperOf: [] });
                     if (p === '/api/marketplace/transactions') return json(route, []);
                     if (p.startsWith('/api/ratings')) return json(route, { ratings: [], average: 0, count: 0 });
                     if (p.startsWith('/api/treasuries')) return json(route, { treasuries: [] });

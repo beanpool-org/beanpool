@@ -91,7 +91,6 @@ vi.mock('../db', () => ({
     getFriendsLocal: vi.fn(async () => data.friends),
     isFriendLocal: vi.fn(async () => false),
     getTrustProfile: vi.fn(async () => data.trust),
-    vouchMember: vi.fn(async () => undefined),
     updateMemberProfile: vi.fn(async () => undefined),
 }));
 
@@ -125,7 +124,7 @@ const TRUST = (over: Record<string, unknown> = {}) => ({
     risk: { band: 'green', headline: 'Trust Profile', reasons: [], tips: [] },
     vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
     mutualCount: 0, mutualConnections: [],
-    joinedAt: '2026-03-01T00:00:00.000Z', lastActiveAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), elderVouch: null,
+    joinedAt: '2026-03-01T00:00:00.000Z', lastActiveAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
     ...over,
 });
 
@@ -148,7 +147,7 @@ beforeEach(() => {
     };
     data.posts = [];
     data.given = [];
-    data.balance = { balance: 10, earnedCredit: 20, tier: { name: 'Resident', emoji: '🏡' }, trustStats: { tradeCount: 2 }, canVouch: false };
+    data.balance = { balance: 10, earnedCredit: 20, tier: { name: 'Resident', emoji: '🏡' }, trustStats: { tradeCount: 2 } };
     data.friends = [];
     data.trust = TRUST();
 });

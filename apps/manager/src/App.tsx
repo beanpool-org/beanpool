@@ -26,7 +26,6 @@ import {
     pruneNodeUser,
     pruneInviteBranch,
     updateNodeUserTier,
-    updateNodeUserVoucher,
     updateNodeUserOperator,
     grantNodeRoleApi,
     revokeNodeRoleApi,
@@ -1753,11 +1752,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 await updateNodeUserTier(activeNode.url, pubkey, tier, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
-                                        onToggleVoucher={async (pubkey, canVouch) => {
-                                            if (activeNode) {
-                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
-                                            }
-                                        }}
                                         onToggleOperator={async (pubkey, granted) => {
                                             if (activeNode) {
                                                 await updateNodeUserOperator(activeNode.url, pubkey, granted, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
@@ -1918,11 +1912,6 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         onUpdateTier={async (pubkey, tier) => {
                                             if (activeNode) {
                                                 await updateNodeUserTier(activeNode.url, pubkey, tier, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
-                                            }
-                                        }}
-                                        onToggleVoucher={async (pubkey, canVouch) => {
-                                            if (activeNode) {
-                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onToggleOperator={async (pubkey, granted) => {

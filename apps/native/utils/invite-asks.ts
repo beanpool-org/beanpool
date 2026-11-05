@@ -2,7 +2,7 @@
  * A member's ask that an admin invite someone (apps/server routes/invite-asks.ts), signed by the member's own key. What a
  * screen does with an answer is components/InviteAsks.tsx; the reading of the node's answers is core's, the same on the web.
  */
-import { readInviteAsksMine, readInviteAsksToAnswer, type InviteAskToAnswer, type VouchLevel } from '@beanpool/core';
+import { readInviteAsksMine, readInviteAsksToAnswer, type InviteAskToAnswer } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
 
@@ -28,9 +28,9 @@ export const askAnAdmin = (anchorUrl: string, identity: BeanPoolIdentity, firstN
 
 export const takeBackAsk = (anchorUrl: string, identity: BeanPoolIdentity, id: string) => post(anchorUrl, identity, one(id, 'withdraw'), {});
 
-/** "Send invite". No level: None, the default. */
-export const sendInviteForAsk = (anchorUrl: string, identity: BeanPoolIdentity, id: string, vouchLevel: VouchLevel | null) =>
-    post(anchorUrl, identity, one(id, 'send'), vouchLevel === null ? {} : { vouchLevel });
+/** "Send invite". */
+export const sendInviteForAsk = (anchorUrl: string, identity: BeanPoolIdentity, id: string) =>
+    post(anchorUrl, identity, one(id, 'send'), {});
 
 export const sayNoToAsk = (anchorUrl: string, identity: BeanPoolIdentity, id: string, reason: string) =>
     post(anchorUrl, identity, one(id, 'no'), reason.trim() ? { reason: reason.trim() } : {});

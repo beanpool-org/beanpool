@@ -1,19 +1,18 @@
 /**
- * Elder-vouch onboarding + offer covenant regression test.
+ * Offer covenant regression test (the checks of the old test-vouch-covenant.ts that were never vouch code; the vouch's
+ * went with it in the vouching reset, R0).
  *
  * Proves:
- *   1. canVouch: the system admin always can; a plain member cannot; adminSetVoucher toggles it.
- *   2. vouchMember: rejects self-vouch and non-vouchers; a voucher's vouch hands out the credit floor.
- *   3. unvouchMember: the original voucher can withdraw (balance ≥ 0); blocked while the target is
- *      negative; the admin can force-revoke; withdrawing removes the floor.
- *   4. Offer covenant: spending into a negative balance requires a LIVE offer (COVENANT_REQUIRED).
- *   5. Vouch levels: the voucher picks -25 / -50 / -100; a re-vouch changes the level.
+ *   1. A member with no earned, granted or known credit has no credit line (floor 0): nothing opens one but those.
+ *   4. Offer covenant: spending into a negative balance requires a LIVE offer (COVENANT_REQUIRED), in bands.
+ *   4b. The author sees their own paused Offer; others and the feed don't.
  *   6. Admin tier badges (adminSetTier): grant a tier's entry floor (Resident -200 … Elder -1400).
+ *   7. Holiday mode.
  *
- * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-vouch-covenant.ts
+ * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-offer-covenant.ts
  */
 import {
-    initStateEngine, getAdminPubkey, getFirstNodeAdminPubkey, seedGenesisMember, canVouch, vouchMember, unvouchMember, adminSetVoucher,
+    initStateEngine, seedGenesisMember,
     getMemberTrustProfile, requestPost, hasLiveOffer, reconcileLedgerFromDb,
     isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance,
 } from './state-engine.js';
@@ -47,42 +46,14 @@ function offer(author: string, live: boolean, credits = 10): string {
 const floorOf = (pk: string) => getMemberTrustProfile(pk).floor;
 
 function main() {
-    console.log('Running Elder-vouch + covenant test...\n');
+    console.log('Running the offer covenant test...\n');
     initStateEngine();
     seedGenesisMember('genesis_admin', 'Admin');
-    const admin = getFirstNodeAdminPubkey() || getAdminPubkey();
 
-    // ── 1. canVouch capability (admin-granted, never tier-derived) ──
-    seedMember('elderA'); seedMember('plain');
-    assert(canVouch(admin) === true, 'system admin always holds the vouch capability');
-    assert(canVouch('elderA') === false, 'a plain member cannot vouch by default');
-    adminSetVoucher('elderA', true);
-    assert(canVouch('elderA') === true, 'adminSetVoucher(true) grants the capability');
-    adminSetVoucher('elderA', false);
-    assert(canVouch('elderA') === false, 'adminSetVoucher(false) revokes it');
-    adminSetVoucher('elderA', true); // re-grant for the rest of the run
-
-    // ── 2. vouchMember guards + effect (hands out the -20 floor) ──
+    // ── 1. No credit line without earned, granted or known credit (the activation gate) ──
     seedMember('newbie');
-    throws(() => vouchMember('elderA', 'elderA'), 'yourself', 'cannot vouch for yourself');
-    throws(() => vouchMember('plain', 'newbie'), 'appointed vouchers', 'a non-voucher cannot vouch');
-    assert(floorOf('newbie') === 0, 'un-vouched newbie → floor 0 (no credit line)');
-    vouchMember('elderA', 'newbie');
-    assert(floorOf('newbie') === -25, 'after a default (light) vouch → floor -25');
-
-    // ── 3. unvouchMember: ownership + negative-balance guard + admin force ──
-    seedMember('other'); adminSetVoucher('other', true);
-    throws(() => unvouchMember('other', 'newbie'), 'voucher who vouched', 'a different voucher cannot withdraw someone else\'s vouch');
-    db.prepare(`UPDATE accounts SET balance = -5 WHERE public_key = 'newbie'`).run();
-    reconcileLedgerFromDb(); // getBalance reads the in-memory ledger — resync it from the raw update
-    throws(() => unvouchMember('elderA', 'newbie'), 'negative balance', 'the voucher cannot withdraw while the target is underwater');
-    unvouchMember(admin, 'newbie'); // admin can force even when negative
-    assert(floorOf('newbie') === 0, 'admin force-withdraw removes the floor (back to 0)');
-    vouchMember('elderA', 'newbie');
-    db.prepare(`UPDATE accounts SET balance = 0 WHERE public_key = 'newbie'`).run();
-    reconcileLedgerFromDb();
-    unvouchMember('elderA', 'newbie'); // settled → the voucher can now withdraw
-    assert(floorOf('newbie') === 0, 'voucher withdraws once the target has settled → floor 0');
+    assert(floorOf('newbie') === 0, 'a new member with nothing earned, granted or confirmed → floor 0 (no credit line)');
+    assert(getMemberTrustProfile('newbie').activated === false, 'and no line is open (activated false)');
 
     // ── 4. Offer covenant (v3, BANDED): live-offer count gates how deep you may spend on credit ──
     // Give the payer a deep earned limit (Elder −1400) so the OFFER band is the binding constraint.
@@ -123,15 +94,6 @@ function main() {
     assert(getPosts({ authorPubkey: 'pauser', viewerPubkey: 'pauser' }).some(p => p.id === pausedId), 'author viewing their own listings sees their paused Offer');
     assert(!getPosts({ authorPubkey: 'pauser', viewerPubkey: 'someone-else' }).some(p => p.id === pausedId), 'a different viewer does NOT see the author\'s paused Offer');
     assert(!getPosts().some(p => p.id === pausedId), 'the general feed hides paused Offers');
-
-    // ── 5. Vouch levels: the voucher picks -25 / -50 / -100 (a re-vouch can change it) ──
-    seedMember('lvlUser');
-    vouchMember('elderA', 'lvlUser', 1);
-    assert(floorOf('lvlUser') === -25, 'level 1 vouch → floor -25');
-    vouchMember('elderA', 'lvlUser', 2);
-    assert(floorOf('lvlUser') === -50, 're-vouch at level 2 → floor -50');
-    vouchMember('elderA', 'lvlUser', 3);
-    assert(floorOf('lvlUser') === -100, 're-vouch at level 3 → floor -100');
 
     // ── 6. Admin tier badges grant the tier's entry floor ──
     seedMember('badgeUser');

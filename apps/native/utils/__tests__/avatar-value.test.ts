@@ -1061,11 +1061,11 @@ describe('the syncMessages directory fetch goes through applyDelta', () => {
     it('leaves exactly one writer of the node\'s member directory in db.ts', () => {
         // A source check as well as the behavioural one: a future second directory writer
         // would bring back the split rule, and the test above would still pass on its own.
-        // Matched on `elder_vouched_by`, which only a directory upsert carries —
+        // Matched on `earned_credit`, which only a directory upsert carries —
         // `updateMemberProfile`'s upsert writes a LOCAL edit and keeps its own COALESCE,
         // because there an absent field means "not edited", not "the node has none".
         const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../db.ts'), 'utf8');
-        expect(src.match(/INSERT INTO members \([^)]*elder_vouched_by/g)).toHaveLength(1);
+        expect(src.match(/INSERT INTO members \([^)]*earned_credit/g)).toHaveLength(1);
         expect(src).toContain('applyDelta({ members: dirData, membersComplete: true }, expectedDbName)');
     });
 });

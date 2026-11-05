@@ -2,7 +2,7 @@
  * A member's ask that an admin invite someone (apps/server routes/invite-asks.ts), signed by the member's own key: the
  * phone's utils/invite-asks.ts. The reading of the node's answers is core's, the same on both apps.
  */
-import { readInviteAsksMine, readInviteAsksToAnswer, type InviteAskToAnswer, type VouchLevel } from '@beanpool/core';
+import { readInviteAsksMine, readInviteAsksToAnswer, type InviteAskToAnswer } from '@beanpool/core';
 import { signedFetch } from './api';
 
 const ASKS = '/api/invite/asks';
@@ -24,8 +24,8 @@ async function post(path: string, body: Record<string, unknown>): Promise<Invite
 
 export const askAnAdmin = (firstName: string, howKnown: string) => post(ASKS, { firstName: firstName.trim(), howKnown: howKnown.trim() });
 export const takeBackAsk = (id: string) => post(one(id, 'withdraw'), {});
-/** "Send invite". No level: None, the default. */
-export const sendInviteForAsk = (id: string, vouchLevel: VouchLevel | null) => post(one(id, 'send'), vouchLevel === null ? {} : { vouchLevel });
+/** "Send invite". */
+export const sendInviteForAsk = (id: string) => post(one(id, 'send'), {});
 export const sayNoToAsk = (id: string, reason: string) => post(one(id, 'no'), reason.trim() ? { reason: reason.trim() } : {});
 
 async function read<T>(path: string, parse: (raw: unknown) => T | null): Promise<T | null> {

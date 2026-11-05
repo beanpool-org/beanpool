@@ -41,12 +41,12 @@ const ENT = 'enterprise-damo';
 const NAME = "Damo's Enterprise";
 const KOFI = 'member-kofi';
 
-const ENTERPRISE_PROFILE = { publicKey: ENT, callsign: NAME, avatar: null, bio: '', contact: null, joinedAt: '2026-09-01T00:00:00.000Z', status: 'active', elderVouchedBy: 'member-damo', elderVouchedByCallsign: 'Damo', archetype: null, isTreasury: true };
-const KOFI_PROFILE = { publicKey: KOFI, callsign: 'Kofi', avatar: null, bio: 'I fix bikes', contact: null, joinedAt: '2026-03-01T00:00:00.000Z', status: 'active', elderVouchedBy: null, elderVouchedByCallsign: null, archetype: null };
+const ENTERPRISE_PROFILE = { publicKey: ENT, callsign: NAME, avatar: null, bio: '', contact: null, joinedAt: '2026-09-01T00:00:00.000Z', status: 'active', archetype: null, isTreasury: true };
+const KOFI_PROFILE = { publicKey: KOFI, callsign: 'Kofi', avatar: null, bio: 'I fix bikes', contact: null, joinedAt: '2026-03-01T00:00:00.000Z', status: 'active', archetype: null };
 // The node's own BeanPool account: a treasury row that is no enterprise, so its profile says no isTreasury (server, review
 // of #2367). It owns the curated learn channel, so it is the author of every curated Pulse card.
 const BEANPOOL = 'node-beanpool';
-const BEANPOOL_PROFILE = { publicKey: BEANPOOL, callsign: 'BeanPool', avatar: 'bundled://sprout', bio: '', contact: null, joinedAt: '2026-08-01T00:00:00.000Z', status: 'active', elderVouchedBy: null, elderVouchedByCallsign: null, archetype: null };
+const BEANPOOL_PROFILE = { publicKey: BEANPOOL, callsign: 'BeanPool', avatar: 'bundled://sprout', bio: '', contact: null, joinedAt: '2026-08-01T00:00:00.000Z', status: 'active', archetype: null };
 const BEANPOOL_LEARN = { id: 'chan_beanpool_learn', platform: 'youtube', url: 'https://www.youtube.com/channel/UC-b27mPemXxYje4VkKF7hgw', handle: '@BeanPool', category: 'learn', isPrimaryVideo: true, supportsAutolist: true, isVerified: false };
 /** A curated Pulse card, as GET /api/pulse/feed hands it out. */
 const pulseCard = (ownerPubkey: string, callsign: string) => ({
@@ -80,7 +80,6 @@ function profileReads(hold = false) {
     vi.spyOn(api, 'getRatingsGiven').mockResolvedValue({ ratings: [] } as any);
     vi.spyOn(api, 'getFriends').mockResolvedValue([]);
     vi.spyOn(api, 'getPublicChannels').mockImplementation(async (key: string) => ({ channels: key === BEANPOOL ? [BEANPOOL_LEARN] : [] }) as any);
-    vi.spyOn(api, 'vouchMemberApi').mockResolvedValue({ success: true } as any);
 }
 
 beforeEach(() => {
@@ -105,7 +104,6 @@ describe('PublicProfilePage: an enterprise key opens the enterprise page', () =>
         await waitFor(() => expect(onOpenTreasury).toHaveBeenCalledWith(ENT));
         expect(onOpenTreasury).toHaveBeenCalledTimes(1);
         expectNoTrustProfile('after the profile read answered');
-        expect(api.vouchMemberApi).not.toHaveBeenCalled();
     });
 
     it('a member: the Trust Profile as before, and never onOpenTreasury', async () => {

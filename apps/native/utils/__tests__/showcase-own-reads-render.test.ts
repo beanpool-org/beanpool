@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The reader's own data on the phone's other screens (global previews audit, "Across all five", P3; scratch/global-node/
- * DESIGN-global-showcase-fable.md §6 W3): the profile (the member's own trust card, or the vouch button on another's),
+ * DESIGN-global-showcase-fable.md §6 W3): the profile (the member's own trust card; another's reads none since its vouch button
+ * went with the vouching reset, R0),
  * a listing (the Offer-first gate and the enterprises the member keeps) and the event composer's "Post as" (the
  * enterprises the member keeps) asked the node for the member's own balance on the worldwide community, where Beans
  * and enterprises are Example Valley's. Each screen rendered for real, with the net spy of showcase-market-render.test.ts
@@ -190,23 +191,33 @@ const render = async (node: unknown) => { await act(async () => { root.render(no
 const balanceAsks = () => net.calls.filter(c => c === 'db.getBalance');
 
 describe("the profile: the member's own balance", () => {
-    for (const [whose, key] of [['their own', ME], ["another member's", KOFI]] as const) {
-        it(`a local community, ${whose} profile: asked, as before`, async () => {
-            rememberProfile('local', LOCAL);
-            params.now = { publicKey: key };
-            await render(createElement(PublicProfileScreen));
-            expect(net.calls).toContain('db.getMemberProfile');
-            expect(balanceAsks()).toHaveLength(1);
-        });
+    it('a local community, their own profile: asked, as before', async () => {
+        rememberProfile('local', LOCAL);
+        params.now = { publicKey: ME };
+        await render(createElement(PublicProfileScreen));
+        expect(net.calls).toContain('db.getMemberProfile');
+        expect(balanceAsks()).toHaveLength(1);
+    });
 
-        it(`the worldwide community (Beans in preview), ${whose} profile: never asked`, async () => {
-            rememberProfile('global', WORLDWIDE);
-            params.now = { publicKey: key };
+    // The reader's balance was read on another member's profile for its vouch button alone, which went with the vouching
+    // reset (R0): now nothing there reads it, on any community.
+    for (const [where, profile, features] of [['a local community', 'local', LOCAL], ['the worldwide community (Beans in preview)', 'global', WORLDWIDE]] as const) {
+        it(`${where}, another member's profile: never asked`, async () => {
+            rememberProfile(profile, features);
+            params.now = { publicKey: KOFI };
             await render(createElement(PublicProfileScreen));
             expect(net.calls).toContain('db.getMemberProfile');
             expect(balanceAsks()).toEqual([]);
         });
     }
+
+    it('the worldwide community (Beans in preview), their own profile: never asked', async () => {
+        rememberProfile('global', WORLDWIDE);
+        params.now = { publicKey: ME };
+        await render(createElement(PublicProfileScreen));
+        expect(net.calls).toContain('db.getMemberProfile');
+        expect(balanceAsks()).toEqual([]);
+    });
 });
 
 describe("a listing: the Offer-first gate and the enterprises the member keeps", () => {

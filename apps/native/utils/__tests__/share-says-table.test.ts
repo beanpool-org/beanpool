@@ -81,7 +81,6 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('../db', () => ({
     signedRequestWithMethod: mockState.signed,
     signedGet: vi.fn(),
-    askCanVouch: vi.fn(async () => false),
 }));
 
 // The real Invite and share button (one invite action) asks who this phone is and whether it is a guest.

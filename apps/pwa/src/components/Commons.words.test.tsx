@@ -161,7 +161,7 @@ describe('a poll card in English', () => {
 // ── The Decide section ──────────────────────────────────────────────────────────────────────────────────────────
 
 const decision = (id: string, over: Record<string, any> = {}): any => ({
-    id, authorPubkey: 'author', title: `Decision ${id}`, description: `Why ${id}`, touches: 'member', effect: 'grant_voucher',
+    id, authorPubkey: 'author', title: `Decision ${id}`, description: `Why ${id}`, touches: 'member', effect: 'freeze_credit',
     subject: 'subject-pk', params: null, franchise: '1m1v', status: 'open', opensAt: '2026-09-18T00:00:00.000Z',
     closesAt: new Date(Date.now() + 3 * DAY).toISOString(), gracePeriodEndsAt: null, createdAt: '2026-09-18T00:00:00.000Z',
     executedAt: null, executionError: null, executionReason: null, adminHaltedAt: null, adminHaltReason: null, updatedAt: '2026-09-18T00:00:00.000Z',
@@ -341,7 +341,7 @@ describe('the Decide section in English', () => {
         expect(bracketed()).toBe(0);
         const cards = screen.getAllByText(/^Touches: /);
         expect(cards.map((c) => c.textContent)).toEqual(['Touches: member', 'Touches: pool', 'Touches: member', 'Touches: member', 'Touches: member', 'Touches: member']);
-        expect(screen.getByText('Grant Voucher')).toBeInTheDocument();
+        expect(screen.getByText('Freeze Credit')).toBeInTheDocument();
         expect(screen.getByText('Keep Suspension?')).toBeInTheDocument();
         expect(screen.getAllByText('1 Member 1 Vote').length).toBe(5);
         expect(screen.getByText('Quadratic on Trade')).toBeInTheDocument();

@@ -13,7 +13,7 @@
  *   1. The same bytes: for the board, a deeper page, the map (circles, and one pass with a radius), a search, the whole
  *      feed with polls and events, a sync read (hidden and off-board listings as removals and paused) and a delta, the
  *      visitor's body is the oracle's, byte for byte: the same read without `guest` (as origin/main reads it), then
- *      guestPost on each post, as the route did. The seed has every kind of author (a photo, a badge, a vouch, trades
+ *      guestPost on each post, as the route did. The seed has every kind of author (a photo, a badge, a credit freeze, trades
  *      completed, an enterprise paused) and of listing (photos, a poll, an event, one spoken for, one hidden by reports).
  *   2. What a visitor's read does: a warm board read of 50 posts by 50 authors compiles a handful of statements (on
  *      origin/main one per author per trust-profile query, hundreds), and none of the statements a visitor's reads
@@ -89,9 +89,9 @@ async function main() {
     const reader = keypair();
     insertMember.run(reader.pubKeyHex, 'BoardReader', iso(-90 * 86_400_000), photo());
     insertAccount.run(reader.pubKeyHex);
-    // Standing: badges, a vouch, ratings.
+    // Standing: badges, a credit freeze, ratings.
     for (let i = 0; i < 50; i += 5) se.adminSetTier(authors[i].pubKeyHex, i % 10 === 0 ? 'Resident' : 'Steward');
-    db.prepare('UPDATE members SET elder_vouched_by = ?, vouch_credit = 50 WHERE public_key = ?').run(authors[0].pubKeyHex, authors[3].pubKeyHex);
+    db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(authors[3].pubKeyHex);
 
     const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at,
                 active, status, lat, lng, accepted_by, accepted_at, pending_transaction_id, poll_options, poll_closes_at,

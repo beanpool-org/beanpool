@@ -30,7 +30,7 @@ export function AncestryTreePanel({
     onSelectMember,
 }: AncestryTreePanelProps) {
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeFilter, setActiveFilter] = useState<'all' | 'voucher' | 'threats' | 'reported' | 'frozen'>('all');
+    const [activeFilter, setActiveFilter] = useState<'all' | 'threats' | 'reported' | 'frozen'>('all');
     const [expandedStats, setExpandedStats] = useState<Record<string, boolean>>({});
     const [expandedBranches, setExpandedBranches] = useState<Record<string, boolean>>({});
     const [pruneTarget, setPruneTarget] = useState<{ pubkey: string; callsign?: string } | null>(null);
@@ -248,7 +248,6 @@ export function AncestryTreePanel({
 
         // Filter match
         if (activeFilter === 'all') return true;
-        if (activeFilter === 'voucher') return Boolean(m.canVouch);
         if (activeFilter === 'threats') {
             const flags = branchFlagsMap[pk] || [];
             return flags.length > 0;
@@ -352,7 +351,6 @@ export function AncestryTreePanel({
         const tier = nodeTierIdx >= 0 ? TIER_LEVELS[nodeTierIdx] : tierForCredit(earnedCredit);
 
         // Badges
-        const canVouch = Boolean(m?.canVouch);
         const memberReportCount = reportsByMember[pk] || 0;
         const bFlags = branchFlagsMap[pk] || [];
         const hasFlags = bFlags.length > 0;
@@ -419,13 +417,6 @@ export function AncestryTreePanel({
                                 {tier.emoji} {tier.name}
                             </span>
 
-                            {/* Voucher Pill */}
-                            {canVouch && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30">
-                                    🤝 Voucher
-                                </span>
-                            )}
-
                             {/* Health Flag Pill */}
                             {hasFlags && (
                                 <span
@@ -468,13 +459,6 @@ export function AncestryTreePanel({
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-300 border border-nature-700">
                                 {tier.emoji} {tier.name}
                             </span>
-
-                            {/* Voucher Pill */}
-                            {canVouch && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30">
-                                    🤝 Voucher
-                                </span>
-                            )}
 
                             {/* Health Flag Pill */}
                             {hasFlags && (
@@ -658,18 +642,6 @@ export function AncestryTreePanel({
                         }`}
                     >
                         All
-                    </button>
-                    <button
-                        type="button"
-                        data-filter="voucher"
-                        onClick={() => setActiveFilter('voucher')}
-                        className={`audit-filter-btn min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                            activeFilter === 'voucher'
-                                ? 'bg-emerald-950 text-emerald-300 border-emerald-500'
-                                : 'bg-nature-950 text-nature-400 hover:text-emerald-300 border-nature-800'
-                        }`}
-                    >
-                        🤝 Vouchers
                     </button>
                     <button
                         type="button"

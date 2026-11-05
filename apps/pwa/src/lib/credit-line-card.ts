@@ -26,7 +26,7 @@ export function creditLineCard(b: CreditLineState): 'frozen' | 'none' | 'bar' {
     return 'bar';
 }
 
-/** Under the bar: the known part frozen while another part (vouched, earned or granted) still works. */
+/** Under the bar: the known part frozen while another part (earned or granted) still works. */
 export function knownFrozenPartNote(b: CreditLineState): string | null {
     return creditLineCard(b) === 'bar' && b.knownFrozen === true ? t(KNOWN_FROZEN.part) : null;
 }

@@ -168,7 +168,8 @@ export type AlertKey =
     | 'door.busy'
     | 'knock.busy'
     | 'knock.waiting'
-    | 'requests.flood';
+    | 'requests.flood'
+    | 'reset.vouching';
 
 interface Row {
     title: string;
@@ -250,6 +251,8 @@ const ROWS: Record<AlertKey, Row> = {
     'knock.waiting': { title: 'a request to join is waiting', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
     /** Signed requests turned away for room in the nonce store (nonceConditions): 4 when a member is, or the newer accounts' share is full. */
     'requests.flood': { title: 'signed requests turned away', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
+    /** The vouching reset at this release's first boot (db/vouch-reset.ts, R0): its counts, told once. */
+    'reset.vouching': { title: 'old vouching turned off', priority: 2, webhook: true, pushEveryMs: EACH, banner: false },
 };
 
 /** Told because members reported: urgent ones too are never kept over another line (keepIn), and the same line is counted. */

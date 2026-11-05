@@ -14,10 +14,9 @@ import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
     INVITE_ASK_LIMITS, INVITE_ASK_WORDS, formatDate, inviteAskAnswerWords, inviteAskReady, t,
-    type InviteAskAnswer, type InviteAskToAnswer, type InviteAskWaiting, type VouchLevel,
+    type InviteAskAnswer, type InviteAskToAnswer, type InviteAskWaiting,
 } from '@beanpool/core';
 import { useStyles, useTheme } from '../app/ThemeContext';
-import { InviteVouchChoice } from './InviteVouchChoice';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
 import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { askAnAdmin, readAsksToAnswer, readMyAsks, sayNoToAsk, sendInviteForAsk, takeBackAsk } from '../utils/invite-asks';
@@ -223,13 +222,12 @@ export function AskAnAdmin({ anchorUrl, identity, onShare }: { anchorUrl: string
     );
 }
 
-function AskCard({ ask, offersVouch, busy, onSend, onNo }: {
-    ask: InviteAskToAnswer; offersVouch: boolean; busy: boolean;
-    onSend: (level: VouchLevel | null) => void; onNo: (reason: string) => void;
+function AskCard({ ask, busy, onSend, onNo }: {
+    ask: InviteAskToAnswer; busy: boolean;
+    onSend: () => void; onNo: (reason: string) => void;
 }) {
     const { colors } = useTheme();
     const styles = useAskStyles();
-    const [level, setLevel] = useState<VouchLevel | null>(null);
     const [saying, setSaying] = useState(false);
     const [reason, setReason] = useState('');
     return (
@@ -257,22 +255,17 @@ function AskCard({ ask, offersVouch, busy, onSend, onNo }: {
                     </View>
                 </>
             ) : (
-                <>
-                    <View style={{ marginTop: 12 }}>
-                        {offersVouch && <InviteVouchChoice value={level} onChange={setLevel} colors={colors} />}
-                    </View>
-                    <View style={[styles.actions, { marginTop: 0 }]}>
-                        <Button label={t(INVITE_ASK_WORDS.sendInvite)} strong onPress={() => onSend(level)} disabled={busy} testID={`invite-ask-invite-${ask.id}`} />
-                        <Button label={t(INVITE_ASK_WORDS.say)} onPress={() => setSaying(true)} disabled={busy} testID={`invite-ask-no-${ask.id}`} />
-                    </View>
-                </>
+                <View style={styles.actions}>
+                    <Button label={t(INVITE_ASK_WORDS.sendInvite)} strong onPress={onSend} disabled={busy} testID={`invite-ask-invite-${ask.id}`} />
+                    <Button label={t(INVITE_ASK_WORDS.say)} onPress={() => setSaying(true)} disabled={busy} testID={`invite-ask-no-${ask.id}`} />
+                </View>
             )}
         </View>
     );
 }
 
 /** For an owner or admin: the asks waiting, oldest first. The node answers anyone else 403, and there is no section. */
-export function InviteAsksToAnswer({ anchorUrl, identity, offersVouch }: { anchorUrl: string; identity: BeanPoolIdentity; offersVouch: boolean }) {
+export function InviteAsksToAnswer({ anchorUrl, identity }: { anchorUrl: string; identity: BeanPoolIdentity }) {
     const { colors } = useTheme();
     const styles = useAskStyles();
     const [asks, setAsks] = useState<InviteAskToAnswer[] | null>(null);
@@ -304,9 +297,8 @@ export function InviteAsksToAnswer({ anchorUrl, identity, offersVouch }: { ancho
                 <AskCard
                     key={ask.id}
                     ask={ask}
-                    offersVouch={offersVouch}
                     busy={busy !== null}
-                    onSend={level => void answer(ask.id, () => sendInviteForAsk(anchorUrl, identity, ask.id, level), t(INVITE_ASK_WORDS.sent))}
+                    onSend={() => void answer(ask.id, () => sendInviteForAsk(anchorUrl, identity, ask.id), t(INVITE_ASK_WORDS.sent))}
                     onNo={reason => void answer(ask.id, () => sayNoToAsk(anchorUrl, identity, ask.id, reason), t(INVITE_ASK_WORDS.told))}
                 />
             ))}

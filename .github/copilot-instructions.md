@@ -25,4 +25,4 @@ Please follow these guidelines during pull request reviews and coding assistance
 
 ## 4. General Best Practices
 * **Linting & Formatting**: Follow standard ES6 syntax. Ensure all TypeScript types are fully declared.
-* **Test Parity**: Ensure new protocol changes are backed up by integration tests in `apps/server/src/test-vouch-covenant.ts`.
+* **Test Parity**: Ensure new protocol changes are backed up by integration tests in `apps/server/src/test-offer-covenant.ts`.

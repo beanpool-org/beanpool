@@ -31,8 +31,6 @@ export interface MemberItem {
     nodeRole?: MemberNodeRole | null;
     earnedCredit?: number;
     earned_credit?: number;
-    canVouch?: boolean;
-    isVoucher?: boolean;
     canOperate?: boolean;
     can_operate?: boolean;
     isOperator?: boolean;
@@ -108,7 +106,6 @@ interface MembersModuleProps {
     onPruneUser?: (pubkey: string, code?: string) => Promise<void>;
     onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
     onUpdateTier?: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
-    onToggleVoucher?: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
@@ -218,8 +215,6 @@ export function getMemberTier(m: MemberItem | null | undefined): string {
     const byCredit = tierForCredit(earned).name;   // the node's own thresholds (@beanpool/core)
     if (byCredit !== 'Newcomer') return byCredit;
 
-    if (m.canVouch || m.isVoucher) return 'Elder';
-
     return 'Citizen';
 }
 
@@ -234,7 +229,6 @@ export function MembersModule({
     onPruneUser,
     onPruneBranch,
     onUpdateTier,
-    onToggleVoucher,
     onToggleOperator,
     onGrantNodeRole,
     onRevokeNodeRole,
@@ -252,7 +246,6 @@ export function MembersModule({
     const [selectedTierValue, setSelectedTierValue] = useState<'Newcomer' | 'Resident' | 'Steward' | 'Elder'>('Resident');
     const [isUpdatingTier, setIsUpdatingTier] = useState(false);
     const [frozenPubkeys, setFrozenPubkeys] = useState<Set<string>>(new Set());
-    const [customVouchers, setCustomVouchers] = useState<Set<string>>(new Set());
     const [customOperators, setCustomOperators] = useState<Set<string>>(new Set());
 
     const [treasuries, setTreasuries] = useState<NodeTreasury[]>([]);
@@ -342,14 +335,6 @@ export function MembersModule({
             );
             setFrozenPubkeys(serverFrozen);
 
-            const serverVouchers = new Set<string>(
-                nodeData.members
-                    .filter((m: MemberItem) => m.canVouch || m.isVoucher)
-                    .map((m: MemberItem) => m.publicKey || m.pubkey)
-                    .filter((pk): pk is string => Boolean(pk))
-            );
-            setCustomVouchers(serverVouchers);
-
             const serverOperators = new Set<string>(
                 nodeData.members
                     .filter((m: MemberItem) => m.canOperate || m.isOperator || m.can_operate)
@@ -397,31 +382,6 @@ export function MembersModule({
                 await onFreezeUser(pubkey, !isCurrentlyFrozen);
                 onRefresh();
             } catch {}
-        }
-    };
-
-    const handleToggleVouchMember = async (pubkey: string, isCurrentlyVoucher: boolean) => {
-        const nextState = !isCurrentlyVoucher;
-        setCustomVouchers((prev) => {
-            const next = new Set(prev);
-            const matches = Array.from(next).filter(
-                (v) => v === pubkey || (pubkey && v && (pubkey.startsWith(v) || v.startsWith(pubkey)))
-            );
-            if (nextState) {
-                next.add(pubkey);
-            } else {
-                matches.forEach((m) => next.delete(m));
-            }
-            return next;
-        });
-        if (onToggleVoucher) {
-            try {
-                await onToggleVoucher(pubkey, nextState);
-                onRefresh();
-            } catch (e: unknown) {
-                const msg = e instanceof Error ? e.message : String(e);
-                alert(msg || 'Failed to update voucher status on server');
-            }
         }
     };
 
@@ -732,7 +692,7 @@ export function MembersModule({
             {nodeData ? (
                 <div className="space-y-6">
                     {/* Stat Badges */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 text-xs">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Total Members</span>
                             <span className="text-2xl font-black text-white font-mono">{nodeData?.counts?.members ?? members.length}</span>
@@ -750,19 +710,6 @@ export function MembersModule({
                                     🌐 {platformTallies.pwa}
                                 </span>
                             </div>
-                        </div>
-                        <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
-                            <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Active Vouchers</span>
-                            <span className="text-2xl font-black text-emerald-400 font-mono">
-                                {members.filter((m: MemberItem) => {
-                                    const pk = m.publicKey || m.pubkey || '';
-                                    const frozen = Array.from(frozenPubkeys).some(f => pk === f || (pk && f && (pk.startsWith(f) || f.startsWith(pk))));
-                                    if (frozen) return false;
-                                    return m.canVouch || Array.from(customVouchers).some(v => pk === v || (pk && v && (pk.startsWith(v) || v.startsWith(pk))));
-                                }).length}
-                                {/* Of the members read so far: at least this many while the node holds more (capacity fix 3). */}
-                                {nodeData?.membersNext ? '+' : ''}
-                            </span>
                         </div>
                         <div className="bg-nature-950/60 border border-nature-800/80 p-4 rounded-xl space-y-1">
                             <span className="text-nature-400 block font-extrabold uppercase text-[10px] tracking-wider">Active Listings</span>
@@ -795,10 +742,9 @@ export function MembersModule({
                         {filteredMembers.length > 0 ? (
                             <div className="bg-nature-950/80 border border-nature-800 rounded-xl overflow-hidden text-xs">
                                 <div className="hidden md:grid grid-cols-12 bg-nature-900/90 p-3 text-nature-400 font-bold border-b border-nature-800">
-                                    <div className="col-span-4">Member Identity</div>
+                                    <div className="col-span-5">Member Identity</div>
                                     <div className="col-span-3">Standing / Tier</div>
-                                    <div className="col-span-2">Can Vouch</div>
-                                    <div className="col-span-1">Operator</div>
+                                    <div className="col-span-2">Operator</div>
                                     <div className="col-span-2 text-right">Actions</div>
                                 </div>
                                 <div className="divide-y divide-nature-800/60">
@@ -832,7 +778,7 @@ export function MembersModule({
                                                         : 'hover:bg-nature-900/60'
                                                 }`}
                                             >
-                                                <div className="w-full md:w-auto min-w-0 col-span-4 flex items-center gap-2.5">
+                                                <div className="w-full md:w-auto min-w-0 col-span-5 flex items-center gap-2.5">
                                                     <Avatar
                                                         src={getMemberRawAvatar(m, profilesMap)}
                                                         alt={displayName}
@@ -916,37 +862,7 @@ export function MembersModule({
                                                         </button>
                                                     )}
                                                 </div>
-                                                <div className="col-span-2">
-                                                    {isMemberFrozen ? (
-                                                        <span className="px-2 py-0.5 rounded-md bg-red-950 text-red-400 text-[10px] font-bold border border-red-900">
-                                                            REVOKED
-                                                        </span>
-                                                    ) : (m.canVouch || Array.from(customVouchers).some(v => pubkey === v || (pubkey && v && (pubkey.startsWith(v) || v.startsWith(pubkey))))) ? (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleToggleVouchMember(pubkey, true);
-                                                            }}
-                                                            title="Click to toggle voucher authority"
-                                                            className="px-2 py-0.5 rounded-md bg-bp-chip-ok-tint hover:opacity-90 text-bp-chip-ok-ink text-[10px] font-bold border border-emerald-800/60 transition-all hover:scale-105"
-                                                        >
-                                                            🛡️ VOUCHER
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleToggleVouchMember(pubkey, false);
-                                                            }}
-                                                            title="Click to nominate / grant voucher authority"
-                                                            className="px-2 py-0.5 rounded-md bg-nature-900 hover:bg-nature-800 text-nature-400 hover:text-emerald-300 text-[10px] font-semibold border border-nature-800 transition-all hover:scale-105 flex items-center gap-1"
-                                                        >
-                                                            <span>STANDARD</span>
-                                                            <span className="text-[9px] opacity-60">+ Nominate</span>
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <div className="col-span-1 flex items-center">
+                                                <div className="col-span-2 flex items-center">
                                                     {isMemberOperator ? (
                                                         <button
                                                             onClick={(e) => {
@@ -1056,13 +972,6 @@ export function MembersModule({
                         selectedMember.standing === 'FROZEN' ||
                         (selectedMember.publicKey || selectedMember.pubkey || '').startsWith('frozen-')
                     }
-                    isVoucher={
-                        selectedMember.canVouch ||
-                        Array.from(customVouchers).some((v) => {
-                            const pk = selectedMember.publicKey || selectedMember.pubkey || '';
-                            return pk === v || (pk && v && (pk.startsWith(v) || v.startsWith(pk)));
-                        })
-                    }
                     isOperator={
                         selectedMember.canOperate ||
                         selectedMember.can_operate ||
@@ -1073,7 +982,6 @@ export function MembersModule({
                         })
                     }
                     onToggleFreeze={handleToggleFreezeMember}
-                    onToggleVouch={(pk, isV) => handleToggleVouchMember(pk, isV)}
                     onToggleOperator={(pk, isOp) => handleToggleOperatorMember(pk, isOp)}
                     onGrantNodeRole={onGrantNodeRole}
                     onRevokeNodeRole={onRevokeNodeRole}
@@ -1127,7 +1035,7 @@ export function MembersModule({
                                     {[
                                         { id: 'Newcomer', name: '🌱 NEWCOMER', desc: 'Entry floor (0 granted credit limit)' },
                                         { id: 'Resident', name: '🏠 RESIDENT', desc: '-200 granted credit floor (verified community member)' },
-                                        { id: 'Steward', name: '🏛️ STEWARD', desc: '-600 granted credit floor (active steward & voucher)' },
+                                        { id: 'Steward', name: '🏛️ STEWARD', desc: '-600 granted credit floor (active steward)' },
                                         { id: 'Elder', name: '⛰️ ELDER', desc: '-1400 granted credit floor (founding governance tier)' },
                                     ].map((t) => (
                                         <label

@@ -4,7 +4,7 @@
  * Source: docs/the-commons.md §2.4 Rules 1-4, §6 "Slice 4"
  *
  * Requirements:
- *   Rule 1: Only earned credit backs an enterprise (vouch gifts & admin grants = 0).
+ *   Rule 1: Only earned credit backs an enterprise (admin grants = 0).
  *   Rule 2: No multiplier; straight sum of keepers' backing pledges, capped by CREDIT_FLOOR_CAP.
  *   Rule 3: Counted once across enterprises; explicit pledge; never auto-split; never deducted from personal floor.
  *   Covenant: Deficit covenant lock prevents release of backing that would leave enterprise below current deficit.
@@ -86,18 +86,16 @@ async function main() {
     // =========================================================================
     console.log('── Section 1: Rule 1 — Only earned credit backs an enterprise ──');
     const K1 = 'keeper-alice-000000000000000000000000000001';
-    const Voucher = 'voucher-elder-00000000000000000000000001';
     seedMember(K1, 'Alice');
-    seedMember(Voucher, 'ElderVoucher');
 
-    // Give Alice vouch credit (50) and admin granted credit (100)
-    db.prepare("UPDATE members SET elder_vouched_by = ?, vouch_credit = 50, earned_credit = 100 WHERE public_key = ?").run(Voucher, K1);
+    // Give Alice admin granted credit (150)
+    db.prepare("UPDATE members SET earned_credit = 150 WHERE public_key = ?").run(K1);
 
     const aliceProfile = getMemberTrustProfile(K1);
-    assert(aliceProfile.grantedCredit === 100, 'Alice has 100 granted credit in granted-credit lane');
-    assert(aliceProfile.floor === -150, 'Alice has personal floor of -150 (50 vouch + 100 granted)');
+    assert(aliceProfile.grantedCredit === 150, 'Alice has 150 granted credit in granted-credit lane');
+    assert(aliceProfile.floor === -150, 'Alice has personal floor of -150 (150 granted)');
     assert(aliceProfile.earnedCredit === 0, 'Alice has 0 earned credit from trades');
-    assert(getAvailableBacking(K1) === 0, 'Rule 1: Alice availableToBack is 0 despite having vouch and granted credit');
+    assert(getAvailableBacking(K1) === 0, 'Rule 1: Alice availableToBack is 0 despite having granted credit');
 
     const { publicKey: ent1 } = createTreasury('EnterpriseAlpha', AVATAR, 0);
     assignKeeper(ent1, K1);
@@ -158,7 +156,7 @@ async function main() {
     console.log('\n── Section 3: Rule 3 — Counted once across enterprises & personal floor intact ──');
     // Alice's personal floor is not touched by her backing pledge
     const alicePersonalProfile = getMemberTrustProfile(K1);
-    assert(alicePersonalProfile.floor === -(alicePersonalProfile.grantedCredit + 50 + aliceEarned), 'Alice personal floor is NOT reduced or deducted by her backing pledge');
+    assert(alicePersonalProfile.floor === -(alicePersonalProfile.grantedCredit + aliceEarned), 'Alice personal floor is NOT reduced or deducted by her backing pledge');
 
     // Alice's remaining available backing
     const aliceRemainingBacking = aliceEarned - pledge1Amount;

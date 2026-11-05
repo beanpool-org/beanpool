@@ -68,9 +68,9 @@ const API = {
         new_dm_recipients: { limit: 10, used: 0, remaining: 10, resetsAt: null },
     } } },
     profile: (pk) => (pk === PEER
-        ? { publicKey: PEER, callsign: 'Bob', avatar: null, bio: 'Fixes bikes on Sundays', role: 'member', joinedAt: '2026-09-14T00:00:00Z', elderVouchedBy: null, archetype: archetype('weaver', 'connector') }
+        ? { publicKey: PEER, callsign: 'Bob', avatar: null, bio: 'Fixes bikes on Sundays', role: 'member', joinedAt: '2026-09-14T00:00:00Z', archetype: archetype('weaver', 'connector') }
         : { publicKey: ME, callsign: 'Alice', avatar: null, bio: 'Bakes on Fridays', role: 'member', joinedAt: '2026-01-01T00:00:00Z', archetype: archetype('catalyst', 'spark'), contact: { value: 'alice@example.org', visibility: 'friends' } }),
-    balance: { balance: 12.5, floor: -50, earnedCredit: 140, canVouch: true, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 3 } },
+    balance: { balance: 12.5, floor: -50, earnedCredit: 140, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 3 } },
     ratings: { average: 4.5, count: 2, asProvider: { average: 5, count: 1 }, asReceiver: { average: 4, count: 1 }, ratings: [
         { stars: 5, comment: 'Lovely bread', role: 'provider', createdAt: '2026-09-02T00:00:00Z' }, { stars: 4, comment: '', role: 'receiver', createdAt: '2026-09-20T00:00:00Z' },
     ] },

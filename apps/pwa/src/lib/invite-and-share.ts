@@ -5,10 +5,10 @@
  *
  * Offered only where this member may invite: the community takes invites and its door lets them (an admin-only door asks their
  * role, not heard yet counting as before: the node refuses a member's invite itself). Where they can't, there is no button.
- * Never an offline ticket: it can't take a friend to a listing, and can't carry a vouch. With no answer from the node nothing is
- * made and the member is told so.
+ * Never an offline ticket: it can't take a friend to a listing. With no answer from the node nothing is made and the member is
+ * told so.
  */
-import { INVITE_SHARE_WORDS, inviteAndShareLink, inviteVouchRefusalWords, postIdFromInviteLink, t, type VouchLevel } from '@beanpool/core';
+import { INVITE_SHARE_WORDS, inviteAndShareLink, postIdFromInviteLink, t } from '@beanpool/core';
 import { generateInvite, type CommunityInfo } from './api';
 import { takePostParam } from './event-extras';
 import { keepLinkedPost } from './visitor-lobby';
@@ -27,9 +27,9 @@ export type InviteForShare = { ok: true; code: string } | { ok: false; offline: 
  * Ask the node for an invite. `offline`: it gave no answer at all, and no ticket is made. A refusal says the node's words (in
  * the member's language where the page knows them), and nothing is shared.
  */
-export async function makeInviteForShare(publicKey: string, vouchLevel: VouchLevel | null, make: typeof generateInvite = generateInvite): Promise<InviteForShare> {
+export async function makeInviteForShare(publicKey: string, make: typeof generateInvite = generateInvite): Promise<InviteForShare> {
     try {
-        const res = await make(publicKey, undefined, vouchLevel ?? undefined);
+        const res = await make(publicKey);
         const code = res?.invite?.code;
         return typeof code === 'string' && code ? { ok: true, code } : { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
     } catch (e) {
@@ -38,8 +38,6 @@ export async function makeInviteForShare(publicKey: string, vouchLevel: VouchLev
         if (typeof status !== 'number') return { ok: false, offline: true, message: t(INVITE_SHARE_WORDS.offline) };
         const refusal = invitesOffRefusal(e) ?? adminsOnlyRefusal(e) ?? pausedRefusal(e);
         if (refusal) return { ok: false, offline: false, message: refusal };
-        // The node refused the vouch: its words, and no invite that would quietly carry none.
-        if (vouchLevel !== null && (e as Error).message) return { ok: false, offline: false, message: inviteVouchRefusalWords((e as Error).message) };
         return { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
     }
 }

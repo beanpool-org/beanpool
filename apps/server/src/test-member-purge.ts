@@ -215,7 +215,7 @@ async function runTests() {
 
     const daveRow = db.prepare("SELECT * FROM members WHERE public_key = ?").get(dave.pubKeyHex) as any;
     assert(daveRow?.status === 'pruned', 'Dave account was pruned via HTTP endpoint');
-    assert(daveRow?.can_vouch === 0 && daveRow?.vouch_credit === 0, 'Privileges were revoked upon purge');
+    assert(daveRow?.can_operate === 0 && daveRow?.credit_frozen === 0, 'Privileges were revoked upon purge');
 
     console.log(`\n========================================`);
     console.log(`Test Results: ${passed}/${run} assertions passed`);

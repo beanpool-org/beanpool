@@ -12,7 +12,7 @@ import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
 import { isMemberKeySpelling, BAD_KEY_ERROR } from './member-key.js';
-import { getGenesisEarnedCredit, getTier, isVouchLevel, PROTOCOL_CONSTANTS, word, type VouchLevel } from '@beanpool/core';
+import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS, word } from '@beanpool/core';
 import {
     getMember,
     mayBringSomeoneIn,
@@ -89,9 +89,6 @@ function assertInvitesOn(): void {
  * Creates standard online invite code for an active member.
  */
 /**
- * `vouchLevel`: the vouch this invite carries, which redeemInvite applies. The caller has checked the maker may give it
- * (state-engine.ts readInviteVouch), and only the two routes that do pass one.
- *
  * `beforeWrite`: a caller's own limit on new codes (the route's 20 a day and 50 unused, an owner's or admin's the owners'
  * setting, W-main), run once the inviter is known to be a member who may bring someone in and before anything is written,
  * so a limit never answers for someone who may not invite at all.
@@ -99,7 +96,7 @@ function assertInvitesOn(): void {
  * Where only admins invite (the door, config/door.ts), a member who is no owner or admin here gets DoorClosedError (403
  * `admins_only`), after the member check and before the limit: a knock's answer included (engine/knocks.ts).
  */
-export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string, vouchLevel?: VouchLevel): InviteCode | null {
+export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void, namesEntryId?: string): InviteCode | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);
@@ -115,8 +112,8 @@ export function generateInvite(inviterPubkey: string, intendedFor?: string, befo
     const code = generateShortCode();
     const createdAt = new Date().toISOString();
 
-    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id, vouch_level) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry, vouchLevel ?? null);
+    db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, intended_for, names_entry_id) VALUES (?, ?, ?, ?, ?)`)
+      .run(code, inviterPubkey, createdAt, intendedFor || null, boundEntry);
 
     const invite: InviteCode & { namesEntryId?: string } = { code, createdBy: inviterPubkey, createdAt, usedBy: null, usedAt: null, intendedFor };
     if (boundEntry) invite.namesEntryId = boundEntry;
@@ -198,8 +195,7 @@ export const INVITE_USED_CODE = 'invite_used';
 
 /**
  * Validates and redeems standard INV- code, registering the member and seeding earned credit. `joinerSigned`: the
- * request carries a fresh signature by `publicKey` itself (unsignedVisitorRefusal). `vouchOnJoin`: writes the vouch an
- * invite carries, in the redeem's transaction, and says whether it did (state-engine.ts, which holds who may vouch).
+ * request carries a fresh signature by `publicKey` itself (unsignedVisitorRefusal).
  */
 export function redeemInvite(
     broadcast: (event: any) => void,
@@ -207,7 +203,6 @@ export function redeemInvite(
     publicKey: string,
     callsign: string,
     joinerSigned = false,
-    vouchOnJoin?: (voucherPubkey: string, joinerPubkey: string, level: VouchLevel) => boolean
 ): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
     assertPlainTablesWritable();
     assertInvitesOn();
@@ -296,25 +291,18 @@ export function redeemInvite(
 
     // Register member FIRST — invite_codes.used_by has FK to members(public_key). One transaction with the code's use
     // and, for an invite bound to a names-list entry, the confirmation (confirmByInvite): never a member without them.
-    // The vouch an invite carries goes in the same transaction, so a code's use and its one vouch stand or fall together:
-    // a code already used never reaches this line, and every refusal above leaves the vouch unwritten.
-    let vouched = false;
     const member = db.transaction(() => {
         const m = registerMemberInternal(broadcast, publicKey, callsign, invite.created_by, code);
         if (!m) return null;
         const outcome = invite.names_entry_id ? confirmByInvite(invite.created_by, invite.names_entry_id, publicKey) : null;
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ? WHERE code COLLATE NOCASE = ?")
             .run(publicKey, new Date().toISOString(), outcome, code);
-        vouched = isVouchLevel(invite.vouch_level) && vouchOnJoin !== undefined && vouchOnJoin(invite.created_by, publicKey, invite.vouch_level);
         return m;
     })();
     if (!member) {
         recordFunnelEvent('invite_failed', 'registration_failed');
         return { success: false, error: word('Registration failed') };
     }
-    // After the commit: a broadcast cannot be rolled back.
-    if (vouched) broadcast({ type: 'profile_updated', publicKey });
-
     // Pre-seed earned credit for tiered genesis invites
     const genesisType = (invite.genesis_type || 'standard') as GenesisInviteType;
     if (genesisType !== 'standard') {

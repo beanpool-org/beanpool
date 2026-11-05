@@ -7,7 +7,7 @@ import type { CircleCard, CircleDemand, ShownFromLine, PinDays } from '@beanpool
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
-import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, t, type DmLineDisclosure, type DmLineSig, type VouchLevel } from '@beanpool/core';
+import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -325,7 +325,6 @@ export interface CommunityInfo {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
         /** This node carries online events (DESIGN-event-times §9). Absent (a node from before): the form offers no "Online". */
         onlineEvents?: boolean;
-        inviteVouch?: boolean;
         inviteAsks?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
@@ -381,7 +380,6 @@ export interface Member {
     homeNodeUrl?: string;   // for federation visitors: their home node URL
     avatarUrl?: string | null;
     profileUpdatedAt?: string | null;
-    elderVouchedBy?: string | null;
 }
 
 /**
@@ -547,8 +545,8 @@ export interface InviteCode {
     intendedFor?: string;
 }
 
-export async function generateInvite(publicKey: string, intendedFor?: string, vouchLevel?: VouchLevel): Promise<{ success: boolean; invite: InviteCode }> {
-    return request('POST', '/api/invite/generate', { publicKey, intendedFor, vouchLevel });
+export async function generateInvite(publicKey: string, intendedFor?: string): Promise<{ success: boolean; invite: InviteCode }> {
+    return request('POST', '/api/invite/generate', { publicKey, intendedFor });
 }
 
 export interface InviteCheck { valid: boolean; reason?: string; inviterCallsign?: string | null; communityName?: string | null }
@@ -783,8 +781,6 @@ export interface MemberProfile {
     } | null;
     callsign?: string;
     joinedAt?: string;
-    elderVouchedBy?: string | null;
-    elderVouchedByCallsign?: string | null;
     archetype?: string | null;
     /**
      * True only on an enterprise's or a project's profile (the node's MemberProfile.isTreasury, slice E0): the key is
@@ -806,17 +802,6 @@ export async function updateMemberProfile(publicKey: string, update: {
     // A photo the member chose here is the one to offer when they join another community (lib/last-photo.ts); never read for display.
     rememberLastPhoto(update.avatar, nodeAddress());
     return answer;
-}
-
-/** Vouch for a member — hands out the -20 credit floor. Signed POST; server verifies the
- *  actor holds the vouch capability (an admin-appointed voucher). */
-export async function vouchMemberApi(targetPubkey: string, level: 1 | 2 | 3 = 1): Promise<{ success: boolean; level: number }> {
-    return request('POST', '/api/profile/vouch', { targetPubkey, level });
-}
-
-/** Withdraw a vouch. The original voucher (or an admin) only; blocked while the target is negative. */
-export async function unvouchMemberApi(targetPubkey: string): Promise<{ success: boolean }> {
-    return request('POST', '/api/profile/unvouch', { targetPubkey });
 }
 
 /** Read a member's preference flags (holiday_mode, notify_*). Unset keys are absent. */
@@ -1318,7 +1303,7 @@ export interface BalanceInfo {
     tier: TierInfo;
     tierCredit?: number;      // the credit `tier` is read from (what they did, never the known grant); memberLevel
     earnedCredit?: number;
-    grantedCredit?: number;   // vouch/genesis/admin grants (separate lane, no vote weight)
+    grantedCredit?: number;   // genesis/admin grants (separate lane, no vote weight)
     qualifiedValue?: number;  // diversity-capped trade value behind the earned score
     avgRating?: number;       // reputation multiplier inputs
     reviewCount?: number;
@@ -1330,16 +1315,12 @@ export interface BalanceInfo {
         uniquePartners: number;
         ageDays: number;
     };
-    /** Elder who vouched for this member, if any. */
-    elderVouchedBy?: string | null;
     /** True once the member has ever listed an Offer (Gate 1 cleared). */
     hasListedOffer?: boolean;
     /** True while the member still needs to list an Offer before posting Needs / accepting Offers. */
     isBlockedFromTrading?: boolean;
-    /** True once the member has a credit line at all (vouched or granted). Un-vouched → false. */
+    /** True once the member has a credit line at all (earned, granted or confirmed known). None → false. */
     activated?: boolean;
-    /** True if this member holds the appointed-voucher capability (can hand out the vouch floor). */
-    canVouch?: boolean;
     /**
      * True if this member keeps *something* — the coarse "show the keeper layer at all" flag.
      * Never gate a specific enterprise's controls on it (#106); use `keeperOf` for that.
@@ -2319,7 +2300,6 @@ export interface MemberCard {
     avatarUrl?: string | null;
     profileUpdatedAt?: string | null;
     earnedCredit?: number;
-    elderVouchedBy?: string | null;
     archetype?: string | null;
     distanceKm?: number | null;
 }
@@ -2485,8 +2465,6 @@ export type DecisionEffect =
     | 'unsuspend_member'
     | 'freeze_credit'
     | 'unfreeze_credit'
-    | 'grant_voucher'
-    | 'revoke_voucher'
     | 'remove_lead_keeper'
     | 'reinstate_member'
     /**

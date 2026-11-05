@@ -6,7 +6,7 @@
  * Clicking the component opens the PublicProfileModal.
  *
  * The tier is the node's own (@beanpool/core tierForCredit). `energyCycled` is the post's
- * authorEnergyCycled, which the node fills with the author's tier credit (vouch + earned + granted),
+ * authorEnergyCycled, which the node fills with the author's tier credit (earned + granted),
  * so the badge matches the tier on the author's own Ledger. Only the colours live here.
  */
 

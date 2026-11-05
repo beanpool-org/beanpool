@@ -361,9 +361,9 @@ async function rulesOnLocal(): Promise<void> {
     const tradedAt = new Date().toISOString();
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), R.pk, Q.pk, tradedAt, tradedAt);
-    const propose = (title: string, description: string) => call(base, 'POST', '/api/commons/decisions', R, { title, description, touches: 'member', effect: 'grant_voucher', subject: Q.pk });
+    const propose = (title: string, description: string) => call(base, 'POST', '/api/commons/decisions', R, { title, description, touches: 'member', effect: 'freeze_credit', subject: Q.pk });
     const titleOver = await propose('t'.repeat(201), 'Ten or more characters of reasons');
-    const descOver = await propose('A voucher for Quin', 'd'.repeat(5_001));
+    const descOver = await propose('A freeze for Quin', 'd'.repeat(5_001));
     const decisions = (db.prepare('SELECT COUNT(*) AS n FROM decisions WHERE author_pubkey = ?').get(R.pk) as { n: number }).n;
     const ok = await propose('t'.repeat(200), 'd'.repeat(5_000));
     assert(titleOver.status === 400 && titleOver.body?.error === tooLong("A Decision's title", 200) && descOver.status === 400

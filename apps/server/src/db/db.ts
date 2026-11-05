@@ -13,6 +13,7 @@ import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
+import { resetVouching, type VouchResetReport } from './vouch-reset.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { upgradeBreakGlassHashes } from '../break-glass-code.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from '../engine/photo-upload-budget.js';
@@ -1351,6 +1352,16 @@ export function addRemovalCaseColumns(targetDb: Database.Database): number {
     return missing.length;
 }
 
+/** What this boot's vouching reset did (db/vouch-reset.ts), for the log line and the owners' alert after the boot. */
+let vouchResetReport: VouchResetReport | null = null;
+
+/** The vouching reset's report, once: null when this boot reset nothing (a fresh install, or one already reset). */
+export function takeVouchResetReport(): VouchResetReport | null {
+    const r = vouchResetReport;
+    vouchResetReport = null;
+    return r;
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -1373,14 +1384,6 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // A hardship grant's shield on a debt being worked off (state-engine.ts sweepRepayment).
     try { db.prepare(`ALTER TABLE names_debts ADD COLUMN hardship_held REAL NOT NULL DEFAULT 0`).run(); } catch { }
-    // Elder vouch column — added BEFORE schema.sql exec so the re-created
-    // members_touch_updated_at trigger (which whitelists elder_vouched_by) compiles.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN elder_vouched_by TEXT REFERENCES members(public_key)`).run(); } catch { }
-    // Vouch capability (super-Elder). Added BEFORE schema.sql exec so the re-created
-    // members_touch_updated_at trigger (which whitelists can_vouch) compiles.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN can_vouch INTEGER DEFAULT 0`).run(); } catch { }
-    // Vouch level's credit floor (25/50/100). Also added before schema.sql for the trigger whitelist.
-    try { db.prepare(`ALTER TABLE members ADD COLUMN vouch_credit REAL DEFAULT 0`).run(); } catch { }
     // Hard credit freeze: forced 0 floor when set by admin. Also added before schema.sql for the trigger whitelist.
     try { db.prepare(`ALTER TABLE members ADD COLUMN credit_frozen INTEGER DEFAULT 0`).run(); } catch { }
     // Community treasury + operator capability. Added BEFORE schema.sql exec so the re-created
@@ -1670,7 +1673,6 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
-    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN vouch_level INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
@@ -2164,6 +2166,20 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE groups ADD COLUMN avatar_bytes INTEGER`).run(); } catch { }
     try { db.prepare(`DROP TRIGGER IF EXISTS groups_touch_updated_at`).run(); } catch { }
     moveGroupPicturesOutOfRows();
+
+    // The vouching reset (R0, db/vouch-reset.ts): here, with members_touch_updated_at dropped above (so no row is stamped)
+    // and before schema.sql, which makes it again without the old names. It counts first and throws, writing nothing,
+    // when someone with a vouch owes more than the line they keep without it or a Decision could still give or take away
+    // vouching: the boot stops there, and the previous release boots the data untouched. Otherwise one transaction turns
+    // every switch and vouch off, deletes the unused invites that promised a vouch, and drops the four columns.
+    vouchResetReport = resetVouching(db, (where) => {
+        // A main server's deletes carry tombstones to its standbys (deletePlainRows); a standby's copy is its main
+        // server's, which deletes them there. A database from before the tombstones table has none to write.
+        const tombstones = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tombstones'`).get();
+        return getNodeRole() !== 'backup' && tombstones
+            ? deletePlainRows('invite_codes', where)
+            : db.prepare(`DELETE FROM invite_codes WHERE ${where}`).run().changes;
+    });
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     // Verified channels (#1830): the badge carries the account the platform named. Badges set before

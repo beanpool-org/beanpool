@@ -38,7 +38,6 @@ export interface Member {
     lastActiveAt?: string | null;
     updatedAt?: string | null;
     earnedCredit?: number;
-    elderVouchedBy?: string | null;
     /** This account is a community treasury (the Commons' trading face), not a person. */
     isTreasury?: boolean;
     archetype?: string | null;
@@ -74,7 +73,7 @@ export interface Member {
     boardStandingChangedAt?: string | null;
     /**
      * The member's row as the main server holds it: every column but `public_key` and `updated_at`, by column name (design
-     * G2a). A standby writes each one that is a column of its own table, so an enterprise stays an enterprise, a vouch or a
+     * G2a). A standby writes each one that is a column of its own table, so an enterprise stays an enterprise, a grant or a
      * freeze holds, and a column added later travels without anyone listing it. Carried by the replication export only
      * (a standby and a take-over keep it); never in the member directory.
      */
@@ -108,8 +107,6 @@ export interface MemberProfile {
     callsign?: string;
     joinedAt?: string;
     status?: 'active' | 'disabled' | 'pruned';
-    elderVouchedBy?: string | null;
-    elderVouchedByCallsign?: string | null;
     archetype?: string | null;
     /**
      * Present, and true, only on an enterprise's or a project's profile: the key is kept by its keepers, not a person.
@@ -170,7 +167,6 @@ export function rowToMember(row: any): Member {
         lastActiveAt: row.last_active_at || null,
         updatedAt: row.updated_at || null,
         earnedCredit: row.earned_credit ?? 0,
-        elderVouchedBy: row.elder_vouched_by || null,
         isTreasury: !!row.is_treasury,
         archetype: row.archetype || null,
         nodeRole: row.node_role ?? null,
@@ -190,8 +186,6 @@ export function rowToProfile(row: any): MemberProfile {
         callsign: row.callsign,
         joinedAt: row.joined_at,
         status: row.status || 'active',
-        elderVouchedBy: row.elder_vouched_by || null,
-        elderVouchedByCallsign: row.elder_vouched_by_callsign || null,
         archetype: row.archetype || null,
         ...(row.is_treasury ? { isTreasury: true as const } : {}),
     };
@@ -336,7 +330,6 @@ export interface DirectoryRow {
     avatar_ref: string | null;
     profile_updated_at: unknown;
     earned_credit: number | null;
-    elder_vouched_by: string | null;
     archetype: string | null;
     is_treasury: unknown;
     /**
@@ -349,7 +342,7 @@ export interface DirectoryRow {
     photo_inline?: number;
 }
 
-const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, elder_vouched_by, archetype, is_treasury';
+const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, archetype, is_treasury';
 
 /** DIRECTORY_COLUMNS, and photo_inline while the old `avatar_url` column is there (DirectoryRow). */
 function directoryColumns(db: Db): string {
@@ -904,11 +897,6 @@ export function getProfile(db: Db, publicKey: string, requesterPubkey?: string):
     const row = db.prepare(`${MEMBER_WITH_PHOTO_SQL} WHERE m.public_key = ?`).get(publicKey) as any;
     if (!row) return null;
     const profile = rowToProfile(row);
-    profile.elderVouchedBy = row.elder_vouched_by || null;
-    if (row.elder_vouched_by) {
-        const voucher = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(row.elder_vouched_by) as any;
-        profile.elderVouchedByCallsign = voucher?.callsign || null;
-    }
     if (profile.contact && !contactVisibleTo(publicKey, row.contact_visibility, contactViewer(db, requesterPubkey))) {
         profile.contact = null;
     }

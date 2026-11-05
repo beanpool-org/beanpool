@@ -12,15 +12,14 @@
  */
 
 import { useState, useEffect } from 'react';
-import { buildOfflineInviteCode, generateInvite, getBalance, getCommunityCard, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
+import { buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
 import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
-import { InviteVouchChoice } from '../components/InviteVouchChoice';
 import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
-import { INVITE_VOUCH_WORDS, LOCAL_COMMUNITY_LINES, formatDate, inviteShareText, inviteVouchRefusalWords, offersInviteAsk, offersInviteVouch, shareAddress, t, tn, type VouchLevel } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, inviteShareText, offersInviteAsk, shareAddress, t, tn } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -125,22 +124,6 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     // Said under the button when no invite was made and the page stays as it is (offline where only admins invite).
     const [notice, setNotice] = useState<string | null>(null);
 
-    // A vouch on this invite, for someone who can vouch and nobody else: the node says so on their own balance, and
-    // decides again when the invite is made. None each time the page opens and after each invite. No answer, no control:
-    // an offline ticket carries no vouch, so the control isn't offered to a page that can't reach the node.
-    const [canVouch, setCanVouch] = useState(false);
-    const [vouchLevel, setVouchLevel] = useState<VouchLevel | null>(null);
-    const vouchHere = !isPreview && nodeInfo?.features?.inviteVouch === true;
-    useEffect(() => {
-        if (!vouchHere) return;
-        let cancelled = false;
-        getBalance(identity.publicKey)
-            .then((b) => { if (!cancelled) setCanVouch(b?.canVouch === true); })
-            .catch(() => { /* Not answered: no control. */ });
-        return () => { cancelled = true; };
-    }, [vouchHere, identity.publicKey]);
-    const offersVouch = !isPreview && offersInviteVouch(nodeInfo?.features, canVouch);
-
     // The member's own codes and their invite tree: never asked where invites are in preview (the global node, which
     // makes no invite; lib/features readsOwn).
     useEffect(() => {
@@ -208,19 +191,16 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         setGenerating(true);
         setCopied(false);
         setNotice(null);
-        // Only what the control on screen shows: a level never rides along once it has gone.
-        const vouch = offersVouch ? vouchLevel : null;
         try {
             // Online first (parity with native): a server-minted INV- code is
             // short, single-use enforced centrally, and lands in the node's
             // invite tree. Only fall back to a self-signed offline ticket when
             // the node can't be reached.
             try {
-                const res = await generateInvite(identity.publicKey, intendedFor.trim() || undefined, vouch ?? undefined);
+                const res = await generateInvite(identity.publicKey, intendedFor.trim() || undefined);
                 if (res?.invite?.code) {
                     setNewCode(res.invite.code);
                     setIntendedFor('');
-                    setVouchLevel(null);
                     setShowQR(true);
                     setInvites(prev => [res.invite, ...prev]);
                     return;
@@ -248,21 +228,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     setNotice(pausedWords);
                     return;
                 }
-                // The node refused the vouch: its words, and no ticket, which would quietly carry none. A level the node
-                // turned down leaves the page as it is, so the member can choose None or ask why.
-                const refusedVouch = vouch !== null && typeof (e as { status?: unknown } | null)?.status === 'number';
-                if (refusedVouch) {
-                    setNotice(inviteVouchRefusalWords((e as Error).message));
-                    return;
-                }
                 /* node unreachable — offline fallback below */
-            }
-
-            // A vouch needs the node, which can't be reached: no ticket, because it would carry none, and the member would
-            // think it did. They choose None for a ticket, or try again connected.
-            if (vouch !== null) {
-                setNotice(t(INVITE_VOUCH_WORDS.noOfflineVouch));
-                return;
             }
 
             // Where only admins invite, a ticket only from a member the node has said is one (lib/node-invites.ts).
@@ -478,12 +444,12 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                         </div>
                     ) : (
                         <>
-                    {!isPreview && doorAdmins && nodeInfo?.features?.inviteAsks === true && <InviteAsksToAnswer offersVouch={offersVouch} />}
+                    {!isPreview && doorAdmins && nodeInfo?.features?.inviteAsks === true && <InviteAsksToAnswer />}
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
                         {t('🎟️ Invite Someone')}
                     </h2>
                     <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-6 leading-relaxed">
-                        {t('Each invite code is single-use and valid for 30 days. Generate a new cryptographic voucher for each person you invite.')}
+                        {t('Each invite code is single-use and valid for 30 days. Generate a new code for each person you invite.')}
                     </p>
 
                     <input
@@ -494,7 +460,6 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                         className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
                     />
 
-                    {offersVouch && <InviteVouchChoice value={vouchLevel} onChange={setVouchLevel} />}
 
                     {isPreview ? (
                         <LocalCommunityAction feature="invites" label={t('✨ Generate New Invite')} className="w-full p-4 mb-6 text-[15px] shadow-md" {...waysForward} />

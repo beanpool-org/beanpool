@@ -81,7 +81,7 @@ beforeEach(() => {
         publicKey: identity.publicKey, callsign: 'Alice', avatar: null, bio: 'Gardener', contact: null, role: 'member', joinedAt: '2026-01-01T00:00:00.000Z',
     } as any);
     vi.spyOn(api, 'updateMemberProfile').mockResolvedValue({ success: true, profile: {} as any });
-    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 10, floor: -50, earnedCredit: 50, canVouch: true, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 1 } } as any);
+    vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 10, floor: -50, earnedCredit: 50, tier: { name: 'Green Bean', emoji: '🌱' }, trustStats: { tradeCount: 1 } } as any);
     vi.spyOn(api, 'getMemberPreferences').mockResolvedValue({} as any);
 });
 afterEach(() => {

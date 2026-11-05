@@ -27,6 +27,7 @@ import { categoryEmoji, categoryLabel } from '../../constants/categories';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { PollCard } from '../../components/PollCard';
+import { PollGridTile } from '../../components/PollGridTile';
 import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
@@ -1657,11 +1658,15 @@ export default function MarketScreen() {
 
     const renderItem = ({ item }: { item: any }) => {
         if (item.isGridRow) {
-            // A row of the grid (utils/market-grid-rows.ts): a poll on its own, the list's width, as the list draws it; or two
-            // cells that the row stretches to one height, each tile filling its cell, so the pair is one height whatever each
-            // holds. A last odd tile keeps its half: an empty cell beside it holds the width.
+            // A row of the grid (utils/market-grid-rows.ts): a poll on its own, both cells wide at a tile row's height, a summary
+            // that opens the poll's page (components/PollGridTile, Marty 5 Nov 2026); or two cells that the row stretches to one
+            // height, each tile filling its cell, so the pair is one height whatever each holds. A last odd tile keeps its half:
+            // an empty cell beside it holds the width.
             const row: GridRow<any> = item;
-            if ('poll' in row) return renderItem({ item: row.poll });
+            if ('poll' in row) {
+                const poll = row.poll;
+                return <PollGridTile post={poll} fontScale={fontScale} informal={pollsInformal(nodeProfile)} onOpen={() => router.push(`/post/${poll.id}`)} />;
+            }
             return (
                 <View style={shell.gridRow} testID="market-grid-row">
                     {row.pair.map(cell => <View key={cell.id} style={shell.gridCell}>{renderItem({ item: cell })}</View>)}

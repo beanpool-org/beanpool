@@ -113,7 +113,7 @@ const STUBS = {
         export const getMemberRatings = async () => ({ average: 0, count: 0, asProvider: 0, asReceiver: 0, ratings: [] });
         export const getMemberPosts = empty, getRatingsGiven = empty, getFriendsLocal = empty;
         export const getBalance = none, isFriendLocal = async () => false, addFriendLocal = none, removeFriendLocal = none;
-        export const createConversationApi = none, getTrustProfile = none, vouchMember = none, updateMemberProfile = none;
+        export const createConversationApi = none, getTrustProfile = none, updateMemberProfile = none;
         export const getUnreadByConversation = async () => ({}), getMarketplaceTransactions = empty, signedGet = none;
     `,
     'NeedsYouIcons': `export const NeedsYouIcons = () => null;`,

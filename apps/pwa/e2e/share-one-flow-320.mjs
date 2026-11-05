@@ -32,7 +32,7 @@ function answer(url, who) {
         return json({ memberCount: 12, postCount: 30, transactionCount: 4, commonsBalance: 0, profile: 'local',
             features: { beans: true, invites: true, knocks: true, inviteAsks: who !== 'admins-only-no-asks', door: onlyAdmins ? 'admins' : 'members', shareOutside: who === 'outside' } });
     }
-    if (u.pathname.startsWith('/api/ledger/balance/')) return json({ balance: 0, floor: 0, usableFloor: 0, canVouch: false });
+    if (u.pathname.startsWith('/api/ledger/balance/')) return json({ balance: 0, floor: 0, usableFloor: 0 });
     if (u.pathname === '/api/node-admin/me') return json({ role: who === 'admin' ? 'admin' : null });
     return null;
 }

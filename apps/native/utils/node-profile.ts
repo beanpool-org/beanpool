@@ -88,8 +88,6 @@ export interface NodeFeatures {
      * alone (the #1946 review, finding 1, measured).
      */
     onlineEvents?: boolean;
-    /** An invite can carry a vouch here (core offersInviteVouch). */
-    inviteVouch?: boolean;
     /** A member can ask an admin to invite someone here (core offersInviteAsk). */
     inviteAsks?: boolean;
     /**
@@ -136,7 +134,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'pollOther',
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteVouch', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
+    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
 ];
 
 export interface NodeProfile {

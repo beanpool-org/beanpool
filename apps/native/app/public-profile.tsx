@@ -6,7 +6,7 @@ import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, isFriendLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile, pushWaitingArchetype } from '../utils/db';
+import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, isFriendLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, updateMemberProfile, pushWaitingArchetype } from '../utils/db';
 import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
@@ -201,14 +201,13 @@ export default function PublicProfileScreen() {
         mutualName: { fontSize: 14, fontWeight: '700', color: colors.text.heading, flex: 1 },
         mutualAsk: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, flexShrink: 0 },
 
-        vouchCard: {
+        inviterCard: {
             backgroundColor: colors.surface.app, marginHorizontal: 16, marginTop: 12, padding: 14,
             borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, gap: 6,
         },
-        vouchLine: { fontSize: 13, color: colors.text.body, fontWeight: '600', lineHeight: 19 },
-        vouchInviterRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-        vouchInviterName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
-        vouchInviterSub: { fontSize: 12, color: colors.text.secondary, fontWeight: '600', marginTop: 1 },
+        inviterRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+        inviterName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
+        inviterSub: { fontSize: 12, color: colors.text.secondary, fontWeight: '600', marginTop: 1 },
         systemBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.brand.tint, alignItems: 'center', justifyContent: 'center' },
 
         // Synergy & Collaboration
@@ -496,8 +495,6 @@ export default function PublicProfileScreen() {
     const [trust, setTrust] = useState<any>(null);
     /** The key whose trust profile the node has answered (or failed to): until then, what the key is isn't known. */
     const [trustFor, setTrustFor] = useState<string | null>(null);
-    const [viewerBalance, setViewerBalance] = useState<any>(null);
-    const [vouching, setVouching] = useState(false);
     const [editingReview, setEditingReview] = useState<any | null>(null);
     const [viewerProfile, setViewerProfile] = useState<any>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
@@ -702,17 +699,6 @@ export default function PublicProfileScreen() {
                     setTrustLoading(false);
                     setTrustFor(asked);
                 });
-
-            // The reader's own balance (the vouch button's): never asked where Beans are in preview (utils/reads-own.ts).
-            if (identity?.publicKey) {
-                const viewer = identity.publicKey;
-                readsOwn('beans', viewer)
-                    .then(reads => (reads ? getBalance(viewer) : null))
-                    .then(viewerBal => {
-                        if (viewerBal) setViewerBalance(viewerBal);
-                    })
-                    .catch(() => null);
-            }
         } else {
             setTrustLoading(false);
             setTrust(null);
@@ -758,44 +744,6 @@ export default function PublicProfileScreen() {
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);
         return '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
-    };
-
-    // Vouch: an appointed voucher (admin-granted can_vouch capability) can vouch for anyone.
-    // A vouch hands out the -20-style credit floor at the chosen level, lifting the newcomer's
-    // no-overdraft gate. Gated on the viewer's server-provided canVouch — NOT their tier.
-    const viewerCanVouch = !!(isSelf ? balanceInfo : viewerBalance)?.canVouch;
-    const canVouch = !isSelf && viewerCanVouch && !trust?.elderVouch;
-
-    const handleVouch = async (level: 1 | 2 | 3) => {
-        if (vouching || !pubKeyStr) return;
-        setVouching(true);
-        try {
-            await vouchMember(pubKeyStr, level);
-            const fresh = await getTrustProfile(pubKeyStr).catch(() => null);
-            if (fresh) setTrust(fresh);
-            // With no name of the voucher's own, the badge says "Vouched by a sponsor" (as it always has) in its own words.
-            else setTrust((cur: any) => cur ? { ...cur, elderVouch: identity?.callsign ? { callsign: identity.callsign } : { sponsor: true } } : cur);
-        } catch (e: any) {
-            // The node's own words as it sent them (slice S4); the phone's own (utils/db.ts _signedRequest) in the member's language.
-            Alert.alert(t('Could not vouch'), e?.message ? signedRequestWords(e.message) : t('Please try again.'));
-        } finally {
-            setVouching(false);
-        }
-    };
-
-    // Let the voucher choose how much of a credit line to extend (their call on confidence).
-    const chooseVouchLevel = () => {
-        if (vouching || !pubKeyStr) return;
-        Alert.alert(
-            profile?.callsign ? t('Vouch for {name}', { name: profile.callsign }) : t('Vouch for this member'),
-            t("Choose how deep a credit line to extend. This lets them trade on credit down to that floor — it reflects your confidence in them. No beans leave your wallet."),
-            [
-                { text: t('Light · −{n}', { n: 25 }), onPress: () => handleVouch(1) },
-                { text: t('Standard · −{n}', { n: 50 }), onPress: () => handleVouch(2) },
-                { text: t('Deep · −{n}', { n: 100 }), onPress: () => handleVouch(3) },
-                { text: t('Cancel'), style: 'cancel' },
-            ]
-        );
     };
 
     const [isBlocking, setIsBlocking] = useState(false);
@@ -1114,7 +1062,7 @@ export default function PublicProfileScreen() {
                 )}
 
                 {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel. Its verdict, tier,
-                    Trust Points, track record, vouch and Vouch action are all Beans: gated like the own card (`showsBeans`).
+                    Trust Points, track record and who invited them are all Beans: gated like the own card (`showsBeans`).
                     On a community with Beans off (the worldwide one) every member reads "🌱 Newcomer · 0 Trust Points" and is
                     told to trade to build trust, which can't happen there (global previews audit, item 2); the line below
                     says where badges and Beans are earned. Collaboration Chemistry and connections in common are not Beans:
@@ -1388,34 +1336,33 @@ export default function PublicProfileScreen() {
                                 </View>
                             )}
 
-                            {showsBeans && (<>
-                            {/* Vouched in by */}
-                            {trust.vouchedInBy && (
-                                <View style={styles.vouchCard}>
+                            {/* Invited by */}
+                            {showsBeans && trust.vouchedInBy && (
+                                <View style={styles.inviterCard}>
                                     {trust.vouchedInBy.kind === 'member' && (
                                         <Pressable
                                             accessibilityRole="button"
-                                            style={styles.vouchInviterRow}
+                                            style={styles.inviterRow}
                                             onPress={() => router.push({ pathname: '/public-profile', params: { publicKey: trust.vouchedInBy.publicKey, callsign: trust.vouchedInBy.callsign || '' } })}
                                         >
                                             <MemberAvatar avatarUrl={trust.vouchedInBy.avatarUrl} pubkey={trust.vouchedInBy.publicKey} callsign={trust.vouchedInBy.callsign || '?'} size={32} />
                                             <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.vouchInviterName} numberOfLines={1}>{t('🌱 Vouched in by {name}', { name: trust.vouchedInBy.callsign ?? '' })}</Text>
-                                                <Text style={styles.vouchInviterSub} numberOfLines={2}>{t('{tier} tier · tap to reach out', { tier: tierWords(trust.vouchedInBy.tier) })}</Text>
+                                                <Text style={styles.inviterName} numberOfLines={1}>{t('🌱 Invited by {name}', { name: trust.vouchedInBy.callsign ?? '' })}</Text>
+                                                <Text style={styles.inviterSub} numberOfLines={2}>{t('{tier} tier · tap to reach out', { tier: tierWords(trust.vouchedInBy.tier) })}</Text>
                                             </View>
                                             <MaterialCommunityIcons name="chevron-right" size={20} color={colors.text.secondary} />
                                         </Pressable>
                                     )}
                                     {trust.vouchedInBy.kind !== 'member' && (
-                                        <View style={styles.vouchInviterRow}>
+                                        <View style={styles.inviterRow}>
                                             <View style={styles.systemBadge}>
                                                 <MaterialCommunityIcons name="shield-check" size={20} color={colors.brand.primary} />
                                             </View>
                                             <View style={{ flex: 1, minWidth: 0 }}>
-                                                <Text style={styles.vouchInviterName} numberOfLines={2}>
+                                                <Text style={styles.inviterName} numberOfLines={2}>
                                                     {trust.vouchedInBy.kind === 'founder' ? t('Founding member') : t('Invited directly by the system admin')}
                                                 </Text>
-                                                <Text style={styles.vouchInviterSub} numberOfLines={2}>
+                                                <Text style={styles.inviterSub} numberOfLines={2}>
                                                     {trust.vouchedInBy.kind === 'founder' ? t('Here since the community began') : t('Vetted by the admin at sign-up')}
                                                 </Text>
                                             </View>
@@ -1423,31 +1370,6 @@ export default function PublicProfileScreen() {
                                     )}
                                 </View>
                             )}
-
-                            {/* Elder endorsement badge */}
-                            {trust.elderVouch && (
-                                <View style={[styles.vouchCard, { flexDirection: 'row', alignItems: 'center', gap: 8, borderColor: '#f59e0b' }]}>
-                                    <Text style={{ fontSize: 18 }} allowFontScaling={false}>⛰️</Text>
-                                    <Text style={[styles.vouchInviterName, { flexShrink: 1 }]} numberOfLines={2}>
-                                        {trust.elderVouch.callsign
-                                            ? t('Vouched by {name}', { name: trust.elderVouch.callsign })
-                                            : trust.elderVouch.sponsor ? t('Vouched by a sponsor') : t('Vouched by an Elder')}
-                                    </Text>
-                                </View>
-                            )}
-
-                            {/* Vouch action — extend a credit line to this member (voucher picks the level) */}
-                            {canVouch && (
-                                <Pressable
-                                    accessibilityRole="button"
-                                    disabled={vouching}
-                                    onPress={chooseVouchLevel}
-                                    style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.feedback.warning.solid, opacity: vouching ? 0.6 : 1 }}
-                                    >
-                                    <Text style={{ color: colors.text.onGold, fontWeight: '800', fontSize: 15, flexShrink: 1, textAlign: 'center' }} allowFontScaling={false}>{vouching ? t('🤝 Vouching…') : t('🤝 Vouch for Member')}</Text>
-                                </Pressable>
-                            )}
-                            </>)}
                         </>
                     ) : null
                 )}

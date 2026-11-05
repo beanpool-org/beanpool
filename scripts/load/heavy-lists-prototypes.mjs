@@ -59,7 +59,7 @@ if (!c.includes('__heavyGate')) {
         if (__P.has('stream') && !ctx.query.updatedAfter && !point) {
             const { Readable } = await import('node:stream');
             const roles = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-            const page = db.prepare("SELECT rowid AS __rowid, public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, elder_vouched_by, archetype, is_treasury FROM members WHERE status != 'pruned' AND rowid > ? ORDER BY rowid LIMIT 1000");
+            const page = db.prepare("SELECT rowid AS __rowid, public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, archetype, is_treasury FROM members WHERE status != 'pruned' AND rowid > ? ORDER BY rowid LIMIT 1000");
             let after = -1, first = true;
             ctx.status = 200; ctx.type = 'application/json';
             ctx.body = new Readable({ read() {
@@ -69,7 +69,7 @@ if (!c.includes('__heavyGate')) {
                 const items = rows.filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury).map(r => JSON.stringify({
                     publicKey: r.public_key, callsign: r.callsign, joinedAt: r.joined_at, nodeRole: roles.get(r.public_key) ?? null,
                     avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref), profileUpdatedAt: r.profile_updated_at || null, earnedCredit: r.earned_credit ?? 0,
-                    elderVouchedBy: r.elder_vouched_by || null, archetype: r.archetype || null }));
+                    archetype: r.archetype || null }));
                 if (items.length === 0) { this.push(Buffer.alloc(0)); return; }
                 this.push(Buffer.from((first ? '[' : ',') + items.join(',')));
                 first = false;
@@ -79,11 +79,11 @@ if (!c.includes('__heavyGate')) {
         if (__P.has('page') && ctx.query.limit) {
             const lim = Math.min(Math.max(Number(ctx.query.limit) || 500, 1), 1000), after = Number(ctx.query.after) || -1;
             const roles = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-            const rows = db.prepare("SELECT rowid AS __rowid, public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, elder_vouched_by, archetype, is_treasury FROM members WHERE status != 'pruned' AND rowid > ? ORDER BY rowid LIMIT ?").all(after, lim);
+            const rows = db.prepare("SELECT rowid AS __rowid, public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, archetype, is_treasury FROM members WHERE status != 'pruned' AND rowid > ? ORDER BY rowid LIMIT ?").all(after, lim);
             const items = rows.filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury).map(r => ({
                 publicKey: r.public_key, callsign: r.callsign, joinedAt: r.joined_at, nodeRole: roles.get(r.public_key) ?? null,
                 avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref), profileUpdatedAt: r.profile_updated_at || null, earnedCredit: r.earned_credit ?? 0,
-                elderVouchedBy: r.elder_vouched_by || null, archetype: r.archetype || null }));
+                archetype: r.archetype || null }));
             ctx.status = 200; ctx.type = 'application/json';
             ctx.body = Buffer.from(JSON.stringify({ members: items, next: rows.length === lim ? String(rows[rows.length - 1].__rowid) : null }));
             return;

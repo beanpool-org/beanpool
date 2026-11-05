@@ -37,7 +37,7 @@ async function main() {
             answer: (rows) => rows.filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury).map(r => ({
                 publicKey: r.public_key, callsign: r.callsign, joinedAt: r.joined_at, nodeRole: null,
                 avatarUrl: core.avatarUrlOf(r.public_key, r.avatar_ref), profileUpdatedAt: r.profile_updated_at || null,
-                earnedCredit: r.earned_credit ?? 0, elderVouchedBy: r.elder_vouched_by || null, archetype: r.archetype || null,
+                earnedCredit: r.earned_credit ?? 0, archetype: r.archetype || null,
             })),
         },
         roster: {

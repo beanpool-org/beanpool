@@ -6,7 +6,7 @@
  *  3. The limits: 3 waiting and 3 a day, in words; asking and taking back still counts.
  *  4. Who is told: owners and admins, a count and no name; a moderator and a member are not; an older app is not.
  *  5. Who reads: owners and admins only, by role on a signature; a token alone reaches nothing.
- *  6. Send invite: an ordinary invite by the admin, with the vouch choice; the code goes to the member; the request is gone.
+ *  6. Send invite: an ordinary invite by the admin; the code goes to the member; the request is gone.
  *  7. No: a short reason, to the member; the request is gone.
  *  8. Take it back: only your own.
  *  9. After 30 days: gone, and never listed past it.
@@ -24,7 +24,7 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 import crypto from 'node:crypto';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
-import { initStateEngine, exportSyncState, adminPruneUser, adminSetVoucher, setUserStatusRow, purgeMemberSelf, COMMUNITY_DECISION_ACTOR } from './state-engine.js';
+import { initStateEngine, exportSyncState, adminPruneUser, setUserStatusRow, purgeMemberSelf, COMMUNITY_DECISION_ACTOR } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
@@ -247,18 +247,13 @@ async function main(): Promise<void> {
 
     // ── 6. Send invite ───────────────────────────────────────────────────────────────────────────
     console.log('── 6. send invite ──');
-    const beforeCodes = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes').get() as { n: number }).n;
-    const badVouch = await call(ada, 'POST', `/api/invite/asks/${askId}/send`, { vouchLevel: 9 });
-    assert(badVouch.status === 400 && badVouch.body?.code === 'bad_vouch_level' && rows() === 1, `6. a refused vouch makes no invite and keeps the ask (${show(badVouch)})`);
-    assert((db.prepare('SELECT COUNT(*) AS n FROM invite_codes').get() as { n: number }).n === beforeCodes, '6. no code made');
-    adminSetVoucher(ada.pk, true);
-    const sent = await call(ada, 'POST', `/api/invite/asks/${askId}/send`, { vouchLevel: 2 });
+    const sent = await call(ada, 'POST', `/api/invite/asks/${askId}/send`, {});
     assert(sent.status === 200 && rows() === 0 && !!tombstone(askId), `6. the request is deleted, with a tombstone (${show(sent)})`);
     const answered = await mine(mel);
     const answer = answered.body?.answers?.[0];
     assert(answered.status === 200 && answered.body?.waiting?.length === 0 && answer?.outcome === 'invited' && answer?.state === 'ready' && typeof answer?.code === 'string', `6. the code goes back to the member (${show(answered)})`);
-    const invite = db.prepare('SELECT created_by, intended_for, vouch_level, names_entry_id FROM invite_codes WHERE code = ?').get(answer?.code) as any;
-    assert(invite?.created_by === ada.pk && invite?.intended_for === null && invite?.vouch_level === 2 && invite?.names_entry_id === null, `6. an ordinary invite by the admin, with the vouch, naming nobody (${JSON.stringify(invite)})`);
+    const invite = db.prepare('SELECT created_by, intended_for, names_entry_id FROM invite_codes WHERE code = ?').get(answer?.code) as any;
+    assert(invite?.created_by === ada.pk && invite?.intended_for === null && invite?.names_entry_id === null, `6. an ordinary invite by the admin, naming nobody (${JSON.stringify(invite)})`);
     const noticeRow = db.prepare('SELECT title, body, data FROM moderation_notices WHERE recipient = ?').get(mel.pk) as { title: string; body: string; data: string };
     assert(!/Quentin|bikes/.test(JSON.stringify(noticeRow)), `6. nothing of the request remains in the answer (${JSON.stringify(noticeRow)})`);
     assert(!noticeRow.title.includes(answer.code) && !noticeRow.body.includes(answer.code) && !/Ada/.test(JSON.stringify(noticeRow)), "6. the notice's words hold no code, and name no admin");

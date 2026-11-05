@@ -80,7 +80,6 @@ vi.mock('../db', () => ({
     removeFriendLocal: vi.fn(async () => {}),
     createConversationApi: vi.fn(async () => ({})),
     getTrustProfile: vi.fn(async () => null),
-    vouchMember: vi.fn(async () => {}),
     updateMemberProfile: vi.fn(async () => {}),
     pushWaitingArchetype: vi.fn(async (opts: { community: string }) => { pushed.calls.push(opts); return true; }),
 }));

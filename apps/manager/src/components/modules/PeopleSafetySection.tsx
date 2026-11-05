@@ -35,7 +35,6 @@ interface PeopleSafetySectionProps {
     onPruneUser: (pubkey: string, code?: string) => Promise<void>;
     onPruneBranch?: (pubkey: string, code?: string) => Promise<void>;
     onUpdateTier: (pubkey: string, tier: 'Newcomer' | 'Resident' | 'Steward' | 'Elder') => Promise<void>;
-    onToggleVoucher: (pubkey: string, canVouch: boolean) => Promise<void>;
     onToggleOperator: (pubkey: string, canOperate: boolean) => Promise<void>;
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
@@ -57,7 +56,6 @@ export function PeopleSafetySection({
     onPruneUser,
     onPruneBranch,
     onUpdateTier,
-    onToggleVoucher,
     onToggleOperator,
     onGrantNodeRole,
     onRevokeNodeRole,
@@ -353,7 +351,6 @@ export function PeopleSafetySection({
                             onPruneUser={onPruneUser}
                             onPruneBranch={handlePruneBranch}
                             onUpdateTier={onUpdateTier}
-                            onToggleVoucher={onToggleVoucher}
                             onToggleOperator={onToggleOperator}
                             onGrantNodeRole={onGrantNodeRole}
                             onRevokeNodeRole={onRevokeNodeRole}

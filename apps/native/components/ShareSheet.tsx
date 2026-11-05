@@ -52,7 +52,7 @@ export function ShareSheet({ visible, onClose, onDismiss, items, body, holding =
                     accessibilityState={{ disabled: holding }} />
                 <View style={[styles.card, { paddingBottom: 16 + insets.bottom }]} testID={testID}>
                     <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.3}>{t('Share')}</Text>
-                    {/* The ways scroll when they are taller than the screen (the invite panel with its vouch choice, a long
+                    {/* The ways scroll when they are taller than the screen (the invite panel, the ask an admin form, a long
                         language at 1.3×, a 569 dp phone); the title and Cancel stay put. */}
                     <ScrollView style={styles.ways} bounces={false} keyboardShouldPersistTaps="handled" testID={`${testID}-ways`}>
                     {items.map((item) => {

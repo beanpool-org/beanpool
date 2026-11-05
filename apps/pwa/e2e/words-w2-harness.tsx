@@ -43,7 +43,7 @@ function Column({ children, gap = 14 }: { children: React.ReactNode; gap?: numbe
 }
 
 const decision = (id: string, over: Record<string, any> = {}): any => ({
-    id, authorPubkey: 'author', title: `Fix the hall roof (${id})`, description: 'The north side leaks in heavy rain.', touches: 'member', effect: 'grant_voucher',
+    id, authorPubkey: 'author', title: `Fix the hall roof (${id})`, description: 'The north side leaks in heavy rain.', touches: 'member', effect: 'freeze_credit',
     subject: 'subject-pk', params: null, franchise: '1m1v', status: 'open', opensAt: iso(-2 * DAY), closesAt: iso(3 * DAY), gracePeriodEndsAt: null,
     createdAt: iso(-2 * DAY), executedAt: null, executionError: null, executionReason: null, adminHaltedAt: null, adminHaltReason: null, updatedAt: iso(-DAY),
     tally: { decisionId: id, status: 'open', totalVoters: 1, electorate: 20, quorumRatio: 0.3, quorumRequired: 6, quorumMet: false, yesWeight: 1, noWeight: 0, totalWeight: 1, supportRatio: 1, thresholdRequired: 0.6, passed: false },

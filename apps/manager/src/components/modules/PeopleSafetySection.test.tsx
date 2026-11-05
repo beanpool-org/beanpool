@@ -47,7 +47,6 @@ const mockMembers: any[] = [
         callsign: 'alice',
         tier: 'Elder',
         standing: 'Elder',
-        canVouch: true,
         nodeRole: 'owner',
     },
     {
@@ -55,7 +54,6 @@ const mockMembers: any[] = [
         callsign: 'bob',
         tier: 'Resident',
         standing: 'Resident',
-        canVouch: false,
         nodeRole: null,
     },
 ];
@@ -79,7 +77,6 @@ describe('PeopleSafetySection Component', () => {
                     onFreezeUser={vi.fn()}
                     onPruneUser={vi.fn()}
                     onUpdateTier={vi.fn()}
-                    onToggleVoucher={vi.fn()}
                     onToggleOperator={vi.fn()}
                     onGrantNodeRole={vi.fn()}
                     onRevokeNodeRole={vi.fn()}
@@ -110,7 +107,6 @@ describe('PeopleSafetySection Component', () => {
                     onFreezeUser={vi.fn()}
                     onPruneUser={vi.fn()}
                     onUpdateTier={vi.fn()}
-                    onToggleVoucher={vi.fn()}
                     onToggleOperator={vi.fn()}
                     onGrantNodeRole={vi.fn()}
                     onRevokeNodeRole={vi.fn()}
@@ -153,7 +149,6 @@ describe('PeopleSafetySection Component', () => {
                     onFreezeUser={vi.fn()}
                     onPruneUser={vi.fn()}
                     onUpdateTier={vi.fn()}
-                    onToggleVoucher={vi.fn()}
                     onToggleOperator={vi.fn()}
                     onGrantNodeRole={vi.fn()}
                     onRevokeNodeRole={vi.fn()}
@@ -181,7 +176,6 @@ describe('PeopleSafetySection Component', () => {
                 onFreezeUser={vi.fn()}
                 onPruneUser={vi.fn()}
                 onUpdateTier={vi.fn()}
-                onToggleVoucher={vi.fn()}
                 onToggleOperator={vi.fn()}
                 initialSubTab="moderation"
             />
@@ -503,7 +497,6 @@ describe('PeopleSafetySection Component', () => {
                 onFreezeUser,
                 onPruneUser: vi.fn(),
                 onUpdateTier: vi.fn(),
-                onToggleVoucher: vi.fn(),
                 onToggleOperator: vi.fn(),
                 initialSubTab: 'moderation' as const,
             };
@@ -590,7 +583,6 @@ describe('PeopleSafetySection Component', () => {
                         onFreezeUser={onFreezeUser}
                         onPruneUser={vi.fn()}
                         onUpdateTier={vi.fn()}
-                        onToggleVoucher={vi.fn()}
                         onToggleOperator={vi.fn()}
                         initialSubTab="moderation"
                     />
@@ -632,7 +624,6 @@ describe('PeopleSafetySection Component', () => {
                         onFreezeUser={onFreezeUser}
                         onPruneUser={vi.fn()}
                         onUpdateTier={vi.fn()}
-                        onToggleVoucher={vi.fn()}
                         onToggleOperator={vi.fn()}
                         initialSubTab="moderation"
                     />
@@ -724,7 +715,6 @@ describe('People & Safety: Onboarding Funnel', () => {
             onFreezeUser={vi.fn()}
             onPruneUser={vi.fn()}
             onUpdateTier={vi.fn()}
-            onToggleVoucher={vi.fn()}
             onToggleOperator={vi.fn()}
         />
     );

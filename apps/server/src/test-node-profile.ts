@@ -95,8 +95,8 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // outside (front doors S6): on for a local community, off on the lobby, whose listings a visitor reads already; reported only
 // while on (test-peek-ticket). The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteVouch: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, door: 'members' },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, pins: true, inviteVouch: false, inviteAsks: false, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, dmRequests: true, door: 'open' },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, door: 'members' },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: false, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, dmRequests: true, door: 'open' },
 };
 
 async function main() {

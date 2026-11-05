@@ -22,6 +22,7 @@ export * from './names-list-trust.js';
 export * from './sealed-envelope.js';
 export * from './recovery-self-check.js';
 export * from './protocol.js';
+export * from './vouch-presets.js';
 export * from './pairing-crypto.js';
 export * from './pricing-catalog.js';
 export * from './archetypes.js';

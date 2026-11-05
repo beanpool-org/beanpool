@@ -915,6 +915,38 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
 }
 
 /**
+ * The credit line people gave this member (DESIGN-invites-and-names-list-amend2-fable.md §6): every piece of room they
+ * received (`room_gifts.to_pubkey`: a voucher's vouch, a member's gift) less what they passed on to someone else (their own
+ * gifts, kind 'gift'). A voucher's vouches come out of their budget (`voucher_allocations`), never out of their own line,
+ * so a vouch they gave counts nothing here. Whole Beans, never below 0. 0 on a database from before the table: the boot's
+ * vouching reset (apps/server db/vouch-reset.ts) reads profiles before schema.sql makes it.
+ */
+export function roomHeldOf(db: Db, publicKey: string): number {
+    try {
+        const r = prepared(db, `SELECT COALESCE((SELECT SUM(amount) FROM room_gifts WHERE to_pubkey = ?), 0)
+            - COALESCE((SELECT SUM(amount) FROM room_gifts WHERE from_pubkey = ? AND kind = 'gift'), 0) AS held`).get(publicKey, publicKey) as { held: number | null } | undefined;
+        return Math.max(0, Math.floor(r?.held ?? 0));
+    } catch (e) {
+        if (/no such table/i.test((e as Error)?.message ?? '')) return 0;
+        throw e;
+    }
+}
+
+/**
+ * Who vouched for this member and how much each, oldest first (§6 `vouchedBy`): the member's own `room_gifts` rows of kind
+ * 'vouch', each voucher's first vouch and raises together. Only for the member's own Ledger (never a public profile).
+ */
+export function vouchesFor(db: Db, publicKey: string): Array<{ voucher: string; amount: number }> {
+    try {
+        return (prepared(db, `SELECT from_pubkey AS voucher, SUM(amount) AS amount FROM room_gifts WHERE to_pubkey = ? AND kind = 'vouch'
+            GROUP BY from_pubkey ORDER BY MIN(at) ASC, from_pubkey ASC`).all(publicKey) as Array<{ voucher: string; amount: number }>);
+    } catch (e) {
+        if (/no such table/i.test((e as Error)?.message ?? '')) return [];
+        throw e;
+    }
+}
+
+/**
  * Returns the full trust profile for a member: stats, floor, ceiling, and tier.
  * Incorporates any pre-seeded earned_credit from admin genesis invites.
  * `extraKnownPledged`: a known pledge of this member's not yet written, counted as if it were (a keeper request's check
@@ -931,6 +963,8 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     grantedCredit: number;
     /** The known grant (community modes slice 4): 0 unless the confirmation dial is on and the member is confirmed. */
     knownGrant: number;
+    /** The credit line people gave them (roomHeldOf): unlocked like the known grant, by one live offer; never in the tier. */
+    roomHeld: number;
     /** earned + granted, before the cap: the part the offer bands meter. */
     otherAllowance: number;
     /** An admin froze this confirmed member's known floor (known_floor_exceptions.frozen): no known line while it lasts. */
@@ -969,6 +1003,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
             earnedCredit: ef.allowance,
             grantedCredit: ef.legacyFloor,
             knownGrant: 0,
+            roomHeld: 0,
             otherAllowance: ef.allowance,
             qualifiedValue: 0,
             avgRating: 5.0,
@@ -1015,14 +1050,16 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     // CREDIT_FLOOR_CAP). With the confirmation dial off both are today's: knownGrant 0, cap 2,000.
     // Less what of it they have pledged to enterprises (known-floor.ts: own line + known pledges <= their grant).
     const knownGrant = memberUsableKnownGrant(db, publicKey, extraKnownPledged);
+    // The credit line a voucher's vouch or a member's gift gave them (amend2 §6): it opens the line as the known grant does.
+    const roomHeld = roomHeldOf(db, publicKey);
     const cap = creditCap(db);
-    const activated = grantedCredit > 0 || earnedCredit > 0 || knownGrant > 0;
+    const activated = grantedCredit > 0 || earnedCredit > 0 || knownGrant > 0 || roomHeld > 0;
     const otherAllowance = earnedCredit + grantedCredit;
     const allowance = (activated && !isCreditFrozen)
-        ? Math.min(cap, knownGrant + otherAllowance)
+        ? Math.min(cap, knownGrant + roomHeld + otherAllowance)
         : 0;
 
-    // Floor = -(known + earned + granted) once activated, clamped so the deepest floor is the community's
+    // Floor = -(known + room held + earned + granted) once activated, clamped so the deepest floor is the community's
     // cap; 0 for a member with none of them. CREDIT_BASE_FLOOR is 0 — no baked-in overdraft.
     const floor = c.CREDIT_BASE_FLOOR - allowance;
 
@@ -1039,6 +1076,6 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
     // multiplier inputs, surfaced so the client can show them honestly.
-    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, activated, knownFrozen, creditFrozen: isCreditFrozen, tierCredit };
+    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, roomHeld: isCreditFrozen ? 0 : roomHeld, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, activated, knownFrozen, creditFrozen: isCreditFrozen, tierCredit };
 }
 

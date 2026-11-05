@@ -64,6 +64,7 @@ import {
     vouchFromProfile, returnLapsedHolds, isOnCreditCommittee,
 } from './engine/vouchers.js';
 import { grantNodeRole } from './engine/node-roles.js';
+import { issueAutomationToken } from './automation-tokens.js';
 // The whole module too, for one export read by name (tellVoucherNotice): a missing one is a failed check, not a load error.
 import * as vouchersModule from './engine/vouchers.js';
 import { getDoor, setDoor, DEFAULT_DOOR } from './config/door.js';
@@ -798,8 +799,10 @@ async function main(): Promise<void> {
     const owenEntry = confirm(owen, ada);
     const owenFlip = await call(ada, 'POST', '/api/names/vouchers', { entryId: owenEntry });
     require_(owenFlip.status === 201 && owenFlip.body?.source === 'entry', `Ada makes Owen a voucher from his entry: nothing new, the source moves (${owenFlip.status})`);
+    require_((await setLevel(ora, owen, 2000)).status === 200 && budgetOf(owen.pk).level === 2000, 'Ora, an owner, sets Owen’s budget to 2,000');
     const owenSet = await setLevel(ora, owen, 1000);
-    require_(owenSet.status === 200 && budgetOf(owen.pk).level === 1000, `an owner sets another owner's budget, lower included: Ora sets Owen's to 1,000 (${show(owenSet)})`);
+    assert(owenSet.status === 200 && owenSet.body?.changed === true && lines(owen.pk).at(-1)?.kind === 'lower' && lines(owen.pk).at(-1)?.amount === -1000 && budgetOf(owen.pk).level === 1000,
+        `20. (c) an owner may lower another owner's budget: Ora sets Owen's from 2,000 to 1,000, one lower line (${owenSet.status} ${JSON.stringify(lines(owen.pk).at(-1)?.kind)})`);
     const owenLinesBefore = lines(owen.pk).length;
     const adaStopsOwen = await call(ada, 'DELETE', `/api/names/vouchers/${owen.pk}`);
     const adaLowersOwen = await setLevel(ada, owen, 500);
@@ -811,6 +814,20 @@ async function main(): Promise<void> {
         && adaLowersOwen.status === 403 && adaLowersOwen.body?.code === 'owner_only' && linesAfterRefusals === owenLinesBefore
         && adaRaisesOwen.status === 200 && budgetOf(owen.pk).level === 1100 && oraStopsOwen.status === 409 && oraStopsOwen.body?.code === 'role_voucher' && owenRow.stopped_at === null,
         `20. (c) with Owen's budget moved to his entry, a committee admin can't stop it or lower it (nothing written), may still raise it, and no owner stops it either (${[adaStopsOwen, adaLowersOwen, adaRaisesOwen, oraStopsOwen].map((r) => `${r.status} ${r.body?.code ?? ''}`).join(' | ')}: "${adaStopsOwen.body?.error ?? ''}")`);
+
+    // Who acts is the signer: an automation token acts for the owner who made it (admin-auth.ts), and the owner-only rules on
+    // the admin routes are asked through adminActionNeedsOwner for that reason (memory owner-only-rules-need-
+    // adminactionneedsowner). No token reaches these routes at all: nothing to ask there.
+    const madeToken = issueAutomationToken({ name: 'vouchers-suite', scope: 'admin', createdBy: owen.pk });
+    require_(madeToken.ok, 'Owen makes an admin automation token');
+    const bearer = { Authorization: `Bearer ${madeToken.ok ? madeToken.token : ''}` };
+    const linesBeforeToken = allLines();
+    const byToken = [
+        await call(null, 'POST', `/api/names/vouchers/${ora.pk}/budget`, { level: 100 }, bearer), await call(null, 'DELETE', `/api/names/vouchers/${ora.pk}`, undefined, bearer),
+        await call(null, 'POST', '/api/names/vouchers', { entryId: crypto.randomBytes(16).toString('hex') }, bearer), await call(null, 'GET', `/api/names/vouchers/${ora.pk}`, undefined, bearer),
+    ];
+    assert(byToken.every((r) => r.status === 401) && allLines() === linesBeforeToken && budgetOf(ora.pk).level === 1000,
+        `20. (c) an owner's automation token reaches no voucher route: set-to, stop, make and the card each answer 401, nothing written (${byToken.map((r) => r.status).join(' ')})`);
 
     // ── 21. The committee flag clears with a promotion to owner (deciding review round 2, finding 3) ─────────────────────
     const bob = newId('Bob');

@@ -74,7 +74,7 @@ const INVITE_LIFE_MS = 30 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export class VoucherError extends Error {
-    constructor(readonly status: number, readonly code: string, message: string) {
+    constructor(readonly status: number, readonly code: string, message: string, readonly extra?: Record<string, unknown>) {
         super(message);
         this.name = 'VoucherError';
     }
@@ -635,9 +635,9 @@ export function vouchFromProfile(voucher: string, body: { memberPubkey?: unknown
         const pair = pairOf(voucher, person);
         if (raise) {
             if (pair.total === 0) throw new VoucherError(409, 'no_vouch_yet', noVouchYet(m.callsign));
-            if (pair.total + amount > VOUCH_MAX) throw new VoucherError(409, 'over_max', overMax(m.callsign, pair.total));
+            if (pair.total + amount > VOUCH_MAX) throw new VoucherError(409, 'over_max', overMax(m.callsign, pair.total), { prior: pair.total });
         } else {
-            if (pair.total > 0) throw new VoucherError(409, 'already_vouched', alreadyVouched(m.callsign));
+            if (pair.total > 0) throw new VoucherError(409, 'already_vouched', alreadyVouched(m.callsign), { prior: pair.total });
             if (pair.vouchers >= VOUCHES_PER_PERSON) throw new VoucherError(409, 'three_vouches', threeVouches(m.callsign));
         }
         id = addVouchRow(voucher, person, amount, null);

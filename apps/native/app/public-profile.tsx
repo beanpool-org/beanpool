@@ -29,7 +29,7 @@ import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, type TierName, VOUCH_MAX, vouchFor, raiseVouchFor } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, type TierName, VOUCH_MAX, vouchFor, raiseVouchFor, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
 import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
@@ -557,6 +557,8 @@ export default function PublicProfileScreen() {
         return () => { alive = false; };
     }, [anchorUrl, identity, isSelf]);
 
+    const [nodePriorVouch, setNodePriorVouch] = useState<number | null>(null);
+
     const myPriorVouch = useMemo(() => {
         if (!myVouching?.history || !pubKeyStr) return 0;
         let sum = 0;
@@ -567,7 +569,8 @@ export default function PublicProfileScreen() {
         }
         return sum;
     }, [myVouching, pubKeyStr]);
-    const isRaise = myPriorVouch > 0;
+    const effectivePriorVouch = nodePriorVouch ?? myPriorVouch;
+    const isRaise = effectivePriorVouch > 0;
     // Your own name and picture are this community's row (utils/use-own-profile.ts), once read: never the name the door
     // passed, nor the phone-wide one, which can be another community's (DESIGN-per-community-profile-fable.md §2). For
     // your own key the door's name is ignored altogether (Profile S2), so a name passed from a screen that read it
@@ -1447,7 +1450,7 @@ export default function PublicProfileScreen() {
                                     {isRaise && (
                                         <Text style={styles.vouchSub}>
                                             {t('You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.', {
-                                                prior: myPriorVouch,
+                                                prior: effectivePriorVouch,
                                                 name: profile?.callsign || callsignStr || '',
                                                 max: VOUCH_MAX,
                                             })}
@@ -1458,6 +1461,7 @@ export default function PublicProfileScreen() {
                                         onChange={setProfileVouchPreset}
                                         budgetLeft={myVouching.budget?.left ?? 0}
                                         budgetTotal={myVouching.budget?.level ?? 0}
+                                        priorVouch={effectivePriorVouch}
                                     />
                                     {!!vouchRefusal && (
                                         <Text style={styles.vouchRefusal} accessibilityRole="alert" testID="profile-vouch-refusal">
@@ -1481,22 +1485,57 @@ export default function PublicProfileScreen() {
                                             setVouchRefusal(null);
                                             setVouchSuccess(null);
                                             try {
-                                                let res = await vouchFromProfile(anchorUrl, identity, {
+                                                const res = await vouchFromProfile(anchorUrl, identity, {
                                                     memberPubkey: pubKeyStr,
                                                     vouchAmount: profileVouchPreset,
                                                     raise: isRaise,
                                                 });
-                                                let effectiveIsRaise = isRaise;
-                                                if (!effectiveIsRaise && !res.ok && (res.code === 'already_vouched' || /already vouched/i.test(res.message))) {
-                                                    effectiveIsRaise = true;
-                                                    res = await vouchFromProfile(anchorUrl, identity, {
-                                                        memberPubkey: pubKeyStr,
-                                                        vouchAmount: profileVouchPreset,
-                                                        raise: true,
-                                                    });
+                                                if (!isRaise && !res.ok && (res.code === 'already_vouched' || /already vouched/i.test(res.message))) {
+                                                    const prior = res.prior ?? (myPriorVouch > 0 ? myPriorVouch : 25);
+                                                    setNodePriorVouch(prior);
+                                                    const newTotal = prior + profileVouchPreset;
+                                                    Alert.alert(
+                                                        t(VOUCH_PRESET_WORDS.raiseTitle),
+                                                        t(VOUCH_PRESET_WORDS.raiseConfirmQuestion, {
+                                                            prior,
+                                                            name: profile?.callsign || callsignStr || '',
+                                                            newTotal,
+                                                        }),
+                                                        [
+                                                            { text: t('Cancel'), style: 'cancel' },
+                                                            {
+                                                                text: t(VOUCH_PRESET_WORDS.raise),
+                                                                onPress: async () => {
+                                                                    setVouchBusy(true);
+                                                                    setVouchRefusal(null);
+                                                                    setVouchSuccess(null);
+                                                                    try {
+                                                                        const raiseRes = await vouchFromProfile(anchorUrl, identity, {
+                                                                            memberPubkey: pubKeyStr,
+                                                                            vouchAmount: profileVouchPreset,
+                                                                            raise: true,
+                                                                        });
+                                                                        if (raiseRes.ok) {
+                                                                            setVouchSuccess(t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: raiseRes.total }));
+                                                                            setProfileVouchPreset(null);
+                                                                            const updated = await askMyVouching(anchorUrl, identity);
+                                                                            setMyVouching(updated);
+                                                                        } else {
+                                                                            setVouchRefusal(raiseRes.message);
+                                                                        }
+                                                                    } catch (e: any) {
+                                                                        setVouchRefusal(e?.message ?? t('Could not vouch.'));
+                                                                    } finally {
+                                                                        setVouchBusy(false);
+                                                                    }
+                                                                },
+                                                            },
+                                                        ]
+                                                    );
+                                                    return;
                                                 }
                                                 if (res.ok) {
-                                                    setVouchSuccess(effectiveIsRaise
+                                                    setVouchSuccess(isRaise
                                                         ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: res.total })
                                                         : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: profileVouchPreset }));
                                                     setProfileVouchPreset(null);
@@ -1515,7 +1554,7 @@ export default function PublicProfileScreen() {
                                         <Text style={styles.vouchSubmitText}>
                                             {vouchBusy ? t('Saving...') : isRaise ? raiseVouchFor(profile?.callsign || callsignStr || '') : vouchFor(profile?.callsign || callsignStr || '')}
                                         </Text>
-                                    </Pressable>
+</Pressable>
                                 </View>
                             )}
                         </>

@@ -42,7 +42,7 @@ export interface MyVouching {
 
 export type VouchProfileResult =
     | { ok: true; id: string; memberPubkey: string; amount: number; total: number; budget: unknown }
-    | { ok: false; message: string; code?: string };
+    | { ok: false; message: string; code?: string; prior?: number };
 
 export async function askMyVouching(
     anchor: string,
@@ -84,7 +84,8 @@ export async function vouchFromProfile(
                   ? data.message
                   : 'Could not vouch.';
         const code = typeof data?.code === 'string' ? data.code : undefined;
-        return { ok: false, message, code };
+        const prior = typeof data?.prior === 'number' ? data.prior : undefined;
+        return { ok: false, message, code, prior };
     } catch {
         return { ok: false, message: 'Could not vouch.' };
     }

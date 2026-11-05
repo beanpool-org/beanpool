@@ -508,19 +508,22 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                                         key={v.memberPubkey}
                                         type="button"
                                         onClick={() => setSelectedVoucherPubkey(v.memberPubkey)}
-                                        className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-center justify-between gap-2 border-0 bg-transparent cursor-pointer"
+                                        className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-start justify-between gap-2 border-0 bg-transparent cursor-pointer"
                                         data-testid={`voucher-row-${v.callsign}`}
                                     >
-                                        <span className="text-sm font-semibold text-nature-900 dark:text-white truncate">
-                                            {t('{name} · {left} of {total} left · {vouched} vouched · {below} below zero', {
-                                                name: v.callsign,
-                                                left: formatNumber(v.left),
-                                                total: formatNumber(v.level),
-                                                vouched: v.peopleVouched,
-                                                below: v.belowZero,
-                                            })}
-                                        </span>
-                                        <span className="text-nature-400 dark:text-nature-300 font-bold ml-2">›</span>
+                                        <div className="flex-1 min-w-0 text-sm font-semibold text-nature-900 dark:text-white break-words">
+                                            <span className="truncate max-w-[140px] inline-block align-bottom">{v.callsign}</span>
+                                            {' · '}
+                                            <span className="whitespace-normal">
+                                                {t('{left} of {total} left · {vouched} vouched · {below} below zero', {
+                                                    left: formatNumber(v.left),
+                                                    total: formatNumber(v.level),
+                                                    vouched: v.peopleVouched,
+                                                    below: v.belowZero,
+                                                })}
+                                            </span>
+                                        </div>
+                                        <span className="text-nature-400 dark:text-nature-300 font-bold ml-2 self-start mt-0.5">›</span>
                                     </button>
                                 ))}
                                 <button

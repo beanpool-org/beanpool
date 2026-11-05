@@ -10,16 +10,17 @@
  * Accessible radios, wrapping cleanly at 320 px with 1.3x text; each choice >= 44 px tall.
  */
 import { useId } from 'react';
-import { formatNumber, t, VOUCH_PRESETS, vouchPresets } from '@beanpool/core';
+import { formatNumber, t, VOUCH_PRESETS, VOUCH_MAX, vouchPresets } from '@beanpool/core';
 
 export interface VouchPresetChoiceProps {
     value: number | null;
     onChange: (value: number | null) => void;
     budgetLeft: number;
     budgetTotal: number;
+    priorVouch?: number;
 }
 
-export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal }: VouchPresetChoiceProps) {
+export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch }: VouchPresetChoiceProps) {
     const id = useId();
     const noneLeft = budgetLeft <= 0;
     const subtitle = noneLeft
@@ -28,12 +29,16 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal }: 
 
     const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean }[] = [
         { amount: null, label: t(vouchPresets.none), ariaLabel: t(vouchPresets.none), disabled: false },
-        ...VOUCH_PRESETS.map((p) => ({
-            amount: p,
-            label: String(p),
-            ariaLabel: t(vouchPresets.beans, { amount: p }),
-            disabled: p > budgetLeft,
-        })),
+        ...VOUCH_PRESETS.map((p) => {
+            const wouldExceedMax = priorVouch !== undefined && priorVouch > 0 && priorVouch + p > VOUCH_MAX;
+            const notEnoughBudget = p > budgetLeft;
+            return {
+                amount: p,
+                label: String(p),
+                ariaLabel: t(vouchPresets.beans, { amount: p }),
+                disabled: notEnoughBudget || wouldExceedMax,
+            };
+        }),
     ];
 
     return (

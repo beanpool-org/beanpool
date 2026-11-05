@@ -8,7 +8,7 @@
  */
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { formatNumber, t, VOUCH_PRESETS, vouchPresets } from '@beanpool/core';
+import { formatNumber, t, VOUCH_PRESETS, VOUCH_MAX, vouchPresets } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 
 export interface VouchPresetChoiceProps {
@@ -16,12 +16,13 @@ export interface VouchPresetChoiceProps {
     onChange: (value: number | null) => void;
     budgetLeft: number;
     budgetTotal: number;
+    priorVouch?: number;
 }
 
-export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal }: VouchPresetChoiceProps) {
+export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch }: VouchPresetChoiceProps) {
     const { colors } = useTheme();
 
-    const styles = useStyles(({ colors, theme }) => StyleSheet.create({
+    const styles = useStyles(({ colors }) => StyleSheet.create({
         container: {
             marginBottom: 16,
         },
@@ -58,7 +59,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal }: 
         },
         chipDisabled: {
             opacity: 0.4,
-            backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.04)' : '#f3f4f6',
+            backgroundColor: colors.surface.subtle,
             borderColor: colors.border.default,
         },
         chipText: {
@@ -86,7 +87,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal }: 
             amount: p,
             label: String(p),
             ariaLabel: t(vouchPresets.beans, { amount: p }),
-            disabled: p > budgetLeft,
+            disabled: p > budgetLeft || (priorVouch !== undefined && priorVouch > 0 && priorVouch + p > VOUCH_MAX),
         })),
     ];
 

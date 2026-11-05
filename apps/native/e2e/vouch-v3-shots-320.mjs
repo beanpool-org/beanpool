@@ -112,6 +112,8 @@ const STUBS = {
         export const getAllCommunityMembers = async () => [];
         export const sendTransfer = async () => ({});
         export const signedRequest = async () => ({});
+        export const signedGet = async () => ({});
+        export const refreshBalanceFromServer = async () => ({});
     `,
     'blocklist': `export const getBlockedUsers = async () => []; export const isUserBlocked = async () => false; export const BLOCKLIST_UPDATED_EVENT = 'bl'; export const blockUser = async () => {}; export const unblockUser = async () => {};`,
     'trust-tier': `export const getTrustProfile = async () => ({ tier: 'trusted', mutualCount: 0, mutualConnections: [], vouchedInBy: null }); export const TIER_WORDS = {};`,

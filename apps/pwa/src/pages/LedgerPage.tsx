@@ -32,7 +32,7 @@ import { useMembersOnDemand, useMemberSearch, getMembersWhole, MEMBERS_SEARCH_MI
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../lib/credit-line-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleLedger, type LedgerRowView } from '../components/ShowcasePreviews';
-import { t, tn, word, splitBold, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatDate, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type WordKey } from '@beanpool/core';
+import { t, tn, word, splitBold, isWholeCents, monthlyCirculation, CIRCULATION_FREE_BEANS, formatDate, formatNumber, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, formatHistoryLine, type WordKey } from '@beanpool/core';
 import { useReadsOwn, resetReaderFeaturesOnce } from '../lib/features';
 import { getCreditGiftOffer, giveCreditLine, type CreditGiftOffer } from '../lib/credit-gift';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
@@ -1303,15 +1303,9 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 ) : (
                                     myVouching.history.map((h, i) => (
                                         <div key={i} className="p-2.5 rounded-lg border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-xs">
-                                            <div className="flex items-center justify-between font-bold text-nature-950 dark:text-white">
-                                                <span>{t('{amount} Beans ({kind})', { amount: h.amount > 0 ? `+${formatNumber(h.amount)}` : formatNumber(h.amount), kind: h.kind })}</span>
-                                                <span className="text-[11px] text-nature-400 font-normal">{formatDate(new Date(h.at), 'day-month-year')}</span>
-                                            </div>
-                                            <div className="text-nature-500 dark:text-nature-400 mt-0.5 flex flex-wrap gap-x-2">
-                                                <span>{h.actorCallsign ? t('by @{name}', { name: h.actorCallsign }) : t('actor: {actor}', { actor: h.actor })}</span>
-                                                {h.person && <span>{t('for @{name}', { name: h.person.callsign })}</span>}
-                                                {h.why && <span className="opacity-80">({h.why})</span>}
-                                                {h.outcome && <span className="opacity-80">[{h.outcome}]</span>}
+                                            <div className="flex items-start justify-between gap-2 font-bold text-nature-950 dark:text-white">
+                                                <span className="flex-1 break-words">{formatHistoryLine(h)}</span>
+                                                <span className="text-[11px] text-nature-400 font-normal shrink-0">{h.at ? formatDate(new Date(h.at), 'day-month-year') : ''}</span>
                                             </div>
                                         </div>
                                     ))

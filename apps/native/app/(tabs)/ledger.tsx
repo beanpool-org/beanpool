@@ -37,7 +37,7 @@ import { palette } from '../../constants/colors';
 import {
     PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, monthlyCirculation, CIRCULATION_FREE_BEANS, isWholeCents,
     t, tn, word, formatDate, formatNumber, parseAmount, amountRefusalWords, isAmbiguousAmount, ANY_DECIMALS, type TierName, type WordKey,
-    ledgerVouchedBy, ledgerBudget,
+    ledgerVouchedBy, ledgerBudget, formatHistoryLine,
 } from '@beanpool/core';
 import { askMyVouching, type MyVouching } from '../../utils/vouchers';
 import { Modal } from 'react-native';
@@ -1415,25 +1415,13 @@ export default function LedgerScreen() {
                                     ) : (
                                         myVouching.history.map((h, i) => (
                                             <View key={i} style={{ padding: 10, borderRadius: 10, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, marginBottom: 6 }}>
-                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.heading }}>
-                                                        {t('{amount} Beans ({kind})', { amount: h.amount > 0 ? `+${formatNumber(h.amount)}` : formatNumber(h.amount), kind: h.kind })}
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                                    <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: colors.text.heading }}>
+                                                        {formatHistoryLine(h)}
                                                     </Text>
-                                                    <Text style={{ fontSize: 11, color: colors.text.muted }}>
-                                                        {formatDate(new Date(h.at), 'day-month-year')}
+                                                    <Text style={{ fontSize: 11, color: colors.text.muted, flexShrink: 0 }}>
+                                                        {h.at ? formatDate(new Date(h.at), 'day-month-year') : ''}
                                                     </Text>
-                                                </View>
-                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                                                    <Text style={{ fontSize: 11, color: colors.text.secondary }}>
-                                                        {h.actorCallsign ? t('by @{name}', { name: h.actorCallsign }) : t('actor: {actor}', { actor: h.actor })}
-                                                    </Text>
-                                                    {h.person && (
-                                                        <Text style={{ fontSize: 11, color: colors.text.secondary }}>
-                                                            {t('for @{name}', { name: h.person.callsign })}
-                                                        </Text>
-                                                    )}
-                                                    {h.why && <Text style={{ fontSize: 11, color: colors.text.muted }}>({h.why})</Text>}
-                                                    {h.outcome && <Text style={{ fontSize: 11, color: colors.text.muted }}>[{h.outcome}]</Text>}
                                                 </View>
                                             </View>
                                         ))

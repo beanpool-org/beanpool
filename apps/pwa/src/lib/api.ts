@@ -229,6 +229,8 @@ async function refusalError(res: Response): Promise<Error> {
     if (typeof err.code === 'string') (error as Error & { code?: string }).code = err.code;
     // And the number a limit refusal names (a place watch's `watch_limit`), for the screen's own sentence.
     if (typeof err.limit === 'number' && Number.isInteger(err.limit) && err.limit > 0) (error as Error & { limit?: number }).limit = err.limit;
+    // And an existing vouch amount for a member (`already_vouched`), for the raise confirmation prompt.
+    if (typeof err.prior === 'number' && Number.isInteger(err.prior) && err.prior > 0) (error as Error & { prior?: number }).prior = err.prior;
     // And the deal a refusal names (a deal already under way on the listing, `deal_open`), for the screen to open it.
     if (typeof err.transactionId === 'string') (error as Error & { transactionId?: string }).transactionId = err.transactionId;
     return error;

@@ -165,9 +165,41 @@ describe('PublicProfilePage Vouching (§9)', () => {
         expect(screen.getByText(/You already vouched 50 Beans for @sam/)).toBeInTheDocument();
     });
 
-    it('automatically retries with raise when server reports already_vouched', async () => {
+    it('asks confirmation when server reports already_vouched and Cancel sends nothing', async () => {
         const error: any = new Error("You've already vouched for @sam.");
         error.code = 'already_vouched';
+        error.prior = 25;
+        vi.mocked(vouchForMember).mockRejectedValueOnce(error);
+
+        render(
+            <PublicProfilePage
+                identity={IDENTITY}
+                pubkey={TARGET_PK}
+                onBack={() => {}}
+                onMessage={() => {}}
+                onNavigateTab={() => {}}
+                onNavigatePost={() => {}}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('invite-vouch-25'));
+        fireEvent.click(screen.getByTestId('profile-vouch-submit'));
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch-raise-confirm')).toBeInTheDocument());
+        expect(screen.getByTestId('profile-vouch-raise-confirm')).toHaveTextContent(
+            'You vouched 25 for @sam before. Raise it to 50?'
+        );
+
+        fireEvent.click(screen.getByTestId('profile-vouch-raise-cancel'));
+        expect(screen.queryByTestId('profile-vouch-raise-confirm')).not.toBeInTheDocument();
+        expect(vouchForMember).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks confirmation when server reports already_vouched and Raise sends raise', async () => {
+        const error: any = new Error("You've already vouched for @sam.");
+        error.code = 'already_vouched';
+        error.prior = 25;
         vi.mocked(vouchForMember)
             .mockRejectedValueOnce(error)
             .mockResolvedValueOnce({
@@ -193,9 +225,56 @@ describe('PublicProfilePage Vouching (§9)', () => {
         fireEvent.click(screen.getByTestId('invite-vouch-25'));
         fireEvent.click(screen.getByTestId('profile-vouch-submit'));
 
+        await waitFor(() => expect(screen.getByTestId('profile-vouch-raise-confirm')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('profile-vouch-raise-submit'));
+
         await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toBeInTheDocument());
         expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Raised vouch for @sam to 50 Beans.');
         expect(vouchForMember).toHaveBeenCalledTimes(2);
         expect(vouchForMember).toHaveBeenLastCalledWith(TARGET_PK, 25, true);
+    });
+
+    it('greys out presets that would take total for that person past 100', async () => {
+        vi.mocked(getMyVouching).mockResolvedValueOnce({
+            voucher: true,
+            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
+            presets: [25, 50, 75, 100],
+            vouchMax: 100,
+            budgetMax: 2000,
+            vouchedBy: [],
+            history: [
+                {
+                    kind: 'hold',
+                    amount: -50,
+                    actor: IDENTITY.publicKey,
+                    actorCallsign: 'ana',
+                    at: '2026-11-01T00:00:00.000Z',
+                    for: 'profile',
+                    person: { memberPubkey: TARGET_PK, callsign: 'sam' },
+                },
+            ],
+        });
+
+        render(
+            <PublicProfilePage
+                identity={IDENTITY}
+                pubkey={TARGET_PK}
+                onBack={() => {}}
+                onMessage={() => {}}
+                onNavigateTab={() => {}}
+                onNavigatePost={() => {}}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch')).toBeInTheDocument());
+        // Prior is 50. Presets:
+        // 25: 50 + 25 = 75 <= 100 -> enabled
+        // 50: 50 + 50 = 100 <= 100 -> enabled
+        // 75: 50 + 75 = 125 > 100 -> disabled
+        // 100: 50 + 100 = 150 > 100 -> disabled
+        expect(screen.getByTestId('invite-vouch-25')).not.toBeDisabled();
+        expect(screen.getByTestId('invite-vouch-50')).not.toBeDisabled();
+        expect(screen.getByTestId('invite-vouch-75')).toBeDisabled();
+        expect(screen.getByTestId('invite-vouch-100')).toBeDisabled();
     });
 });

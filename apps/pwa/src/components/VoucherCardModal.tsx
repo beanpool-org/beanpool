@@ -4,7 +4,7 @@
  * and 100-step stepper, raise or lower), Budget history, and See who they brought in.
  */
 import { useEffect, useState, useRef } from 'react';
-import { formatNumber, formatDate, t, tn } from '@beanpool/core';
+import { formatNumber, formatDate, t, tn, formatHistoryLine, VOUCH_PRESET_WORDS } from '@beanpool/core';
 import { getVoucherCard, setVoucherBudget, type VoucherCardData } from '../lib/api';
 import { useDialogFocus } from './dialog-focus';
 
@@ -50,7 +50,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
         setError(null);
         try {
             const updated = await setVoucherBudget(memberPubkey, targetLevel);
-            setCard(updated);
+            setCard((prev) => (prev ? { ...prev, ...updated } : updated));
             onUpdated?.();
         } catch (e: any) {
             setError(e?.message || e?.error || t('Could not set budget'));
@@ -99,7 +99,7 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                     <button
                         type="button"
                         onClick={onClose}
-                        className="p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-0 cursor-pointer"
+                        className="min-w-[44px] min-h-[44px] rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-0 cursor-pointer flex items-center justify-center text-base"
                         aria-label={t('Close')}
                     >
                         ✕
@@ -113,39 +113,49 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                 ) : card ? (
                     <>
                         {/* Tabs */}
-                        <div className="flex gap-2 border-b border-nature-200 dark:border-nature-800 pb-2 mb-4">
+                        <div
+                            role="tablist"
+                            aria-label={t(VOUCH_PRESET_WORDS.voucherCardSections)}
+                            className="flex flex-wrap gap-2 border-b border-nature-200 dark:border-nature-800 pb-2 mb-4"
+                        >
                             <button
                                 type="button"
+                                role="tab"
+                                aria-selected={activeTab === 'budget'}
                                 onClick={() => setActiveTab('budget')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors ${
+                                className={`min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors flex items-center ${
                                     activeTab === 'budget'
                                         ? 'bg-bp-commit-fill text-bp-commit-on'
                                         : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 hover:text-nature-900 dark:hover:bg-nature-800 dark:hover:text-white'
                                 }`}
                             >
-                                {t('Their budget')}
+                                {t(VOUCH_PRESET_WORDS.theirBudget)}
                             </button>
                             <button
                                 type="button"
+                                role="tab"
+                                aria-selected={activeTab === 'history'}
                                 onClick={() => setActiveTab('history')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors ${
+                                className={`min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors flex items-center ${
                                     activeTab === 'history'
                                         ? 'bg-bp-commit-fill text-bp-commit-on'
                                         : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 hover:text-nature-900 dark:hover:bg-nature-800 dark:hover:text-white'
                                 }`}
                             >
-                                {t('Budget history ({count})', { count: card.history.length })}
+                                {t(VOUCH_PRESET_WORDS.budgetHistoryCount, { count: card.history?.length ?? 0 })}
                             </button>
                             <button
                                 type="button"
+                                role="tab"
+                                aria-selected={activeTab === 'people'}
                                 onClick={() => setActiveTab('people')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors ${
+                                className={`min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors flex items-center ${
                                     activeTab === 'people'
                                         ? 'bg-bp-commit-fill text-bp-commit-on'
                                         : 'bg-transparent text-nature-600 dark:text-nature-400 hover:bg-nature-200/50 hover:text-nature-900 dark:hover:bg-nature-800 dark:hover:text-white'
                                 }`}
                             >
-                                {t('See who they brought in ({count})', { count: card.people.length })}
+                                {t(VOUCH_PRESET_WORDS.seeWhoTheyBroughtInCount, { count: card.people?.length ?? 0 })}
                             </button>
                         </div>
 
@@ -166,8 +176,12 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                     <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(card.held), invites: tn(card.heldInvites, '{n} invite', '{n} invites') })}</div>
                                     <div>{t('Invites sent with a vouch: {count}', { count: card.invitesWithVouch })}</div>
                                     <div>{t('{below} of {total} below zero · written off {off}', { below: card.belowZero, total: card.peopleVouched, off: formatNumber(card.writtenOff) })}</div>
-                                    <div>{t('Trading: {others} with others · {inside} inside only', { others: card.trading.withOthers, inside: card.trading.insideOnly })}</div>
-                                    <div>{t('Passed on: {amount} of their {vouched} to {people}', { amount: formatNumber(card.passedOn.amount), vouched: formatNumber(card.vouched), people: tn(card.passedOn.people, '{n} person', '{n} people') })}</div>
+                                    {card.trading && (
+                                        <div>{t('Trading: {others} with others · {inside} inside only', { others: card.trading.withOthers, inside: card.trading.insideOnly })}</div>
+                                    )}
+                                    {card.passedOn && (
+                                        <div>{t('Passed on: {amount} of their {vouched} to {people}', { amount: formatNumber(card.passedOn.amount), vouched: formatNumber(card.vouched), people: tn(card.passedOn.people, '{n} person', '{n} people') })}</div>
+                                    )}
                                 </div>
 
                                 {/* Set budget to control (§10) */}
@@ -207,8 +221,8 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                 type="button"
                                                 onClick={() => setTargetLevel((prev) => Math.max(minLevel, prev - 100))}
                                                 disabled={targetLevel <= minLevel || saving}
-                                                className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
-                                                aria-label={t('Decrease budget')}
+                                                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
+                                                aria-label={t(VOUCH_PRESET_WORDS.decreaseBudget)}
                                             >
                                                 −
                                             </button>
@@ -219,8 +233,8 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                 type="button"
                                                 onClick={() => setTargetLevel((prev) => Math.min(maxLevel, prev + 100))}
                                                 disabled={targetLevel >= maxLevel || saving}
-                                                className="w-10 h-10 rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
-                                                aria-label={t('Increase budget')}
+                                                className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center font-bold text-base bg-oat-100 dark:bg-nature-800 text-nature-900 dark:text-white border-0 cursor-pointer disabled:opacity-40"
+                                                aria-label={t(VOUCH_PRESET_WORDS.increaseBudget)}
                                             >
                                                 +
                                             </button>
@@ -241,29 +255,24 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
 
                         {activeTab === 'history' && (
                             <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                                {card.history.length === 0 ? (
+                                {!card.history || card.history.length === 0 ? (
                                     <div className="p-4 text-center text-xs text-nature-500">
-                                        {t('No budget history yet.')}
+                                        {t(VOUCH_PRESET_WORDS.noBudgetHistoryYet)}
                                     </div>
                                 ) : (
                                     card.history.map((h, i) => (
                                         <div
                                             key={i}
                                             className="p-2.5 rounded-lg border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-xs"
+                                            data-testid="voucher-history-line"
                                         >
-                                            <div className="flex items-center justify-between font-bold text-nature-950 dark:text-white">
-                                                <span>
-                                                    {t('{amount} Beans ({kind})', { amount: h.amount > 0 ? `+${formatNumber(h.amount)}` : formatNumber(h.amount), kind: h.kind })}
+                                            <div className="flex items-start justify-between gap-2 font-bold text-nature-950 dark:text-white">
+                                                <span className="flex-1 break-words">
+                                                    {formatHistoryLine(h)}
                                                 </span>
-                                                <span className="text-[11px] text-nature-400 font-normal">
+                                                <span className="text-[11px] text-nature-400 font-normal shrink-0">
                                                     {formatDate(new Date(h.at), 'day-month-year')}
                                                 </span>
-                                            </div>
-                                            <div className="text-nature-500 dark:text-nature-400 mt-0.5 flex flex-wrap gap-x-2">
-                                                <span>{h.actorCallsign ? t('by @{name}', { name: h.actorCallsign }) : t('actor: {actor}', { actor: h.actor })}</span>
-                                                {h.person && <span>{t('for @{name}', { name: h.person.callsign })}</span>}
-                                                {h.why && <span className="opacity-80">({h.why})</span>}
-                                                {h.outcome && <span className="opacity-80">[{h.outcome}]</span>}
                                             </div>
                                         </div>
                                     ))
@@ -273,9 +282,9 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
 
                         {activeTab === 'people' && (
                             <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                                {card.people.length === 0 ? (
+                                {!card.people || card.people.length === 0 ? (
                                     <div className="p-4 text-center text-xs text-nature-500">
-                                        {t('Has not vouched for anyone yet.')}
+                                        {t(VOUCH_PRESET_WORDS.hasNotVouchedAnyone)}
                                     </div>
                                 ) : (
                                     card.people.map((p, i) => (
@@ -302,7 +311,11 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                     </span>
                                                 )}
                                                 <div className="text-[11px] text-nature-400 mt-0.5">
-                                                    {t('trading: {state}', { state: p.trading })}
+                                                    {p.trading === 'others'
+                                                        ? t(VOUCH_PRESET_WORDS.tradingWithOthers)
+                                                        : p.trading === 'inside'
+                                                            ? t(VOUCH_PRESET_WORDS.tradingInsideOnly)
+                                                            : t(VOUCH_PRESET_WORDS.noTradesYet)}
                                                 </div>
                                             </div>
                                         </div>

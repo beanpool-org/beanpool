@@ -74,6 +74,35 @@ export const VOUCH_PRESET_WORDS = {
     makeSomeoneVoucher: word('+ Make someone a voucher'),
     makeSomeoneVoucherHelp: word('The names list is managed in the operator manual or manager (apps/manager). S2 web names list entry screen is coming soon.'),
     seeWhoTheyBroughtIn: word('See who they brought in'),
+    theirBudget: word('Their budget'),
+    budgetHistoryCount: word('Budget history ({count})'),
+    seeWhoTheyBroughtInCount: word('See who they brought in ({count})'),
+    decreaseBudget: word('Decrease budget'),
+    increaseBudget: word('Increase budget'),
+    voucherCardSections: word('Voucher card sections'),
+    vouchersRowText: word('{left} of {total} left · {vouched} vouched · {below} below zero'),
+    hasNotVouchedAnyone: word('Has not vouched for anyone yet.'),
+    noBudgetHistoryYet: word('No budget history yet.'),
+    raiseConfirmQuestion: word('You vouched {prior} for @{name} before. Raise it to {newTotal}?'),
+    raise: word('Raise'),
+    raiseTitle: word('Raise vouch?'),
+    tradingWithOthers: word('trading with others'),
+    tradingInsideOnly: word('trading inside only'),
+    noTradesYet: word('no trades yet'),
+    grantBy: word('+{amount} budget, made a voucher by @{name}'),
+    grant: word('+{amount} budget, made a voucher'),
+    topUpBy: word('+{amount} top-up by @{name}'),
+    topUp: word('+{amount} top-up'),
+    lowerBy: word('−{amount} budget lowered by @{name}'),
+    lower: word('−{amount} budget lowered'),
+    vouchedFor: word('−{amount} vouched for @{name}'),
+    heldForInvite: word('−{amount} held for an invite'),
+    backInviteExpired: word('+{amount} back, invite expired'),
+    backBudgetStopped: word('+{amount} back, budget stopped'),
+    backNotLanded: word('+{amount} back, invite not landed'),
+    backToBudget: word('+{amount} back to budget'),
+    stopBy: word('−{amount} budget stopped by @{name}'),
+    stop: word('−{amount} budget stopped'),
 } as const;
 
 export const vouchPresets = {
@@ -104,5 +133,63 @@ export const ledgerBudget = (left: number, total: number) =>
  */
 export function offersInviteVouch(voucher?: boolean | null): boolean {
     return voucher === true;
+}
+
+export interface HistoryLineLike {
+    kind: string;
+    amount: number;
+    actor?: string;
+    actorCallsign?: string | null;
+    at?: string;
+    for?: 'invite' | 'profile';
+    why?: 'expired' | 'stopped' | 'not_landed';
+    outcome?: 'held' | 'vouched' | 'back';
+    person?: { memberPubkey: string; callsign: string } | null;
+}
+
+/**
+ * Format a budget history line into plain words without raw enums or 64-hex keys (design §3).
+ */
+export function formatHistoryLine(h: HistoryLineLike): string {
+    const absAmount = formatNumber(Math.abs(h.amount));
+    const name = h.actorCallsign || '';
+    const personName = h.person?.callsign || '';
+
+    switch (h.kind) {
+        case 'grant':
+            return name
+                ? t(VOUCH_PRESET_WORDS.grantBy, { amount: absAmount, name })
+                : t(VOUCH_PRESET_WORDS.grant, { amount: absAmount });
+        case 'top_up':
+            return name
+                ? t(VOUCH_PRESET_WORDS.topUpBy, { amount: absAmount, name })
+                : t(VOUCH_PRESET_WORDS.topUp, { amount: absAmount });
+        case 'lower':
+            return name
+                ? t(VOUCH_PRESET_WORDS.lowerBy, { amount: absAmount, name })
+                : t(VOUCH_PRESET_WORDS.lower, { amount: absAmount });
+        case 'hold':
+            if (personName) {
+                return t(VOUCH_PRESET_WORDS.vouchedFor, { amount: absAmount, name: personName });
+            }
+            return t(VOUCH_PRESET_WORDS.heldForInvite, { amount: absAmount });
+        case 'return':
+            if (h.why === 'expired') {
+                return t(VOUCH_PRESET_WORDS.backInviteExpired, { amount: absAmount });
+            }
+            if (h.why === 'stopped') {
+                return t(VOUCH_PRESET_WORDS.backBudgetStopped, { amount: absAmount });
+            }
+            if (h.why === 'not_landed') {
+                return t(VOUCH_PRESET_WORDS.backNotLanded, { amount: absAmount });
+            }
+            return t(VOUCH_PRESET_WORDS.backToBudget, { amount: absAmount });
+        case 'stop':
+            return name
+                ? t(VOUCH_PRESET_WORDS.stopBy, { amount: absAmount, name })
+                : t(VOUCH_PRESET_WORDS.stop, { amount: absAmount });
+        default:
+            return t(VOUCH_PRESET_WORDS.beans, { amount: `${h.amount >= 0 ? '+' : '−'}${absAmount}` });
+    }
 }
 

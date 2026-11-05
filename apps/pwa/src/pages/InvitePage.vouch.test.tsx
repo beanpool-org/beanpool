@@ -149,6 +149,24 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         expect(buildOfflineInviteCode).not.toHaveBeenCalled();
     });
 
+    it('generates offline ticket carrying no vouch when offline and preset is None', async () => {
+        vi.mocked(generateInvite).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+        render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
+        await waitFor(() => expect(screen.getByTestId('invite-vouch-none')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByRole('button', { name: /Generate/ }));
+
+        await waitFor(() => {
+            expect(buildOfflineInviteCode).toHaveBeenCalledWith(
+                IDENTITY.publicKey,
+                IDENTITY.privateKey,
+                undefined,
+            );
+        });
+        expect((await screen.findAllByTitle('BP-offline-ticket')).length).toBeGreaterThan(0);
+    });
+
     it('renders §11 Vouchers block for owners/committee admins', async () => {
         render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
         await waitFor(() => expect(screen.getByTestId('vouchers-block')).toBeInTheDocument());

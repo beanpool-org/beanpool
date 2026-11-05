@@ -84,6 +84,8 @@ describe('GroupDetailModal Accessibility', () => {
         const closeBtn = screen.getByRole('button', { name: 'Close' });
         expect(closeBtn).toHaveAttribute('type', 'button');
         expect(closeBtn.className).toContain('focus-visible:ring-2');
+        expect(closeBtn.className).toContain('min-w-[44px]');
+        expect(closeBtn.className).toContain('min-h-[44px]');
     });
 });
 

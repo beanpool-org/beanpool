@@ -366,7 +366,7 @@ export function GroupDetailModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center p-1 rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         aria-label={t('Close')}
                     >
                         ✕

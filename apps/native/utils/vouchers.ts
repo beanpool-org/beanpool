@@ -3,7 +3,6 @@
  * and vouching for someone from their profile (POST /api/vouch).
  */
 import type { BeanPoolIdentity } from './identity';
-import { signedGet, signedPost } from './node-post';
 
 export interface AllocationHistoryLine {
     kind: string;
@@ -50,6 +49,7 @@ export async function askMyVouching(
     identity: BeanPoolIdentity,
 ): Promise<MyVouching | null> {
     try {
+        const { signedGet } = await import('./node-post');
         const res = await signedGet(anchor, '/api/vouchers/me', identity);
         if (!res.ok) return null;
         return (await res.json()) as MyVouching;
@@ -64,6 +64,7 @@ export async function vouchFromProfile(
     body: { memberPubkey: string; vouchAmount: number; raise?: boolean },
 ): Promise<VouchProfileResult> {
     try {
+        const { signedPost } = await import('./node-post');
         const res = await signedPost(anchor, '/api/vouch', body, identity);
         const data = (await res.json().catch(() => null)) as Record<string, unknown> | null;
         if (res.ok && data) {

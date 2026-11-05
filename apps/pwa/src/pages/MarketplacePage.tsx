@@ -2029,6 +2029,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         )}
 
+                        {/* Who can see it: with the notices, before the title, where the phone's page draws its group banner. */}
+                        {(selectedPost.audienceScope === 'group' || !!selectedPost.targetGroupId) && (
+                            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-bold">
+                                <span className="text-base">🔒</span>
+                                <span>{selectedPost.targetGroupName ? t('Only {group} can see this', { group: selectedPost.targetGroupName }) : t('Only group members can see this')}</span>
+                            </div>
+                        )}
+
                         <h2 dir="auto" className={`m-0 ${PAGE_TYPE.listingTitle} text-nature-950 dark:text-white break-words`}>
                             {selectedPost.title}
                         </h2>
@@ -2036,13 +2044,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <p className={`m-0 text-sm font-semibold ${PAGE_INK.secondary}`}>
                                 {selectedPost.type === 'need' ? t('This need has been met.') : t('This offer is finished.')}
                             </p>
-                        )}
-
-                        {(selectedPost.audienceScope === 'group' || !!selectedPost.targetGroupId) && (
-                            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-bold">
-                                <span className="text-base">🔒</span>
-                                <span>{selectedPost.targetGroupName ? t('Only {group} can see this', { group: selectedPost.targetGroupName }) : t('Only group members can see this')}</span>
-                            </div>
                         )}
 
                         {/* 6. The terms box, on the shell: the label in small capitals, then the value, left-aligned, in the page's own

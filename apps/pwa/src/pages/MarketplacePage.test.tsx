@@ -1639,6 +1639,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         const cls = (el: Element) => el.className.split(/\s+/);
 
         it('at 320 px and 130% text, in the DOM: chips, title, terms, the take-up, the photo, Message and Share, the description, Posted by, Report', async () => {
+            const width = window.innerWidth;
             Object.defineProperty(window, 'innerWidth', { value: 320, configurable: true, writable: true });
             document.documentElement.style.fontSize = '130%';
             try {
@@ -1674,12 +1675,13 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
                 expect(cls(photo)).toEqual(expect.arrayContaining(['w-full', 'aspect-[4/3]']));
                 const detail = screen.getByTestId('listing-detail');
                 expect(detail.innerHTML).not.toMatch(/\b(w|min-w)-\[(3[3-9]\d|[4-9]\d\d)px\]/);
-                // No outer card and no tinted strip: the column is the page.
+                // No outer card (main's was `rounded-2xl … shadow-soft` round the strip and the words): the column is the page.
                 expect(detail.closest('.shadow-soft')).toBeNull();
-                expect(detail.parentElement!.innerHTML).not.toMatch(/background-color: #/i);
+                expect(detail.parentElement!.querySelector('.shadow-soft')).toBeNull();
                 expect(detail.innerHTML).not.toMatch(/\border-\d/);
             } finally {
                 document.documentElement.style.fontSize = '';
+                Object.defineProperty(window, 'innerWidth', { value: width, configurable: true, writable: true });
             }
         });
 

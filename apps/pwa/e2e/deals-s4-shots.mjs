@@ -43,7 +43,7 @@ const POSTS = [
 // A 4:3 photo (the frame's own shape), for the page's cases.
 const PHOTO_43 = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#9cb98a"/><circle cx="300" cy="320" r="120" fill="#c0392b"/><circle cx="500" cy="300" r="110" fill="#d35400"/></svg>');
 // Marty's apples (DESIGN-detail-pages-fable.md §2.9): a recurring Need, Beans off where it is read (the global community).
-POSTS.push(post({ id: 'p-apples', type: 'need', category: 'food', title: 'Apples needed', description: 'Looking for fresh apples', credits: 0,
+if (PAGE_ONLY) POSTS.push(post({ id: 'p-apples', type: 'need', category: 'food', title: 'Apples needed', description: 'Looking for fresh apples', credits: 0,
     authorPublicKey: 'marty-key', authorCallsign: 'Marty', photos: [PHOTO_43], createdAt: '2026-11-03T10:00:00.000Z' }));
 if (PAGE_ONLY) for (const p of POSTS) if (p.id === 'p-course' || p.id === 'p-mine') p.photos = [PHOTO_43];
 const FARM_DEALS = [{ id: 'tx-f', postId: 'p-farm', postTitle: 'Mend the polytunnel', credits: 20, status: 'pending', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', createdAt: AT }];

@@ -149,6 +149,23 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         expect(buildOfflineInviteCode).not.toHaveBeenCalled();
     });
 
+    it('stops with noOfflineVouch notice and generates NO offline ticket when offline with a vouch selected', async () => {
+        vi.mocked(generateInvite).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+        render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
+        await waitFor(() => expect(screen.getByTestId('invite-vouch-50')).toBeInTheDocument());
+
+        fireEvent.click(screen.getByTestId('invite-vouch-50'));
+        fireEvent.click(screen.getByRole('button', { name: /Generate/ }));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent(
+                'You can’t vouch on an offline ticket. Choose None to make one, or try again when you’re connected.'
+            );
+        });
+        expect(buildOfflineInviteCode).not.toHaveBeenCalled();
+    });
+
     it('generates offline ticket carrying no vouch when offline and preset is None', async () => {
         vi.mocked(generateInvite).mockRejectedValueOnce(new TypeError('Failed to fetch'));
 

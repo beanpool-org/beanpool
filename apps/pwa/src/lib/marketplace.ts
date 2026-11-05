@@ -35,6 +35,14 @@ export const MARKETPLACE_CATEGORIES_BY_ID = new Map(
 
 export type PostType = 'offer' | 'need' | 'poll' | 'event';
 
+/**
+ * A listing's type on its chip, the list card's and the listing page's (the chip's caller puts it in capitals); a type this
+ * build doesn't know, as written.
+ */
+export function typeWords(type: string): string {
+    return type === 'offer' ? t('offer', undefined, 'post type') : type === 'need' ? t('need', undefined, 'post type') : String(type ?? '');
+}
+
 export const POST_TYPE_COLORS = {
     offer: '#10b981',  // Sage Green (Emerald-500)
     need: '#d97757',  // Soft Terracotta

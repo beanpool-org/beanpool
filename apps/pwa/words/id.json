@@ -3278,7 +3278,6 @@
   "{title} by {name} on {platform}": "{title} oleh {name} di {platform}",
   "{title} · within {km} km": "{title} · dalam {km} km",
   "{title}, by {name}. Opens the Pulse.": "{title}, oleh {name}. Membuka Denyut.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "other": "Dibutuhkan {voters} dari {n} suara"
   },
@@ -3479,7 +3478,6 @@
   "🖼️ Gallery": "🖼️ Galeri",
   "🗑️ Delete Group Post (Convenor)": "🗑️ Hapus Postingan Grup (Koordinator)",
   "🗑️ Delete Post": "🗑️ Hapus Postingan",
-  "🗞️ DAILY PULSE": "🗞️ KABAR HARIAN",
   "🗞️ Daily Pulse": "🗞️ Daily Pulse",
   "🗳️ Poll": "🗳️ Jajak Pendapat",
   "🗳️ Polls": "🗳️ Jajak Pendapat",

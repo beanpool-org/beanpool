@@ -7,12 +7,12 @@
  */
 
 import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
-import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, openListingLabel, type PostType } from '../lib/marketplace';
+import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, openListingLabel, typeWords, type PostType } from '../lib/marketplace';
 import { AuthorCard } from '../components/AuthorCard';
 import { useCoversScreen } from '../lib/screen-cover';
 import { nodeRefusal } from '../lib/node-refusal';
 import { MarketplaceCard } from '../components/MarketplaceCard';
-import { GRID } from '../components/market-card-shell';
+import { BOX_LABEL, GRID, PAGE_BOX, PAGE_BUTTON, PAGE_INK, PAGE_TYPE, chip } from '../components/market-card-shell';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
 import { PollGridTile } from '../components/PollGridTile';
@@ -32,7 +32,7 @@ import {
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
-    tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive,
+    tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive, upperCase,
     MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
@@ -191,6 +191,10 @@ function priceUnit(priceType: string | undefined): string {
     if (priceType === 'monthly') return t('/Mo', undefined, 'price per month');
     return '';
 }
+
+/** A photo on the listing's page: a button that shows it whole in the lightbox, the frame's corners and size the caller's. */
+const PHOTO_BUTTON = 'overflow-hidden border-0 p-0 bg-nature-100 dark:bg-nature-900 cursor-zoom-in focus-visible:outline-none '
+    + 'focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-nature-600 dark:focus-visible:ring-nature-300';
 
 /** The label over the hours a payer confirms when releasing a deal priced by the hour, day, week or month. */
 function actualWorkedLabel(priceType: string | undefined): string {
@@ -415,6 +419,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [deleting, setDeleting] = useState<string | null>(null);
     const [toggling, setToggling] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // A refusal from a control below the photo (Message, the convenor's Delete) shows beside that control, not on the
+    // action's line above the photo, which a phone-width page has scrolled away by then (DW3 review, #2924).
+    const [bodyError, setBodyError] = useState<{ at: 'message' | 'convenor'; words: string } | null>(null);
     // The node refused its listings: this reader is no member of this local community (MembersOnlyListings).
     const [membersOnly, setMembersOnly] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -633,7 +640,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // NOT folded into the capacity refresh, as suggested: that would refetch the allowance on every card a
     // member opens, and the allowance only moves when a commission or a settlement lands — both of which
     // already refresh it explicitly.
-    useEffect(() => { setCommissionResult(null); }, [selectedPost?.id]);
+    useEffect(() => { setCommissionResult(null); setBodyError(null); }, [selectedPost?.id]);
 
     const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
 
@@ -1347,7 +1354,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // the server-side relay can't resolve their node and the message would sit
                 // here undelivered while looking sent. Say so plainly until cross-community
                 // messaging is real.
-                setError(t("This post is hosted by another community. Messaging across communities isn't available yet."));
+                setBodyError({ at: 'message', words: t("This post is hosted by another community. Messaging across communities isn't available yet.") });
                 return;
             } else {
                 // Local post — existing flow
@@ -1361,7 +1368,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (onNavigate) onNavigate('messages', result.conversation.id);
             }
         } catch (e: any) {
-            setError(nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')));
+            setBodyError({ at: 'message', words: nodeRefusal(e)?.message ?? (e.message || t('Failed to start conversation')) });
         } finally {
             setMessaging(false);
         }
@@ -1685,7 +1692,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             );
         }
         const cat = MARKETPLACE_CATEGORIES_BY_ID.get(selectedPost.category);
-        const typeColor = POST_TYPE_COLORS[selectedPost.type];
         const postedDate = new Date(selectedPost.createdAt);
         const ago = getTimeAgo(postedDate);
         const isOwnPost = identity?.publicKey === selectedPost.authorPublicKey;
@@ -1914,8 +1920,24 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             );
         };
 
-        const hasPhotosColumn = !!selectedPost.photos && selectedPost.photos.length > 0;
+        // The photos with something in them; the lightbox opens each whole (the same 800 px photo, nothing stored).
+        const photos = (selectedPost.photos ?? []).filter(photo => typeof photo === 'string' && photo.trim() !== '');
+        const hasPhoto = photos.length > 0;
+        const isPinned = pinLive(selectedPost as any);
+        const openPhoto = (i: number, trigger: HTMLElement) =>
+            setLightboxState({ isOpen: true, photos, initialIndex: i, title: selectedPost.title, triggerElement: trigger });
+        const photoLabel = (i: number) => t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: photos.length, title: selectedPost.title });
 
+        // The listing's page on the event page's frame (DESIGN-detail-pages-fable.md §2.1, as DESIGN-detail-pages-frame-fable.md
+        // §1.7 and §3 amend it; slice DW3): no outer card, the column is the page, and its boxes are the card family's
+        // (components/market-card-shell.ts). Top to bottom, as the phone's page: the chips and how long ago, the notices, the
+        // title, the terms box, the action (the whole deal area as one block: what became of a named deal, a deal under way, the
+        // requests, the take-up, the rating, the author's own tools), the photo (4:3; the category's tile without one), the quiet
+        // row (Message, Share), the description and the tags, Posted by, the author's show-on-global row, a convenor's box, and
+        // Report. The take-up comes before the photo, so it is on the first screen at 320 px and 130% text.
+        // DOM order is the phone's: words, price, action, photos. No order-*, so focus follows the screen there. Wide screens place
+        // the columns (from 768 px, the event page's layout): the photos left, spanning the three rows, and the head, the action
+        // and the rest right, one row each, so Tab reads the right column's chips, title, terms and take-up before the photos.
         return (
             <div className="p-4 sm:p-6 w-full max-w-3xl mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {/* Back Button */}
@@ -1926,45 +1948,49 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         setEditMode(false);
                         setEditPhotos([]);
                     }}
-                    className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors"
+                    className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                 >
                     <span className="text-xl leading-none">←</span> {t('Back to Market')}
                 </button>
-                
-                {/* Post card */}
-                <div className="bg-white dark:bg-nature-950 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-soft overflow-hidden mb-4">
-                    {/* Type + category header */}
-                    <div 
-                        className="flex justify-between items-center px-4 py-3 border-b"
-                        style={{ backgroundColor: `${typeColor}15`, borderBottomColor: `${typeColor}30` }}
-                    >
-                        <div className="flex items-center gap-2">
-                            <span className="text-2xl">{isPulsePost ? '🗞️' : (cat?.emoji ?? '🌐')}</span>
-                            <span 
-                                className="text-xs font-black uppercase tracking-wider"
-                                style={{ color: isPulsePost ? '#d97706' : typeColor }}
-                            >
-                                {isPulsePost ? t('🗞️ DAILY PULSE') : t('{type} · {category}', { type: selectedPost.type === 'offer' ? t('🟢 Offer') : t('🟠 Need'), category: cat ? t(cat.label) : selectedPost.category })}
-                            </span>
-                        </div>
-                        <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{ago}</span>
-                    </div>
+                <PostPinDetail
+                    post={selectedPost}
+                    identity={identity}
+                    isOwnerOrAdmin={isOwnerOrAdmin}
+                    featuresPins={featuresPins}
+                    onPostUpdated={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
+                />
 
-                    {/* Content */}
-                    <div className="p-5 md:p-6">
-                        <PostPinDetail
-                            post={selectedPost}
-                            identity={identity}
-                            isOwnerOrAdmin={isOwnerOrAdmin}
-                            featuresPins={featuresPins}
-                            onPostUpdated={(p) => { setSelectedPost(p); refresh().catch(() => {}); }}
-                        />
+                <div
+                    data-testid="listing-detail"
+                    className={`w-full min-w-0 flex flex-col gap-3 ${hasPhoto ? 'md:grid md:grid-cols-2 md:grid-rows-[auto_auto_1fr] md:gap-x-6 md:gap-y-3 md:items-start' : ''}`}
+                >
+                    {/* 1 to 6: the chips and how long ago, the notices, the title, the terms. */}
+                    <div data-testid="listing-head" className={`flex flex-col gap-2 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-1' : ''}`}>
+                        {/* The list card's chips, in its order (type · PINNED · category · RECURRING · CASH TOO · PAUSED), and "3d ago" at the row's end. */}
+                        <div data-testid="listing-chips" className="flex flex-wrap items-center gap-1 min-w-0">
+                            {isPulsePost ? (
+                                <span data-testid="listing-type-chip" className={chip('warn')}>{upperCase(t('🗞️ Daily Pulse'))}</span>
+                            ) : (
+                                <span data-testid="listing-type-chip" className={chip(selectedPost.type === 'offer' ? 'offer' : 'need')}>{upperCase(typeWords(selectedPost.type))}</span>
+                            )}
+                            {isPinned && <span data-testid="listing-pinned-chip" className={chip('pinned')}>{t('📌 PINNED')}</span>}
+                            {!isPulsePost && cat && (
+                                <span data-testid="listing-category-chip" className={chip('quiet')}>{cat.emoji} <span>{t(cat.label)}</span></span>
+                            )}
+                            {selectedPost.repeatable && <span data-testid="listing-recurring-chip" className={chip('quiet')}>{t('↻ RECURRING')}</span>}
+                            {selectedPost.cashAlsoNeeded && (
+                                <span className={chip('warn')} title={t('Cash also needed for fuel or materials — agreed in chat')}>{t('💸 CASH TOO')}</span>
+                            )}
+                            {selectedPost.status === 'paused' && <span data-testid="listing-paused-chip" className={chip('warn')}>{upperCase(t('⏸ Paused'))}</span>}
+                            <span data-testid="listing-ago" className={`ms-auto shrink-0 ${PAGE_TYPE.note} font-semibold ${PAGE_INK.secondary}`}>{ago}</span>
+                        </div>
+
                         {/* Enterprise Season State Banners */}
                         {authorEnterpriseInactive?.paused && authorEnterpriseInactive?.status !== 'winding_up' && authorEnterpriseInactive?.status !== 'completed' && (
                             <div
                                 role="alert"
                                 aria-live="polite"
-                                className="mb-4 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                                className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 text-amber-950 dark:text-amber-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
                             >
                                 <span className="text-2xl" aria-hidden="true">⏸️</span>
                                 <div>
@@ -1979,7 +2005,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <div
                                 role="alert"
                                 aria-live="polite"
-                                className="mb-4 p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-600 text-rose-950 dark:text-rose-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                                className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-600 text-rose-950 dark:text-rose-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
                             >
                                 <span className="text-2xl" aria-hidden="true">⏳</span>
                                 <div>
@@ -1994,7 +2020,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <div
                                 role="alert"
                                 aria-live="polite"
-                                className="mb-4 p-4 rounded-xl bg-stone-100 dark:bg-stone-900 border-2 border-stone-300 dark:border-stone-700 text-stone-900 dark:text-stone-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
+                                className="p-4 rounded-xl bg-stone-100 dark:bg-stone-900 border-2 border-stone-300 dark:border-stone-700 text-stone-900 dark:text-stone-100 text-xs font-semibold flex items-center gap-3 shadow-xs"
                             >
                                 <span className="text-2xl" aria-hidden="true">🏁</span>
                                 <div>
@@ -2006,169 +2032,60 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         )}
 
-                        {(!selectedPost.photos || selectedPost.photos.length === 0) && (
-                            <div className="w-full aspect-[3/1] rounded-xl overflow-hidden mb-3">
-                                <CategoryTile
-                                    category={selectedPost.category}
-                                    kind={isPulsePost ? 'pulse' : ((selectedPost.type as string) === 'event' ? 'event' : 'listing')}
-                                    size="banner"
-                                />
+                        {/* Who can see it: with the notices, before the title, where the phone's page draws its group banner. */}
+                        {(selectedPost.audienceScope === 'group' || !!selectedPost.targetGroupId) && (
+                            <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-bold">
+                                <span className="text-base">🔒</span>
+                                <span>{selectedPost.targetGroupName ? t('Only {group} can see this', { group: selectedPost.targetGroupName }) : t('Only group members can see this')}</span>
                             </div>
                         )}
 
-                        {/* DOM order is the phone's: words, photos, price. No order-*, so focus follows the screen there. Wide screens place the columns: photos left, the rest right, so Tab reads the right column's chips before the left column's photos. */}
-                        <div className={hasPhotosColumn ? "flex flex-col md:grid md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-6 md:items-start" : ""}>
-                            <div className={`${hasPhotosColumn ? "md:col-start-2 md:row-start-1" : ""} flex flex-col`}>
-                                <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight">
-                                    {selectedPost.status === 'paused' && (
-                                        <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-bp-chip-warn-tint text-bp-chip-warn-ink">{t('⏸ Paused')}</span>
-                                    )}
-                                    {selectedPost.title}
-                                </h2>
-                                {selectedPost.status === 'completed' && (
-                                    <p className="text-sm font-semibold text-nature-600 dark:text-nature-300 mb-3">
-                                        {selectedPost.type === 'need' ? t('This need has been met.') : t('This offer is finished.')}
-                                    </p>
-                                )}
+                        <h2 dir="auto" className={`m-0 ${PAGE_TYPE.listingTitle} text-nature-950 dark:text-white break-words`}>
+                            {selectedPost.title}
+                        </h2>
+                        {selectedPost.status === 'completed' && (
+                            <p className={`m-0 text-sm font-semibold ${PAGE_INK.secondary}`}>
+                                {selectedPost.type === 'need' ? t('This need has been met.') : t('This offer is finished.')}
+                            </p>
+                        )}
 
-                                {(selectedPost.audienceScope === 'group' || !!selectedPost.targetGroupId) && (
-                                    <div className="p-3 mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-bold">
-                                        <span className="text-base">🔒</span>
-                                        <span>{selectedPost.targetGroupName ? t('Only {group} can see this', { group: selectedPost.targetGroupName }) : t('Only group members can see this')}</span>
-                                    </div>
-                                )}
-
-                                {selectedPost.description && (
-                                    <p dir="auto" className="text-base text-nature-600 dark:text-nature-300 leading-relaxed mb-5 whitespace-pre-wrap">
-                                        {selectedPost.description}
-                                    </p>
-                                )}
-
-                                <PostTagChips tags={selectedPost.tags} freeTags={selectedPost.freeTags} onPick={openTag} onPickFree={openFree} className="mb-5" />
+                        {/* 6. The terms box, on the shell: the label in small capitals, then the value, left-aligned, in the page's own
+                            font. Where Beans live in a local community: what it asks in return, and the line that says where. */}
+                        {!isPulsePost && priceMarked && (
+                            <div className={`mt-1 ${PAGE_BOX}`} data-testid="listing-in-return">
+                                <p className={BOX_LABEL.muted}>{t('In return')}</p>
+                                {/* lib/visitor-lobby.ts NO_BEANS_TERMS_TEXT's words, and the phone's key (utils/market-global.ts). */}
+                                <p className={`m-0 mb-2 ${PAGE_TYPE.termsValue} text-nature-950 dark:text-white break-words`}>{t('Free, a swap, or ask')}</p>
+                                <LocalCommunityLine feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} {...markWays} />
                             </div>
-
-                            {/* Photos */}
-                            {selectedPost.photos && selectedPost.photos.length > 0 && (
-                                <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible mb-5 md:mb-0 pb-2 snap-x md:col-start-1 md:row-start-1 md:row-span-2">
-                                    {selectedPost.photos.map((photo, i) => (
-                                        <button
-                                            key={i}
-                                            type="button"
-                                            onClick={(e) =>
-                                                setLightboxState({
-                                                    isOpen: true,
-                                                    photos: selectedPost.photos!,
-                                                    initialIndex: i,
-                                                    title: selectedPost.title,
-                                                    triggerElement: e.currentTarget,
-                                                })
-                                            }
-                                            aria-label={t('View enlarged photo {n} of {total}: {title}', { n: i + 1, total: selectedPost.photos!.length, title: selectedPost.title })}
-                                            className="h-40 sm:h-64 md:h-72 w-auto md:w-full rounded-xl overflow-hidden border border-nature-200 dark:border-nature-800 shrink-0 snap-start shadow-sm cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 transition-transform active:scale-[0.98]"
-                                        >
-                                            <img
-                                                src={photo}
-                                                alt={t('photo {n}', { n: i + 1 })}
-                                                className="h-40 sm:h-64 md:h-72 w-auto md:w-full object-cover"
-                                            />
-                                        </button>
-                                    ))}
+                        )}
+                        {!isPulsePost && !priceMarked && (
+                            <div className={`mt-1 ${PAGE_BOX}`} data-testid="listing-price">
+                                <p className={BOX_LABEL.muted}>
+                                    {selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay')}
+                                </p>
+                                <div className={`flex flex-row flex-wrap items-center gap-x-1 min-w-0 ${PAGE_TYPE.price} text-nature-950 dark:text-white`}>
+                                    <span>{formatNumber(selectedPost.credits)}</span>
+                                    <span className={`inline-flex items-center shrink-0 ${PAGE_TYPE.priceUnit} ${PAGE_INK.secondary}`}>
+                                        <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
+                                        {priceUnit(selectedPost.priceType)}
+                                    </span>
                                 </div>
-                            )}
-
-                            <div className={`${hasPhotosColumn ? "md:col-start-2 md:row-start-2" : ""} flex flex-col`}>
-                                {/* Credits; where Beans live in a local community, what the description asks in return and the line */}
-                                {!isPulsePost && priceMarked && (
-                                    <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 border border-nature-100 dark:border-nature-800 shadow-inner" data-testid="listing-in-return">
-                                        <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">{t('In return')}</span>
-                                        {/* lib/visitor-lobby.ts NO_BEANS_TERMS_TEXT's words, and the phone's key (utils/market-global.ts). */}
-                                        <p className="font-bold text-nature-900 dark:text-white mb-2">{t('Free, a swap, or ask')}</p>
-                                        <LocalCommunityLine feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)} {...markWays} />
-                                    </div>
-                                )}
-                                {!isPulsePost && !priceMarked && (
-                                    <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 text-center border border-nature-100 dark:border-nature-800 shadow-inner block">
-                                        <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">
-                                            {selectedPost.type === 'offer' ? t('Asking Price') : t('Willing to Pay')}
-                                        </span>
-                                        <div className="text-3xl font-bold text-nature-900 dark:text-white font-mono tracking-tight" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                            <span>{formatNumber(selectedPost.credits)}</span>
-                                            <span className="text-xl text-nature-400 font-sans font-medium flex items-center" style={{ flexShrink: 0 }}>
-                                                <img src="/assets/bean.png" style={{ width: '20px', height: '20px', marginLeft: '4px', marginRight: '2px', flexShrink: 0 }} alt={t('B', undefined, 'the Beans sign')} />
-                                                {priceUnit(selectedPost.priceType)}
-                                            </span>
-                                        </div>
-                                        {selectedPost.credits > 0 && (
-                                            <p className="text-nature-400 text-xs mt-1 font-mono">
-                                                {t('≈ {n} hrs', { n: formatNumber(selectedPost.credits / 40, 1) })}
-                                            </p>
-                                        )}
-                                    </div>
+                                {selectedPost.credits > 0 && (
+                                    <p className={`m-0 mt-1 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
+                                        {t('≈ {n} hrs', { n: formatNumber(selectedPost.credits / 40, 1) })}
+                                    </p>
                                 )}
                             </div>
-                        </div>
+                        )}
                     </div>
-                </div>
 
-                {/* Author section: components/AuthorCard.tsx, the one box an event's "Hosted by" is too. */}
-                <AuthorCard
-                    label={t('Posted by')}
-                    pubkey={selectedPost.authorPublicKey}
-                    callsign={selectedPost.authorCallsign}
-                    avatarUrl={authorProfile?.avatar}
-                    loadingAvatar={loadingProfile}
-                    ratings={authorAvgRating}
-                    onOpen={() => { if (onOpenProfile) onOpenProfile(selectedPost.authorPublicKey); }}
-                    className="mb-4"
-                    details={<>
-                        {authorProfile?.bio && (
-                            <p dir="auto" className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
-                                {authorProfile.bio}
-                            </p>
-                        )}
-                        {authorProfile?.contact && authorProfile.contact.visibility !== 'hidden' && (
-                            <p className="text-xs text-nature-700 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block max-w-full [overflow-wrap:anywhere] border border-nature-100 dark:border-nature-800">
-                                📧 {authorProfile.contact.value}
-                            </p>
-                        )}
-                    </>}
-                >
-                    {selectedPost.shopId && (
-                        <div className="mt-2 pt-2 border-t border-nature-100 dark:border-nature-800">
-                            <button
-                                type="button"
-                                onClick={() => onNavigate?.('shop', selectedPost.shopId!)}
-                                data-testid="post-shop-link"
-                                className="flex items-center gap-2 text-sm font-semibold text-bp-ink-brand hover:underline bg-transparent border-0 p-0 cursor-pointer"
-                            >
-                                <span aria-hidden="true">🏪</span>
-                                <span>{t('View shop')}</span>
-                            </button>
-                        </div>
-                    )}
-                    {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md
-                        §4): said here, so a pin on the map is never taken for the door. */}
-                    {placeShownRoughly(selectedPost, identity?.publicKey, openMembership) && (
-                        <p data-testid="rough-place-line" className="m-0 mt-2 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
-                            {t(PLACE_WORDS.roughPlace, { name: selectedPost.authorCallsign })}
-                        </p>
-                    )}
-                </AuthorCard>
-
-                 {/* Share with members, and outside the community where it allows it (front doors S6). */}
-                 <SharePostButtons post={selectedPost} isMember={isMember} />
-
-                 {!!identity && selectedPost.authorPublicKey === identity.publicKey && (
-                     <ShowOnGlobalHostRow
-                         post={selectedPost}
-                         identity={identity}
-                         enabled={(selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.originNode && !selectedPost.shownCopy
-                             && typeof selectedPost.lat === 'number' && typeof selectedPost.lng === 'number' && ['active', 'paused', 'pending'].includes(selectedPost.status)}
-                         listing
-                     />
-                 )}
-
-                 {/* Action buttons */}
+                    {/*
+                      * 7. The action: the deal area as one block, moved whole from the foot of the page (nothing in it added or
+                      * taken away; its blocks keep their own lines). Before the photo, its own row in the grid; its first block's
+                      * own top margin gives way to the 12 above it, and its 4 below makes 16 to the photo on a phone.
+                      */}
+                    <div data-testid="listing-action" className={`flex flex-col min-w-0 mb-1 [&>*:first-child]:mt-0 ${hasPhoto ? 'md:col-start-2 md:row-start-2' : ''}`}>
 
                  {/* The deal a door named, when it is over by now: what became of it, above the listing as it stands for the reader.
                      Not once the reader has taken the listing up again (a deal of their own held or asked for: no take-up left,
@@ -2511,10 +2428,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </p>
                     </div>
                 ) : (myRequest || deals.canTakeUp) && selectedPost.status === 'active' && !isAcceptedByMe && (
-                    <div style={{
-                        display: 'flex', flexDirection: 'column', gap: '0.5rem',
-                        marginTop: '0.75rem',
-                    }}>
+                    <div className="flex flex-col gap-2 mt-3">
                         {(() => {
                             // A lendable Offer is asked for, never taken in one step: the lender says yes first (the node refuses a
                             // one-step accept).
@@ -2906,24 +2820,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 )}
                 
-                {/* 3. Global Message Button (Visible to Non-Authors) */}
+                {/* 3. The rating, once a deal here is finished, for its two people (Message is in the quiet row, Report at the foot). */}
                 {!isOwnPost && !isPulsePost && (
-                    <div className="mt-2">
-                        <button
-                            onClick={handleMessageAuthor}
-                            disabled={messaging || isRemotePost}
-                            className={`w-full py-3.5 mt-1 rounded-xl font-bold text-white text-[15px] transition-all shadow-md ${
-                                messaging || isRemotePost ? 'bg-nature-500 cursor-not-allowed opacity-60' : 'bg-nature-800 hover:bg-nature-900'
-                            }`}
-                        >
-                            {messaging ? t('Opening chat...') : t('💬 Message')}
-                        </button>
-                        {isRemotePost && (
-                            <p className="mt-1.5 text-xs text-nature-600 dark:text-nature-400 text-center">
-                                {t("This post is from another community — messaging across communities isn't available yet.")}
-                            </p>
-                        )}
-
+                    <>
                         {/* Transaction-gated rating — only show on completed posts where user was a participant */}
                         {identity && selectedPost.status === 'completed' && selectedPost.pendingTransactionId && (
                             identity.publicKey === selectedPost.authorPublicKey || 
@@ -3029,62 +2928,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 </>
                             );
                         })()}
-
-                        <button
-                            onClick={() => { setShowReportForm(!showReportForm); setReportNote(null); }}
-                            className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-300 hover:border-red-200 transition-colors"
-                        >
-                            {t('🚩 Report')}
-                        </button>
-
-                        {showReportForm && (
-                            <div className="bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900 rounded-xl p-4 mt-2 shadow-inner">
-                                <select
-                                    value={reportReason}
-                                    onChange={(e) => setReportReason(e.target.value)}
-                                    className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
-                                >
-                                    <option value="">{t('Select a reason...')}</option>
-                                    {/* The one shared list (lib/reportReasons.ts), as in ReportModal: "Child safety" is told at once.
-                                        Each sends its English (the node reads it); its label is shown in the member's language. */}
-                                    {REPORT_REASONS.map((r, i) => <option key={r} value={r}>{t(REPORT_REASONS[i])}</option>)}
-                                </select>
-                                <p className="text-xs text-nature-800 dark:text-nature-200 mb-2">
-                                    <Sentence text={t('{reason}: {hint}', { hint: t(REPORT_WORDS.childSafetyHint) })} parts={{ reason: <span className="font-bold">{t(REPORT_WORDS.childSafety)}</span> }} />
-                                </p>
-                                <button
-                                    onClick={async () => {
-                                        if (!identity || !selectedPost || !reportReason) return;
-                                        setSubmittingReport(true);
-                                        setReportNote(null);
-                                        try {
-                                            await reportAbuse(identity.publicKey, selectedPost.authorPublicKey, reportReason, selectedPost.id);
-                                            setReportNote({ sent: true, text: t(REPORT_WORDS.sent) });
-                                            setShowReportForm(false);
-                                            setReportReason('');
-                                        } catch (e: any) {
-                                            // The reason stays picked, so a second tap sends it again.
-                                            setReportNote({ sent: false, text: e?.message || t('Failed to submit report. Please try again.') });
-                                        } finally {
-                                            setSubmittingReport(false);
-                                        }
-                                    }}
-                                    disabled={!reportReason || submittingReport}
-                                    className={`w-full py-2.5 rounded-lg font-bold text-sm transition-colors ${
-                                        reportReason ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on shadow-sm' : 'bg-nature-300 text-white cursor-not-allowed'
-                                    }`}
-                                >
-                                    {submittingReport ? t('Sending...') : t('Submit Report')}
-                                </button>
-                            </div>
-                        )}
-                        {reportNote && (
-                            <p data-testid="report-note" role={reportNote.sent ? 'status' : 'alert'}
-                                className={`m-0 mt-2 text-sm font-semibold ${reportNote.sent ? 'text-bp-ink-success' : 'text-bp-ink-danger'}`}>
-                                {reportNote.text}
-                            </p>
-                        )}
-                    </div>
+                    </>
                 )}
 
                 {(isOwnPost || keepsAuthor) && selectedPost.status !== 'pending' && (
@@ -3432,45 +3276,253 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 )}
 
-                {/* Convenor Post Moderation (Item 10) */}
-                {!isOwnPost && Boolean(selectedPost.targetGroupId && userGroups.some(g => g.id === selectedPost.targetGroupId && (g.viewerRole === 'convenor' || (g as any).isConvenor))) && (
-                    <div className="mt-4 p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
-                        <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                            {t('🛡️ Convenor Moderation ({group})', { group: selectedPost.targetGroupName || t('Group') })}
-                        </p>
-                        <button
-                            onClick={async () => {
-                                const question = selectedPost.targetGroupName
-                                    ? t('Delete this post as Convenor of {group}? This action cannot be undone.', { group: selectedPost.targetGroupName })
-                                    : t('Delete this post as Convenor of the group? This action cannot be undone.');
-                                if (!confirm(question)) return;
-                                setDeleting(selectedPost.id);
-                                try {
-                                    await deleteGroupPost(selectedPost.targetGroupId!, selectedPost.id);
-                                    setSelectedPost(null);
-                                    setSelectedTxId(null);
-                                    refresh();
-                                } catch (e: any) {
-                                    setError(e.message || t('Failed to delete post as convenor'));
-                                } finally {
-                                    setDeleting(null);
-                                }
-                            }}
-                            disabled={deleting === selectedPost.id}
-                            className={`w-full py-3 rounded-xl border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors ${
-                                deleting === selectedPost.id ? 'opacity-50 cursor-not-allowed' : ''
-                            }`}
-                        >
-                            {deleting === selectedPost.id ? t('Deleting...') : t('🗑️ Delete Group Post (Convenor)')}
-                        </button>
-                    </div>
-                )}
-
+                {/* What went wrong with a step above, under the action it came from rather than at the foot of the page. */}
                 {error && (
                     <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mt-4 text-red-600 dark:text-red-300 text-sm text-center shadow-sm">
                         {error}
                     </div>
                 )}
+                    </div>
+
+                    {/*
+                      * 8. The photos, under the action: the first 4:3 at the column's width under the shell's corners, any others
+                      * small under it; a click shows each whole in the lightbox, as before. No photo: the category's tile, 3:1,
+                      * inside the column. Its 4 below makes 16 to the quiet row on a phone; from 768 px the photos take the left
+                      * column, spanning the three rows.
+                      */}
+                    {hasPhoto ? (
+                        <div data-testid="listing-photos" className="flex flex-col gap-2 min-w-0 mb-1 md:mb-0 md:col-start-1 md:row-start-1 md:row-span-3">
+                            <button
+                                type="button"
+                                data-testid="listing-photo-open"
+                                onClick={(e) => openPhoto(0, e.currentTarget)}
+                                aria-label={photoLabel(0)}
+                                className={`block w-full aspect-[4/3] rounded-[14px] ${PHOTO_BUTTON}`}
+                            >
+                                <img src={photos[0]} alt={t('photo {n}', { n: 1 })} className="block w-full h-full object-cover" />
+                            </button>
+                            {photos.length > 1 && (
+                                <div data-testid="listing-photos-more" className="flex flex-wrap gap-2 min-w-0">
+                                    {photos.slice(1).map((photo, j) => (
+                                        <button
+                                            key={j + 1}
+                                            type="button"
+                                            onClick={(e) => openPhoto(j + 1, e.currentTarget)}
+                                            aria-label={photoLabel(j + 1)}
+                                            className={`block w-20 aspect-[4/3] shrink-0 rounded-lg ${PHOTO_BUTTON}`}
+                                        >
+                                            <img src={photo} alt={t('photo {n}', { n: j + 2 })} className="block w-full h-full object-cover" />
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div data-testid="listing-tile-banner" className="w-full aspect-[3/1] mb-1 rounded-[14px] overflow-hidden">
+                            <CategoryTile
+                                category={selectedPost.category}
+                                kind={isPulsePost ? 'pulse' : ((selectedPost.type as string) === 'event' ? 'event' : 'listing')}
+                                size="banner"
+                            />
+                        </div>
+                    )}
+
+                    <div data-testid="listing-body" className={`flex flex-col gap-4 min-w-0 ${hasPhoto ? 'md:col-start-2 md:row-start-3' : ''}`}>
+                        {/*
+                          * 9. The quiet row: Message (for anyone but its author; not on the Pulse) and Share with its menu of the
+                          * ways (front doors S6, DW2), in the neutral outline, as the event page's chat, Share and Add to calendar.
+                          */}
+                        <div className="flex flex-col gap-1.5 min-w-0">
+                            <SharePostButtons
+                                post={selectedPost}
+                                isMember={isMember}
+                                lead={!isOwnPost && !isPulsePost ? (
+                                    <button
+                                        type="button"
+                                        data-testid="listing-message"
+                                        onClick={handleMessageAuthor}
+                                        disabled={messaging || isRemotePost}
+                                        className={`grow basis-auto break-words ${PAGE_BUTTON.quiet}`}
+                                    >
+                                        {messaging ? t('Opening chat...') : t('💬 Message')}
+                                    </button>
+                                ) : undefined}
+                            />
+                            {!isOwnPost && !isPulsePost && isRemotePost && (
+                                <p className={`m-0 ${PAGE_TYPE.note} ${PAGE_INK.secondary}`}>
+                                    {t("This post is from another community — messaging across communities isn't available yet.")}
+                                </p>
+                            )}
+                            {bodyError?.at === 'message' && (
+                                <p data-testid="listing-message-error" role="alert" className="m-0 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 text-red-600 dark:text-red-300 text-sm text-center">{bodyError.words}</p>
+                            )}
+                        </div>
+
+                        {/* 10. The description and the tags: reading comes after the action (Marty's pick 1). */}
+                        {selectedPost.description && (
+                            <p dir="auto" data-testid="listing-description" className={`m-0 ${PAGE_TYPE.description} ${PAGE_INK.body} whitespace-pre-wrap break-words`}>
+                                {selectedPost.description}
+                            </p>
+                        )}
+                        <PostTagChips tags={selectedPost.tags} freeTags={selectedPost.freeTags} onPick={openTag} onPickFree={openFree} />
+
+                        {/* 11. Posted by: components/AuthorCard.tsx, the one box an event's "Hosted by" is too, with the listing's bio,
+                            contact line and shop inside it. */}
+                        <AuthorCard
+                            label={t('Posted by')}
+                            pubkey={selectedPost.authorPublicKey}
+                            callsign={selectedPost.authorCallsign}
+                            avatarUrl={authorProfile?.avatar}
+                            loadingAvatar={loadingProfile}
+                            ratings={authorAvgRating}
+                            onOpen={() => { if (onOpenProfile) onOpenProfile(selectedPost.authorPublicKey); }}
+                            details={<>
+                                {authorProfile?.bio && (
+                                    <p dir="auto" className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
+                                        {authorProfile.bio}
+                                    </p>
+                                )}
+                                {authorProfile?.contact && authorProfile.contact.visibility !== 'hidden' && (
+                                    <p className="text-xs text-nature-700 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block max-w-full [overflow-wrap:anywhere] border border-nature-100 dark:border-nature-800">
+                                        📧 {authorProfile.contact.value}
+                                    </p>
+                                )}
+                            </>}
+                        >
+                            {selectedPost.shopId && (
+                                <div className="mt-2 pt-2 border-t border-nature-100 dark:border-nature-800">
+                                    <button
+                                        type="button"
+                                        onClick={() => onNavigate?.('shop', selectedPost.shopId!)}
+                                        data-testid="post-shop-link"
+                                        className="flex items-center gap-2 text-sm font-semibold text-bp-ink-brand hover:underline bg-transparent border-0 p-0 cursor-pointer"
+                                    >
+                                        <span aria-hidden="true">🏪</span>
+                                        <span>{t('View shop')}</span>
+                                    </button>
+                                </div>
+                            )}
+                            {/* Where anyone can join, another member reads this place to about 1 km (DESIGN-global-member-privacy-fable.md
+                                §4): said here, so a pin on the map is never taken for the door. */}
+                            {placeShownRoughly(selectedPost, identity?.publicKey, openMembership) && (
+                                <p data-testid="rough-place-line" className="m-0 mt-2 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
+                                    {t(PLACE_WORDS.roughPlace, { name: selectedPost.authorCallsign })}
+                                </p>
+                            )}
+                        </AuthorCard>
+
+                        {/* 12. The rest: the author's show-on-global row, and a convenor's box. */}
+                        {!!identity && selectedPost.authorPublicKey === identity.publicKey && (
+                            <ShowOnGlobalHostRow
+                                post={selectedPost}
+                                identity={identity}
+                                enabled={(selectedPost.audienceScope ?? 'public') === 'public' && !selectedPost.originNode && !selectedPost.shownCopy
+                                    && typeof selectedPost.lat === 'number' && typeof selectedPost.lng === 'number' && ['active', 'paused', 'pending'].includes(selectedPost.status)}
+                                listing
+                            />
+                        )}
+
+                        {/* Convenor Post Moderation (Item 10) */}
+                        {!isOwnPost && Boolean(selectedPost.targetGroupId && userGroups.some(g => g.id === selectedPost.targetGroupId && (g.viewerRole === 'convenor' || (g as any).isConvenor))) && (
+                            <div className="p-4 rounded-2xl border border-emerald-300 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
+                                <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                                    {t('🛡️ Convenor Moderation ({group})', { group: selectedPost.targetGroupName || t('Group') })}
+                                </p>
+                                <button
+                                    onClick={async () => {
+                                        const question = selectedPost.targetGroupName
+                                            ? t('Delete this post as Convenor of {group}? This action cannot be undone.', { group: selectedPost.targetGroupName })
+                                            : t('Delete this post as Convenor of the group? This action cannot be undone.');
+                                        if (!confirm(question)) return;
+                                        setDeleting(selectedPost.id);
+                                        try {
+                                            await deleteGroupPost(selectedPost.targetGroupId!, selectedPost.id);
+                                            setSelectedPost(null);
+                                            setSelectedTxId(null);
+                                            refresh();
+                                        } catch (e: any) {
+                                            setBodyError({ at: 'convenor', words: e.message || t('Failed to delete post as convenor') });
+                                        } finally {
+                                            setDeleting(null);
+                                        }
+                                    }}
+                                    disabled={deleting === selectedPost.id}
+                                    className={`w-full py-3 rounded-xl border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors ${
+                                        deleting === selectedPost.id ? 'opacity-50 cursor-not-allowed' : ''
+                                    }`}
+                                >
+                                    {deleting === selectedPost.id ? t('Deleting...') : t('🗑️ Delete Group Post (Convenor)')}
+                                </button>
+                                {bodyError?.at === 'convenor' && (
+                                    <p data-testid="listing-convenor-error" role="alert" className="m-0 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 text-red-600 dark:text-red-300 text-sm text-center">{bodyError.words}</p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* 13. Report, last and small, as the event page has it: for anyone but its author, never on the Pulse. */}
+                        {!isOwnPost && !isPulsePost && (
+                            <div className="flex flex-col gap-2 min-w-0">
+                                <button
+                                    type="button"
+                                    data-testid="listing-report"
+                                    onClick={() => { setShowReportForm(!showReportForm); setReportNote(null); }}
+                                    aria-expanded={showReportForm}
+                                    className={`self-start inline-flex items-center min-h-[48px] px-0 bg-transparent border-0 cursor-pointer hover:underline ${PAGE_TYPE.report} ${PAGE_INK.danger} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded`}
+                                >
+                                    {t('🚩 Report')}
+                                </button>
+
+                                {showReportForm && (
+                                    <div className="bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900 rounded-xl p-4 shadow-inner">
+                                        <select
+                                            value={reportReason}
+                                            onChange={(e) => setReportReason(e.target.value)}
+                                            className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
+                                        >
+                                            <option value="">{t('Select a reason...')}</option>
+                                            {/* The one shared list (lib/reportReasons.ts), as in ReportModal: "Child safety" is told at once.
+                                                Each sends its English (the node reads it); its label is shown in the member's language. */}
+                                            {REPORT_REASONS.map((r, i) => <option key={r} value={r}>{t(REPORT_REASONS[i])}</option>)}
+                                        </select>
+                                        <p className="text-xs text-nature-800 dark:text-nature-200 mb-2">
+                                            <Sentence text={t('{reason}: {hint}', { hint: t(REPORT_WORDS.childSafetyHint) })} parts={{ reason: <span className="font-bold">{t(REPORT_WORDS.childSafety)}</span> }} />
+                                        </p>
+                                        <button
+                                            onClick={async () => {
+                                                if (!identity || !selectedPost || !reportReason) return;
+                                                setSubmittingReport(true);
+                                                setReportNote(null);
+                                                try {
+                                                    await reportAbuse(identity.publicKey, selectedPost.authorPublicKey, reportReason, selectedPost.id);
+                                                    setReportNote({ sent: true, text: t(REPORT_WORDS.sent) });
+                                                    setShowReportForm(false);
+                                                    setReportReason('');
+                                                } catch (e: any) {
+                                                    // The reason stays picked, so a second tap sends it again.
+                                                    setReportNote({ sent: false, text: e?.message || t('Failed to submit report. Please try again.') });
+                                                } finally {
+                                                    setSubmittingReport(false);
+                                                }
+                                            }}
+                                            disabled={!reportReason || submittingReport}
+                                            className={`w-full py-2.5 rounded-lg font-bold text-sm transition-colors ${
+                                                reportReason ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on shadow-sm' : 'bg-nature-300 text-white cursor-not-allowed'
+                                            }`}
+                                        >
+                                            {submittingReport ? t('Sending...') : t('Submit Report')}
+                                        </button>
+                                    </div>
+                                )}
+                                {reportNote && (
+                                    <p data-testid="report-note" role={reportNote.sent ? 'status' : 'alert'}
+                                        className={`m-0 text-sm font-semibold ${reportNote.sent ? 'text-bp-ink-success' : 'text-bp-ink-danger'}`}>
+                                        {reportNote.text}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
 
                 {lightboxState?.isOpen && (
                     <ImageLightbox

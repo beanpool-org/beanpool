@@ -41,8 +41,10 @@ vi.mock('../lib/profile-status', () => ({
     describeMissing: vi.fn(() => ''),
 }));
 
+// The lightbox draws nothing here; what the page hands it is read from its props (DW3's several-photos case).
+const lightboxProps = vi.hoisted(() => ({ last: null as null | { photos: string[]; initialIndex?: number } }));
 vi.mock('../components/ImageLightbox', () => ({
-    ImageLightbox: () => null,
+    ImageLightbox: (props: { photos: string[]; initialIndex?: number }) => { lightboxProps.last = props; return null; },
 }));
 
 vi.mock('../components/ActivityWaterfall', () => ({
@@ -1628,59 +1630,104 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(pairs.sort()).toEqual([['✋ ASKED', 'b'], ['🤝 IN TRUST', 'a']]);
     });
 
-    describe('the listing page keeps its phone order and only moves columns on wide screens (#2744)', () => {
-        const order = () => {
-            const title = screen.getByRole('heading', { name: 'Listing' });
-            const words = screen.getByText('Words');
-            const photo = screen.getByRole('button', { name: /View enlarged photo 1 of 1/ });
-            const price = screen.getByText('Asking Price');
-            return { title, words, photo, price };
-        };
+    // DW3 (DESIGN-detail-pages-fable.md §2.1, as DESIGN-detail-pages-frame-fable.md §1.7 and §3 amend it): the listing's page in
+    // the phone's order, which the DOM keeps (no order-*), so Tab follows what a phone shows: the chips, the title, the terms
+    // box, the take-up, the photo, the quiet row (Message, Share), the description, Posted by, Report. From md the event page's
+    // grid places the photo left, spanning three rows, and the head, the action and the rest right. No outer card.
+    describe('the listing page keeps the phone\'s order (the take-up before the photo) and only moves columns on wide screens (DW3)', () => {
         const after = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        const cls = (el: Element) => el.className.split(/\s+/);
 
-        it('reads words, photos, price in the DOM, so Tab follows what a phone shows', async () => {
-            await open(listing({}), []);
-            const { title, words, photo, price } = order();
-            expect(after(title, words)).toBe(true);
-            expect(after(words, photo)).toBe(true);
-            expect(after(photo, price)).toBe(true);
-            expect(title.closest('.flex-col')?.parentElement?.innerHTML).not.toMatch(/\border-\d/);
+        it('at 320 px and 130% text, in the DOM: chips, title, terms, the take-up, the photo, Message and Share, the description, Posted by, Report', async () => {
+            const width = window.innerWidth;
+            Object.defineProperty(window, 'innerWidth', { value: 320, configurable: true, writable: true });
+            document.documentElement.style.fontSize = '130%';
+            try {
+                await open(listing({}), []);
+                const chips = screen.getByTestId('listing-chips');
+                const title = screen.getByRole('heading', { name: 'Listing' });
+                const price = screen.getByText('Asking Price');
+                const takeUp = screen.getByRole('button', { name: /Accept Offer/ });
+                const photo = screen.getByRole('button', { name: /View enlarged photo 1 of 1/ });
+                const message = screen.getByRole('button', { name: /Message/ });
+                const share = screen.getByTestId('share-button');
+                const words = screen.getByText('Words');
+                const postedBy = screen.getByText('Posted by');
+                const report = screen.getByRole('button', { name: '🚩 Report' });
+                const inOrder = [chips, title, price, takeUp, photo, message, share, words, postedBy, report];
+                for (let i = 1; i < inOrder.length; i++) expect(after(inOrder[i - 1], inOrder[i])).toBe(true);
+                // The take-up before Posted by and Share: the first screen's one commit.
+                expect(after(takeUp, postedBy)).toBe(true);
+                expect(after(takeUp, share)).toBe(true);
+                // Message and Share are one quiet row, in the page's neutral outline.
+                const row = screen.getByTestId('listing-quiet-row');
+                expect(row.contains(message) && row.contains(share)).toBe(true);
+                for (const b of [message, share]) expect(cls(b)).toEqual(expect.arrayContaining(['min-h-[48px]', 'grow', 'basis-auto', 'break-words', 'border-nature-300']));
+                // The chips are the list card's, one node each, and "how long ago" at the row's end.
+                expect(screen.getByTestId('listing-type-chip').textContent).toBe('OFFER');
+                expect(screen.getByTestId('listing-category-chip').textContent).toMatch(/Services$/);
+                expect(cls(screen.getByTestId('listing-ago'))).toContain('ms-auto');
+                // The terms box on the shell, left-aligned, in the page's own font (no centring, no mono).
+                const box = screen.getByTestId('listing-price');
+                expect(cls(box)).toEqual(expect.arrayContaining(['rounded-[14px]', 'border', 'p-3']));
+                expect(box.innerHTML).not.toMatch(/text-center|font-mono/);
+                // The photo is 4:3 at the column's width, and nothing in the column is fixed wider than the screen.
+                expect(cls(photo)).toEqual(expect.arrayContaining(['w-full', 'aspect-[4/3]']));
+                const detail = screen.getByTestId('listing-detail');
+                expect(detail.innerHTML).not.toMatch(/\b(w|min-w)-\[(3[3-9]\d|[4-9]\d\d)px\]/);
+                // No outer card (main's was `rounded-2xl … shadow-soft` round the strip and the words): the column is the page.
+                expect(detail.closest('.shadow-soft')).toBeNull();
+                expect(detail.parentElement!.querySelector('.shadow-soft')).toBeNull();
+                expect(detail.innerHTML).not.toMatch(/\border-\d/);
+            } finally {
+                document.documentElement.style.fontSize = '';
+                Object.defineProperty(window, 'innerWidth', { value: width, configurable: true, writable: true });
+            }
         });
 
-        it('places photos left and the rest right from md up, with the price under the words', async () => {
-            await open(listing({}), []);
-            const { title, photo, price } = order();
-            const photos = photo.parentElement as HTMLElement;
-            expect(photos.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-start-1', 'md:row-span-2']));
-            // The placements do nothing unless the block around them is the grid.
-            expect(photos.parentElement!.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:grid', 'md:grid-cols-2', 'md:grid-rows-[auto_1fr]', 'md:gap-x-6']));
-            expect(title.parentElement!.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1']));
-            const priceColumn = price.parentElement!.parentElement as HTMLElement;
-            expect(priceColumn.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-2']));
+        it('a Need: Offer to Fulfill comes before the photo, Posted by and Share too', async () => {
+            await open(listing({ type: 'need', title: 'Apples needed' }), []);
+            const takeUp = screen.getByRole('button', { name: /Offer to Fulfill/ });
+            expect(after(takeUp, screen.getByRole('button', { name: /View enlarged photo 1 of 1/ }))).toBe(true);
+            expect(after(takeUp, screen.getByText('Posted by'))).toBe(true);
+            expect(after(takeUp, screen.getByTestId('share-button'))).toBe(true);
+            expect(screen.getByTestId('listing-type-chip').textContent).toBe('NEED');
         });
 
-        it('with no photos stays one column, with nothing placed', async () => {
+        it('places the photo left from md up, spanning the three rows, and the head, the action and the rest right, by the grid', async () => {
+            await open(listing({}), []);
+            const detail = screen.getByTestId('listing-detail');
+            expect(cls(detail)).toEqual(expect.arrayContaining(['md:grid', 'md:grid-cols-2', 'md:grid-rows-[auto_auto_1fr]', 'md:gap-x-6']));
+            expect(cls(screen.getByTestId('listing-photos'))).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-start-1', 'md:row-span-3']));
+            expect(cls(screen.getByTestId('listing-head'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1']));
+            expect(cls(screen.getByTestId('listing-action'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-2']));
+            expect(cls(screen.getByTestId('listing-body'))).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-3']));
+            // The grid's children are those four, in the phone's order.
+            expect(Array.from(detail.children).map(c => c.getAttribute('data-testid'))).toEqual(['listing-head', 'listing-action', 'listing-photos', 'listing-body']);
+            expect(screen.getByRole('button', { name: /Accept Offer/ }).closest('[data-testid="listing-action"]')).not.toBeNull();
+        });
+
+        it('with no photos stays one column, nothing placed, and the category\'s tile stands in the photo\'s place', async () => {
             await open(listing({ photos: [] }), []);
-            const title = screen.getByRole('heading', { name: 'Listing' });
-            expect(title.parentElement!.className).not.toMatch(/md:col-start/);
-            expect(title.parentElement!.parentElement!.className).not.toContain('md:grid');
-            const priceColumn = screen.getByText('Asking Price').parentElement!.parentElement as HTMLElement;
-            expect(priceColumn.className).not.toMatch(/md:col-start/);
+            const detail = screen.getByTestId('listing-detail');
+            expect(detail.className).not.toContain('md:grid');
+            expect(detail.innerHTML).not.toMatch(/md:col-start/);
+            expect(Array.from(detail.children).map(c => c.getAttribute('data-testid'))).toEqual(['listing-head', 'listing-action', 'listing-tile-banner', 'listing-body']);
+            expect(screen.queryByRole('button', { name: /View enlarged photo/ })).toBeNull();
         });
 
-        it("keeps the phone's photo size and lets a wide photo scroll, as on main", async () => {
-            await open(listing({}), []);
-            const button = order().photo;
-            expect(button.className.split(/\s+/)).toContain('h-40');
-            expect(button.className).not.toContain('max-w-[85%]');
-            expect(button.querySelector('img')!.className.split(/\s+/)).toContain('h-40');
-        });
-
-        it('leaves the photo column at its full height on wide screens, with no inner scroll', async () => {
-            await open(listing({}), []);
-            const classes = order().photo.parentElement!.className.split(/\s+/);
-            expect(classes).toContain('md:overflow-visible');
-            expect(classes).not.toContain('md:overflow-y-auto');
+        it('several photos: the first large, the others small under it, each opening the lightbox at its own place', async () => {
+            await open(listing({ photos: ['/a.jpg', '/b.jpg', '/c.jpg'] }), []);
+            const first = screen.getByRole('button', { name: /View enlarged photo 1 of 3/ });
+            expect(cls(first)).toEqual(expect.arrayContaining(['w-full', 'aspect-[4/3]']));
+            const third = screen.getByRole('button', { name: /View enlarged photo 3 of 3/ });
+            expect(cls(third)).toEqual(expect.arrayContaining(['w-20', 'aspect-[4/3]']));
+            expect(after(first, third)).toBe(true);
+            lightboxProps.last = null;
+            fireEvent.click(third);
+            await waitFor(() => expect(lightboxProps.last).not.toBeNull());
+            expect(lightboxProps.last!.photos).toEqual(['/a.jpg', '/b.jpg', '/c.jpg']);
+            expect(lightboxProps.last!.initialIndex).toBe(2);
         });
     });
 });

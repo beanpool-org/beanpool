@@ -3883,7 +3883,6 @@
   "{title} by {name} on {platform}": "{title} بواسطة {name} على {platform}",
   "{title} · within {km} km": "{title} · ضمن {km} كم",
   "{title}, by {name}. Opens the Pulse.": "{title}، بواسطة {name}. يفتح النبض.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "zero": "{voters} من أصل {n} صوت مطلوب",
     "one": "{voters} من أصل صوت واحد مطلوب",
@@ -4119,7 +4118,6 @@
   "🖼️ Gallery": "🖼️ المعرض",
   "🗑️ Delete Group Post (Convenor)": "🗑️ حذف منشور المجموعة (المنسق)",
   "🗑️ Delete Post": "🗑️ حذف المنشور",
-  "🗞️ DAILY PULSE": "🗞️ النبض اليومي",
   "🗞️ Daily Pulse": "🗞️ النبض اليومي",
   "🗳️ Poll": "🗳️ استطلاع",
   "🗳️ Polls": "🗳️ استطلاعات",

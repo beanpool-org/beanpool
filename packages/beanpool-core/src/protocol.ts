@@ -16,18 +16,13 @@ export const PROTOCOL_CONSTANTS = {
     REFERENCE_LABEL: 'hour',
 
     // === Credit Formula (Sliding Scale) ===
-    // No automatic overdraft: the floor starts at 0 and deepens with a vouch + earned trust +
-    // any grants. floor = -min(CREDIT_FLOOR_CAP, vouchCredit + earned + granted). A member has
-    // no credit line at all until an appointed voucher vouches (vouchCredit > 0) or an admin/
-    // genesis grant graduates them (granted > 0). See getMemberTrustProfile.
+    // No automatic overdraft: the floor starts at 0 and deepens with earned trust + any grants.
+    // floor = -min(CREDIT_FLOOR_CAP, earned + granted). A member has no credit line at all until a
+    // completed trade earns one (earned > 0) or an admin/genesis grant graduates them (granted > 0).
+    // See getMemberTrustProfile.
     CREDIT_BASE_FLOOR: 0,              // no baked-in credit — every bean of the floor is explicit
     CREDIT_MAX_EARNED: 1920,           // asymptote of the earned-trust curve (see earnedCreditFromValue)
     CREDIT_FLOOR_CAP: 2000,            // deepest possible floor is -2000 (≈ 50 hours) across ALL sources
-
-    // === Vouch Levels — the credit floor an appointed voucher hands a newcomer (voucher picks one) ===
-    VOUCH_CREDIT_LIGHT: 25,            // level 1 — a light vouch (-25 floor)
-    VOUCH_CREDIT_STANDARD: 50,         // level 2 — a standard vouch (-50 floor)
-    VOUCH_CREDIT_DEEP: 100,            // level 3 — a deep vouch (-100 floor)
 
     // === Trust Curve (Trust Model v2 — value-based, saturating) ===
     // Earned credit is a saturating function of qualified, diversity-capped value cycled (V):
@@ -59,7 +54,7 @@ export const PROTOCOL_CONSTANTS = {
     // === Admin Tier-Badge / Genesis Grants ===
     // Pre-seeded GRANTED credit that places a member at a tier's ENTRY floor. An admin can assign
     // a tier badge (adminSetTier), or a genesis invite can pre-seed it. On this granted path the
-    // grant IS the whole floor (no separate vouch component): floor = -(granted + earned).
+    // grant IS the whole floor: floor = -(granted + earned).
     //   Resident: -200 → granted = 200
     //   Steward:  -600 → granted = 600
     //   Elder:   -1400 → granted = 1400
@@ -132,7 +127,7 @@ export function calculateDynamicFloor(stats: TrustStats): number {
 
 /**
  * The four tiers, lowest first, with the credit each one starts at. `minCredit` is the credit that
- * backs the floor — vouch + earned + granted, i.e. CREDIT_BASE_FLOOR − floor — not the earned lane
+ * backs the floor — earned + granted, i.e. CREDIT_BASE_FLOOR − floor — not the earned lane
  * on its own. Derived from the floor thresholds, so the apps, the server and admin views can never
  * disagree about where a tier starts. Colours stay in the apps.
  */
@@ -199,22 +194,6 @@ export function getGenesisEarnedCredit(type: GenesisInviteType): number {
     }
 }
 
-// Vouch level → the credit-floor beans an appointed voucher hands out (see vouchMember).
-export type VouchLevel = 1 | 2 | 3;
-/** The three levels, in order: all a vouch can be, and nothing else counts as one (a string, 0, 4, 1.5). */
-export const VOUCH_LEVELS: readonly VouchLevel[] = [1, 2, 3];
-export function isVouchLevel(value: unknown): value is VouchLevel {
-    return value === 1 || value === 2 || value === 3;
-}
-export function vouchCreditForLevel(level: VouchLevel): number {
-    const c = PROTOCOL_CONSTANTS;
-    switch (level) {
-        case 3: return c.VOUCH_CREDIT_DEEP;      // -100
-        case 2: return c.VOUCH_CREDIT_STANDARD;  // -50
-        default: return c.VOUCH_CREDIT_LIGHT;    // -25 (level 1)
-    }
-}
-
 // Admin tier badge → the GRANTED credit that lands a member at that tier's entry floor.
 // Newcomer clears the grant (0). Mirrors the genesis pre-seed values.
 export function grantedCreditForTier(tier: TierName): number {
@@ -255,7 +234,7 @@ export function offersRequiredForDepth(magnitude: number): number {
 // ===================== THE KNOWN FLOOR (community modes slice 4) =====================
 // In a community whose confirmation dial is on, a member an admin has confirmed (a live confirmation on the names
 // list) holds a known grant: the community's knownFloor, or that member's exception. The floor becomes
-//   floor = -min(creditCap, knownGrant + vouch + earned + granted)
+//   floor = -min(creditCap, knownGrant + earned + granted)
 // where creditCap is the community's cap (default CREDIT_FLOOR_CAP, owner-settable up to CREDIT_CAP_MAX). With the dial
 // off, or for an unconfirmed member, knownGrant is 0 and the cap is today's: nothing changes.
 
@@ -275,13 +254,13 @@ export function knownGrantFor(o: { dialOn: boolean; confirmed: boolean; knownFlo
 }
 
 /** The credit allowance (the floor's magnitude): every source together, capped by the community's cap. */
-export function creditAllowance(o: { vouch: number; earned: number; granted: number; knownGrant: number; cap: number }): number {
-    return Math.min(o.cap, o.knownGrant + o.vouch + o.earned + o.granted);
+export function creditAllowance(o: { earned: number; granted: number; knownGrant: number; cap: number }): number {
+    return Math.min(o.cap, o.knownGrant + o.earned + o.granted);
 }
 
 /**
  * How much of the allowance a member may use. The known part has one band: any live offer unlocks all of it, none
- * unlocks none (a confirmed person with an offer has answered "is this person really here?"). The rest (vouch, earned,
+ * unlocks none (a confirmed person with an offer has answered "is this person really here?"). The rest (earned,
  * granted) keeps the offer bands. The sum stays within the cap. With knownGrant 0 this is min(other, offerCapForCount).
  */
 export function usableAllowance(o: { knownGrant: number; otherAllowance: number; cap: number; liveOffers: number }): number {

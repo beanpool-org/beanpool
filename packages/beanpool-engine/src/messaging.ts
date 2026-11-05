@@ -32,7 +32,6 @@ export interface TypedMessagePayload {
     txHash?: string;
     voucherPubkey?: string;
     targetPubkey?: string;
-    vouchLevel?: number;
     creditFloor?: number;
     resolution?: string;
     authSigner?: string;

@@ -225,3 +225,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-02-13 - Add busy and disabled state to join request button in treasury detail
 **Learning:** In community enterprise detail views, the join request button conditionally replaces its text with an ActivityIndicator during submission and disables interaction when busy or when backing pledge exceeds available standing, but lacked `accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}`, leaving screen readers without state feedback.
 **Action:** Supply `accessibilityState={{ disabled: submittingJoin || Number(joinBackingPledge) > availableToBack, busy: submittingJoin }}` on join request action buttons rendering an ActivityIndicator when busy.
+
+## 2027-02-20 - Add accessibilityState to voucher card actions and toggles
+**Learning:** In voucher detail cards, interactive action buttons (such as setting budget and stopping vouching) that disable while busy or unavailable lacked `accessibilityState={{ disabled, busy }}` feedback for screen readers, and collapsible section toggles ('See who they brought in' and 'Budget history') lacked `accessibilityState={{ expanded }}` to announce accordion state.
+**Action:** Always provide `accessibilityState={{ disabled, busy }}` on async action buttons and `accessibilityState={{ expanded }}` on disclosure toggles in detail cards.

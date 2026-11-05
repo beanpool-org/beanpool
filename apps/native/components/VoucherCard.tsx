@@ -371,6 +371,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                                 onPress={() => { void handleSetBudget(); }}
                                 disabled={busy || !canSet}
                                 accessibilityRole="button"
+                                accessibilityState={{ disabled: busy || !canSet, busy }}
                                 accessibilityLabel={t('Set budget to {level}', { level: formatNumber(targetLevel) })}
                             >
                                 <Text style={styles.actionBtnText}>
@@ -384,6 +385,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                         style={styles.toggleBtn}
                         onPress={() => setShowPeople(!showPeople)}
                         accessibilityRole="button"
+                        accessibilityState={{ expanded: showPeople }}
                         accessibilityLabel={t('See who they brought in ›')}
                     >
                         <Text style={styles.toggleBtnText}>{t('See who they brought in ›')}</Text>
@@ -395,6 +397,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                             onPress={handleStopVoucher}
                             disabled={busy}
                             accessibilityRole="button"
+                            accessibilityState={{ disabled: busy, busy }}
                             accessibilityLabel={t('Stop vouching')}
                         >
                             <Text style={styles.dangerBtnText}>{t('Stop vouching')}</Text>
@@ -448,6 +451,7 @@ export function VoucherCard({ anchorUrl, identity, memberPubkey, initialCard, en
                     style={styles.toggleBtn}
                     onPress={() => setShowHistory(!showHistory)}
                     accessibilityRole="button"
+                    accessibilityState={{ expanded: showHistory }}
                     accessibilityLabel={t('Budget history ›')}
                 >
                     <Text style={styles.toggleBtnText}>{t('Budget history ›')}</Text>

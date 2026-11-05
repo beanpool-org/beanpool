@@ -286,3 +286,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-11-02 - MarketplacePage Inline Star Rating Accessibility & Focus Indicators
 **Learning:** In `MarketplacePage.tsx`, inline trade rating star buttons lacked `type="button"` attributes, lacked accessible names (`aria-label`) for screen readers, and suppressed focus outlines with `focus:outline-none` without providing keyboard focus ring indicators.
 **Action:** Added `type="button"`, dynamic `aria-label={tn(star, 'Rate {n} star', 'Rate {n} stars')}`, and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg` to inline star rating buttons in `MarketplacePage.tsx`.
+
+## 2026-11-06 - GroupDetailModal Close Button Touch Target Sizing
+**Learning:** `GroupDetailModal.tsx` modal close button lacked explicit 44px minimum touch target dimensions (`p-1` around text ✕), resulting in a touch target below the recommended 44x44px minimum for mobile touch accessibility.
+**Action:** Added `min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center` touch target sizing to the close button in `GroupDetailModal.tsx` and updated `GroupDetailModal.test.tsx` to assert minimum touch target classes.

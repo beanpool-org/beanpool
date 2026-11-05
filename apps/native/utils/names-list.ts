@@ -29,7 +29,6 @@
  *
  * A confirmation is a fact about a member, never a tier, and in this version it gates nothing.
  */
-import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, normaliseNamesEntryText, namesKeyCheckMatches,
@@ -41,7 +40,7 @@ import {
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
 import { communityAddress } from './push-pins';
-import { KEY_ITEM_OPTIONS, type BeanPoolIdentity } from './identity';
+import type { BeanPoolIdentity } from './identity';
 import type { HealthExceptionsBody, HealthLogLine } from './community-health';
 
 export const NAMES_PATH = '/api/names';
@@ -361,8 +360,14 @@ export interface NamesPinStore {
 export const DEVICE_NAMES_STORE: NamesPinStore = {
     getItem: (k) => AsyncStorage.getItem(k),
     setItem: (k, v) => AsyncStorage.setItem(k, v),
-    getSecret: (name) => SecureStore.getItemAsync(name),
-    setSecret: (name, value) => SecureStore.setItemAsync(name, value, KEY_ITEM_OPTIONS),
+    getSecret: async (name) => {
+        const SecureStore = await import('expo-secure-store');
+        return SecureStore.getItemAsync(name);
+    },
+    setSecret: async (name, value) => {
+        const SecureStore = await import('expo-secure-store');
+        return SecureStore.setItemAsync(name, value, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
+    },
 };
 
 /**

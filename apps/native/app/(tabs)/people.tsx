@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { AddedYouLines } from '../../components/AddedYouLines';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter, Modal } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -1549,7 +1548,7 @@ export default function PeopleScreen() {
             </KeyboardAvoidingView>
 
             <Modal visible={!!selectedVoucherPubkey} animationType="slide" onRequestClose={() => setSelectedVoucherPubkey(null)}>
-                <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface.page }} edges={['top', 'left', 'right', 'bottom']}>
+                <View style={{ flex: 1, backgroundColor: colors.surface.page }}>
                     {anchorUrl && identity && selectedVoucherPubkey && (
                         <VoucherCard
                             anchorUrl={anchorUrl}
@@ -1562,7 +1561,7 @@ export default function PeopleScreen() {
                             }}
                         />
                     )}
-                </SafeAreaView>
+                </View>
             </Modal>
         </View>
     );

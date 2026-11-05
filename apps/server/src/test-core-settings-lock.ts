@@ -182,9 +182,9 @@ async function main(): Promise<void> {
     // ── 1. Before the lock ──────────────────────────────────────────────────────────────────────
     console.log('── 1. before the lock: nothing changes ──');
     let sh = readShape();
-    assert(isDeepStrictEqual([...sh.core.settings], ['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'])
+    assert(isDeepStrictEqual([...sh.core.settings], ['join', 'wordsDoor', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'])
         && sh.core.settings === CORE_SETTINGS,
-        `the shape names the eight Core settings (the member's credit-line gift, slice G1, the eighth), the constant itself (${JSON.stringify(sh.core.settings)})`);
+        `the shape names the nine Core settings (voucher budget, slice V5, the ninth), the constant itself (${JSON.stringify(sh.core.settings)})`);
     assert(sh.core.lock === null && isDeepStrictEqual(sh.core.place, { needed: true, set: false }),
         `not locked, and a local community needs its place, not set yet (${JSON.stringify(sh.core)})`);
     for (const s of sh.core.settings) assert(s in sh.settings || s === 'wordsDoor', `${s} is a setting of the shape`);

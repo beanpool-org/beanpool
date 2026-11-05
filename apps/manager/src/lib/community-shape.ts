@@ -52,6 +52,8 @@ export interface ShapeSettings {
         includes: { escrow: boolean; enterprises: boolean; treasuries: boolean; crowdfund: boolean };
     };
     knownFloor: ShapeSetting<KnownFloorShape>;
+    /** The budget each voucher starts with, 100 to 2,000 in 100s, default 1,000 (slice V5). Absent on a server from before it. */
+    voucherBudget?: ShapeSetting<number>;
     /** The most of their credit line a member may give another at once, 0 (off) to 100 (slice G1). Absent on a server from before it. */
     memberGift?: ShapeSetting<number>;
     dmRequests?: ShapeSetting<boolean>;
@@ -120,7 +122,7 @@ export interface Shape {
  * The Core settings, in the shape's names. The server sends its own list (`core.settings`); this one is the page's, and
  * lib/community-shape.test.ts holds the two equal. Everything else on the shape is everyday and lives where it is used.
  */
-export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
+export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
 export type CoreSettingKey = (typeof CORE_SETTINGS)[number];
 export const isCoreSetting = (k: string): k is CoreSettingKey => (CORE_SETTINGS as readonly string[]).includes(k);
 
@@ -470,6 +472,9 @@ export function getConsequenceSentence(
             const floor = kf.floor ?? s.knownFloor.value.floor;
             return t('Confirmed members can owe up to {floor} Beans while they keep an offer listed.').replace('{floor}', floor.toLocaleString('en'));
         }
+        case 'voucherBudget':
+            if (typeof targetValue !== 'number' || !Number.isInteger(targetValue)) return '';
+            return t('New vouchers start with a budget of {n} Beans to vouch for people they invite. Existing vouchers keep their current budget.').replace('{n}', targetValue.toLocaleString('en'));
         case 'memberGift':
             if (typeof targetValue !== 'number' || !Number.isInteger(targetValue)) return '';
             return targetValue === 0

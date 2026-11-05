@@ -86,7 +86,7 @@ beforeEach(() => {
 
 describe('Core settings — the lib holds the server list', () => {
     it('the page lists the settings the server calls Core', () => {
-        expect([...CORE_SETTINGS]).toEqual(['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies']);
+        expect([...CORE_SETTINGS]).toEqual(['join', 'wordsDoor', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies']);
     });
     it('the three one-way changes have their typed words, and nothing else has one', () => {
         expect(typedWordFor('beans', false)).toBe('off');
@@ -246,6 +246,77 @@ describe('Core settings — locked: Unlock to change', () => {
         expect(log).toHaveTextContent('🔓 Unlocked Members giving part of their credit line');
         expect(log).toHaveTextContent('💬 Advised the owners about Members giving part of their credit line');
         expect(log.textContent).not.toContain('memberGift');
+    });
+
+    it('the log names the voucher budget in words, as its row does, never its key (V5)', async () => {
+        const shape = locked();
+        const by = { kept: 'community_settings_log' as const, at: '2026-11-05T11:00:00.000Z', actor: 'o'.repeat(64), actorCallsign: 'ada', actorRole: 'owner', note: null };
+        shape.log = [
+            { ...by, id: '3', setting: 'voucherBudget', from: '1000', to: '1500' },
+            { ...by, id: '2', setting: 'core.unlock', from: null, to: 'voucherBudget' },
+            { ...by, id: '1', setting: 'advice.voucherBudget', from: null, to: null, actorRole: 'admin', note: 'Give vouchers 1,500' },
+        ];
+        mockApi(shape);
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        const log = await screen.findByTestId('shape-audit-log');
+        expect(log).toHaveTextContent('Budget per voucher: 1,000 Beans → 1,500 Beans');
+        expect(log).toHaveTextContent('🔓 Unlocked Budget per voucher');
+        expect(log).toHaveTextContent('💬 Advised the owners about Budget per voucher');
+        expect(log.textContent).not.toContain('voucherBudget');
+    });
+
+    it('Core settings’ two numbers go through the lock: fresh proof when locked (V5)', async () => {
+        const shape = locked();
+        shape.settings.voucherBudget = { value: 1000, configured: 1000, source: 'default', lock: null };
+        shape.settings.memberGift = { value: 100, configured: 100, source: 'default', lock: null };
+
+        // Test voucherBudget
+        const { sent } = mockApi(shape, [
+            { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
+            { ok: true, status: 200, body: { shape, told: 'members' } },
+        ]);
+        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'password' }} />);
+        await screen.findByText('🧭');
+
+        fireEvent.click(within(screen.getByTestId('shape-row-voucherBudget')).getByRole('button', { name: 'Unlock to change' }));
+        const inputBudget = screen.getByLabelText(/Budget per voucher/i);
+        fireEvent.change(inputBudget, { target: { value: '1500' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        const input = await screen.findByTestId('fresh-proof-input');
+        expect(sent[0].body.code).toBeUndefined();
+        expect(sent[0].body.changes).toEqual({ voucherBudget: 1500 });
+        fireEvent.change(input, { target: { value: '123456' } });
+        fireEvent.click(screen.getByTestId('fresh-proof-confirm'));
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
+        expect(sent).toHaveLength(2);
+        expect(sent[1].body.changes).toEqual({ voucherBudget: 1500 });
+        expect(sent[1].body.code).toBe('123456');
+
+        cleanup();
+
+        // Test memberGift
+        const { sent: sentGift } = mockApi(shape, [
+            { ok: false, status: 401, body: { error: 'This change asks for a current code.', totpRequired: true } },
+            { ok: true, status: 200, body: { shape, told: 'members' } },
+        ]);
+        render(<CommunityShapeSection activeNode={NODE} viewer={{ kind: 'password' }} />);
+        await screen.findByText('🧭');
+
+        fireEvent.click(within(screen.getByTestId('shape-row-memberGift')).getByRole('button', { name: 'Unlock to change' }));
+        const inputGift = screen.getByLabelText(/Most one gift can be/i);
+        fireEvent.change(inputGift, { target: { value: '50' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+        const input2 = await screen.findByTestId('fresh-proof-input');
+        expect(sentGift[0].body.code).toBeUndefined();
+        expect(sentGift[0].body.changes).toEqual({ memberGift: 50 });
+        fireEvent.change(input2, { target: { value: '654321' } });
+        fireEvent.click(screen.getByTestId('fresh-proof-confirm'));
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
+        expect(sentGift).toHaveLength(2);
+        expect(sentGift[1].body.changes).toEqual({ memberGift: 50 });
+        expect(sentGift[1].body.code).toBe('654321');
     });
 });
 

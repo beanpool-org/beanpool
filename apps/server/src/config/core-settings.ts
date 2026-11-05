@@ -30,7 +30,7 @@ import type { CommunityDoor } from './door.js';
 export const CORE_SETTINGS_LOCK_KEY = 'core_settings_lock';
 
 /** The Core settings, in the shape's names (config/community-shape.ts); every other setting there is everyday. */
-export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
+export const CORE_SETTINGS = ['join', 'wordsDoor', 'beans', 'knownFloor', 'voucherBudget', 'memberGift', 'decisions', 'shareOutside', 'recoveryCopies'] as const;
 export type CoreSettingName = (typeof CORE_SETTINGS)[number];
 
 export const isCoreSettingName = (s: string): s is CoreSettingName => (CORE_SETTINGS as readonly string[]).includes(s);

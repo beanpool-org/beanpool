@@ -39,13 +39,20 @@ const MINE: Record<string, MarketplaceTransaction[]> = {
         deal({ id: 'tx-2', postId: 'p-ladder', status: 'requested' }),
     ],
 };
-const OPEN: Record<string, string | undefined> = { payer: 'p-course', payee: 'p-stall', author: 'p-mine', keeper: 'p-farm', release: 'p-olives', over: 'p-other' };
+// The listing's PAGE (DW3, `--page`): DP3's four cases, at any width (no 320 px wrapper). Marty's apples (a Need where Beans
+// are off: the global community's "In return"), an Offer with Beans, the author's own listing, and a deal under way (the payer's).
+MINE['page-deal'] = MINE.payer;
+const OPEN: Record<string, string | undefined> = {
+    payer: 'p-course', payee: 'p-stall', author: 'p-mine', keeper: 'p-farm', release: 'p-olives', over: 'p-other',
+    'page-apples': 'p-apples', 'page-offer': 'p-course', 'page-own': 'p-mine', 'page-deal': 'p-course',
+};
 const PINNED: Record<string, string | undefined> = { author: 'tx-b', over: 'tx-c' };
 const view = q.get('view') || 'feed';
+const page = (
+    <MarketplacePage identity={identity} isMember={true} openPostId={OPEN[view] ?? null} onPostOpened={() => {}}
+        openTxId={PINNED[view] ?? null} transactions={MINE[view] ?? []} />
+);
 
 createRoot(document.getElementById('root')!).render(
-    <div className="max-w-[320px]">
-        <MarketplacePage identity={identity} isMember={true} openPostId={OPEN[view] ?? null} onPostOpened={() => {}}
-            openTxId={PINNED[view] ?? null} transactions={MINE[view] ?? []} />
-    </div>,
+    view.startsWith('page-') ? page : <div className="max-w-[320px]">{page}</div>,
 );

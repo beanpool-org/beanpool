@@ -3278,7 +3278,6 @@
   "{title} by {name} on {platform}": "{platform}의 {name} 님이 작성한 {title}",
   "{title} · within {km} km": "{title} · {km}km 이내",
   "{title}, by {name}. Opens the Pulse.": "{title}, {name} 님. '펄스'를 열어요.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "other": "필요한 {n}표 중 {voters}표"
   },
@@ -3479,7 +3478,6 @@
   "🖼️ Gallery": "🖼️ 갤러리",
   "🗑️ Delete Group Post (Convenor)": "🗑️ 그룹 게시물 삭제 (주최자)",
   "🗑️ Delete Post": "🗑️ 게시물 삭제",
-  "🗞️ DAILY PULSE": "🗞️ 오늘의 생각",
   "🗞️ Daily Pulse": "🗞️ 데일리 펄스",
   "🗳️ Poll": "🗳️ 설문",
   "🗳️ Polls": "🗳️ 투표",

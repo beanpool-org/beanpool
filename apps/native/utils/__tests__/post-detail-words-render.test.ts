@@ -243,6 +243,11 @@ function bypassing(): string[] {
     return [...out];
 }
 const bracketed = () => Array.from(host.querySelectorAll('span')).filter((s) => /^\[.*\]$/su.test(s.textContent ?? '')).length;
+/**
+ * The chip row's chips, each its own node, in order (DESIGN-detail-pages-fable.md §2.1 row 1, slice DP3): the list card's chips
+ * where the page had one coloured line, "● OFFER · TRANSPORT · RECURRING" (§2.8 retires its two keys).
+ */
+const chips = () => Array.from(host.querySelectorAll('[data-testid="post-chip-row"] > div > div')).map((c) => c.textContent);
 
 describe("a listing's page in the pseudo-locale: every word on it came through t() (words S3b)", () => {
     it("another member's Offer: the badges, the price, the poster, the photos; accepting it; the report form; blocking", async () => {
@@ -497,7 +502,7 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
     it('in English nothing is bracketed, and the words are as they were', async () => {
         await open(OFFER, 'en');
         expect(bracketed()).toBe(0);
-        expect(host.textContent).toContain('● OFFER · TRANSPORT · RECURRING');
+        expect(chips()).toEqual(['OFFER', '🚲 Transport', '↻ RECURRING', '💸 CASH TOO']);
         expect(host.textContent).toContain('Only Garden club can see this');
         expect(host.textContent).toContain('💸 Cash also needed for fuel or materials, at cost.');
         expect(host.textContent).toContain('(4.5) • 3 Reviews');
@@ -511,7 +516,7 @@ describe('a listing an owner\'s AI assistant posted (MCP-OWNER-POSTS)', () => {
         // The node keeps who made it (posts.created_via) for moderators only; a copy that carried it anyway changes nothing here.
         await open({ ...OFFER, createdVia: 'assistant:0123456789ab' }, 'en');
         expect(host.textContent).toContain('Bike repairs at home');
-        expect(host.textContent).toContain('● OFFER · TRANSPORT · RECURRING');
+        expect(chips()).toEqual(['OFFER', '🚲 Transport', '↻ RECURRING', '💸 CASH TOO']);
         expect(host.textContent).toContain('ASKING PRICE');
         expect(host.querySelector('img[aria-label="Photo 2 of 2"]')).not.toBeNull();
         expect(host.textContent ?? '').not.toMatch(/assistant/i);
@@ -532,8 +537,11 @@ describe('the review sheet after a deal, in the pseudo-locale', () => {
     });
 });
 
-describe("the listing's type and category line in capitals, the language's way", () => {
-    it('Greek: the category drops its accents in capitals (never toUpperCase on a translated word)', async () => {
+// The page's chips are the list card's (DESIGN-detail-pages-fable.md §2.1 row 1, slice DP3): the type in the words' own capitals,
+// the category as the card writes it. The old line put the category in capitals by the language's rule; the chip has none to
+// apply, and a translated word is still never put through toUpperCase.
+describe("the listing's chips in Greek: the type in the words' capitals, the category as the card writes it", () => {
+    it('Greek: OFFER from the catalog, the category in its own case, never toUpperCase on a translated word', async () => {
         const { readFileSync } = await import('node:fs');
         const { resolve } = await import('node:path');
         const el = JSON.parse(readFileSync(resolve(__dirname, '../../words/el.json'), 'utf8')) as Record<string, string>;
@@ -541,7 +549,7 @@ describe("the listing's type and category line in capitals, the language's way",
         expect(transport.toUpperCase()).not.toBe(transport.toLocaleUpperCase('el'));
         await open(OFFER, 'el');
         expect(host.textContent).toContain('Bike repairs at home');
-        expect(host.textContent).toContain(`· ${transport.toLocaleUpperCase('el')}`);
+        expect(chips().slice(0, 2)).toEqual([el['OFFER'], `🚲 ${transport}`]);
         expect(host.textContent).not.toContain(transport.toUpperCase());
     });
 });

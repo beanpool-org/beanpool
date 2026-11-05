@@ -3398,7 +3398,6 @@
   "{title} by {name} on {platform}": "{title} από {name} στο {platform}",
   "{title} · within {km} km": "{title} · σε απόσταση έως {km} χλμ.",
   "{title}, by {name}. Opens the Pulse.": "{title}, από {name}. Ανοίγει τον Παλμό.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "{voters} από {n} απαιτούμενη ψήφο",
     "other": "{voters} από {n} απαιτούμενες ψήφους"
@@ -3606,7 +3605,6 @@
   "🖼️ Gallery": "🖼️ Συλλογή",
   "🗑️ Delete Group Post (Convenor)": "🗑️ Διαγραφή ανάρτησης ομάδας (Συντονιστής)",
   "🗑️ Delete Post": "🗑️ Διαγραφή ανάρτησης",
-  "🗞️ DAILY PULSE": "🗞️ ΚΑΘΗΜΕΡΙΝΟΣ ΠΑΛΜΟΣ",
   "🗞️ Daily Pulse": "🗞️ Καθημερινός Παλμός",
   "🗳️ Poll": "🗳️ Ψηφοφορία",
   "🗳️ Polls": "🗳️ Δημοσκοπήσεις",

@@ -38,7 +38,7 @@ interface AuthorCardProps {
     disabled?: boolean;
     testID?: string;
     accessibilityLabel?: string;
-    /** The screen's own margins: the listing's page has none of its own (20 here until it pads its column), the event's pads 16. */
+    /** The screen's own margins, where they differ from the box's place in a 16 dp column (none above, 16 under it). */
     style?: StyleProp<ViewStyle>;
 }
 
@@ -110,8 +110,8 @@ export function AuthorCard({ label, pubkey, callsign, avatarUrl, rating, onPress
 }
 
 const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
-    // The listing's page has no column padding of its own yet (DP3 gives it 16): it keeps its 20 dp until then.
-    card: { marginHorizontal: 20, marginBottom: 20 },
+    // Both pages pad their column 16 a side (DESIGN-detail-pages-fable.md §2.1): the box sits in it, 16 above the next part.
+    card: { marginBottom: 16 },
     label: { marginBottom: 8 },
     row: { flexDirection: 'row', alignItems: 'center' },
     avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: theme === 'dark' ? 'rgba(217,119,87,0.2)' : 'rgba(217,119,87,0.1)', justifyContent: 'center', alignItems: 'center' },

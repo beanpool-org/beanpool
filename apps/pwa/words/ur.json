@@ -3399,7 +3399,6 @@
   "{title} by {name} on {platform}": "{name} کی طرف سے {platform} پر {title}",
   "{title} · within {km} km": "{title} · {km} کلومیٹر کے اندر",
   "{title}, by {name}. Opens the Pulse.": "{title}، {name} کی طرف سے۔ پلس کھلے گا۔",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "مطلوبہ {n} میں سے {voters} ووٹ",
     "other": "مطلوبہ {n} میں سے {voters} ووٹ"
@@ -3607,7 +3606,6 @@
   "🖼️ Gallery": "🖼️ گیلری",
   "🗑️ Delete Group Post (Convenor)": "🗑️ گروپ پوسٹ حذف کریں (کنوینر)",
   "🗑️ Delete Post": "🗑️ پوسٹ حذف کریں",
-  "🗞️ DAILY PULSE": "🗞️ روزانہ کا جائزہ",
   "🗞️ Daily Pulse": "🗞️ ڈیلی پلس",
   "🗳️ Poll": "🗳️ پول",
   "🗳️ Polls": "🗳️ پولز",

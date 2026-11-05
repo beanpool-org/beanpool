@@ -3641,7 +3641,6 @@
   "{title} by {name} on {platform}": "{title} от {name} на {platform}",
   "{title} · within {km} km": "{title} · в пределах {km} км",
   "{title}, by {name}. Opens the Pulse.": "{title}, от {name}. Открывает «Пульс».",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "Нужно {voters} из {n} голоса",
     "few": "Нужно {voters} из {n} голосов",
@@ -3863,7 +3862,6 @@
   "🖼️ Gallery": "🖼️ Галерея",
   "🗑️ Delete Group Post (Convenor)": "🗑️ Удалить объявление группы (Координатор)",
   "🗑️ Delete Post": "🗑️ Удалить объявление",
-  "🗞️ DAILY PULSE": "🗞️ ДНЕВНОЙ ПУЛЬС",
   "🗞️ Daily Pulse": "🗞️ Ежедневный пульс",
   "🗳️ Poll": "🗳️ Опрос",
   "🗳️ Polls": "🗳️ Опросы",

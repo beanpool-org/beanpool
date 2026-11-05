@@ -3399,7 +3399,6 @@
   "{title} by {name} on {platform}": "{platform}-এ {name}-এর {title}",
   "{title} · within {km} km": "{title} · {km} কিমির মধ্যে",
   "{title}, by {name}. Opens the Pulse.": "{title}, {name} কর্তৃক। পালস খুলবে।",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "প্রয়োজনীয় {n}টি ভোটের মধ্যে {voters}টি",
     "other": "প্রয়োজনীয় {n}টি ভোটের মধ্যে {voters}টি"
@@ -3607,7 +3606,6 @@
   "🖼️ Gallery": "🖼️ গ্যালারি",
   "🗑️ Delete Group Post (Convenor)": "🗑️ দলের পোস্ট মুছুন (সমন্বয়কারী)",
   "🗑️ Delete Post": "🗑️ পোস্ট মুছুন",
-  "🗞️ DAILY PULSE": "🗞️ দৈনিক পালস",
   "🗞️ Daily Pulse": "🗞️ দৈনিক স্পন্দন",
   "🗳️ Poll": "🗳️ পোল",
   "🗳️ Polls": "🗳️ ভোট",

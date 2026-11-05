@@ -3399,7 +3399,6 @@
   "{title} by {name} on {platform}": "{title} ni {name} sa {platform}",
   "{title} · within {km} km": "{title} · sa loob ng {km} km",
   "{title}, by {name}. Opens the Pulse.": "{title}, ni {name}. Binubuksan ang Pulso.",
-  "{type} · {category}": "{type} · {category}",
   "{voters} of {n} vote needed|{voters} of {n} votes needed": {
     "one": "Kailangan ng {voters} sa {n} boto",
     "other": "Kailangan ng {voters} sa {n} boto"
@@ -3607,7 +3606,6 @@
   "🖼️ Gallery": "🖼️ Gallery",
   "🗑️ Delete Group Post (Convenor)": "🗑️ Burahin ang Post ng Grupo (Convenor)",
   "🗑️ Delete Post": "🗑️ Burahin ang Post",
-  "🗞️ DAILY PULSE": "🗞️ PANG-ARAW-ARAW NA PULSE",
   "🗞️ Daily Pulse": "🗞️ Daily Pulse",
   "🗳️ Poll": "🗳️ Botohan",
   "🗳️ Polls": "🗳️ Mga Poll",

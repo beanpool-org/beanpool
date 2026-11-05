@@ -509,12 +509,21 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         }
     });
 
-    it('gives the poll the whole row at two and three columns, a 2 x 2 square from four, and its answers in two from md up', async () => {
+    // Marty, 5 Nov 2026 (a desktop screenshot of the grid): the 2 x 2 square left half the poll empty beside the taller event
+    // tiles. "yes two wide it is but make sure it filled correctly. we dont want 2 wide with heaps of space." This replaces G2's
+    // whole row at two and three columns and 2 x 2 from four (DESIGN-market-grid-sizes-fable.md §2.3), for the grid only.
+    it('gives the poll two cells at every column count and one row, a summary with nothing to vote with that opens the poll', async () => {
         await openGrid();
-        // At 320 px with 1.3x text one column of two clipped "Other": the whole row on a phone and at three columns (nothing
-        // beside it), two columns and two rows from lg up (G2, DESIGN-market-grid-sizes-fable.md §2.3).
-        expect(pollCard().parentElement!.className.split(/\s+/)).toEqual(['h-full', 'col-span-2', 'md:col-span-3', 'lg:col-span-2', 'lg:row-span-2']);
-        expect(pollOptions().className).toContain('md:grid-cols-2');
+        const cell = pollCard().parentElement!;
+        expect(cell.className.split(/\s+/).filter(c => /(col|row)-span-/.test(c))).toEqual(['col-span-2']);
+        // Nothing on the grid's poll votes: no answer is a button, and the tile is the one button, named as the poll.
+        expect(screen.getByText('Neither').closest('button')).toBeNull();
+        const tile = screen.getByRole('button', { name: /^Poll: Where should the tool shed go\?\. 4 answers, 4 votes\. Opens to vote$/ });
+        expect(within(tile).queryAllByRole('button')).toHaveLength(0);
+        fireEvent.click(within(tile).getByText('Neither'));
+        // The poll's page: the full card, where it is voted.
+        expect(await screen.findByRole('button', { name: /Back to Market/ })).toBeInTheDocument();
+        expect(screen.getByText('Neither').closest('button')).not.toBeNull();
     });
 
     // A two-column tile cannot start in the last column of a row: auto-placement moves it down and leaves that
@@ -529,11 +538,19 @@ describe('MarketplacePage: Card View gives tiles their own height', () => {
         expect(gridEl.className).toContain('grid-flow-row-dense');
     });
 
-    it('shows poll answers in full in the grid — a ballot option you cannot read is not a choice', async () => {
+    // The grid's tile is a summary (an answer one line, ending in "…"), never a ballot; the poll is voted on its page, and there
+    // every answer is shown in full — a ballot option you cannot read is not a choice.
+    it('shows poll answers in full on the poll\'s page, where the grid\'s tile opens it to be voted', async () => {
         await openGrid();
-        const label = screen.getByText('It is Amazing and we should start on it this weekend');
-        expect(label.className).toContain('break-words');
-        expect(label.className).not.toMatch(/(^|\s)truncate(\s|$)/);
+        const onTile = screen.getByText('It is Amazing and we should start on it this weekend');
+        expect(onTile.className).toMatch(/(^|\s)truncate(\s|$)/);
+        expect(onTile.closest('button')).toBeNull();
+        fireEvent.click(onTile);
+        await screen.findByRole('button', { name: /Back to Market/ });
+        const onPage = screen.getByText('It is Amazing and we should start on it this weekend');
+        expect(onPage.closest('button')).not.toBeNull();
+        expect(onPage.className).toContain('break-words');
+        expect(onPage.className).not.toMatch(/(^|\s)truncate(\s|$)/);
     });
 
     it('leaves List View exactly as it was', async () => {

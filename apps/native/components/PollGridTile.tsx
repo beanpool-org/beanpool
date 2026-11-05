@@ -21,6 +21,10 @@ import { MemberAvatar } from './MemberAvatar';
 import { pollFacts, pollStatusWords } from './PollCard';
 import { CardChip, useCardShell } from './market-card-shell';
 import { isPostPinned } from '../utils/pins';
+import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
+
+/** Lines kept as word() elsewhere, shown here in the member's language (the card's own). */
+const LINES = { informal: INFORMAL_POLL_NOTE };
 
 interface PollGridTileProps {
     post: any;
@@ -28,9 +32,11 @@ interface PollGridTileProps {
     onOpen: () => void;
     /** The phone's font scale (useWindowDimensions), as the tiles beside it are built at. */
     fontScale: number;
+    /** The worldwide community's polls (utils/node-profile.ts pollsInformal): the tile says it decides nothing, as the card does. */
+    informal?: boolean;
 }
 
-export function PollGridTile({ post, onOpen, fontScale }: PollGridTileProps) {
+export function PollGridTile({ post, onOpen, fontScale, informal = false }: PollGridTileProps) {
     const shell = useCardShell();
     const styles = useStyles(makeStyles);
     const scale = Number.isFinite(fontScale) && fontScale > 0 ? fontScale : 1;
@@ -92,6 +98,9 @@ export function PollGridTile({ post, onOpen, fontScale }: PollGridTileProps) {
                     )}
                 </View>
 
+                {/* On the worldwide community the card's own note, one line: a count there decides nothing. */}
+                {informal && <Text style={styles.note} numberOfLines={1} testID="poll-informal-note">{t('💬 {note}', { note: t(LINES.informal) })}</Text>}
+
                 <View style={styles.foot} testID="poll-grid-foot">
                     <Text style={styles.summary} numberOfLines={1} testID="poll-grid-summary">{pollTileSummary({ totalVotes, closed: isClosed, openVote })}</Text>
                     <Text style={styles.action} numberOfLines={1} testID={`poll-grid-action-${action.kind}`}>{action.words}</Text>
@@ -122,6 +131,7 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         answerText: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700', color: colors.text.body },
         pct: { flexShrink: 0, fontSize: 12, fontWeight: '900', color: colors.market.poll.fg },
         moreText: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700', color: colors.text.secondary },
+        note: { fontSize: 11, fontWeight: '600', color: colors.market.poll.fg },
         foot: {
             flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 6, borderTopWidth: SHELL.borderWidth,
             borderTopColor: colors.border.default,

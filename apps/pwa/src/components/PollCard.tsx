@@ -123,9 +123,12 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
         setLivePost(post);
     }, [post]);
 
-    // The Market grid hands a poll two columns from `md` up (MarketplacePage). List and the single-post view give it
-    // the full width of a page column, where a single answer column already fits: they are left exactly as they were.
+    // `grid`: the card given two columns (the Market's grid draws PollGridTile now, Marty 5 Nov 2026). List and the
+    // single-post view give it the full width of a page column, where a single answer column already fits.
     const isGrid = viewMode === 'grid';
+    // An answer is a choice only where it can be read whole: on the poll's own page (no viewMode), where the grid's tile
+    // opens it to be voted, and in the two-column card. The Market's list keeps its one line, as it was.
+    const answersWhole = viewMode !== 'list';
 
     const { openVote, isClosed, authorName, avatarSrc, options, totalVotes, sealed, answered } = pollFacts(livePost);
     const isAuthor = Boolean(identity?.publicKey && livePost.authorPublicKey === identity.publicKey);
@@ -370,7 +373,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                     >
                                         {isVoted ? '✓' : null}
                                     </div>
-                                    <span className={`font-bold ${isGrid ? 'break-words' : 'truncate'} ${isVoted ? 'text-purple-950 dark:text-purple-200' : 'text-nature-900 dark:text-white'}`}>
+                                    <span className={`font-bold ${answersWhole ? 'break-words' : 'truncate'} ${isVoted ? 'text-purple-950 dark:text-purple-200' : 'text-nature-900 dark:text-white'}`}>
                                         {optionText}
                                     </span>
                                 </div>

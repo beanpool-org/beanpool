@@ -4088,6 +4088,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 post={post}
                                                 testId={pinned ? 'market-pinned-tile' : undefined}
                                                 onOpen={() => setSelectedPost(post)}
+                                                informal={informalPolls}
                                             />
                                         );
                                     }

@@ -1665,7 +1665,7 @@ export default function MarketScreen() {
             const row: GridRow<any> = item;
             if ('poll' in row) {
                 const poll = row.poll;
-                return <PollGridTile post={poll} fontScale={fontScale} onOpen={() => router.push(`/post/${poll.id}`)} />;
+                return <PollGridTile post={poll} fontScale={fontScale} informal={pollsInformal(nodeProfile)} onOpen={() => router.push(`/post/${poll.id}`)} />;
             }
             return (
                 <View style={shell.gridRow} testID="market-grid-row">

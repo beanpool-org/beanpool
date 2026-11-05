@@ -202,6 +202,9 @@ export const GRID_POLL_BAR = 'absolute inset-y-0 start-0 bg-bp-chip-poll-tint';
 export const GRID_POLL_ANSWER = 'relative min-w-0 flex-1 truncate font-bold';
 export const GRID_POLL_PCT = 'relative shrink-0 font-black text-bp-chip-poll-ink';
 
+/** The global community's note ("An informal poll; it decides nothing"), the card's own words on one line, in the poll ink. */
+export const GRID_POLL_NOTE = 'm-0 shrink-0 min-w-0 truncate text-[11px] font-semibold leading-snug text-bp-chip-poll-ink';
+
 /** The footer: the turnout and the ballot at the start, what a tap does at the end, one line, at the tile's foot. */
 export const GRID_POLL_FOOT = 'shrink-0 mt-auto pt-1.5 border-t border-nature-100 dark:border-nature-800 flex items-center gap-2 min-w-0 whitespace-nowrap text-[11px] leading-snug';
 export const GRID_POLL_ACTION = 'ms-auto shrink-0 font-bold text-bp-chip-poll-ink';

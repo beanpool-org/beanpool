@@ -199,13 +199,19 @@ describe('PollCard (PWA)', () => {
         });
 
         // Compact is not here: since C1 the poll is a compact row there, with no answers on it (PollCard.compact.test.tsx).
-        it('leaves the single-column, truncating layout alone anywhere else', () => {
-            for (const viewMode of [undefined, 'list' as const]) {
-                const view = render(<PollCard post={mockPost} identity={mockIdentity} viewMode={viewMode} />);
-                expect(optionsOf('North Gate').className).toBe('space-y-2 mb-3 mt-1');
-                expect(screen.getByText('North Gate').className).toMatch(/(^|\s)truncate(\s|$)/);
-                view.unmount();
-            }
+        it('leaves the single-column, truncating layout alone in the Market\'s list', () => {
+            render(<PollCard post={mockPost} identity={mockIdentity} viewMode="list" />);
+            expect(optionsOf('North Gate').className).toBe('space-y-2 mb-3 mt-1');
+            expect(screen.getByText('North Gate').className).toMatch(/(^|\s)truncate(\s|$)/);
+        });
+
+        // The poll's own page (no viewMode) is where the grid's tile sends a member to vote (PollGridTile, Marty 5 Nov 2026):
+        // one answer column, as before, and every answer whole — a ballot option you cannot read is not a choice.
+        it('keeps one column on the poll\'s page, with every answer whole', () => {
+            render(<PollCard post={mockPost} identity={mockIdentity} />);
+            expect(optionsOf('North Gate').className).toBe('space-y-2 mb-3 mt-1');
+            expect(screen.getByText('North Gate').className).toContain('break-words');
+            expect(screen.getByText('North Gate').className).not.toMatch(/(^|\s)truncate(\s|$)/);
         });
 
         // G2 (DESIGN-market-grid-sizes-fable.md §2.3): so the poll fits its 2 x 2 square, its description is two lines at

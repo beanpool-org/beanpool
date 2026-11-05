@@ -18,7 +18,7 @@ import { MemberAvatar } from './MemberAvatar';
 import { pollFacts, pollStatusWords } from './PollCard';
 import {
     CARD_INK, GRID_POLL_ACTION, GRID_POLL_ANSWER, GRID_POLL_ANSWERS, GRID_POLL_BAR, GRID_POLL_CELL, GRID_POLL_FOOT, GRID_POLL_GHOST,
-    GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_PCT, GRID_POLL_QUESTION, GRID_POLL_ROW, GRID_POLL_ROW_EDGE,
+    GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_NOTE, GRID_POLL_PCT, GRID_POLL_QUESTION, GRID_POLL_ROW, GRID_POLL_ROW_EDGE,
     GRID_POLL_TILE, chip, gridChip,
 } from './market-card-shell';
 
@@ -31,6 +31,8 @@ interface PollGridTileProps {
     onOpen: () => void;
     /** The cell's test id (the Market's pinned cells say `market-pinned-tile`). */
     testId?: string;
+    /** The global community's polls (lib/informal-polls.ts): the tile says it decides nothing, as the card does. */
+    informal?: boolean;
 }
 
 /** The rows that fit the answers' room, measured in the page's own rem (a larger text setting makes the rows taller). */
@@ -53,7 +55,7 @@ function useRowsThatFit(answerCount: number) {
     return { ref, fit };
 }
 
-export function PollGridTile({ post, onOpen, testId }: PollGridTileProps) {
+export function PollGridTile({ post, onOpen, testId, informal = false }: PollGridTileProps) {
     const { openVote, isClosed, authorName, avatarSrc, options, totalVotes, sealed, answered } = pollFacts(post);
     const { ref, fit } = useRowsThatFit(options.length);
     const { answers, more } = pollTileAnswers(options, { totalVotes, userVotedOptionId: post.userVotedOptionId, sealed, fit });
@@ -120,6 +122,13 @@ export function PollGridTile({ post, onOpen, testId }: PollGridTileProps) {
                         </div>
                     )}
                 </div>
+
+                {/* On the global community the card's own note, one line: a count there decides nothing (lib/informal-polls.ts). */}
+                {informal && (
+                    <p data-testid="poll-informal-note" className={GRID_POLL_NOTE}>
+                        <span aria-hidden="true">💬 </span>{t('An informal poll; it decides nothing')}
+                    </p>
+                )}
 
                 <div data-testid="poll-grid-foot" className={GRID_POLL_FOOT}>
                     <span data-testid="poll-grid-summary" className={`min-w-0 truncate font-semibold ${CARD_INK.secondary}`}>

@@ -119,6 +119,8 @@ export interface DeliverDeps {
     changed?: () => void;
     /** A notice from `beanpool claim --key`: burn that claim code as the HTTP claim does (claim-code.ts burnClaimFromShell). */
     burnClaim?: (claimId: string, pubkey: string) => void;
+    /** What follows a role change inside the server (engine/vouchers.ts vouchingAfterRoleChange: the budget, the committee flag). */
+    roleChanged?: (pubkey: string) => void;
 }
 
 /** Each notice the command left: the announcement and the log line, once. Returns how many were delivered. Never throws. */
@@ -152,6 +154,7 @@ export function deliverRecoverNotices(deps: DeliverDeps, dir = dataDir()): numbe
             : notice.alreadyOwner
             ? `Someone with access to this community's server ran "beanpool recover" and gave ${who}, an owner, a new break-glass code.`
             : `Someone with access to this community's server ran "beanpool recover" and made ${who} an owner of this community.`;
+        try { deps.roleChanged?.(notice.pubkey); } catch { /* the boot's catch-all (grantMissingRoleBudgets) still follows it */ }
         try {
             deps.changed?.();
             deps.announce('Owner added from the server', body, 'critical');

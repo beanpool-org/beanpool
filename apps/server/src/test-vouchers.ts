@@ -42,6 +42,9 @@ delete process.env.NODE_PROFILE;
 delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
 import {
@@ -61,8 +64,9 @@ import { setMemberPhoto } from '@beanpool/engine';
 import { pruneUnusedInvites } from './engine/writer-bounds.js';
 import {
     VOUCHER_WORDS, VOUCHERS_MIGRATION_ACTOR, budgetOf, grantMissingRoleBudgets, makeVoucher, setBudgetLevel, stopVoucher,
-    vouchFromProfile, returnLapsedHolds, isOnCreditCommittee,
+    vouchFromProfile, returnLapsedHolds, isOnCreditCommittee, vouchingAfterRoleChange,
 } from './engine/vouchers.js';
+import { deliverRecoverNotices, RECOVER_ACTOR } from './recover-command.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { issueAutomationToken } from './automation-tokens.js';
 // The whole module too, for one export read by name (tellVoucherNotice): a missing one is a failed check, not a load error.
@@ -461,6 +465,41 @@ async function main(): Promise<void> {
         && lines(lou.pk).length === 1 && lines(lou.pk)[0].actor === VOUCHERS_MIGRATION_ACTOR,
         `11. at boot an admin made outside grantNodeRole gets 1,000, actor migration:vouchers, and so does one made while Beans were off (${granted}: ${JSON.stringify(kaiLines)})`);
     assert(grantMissingRoleBudgets() === 0, '11. once: the next boot grants nothing');
+
+    // ── 11b. A role the server's shell changed (beanpool recover / claim write node_roles on their own connection) ──
+    const committeeOf = (pk: string) => (db.prepare('SELECT credit_committee AS c FROM members WHERE public_key = ?').get(pk) as { c: number | null }).c;
+    const committeeLine = (pk: string, actor: string) => !!db.prepare("SELECT 1 FROM known_floor_log WHERE action = 'committee' AND member_pubkey = ? AND actor_pubkey = ? AND old_value = 'on' AND new_value = 'off'").get(pk, actor);
+    const rbob = newId('Bob'); await join(owen, rbob);
+    db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(rbob.pk);
+    grantMissingRoleBudgets();
+    db.prepare('UPDATE members SET credit_committee = 1 WHERE public_key = ?').run(rbob.pk);
+    db.prepare("UPDATE node_roles SET role = 'owner', granted_by = ? WHERE member_pubkey = ?").run(RECOVER_ACTOR, rbob.pk);
+    const noticeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vouchers-recover-'));
+    fs.writeFileSync(path.join(noticeDir, `recover-notice-${Date.now()}-0001.json`), JSON.stringify({ pubkey: rbob.pk, callsign: 'Bob', alreadyOwner: false, at: new Date().toISOString() }));
+    const delivered = deliverRecoverNotices({ announce: () => {}, log: () => {}, roleChanged: (pk) => vouchingAfterRoleChange(pk, RECOVER_ACTOR) }, noticeDir);
+    fs.rmSync(noticeDir, { recursive: true, force: true });
+    assert(delivered === 1 && committeeOf(rbob.pk) === 0 && committeeLine(rbob.pk, RECOVER_ACTOR),
+        `11b. a committee admin made owner by beanpool recover leaves the committee when the node delivers the notice, with its line (flag ${committeeOf(rbob.pk)})`);
+
+    const rcy = newId('Cy'); await join(owen, rcy);
+    db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(rcy.pk);
+    grantMissingRoleBudgets();
+    db.prepare('UPDATE members SET credit_committee = 1 WHERE public_key = ?').run(rcy.pk);
+    db.prepare("UPDATE node_roles SET role = 'owner', granted_by = ? WHERE member_pubkey = ?").run(RECOVER_ACTOR, rcy.pk);
+    grantMissingRoleBudgets();
+    assert(committeeOf(rcy.pk) === 0 && committeeLine(rcy.pk, VOUCHERS_MIGRATION_ACTOR),
+        `11b. the boot clears the committee flag of an owner the shell made with no notice delivered, with its line (flag ${committeeOf(rcy.pk)})`);
+
+    const rdee = newId('Dee'); await join(owen, rdee);
+    db.prepare("INSERT INTO vouchers (member_pubkey, source, entry_id, made_by, made_at, stopped_at, stopped_by, stop_reason) VALUES (?, 'entry', NULL, ?, datetime('now'), datetime('now'), ?, 'stopped')").run(rdee.pk, owen.pk, owen.pk);
+    db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', ?)").run(rdee.pk, RECOVER_ACTOR);
+    const deeGranted = grantMissingRoleBudgets();
+    const deeRow = db.prepare('SELECT stopped_at, source FROM vouchers WHERE member_pubkey = ?').get(rdee.pk) as { stopped_at: string | null; source: string };
+    const deeLines = lines(rdee.pk);
+    assert(deeGranted === 1 && deeRow.stopped_at === null && deeRow.source === 'role' && deeLines.length === 1 && deeLines[0].kind === 'grant'
+        && deeLines[0].amount === 1000 && deeLines[0].actor === VOUCHERS_MIGRATION_ACTOR,
+        `11b. a stopped list voucher made owner by the shell gets an owner's 1,000 at the next boot (${deeGranted}: ${JSON.stringify(deeRow)} ${JSON.stringify(deeLines)})`);
+    assert(grantMissingRoleBudgets() === 0, '11b. once: the boot after grants nothing more');
 
     // ── 12. Property test ───────────────────────────────────────────────────────────────────────────────────────
     let seedN = 0x5eed;

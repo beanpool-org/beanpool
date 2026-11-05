@@ -370,17 +370,28 @@ export function vouchingAfterRoleChange(pk: string, actor: string | undefined): 
 }
 
 /**
- * At boot on a main server with Beans on: every owner and admin whose role acts and who never had a budget gets one, actor
- * `migration:vouchers`. On a node from before vouchers, that is every owner and admin, once; later boots find only one
- * made outside grantNodeRole (the shell's claim or recover), or none. A budget someone stopped is never granted again here.
+ * At boot on a main server with Beans on, the catch-all for a role changed outside grantNodeRole (the shell's claim or
+ * recover, which write node_roles on their own connection): every owner and admin whose role acts and who has no LIVE
+ * budget gets one, actor `migration:vouchers`; and anyone on the credit committee whose acting role is not admin leaves it,
+ * with its `committee` line, as vouchingAfterRoleChange does inside the server. On a node from before vouchers, that is
+ * every owner and admin, once; later boots find only the shell's, or none. A stopped budget on a current owner or admin
+ * always comes from before the role they hold now (nothing in the server stops one while they hold it), so it is granted.
  */
 export function grantMissingRoleBudgets(): number {
     if (getNodeRole() !== 'primary' || !getProfileSwitches().beans) return 0;
     const keys = (db.prepare(`SELECT nr.member_pubkey AS pk FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
-        WHERE nr.role IN ('owner', 'admin') AND ${NODE_ROLE_ACTS} AND NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = nr.member_pubkey)
+        WHERE nr.role IN ('owner', 'admin') AND ${NODE_ROLE_ACTS} AND NOT EXISTS (SELECT 1 FROM vouchers v WHERE v.member_pubkey = nr.member_pubkey AND v.stopped_at IS NULL)
         ORDER BY nr.granted_at ASC, nr.member_pubkey ASC`).all() as { pk: string }[]).map((r) => r.pk);
     const amount = voucherBudgetSetting();
-    db.transaction(() => { for (const pk of keys) startBudget(pk, 'role', null, amount, VOUCHERS_MIGRATION_ACTOR); })();
+    const committee = (db.prepare('SELECT public_key AS pk FROM members WHERE credit_committee = 1').all() as { pk: string }[])
+        .map((r) => r.pk).filter((pk) => actingRole(pk) !== 'admin');
+    db.transaction(() => {
+        for (const pk of committee) {
+            db.prepare('UPDATE members SET credit_committee = 0 WHERE public_key = ? AND credit_committee = 1').run(pk);
+            logLine(VOUCHERS_MIGRATION_ACTOR, 'committee', pk, 'on', 'off');
+        }
+        for (const pk of keys) startBudget(pk, 'role', null, amount, VOUCHERS_MIGRATION_ACTOR);
+    })();
     return keys.length;
 }
 

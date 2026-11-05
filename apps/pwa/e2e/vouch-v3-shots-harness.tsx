@@ -6,6 +6,8 @@ import { VoucherCardModal } from '../src/components/VoucherCardModal';
 import { InvitePage } from '../src/pages/InvitePage';
 import { PublicProfilePage } from '../src/pages/PublicProfilePage';
 import { LedgerPage } from '../src/pages/LedgerPage';
+import { MyBudgetModal } from '../src/components/MyBudgetModal';
+import { createIdentity } from '../src/lib/identity';
 import '../src/index.css';
 
 const params = new URLSearchParams(location.search);
@@ -60,6 +62,30 @@ function HarnessApp() {
         );
     }
 
+    if (view === 'budget') {
+        // The Ledger's "Your budget to vouch from" dialog, open (#2915 round 4, finding 3).
+        return (
+            <div className="p-2 min-h-screen bg-oat-100 dark:bg-nature-950">
+                <MyBudgetModal
+                    vouching={{
+                        voucher: true,
+                        budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
+                        presets: [25, 50, 75, 100],
+                        vouchMax: 100,
+                        budgetMax: 2000,
+                        vouchedBy: [],
+                        history: [
+                            { kind: 'grant', amount: 1000, actor: 'b'.repeat(64), actorCallsign: 'marty', at: '2026-11-01T00:00:00Z' },
+                            { kind: 'hold', amount: -100, actor: '0'.repeat(64), actorCallsign: 'Alice', at: '2026-11-02T00:00:00Z', for: 'invite', outcome: 'held' },
+                            { kind: 'top_up', amount: 500, actor: 'c'.repeat(64), actorCallsign: 'damo', at: '2026-11-04T00:00:00Z' },
+                        ],
+                    }}
+                    onClose={() => {}}
+                />
+            </div>
+        );
+    }
+
     if (view === 'ledger') {
         return (
             <div className="p-2 min-h-screen bg-oat-100 dark:bg-nature-950">
@@ -83,7 +109,11 @@ function HarnessApp() {
     );
 }
 
-void showLanguage('en').then(() => {
+// The profile's vouch card asks GET /api/vouchers/me, which needs a stored identity to sign with (lib/api.ts
+// getMyVouching): without one it answers null and the card is never drawn. A throwaway key, in this browser only.
+const ready = view === 'profile' ? createIdentity('Alice').then(() => undefined, () => undefined) : Promise.resolve();
+
+void ready.then(() => showLanguage('en')).then(() => {
     createRoot(document.getElementById('root')!).render(<HarnessApp />);
     document.documentElement.dataset.harnessReady = 'true';
 });

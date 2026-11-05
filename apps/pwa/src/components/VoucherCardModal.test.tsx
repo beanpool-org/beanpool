@@ -113,6 +113,10 @@ describe('VoucherCardModal (slice V3, §5, §10)', () => {
             expect(pill.className).toMatch(/min-h-\[44px\]/);
             expect(pill.className).not.toMatch(/min-h-\[40px\]/);
         }
+        // Four in a row overflowed "2000" at 320 px × 1.3 text (seen in the round-4 shot): two a row under 400 px.
+        const row = screen.getByTestId('voucher-levels');
+        expect(row.className).toMatch(/\bgrid-cols-2\b/);
+        expect(row.className).toMatch(/min-\[400px\]:grid-cols-4/);
     });
 
     it('controls "Set budget to": quick levels, raise/lower stepper, never below held', async () => {

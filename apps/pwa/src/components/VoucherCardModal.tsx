@@ -196,8 +196,8 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                             </span>
                                         </div>
 
-                                        {/* Quick levels */}
-                                        <div className="grid grid-cols-4 gap-2 mb-3">
+                                        {/* Quick levels: two a row under 400 px, so "2,000" fits whole at 320 px × 1.3 text */}
+                                        <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-2 mb-3" data-testid="voucher-levels">
                                             {QUICK_LEVELS.map((lvl) => (
                                                 <button
                                                     key={lvl}

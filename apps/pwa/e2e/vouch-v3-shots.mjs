@@ -30,6 +30,14 @@ const cases = [
     { view: 'profile', theme: 'dark', name: 'pwa-profile-320px-dark.png' },
     { view: 'ledger', theme: 'light', name: 'pwa-ledger-320px-light.png' },
     { view: 'ledger', theme: 'dark', name: 'pwa-ledger-320px-dark.png' },
+    // #2915 round 4: the Ledger's budget dialog, the "+ Make someone a voucher" notice, and the profile card after an
+    // earlier 75 (the 50, 75 and 100 presets greyed by the 100 cap).
+    { view: 'budget', theme: 'light', name: 'pwa-budget-modal-320px-light.png' },
+    { view: 'budget', theme: 'dark', name: 'pwa-budget-modal-320px-dark.png' },
+    { view: 'notice', theme: 'light', name: 'pwa-make-voucher-320px-light.png' },
+    { view: 'notice', theme: 'dark', name: 'pwa-make-voucher-320px-dark.png' },
+    { view: 'profile', theme: 'light', prior: 75, name: 'pwa-profile-raise-320px-light.png' },
+    { view: 'profile', theme: 'dark', prior: 75, name: 'pwa-profile-raise-320px-dark.png' },
 ];
 
 try {
@@ -56,6 +64,7 @@ try {
                         history: [
                             { kind: 'grant', amount: 1000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01T00:00:00Z' },
                             { kind: 'hold', amount: -100, actor: 'me', actorCallsign: 'Alice', at: '2026-11-02T00:00:00Z', for: 'invite', outcome: 'held' },
+                            ...(c.prior ? [{ kind: 'hold', amount: -c.prior, actor: 'me', actorCallsign: 'Alice', at: '2026-11-03T00:00:00Z', for: 'profile', person: { memberPubkey: 's'.repeat(64), callsign: 'sam' } }] : []),
                         ],
                     }),
                 });
@@ -109,7 +118,7 @@ try {
                     }),
                 });
             }
-            if (url.includes('/api/members/')) {
+            if (url.includes('/api/members/') || url.includes('/api/profile/')) {
                 return route.fulfill({
                     status: 200,
                     contentType: 'application/json',
@@ -204,13 +213,22 @@ try {
         });
 
         const page = await ctx.newPage();
-        await page.goto(`${origin}/e2e/vouch-v3-shots-harness.html?view=${c.view}&theme=${c.theme}`, { waitUntil: 'load' });
+        await page.goto(`${origin}/e2e/vouch-v3-shots-harness.html?view=${c.view === 'notice' ? 'invite' : c.view}&theme=${c.theme}`, { waitUntil: 'load' });
         await page.waitForFunction(() => document.documentElement.dataset.harnessReady === 'true');
         await page.addStyleTag({
             content: `*, *::before, *::after { transition: none !important; } html { font-size: 130% !important; }`,
         });
         await page.waitForTimeout(500);
 
+        if (c.view === 'notice') await page.click('[data-testid="make-voucher-button"]');
+        await page.waitForTimeout(c.view === 'notice' ? 300 : 0);
+        // The part each shot is for, scrolled into view inside its own scrolling box (#2915 round 4).
+        const focus = { card: '[data-testid="voucher-level-500"]', profile: '[data-testid="profile-vouch"]' }[c.view];
+        if (focus) {
+            await page.waitForSelector(focus, { timeout: 5000 }).catch(() => {});
+            await page.evaluate((sel) => document.querySelector(sel)?.scrollIntoView({ block: 'center' }), focus);
+            await page.waitForTimeout(200);
+        }
         const shotPath = path.join(SHOTS_DIR, c.name);
         await page.screenshot({ path: shotPath, fullPage: true });
         console.log(`Saved screenshot: ${shotPath}`);

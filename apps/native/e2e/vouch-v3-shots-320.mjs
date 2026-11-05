@@ -81,8 +81,13 @@ const STUBS = {
             vouchMax: 100,
             budgetMax: 2000,
             vouchedBy: [{ memberPubkey: 'a'.repeat(64), callsign: 'Jane Albury', amount: 100, at: '2026-11-01' }],
-            history: [{ kind: 'grant', amount: 1000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01' }],
+            history: [
+                { kind: 'grant', amount: 1000, actor: 'owner', actorCallsign: 'marty', at: '2026-11-01' },
+                // #2915 round 4: an earlier 75 for @sam, so the profile card is a raise and 50, 75 and 100 are greyed by the cap.
+                { kind: 'hold', amount: -75, actor: 'me', actorCallsign: 'Alice', at: '2026-11-03', for: 'profile', person: { memberPubkey: 's'.repeat(64), callsign: 'sam' } },
+            ],
         });
+        export const rereadMyVouching = async (anchor, identity, apply) => { const mv = await askMyVouching(); if (mv) apply(mv); };
         export const vouchFromProfile = async () => ({ ok: true, amount: 25, total: 25 });
     `,
     'db': `
@@ -201,7 +206,7 @@ const result = await build({
     loader: { '.js': 'jsx', '.png': 'dataurl', '.jpg': 'dataurl', '.webp': 'dataurl', '.ttf': 'empty' },
     resolveExtensions: ['.web.tsx', '.web.ts', '.web.js', '.tsx', '.ts', '.js', '.mjs', '.json'],
     nodePaths: [path.join(ROOT, 'node_modules'), path.join(NATIVE, 'node_modules')],
-    define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false', 'process.env.EXPO_OS': '"web"' },
+    define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false', 'process.env.EXPO_OS': '"web"', global: 'globalThis' },
     banner: { js: 'globalThis.process = globalThis.process || { env: {}, versions: {} };' },
     logLevel: 'error',
     plugins: [{
@@ -245,8 +250,11 @@ try {
     for (const c of cases) {
         const context = await browser.newContext({ viewport: { width: WIDTH, height: 640 }, deviceScaleFactor: 2 });
         const page = await context.newPage();
+        page.on("pageerror", (e) => console.log(`[${c.view}/${c.scheme}] page error: ${String(e.message).slice(0, 300)}`));
         await page.goto(`${base}/?view=${c.view}&scheme=${c.scheme}`);
         await page.waitForTimeout(500);
+        // #2915 round 4: the vouch card is below the fold inside the profile's ScrollView.
+        if (c.view === "profile") { await page.evaluate(() => document.querySelector("[data-testid=\"profile-vouch\"]")?.scrollIntoView({ block: "start" })); await page.waitForTimeout(300); }
 
         const shotPath = path.join(SHOTS_DIR, c.name);
         await page.screenshot({ path: shotPath, fullPage: true });

@@ -58,6 +58,7 @@ import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { assertBeansOn, getProfileSwitches } from '../config/node-profile.js';
 import { isNodeOwner, isNodeAdmin, heldPrivilegedRole, NODE_ROLE_ACTS } from './node-roles.js';
 import { keepNotice } from './kept-notices.js';
+import { ownCoreLockRow } from '../config/core-settings.js';
 
 // A refusal with values in it, in English as a template literal wrote it, marked for the way out (member-words.ts).
 const { t: tr } = wordsFor('en');
@@ -579,6 +580,9 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
     if (body.memberGift !== undefined) throw new VoucherError(400, 'moved_to_community_shape', VOUCHER_WORDS.giftInCoreSettings);
     const newBudget = body.voucherBudget;
     if (newBudget !== undefined && !isBudgetLevel(newBudget)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
+    if (newBudget !== undefined && ownCoreLockRow() !== null) {
+        throw new VoucherError(403, 'core_locked', 'Budget per voucher is a core setting locked by the community.');
+    }
     const before = voucherSettings();
     // Each write names its key (test-replication-manifest reads every node_config write); the default removes the row.
     db.transaction(() => {

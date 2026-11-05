@@ -829,7 +829,7 @@ export default function NamesListScreen() {
                                 {vouchers.length === 0 ? <Text style={styles.hint}>{t('Nobody has a voucher budget.')}</Text> : null}
                                 {[...vouchers].sort((a, b) => (b.writtenOff || 0) - (a.writtenOff || 0)).map((v) => (
                                     <View key={v.memberPubkey} style={styles.entry}>
-                                        <Text style={styles.entryName}>{callsignOf(v.memberPubkey) ? `@${callsignOf(v.memberPubkey)}` : v.callsign}</Text>
+                                        <Text style={styles.entryName}>{(callsignOf(v.memberPubkey) || v.callsign) ? `@${callsignOf(v.memberPubkey) || v.callsign}` : t('a voucher')}</Text>
                                         <Text style={styles.entryNote}>
                                             {t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
                                                 left: formatNumber(v.left),

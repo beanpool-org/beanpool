@@ -1,19 +1,23 @@
 #!/usr/bin/env node
 /* global process, console, document, getComputedStyle */
 /**
- * Vouchers on the phone (slice V2, DESIGN-invites-and-names-list-amend2-fable.md §5, §10, §11)
- * at the floor (320dp wide, phone text at 1.3×), in light and dark schemes:
- * - VoucherCard with budget breakdown, quick levels (500 · 1,000 · 1,500 · 2,000), stepper
- * - Who they brought in list
- * - Budget history list
- * - People → Invites Vouchers block
+ * Vouchers on the phone (slice V2, DESIGN-invites-and-names-list-amend2-fable.md §5, Marty's §10 and §11) at the floor
+ * (memory product-audience-small-screens: 320dp wide, the phone's text at 1.3×), in the light and the dark scheme, through
+ * react-native-web in headless Chromium. What is drawn is the app's own code:
+ * - components/VoucherCard.tsx from a card shaped as the node sends it (left 550, held 100, level 650): Their budget with
+ *   Set budget to (quick levels and stepper), then See who they brought in, then Budget history (with the node's own actors);
+ * - components/VouchersBlock.tsx, the block People → Invites renders for owners and committee admins, on People's padding;
+ * - app/names-list.tsx, the whole screen, its list opened with a real key (only the opening and the node's answers are
+ *   stand-ins, below): the voucher first with its tag, Make a voucher, the Vouchers filter with a role voucher's row (Add
+ *   their name), the Make a voucher sheet (amount chips and stepper), and Community health's Vouchers section.
  *
- * Checks:
- * - No sideways scroll
- * - Nothing past the 320dp edge or clipped
- * - Buttons >= 44dp tall (touch target)
- * - Text contrast >= 4.5:1 (or 3:1 for large text)
- * - Screenshots written to --shots <dir>
+ * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under 44dp
+ * tall; text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).
+ *
+ * A stand-in for the phone, not an emulator: Android's fonts and line breaking differ, and iOS's safe area isn't drawn.
+ * Nothing leaves the machine: the page aborts every request but its own.
+ *
+ *   node apps/native/e2e/vouchers-320.mjs [--shots <dir>]
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -32,7 +36,9 @@ const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? path.resolve(process.argv[shotsAt + 1]) : null;
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'vouchers-320-'));
+const REAL = (rel) => JSON.stringify(path.join(NATIVE, rel));
 
+// ─── Stand-ins: what the screens import that reaches the router, the device, the theme or the node ──────────────────
 const STUBS = {
     'react-native': `
         import React from 'react';
@@ -52,100 +58,169 @@ const STUBS = {
     `,
     'expo-router': `
         import React from 'react';
-        export const router = { back() {}, push() {}, replace() {}, canDismiss: () => false };
-        export const useFocusEffect = (cb) => { React.useEffect(() => { cb(); }, []); };
+        export const router = { back() {}, push() {}, replace() {}, navigate() {}, canGoBack: () => false, canDismiss: () => false };
+        export const useRouter = () => router;
+        export const useFocusEffect = (cb) => { React.useEffect(() => cb(), [cb]); };
         export const useLocalSearchParams = () => ({});
+        export const ErrorBoundary = () => null;
     `,
     'ThemeContext': `
         export const useTheme = () => globalThis.__theme;
         export const useStyles = (make) => make(globalThis.__theme);
     `,
+    'IdentityContext': `
+        const value = { identity: { publicKey: 'a'.repeat(64), privateKey: 'f'.repeat(64), callsign: 'Sally' }, setIdentity() {} };
+        export const useIdentity = () => value;
+    `,
     '@expo/vector-icons': `
         import React from 'react';
         import { Text } from 'react-native-web';
-        export const MaterialCommunityIcons = ({ style, size, name }) => React.createElement(Text, { style: [{ fontSize: size || 18, color: '#242824' }, style] }, name === 'arrow-left' ? '←' : '•');
+        export const MaterialCommunityIcons = ({ style, size, name, color }) => React.createElement(Text, { style: [{ fontSize: size || 18, color: color || '#242824' }, style] }, name === 'arrow-left' ? '←' : '•');
     `,
     'expo-crypto': `
-        export const getRandomBytes = (n) => new Uint8Array(n);
+        export const getRandomBytes = (n) => crypto.getRandomValues(new Uint8Array(n));
+        export const randomUUID = () => crypto.randomUUID();
     `,
     '@react-native-async-storage/async-storage': `
-        export default { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} };
+        export default { getItem: async (k) => (k === 'beanpool_anchor_url' ? 'https://mullum.example' : null), setItem: async () => {}, removeItem: async () => {} };
     `,
     'expo-secure-store': `
+        export const WHEN_UNLOCKED_THIS_DEVICE_ONLY = 6;
         export const getItemAsync = async () => null;
         export const setItemAsync = async () => {};
         export const deleteItemAsync = async () => {};
     `,
+    'react-native-safe-area-context': `
+        import React from 'react';
+        import { View } from 'react-native-web';
+        export const SafeAreaView = ({ style, children }) => React.createElement(View, { style }, children);
+        export const useSafeAreaInsets = () => ({ top: 0, bottom: 0, left: 0, right: 0 });
+    `,
+    'react-native-keyboard-controller': `
+        import React from 'react';
+        import { View, ScrollView } from 'react-native-web';
+        export const KeyboardAvoidingView = ({ children, style }) => React.createElement(View, { style }, children);
+        export const KeyboardAwareScrollView = React.forwardRef((p, ref) => React.createElement(ScrollView, { ...p, ref }));
+        export const KeyboardStickyView = ({ children, style }) => React.createElement(View, { style }, children);
+    `,
+    'expo-camera': `export const CameraView = () => null; export const useCameraPermissions = () => [{ granted: false, canAskAgain: true }, async () => ({ granted: false })];`,
+    'react-native-qrcode-svg': `export default () => null;`,
+    'expo-status-bar': `export const StatusBar = () => null;`,
+    'expo-clipboard': `export const getStringAsync = async () => ''; export const setStringAsync = async () => {};`,
+    'expo-local-authentication': `
+        export const SecurityLevel = { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 };
+        export const hasHardwareAsync = async () => false; export const isEnrolledAsync = async () => false;
+        export const getEnrolledLevelAsync = async () => 0; export const authenticateAsync = async () => ({ success: false });
+    `,
+    'node-post': `
+        export const anchorUrl = async () => 'https://mullum.example';
+        export const getCachedAnchorUrl = () => 'https://mullum.example';
+        export const setCachedAnchorUrl = () => {};
+        export const signedGet = async () => new Response('{}', { status: 404 });
+        export const signedPost = async () => new Response('{}', { status: 404 });
+        export const signedDelete = async () => new Response('{}', { status: 404 });
+    `,
+    'db': `export const getAllCommunityMembers = async () => []; export const createDecision = async () => ({}); export const getDb = async () => null;`,
+    'member-statements': `export const makeOfflineTicket = async () => 'ticket';`,
+    'names-invite': `
+        export const inviteThisPerson = async () => ({ ok: false, message: '' });
+        export const invitesForEntry = () => [];
+        export const boundInviteLine = () => '';
+        export const inviteLink = () => '';
+    `,
+    // The names list's own module, as it is, but its opening (keys, pin, sealed history) and the node's answers: a list of
+    // four sealed with a real key here, and the vouchers block the node gives an owner (on the credit committee by role).
+    'names-list': `
+        import { newNamesListKey, sealNamesEntry } from '@beanpool/core';
+        export * from ${REAL('utils/names-list.ts')};
+        const ME = 'a'.repeat(64), WREN = 'b'.repeat(64), ZARA = 'd'.repeat(64), BEA = 'e'.repeat(64);
+        const KID = '9'.repeat(64);
+        const KEY = newNamesListKey();
+        const ID = { zara: '1'.repeat(32), ann: '2'.repeat(32), mary: '3'.repeat(32), tom: '5'.repeat(32) };
+        const entry = (id, name, note) => ({ id, keyId: KID, ciphertext: sealNamesEntry(KEY, id, KID, { name, note }), createdBy: ME, createdAt: '2026-11-01T00:00:00.000Z', updatedBy: null, updatedAt: '' });
+        const conf = (id, entryId, memberPubkey, callsign, status = 'confirmed') => ({ id, entryId, memberPubkey, callsign, status, confirmedBy: WREN, confirmedAt: '2026-11-03T09:00:00Z',
+            needsSecond: status === 'awaiting_second', secondedBy: null, secondedAt: null, revokedBy: null, revokedAt: null, revokeReason: null });
+        const OPENED = {
+            state: {
+                admins: [{ pubkey: ME, callsign: 'Sally', role: 'owner', keyIds: [KID], holdsCurrent: true }, { pubkey: WREN, callsign: 'Wren', role: 'admin', keyIds: [KID], holdsCurrent: true }],
+                callsigns: {}, settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
+                counts: { entries: 4, confirmed: 2, awaitingSecond: 1, byKey: {}, locked: 0 },
+                me: { pubkey: ME, role: 'owner', owner: true },
+            },
+            plan: { kind: 'ready' },
+            pin: { me: ME, trusted: [WREN], chain: [{ id: KID, n: 1 }], abandoned: [], communityId: 'mullum' },
+            ring: { [KID]: KEY }, generations: new Map(),
+            list: {
+                current: null,
+                entries: [entry(ID.zara, 'Zara Quinn', 'Runs the seed library'), entry(ID.ann, 'Ann Awaiting', ''), entry(ID.mary, 'Mary Smith', 'From the seed swap'), entry(ID.tom, 'Tom Unconfirmed', '')],
+                confirmations: [conf('c1', ID.zara, ZARA, 'zara'), conf('c2', ID.ann, '7'.repeat(64), 'ann', 'awaiting_second'), conf('c3', ID.mary, BEA, 'Bea')],
+            },
+            notices: [], made: null, sentTo: [], toCheck: [],
+        };
+        const row = (over) => ({ memberPubkey: ZARA, callsign: 'zara', source: 'entry', entryId: ID.zara, madeBy: ME, madeByCallsign: 'Sally', madeAt: '2026-11-05T10:00:00Z',
+            stoppedAt: null, stopReason: null, left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 650, belowZero: 1, writtenOff: 25,
+            passedOn: { amount: 50, people: 1, belowZero: 25 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, ...over });
+        export const VOUCHER_BLOCK = {
+            vouchers: [
+                row({}),
+                row({ memberPubkey: WREN, callsign: 'Wren', source: 'role', entryId: null, madeBy: 'migration:vouchers', madeByCallsign: null, left: 1500, held: 0, level: 1500,
+                    vouched: 0, peopleVouched: 0, belowZero: 0, writtenOff: 0, passedOn: { amount: 0, people: 0, belowZero: 0 }, invitesWithVouch: 0 }),
+            ],
+            settings: { voucherBudget: 1000, memberGift: 100, presets: [25, 50, 75, 100], vouchMax: 100, vouchesPerPerson: 3, budgetMax: 2000 },
+        };
+        export const openNamesList = async () => ({ ok: true, value: OPENED });
+        export const fetchNamesLog = async () => ({ ok: true, value: { log: [] } });
+        export const readBoundInvites = async () => ({ ok: true, value: { invites: [] } });
+        export const unkeptRemovalsOf = () => [];
+        export const fetchHealthSummary = async () => ({ ok: false, status: 404, code: null, message: 'not here' });
+        export const fetchHealthExceptions = async () => ({ ok: true, value: { settings: { debtLinePct: 50, quietDays: 30 }, exceptions: [], departed: [] } });
+        export const fetchHealthLog = async () => ({ ok: true, value: { log: [] } });
+        export const fetchVouchers = async () => ({ ok: true, value: VOUCHER_BLOCK });
+        export const fetchVoucherCard = async () => ({ ok: true, value: { ...row({}), history: [], people: [], canChange: true } });
+    `,
+    'names-debts': `
+        export * from ${REAL('utils/names-debts.ts')};
+        export const fetchNamesDebts = async () => ({ ok: true, value: [] });
+    `,
 };
-
+/** Relative imports, by their last part, that resolve to a stand-in (never a stand-in's own import of the real file). */
+const BY_NAME = ['ThemeContext', 'IdentityContext', 'node-post', 'db', 'member-statements', 'names-invite', 'names-list', 'names-debts'];
 const stubFor = (spec) => {
     if (STUBS[spec]) return spec;
     if (spec.endsWith('ThemeContext') || spec.endsWith('ThemeContext.tsx')) return 'ThemeContext';
-    return null;
+    if (!spec.startsWith('.')) return null;
+    const base = path.basename(spec);
+    return BY_NAME.includes(base) ? base : null;
 };
 
+// ─── The page: one state of the card, the block or the names list ───────────────────────────────────────────────────
 const entry = path.join(work, 'entry.tsx');
 fs.writeFileSync(entry, `
-import React, { useState } from 'react';
+import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { View, ScrollView, Text, Pressable } from 'react-native';
-import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
-import { VoucherCard } from ${JSON.stringify(path.join(NATIVE, 'components/VoucherCard'))};
+import { View } from 'react-native';
+import { lightColors, darkColors } from ${REAL('constants/colors')};
+import { VoucherCard } from ${REAL('components/VoucherCard')};
+import { VouchersBlock } from ${REAL('components/VouchersBlock')};
+import NamesListScreen from ${REAL('app/names-list')};
+import { VOUCHER_BLOCK } from 'names-list';
 
-const FIXTURE_CARD = {
-    memberPubkey: 'pk_jane',
-    callsign: 'jane',
-    source: 'entry',
-    entryId: 'entry_jane',
-    madeBy: 'pk_admin',
-    madeByCallsign: 'admin',
-    madeAt: '2026-11-01T10:00:00Z',
-    stoppedAt: null,
-    stopReason: null,
-    left: 550,
-    held: 100,
-    heldInvites: 1,
-    vouched: 350,
-    peopleVouched: 4,
-    level: 1000,
-    belowZero: 1,
-    writtenOff: 0,
-    passedOn: { amount: 50, people: 1 },
-    invitesWithVouch: 5,
-    trading: { withOthers: 3, insideOnly: 1 },
-    canChange: true,
+/** As engine/vouchers.ts budgetOf() reads it: 1,000 given, 350 vouched to 4 people, 100 held on one invite. */
+const NODE_CARD = {
+    memberPubkey: 'd'.repeat(64), callsign: 'zara', source: 'entry', entryId: '1'.repeat(32), madeBy: 'a'.repeat(64), madeByCallsign: 'Sally',
+    madeAt: '2026-11-05T10:00:00Z', stoppedAt: null, stopReason: null,
+    left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 650, belowZero: 1, writtenOff: 25,
+    passedOn: { amount: 50, people: 1, belowZero: 25 }, invitesWithVouch: 5, trading: { withOthers: 2, insideOnly: 1 }, canChange: true,
     history: [
-        { kind: 'grant', amount: 1000, actor: 'pk_admin', actorCallsign: 'admin', at: '2026-11-01T10:00:00Z' },
-        { kind: 'hold', amount: -100, actor: 'pk_jane', actorCallsign: 'jane', at: '2026-11-02T10:00:00Z', for: 'invite', outcome: 'vouched' },
-        { kind: 'top_up', amount: 500, actor: 'pk_admin', actorCallsign: 'admin', at: '2026-11-03T10:00:00Z' }
+        { kind: 'grant', amount: 1000, actor: 'a'.repeat(64), actorCallsign: 'Sally', at: '2026-11-05T10:00:00Z' },
+        { kind: 'hold', amount: -100, actor: 'd'.repeat(64), actorCallsign: 'zara', at: '2026-11-05T11:00:00Z', for: 'invite', outcome: 'vouched', person: { memberPubkey: 'c'.repeat(64), callsign: 'sam' } },
+        { kind: 'return', amount: 75, actor: 'node', actorCallsign: null, at: '2026-11-06T09:00:00Z', for: 'invite', why: 'expired' },
+        { kind: 'grant', amount: 1000, actor: 'migration:vouchers', actorCallsign: null, at: '2026-11-01T10:00:00Z' },
+        { kind: 'top_up', amount: 500, actor: 'f'.repeat(64), actorCallsign: null, at: '2026-11-03T10:00:00Z' },
     ],
     people: [
-        {
-            memberPubkey: 'pk_sam',
-            callsign: 'sam',
-            joinedAt: '2026-11-02T12:00:00Z',
-            amount: 100,
-            raised: false,
-            byInvite: true,
-            belowZero: true,
-            left: false,
-            writtenOff: 0,
-            vouchesForMe: false,
-            trading: 'others',
-        },
-        {
-            memberPubkey: 'pk_bob',
-            callsign: 'bob',
-            joinedAt: '2026-11-03T12:00:00Z',
-            amount: 75,
-            raised: false,
-            byInvite: true,
-            belowZero: false,
-            left: false,
-            writtenOff: 0,
-            vouchesForMe: false,
-            trading: 'inside',
-        }
+        { memberPubkey: 'c'.repeat(64), callsign: 'sam', joinedAt: '2026-11-02T12:00:00Z', amount: 100, raised: false, byInvite: true, belowZero: true, left: false, writtenOff: 0, vouchesForMe: false, trading: 'others' },
+        { memberPubkey: '8'.repeat(64), callsign: 'bob', joinedAt: '2026-11-03T12:00:00Z', amount: 75, raised: false, byInvite: true, belowZero: false, left: false, writtenOff: 0, vouchesForMe: false, trading: 'inside' },
     ],
 };
 
@@ -153,55 +228,23 @@ const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
 const colors = scheme === 'dark' ? darkColors : lightColors;
 const viewMode = q.get('view') || 'card';
-
-globalThis.__theme = {
-    theme: scheme,
-    colors,
-    isDark: scheme === 'dark',
-};
-
-const identity = {
-    publicKey: 'pk_viewer',
-    privateKey: 'priv_key',
-    callsign: 'marty',
-    createdAt: '2026-11-01'
-};
-
-function InvitesVouchersBlock() {
-    return (
-        <View style={{
-            margin: 16, padding: 16, borderRadius: 14, backgroundColor: colors.surface.card,
-            borderWidth: 1, borderColor: colors.border.default
-        }}>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text.heading, marginBottom: 4 }}>Vouchers</Text>
-            <Text style={{ fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginBottom: 12 }}>
-                Members with a budget to vouch for the people they invite.
-            </Text>
-            <Pressable style={{ minHeight: 48, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default, justifyContent: 'center' }}>
-                <Text style={{ fontSize: 14, lineHeight: 20, color: colors.text.body, fontWeight: '500' }}>
-                    Jane Albury · 550 of 1,000 left · 4 vouched · 1 below zero ›
-                </Text>
-            </Pressable>
-            <Pressable style={{ minHeight: 48, paddingTop: 14, justifyContent: 'center' }}>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.brand.primary }}>+ Make someone a voucher</Text>
-            </Pressable>
-        </View>
-    );
-}
+globalThis.__theme = { theme: scheme, colors, isDark: scheme === 'dark' };
+const identity = { publicKey: 'a'.repeat(64), privateKey: 'f'.repeat(64), callsign: 'Sally', createdAt: '2026-11-01' };
 
 function RootApp() {
+    // A flex root the height of the page, as a phone's screen is, so the screen's own background reaches the bottom.
+    if (viewMode === 'names') return <View style={{ flex: 1, minHeight: '100vh' }}><NamesListScreen /></View>;
+    if (viewMode === 'block') {
+        // People → Invites draws the block first in its list, on the list's padding (16).
+        return (
+            <View style={{ flex: 1, minHeight: '100vh', backgroundColor: colors.surface.app, padding: 16 }}>
+                <VouchersBlock vouchers={VOUCHER_BLOCK.vouchers} onOpen={() => {}} onMakeVoucher={() => {}} />
+            </View>
+        );
+    }
     return (
         <View style={{ flex: 1, backgroundColor: colors.surface.page, minHeight: '100vh' }}>
-            {viewMode === 'block' ? (
-                <InvitesVouchersBlock />
-            ) : (
-                <VoucherCard
-                    anchorUrl="https://community.test"
-                    identity={identity}
-                    memberPubkey="pk_jane"
-                    initialCard={FIXTURE_CARD}
-                />
-            )}
+            <VoucherCard anchorUrl="https://mullum.example" identity={identity} memberPubkey={NODE_CARD.memberPubkey} initialCard={NODE_CARD} onClose={() => {}} />
         </View>
     );
 }
@@ -225,7 +268,7 @@ const result = await build({
         name: 'stubs',
         setup(b) {
             b.onResolve({ filter: /.*/ }, (args) => {
-                if (args.namespace === 'stub') return undefined;
+                if (args.namespace === 'stub' && !STUBS[args.path]) return undefined;
                 const name = stubFor(args.path);
                 if (!name) return undefined;
                 return { path: name, namespace: 'stub' };
@@ -276,7 +319,9 @@ try {
                 return base;
             };
             if (document.scrollingElement.scrollWidth > WIDTH) out.push(`the page scrolls sideways (${document.scrollingElement.scrollWidth}px)`);
-            const texts = [...document.querySelectorAll('div[dir], span, input, textarea')].filter((el) => {
+            // Not a checkbox: react-native-web draws a Switch (the owners' setting on the names list) with an
+            // `appearance: none` checkbox laid over its track, whose value ("on") is never drawn as words.
+            const texts = [...document.querySelectorAll('div[dir], span, input:not([type="checkbox"]), textarea')].filter((el) => {
                 const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
                 return own || ((el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && el.value);
             });
@@ -290,7 +335,7 @@ try {
                 const cs = getComputedStyle(el);
                 const fg = rgb(cs.color);
                 if (!fg) continue;
-                if (/^[\p{Extended_Pictographic}\uFE0F\u200D\s]+$/u.test(what)) continue;
+                if (/^[\p{Extended_Pictographic}️‍\s]+$/u.test(what)) continue;
                 const bg = backdrop(el);
                 const [a, b] = [lum(over(fg, bg)), lum(bg)].sort((x, y) => y - x);
                 const ratio = (a + 0.05) / (b + 0.05);
@@ -310,28 +355,52 @@ try {
         console.log(`${found.length ? '✗' : '✓'} ${label}${found.length ? `: ${found.length} problem(s)` : ''}`);
     };
 
-    const open = async (query) => { await page.goto(`${base}/?${query}`); await page.waitForTimeout(250); };
+    const open = async (query) => { await page.goto(`${base}/?${query}`); await page.waitForTimeout(300); };
+    const press = async (name) => { await page.getByRole('button', { name, exact: true }).first().click(); await page.waitForTimeout(250); };
 
     for (const scheme of ['light', 'dark']) {
-        // 1. Voucher card default (Their budget, Set budget to with quick levels & stepper)
+        // 1. The card: Their budget, Passed on with its below-zero part, Set budget to (from 700: the nearest level to 650)
         await open(`view=card&scheme=${scheme}`);
-        await page.getByText('Their budget').waitFor();
+        await page.getByText('Set budget to: 700').waitFor();
         await measure(`vouchers-card-${scheme}`);
 
-        // 2. Expand "See who they brought in ›"
-        await page.getByRole('button', { name: 'See who they brought in ›' }).click();
+        // 2. See who they brought in
+        await press('See who they brought in ›');
         await page.getByText('People vouched for').waitFor();
         await measure(`vouchers-card-people-${scheme}`);
 
-        // 3. Expand "Budget history ›"
-        await page.getByRole('button', { name: 'Budget history ›' }).click();
+        // 3. Budget history (a member, the node, BeanPool's start, someone who has left)
+        await press('Budget history ›');
         await page.getByTestId('budget-history-section').waitFor();
         await measure(`vouchers-card-history-${scheme}`);
 
-        // 4. Invites screen Vouchers block (§11)
+        // 4. People → Invites: the Vouchers block People renders (components/VouchersBlock.tsx)
         await open(`view=block&scheme=${scheme}`);
-        await page.getByText('Jane Albury · 550 of 1,000 left').waitFor();
+        await page.getByText('@zara · 550 of 650 left · 4 vouched · 1 below zero ›').waitFor();
         await measure(`vouchers-invites-block-${scheme}`);
+
+        // 5. The names list: the voucher first with its tag, Make a voucher on Mary Smith's entry, the filter chips
+        await open(`view=names&scheme=${scheme}`);
+        await page.getByText('Zara Quinn').waitFor();
+        await page.getByRole('button', { name: 'Make a voucher', exact: true }).first().waitFor();
+        await measure(`vouchers-names-list-${scheme}`);
+
+        // 6. The Vouchers filter: Zara's entry, and Wren's role voucher row with Add their name
+        await press('Vouchers');
+        await page.getByText('Add their name').waitFor();
+        await measure(`vouchers-names-filter-${scheme}`);
+
+        // 7. Make a voucher: the sheet with the amount chips and the stepper, prefilled from the community's setting
+        await press('All');
+        await press('Make a voucher');
+        await page.getByText('Make @Bea a voucher?').waitFor();
+        await measure(`vouchers-make-sheet-${scheme}`);
+
+        // 8. Community health: its Vouchers section
+        await press('Cancel');
+        await press('Community health');
+        await page.getByText('VOUCHERS', { exact: true }).waitFor();
+        await measure(`vouchers-health-${scheme}`);
     }
     for (const e of errors) problems.push(`page error: ${e}`);
 } finally {

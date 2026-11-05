@@ -95,7 +95,7 @@ vi.mock('../names-list', async (importOriginal) => {
         readBoundInvites: async () => ({ ok: true, value: { invites: [] } }),
         unkeptRemovalsOf: () => [],
         fetchHealthSummary: async () => ({ ok: false, status: 0, code: null, message: real.UNREACHABLE }),
-        fetchHealthExceptions: async () => ({ ok: false, status: 0, code: null, message: real.UNREACHABLE }),
+        fetchHealthExceptions: async () => ({ ok: true, value: { settings: { debtLinePct: 50, quietDays: 30 }, exceptions: [], departed: [] } }),
         fetchHealthLog: async () => ({ ok: false, status: 0, code: null, message: real.UNREACHABLE }),
     };
 });
@@ -270,6 +270,16 @@ describe('the names list with vouchers, exactly as the node answers', () => {
         const posted = node.calls.filter((c) => c.method === 'POST' && c.url === `${NODE}/api/names/vouchers`);
         expect(posted.map((c) => c.body)).toEqual([{ entryId: ID.mary, amount: 1100 }]);
         expect(host.textContent).toContain('Made @Bea a voucher with a budget of 1100 Beans.');
+    });
+
+    it('Community health’s Vouchers section names each voucher by @callsign, also one the phone has no member row for', async () => {
+        await renderAs('owner');
+        await click(buttons('Community health')[0]);
+        const heading = Array.from(host.querySelectorAll('span')).find((x) => (x.textContent ?? '') === 'VOUCHERS');
+        expect(heading).toBeTruthy();
+        const names = Array.from(host.querySelectorAll('span')).map((x) => (x.textContent ?? '').trim());
+        expect(names).toContain('@zara');
+        expect(names).not.toContain('zara');
     });
 
     it('a voucher’s card from the list: in the safe area, with who confirmed them (§5 second line)', async () => {

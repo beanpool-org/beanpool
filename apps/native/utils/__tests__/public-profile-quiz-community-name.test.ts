@@ -90,7 +90,6 @@ vi.mock('../db', () => ({
     removeFriendLocal: vi.fn(async () => {}),
     createConversationApi: vi.fn(async () => ({})),
     getTrustProfile: vi.fn(async () => null),
-    vouchMember: vi.fn(async () => {}),
     updateMemberProfile: vi.fn(async (pubkey: string, data: Record<string, unknown>) => { calls.updateMemberProfile.push({ pubkey, data }); }),
 }));
 

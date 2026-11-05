@@ -53,7 +53,7 @@ import { signedRequestWords } from '../../components/signed-request-lines';
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
 //   earned = floor(CREDIT_MAX_EARNED × V / (V + TRUST_CURVE_K))
-// There is NO baked-in floor: floor = -(vouch + earned + granted), so it slides
+// There is NO baked-in floor: floor = -(known + earned + granted), so it slides
 // continuously from 0 down to -2000. Tiers are recognition milestones (they don't set the floor).
 const { CREDIT_MAX_EARNED, TRUST_CURVE_K } = PROTOCOL_CONSTANTS;
 const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP;   // diversity: value with any ONE partner counts at most this much (canonical 500 from @beanpool/core)
@@ -564,7 +564,7 @@ export default function LedgerScreen() {
     const level = memberLevel(balanceState);
     const totalCredit = level.credit;
     const ec = totalCredit;                            // "trust" shown to the user
-    const notEarned = Math.max(0, totalCredit - earned); // vouch + grants — fixed, not grown by trading
+    const notEarned = Math.max(0, totalCredit - earned); // grants — fixed, not grown by trading
     const qualifiedValue = balanceState.qualifiedValue || 0;
     const avgRating = balanceState.avgRating || 0;
     const reviewCount = balanceState.reviewCount || 0;
@@ -580,7 +580,7 @@ export default function LedgerScreen() {
     const creditsToNext = nextTier ? Math.max(0, nextTier.min - totalCredit) : 0;
 
     // Value needed for the next tier: invert the curve for the earned credit that tier
-    // requires (vouch + grants are fixed), minus the value already traded. Then translate
+    // requires (grants are fixed), minus the value already traded. Then translate
     // to a rough "new partners" count (value with any one partner is diversity-capped).
     const targetEarned = nextTier ? Math.max(0, nextTier.min - notEarned) : 0;
     const valueToNext = nextTier ? Math.max(0, valueForEarned(targetEarned) - qualifiedValue) : 0;
@@ -708,7 +708,7 @@ export default function LedgerScreen() {
                 </View>
 
                 <Text style={styles.detailBlurb}>{selCurrent && selLevel === 0 && balanceState.floor < 0
-                    // Your own Newcomer level with your credit line already open (a vouch, or the admins' confirmation): not
+                    // Your own Newcomer level with your credit line already open (a grant, or the admins' confirmation): not
                     // the blurb's 'your first completed trade … opens your credit line' right above a floor below zero.
                     ? t("Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.")
                     : t(sel.blurb)}</Text>
@@ -1130,8 +1130,8 @@ export default function LedgerScreen() {
                 </Pressable>
             </View>
 
-            {/* ── Credit position — zero is the sweet spot. Un-vouched members have no credit line
-                 yet (floor 0), so show a plain-language "get vouched" prompt instead of the bar. ── */}
+            {/* ── Credit position — zero is the sweet spot. Members with no credit line yet (floor 0)
+                 see a plain-language prompt instead of the bar. ── */}
             {creditLineCard(balanceState) === 'frozen' ? (
                 <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
                     <View testID="ledger-known-frozen" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: colors.feedback.info.bg, borderWidth: 1, borderColor: colors.feedback.info.border, borderRadius: 12, padding: 12 }}>

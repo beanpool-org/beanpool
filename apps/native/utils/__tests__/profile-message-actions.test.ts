@@ -92,7 +92,6 @@ vi.mock('../db', () => ({
         return { id: 'conv-dm-123', participants, type };
     }),
     getTrustProfile: vi.fn(async () => data.trust),
-    vouchMember: vi.fn(async () => undefined),
     updateMemberProfile: vi.fn(async () => undefined),
 }));
 

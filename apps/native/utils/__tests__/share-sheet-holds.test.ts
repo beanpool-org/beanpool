@@ -78,7 +78,6 @@ vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recognit
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 // The community making the outside link (utils/peek.ts makePeekLink), held until the test answers.
 vi.mock('../db', () => ({
-    askCanVouch: async () => false,
     signedGet: vi.fn(),
     signedRequestWithMethod: vi.fn(async (_m: string, path: string) => (path === '/api/peek' && ctl.peek ? ctl.peek.promise : {})),
 }));

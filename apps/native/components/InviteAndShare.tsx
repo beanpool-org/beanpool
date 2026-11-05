@@ -1,9 +1,8 @@
 /**
  * "Invite and share" on a listing or an event (Marty, 3 Nov): one way in the Share sheet (components/SharePost.tsx ShareButton,
  * DESIGN-detail-pages-fable.md §2.5) that invites a friend and brings them to that listing once they have joined. It makes an
- * ordinary invite (the node makes the code), with the Vouch for them choice of the People tab for someone who can vouch (None
- * unless they choose), and hands the share sheet the listing's title and `{community}/?invite={code}&post={id}`
- * (utils/invite-and-share.ts).
+ * ordinary invite (the node makes the code), and hands the share sheet the listing's title and
+ * `{community}/?invite={code}&post={id}` (utils/invite-and-share.ts).
  *
  * Offered only where this member may invite: the community takes invites and its door lets them (an admin-only door asks their
  * role), and they are no guest. Where they can't, nothing. An invite works once, for one person, and the line under the sheet's
@@ -14,21 +13,17 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { INVITE_SHARE_WORDS, offersInviteVouch, t, type VouchLevel } from '@beanpool/core';
-import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
+import { INVITE_SHARE_WORDS, t } from '@beanpool/core';
+import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { onlyAdminsInvite, type InviteRole } from '../utils/invite-entries';
 import { inviteLink } from '../utils/names-invite';
 import { makeInviteForShare, offersInviteAndShare } from '../utils/invite-and-share';
-import { InviteVouchChoice } from './InviteVouchChoice';
 import type { BeanPoolIdentity } from '../utils/identity';
 
 export interface InviteAndShare {
     /** This member may invite here: the sheet offers the way. */
     offered: boolean;
-    offersVouch: boolean;
-    vouchLevel: VouchLevel | null;
-    setVouchLevel: (level: VouchLevel | null) => void;
     busy: boolean;
     note: string | null;
     clearNote: () => void;
@@ -45,11 +40,8 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
     const profile = useNodeProfile();
     const features = profile?.features;
     const adminsOnly = onlyAdminsInvite(features);
-    const vouchHere = features?.inviteVouch === true;
     const [who, setWho] = useState<{ anchor: string; identity: BeanPoolIdentity; guest: boolean } | null>(null);
     const [role, setRole] = useState<InviteRole | undefined>(undefined);
-    const [canVouch, setCanVouch] = useState(false);
-    const [vouchLevel, setVouchLevel] = useState<VouchLevel | null>(null);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
 
@@ -72,32 +64,25 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
                     const last = heard ? heard.role : await readPersistedNodeRole(anchor, identity.publicKey);
                     if (alive) setRole(last);
                 }
-                if (vouchHere) {
-                    const { askCanVouch } = await import('../utils/db');
-                    const can = await askCanVouch(identity.publicKey).catch(() => false);
-                    if (alive) setCanVouch(can);
-                }
             } catch {
                 if (alive) setWho(null);
             }
         })();
         return () => { alive = false; };
-    }, [post.id, adminsOnly, vouchHere, enabled]);
+    }, [post.id, adminsOnly, enabled]);
 
     const offered = enabled && !!who && offersInviteAndShare({ features, role, guest: who.guest, postId: post.id });
-    const offersVouch = offersInviteVouch(features, canVouch);
 
     const make = async (): Promise<boolean> => {
         if (!who) return false;
         setBusy(true);
         setNote(null);
         try {
-            const made = await makeInviteForShare(who.anchor, who.identity, offersVouch ? vouchLevel : null, features);
+            const made = await makeInviteForShare(who.anchor, who.identity, features);
             if (!made.ok) {
                 setNote(made.message);
                 return false;
             }
-            setVouchLevel(null);
             await Share.share({ message: `${post.title}\n${inviteLink(who.anchor, made.code, post.id)}`, title: post.title });
             return true;
         } catch (e: any) {
@@ -108,22 +93,20 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
         }
     };
 
-    return { offered, offersVouch, vouchLevel, setVouchLevel, busy, note, clearNote: () => setNote(null), make };
+    return { offered, busy, note, clearNote: () => setNote(null), make };
 }
 
 /**
- * The panel the sheet's Invite and share item opens: what the invite does, the vouch where offered, and the one button. `held`:
+ * The panel the sheet's Invite and share item opens: what the invite does, and the one button. `held`:
  * another share is in flight (components/ShareSheet.tsx `holding`), so Make waits too.
  */
 export function InviteAndSharePanel({ invite, onMake, held = false }: { invite: InviteAndShare; onMake: () => void; held?: boolean }) {
     const styles = useStyles(makeStyles);
-    const { colors } = useTheme();
     const off = invite.busy || held;
     return (
         <View style={styles.block} testID="invite-and-share">
             <View style={styles.panel} testID="invite-and-share-panel">
                 <Text style={styles.panelText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.panel)}</Text>
-                {invite.offersVouch && <InviteVouchChoice value={invite.vouchLevel} onChange={invite.setVouchLevel} colors={colors} />}
                 <Pressable onPress={onMake} disabled={off} style={[styles.make, off && { opacity: 0.6 }]} accessibilityRole="button"
                     accessibilityState={{ disabled: off }} testID="invite-and-share-make">
                     <Text style={styles.makeText} maxFontSizeMultiplier={1.3}>{t(INVITE_SHARE_WORDS.make)}</Text>

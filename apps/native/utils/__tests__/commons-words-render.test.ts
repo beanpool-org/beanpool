@@ -314,9 +314,9 @@ const OPEN = [
 ];
 const PAST = [
     decision('77777777', { status: 'executed', effect: 'freeze_credit', executionReason: 'Credit floor set to 0', tally: tally({ quorumMet: true, passed: true }) }),
-    decision('88888888', { status: 'executed', effect: 'grant_voucher' }),
+    decision('88888888', { status: 'executed', effect: 'freeze_credit' }),
     decision('99999999', { status: 'failed', effect: 'unfreeze_credit', tally: tally({ quorumMet: true }) }),
-    decision('10101010', { status: 'failed', effect: 'revoke_voucher' }),
+    decision('10101010', { status: 'failed', effect: 'reinstate_member' }),
     // A removal that passed, then a reinstatement cancelled it in its grace window.
     decision('29292929', { status: 'failed', effect: 'remove_member', executionReason: 'Cancelled by member reinstatement decision',
         tally: tally({ quorumMet: true, passed: true, minYes: 3, yesWeight: 3, noWeight: 0, totalWeight: 3, supportRatio: 1 }) }),

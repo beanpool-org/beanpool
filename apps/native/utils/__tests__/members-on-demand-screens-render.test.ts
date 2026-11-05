@@ -268,9 +268,9 @@ vi.mock('../channels', () => ({ fetchPublicChannels: vi.fn(async () => []) }));
 
 // The node: the three small forms of /api/members (M1), and nothing else this test needs. Every request is recorded.
 const NODE_URL = 'https://global.example';
-type NodeMember = { publicKey: string; callsign: string; joinedAt: string; avatarUrl: null; profileUpdatedAt: string; earnedCredit: number; nodeRole: null; elderVouchedBy: null; archetype: null; distanceKm?: number };
+type NodeMember = { publicKey: string; callsign: string; joinedAt: string; avatarUrl: null; profileUpdatedAt: string; earnedCredit: number; nodeRole: null; archetype: null; distanceKm?: number };
 const nodeMember = (publicKey: string, callsign: string, distanceKm?: number): NodeMember => ({
-    publicKey, callsign, joinedAt: '2026-03-01T00:00:00.000Z', avatarUrl: null, profileUpdatedAt: '2026-09-01T00:00:00.000Z', earnedCredit: 0, nodeRole: null, elderVouchedBy: null, archetype: null, ...(distanceKm !== undefined ? { distanceKm } : {}),
+    publicKey, callsign, joinedAt: '2026-03-01T00:00:00.000Z', avatarUrl: null, profileUpdatedAt: '2026-09-01T00:00:00.000Z', earnedCredit: 0, nodeRole: null, archetype: null, ...(distanceKm !== undefined ? { distanceKm } : {}),
 });
 const RIVER = '1'.repeat(64);
 const ROSA = '2'.repeat(64);
@@ -285,13 +285,13 @@ const node = {
 /** Another member's trust profile as the worldwide node answers it (measured on it, 16 Oct audit): Newcomer, nothing earned. */
 const NEWCOMER_TRUST = {
     tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit: 0, stats: { tradeCount: 0, uniquePartners: 0 }, completionRate: null,
-    risk: { band: 'red', headline: 'New & unvouched — take normal precautions', reasons: ['New member with no completed trades yet.'], tips: ['Meet somewhere public the first time.'] },
+    risk: { band: 'red', headline: 'New here — take normal precautions', reasons: ['New member with no completed trades yet.'], tips: ['Meet somewhere public the first time.'] },
     vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
     mutualCount: 1, mutualConnections: [{ publicKey: ROSA, callsign: 'Rosa', avatarUrl: null }],
-    joinedAt: '2026-10-01T00:00:00.000Z', lastActiveAt: null, elderVouch: null,
+    joinedAt: '2026-10-01T00:00:00.000Z', lastActiveAt: null,
 };
 /** Words only the Beans half of the Trust & safety panel draws. */
-const TRUST_PANEL_WORDS = ['Trust Points', 'Newcomer', 'New Member:', 'take normal precautions', 'Invited directly by the system admin', 'Completion', 'Vouch for Member', 'Calculating trust signals'];
+const TRUST_PANEL_WORDS = ['Trust Points', 'Newcomer', 'New Member:', 'take normal precautions', 'Invited directly by the system admin', 'Completion', 'Calculating trust signals'];
 /** The plain meeting advice another member's profile carries where Beans are off (director's call, 16 Oct 11:07). */
 const MEETING_TIPS = ['Meet somewhere public the first time.', "Don't share your home address until you've met.", "Tell a friend where and when you're meeting."];
 async function nodeFetch(input: unknown): Promise<Response> {

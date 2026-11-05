@@ -189,12 +189,12 @@ const KOFI = '3'.repeat(64);
 const memberTrust = (publicKey: string, callsign: string) => ({
     publicKey, callsign,
     tier: { name: 'Newcomer', emoji: '🌱' }, earnedCredit: 0, stats: { tradeCount: 0, uniquePartners: 0 }, completionRate: null,
-    risk: { band: 'red', headline: 'New & unvouched — take normal precautions', reasons: ['New member with no completed trades yet.'], tips: ['Meet somewhere public the first time.'] },
+    risk: { band: 'red', headline: 'New here — take normal precautions', reasons: ['New member with no completed trades yet.'], tips: ['Meet somewhere public the first time.'] },
     vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
-    mutualCount: 0, mutualConnections: [], joinedAt: '2026-09-01T00:00:00.000Z', lastActiveAt: null, elderVouch: null,
+    mutualCount: 0, mutualConnections: [], joinedAt: '2026-09-01T00:00:00.000Z', lastActiveAt: null,
 });
 /** What the node answers for an enterprise's key since slice E0: the same shape, saying what the key is. */
-const ENTERPRISE_TRUST = { ...memberTrust(ENTERPRISE, ENTERPRISE_NAME), isTreasury: true, elderVouch: { publicKey: OWN, callsign: 'Damo', avatarUrl: null } };
+const ENTERPRISE_TRUST = { ...memberTrust(ENTERPRISE, ENTERPRISE_NAME), isTreasury: true };
 const node = {
     online: true,
     requests: [] as string[],
@@ -286,7 +286,7 @@ const holdCard = async (publicKey: string, callsign: string) => {
 };
 
 /** Words only the member Trust Profile draws: none of them may show for an enterprise's key, at any moment. */
-const TRUST_PROFILE_WORDS = ['Trust Profile', 'Reciprocity Health', 'Vouched by', 'Vouch for', 'Trust Points', 'Collaboration Chemistry', 'Joined', 'Block'];
+const TRUST_PROFILE_WORDS = ['Trust Profile', 'Reciprocity Health', 'Invited directly by the system admin', 'Trust Points', 'Collaboration Chemistry', 'Joined', 'Block'];
 const expectNoTrustProfile = (when: string) => {
     for (const w of TRUST_PROFILE_WORDS) expect(text(), `${w} (${when})`).not.toContain(w);
     expect(host.querySelector('[data-testid="trust-track-record"]'), when).toBeNull();
@@ -377,7 +377,7 @@ for (const dark of [false, true]) {
             expect(nav.replaced).toEqual([]);
         });
 
-        // The screen can be handed a new key in place (a voucher or mutual link on a profile opens another): what it holds
+        // The screen can be handed a new key in place (an inviter or mutual link on a profile opens another): what it holds
         // for the last key never stands for the new one (review of #2367).
         it("a key changed in place from a member's held card to an enterprise's: the member's card is not drawn for it while the node is asked", async () => {
             await holdCard(KOFI, 'Kofi');
@@ -533,7 +533,7 @@ describe('Every door lands on the enterprise page', () => {
             // Nothing but the profile screen draws "Trust Profile".
             if (rel !== path.join('app', 'public-profile.tsx')) expect(src, rel).not.toMatch(/t\('Trust Profile'\)/);
         }
-        // §1.1's doors, and the member's own profile (the Ledger tab, the header, a voucher or mutual link on a profile).
+        // §1.1's doors, and the member's own profile (the Ledger tab, the header, an inviter or mutual link on a profile).
         expect(doors).toEqual({
             // The deal's other person, a listing's POSTED BY, a request's asker, and a poll's author (C1: a poll has a page now).
             [path.join('app', 'post', '[id].tsx')]: 4,

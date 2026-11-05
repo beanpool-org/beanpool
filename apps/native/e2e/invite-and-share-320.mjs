@@ -5,14 +5,14 @@
  * (memory product-audience-small-screens: 320dp wide, the phone's text at 1.3x), in the light and the dark scheme: the
  * app's own component through react-native-web in headless Chromium, as e2e/peek-320.mjs draws its screens.
  *
- * What is drawn: the button closed; its panel for someone who can vouch (Vouch for them, None on) and for a plain member;
- * the panel after a tap with the community unreachable (the line that says an offline ticket can't take anyone to a
- * listing); and a member where only admins invite, who has no button at all. English, and Tamil (the longest words).
+ * What is drawn: the button closed; its panel (no vouch since the vouching reset, R0: the same for every member); the panel
+ * after a tap with the community unreachable (the line that says an offline ticket can't take anyone to a listing); and a
+ * member where only admins invite, who has no button at all. English, and Tamil (the longest words).
  *
- * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under 44dp
- * tall (the choices) or 47.5dp (the others); text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or
- * 24px); the wrong control for who is looking (a vouch choice for a plain member; a button for a member where only admins
- * invite).
+ * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
+ * 47.5dp tall; text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or
+ * 24px); the wrong control for who is looking (any choice in the panel, or a vouch word; a button for a member where only
+ * admins invite).
  *
  * A stand-in for the phone, not an emulator: Android's fonts and line breaking differ. Nothing leaves the machine: the
  * page aborts every request but its own.
@@ -84,7 +84,6 @@ const STUBS = {
     'node-admin': `export const askNodeRole = async () => ({ role: globalThis.__role ?? null, communityName: 'Castlemaine' }); export const cachedNodeRoleHeard = askNodeRole; export const persistNodeRole = async () => {}; export const readPersistedNodeRole = async () => undefined;`,
     // A member here (the Share button's ways are a member's), as share-one-flow-320.mjs stubs it.
     'NodeStatusContext': `export const useNodeStatus = () => ({ recognition: 'member', nodeUrl: 'https://castlemaine.beanpool.org', recheck: async () => 'member' });`,
-    'db': `export const askCanVouch = async () => !!globalThis.__canVouch;`,
     'crypto': `export const buildSignedHeaders = async () => ({});`,
     'peek': `export const makePeekLink = async () => ({ link: 'https://castlemaine.beanpool.org/?post=p&peek=t', expiresAt: '' }); export const peekStopsHere = () => 0;`,
     // The ask form (#2775) is opened by a tap these shots never make; stubbed as share-one-flow-320.mjs does.
@@ -96,9 +95,9 @@ const stubFor = (spec, importer = '') => {
     if (!spec.startsWith('.')) return null;
     const base = path.basename(spec);
     if (['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'InviteAsks', 'NodeStatusContext'].includes(base)) return base;
-    // The key, the stored communities, the role and the balance are the button's own reads: stubbed for it alone, so the
-    // real modules still serve everything else that imports them.
-    return ['identity', 'nodes', 'node-admin', 'db', 'crypto'].includes(base) && /^(invite-and-share|InviteAndShare|use-share-role)\./.test(path.basename(importer)) ? base : null;
+    // The key, the stored communities and the role are the button's own reads: stubbed for it alone, so the real modules
+    // still serve everything else that imports them.
+    return ['identity', 'nodes', 'node-admin', 'crypto'].includes(base) && /^(invite-and-share|InviteAndShare|use-share-role)\./.test(path.basename(importer)) ? base : null;
 };
 
 // ─── The page: each case renders the real screens for one state ─────────────────────────────────────────────────────
@@ -118,8 +117,7 @@ const colors = scheme === 'dark' ? darkColors : lightColors;
 globalThis.__theme = { theme: scheme, colors };
 if (q.get('lang') === 'ta') setLanguage('ta', [ta]);
 const who = q.get('who') || 'member';
-globalThis.__features = { shareOutside: true, invites: true, inviteVouch: true, door: who === 'locked-out' ? 'admins' : 'members' };
-globalThis.__canVouch = who === 'voucher';
+globalThis.__features = { shareOutside: true, invites: true, beans: true, door: who === 'locked-out' ? 'admins' : 'members' };
 globalThis.__role = null;
 const POST_ID = '3f0c8a8e-1b2c-4d5e-8f90-123456789abc';
 createRoot(document.getElementById('root')).render(
@@ -244,17 +242,11 @@ try {
             await open(q('member'));
             await page.locator('[data-testid="invite-and-share-button"]').waitFor();
             await measure(`${tag} · the way in the sheet, closed`);
-            await open(q('voucher'));
-            await page.locator('[data-testid="invite-and-share-button"]').click();
-            await page.locator('[role="radio"]').first().waitFor();
-            const radios = await page.locator('[role="radio"]').count();
-            if (radios !== 4) problems.push(`${tag} voucher: ${radios} choices, not 4`);
-            await measure(`${tag} · the panel for someone who can vouch`, { minButton: 43.5 });
-            await open(q('member'));
             await page.locator('[data-testid="invite-and-share-button"]').click();
             await page.locator('[data-testid="invite-and-share-panel"]').waitFor();
-            if (await page.locator('[role="radio"]').count()) problems.push(`${tag} member: a plain member sees the vouch choice`);
-            await measure(`${tag} · the panel for a plain member`);
+            if (await page.locator('[role="radio"]').count()) problems.push(`${tag} member: the panel offers a choice (the vouching reset, R0: none)`);
+            if (/vouch/i.test(await page.locator('[data-testid="invite-and-share"]').innerText())) problems.push(`${tag} member: the panel says vouch`);
+            await measure(`${tag} · the panel`);
             // The community is unreachable (the page aborts every request but its own): no ticket, and the member is told.
             await page.locator('[data-testid="invite-and-share-make"]').click();
             await page.locator('[data-testid="invite-and-share-note"]').waitFor();

@@ -93,7 +93,7 @@ function Screen() {
             <View style={{ padding: 16 }}>
                 <View testID="screen">
                     {q.get('who') === 'admin'
-                        ? <InviteAsksToAnswer anchorUrl="https://node.example" identity={identity} offersVouch />
+                        ? <InviteAsksToAnswer anchorUrl="https://node.example" identity={identity} />
                         : <>
                             <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>{t('📤 Bring someone here')}</Text>
                             <AskAnAdmin anchorUrl="https://node.example" identity={identity} onShare={() => {}} />

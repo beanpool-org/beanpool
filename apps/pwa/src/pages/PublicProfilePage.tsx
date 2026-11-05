@@ -533,7 +533,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         void (api as any).getMyVouching().then(setMyVouching).catch(() => {});
                                     }
                                 } catch (err: any) {
-                                    if (!isRaise && (err?.code === 'already_vouched' || (typeof err?.message === 'string' && /already vouched/i.test(err.message)))) {
+                                    if (!isRaise && err?.code === 'already_vouched') {
                                         const prior = (typeof err?.prior === 'number' && err.prior > 0) ? err.prior : (myPriorVouch > 0 ? myPriorVouch : 25);
                                         setNodePriorVouch(prior);
                                         const newTotal = prior + profileVouchPreset;

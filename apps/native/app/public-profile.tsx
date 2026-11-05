@@ -1490,7 +1490,7 @@ export default function PublicProfileScreen() {
                                                     vouchAmount: profileVouchPreset,
                                                     raise: isRaise,
                                                 });
-                                                if (!isRaise && !res.ok && (res.code === 'already_vouched' || /already vouched/i.test(res.message))) {
+                                                if (!isRaise && !res.ok && res.code === 'already_vouched') {
                                                     const prior = res.prior ?? (myPriorVouch > 0 ? myPriorVouch : 25);
                                                     setNodePriorVouch(prior);
                                                     const newTotal = prior + profileVouchPreset;

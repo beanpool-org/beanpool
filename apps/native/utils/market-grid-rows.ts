@@ -1,8 +1,10 @@
 /**
  * The phone's Market grid as rows (DESIGN-market-grid-sizes-fable.md §2.5, slice PG2; Marty, 4 Nov 2026: one style box, the
  * grid's tiles one height per row, a poll a whole row). The grid's FlatList takes one item a row, not one a post: a row is two
- * tiles side by side, drawn in one `flexDirection: 'row'` so the pair shares one height, or a poll on its own at the list's
- * width (it is the poll card, which a half cell squeezed, as it did the event).
+ * tiles side by side, drawn in one `flexDirection: 'row'` so the pair shares one height, or a poll on its own, both cells
+ * wide (the phone's whole row) at a TILE row's height, not its own (Marty, 5 Nov 2026: "yes two wide it is but make sure it
+ * filled correctly"): components/PollGridTile.tsx draws a tile's box invisible in the row and lays the poll's summary over
+ * it, so a poll row is exactly as tall as the tile rows round it.
  *
  * The order is the posts' own, packed as the web's grid packs it (`grid-flow-row-dense`): a poll that comes while a tile waits
  * for its partner is drawn after that row, and the next tile fills the cell beside the waiting one, so no cell is left empty

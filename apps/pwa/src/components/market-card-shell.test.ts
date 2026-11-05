@@ -9,11 +9,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
-import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, type CardType } from '@beanpool/core';
+import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, POLL_GRID_TILE, pollTileRowGrow, type CardType } from '@beanpool/core';
 import {
     BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, COMPACT_END, COMPACT_EVENT_BODY, COMPACT_EVENT_HEAD, COMPACT_EVENT_MARK, COMPACT_EVENT_TEXT,
     COMPACT_LEAD, COMPACT_LINE, COMPACT_LINES, COMPACT_MARK, COMPACT_MARK_GIVES, COMPACT_PICTURE, COMPACT_PIECE, COMPACT_POLL_TILE, COMPACT_ROW,
-    COMPACT_TEXT, COMPACT_TITLE, COMPACT_TITLE_GIVES, COMPACT_WORD, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_CELL, GRID_ROW, GRID_ROW_CHIP,
+    COMPACT_TEXT, COMPACT_TITLE, COMPACT_TITLE_GIVES, COMPACT_WORD, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_ACTION, GRID_POLL_ANSWER, GRID_POLL_ANSWERS, GRID_POLL_BAR, GRID_POLL_CELL,
+    GRID_POLL_FOOT, GRID_POLL_GHOST, GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_NOTE, GRID_POLL_PCT, GRID_POLL_QUESTION, GRID_POLL_ROW,
+    GRID_POLL_ROW_EDGE, GRID_POLL_ROW_MAX, GRID_POLL_TILE, GRID_ROW, GRID_ROW_CHIP,
     GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
     PAGE_TYPE, POLL_CARD, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
@@ -262,10 +264,38 @@ describe('the grid tile holds core\'s numbers', () => {
         expect(classes(GRID_PHOTO)).toEqual(expect.arrayContaining([`aspect-[${aspectWidth}/${aspectHeight}]`, 'shrink-0', 'w-full']));
     });
 
-    it('the gutter is 16; the poll is the whole row at two and three columns, a 2 x 2 from four', () => {
+    // Marty, 5 Nov 2026: "yes two wide it is but make sure it filled correctly. we dont want 2 wide with heaps of space". This
+    // replaces G2's "whole row at two and three columns, a 2 x 2 from four" (DESIGN-market-grid-sizes-fable.md §2.3).
+    it('the gutter is 16; the poll is two cells wide at every column count and one row tall', () => {
         expect(spacing(GRID, 'gap')).toBe(MARKET_CARD_SHELL.gap.grid);
         expect(classes(GRID)).toEqual(expect.arrayContaining(['grid-flow-row-dense', 'grid-cols-2', 'md:grid-cols-3', 'lg:grid-cols-4', 'xl:grid-cols-5']));
-        expect(classes(GRID_POLL_CELL)).toEqual(['h-full', 'col-span-2', 'md:col-span-3', 'lg:col-span-2', 'lg:row-span-2']);
+        expect(classes(GRID_POLL_CELL)).toContain('col-span-2');
+        // No other span at any breakpoint: two columns at 2, 3, 4 and 5 columns, and never two rows.
+        expect(classes(GRID_POLL_CELL).filter(c => /(col|row)-span-/.test(c))).toEqual(['col-span-2']);
+    });
+
+    it('the poll\'s height is a tile\'s: an invisible tile in its cell (half the cell less half the 16 gutter, its border, the 4:3 photo, the text block)', () => {
+        expect(classes(GRID_POLL_GHOST)).toEqual(expect.arrayContaining(['invisible', 'border', `w-[calc(50%-${MARKET_CARD_SHELL.gap.grid / 2 / 16}rem)]`]));
+        const { aspectWidth, aspectHeight } = MARKET_CARD_SHELL.photo.grid;
+        expect(classes(GRID_POLL_GHOST_PHOTO)).toEqual(expect.arrayContaining([`aspect-[${aspectWidth}/${aspectHeight}]`, 'w-full', 'shrink-0']));
+        expect(classes(GRID_POLL_GHOST_TEXT)).toEqual(expect.arrayContaining([`h-[${MARKET_GRID_TEXT_BLOCK_REM}rem]`, 'shrink-0']));
+        expect(GRID_TEXT).toContain(`h-[${MARKET_GRID_TEXT_BLOCK_REM}rem]`);
+        // The tile is laid over the cell, so what it holds never makes the row taller.
+        expect(classes(GRID_POLL_CELL)).toContain('relative');
+        expect(classes(GRID_POLL_TILE)).toEqual(expect.arrayContaining(['absolute', 'inset-0', 'overflow-hidden', 'border', 'bg-[var(--bg-card)]', 'shadow-sm']));
+        expect(radius(GRID_POLL_TILE)).toBe(MARKET_CARD_SHELL.radius);
+        expect(spacing(GRID_POLL_TILE, 'p')).toBe(MARKET_CARD_SHELL.textPadding);
+    });
+
+    it('the poll\'s answer rows: one line at least (core\'s row), 1.6 x at most, spread evenly in their room', () => {
+        expect(classes(GRID_POLL_ROW)).toEqual(expect.arrayContaining([`min-h-[${POLL_GRID_TILE.rowHeightRem}rem]`, 'flex-1']));
+        // core's grow for every row count the tile can show, each written out as its max-height.
+        for (const rows of [1, 2, 3, 4, 5, 8]) {
+            const grow = pollTileRowGrow(rows);
+            expect(GRID_POLL_ROW_MAX[grow]).toBe(`max-h-[${+(POLL_GRID_TILE.rowHeightRem * grow).toFixed(4)}rem]`);
+        }
+        expect(GRID_POLL_ROW_MAX[POLL_GRID_TILE.rowGrow]).toBe('max-h-[2.2rem]');
+        expect(classes(GRID_POLL_ANSWERS)).toEqual(expect.arrayContaining(['flex-1', 'min-h-0', 'justify-evenly', 'overflow-hidden', `gap-${POLL_GRID_TILE.rowGapRem * 4}`]));
     });
 
     it('the row chip and the scrim pill: the one chip\'s size, padding and corners; the row chip gives way and ends in an ellipsis', () => {
@@ -324,7 +354,8 @@ describe('the grid tile holds core\'s numbers', () => {
     });
 
     it('no raw violet, purple, blue or nature-950 in the grid\'s classes', () => {
-        const all = [GRID, GRID_POLL_CELL, gridTile(), gridTile({ elder: true }), gridTile({ pulse: true }), GRID_PHOTO, GRID_TEXT,
+        const all = [GRID, GRID_POLL_CELL, GRID_POLL_GHOST, GRID_POLL_TILE, GRID_POLL_HEAD, GRID_POLL_QUESTION, GRID_POLL_ANSWERS, GRID_POLL_ROW,
+            ...Object.values(GRID_POLL_ROW_EDGE), GRID_POLL_BAR, GRID_POLL_ANSWER, GRID_POLL_PCT, GRID_POLL_NOTE, GRID_POLL_FOOT, GRID_POLL_ACTION, gridTile(), gridTile({ elder: true }), gridTile({ pulse: true }), GRID_PHOTO, GRID_TEXT,
             GRID_TITLE, GRID_ROW, GRID_ROW_CHIP, GRID_SCRIM_PILL, GRID_SCRIM_MARK, GRID_ROW_LABEL, GRID_TIME_ROW, GRID_TIME_PIECE, ...Object.values(GRID_TYPE)].join(' ');
         expect(all).not.toMatch(/violet-|purple-|blue-|indigo-|nature-950/);
     });

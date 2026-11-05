@@ -46,7 +46,11 @@ vi.mock('../lib/features', async (orig) => ({
 
 // The page's children: stubbed, so only the page's own words are judged (see the note at the top).
 vi.mock('../components/MarketplaceCard', () => ({ MarketplaceCard: ({ post }: { post: { title: string } }) => <div data-testid="card-stub">{post.title}</div> }));
-vi.mock('../components/PollCard', () => ({ PollCard: ({ post }: { post: { title: string } }) => <div data-testid="poll-stub">{post.title}</div> }));
+// The card is a stub; its pure helpers stay real, because the grid's poll tile (PollGridTile) reads them, so the tile is drawn in the pseudo-locale too.
+vi.mock('../components/PollCard', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../components/PollCard')>()),
+    PollCard: ({ post }: { post: { title: string } }) => <div data-testid="poll-stub">{post.title}</div>,
+}));
 vi.mock('../components/EventCard', () => ({
     EventCard: ({ post }: { post: { title: string } }) => <div data-testid="event-stub">{post.title}</div>,
     EventDetail: ({ post }: { post: { title: string } }) => <div data-testid="event-detail-stub">{post.title}</div>,

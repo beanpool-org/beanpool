@@ -12,9 +12,10 @@ import { AuthorCard } from '../components/AuthorCard';
 import { useCoversScreen } from '../lib/screen-cover';
 import { nodeRefusal } from '../lib/node-refusal';
 import { MarketplaceCard } from '../components/MarketplaceCard';
-import { GRID, GRID_POLL_CELL } from '../components/market-card-shell';
+import { GRID } from '../components/market-card-shell';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
+import { PollGridTile } from '../components/PollGridTile';
 import { EventCard, EventDetail } from '../components/EventCard';
 import { PostTagChips } from '../components/PostTagChips';
 import { SharePostButtons } from '../components/SharePost';
@@ -4038,13 +4039,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         // after the first group, which holds the pins, so a pin is never below it.
                         const gridLineAt = fillHeading || !seenEligible ? -1 : newSinceIndex(filtered, seenListed, orderNow);
                         return (
-                            // `grid-flow-row-dense`: the poll below takes two columns from `md` up, and a
+                            // `grid-flow-row-dense`: the poll below takes two columns at every count, and a
                             // plain auto-placed grid cannot put it in the last column of a row — it moves to
                             // the next row and leaves that cell empty, a hole that walks about as the feed
                             // and the window change. Dense lets the tiles after it back-fill the cell.
                             // It only ever moves a tile forward past the poll, and only into a cell that
-                            // would otherwise be blank; with no item wider than one column there is nothing
-                            // to back-fill, so below `md` this changes nothing.
+                            // would otherwise be blank. At two columns the poll is the whole row, so a tile
+                            // waiting for its partner takes the next one first, as the phone's rows do.
                             <>
                             {fillHeading && (
                                 <div className="flex items-center gap-3 mt-2 mb-2">
@@ -4078,21 +4079,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         );
                                     }
                                     if (post.type === 'poll') {
+                                        // Two cells wide and one tile row tall at every column count, a read-only summary
+                                        // that fills its box; a click anywhere opens the poll's page, where it is voted
+                                        // (Marty, 5 Nov 2026: "yes two wide it is but make sure it filled correctly").
                                         return (
-                                            // A poll is the tallest thing in the grid: four answers, the ballot note and the
-                                            // turnout row. One column is too narrow for its answers ("It's Am…", and at 320 px
-                                            // with 1.3x text "Other"). At two and three columns it is the whole row at its own
-                                            // height (nothing sits beside it); from four up a 2 x 2 square the tiles flow round
-                                            // (GRID_POLL_CELL, DESIGN-market-grid-sizes-fable.md §2.3).
-                                            <div key={post.id} data-testid={pinned ? 'market-pinned-tile' : undefined} className={GRID_POLL_CELL}>
-                                                <PollCard
-                                                    post={post}
-                                                    identity={identity}
-                                                    viewMode={viewMode}
-                                                    onVoteSuccess={() => refresh()}
-                                                    informal={informalPolls} localWays={markWays}
-                                                />
-                                            </div>
+                                            <PollGridTile
+                                                key={post.id}
+                                                post={post}
+                                                testId={pinned ? 'market-pinned-tile' : undefined}
+                                                onOpen={() => setSelectedPost(post)}
+                                                informal={informalPolls}
+                                            />
                                         );
                                     }
                                     const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';

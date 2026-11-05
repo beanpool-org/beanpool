@@ -589,6 +589,8 @@ describe('the grid is rows on a lattice: a pair is one height, the text block fo
     const BLOCK = 24 + (4 * 18 + 3 * 4) * SCALE;
     const blockOf = (card: Element) => card.querySelector('[data-testid="grid-text-block"]') as HTMLElement;
     const pollCard = () => host.querySelector('[data-testid="poll-card"]') as HTMLElement;
+    /** The grid's poll: its summary tile (PollGridTile, Marty 5 Nov 2026), laid over a tile's invisible box. */
+    const gridPoll = () => host.querySelector('[data-testid="market-poll-tile-g-poll"]') as HTMLElement;
 
     it('a pair at 320 x 1.3: two tiles 136 wide and one height, the least a tile holds beside the most', async () => {
         await show([SHORT, FULL, C, D], 'grid');
@@ -650,8 +652,9 @@ describe('the grid is rows on a lattice: a pair is one height, the text block fo
     it('a poll is a row of its own at the list\'s width, 288 dp, never a half cell; the tiles pack round it', async () => {
         await show([SHORT, POLL, FULL, C], 'grid');
         const l = lay(569);
-        const poll = pollCard();
+        const poll = gridPoll();
         expect(poll).not.toBeNull();
+        expect(pollCard()).toBeNull();
         expect(l.width(poll)).toBe(WIDTH - 32);
         expect(at(l, poll).left).toBe(16);
         // The tile that waited for its partner keeps it: SHORT and FULL share the first row, the poll is under it, C after.
@@ -663,19 +666,39 @@ describe('the grid is rows on a lattice: a pair is one height, the text block fo
         expect(at(l, cardOf(C.title)).left).toBe(16);
     });
 
+    // Marty, 5 Nov 2026: "yes two wide it is but make sure it filled correctly. we dont want 2 wide with heaps of space". The
+    // poll's row is a tile row tall, never its own height, whatever it holds: a tile's box drawn invisible in its first cell.
+    it('a poll\'s row is exactly a tile row tall at 320 x 1.3, the short poll and the long one alike', async () => {
+        const SIX = { ...POLL, id: 'g-poll', pollOptions: Array.from({ length: 6 }, (_, i) => ({ id: `o${i}`, text: `Answer number ${i + 1} with words enough to fill a line`, votes: i })) };
+        for (const poll of [POLL, SIX, { ...POLL, pollOptions: POLL.pollOptions.slice(0, 2) }]) {
+            await show([SHORT, FULL, poll, C, D], 'grid');
+            const l = lay(569);
+            const tile = cardOf(SHORT.title);
+            expect(l.height(gridPoll())).toBeCloseTo(l.height(tile), 3);
+            expect(l.height(gridPoll())).toBeCloseTo(2 + (136 - 2) * 3 / 4 + BLOCK, 3);
+            // Its header at its top and its footer at its foot, inside its 12 of padding; the answers between them.
+            const head = gridPoll().querySelector('[data-testid="poll-grid-head"]')!;
+            const foot = gridPoll().querySelector('[data-testid="poll-grid-foot"]')!;
+            expect(at(l, head).top - at(l, gridPoll()).top).toBeCloseTo(12 + 1, 3);
+            expect(at(l, gridPoll()).top + l.height(gridPoll()) - (at(l, foot).top + l.height(foot))).toBeCloseTo(12 + 1, 3);
+            act(() => root.unmount());
+            root = createRoot(host);
+        }
+    });
+
     it('the poll in the grid is the width of the poll in the list', async () => {
         await show([SHORT, POLL], 'list');
         const listWidth = lay(569).width(pollCard());
         act(() => root.unmount());
         root = createRoot(host);
         await show([SHORT, POLL], 'grid');
-        expect(lay(569).width(pollCard())).toBe(listWidth);
+        expect(lay(569).width(gridPoll())).toBe(listWidth);
     });
 
     it('under a poll in the grid is the gutter, 16, as under a row of tiles (the poll card on the box, slice C1)', async () => {
         await show([SHORT, FULL, POLL, C, D], 'grid');
         const l = lay(569);
-        const poll = pollCard();
+        const poll = gridPoll();
         const nextRow = cardOf(C.title);
         expect(at(l, nextRow).top - (at(l, poll).top + l.height(poll))).toBeCloseTo(16, 3);
         const firstRow = cardOf(SHORT.title);

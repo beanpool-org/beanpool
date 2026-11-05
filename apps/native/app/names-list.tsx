@@ -41,9 +41,13 @@ import {
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmationLimit, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
-    inviteForNamesEntry, readBoundInvites, firstSentence,
-    type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
+    inviteForNamesEntry, readBoundInvites, firstSentence, makeNamesVoucher, fetchVouchers,
+    type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow, type VouchersBlockBody,
 } from '../utils/names-list';
+import { VoucherCard } from '../components/VoucherCard';
+import {
+    canMakeVoucher, voucherCallsignFor, roleVouchersWithoutEntry, filterRoleVouchers, nearestBudgetLevel, budgetLevelUp, budgetLevelDown,
+} from '../utils/voucher-rules';
 import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, type BoundInvite } from '../utils/names-invite';
 import { makeOfflineTicket } from '../utils/member-statements';
 import {
@@ -81,7 +85,9 @@ type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?
     // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
     // The totals (any community) and the two access-log lists: looks at a balance, looks at trades and alerts (#1608).
     // `totalsMissing`: why there are no totals (a node from before #1599 needs an update; otherwise "just now").
-    | { kind: 'health'; body: HealthExceptionsBody | null; waiting: WaitingLines | null; totals: HealthTotals | null; totalsMissing: string; logs: { balance: HealthLogSection; trades: HealthLogSection }; refused: string | null };
+    | { kind: 'health'; body: HealthExceptionsBody | null; waiting: WaitingLines | null; totals: HealthTotals | null; totalsMissing: string; logs: { balance: HealthLogSection; trades: HealthLogSection }; refused: string | null }
+    // Making a confirmed entry a voucher (§10): budget from 100 to 2,000, prefilled with community setting (1,000).
+    | { kind: 'make_voucher'; entry: OpenedEntry; memberPubkey: string; callsign: string };
 
 export default function NamesListScreen() {
     const { theme, colors } = useTheme();
@@ -109,6 +115,13 @@ export default function NamesListScreen() {
     const [copyRefused, setCopyRefused] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
     const [mode, setMode] = useState<Mode>({ kind: 'list' });
+    const [filter, setFilter] = useState<'all' | 'vouchers'>('all');
+    const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
+    const [makeVoucherAmount, setMakeVoucherAmount] = useState(() => nearestBudgetLevel(null));
+    // The vouchers block, as the node answers GET /api/names/vouchers: it answers only owners and credit-committee admins,
+    // so having it IS being on the committee (null: refused, or not asked yet). Kept apart from `opened`, which the list's
+    // own actions replace, so a save never drops it.
+    const [voucherBlock, setVoucherBlock] = useState<VouchersBlockBody | null>(null);
     const [query, setQuery] = useState('');
     const [memberQuery, setMemberQuery] = useState('');
     const [name, setName] = useState('');
@@ -175,7 +188,9 @@ export default function NamesListScreen() {
             const url = await getAnchorUrl();
             if (!url) { setError(t('This phone isn’t connected to a community.')); return; }
             setAnchor(url);
-            await take(url, await openNamesList(url, identity, STORE));
+            const [result, block] = await Promise.all([openNamesList(url, identity, STORE), fetchVouchers(url, identity)]);
+            setVoucherBlock(block.ok ? block.value : null);
+            await take(url, result);
         } finally {
             loadingRef.current = false;
             setLoading(false);
@@ -188,8 +203,17 @@ export default function NamesListScreen() {
     const state = opened?.state ?? null;
     const plan = opened?.plan ?? null;
     const list = opened?.list ?? null;
-    const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened) : []), [opened]);
+    const vouchers = voucherBlock?.vouchers ?? null;
+    const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened, vouchers) : []), [opened, vouchers]);
     const shown = useMemo(() => filterEntries(entries, query), [entries, query]);
+    const isCommittee = voucherBlock !== null;
+    const filteredRoleVouchers = useMemo(() => filterRoleVouchers(roleVouchersWithoutEntry(vouchers, entries), query), [vouchers, entries, query]);
+    const filteredShown = useMemo(() => {
+        if (filter === 'vouchers') {
+            return shown.filter((e) => !!e.voucher);
+        }
+        return shown;
+    }, [shown, filter]);
     const callsignOf = useMemo(() => {
         const m = new Map<string, string>();
         for (const x of members) m.set(x.publicKey, x.callsign);
@@ -526,7 +550,7 @@ export default function NamesListScreen() {
                         // Fetched for the export, so the node logs it as one: the PDF is made from this answer.
                         const fresh = await fetchNamesList(anchor, identity, true);
                         if (!fresh.ok) { setError(fresh.message); return; }
-                        const html = namesListHtml({ communityName, exportedBy: `@${identity.callsign}`, at: new Date(), entries: openEntries(fresh.value, opened) });
+                        const html = namesListHtml({ communityName, exportedBy: `@${identity.callsign}`, at: new Date(), entries: openEntries(fresh.value, opened, vouchers) });
                         // Required here, not at the top: a phone built before expo-print fails this export alone, and says so below.
                         const Print = require('expo-print') as typeof import('expo-print');
                         const Sharing = require('expo-sharing') as typeof import('expo-sharing');
@@ -594,6 +618,7 @@ export default function NamesListScreen() {
                 {mode.kind === 'edit' ? (mode.entry ? t('Change an entry') : t('Add a name')) : mode.kind === 'pick' ? (mode.workOff ? t('Work off a debt') : t('Confirm a member'))
                     : mode.kind === 'settle' ? t('Settle a debt')
                     : mode.kind === 'health' ? t('Community health')
+                    : mode.kind === 'make_voucher' ? t('Make a voucher')
                     : say(mode.kind === 'check' ? COPY.checkEachOtherTitle : COPY.title)}
             </Text>
         </View>
@@ -797,11 +822,100 @@ export default function NamesListScreen() {
                                 <Text style={styles.entryNote}>{r.detail}</Text>
                             </View>
                         ))}
+                        {vouchers && (
+                            <>
+                                <Text style={styles.label} accessibilityRole="header">{t('VOUCHERS')}</Text>
+                                <Text style={styles.hint}>{t('Members who vouch for new joiners, and how much of their vouched credit was written off.')}</Text>
+                                {vouchers.length === 0 ? <Text style={styles.hint}>{t('Nobody has a voucher budget.')}</Text> : null}
+                                {[...vouchers].sort((a, b) => (b.writtenOff || 0) - (a.writtenOff || 0)).map((v) => (
+                                    <View key={v.memberPubkey} style={styles.entry}>
+                                        <Text style={styles.entryName}>{(callsignOf(v.memberPubkey) || v.callsign) ? `@${callsignOf(v.memberPubkey) || v.callsign}` : t('a voucher')}</Text>
+                                        <Text style={styles.entryNote}>
+                                            {t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
+                                                left: formatNumber(v.left),
+                                                level: formatNumber(v.level),
+                                                vouched: formatNumber(v.vouched),
+                                                belowZero: v.belowZero,
+                                                writtenOff: formatNumber(v.writtenOff),
+                                                passedOn: formatNumber(v.passedOn?.amount ?? 0),
+                                            })}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </>
+                        )}
                     </>
                 ) : null}
                 {logList(mode.logs.balance)}
                 {logList(mode.logs.trades)}
                 <View style={styles.buttonRow}>{btn(t('Back to the list'), () => setMode({ kind: 'list' }), 'secondary')}</View>
+            </>
+        );
+    } else if (mode.kind === 'make_voucher') {
+        const QUICK_BUDGETS = [500, 1000, 1500, 2000];
+        body = (
+            <>
+                <Text style={styles.body}>
+                    {t('Make @{callsign} a voucher?', { callsign: mode.callsign })}
+                </Text>
+                <Text style={styles.hint}>
+                    {t('They get a budget of {amount} Beans to vouch for the people they invite, up to 100 each. Every owner and admin can see this in the known floor’s log.', { amount: formatNumber(makeVoucherAmount) })}
+                </Text>
+
+                <Text style={styles.label}>{t('BUDGET AMOUNT')}</Text>
+                <View style={styles.chipRow}>
+                    {QUICK_BUDGETS.map((amt) => (
+                        <Pressable
+                            key={amt}
+                            style={[styles.chip, makeVoucherAmount === amt && styles.chipActive, off && styles.disabled]}
+                            onPress={() => setMakeVoucherAmount(amt)}
+                            disabled={off}
+                            accessibilityRole="button"
+                            accessibilityLabel={formatNumber(amt)}
+                        >
+                            <Text style={[styles.chipText, makeVoucherAmount === amt && styles.chipTextActive]}>
+                                {formatNumber(amt)}
+                            </Text>
+                        </Pressable>
+                    ))}
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginVertical: 16 }}>
+                    <Pressable
+                        style={[styles.smallBtn, (budgetLevelDown(makeVoucherAmount) === null || off) && styles.disabled]}
+                        onPress={() => setMakeVoucherAmount((a) => budgetLevelDown(a) ?? a)}
+                        disabled={budgetLevelDown(makeVoucherAmount) === null || off}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Decrease budget by 100')}
+                    >
+                        <Text style={styles.smallBtnText}>−</Text>
+                    </Pressable>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text.heading }}>
+                        {t('{amount} Beans', { amount: formatNumber(makeVoucherAmount) })}
+                    </Text>
+                    <Pressable
+                        style={[styles.smallBtn, (budgetLevelUp(makeVoucherAmount) === null || off) && styles.disabled]}
+                        onPress={() => setMakeVoucherAmount((a) => budgetLevelUp(a) ?? a)}
+                        disabled={budgetLevelUp(makeVoucherAmount) === null || off}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Increase budget by 100')}
+                    >
+                        <Text style={styles.smallBtnText}>+</Text>
+                    </Pressable>
+                </View>
+
+                <View style={styles.buttonRow}>
+                    {btn(t('Make a voucher'), async () => {
+                        if (!anchor || !identity || !begin()) return;
+                        const done = await makeNamesVoucher(anchor, identity, mode.entry.id, makeVoucherAmount);
+                        finish();
+                        if (!done.ok) { setError(done.message); return; }
+                        setNotice(t('Made @{callsign} a voucher with a budget of {amount} Beans.', { callsign: mode.callsign, amount: formatNumber(makeVoucherAmount) }));
+                        setMode({ kind: 'list' });
+                        void load();
+                    }, 'primary')}
+                    {btn(t('Cancel'), () => setMode({ kind: 'list' }), 'secondary')}
+                </View>
             </>
         );
     } else if (mode.kind === 'check') {
@@ -898,6 +1012,26 @@ export default function NamesListScreen() {
                     {btn(t('Export as PDF'), exportPdf, 'secondary', t('Makes a PDF of the list on this phone, to keep with your paper copy'))}
                     {btn(t('Community health'), () => { void openHealth(); }, 'secondary', t('Opens who is past a debt line (every opening is logged for all admins)'))}
                 </View>
+                {isCommittee && (
+                    <View style={styles.chipRow}>
+                        <Pressable
+                            style={[styles.chip, filter === 'all' && styles.chipActive]}
+                            onPress={() => setFilter('all')}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('All')}
+                        >
+                            <Text style={[styles.chipText, filter === 'all' && styles.chipTextActive]}>{t('All')}</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.chip, filter === 'vouchers' && styles.chipActive]}
+                            onPress={() => setFilter('vouchers')}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Vouchers')}
+                        >
+                            <Text style={[styles.chipText, filter === 'vouchers' && styles.chipTextActive]}>{t('Vouchers')}</Text>
+                        </Pressable>
+                    </View>
+                )}
                 <TextInput
                     style={styles.search} value={query} onChangeText={setQuery} placeholder={t('Search names and notes')}
                     placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel={t('Search names and notes')}
@@ -909,8 +1043,10 @@ export default function NamesListScreen() {
                     <Text>{tn(state.counts.confirmed, '{n} confirmed', '{n} confirmed')}</Text>
                     {state.counts.awaitingSecond ? <Text>{' · '}</Text> : null}
                     {state.counts.awaitingSecond ? <Text>{tn(state.counts.awaitingSecond, '{n} waiting for a second admin', '{n} waiting for a second admin')}</Text> : null}
+                    {vouchers ? <Text>{' · '}</Text> : null}
+                    {vouchers ? <Text>{tn(vouchers.length, '{n} voucher', '{n} vouchers')}</Text> : null}
                 </Text>
-                {shown.map((e) => {
+                {filteredShown.map((e) => {
                     const acts = e.confirmation ? confirmationActions(e.confirmation, identity?.publicKey ?? '') : null;
                     // Its debt history (#1597): while one is open, nobody is confirmed against it; the way on is settling it.
                     const history = debtsOfEntry(debts, e.id);
@@ -925,6 +1061,16 @@ export default function NamesListScreen() {
                             ) : (
                                 <Text style={styles.lockedText}>{say(COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders, e.notTrusting, e.checkedHere))}</Text>
                             )}
+                            {e.voucher ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                                    <View style={styles.voucherTag}>
+                                        <Text style={styles.voucherTagText}>{t('Voucher')}</Text>
+                                    </View>
+                                    <Text style={styles.entryMeta}>
+                                        {t('{left} of {level} left', { left: formatNumber(e.voucher.left), level: formatNumber(e.voucher.level) })}
+                                    </Text>
+                                </View>
+                            ) : null}
                             <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : t('No member confirmed against it')}</Text>
                             {!e.confirmation && invitesForEntry(boundInvites, e.id)[0] ? (
                                 <Text style={styles.entryMeta}>{boundInviteLine(invitesForEntry(boundInvites, e.id)[0], (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
@@ -933,6 +1079,13 @@ export default function NamesListScreen() {
                                 <Text key={d.id} style={[styles.entryMeta, d.status === 'open' && styles.lockedText]}>{debtLine(d, at)}</Text>
                             ))}
                             <View style={styles.buttonRow}>
+                                {e.voucher ? btn(t('See voucher card ›'), () => setSelectedVoucherPubkey(e.voucher!.memberPubkey), 'small') : null}
+                                {canMakeVoucher(e, isCommittee, identity?.publicKey) && e.confirmation
+                                    ? btn(t('Make a voucher'), () => {
+                                        setMakeVoucherAmount(nearestBudgetLevel(voucherBlock?.settings?.voucherBudget));
+                                        setMode({ kind: 'make_voucher', entry: e, memberPubkey: e.confirmation!.memberPubkey, callsign: voucherCallsignFor(e, callsignOf) });
+                                    }, 'small')
+                                    : null}
                                 {btn(e.text ? t('Change') : t('Type it again'), () => openForm(e), 'small')}
                                 {!e.confirmation && e.text && !open ? btn(t('Invite this person'), () => inviteEntry(e), 'small') : null}
                                 {!e.confirmation && e.text && !open ? btn(t('Confirm a member'), () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
@@ -947,6 +1100,34 @@ export default function NamesListScreen() {
                         </View>
                     );
                 })}
+                {filter === 'vouchers' && filteredRoleVouchers.map((rv) => (
+                    <View key={rv.memberPubkey} style={styles.entry}>
+                        <Text style={styles.entryName}>@{rv.callsign}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                            <View style={styles.voucherTag}>
+                                <Text style={styles.voucherTagText}>{t('Voucher')}</Text>
+                            </View>
+                            <Text style={styles.entryMeta}>
+                                {t('{left} of {level} left · {vouched} vouched', {
+                                    left: formatNumber(rv.left),
+                                    level: formatNumber(rv.level),
+                                    vouched: formatNumber(rv.peopleVouched),
+                                })}
+                            </Text>
+                        </View>
+                        <View style={styles.buttonRow}>
+                            {btn(t('See voucher card ›'), () => setSelectedVoucherPubkey(rv.memberPubkey), 'small')}
+                            {btn(t('Add their name'), () => openForm(null), 'small')}
+                        </View>
+                    </View>
+                ))}
+                {filter === 'vouchers' && filteredShown.length === 0 && filteredRoleVouchers.length === 0 ? (
+                    <Text style={styles.hint}>
+                        {query.trim()
+                            ? t('No vouchers match your search.')
+                            : t('No vouchers yet. Vouchers get a budget to vouch for new members they invite.')}
+                    </Text>
+                ) : null}
                 {state.me.owner ? (
                     <>
                         <Text style={styles.label}>{t('SETTINGS (OWNERS)')}</Text>
@@ -1048,6 +1229,21 @@ export default function NamesListScreen() {
                             {btn(t('Done'), () => setInvited(null))}
                         </View>
                     </ScrollView>
+                </SafeAreaView>
+            </Modal>
+            <Modal visible={!!selectedVoucherPubkey} animationType="slide" onRequestClose={() => setSelectedVoucherPubkey(null)}>
+                <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
+                    {anchor && identity && selectedVoucherPubkey && (
+                        <VoucherCard
+                            anchorUrl={anchor}
+                            identity={identity}
+                            memberPubkey={selectedVoucherPubkey}
+                            entry={entries.find((e) => e.voucher?.memberPubkey === selectedVoucherPubkey || e.confirmation?.memberPubkey === selectedVoucherPubkey) ?? null}
+                            nameOf={callsignOf}
+                            onClose={() => setSelectedVoucherPubkey(null)}
+                            onVoucherUpdated={() => { void load(); }}
+                        />
+                    )}
                 </SafeAreaView>
             </Modal>
         </SafeAreaView>

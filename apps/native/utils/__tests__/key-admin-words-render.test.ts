@@ -140,6 +140,8 @@ vi.mock('../names-list', async (importOriginal) => {
         fetchNamesLog: async () => ({ ok: true, value: { log: [] } }),
         readBoundInvites: async () => ({ ok: true, value: { invites: [] } }),
         openEntries: () => ENTRIES,
+        // The vouchers block (slice V2): this owner isn't asked about it here; the node's refusal keeps the test offline.
+        fetchVouchers: async () => ({ ok: false, status: 403, code: 'committee_only', message: 'Only an owner or an admin on the credit committee makes vouchers and sets their budgets.' }),
         confirmableMembers: () => MEMBERS,
         unkeptRemovalsOf: () => [],
         // Community health got no answer: names-list.ts call()'s own words for that.

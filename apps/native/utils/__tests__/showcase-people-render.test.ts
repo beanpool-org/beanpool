@@ -86,7 +86,13 @@ vi.mock('react-native-keyboard-controller', () => ({
     // The ask sheet's lift (components/InviteAsks.tsx, useModalKeyboardLift): no keyboard here.
     useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }),
 }));
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('react-native-safe-area-context', () => ({
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+    // The voucher card's modal (people.tsx, slice V2) sits in one.
+    SafeAreaView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
+}));
+// People reads the vouchers block through utils/names-list.ts, which keeps the names key in the secure store: nothing here.
+vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return {

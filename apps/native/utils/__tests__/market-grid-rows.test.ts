@@ -3,7 +3,9 @@ import { gridRows, type GridRow } from '../market-grid-rows';
 
 /**
  * The phone's Market grid as rows (DESIGN-market-grid-sizes-fable.md §2.5, slice PG2): two tiles to a row, a poll a row of its
- * own, packed as the web's dense grid packs it, so no cell is empty but the last, and no post is drawn twice or dropped.
+ * own (both cells, the phone's whole row; since 5 Nov 2026 at a tile row's height, its summary laid over a tile's invisible box:
+ * poll-grid-tile-render.test.ts), packed as the web's dense grid packs it, so no cell is empty but the last, and no post is
+ * drawn twice or dropped.
  */
 const tile = (id: string, type = 'offer') => ({ id, type });
 const poll = (id: string) => ({ id, type: 'poll' });
@@ -17,7 +19,7 @@ describe('gridRows', () => {
         expect(gridRows([])).toEqual([]);
     });
 
-    it('a poll is a row of its own, where it comes when no tile waits for a partner', () => {
+    it('a poll is a row of its own (two cells, a tile row tall), where it comes when no tile waits for a partner', () => {
         expect(shape(gridRows([poll('p'), tile('a'), tile('b')]))).toEqual(['poll:p', 'a+b']);
         expect(shape(gridRows([tile('a'), tile('b'), poll('p'), tile('c'), tile('d')]))).toEqual(['a+b', 'poll:p', 'c+d']);
     });

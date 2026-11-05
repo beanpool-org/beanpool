@@ -186,8 +186,14 @@ export const GRID_POLL_QUESTION = 'm-0 shrink-0 text-sm font-extrabold leading-s
  */
 export const GRID_POLL_ANSWERS = 'flex-1 min-h-0 flex flex-col justify-evenly gap-1 overflow-hidden';
 
-/** One answer row: one line, at least 1.375rem, at most 2.2rem (1.6 x), the result bar behind it. */
-export const GRID_POLL_ROW = 'relative flex-1 min-h-[1.375rem] max-h-[2.2rem] min-w-0 flex items-center gap-2 px-2 rounded-lg overflow-hidden border text-xs leading-snug';
+/** One answer row: one line, at least 1.375rem, the result bar behind it; how far it grows is GRID_POLL_ROW_MAX's. */
+export const GRID_POLL_ROW = 'relative flex-1 min-h-[1.375rem] min-w-0 flex items-center gap-2 px-2 rounded-lg overflow-hidden border text-xs leading-snug';
+
+/**
+ * How tall an answer row may grow, by core's pollTileRowGrow (one-line heights): 1.6 x from four rows up (2.2rem), 2 x for
+ * three (2.75rem), 2.4 x for one or two (3.3rem). Written out whole so Tailwind builds each.
+ */
+export const GRID_POLL_ROW_MAX: Record<number, string> = { 1.6: 'max-h-[2.2rem]', 2: 'max-h-[2.75rem]', 2.4: 'max-h-[3.3rem]' };
 
 /** The row's outline: the card's own, or the poll ink round the member's own answer. */
 export const GRID_POLL_ROW_EDGE = {

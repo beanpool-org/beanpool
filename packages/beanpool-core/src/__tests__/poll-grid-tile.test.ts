@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    POLL_GRID_TILE, pollTileAction, pollTileAnswers, pollTileLabel, pollTileMore, pollTilePercent, pollTileQuestionLines,
+    POLL_GRID_TILE, pollTileAction, pollTileAnswers, pollTileLabel, pollTileMore, pollTilePercent, pollTileQuestionLines, pollTileRowGrow,
     pollTileRowsThatFit, pollTileSummary, pollTileTotal,
 } from '../poll-grid-tile.js';
 
@@ -36,6 +36,10 @@ describe('pollTileRowsThatFit: one-line rows in the answers\' room', () => {
         expect(POLL_GRID_TILE.rowHeightRem * 16).toBe(POLL_GRID_TILE.rowHeight);
         expect(POLL_GRID_TILE.rowGapRem * 16).toBe(POLL_GRID_TILE.rowGap);
         expect(POLL_GRID_TILE.rowGrow).toBe(1.6);
+    });
+
+    it('rows grow 1.6x from four up, a short poll\'s further, so two answers still fill a wide tile', () => {
+        expect([1, 2, 3, 4, 6, 9].map(pollTileRowGrow)).toEqual([2.4, 2.4, 2, 1.6, 1.6, 1.6]);
     });
 });
 

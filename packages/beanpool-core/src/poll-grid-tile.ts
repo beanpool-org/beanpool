@@ -73,6 +73,18 @@ export function pollTileTotal(options: readonly PollTileOption[], totalVotes?: n
     return options.reduce((sum, o) => sum + (o.votes || 0), 0);
 }
 
+/**
+ * How far an answer row may grow, in one-line heights, for the rows the tile shows (its answers and a "+N more"): 1.6x from
+ * four rows up (POLL_GRID_TILE.rowGrow); a short poll's rows further, 2x for three and 2.4x for one or two. At 1.6x a two-answer
+ * poll left 43 px blank bands in a 1920 px window's tile (market-grid-shots.mjs, 5 Nov 2026): "we dont want 2 wide with heaps of
+ * space". The rows are bars either way; a short poll's are fatter ones.
+ */
+export function pollTileRowGrow(rows: number): number {
+    if (rows <= 2) return 2.4;
+    if (rows === 3) return 2;
+    return POLL_GRID_TILE.rowGrow;
+}
+
 /** The question's lines at most: 2, or 3 when there are only two answers to show. */
 export function pollTileQuestionLines(answerCount: number): number {
     return answerCount <= 2 ? POLL_GRID_TILE.questionLinesFewAnswers : POLL_GRID_TILE.questionLines;

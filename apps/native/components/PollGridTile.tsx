@@ -14,7 +14,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import {
     MARKET_CARD_SHELL as SHELL, POLL_GRID_TILE, gridTextBlockHeight, pollOtherLines, pollTileAction, pollTileAnswers, pollTileLabel,
-    pollTileMore, pollTileQuestionLines, pollTileRowsThatFit, pollTileSummary, t,
+    pollTileMore, pollTileQuestionLines, pollTileRowGrow, pollTileRowsThatFit, pollTileSummary, t,
 } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
@@ -50,7 +50,8 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false }: Poll
     const label = pollTileLabel({ question: post.title, answerCount: options.length, totalVotes, closed: isClosed });
     const authorKey: string = post.author_pubkey || post.authorPublicKey || '';
     const onAnswersLayout = (e: LayoutChangeEvent) => setFit(pollTileRowsThatFit(e.nativeEvent.layout.height, rowHeight, rowGap));
-    const row = { minHeight: rowHeight, maxHeight: rowHeight * POLL_GRID_TILE.rowGrow };
+    // How far a row may grow: further for a short poll, so two answers still fill the tile.
+    const row = { minHeight: rowHeight, maxHeight: rowHeight * pollTileRowGrow(answers.length + (more > 0 ? 1 : 0)) };
 
     return (
         <View style={shell.gridRow} testID="market-grid-poll-row">

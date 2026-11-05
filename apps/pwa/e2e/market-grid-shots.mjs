@@ -193,7 +193,7 @@ const POLL_6 = poll({
         .map((text, i) => ({ id: `s${i}`, text, votes: [4, 3, 2, 2, 1, 0][i], percentage: [33, 25, 17, 17, 8, 0][i] })),
 });
 /** The brief's widths and languages for the poll's tile. */
-const POLL_WIDTHS = ['320', '320-x1.3', '768-shim', '1024-shim', '1280-shim'];
+const POLL_WIDTHS = ['320', '320-x1.3', '768-shim', '1024-shim', '1280-shim', '1920-shim'];
 const POLL_LANGS = ['en', 'de'];
 
 const CASES = [

@@ -11,14 +11,14 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import {
     POLL_GRID_TILE, pinLive, pollOtherLines, pollTileAction, pollTileAnswers, pollTileLabel, pollTileMore, pollTileQuestionLines,
-    pollTileRowsThatFit, pollTileSummary, t,
+    pollTileRowGrow, pollTileRowsThatFit, pollTileSummary, t,
 } from '@beanpool/core';
 import { type MarketplacePost } from '../lib/api';
 import { MemberAvatar } from './MemberAvatar';
 import { pollFacts, pollStatusWords } from './PollCard';
 import {
     CARD_INK, GRID_POLL_ACTION, GRID_POLL_ANSWER, GRID_POLL_ANSWERS, GRID_POLL_BAR, GRID_POLL_CELL, GRID_POLL_FOOT, GRID_POLL_GHOST,
-    GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_NOTE, GRID_POLL_PCT, GRID_POLL_QUESTION, GRID_POLL_ROW, GRID_POLL_ROW_EDGE,
+    GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_NOTE, GRID_POLL_PCT, GRID_POLL_QUESTION, GRID_POLL_ROW, GRID_POLL_ROW_EDGE, GRID_POLL_ROW_MAX,
     GRID_POLL_TILE, chip, gridChip,
 } from './market-card-shell';
 
@@ -59,6 +59,8 @@ export function PollGridTile({ post, onOpen, testId, informal = false }: PollGri
     const { openVote, isClosed, authorName, avatarSrc, options, totalVotes, sealed, answered } = pollFacts(post);
     const { ref, fit } = useRowsThatFit(options.length);
     const { answers, more } = pollTileAnswers(options, { totalVotes, userVotedOptionId: post.userVotedOptionId, sealed, fit });
+    // How far a row may grow: further for a short poll, so two answers still fill a wide tile.
+    const row = `${GRID_POLL_ROW} ${GRID_POLL_ROW_MAX[pollTileRowGrow(answers.length + (more > 0 ? 1 : 0))]}`;
     const action = pollTileAction({ closed: isClosed, answered });
     const pinned = pinLive(post as any);
     const label = pollTileLabel({ question: post.title, answerCount: options.length, totalVotes, closed: isClosed });
@@ -108,7 +110,7 @@ export function PollGridTile({ post, onOpen, testId, informal = false }: PollGri
                         const words = a.option.other ? pollOtherLines.other() : a.option.text;
                         return (
                             <div key={a.key} data-testid="poll-grid-answer" data-chosen={a.chosen ? 'true' : undefined}
-                                className={`${GRID_POLL_ROW} ${a.chosen ? GRID_POLL_ROW_EDGE.chosen : GRID_POLL_ROW_EDGE.open}`}>
+                                className={`${row} ${a.chosen ? GRID_POLL_ROW_EDGE.chosen : GRID_POLL_ROW_EDGE.open}`}>
                                 <span aria-hidden="true" className={GRID_POLL_BAR} style={{ width: `${a.pct}%` }} />
                                 <span dir="auto" className={`${GRID_POLL_ANSWER} ${CARD_INK.title}`}>{words}</span>
                                 <span className={GRID_POLL_PCT}>
@@ -118,7 +120,7 @@ export function PollGridTile({ post, onOpen, testId, informal = false }: PollGri
                         );
                     })}
                     {more > 0 && (
-                        <div data-testid="poll-grid-more" className={`${GRID_POLL_ROW} ${GRID_POLL_ROW_EDGE.open}`}>
+                        <div data-testid="poll-grid-more" className={`${row} ${GRID_POLL_ROW_EDGE.open}`}>
                             <span className={`${GRID_POLL_ANSWER} ${CARD_INK.secondary}`}>{pollTileMore(more)}</span>
                         </div>
                     )}

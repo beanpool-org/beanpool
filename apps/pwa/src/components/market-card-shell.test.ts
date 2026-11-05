@@ -9,13 +9,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import postcss, { type AcceptedPlugin } from 'postcss';
 import tailwindcss from 'tailwindcss';
-import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, POLL_GRID_TILE, type CardType } from '@beanpool/core';
+import { MARKET_CARD_SHELL, MARKET_CARD_TYPE, MARKET_CHIP, MARKET_GRID_TEXT_BLOCK, MARKET_GRID_TEXT_BLOCK_REM, POLL_GRID_TILE, pollTileRowGrow, type CardType } from '@beanpool/core';
 import {
     BOX_LABEL, CARD_INK, CHIP, CHIP_SENTENCE, CHIP_TONE, COMPACT_END, COMPACT_EVENT_BODY, COMPACT_EVENT_HEAD, COMPACT_EVENT_MARK, COMPACT_EVENT_TEXT,
     COMPACT_LEAD, COMPACT_LINE, COMPACT_LINES, COMPACT_MARK, COMPACT_MARK_GIVES, COMPACT_PICTURE, COMPACT_PIECE, COMPACT_POLL_TILE, COMPACT_ROW,
     COMPACT_TEXT, COMPACT_TITLE, COMPACT_TITLE_GIVES, COMPACT_WORD, EVENT_ANSWER, GRID, GRID_PHOTO, GRID_PHOTO_CROP, GRID_POLL_ACTION, GRID_POLL_ANSWER, GRID_POLL_ANSWERS, GRID_POLL_BAR, GRID_POLL_CELL,
     GRID_POLL_FOOT, GRID_POLL_GHOST, GRID_POLL_GHOST_PHOTO, GRID_POLL_GHOST_TEXT, GRID_POLL_HEAD, GRID_POLL_NOTE, GRID_POLL_PCT, GRID_POLL_QUESTION, GRID_POLL_ROW,
-    GRID_POLL_ROW_EDGE, GRID_POLL_TILE, GRID_ROW, GRID_ROW_CHIP,
+    GRID_POLL_ROW_EDGE, GRID_POLL_ROW_MAX, GRID_POLL_TILE, GRID_ROW, GRID_ROW_CHIP,
     GRID_ROW_LABEL, GRID_SCRIM_MARK, GRID_SCRIM_PILL, GRID_TEXT, GRID_TIME_PIECE, GRID_TIME_ROW, GRID_TITLE, GRID_TYPE, LIST_BEAN_PX, LIST_PHOTO, LIST_PHOTO_FILL, LIST_TEXT, LIST_TYPE, PAGE_ANSWER_TYPE, PAGE_BOX, PAGE_BUTTON, PAGE_INK,
     PAGE_TYPE, POLL_CARD, POP_UP, POP_UP_CLOSE, POP_UP_CLOSE_DOT, POP_UP_CLOSE_ROOM, chip, gridChip, gridTile, listCard,
 } from './market-card-shell';
@@ -288,7 +288,13 @@ describe('the grid tile holds core\'s numbers', () => {
     });
 
     it('the poll\'s answer rows: one line at least (core\'s row), 1.6 x at most, spread evenly in their room', () => {
-        expect(classes(GRID_POLL_ROW)).toEqual(expect.arrayContaining([`min-h-[${POLL_GRID_TILE.rowHeightRem}rem]`, `max-h-[${+(POLL_GRID_TILE.rowHeightRem * POLL_GRID_TILE.rowGrow).toFixed(4)}rem]`, 'flex-1']));
+        expect(classes(GRID_POLL_ROW)).toEqual(expect.arrayContaining([`min-h-[${POLL_GRID_TILE.rowHeightRem}rem]`, 'flex-1']));
+        // core's grow for every row count the tile can show, each written out as its max-height.
+        for (const rows of [1, 2, 3, 4, 5, 8]) {
+            const grow = pollTileRowGrow(rows);
+            expect(GRID_POLL_ROW_MAX[grow]).toBe(`max-h-[${+(POLL_GRID_TILE.rowHeightRem * grow).toFixed(4)}rem]`);
+        }
+        expect(GRID_POLL_ROW_MAX[POLL_GRID_TILE.rowGrow]).toBe('max-h-[2.2rem]');
         expect(classes(GRID_POLL_ANSWERS)).toEqual(expect.arrayContaining(['flex-1', 'min-h-0', 'justify-evenly', 'overflow-hidden', `gap-${POLL_GRID_TILE.rowGapRem * 4}`]));
     });
 

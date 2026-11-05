@@ -1868,7 +1868,7 @@ export async function fetchMyVouching(
     adminPassword?: string,
     tfaToken?: string
 ): Promise<MyVouchingResponse | null> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/vouchers/me');
+    const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/vouchers/me');
     const res = await fetch(endpoint, {
         headers: buildAdminHeaders(adminPassword, tfaToken),
     }).catch(() => null);

@@ -1577,7 +1577,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/reset') return ok({ success: true });
     if (pathname === '/api/admin/login') return ok({ success: true });
     if (pathname === '/api/admin/check-update') return ok({ updateAvailable: false, currentVersion: '1.4.2' });
-    if (pathname === '/api/vouchers/me') {
+    if (pathname === '/api/vouchers/me' || pathname === '/api/local/admin/vouchers/me') {
         return ok({
             voucher: true,
             budget: { left: 550, level: 1000, held: 100, vouched: 350 },
@@ -1588,7 +1588,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
             history: [],
         });
     }
-    if (/^\/api\/names\/vouchers\/[^/]+$/.test(pathname)) {
+    if (/^\/api\/names\/vouchers\/[^/]+$/.test(pathname) || /^\/api\/local\/admin\/known-floor\/vouchers\/member\/[^/]+$/.test(pathname)) {
         return ok({
             memberPubkey: 'a'.repeat(64),
             callsign: 'jane',

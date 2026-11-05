@@ -1370,6 +1370,8 @@ async function main(): Promise<void> {
             'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
             'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
             'GET /api/local/admin/known-floor/member/:pubkey',
+            'GET /api/local/admin/known-floor/vouchers/member/:pubkey',
+            'GET /api/local/admin/vouchers/me',
             'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health', 'GET /api/local/admin/community-shape', 'POST /api/local/admin/community-shape', 'POST /api/local/admin/community-shape/advice',
             'POST /api/local/admin/start-community-url',
             'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',

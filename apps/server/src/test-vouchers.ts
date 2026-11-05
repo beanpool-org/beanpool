@@ -481,6 +481,17 @@ async function main(): Promise<void> {
     assert(ritaVouchGift && ritaVouchGift.amount === 25 && ritaVouchGift.from_pubkey === owen.pk && ritaVouchGift.to_pubkey === rita.pk,
         `10. seed invite vouch lands from issuing admin owen (${JSON.stringify(ritaVouchGift)})`);
 
+    // Manager admin endpoints:
+    const meAdmin = await call(null, 'GET', '/api/local/admin/vouchers/me', undefined, owenAdminSession);
+    assert(meAdmin.status === 200 && meAdmin.body?.voucher === true && meAdmin.body?.budget?.left === budgetOf(owen.pk).left,
+        `10. /api/local/admin/vouchers/me under key session returns voucher status (${show(meAdmin)})`);
+    const mePw = await call(null, 'GET', '/api/local/admin/vouchers/me', undefined, PASSWORD());
+    assert(mePw.status === 200 && mePw.body?.voucher === false && mePw.body?.presets?.length === 4,
+        `10. /api/local/admin/vouchers/me under password session returns voucher: false (${show(mePw)})`);
+    const cardAdmin = await call(null, 'GET', `/api/local/admin/known-floor/vouchers/member/${owen.pk}`, undefined, owenAdminSession);
+    assert(cardAdmin.status === 200 && cardAdmin.body?.memberPubkey === owen.pk && cardAdmin.body?.left === budgetOf(owen.pk).left,
+        `10. /api/local/admin/known-floor/vouchers/member/:pubkey returns voucher card (${show(cardAdmin)})`);
+
     // ── 11. The boot's grant to an owner or admin who never had a budget ──────────────────────────────────────
     db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(kai.pk);
     const granted = grantMissingRoleBudgets();

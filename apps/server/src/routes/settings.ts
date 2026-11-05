@@ -39,7 +39,8 @@ import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
 import { countWebAppPageLoad } from '../engine/web-visits.js';
 import type { RouteDeps } from './types.js';
-import { PROTOCOL_CONSTANTS, word } from '@beanpool/core';
+import { PROTOCOL_CONSTANTS, word, VOUCH_PRESETS, VOUCH_MAX, VOUCHER_BUDGET_MAX } from '@beanpool/core';
+import { myVouching, readVoucherCard, VoucherError } from '../engine/vouchers.js';
 import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
 import { cleanLabel, AREA_NAME_MAX } from '../config/clean-label.js';
 import { serveCommunityCard } from './community-card.js';
@@ -441,6 +442,36 @@ router.get('/api/local/admin/known-floor/member/:pubkey', async (ctx) => {
     try {
         ctx.body = knownFloorForMember(ctx.params.pubkey, ownKeySessionActor(ctx));
     } catch (e) { knownFloorRefusal(ctx, e); }
+});
+
+// One member's voucher card for the Manager's member screen (owner or admin).
+router.get('/api/local/admin/known-floor/vouchers/member/:pubkey', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can see a member\'s voucher card.')) return;
+    ctx.set('Cache-Control', 'no-store');
+    const actor = (ctx.state?.actor as string | undefined) || 'owner:password';
+    try {
+        ctx.body = readVoucherCard(actor, ctx.params.pubkey);
+    } catch (e) {
+        if (e instanceof VoucherError) {
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
+            return;
+        }
+        throw e;
+    }
+});
+
+// The signed-in admin's own vouching status, budget, and presets for the Manager (Invites module).
+router.get('/api/local/admin/vouchers/me', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor || actor === 'owner:password') {
+        ctx.body = { voucher: false, presets: [...VOUCH_PRESETS], vouchMax: VOUCH_MAX, budgetMax: VOUCHER_BUDGET_MAX };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = myVouching(actor);
 });
 
 router.post('/api/local/admin/known-floor/exception', async (ctx) => {

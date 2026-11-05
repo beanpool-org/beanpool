@@ -30,7 +30,7 @@ export function MemberVoucherPanel({
         }
         let mounted = true;
         setLoading(true);
-        const endpoint = resolveNodeApiUrl(nodeUrl, `/api/names/vouchers/${encodeURIComponent(pubkey)}`);
+        const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/known-floor/vouchers/member/${encodeURIComponent(pubkey)}`);
         fetch(endpoint, {
             headers: buildAdminHeaders(adminPassword, tfaToken),
         })

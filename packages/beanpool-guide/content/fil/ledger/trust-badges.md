@@ -36,4 +36,3 @@ Sa telepono, maipapakita ng filter na **Tiwala** ng Merkado ang mga post lamang 
 ## Mga admin at mga badge
 
 Maaaring bigyan ng mga admin ng komunidad ang isang miyembro ng badge. Nagpapalalim iyon sa kanilang credit line, tulad ng kinita na tiwala. Hindi ito ibinibilang bilang mga kalakalan: hindi ito nagdaragdag ng mga kredito sa boses at hindi nagpapahintulot sa kanila na magpadala ng mga regalo.
-

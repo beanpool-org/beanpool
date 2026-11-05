@@ -4,7 +4,7 @@ title: Orang dan teman
 summary: Mencari anggota komunitas, profil dan lencana mereka, serta menandai teman agar kamu tahu jika ada yang keluar.
 related: messages, your-profile, joining, blocking
 help: Anggota komunitasmu dan teman-temanmu. Ketuk seseorang untuk melihat profilnya, atau ketuk 💬 di samping anggota untuk mengirim pesan.
-source-hash: 094e89e2c072349f
+source-hash: 44b66169497e9909
 ---
 
 ## Menemukan orang
@@ -37,13 +37,6 @@ Kamu dapat memilih untuk tidak ditampilkan sebagai koneksi bersama siapa pun. Di
 
 ## Menjamin seseorang
 
-Seorang penjamin dapat menjamin anggota yang sudah bergabung, memberi mereka batas kredit untuk mulai bertransaksi. Penjamin adalah pemilik dan admin berdasarkan peran, serta anggota yang ditetapkan sebagai penjamin pada daftar nama oleh pemilik atau admin komite kredit.
+Beberapa anggota dipilih oleh komunitas untuk menyambut pendatang baru. Mereka dapat menjamin anggota baru, yang memberi orang tersebut jalur kredit awal yang kecil. Pada profil orang tersebut, mereka mengetuk **Jamin Anggota** dan memilih **Ringan** (25), **Standar** (50), atau **Besar** (100). Tidak ada Kacang yang keluar dari dompet penjamin itu sendiri.
 
-Pada profil anggota, penjamin mengetuk **Jamin @nama** dan memilih **25**, **50**, **75**, atau **100** Kacang dari anggaran penjamin mereka. Tidak ada Kacang yang keluar dari dompet pribadi penjamin.
-
-- **Satu jaminan per orang:** setiap penjamin hanya dapat menjamin seseorang satu kali. Kamu nantinya dapat menaikkan jaminanmu untuk orang tersebut, hingga total 100 Kacang.
-- **Maksimal 3 penjamin:** maksimal 3 penjamin dapat menjamin orang yang sama (hingga total 300 Kacang).
-- **Tidak boleh di bawah nol:** kamu tidak dapat menjamin anggota yang saldonya saat ini di bawah nol. Untuk membantu seseorang yang berutang, anggota dapat memberikan sebagian batas kredit mereka di Kirim, atau mengusulkan Keputusan komunitas.
-
-Lihat "Bergabung dengan BeanPool" dan "Batas kreditmu".
-
+Siapa yang boleh menjamin diputuskan oleh admin atau melalui Keputusan komunitas, tidak pernah oleh sebuah lencana. Lihat "Aturan dan cara kerja keputusan".

@@ -3,7 +3,7 @@ slug: how-it-works
 title: Comment marche BeanPool
 summary: Haricots, échanges, offres et demandes, et crédit, en mots simples.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: d9e82e8017a2b050
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Les haricots
@@ -43,7 +43,7 @@ Vous pouvez aussi envoyer des haricots à quelqu'un sous forme de don, sans éch
 
 Vous pouvez dépenser un peu plus que ce que vous avez, et passer sous zéro. C'est votre **ligne de crédit**. C'est la promesse d'aider les autres plus tard.
 
-Votre ligne de crédit commence à zéro. Elle s'ouvre lorsque vous concluez votre premier échange sur le marché (un échange de seulement 1 ou 2 haricots est trop petit pour compter). Un parrain peut également vous donner un coup de pouce en vous parrainant sur votre invitation ou votre profil : 25, 50, 75 ou 100 haricots, prélevés sur son budget de parrainage.
+Votre ligne de crédit commence à zéro. Elle s'ouvre lorsque vous concluez votre premier échange sur le marché (un échange de seulement 1 ou 2 haricots est trop petit pour compter). Une personne choisie par votre communauté pour accueillir les nouveaux arrivants peut également vous donner un coup de pouce en vous parrainant : 25, 50 ou 100 haricots.
 
 Votre ligne de crédit grandit avec votre **confiance** :
 
@@ -93,4 +93,3 @@ Une **entreprise** perdure et échange en son propre nom : une boulangerie, une 
 Un **groupe** est un cercle de membres avec ses propres discussions et annonces, animé par un ou plusieurs **coordinateurs**. L'un d'eux est son **coordinateur principal** — la personne qui a créé le groupe, au départ.
 
 Vous pouvez découvrir comment les gestionnaires et coordinateurs sont choisis dans « Règles et décisions ».
-

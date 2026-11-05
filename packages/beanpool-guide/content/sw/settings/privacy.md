@@ -4,7 +4,7 @@ title: Faragha yako
 summary: Kile wengine wanachoweza kuona kukuhusu, na mipangilio inayodhibiti.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Kile wanachama wengine wanachoweza kuona kukuhusu, na swichi zinazoidhibiti.
-source-hash: 19d7d7439e729ce8
+source-hash: 7a296a90b991050e
 ---
 
 ## Kufungua Mipangilio
@@ -17,7 +17,7 @@ Gusa kitufe cha vitelezi vilivyo juu kulia mwa skrini. Kwenye programu ya wavuti
 - Beji yako ya uaminifu, maoni yako (hakuna mtu mwingine anayeweza kuona nani aliyeandika maoni), na wasifu wako wa uaminifu: biashara zako ngapi zilikamilika na ngapi zilighairiwa, na sehemu iliyokamilika, ni malipo mangapi ya Maharagwe uliyotuma au kupokea kutoka kwa wanachama pamoja na biashara ulizomaliza, na wanachama wangapi tofauti uliowalipa, kulipwa nao au kufanya nao biashara, ni malipo na biashara ngapi ulizofanya na mwanachama anayeangalia, na Alama zako za Uaminifu. Wasimamizi huiona kama mwanachama yeyote anavyoona, na hairekodiwi.
 - Machapisho yako, na mahali ambapo pini zake zipo. Tazama "Pini yako inapokwenda".
 - Jinsi ulivyopiga kura kwenye Kura ya Maoni, lakini kwenye Kura ya Maoni pekee ambayo muundaji wake aliifanya kuwa **kura ya wazi**. Vinginevyo kura za maoni hazina majina, na kura kwenye **Maamuzi** ni za siri kila wakati.
-- Nani aliyekualika. Kwenye simu wasifu wako unasema **Amealikwa na** na jina lao. Kama uliingia kama mwanachama mwanzilishi au ulialikwa moja kwa moja na msimamizi wa mfumo, inasema **Mwanachama mwanzilishi** au **Umealikwa moja kwa moja na msimamizi wa mfumo** badala yake.
+- Nani aliyekualika. Kwenye simu wasifu wako unasema **Alidhaminiwa na** na jina lao. Ikiwa uliingia kama mwanachama mwanzilishi au ulialikwa moja kwa moja na msimamizi wa mfumo, inasema **Mwanachama mwanzilishi** au **Alialikwa moja kwa moja na msimamizi wa mfumo** badala yake. Ikiwa mwanachama alikudhamini kwa kikomo chako cha mkopo, wasifu wako unasema **Alidhaminiwa na** na jina lao, katika programu ya simu na programu ya wavuti.
 
 ## Kile ambacho wewe pekee unaweza kuona
 
@@ -60,4 +60,3 @@ Wamiliki na wasimamizi wanaoendesha seva ya jumuiya yako bado wanaweza kuona kil
 ## Soma zaidi
 
 Katika Mipangilio, chini ya **KISHERIA & FARAGHA**, gusa **Sera ya Faragha**.
-

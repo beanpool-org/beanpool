@@ -4,7 +4,7 @@ title: Sua privacidade
 summary: O que os outros podem ver sobre você e as configurações que controlam isso.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: O que outros membros podem ver sobre você e as opções que controlam isso.
-source-hash: 19d7d7439e729ce8
+source-hash: 7a296a90b991050e
 ---
 
 ## Abrindo as Configurações
@@ -17,7 +17,7 @@ Toque no botão com controles deslizantes no canto superior direito da tela. No 
 - Seu selo de confiança, suas avaliações (ninguém mais pode ver quem escreveu uma avaliação) e seu perfil de confiança: quantas das suas trocas foram concluídas e quantas foram canceladas, e a porcentagem de conclusão, quantos pagamentos em feijões você enviou ou recebeu de membros somados às trocas que concluiu, com quantos membros diferentes você pagou, recebeu ou negociou, quantos pagamentos e trocas você realizou com o membro que está olhando, e seus Pontos de Confiança. Os administradores veem isso da mesma forma que qualquer membro, e isso não fica registrado em logs.
 - Suas publicações e onde estão os marcadores delas. Veja "Onde o seu marcador vai".
 - Como você votou em uma enquete, mas apenas em uma enquete em que o criador fez um **voto aberto**. Caso contrário, as enquetes são anônimas, e os votos em **Decisões** são sempre secretos.
-- Quem convidou você. No telefone, seu perfil exibe **Convite de** e o nome da pessoa. Se você entrou como membro fundador ou foi convidado diretamente pelo administrador do sistema, exibe **Membro fundador** ou **Convidado diretamente pelo administrador do sistema**.
+- Quem convidou você. No celular, seu perfil diz **Apoiado(a) por** e o nome da pessoa. Se você entrou como membro fundador ou foi convidado diretamente pelo administrador do sistema, o perfil exibe **Membro fundador** ou **Convidado(a) diretamente pelo administrador do sistema**, em vez disso. Se um membro apoiou sua linha de crédito, seu perfil diz **Apoiado(a) por** e o nome dele, no app para celular e no app web.
 
 ## O que apenas você pode ver
 
@@ -60,4 +60,3 @@ Os proprietários e administradores que operam o servidor da sua comunidade aind
 ## Saiba mais
 
 Nas Configurações, em **Jurídico e privacidade**, toque em **Política de Privacidade**.
-

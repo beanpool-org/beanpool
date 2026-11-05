@@ -36,4 +36,3 @@ Sul telefono, il filtro **Fiducia** del Mercato può mostrare solo i post di mem
 ## Amministratori e badge
 
 Gli amministratori di una comunità possono assegnare un badge a un membro. Ciò amplia la loro linea di credito, come la fiducia guadagnata. Non viene conteggiato come scambi: non aggiunge crediti di voto e non consente loro di inviare doni.
-

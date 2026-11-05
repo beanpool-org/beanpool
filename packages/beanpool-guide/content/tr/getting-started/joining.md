@@ -4,7 +4,7 @@ title: BeanPool'a katılma
 summary: Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Bir üyenin davetiyle bir topluluğa katılın veya 12 gizli kelime ya da tek girişle küresel topluluğa katılın.
-source-hash: e8148ea89abb9b77
+source-hash: 5a1feb7390e4c3fb
 ---
 
 ## İki giriş yolu
@@ -117,4 +117,3 @@ Küresel topluluğun davetleri yoktur: herkes BeanPool uygulamasında 12 gizli k
 - **Şimdi değil**, onlara "henüz yanıt yok"tan başka bir şey söylemez.
 
 Herhangi bir üye yanıt verebilir. Yalnızca yöneticilerin davet ettiği bir toplulukta yalnızca mülk sahipleri ve yöneticileri istekleri görür ve yanıtlar. "Yakınınızda bir topluluk bulma" bölümüne bakın.
-

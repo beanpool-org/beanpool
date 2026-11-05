@@ -3,7 +3,7 @@ slug: rules
 title: Regras e decisões
 summary: Votação, quórum, voto secreto, quem pode votar, suspensão, remoção de membros, custódios, coordenadores e coordenadores principais.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: 5e6d3bb454c39428
+source-hash: be2e7321aab53ca8
 ---
 
 ## Duas formas de consultar a comunidade
@@ -19,6 +19,7 @@ Sobre um membro:
 
 - Suspender um membro ou revogar uma suspensão.
 - Congelar o crédito de um membro ou descongelá-lo.
+- Conceder a um membro o direito de abonar novatos ou retirá-lo.
 - Remover o custódio principal de um empreendimento ou o líder de um projeto.
 - Remover um membro da comunidade ou readmiti-lo.
 
@@ -153,7 +154,4 @@ Um grupo é administrado por seus coordenadores, e um deles é o seu **coordenad
 
 ## Apoio de confiança
 
-Proprietários e administradores são recomendadores por função, e um proprietário ou administrador do comitê de crédito pode tornar um membro confirmado um recomendador na lista de nomes. Cada recomendador recebe um orçamento (de 100 a 2.000 feijões, com padrão comunitário de 1.000 feijões).
-
-Recomendadores podem apoiar novatos em um convite ou membros já cadastrados pelo perfil, escolhendo entre valores predefinidos de 25, 50, 75 ou 100 feijões do seu orçamento. Cada recomendador pode apoiar uma pessoa uma única vez (podendo elevar até 100 feijões no total), no máximo 3 recomendadores podem apoiar a mesma pessoa (até 300 feijões no total), e não é permitido apoiar quem estiver negativado no momento. Insígnias de confiança nunca concedem esse direito.
-
+Apenas administradores e membros escolhidos por um administrador ou por uma Decisão da comunidade podem abonar novatos. Um abono concede ao novato uma pequena linha de crédito para começar: 25, 50 ou 100 feijões. Emblemas de confiança nunca conferem esse direito.

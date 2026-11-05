@@ -3,7 +3,7 @@ slug: rules
 title: Regeln und Entscheidungen
 summary: Abstimmungen, Beteiligung, geheime Wahl, Stimmberechtigung, Suspendierung, Ausschluss, Verwalter sowie Koordinatoren und Hauptkoordinatoren.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: 5e6d3bb454c39428
+source-hash: be2e7321aab53ca8
 ---
 
 ## Zwei Wege, die Community zu befragen
@@ -19,6 +19,7 @@ Bezüglich eines Mitglieds:
 
 - Ein Mitglied suspendieren oder eine Suspendierung aufheben.
 - Den Kredit eines Mitglieds einfrieren oder wieder freigeben.
+- Einem Mitglied das Recht geben, für Neulinge zu bürgen, oder es ihm entziehen.
 - Einen Hauptverwalter aus einem Betrieb oder einen Leiter aus einem Projekt entfernen.
 - Ein Mitglied aus der Community ausschließen oder wieder aufnehmen.
 
@@ -106,7 +107,7 @@ Der Server deiner Community hat Eigentümer und Admins. Sie kümmern sich darum.
 
 - Ein Admin kann eine offene Entscheidung stoppen, muss jedoch eine schriftliche Begründung angeben. Mitglieder können diese bei der Entscheidung lesen.
 - Wenn ein Ausschluss angenommen wurde und sich in der 7-tägigen Wartezeit befindet, kann ein Admin ihn stoppen oder sofort vollziehen lassen.
-- Eigentümer und Admins des Kreditausschusses können ein bestätigtes Mitglied in der Namensliste zum Bürgen ernennen.
+- Admins können Mitgliedern das Recht geben, für Neulinge zu bürgen.
 - Admins können einem Mitglied ein Vertrauensabzeichen verleihen. Dies gibt dem Mitglied auch das Vertrauen, das dieses Abzeichen erfordert, und vertieft so seinen Kreditrahmen.
 - Admins schlichten feststeckende Deals, aber niemals einen, an dem sie selbst beteiligt sind.
 
@@ -153,7 +154,4 @@ Eine Gruppe wird von ihren Koordinatoren geleitet, und einer von ihnen ist der *
 
 ## Bürgen
 
-Eigentümer und Admins sind durch ihre Rolle Bürgen, und ein Eigentümer oder Admin des Kreditausschusses kann ein bestätigtes Mitglied auf der Namensliste zum Bürgen ernennen. Jeder Bürge erhält ein Budget (100 bis 2.000 Bohnen, mit einem Community-Standard von 1.000 Bohnen).
-
-Bürgen können für Neulinge bei einer Einladung oder für bereits beigetretene Mitglieder über deren Profil bürgen und dabei aus Vorgaben von 25, 50, 75 oder 100 Bohnen aus ihrem Budget wählen. Jeder Bürge kann für eine Person einmal bürgen (erhöhbar auf bis zu 100 Bohnen insgesamt), höchstens 3 Bürgen können für eine Person bürgen (bis zu 300 Bohnen insgesamt), und ein Bürge kann nicht für jemanden bürgen, der sich aktuell im Minus befindet. Vertrauensabzeichen gewähren dieses Recht niemals.
-
+Nur Admins sowie Mitglieder, die von einem Admin oder durch eine Community-Entscheidung ausgewählt wurden, können für Neulinge bürgen. Eine Bürgschaft gibt dem Neuling einen kleinen Kreditrahmen für den Einstieg: 25, 50 oder 100 Bohnen. Vertrauensabzeichen verleihen dieses Recht niemals.

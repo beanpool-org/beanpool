@@ -4,7 +4,7 @@ title: BeanPool 가입하기
 summary: 가입 방법 2가지: 멤버의 초대를 통한 커뮤니티 가입, 개방 시 12개 비밀 단어 또는 간편 로그인으로 글로벌 커뮤니티 가입. 가입 요청과 다른 사람 초대 방법이에요.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: 멤버의 초대로 커뮤니티에 가입하거나, 12개 비밀 단어 또는 간편 로그인으로 글로벌 커뮤니티에 가입하세요.
-source-hash: e8148ea89abb9b77
+source-hash: 5a1feb7390e4c3fb
 ---
 
 ## 가입 방법 2가지
@@ -117,4 +117,3 @@ source-hash: e8148ea89abb9b77
 - **나중에**는 상대방에게 "아직 응답 없음" 이상의 내용을 알리지 않아요.
 
 모든 멤버가 응답할 수 있어요. 관리자만 초대할 수 있는 커뮤니티에서는 소유자와 관리자만 요청을 보고 응답할 수 있어요. "내 주변 커뮤니티 찾기"를 참조하세요.
-

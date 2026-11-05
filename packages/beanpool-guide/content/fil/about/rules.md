@@ -3,7 +3,7 @@ slug: rules
 title: Mga tuntunin at mga desisyon
 summary: Pagboto, turnout, lihim na balota, sino ang maaaring bumoto, suspensiyon, pag-alis ng miyembro, mga tagapangalaga, at mga tagapag-ugnay at punong tagapag-ugnay.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: 5e6d3bb454c39428
+source-hash: be2e7321aab53ca8
 ---
 
 ## Dalawang paraan upang magtanong sa komunidad
@@ -19,6 +19,7 @@ Tungkol sa isang miyembro:
 
 - Suspendihin ang isang miyembro, o bawiin ang suspensiyon.
 - I-freeze ang kredito ng isang miyembro, o i-unfreeze ito.
+- Bigyan ang isang miyembro ng karapatang mag-vouch para sa mga baguhan, o alisin ito.
 - Alisin ang isang punong tagapangalaga mula sa isang negosyo, o isang lider mula sa isang proyekto.
 - Alisin ang isang miyembro mula sa komunidad, o ibalik sila.
 
@@ -106,7 +107,7 @@ Ang server ng iyong komunidad ay may mga may-ari at admin. Sila ang nag-aalaga r
 
 - Maaaring ihinto ng isang admin ang isang bukas na Desisyon, ngunit dapat magbigay ng nakasulat na dahilan. Mababasa ito ng mga miyembro sa Desisyon.
 - Kung naipasa na ang isang pag-alis at nasa 7-araw na paghihintay nito, maaaring ihinto ito ng isang admin, o gawin itong mangyari kaagad.
-- Maaaring gawing tagapagpatunay ng mga may-ari at admin ng credit committee ang isang kumpirmadong miyembro sa listahan ng mga pangalan.
+- Maaaring bigyan ng mga admin ang mga miyembro ng karapatang mag-vouch para sa mga baguhan.
 - Maaaring magbigay ang mga admin sa isang miyembro ng trust badge. Nagbibigay din ito sa miyembrong iyon ng tiwala na kailangan ng badge na iyon, kaya pinalalalim nito ang kanilang linya ng kredito.
 - Inaayos ng mga admin ang mga naipit na kalakalan, ngunit hindi kailanman ang isa kung saan bahagi sila.
 
@@ -153,7 +154,4 @@ Ang isang grupo ay pinapatakbo ng mga tagapag-ugnay nito, at ang isa sa kanila a
 
 ## Pag-vouch
 
-Ang mga may-ari at admin ay mga tagapagpatunay ayon sa tungkulin, at maaaring gawing tagapagpatunay ng may-ari o admin ng credit committee ang isang kumpirmadong miyembro sa listahan ng mga pangalan. Bawat tagapagpatunay ay tumatanggap ng badyet (100 hanggang 2,000 Beans, na may default sa komunidad na 1,000 Beans).
-
-Maaaring magpatunay ang mga tagapagpatunay para sa mga bagong dating sa isang imbitasyon, o para sa mga miyembrong nasa loob na mula sa kanilang profile, na pumipili mula sa mga preset na 25, 50, 75 o 100 Beans mula sa kanilang badyet. Bawat tagapagpatunay ay maaaring magpatunay para sa isang tao nang isang beses (maaaring itaas hanggang 100 Beans sa kabuuan), hanggang 3 tagapagpatunay ang maaaring magpatunay para sa isang tao (hanggang 300 Beans sa kabuuan), at hindi maaaring magpatunay para sa isang taong nasa ilalim ng zero ngayon. Hindi kailanman nagbibigay ng karapatang ito ang mga trust badge.
-
+Ang mga admin lamang, at mga miyembrong pinili ng isang admin o ng isang Desisyon ng komunidad, ang maaaring mag-vouch para sa mga baguhan. Ang isang vouch ay nagbibigay sa baguhan ng maliit na linya ng kredito upang magsimula: 25, 50 o 100 munggo. Ang mga trust badge ay hindi kailanman nagbibigay ng karapatang ito.

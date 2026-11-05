@@ -4,7 +4,7 @@ title: Iyong privacy
 summary: Kung ano ang makikita ng iba tungkol sa iyo, at ang mga setting na kumokontrol dito.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Kung ano ang makikita ng ibang miyembro tungkol sa iyo, at ang mga switch na kumokontrol dito.
-source-hash: 19d7d7439e729ce8
+source-hash: 7a296a90b991050e
 ---
 
 ## Pagbubukas ng Mga Setting
@@ -17,7 +17,7 @@ I-tap ang button na mga slider sa kanang itaas ng screen. Sa web app sa malapad 
 - Ang iyong badge ng tiwala, ang iyong mga review (walang ibang makakakita kung sino ang sumulat ng review), at ang iyong profile ng tiwala: gaano karami sa iyong mga kalakalan ang natapos at ilan ang nakansela, at ang bahaging natapos, gaano karaming kabayaran sa Munggo ang naipadala mo o natanggap mula sa mga miyembro kasama ang mga kalakalang natapos mo, kasama ang kung ilang magkakaibang miyembro ang binayaran mo, binayaran ka o kinalakal mo, gaano karaming kabayaran at kalakalan ang nagawa mo sa miyembrong tumitingin, at ang iyong Mga Puntos ng Tiwala. Nakikita ito ng mga admin tulad ng sinumang miyembro, at hindi ito naka-log.
 - Ang iyong mga post, at kung nasaan ang mga pin ng mga ito. Tingnan ang "Kung saan napupunta ang iyong pin".
 - Kung paano ka bumoto sa isang Botohan, ngunit sa isang Botohan lamang na ginawang **bukas na boto** ng gumawa nito. Kung hindi ay hindi nagpapakilala (anonymous) ang mga botohan, at palaging lihim ang mga boto sa **Mga Desisyon**.
-- Kung sino ang nag-imbita sa iyo. Sa telepono, sinasabi sa iyong profile ang **Inimbitahan ni** at ang kanilang pangalan. Kung sumali ka bilang founding member o direktang inimbitahan ng system admin, sinasabi nito sa halip ang **Founding member** o **Direktang inimbitahan ng system admin**.
+- Kung sino ang nag-imbita sa iyo. Sa telepono sinasabi ng iyong profile ang **Pinatunayan ni** at ang kanilang pangalan. Kung pumasok ka bilang isang nagtatag na miyembro o direktang inimbita ng admin ng sistema, sinasabi nito ang **Nagtatag na miyembro** o **Direktang inimbita ng admin ng sistema** sa halip. Kung may miyembrong nagpatunay para sa iyong linya ng kredito, sinasabi ng iyong profile ang **Pinatunayan ni** at ang kanilang pangalan, sa app sa telepono at sa web app.
 
 ## Kung ano ang ikaw lamang ang makakakita
 
@@ -60,4 +60,3 @@ Makikita pa rin ng mga may-ari at admin na nagpapatakbo ng server ng iyong komun
 ## Magbasa pa
 
 Sa Mga Setting, sa ilalim ng **LEGAL AT PRIVACY**, i-tap ang **Patakaran sa Privacy**.
-

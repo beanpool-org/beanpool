@@ -3,7 +3,7 @@ slug: credit-line
 title: Tu línea de crédito
 summary: Hasta cuánto puedes tener saldo negativo y cómo se incrementa.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 1019023b7b5bb263
+source-hash: d966829d85d430b1
 ---
 
 ## Qué es
@@ -46,7 +46,7 @@ La línea debajo de la barra te lo indica, por ejemplo "Publica una oferta para 
 
 ## En una comunidad conocida
 
-Comienza en cero. Se abre cuando completas tu primer intercambio en el mercado (un intercambio de solo 1 o 2 frijoles es demasiado pequeño para contar), o cuando un avalista te avala en la invitación que te trajo o en tu perfil. Hasta entonces, el Libro contable indica **Aún sin línea de crédito**. Aún puedes intercambiar con los frijoles que poseas.
+Algunas comunidades tienen administradores que conocen a cada miembro por su nombre. Un miembro que un administrador haya confirmado obtiene una línea de crédito de inmediato, **el límite mínimo conocido**: 1,000 frijoles, a menos que tu comunidad haya elegido otra cantidad. Eso equivale a unas 25 horas de trabajo por las que la comunidad confía en ti. Aumenta tu límite, no tu nivel: tu insignia de confianza sigue contando solo lo que has hecho. El límite mínimo conocido está activado en cada comunidad con frijoles a menos que su propietario lo haya desactivado.
 
 - Una Oferta activa te permite usarla toda. Sin Ofertas, no puedes usarla.
 - La confianza que ganas intercambiando se suma a ella, hasta el tope de tu comunidad (2,000 frijoles a menos que haya elegido más, hasta 5,000).
@@ -62,21 +62,10 @@ En algunas comunidades cualquier miembro puede invitar a personas, por lo que lo
 Los administradores de tu comunidad pueden congelar la línea de crédito de un miembro: toda ella o, en una comunidad conocida, la parte que proviene de ser un miembro confirmado.
 
 - Si congelan toda ella, o la parte confirmada es toda la línea que tienes, el Registro dice **Tu línea de crédito está congelada**: no puedes gastar en débito mientras dure, pero aún puedes vender y recibir frijoles, y gastar lo que tengas por encima de cero. Si estabas en débito cuando la congelaron, el Registro también indica cuántos frijoles tienes en débito: vender o recibir frijoles te devuelve a saldo positivo, y una vez que estés por encima de cero puedes gastar lo que tengas.
-- Si congelan la parte confirmada y también tienes crédito de un aval, una cesión de línea de crédito, de intercambios o de una asignación, la barra permanece, con una nota debajo indicando que la parte confirmada está congelada y el resto funciona como antes. Si estás por debajo de lo que queda, el Libro contable también dice **Gastos pausados** (abajo).
+- Si congelan la parte confirmada y también tienes crédito de un aval, de intercambios o de un subsidio, la barra se mantiene, con una nota debajo indicando que la parte confirmada está congelada y el resto funciona como antes. Si estás por debajo de lo que queda, el Registro también dice **Gastos pausados** (más abajo).
 
-Tu nivel no cambia, ni en tu perfil ni en tus publicaciones: cuenta lo que has hecho (tus intercambios y cualquier confianza que un administrador te haya otorgado), nunca la parte de tu línea que proviene de estar confirmado, ni ningún monto que los administradores hayan establecido para ella. Para preguntar el motivo o para que se vuelva a abrir, consulta con uno de los administradores.
-
-## Ceder parte de tu línea de crédito
-
-Puedes ceder parte de tu línea de crédito a otro miembro. En **Enviar**, abre la pestaña **Línea de crédito** junto a **Frijoles**.
-
-- **Solo crédito que alguien te haya dado:** solo puedes ceder crédito que te haya otorgado un avalista u otro miembro. No puedes ceder tu piso conocido ni el crédito que ganaste intercambiando.
-- **Solo lo que no estés usando:** solo puedes ceder tanto crédito como dejen libre tu saldo y tus Ofertas activas, por lo que ceder crédito nunca pausa tus gastos.
-- **Después de tu primer intercambio:** puedes ceder crédito una vez que hayas completado tu primer intercambio en el mercado, la misma regla que para enviar frijoles.
-- **Hasta el límite comunitario:** puedes ceder hasta 100 frijoles por regalo (o el ajuste de tu comunidad, si un propietario estableció un límite inferior).
-- **Es suyo definitivamente:** la línea de crédito pasa permanentemente al destinatario. Nunca lo convierte en avalista. No puedes ceder crédito a ti mismo, a una empresa ni a un miembro pausado o congelado.
+Tu nivel no cambia, tanto en tu perfil como en tus publicaciones: cuenta lo que has hecho (un aval, tus intercambios y cualquier confianza que te haya otorgado un administrador), nunca la parte de tu línea que proviene de estar confirmado ni cualquier monto que los administradores hayan fijado para ella. Para preguntar por qué, o para que se vuelva a abrir, consulta a uno de los administradores.
 
 ## Gastos pausados
 
 Si bajas de lo que permiten tus Ofertas, por ejemplo porque retiraste una Oferta, el Registro dice **Gastos pausados**. Todavía puedes ganar y vender. Publica una Oferta, o gana hasta recuperarte, y la pausa se levantará. No se te quita nada.
-

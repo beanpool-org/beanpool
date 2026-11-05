@@ -3,7 +3,7 @@ slug: credit-line
 title: Batas kreditmu
 summary: Seberapa jauh saldomu bisa di bawah nol, dan bagaimana batas ini bertambah.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 1019023b7b5bb263
+source-hash: d966829d85d430b1
 ---
 
 ## Apa itu batas kredit
@@ -46,7 +46,7 @@ Baris di bawah bilah memberi tahumu, misalnya "Pasang penawaran untuk membuka ja
 
 ## Di komunitas yang saling mengenal
 
-Dimulai dari nol. Terbuka saat kamu menyelesaikan transaksi pertamamu di pasar (transaksi 1 atau 2 kacang terlalu kecil untuk dihitung), atau saat seorang penjamin menjaminmu pada undangan yang membawamu masuk atau pada profilmu. Sebelum itu Buku Besar bertuliskan **Belum ada batas kredit**. Kamu tetap dapat bertransaksi dengan kacang yang kamu miliki.
+Beberapa komunitas memiliki admin yang mengenal setiap anggotanya berdasarkan nama. Anggota yang telah dikonfirmasi oleh admin langsung mendapatkan batas kredit, **batas dasar yang diketahui**: 1.000 Kacang kecuali jika komunitasmu memilih jumlah lain. Itu setara dengan sekitar 25 jam kerja yang dipercayakan komunitas kepadamu. Hal ini menaikkan batasmu, bukan tingkatmu: lencana percayamu tetap hanya menghitung apa yang telah kamu lakukan. Batas dasar yang diketahui aktif di setiap komunitas dengan Kacang kecuali jika pemiliknya menonaktifkannya.
 
 - Satu Penawaran aktif memungkinkanmu menggunakan semuanya. Tanpa Penawaran, kamu tidak dapat menggunakannya.
 - Kepercayaan yang kamu peroleh dari bertransaksi menambah batas tersebut, hingga batas atas komunitasmu (2.000 Kacang kecuali jika dipilih lebih banyak, hingga 5.000).
@@ -62,21 +62,10 @@ Di beberapa komunitas, setiap anggota dapat mengundang orang lain, sehingga admi
 Admin komunitasmu dapat membekukan batas kredit anggota: seluruhnya, atau, di komunitas yang saling mengenal, bagian yang berasal dari status anggota terkonfirmasi.
 
 - Jika mereka membekukan seluruhnya, atau bagian terkonfirmasi adalah satu-satunya jalur kredit yang kamu miliki, Buku kas menyatakan **Jalur kredit Anda dibekukan**: kamu tidak dapat berbelanja hingga defisit selama pembekuan berlangsung, tetapi kamu masih dapat menjual dan menerima Kacang, serta membelanjakan apa yang kamu miliki di atas nol. Jika kamu berada dalam defisit saat mereka membekukannya, Buku kas juga menyebutkan berapa Kacang defisitmu: menjual atau menerima Kacang akan menaikkan kembali saldomu, dan setelah berada di atas nol kamu dapat membelanjakan apa yang kamu miliki.
-- Jika mereka membekukan bagian yang terkonfirmasi dan kamu juga memiliki kredit dari jaminan, hadiah batas kredit, perdagangan, atau hibah, bilah tetap ada, dengan catatan di bawahnya bahwa bagian terkonfirmasi dibekukan dan sisanya berfungsi seperti biasa. Jika kamu berada di bawah sisa yang ada, Buku Besar juga menampilkan **Pengeluaran dijeda** (di bawah).
+- Jika mereka membekukan bagian terkonfirmasi dan kamu juga memiliki kredit dari jaminan, dari perdagangan, atau dari hibah, bilah tetap ada, dengan catatan di bawahnya bahwa bagian terkonfirmasi dibekukan dan sisanya berfungsi seperti sebelumnya. Jika kamu berada di bawah apa yang tersisa, Buku kas juga menyatakan **Pengeluaran dijeda** (di bawah).
 
-Levelmu tidak berubah, baik di profil maupun di postinganmu: level menghitung apa yang telah kamu lakukan (transaksimu dan kepercayaan apa pun yang diberikan admin), tidak pernah bagian dari batasmu yang berasal dari status terkonfirmasi, atau jumlah berapa pun yang ditetapkan admin untuk itu. Untuk menanyakan alasannya atau membukanya kembali, hubungi salah satu admin.
-
-## Memberikan sebagian batas kreditmu
-
-Kamu dapat memberikan sebagian batas kreditmu kepada anggota lain. Pada **Kirim**, buka tab **Batas kredit** di samping **Kacang**.
-
-- **Hanya kredit yang diberikan seseorang kepadamu:** kamu hanya dapat memberikan kredit yang diberikan oleh penjamin atau anggota lain kepadamu. Kamu tidak dapat memberikan batas dasar terkonfirmasi atau kredit yang kamu peroleh dari transaksi.
-- **Hanya yang tidak sedang kamu gunakan:** kamu hanya dapat memberikan kredit sebanyak yang tidak terpakai oleh saldo dan Penawaran aktifmu, sehingga memberikan kredit tidak pernah menjeda pengeluaranmu.
-- **Setelah transaksi pertamamu:** kamu dapat memberikan kredit setelah menyelesaikan transaksi pertamamu di pasar, aturan yang sama seperti mengirim Kacang.
-- **Hingga batas komunitas:** kamu dapat memberikan hingga 100 Kacang per hadiah (atau pengaturan komunitasmu, jika pemilik menetapkan batas yang lebih rendah).
-- **Menjadi milik mereka secara permanen:** batas kredit berpindah ke penerima secara permanen. Hal itu tidak pernah membuat penerima menjadi penjamin. Kamu tidak dapat memberikan kredit kepada dirimu sendiri, perusahaan, atau anggota yang dijeda atau dibekukan.
+Tingkatmu tidak berubah, baik di profilmu maupun di listingmu: tingkatmu menghitung apa yang telah kamu lakukan (jaminan, transaksimu, dan kepercayaan apa pun yang diberikan admin kepadamu), tidak pernah bagian dari jalur kreditmu yang berasal dari status anggota terkonfirmasi, atau jumlah berapa pun yang ditetapkan admin untuk itu. Untuk menanyakan alasannya, atau agar dibuka kembali, hubungi salah satu admin.
 
 ## Pengeluaran dijeda
 
 Jika kamu berada di bawah apa yang diizinkan oleh Penawaranmu, misalnya karena kamu menghapus sebuah Penawaran, Buku kas menyatakan **Pengeluaran dijeda**. Kamu masih dapat memperoleh penghasilan dan menjual. Pasang Penawaran, atau bertransaksilah hingga saldo naik kembali, dan jeda akan berakhir. Tidak ada yang diambil darimu.
-

@@ -4,7 +4,7 @@ title: Enquetes
 summary: Faça uma pergunta rápida à comunidade. Enquetes mostram opiniões; não mudam nada sozinhas.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Uma enquete faz uma pergunta rápida à comunidade. Mostra o que as pessoas pensam; não altera nada sozinha.
-source-hash: 74aa1008e60fa805
+source-hash: c1e4eb171c19552f
 ---
 
 ## Enquete ou Decisão?
@@ -19,7 +19,7 @@ Enquanto a enquete está aberta, ela não menciona nada sobre isso. Se mencionas
 
 ## Criar uma enquete
 
-- Toque em uma resposta para escolhê-la. Toque em outra para mudar de ideia, até que a enquete se encerre: o app pede confirmação antes de alterar seu voto.
+- Toque em **+ PUBLICAR** na aba Mercado ou no Mapa.
 - Escolha **Enquete da comunidade**.
 - Escreva a **Pergunta**.
 - Adicione **Contexto / Observações** se achar útil. Isso é opcional.
@@ -36,7 +36,7 @@ Você pode ter uma enquete aberta por vez, e uma comunidade pode ter até 5 aber
 
 As enquetes ficam no Mercado. Toque em **Enquetes** na linha superior para ver apenas enquetes. Uma enquete é listada de novo uma vez, em **Hoje**, no dia anterior ao encerramento.
 
-- Toque em uma resposta para escolhê-la. Toque em outra para mudar de ideia, até que a enquete se encerre: o app pede confirmação antes de alterar seu voto.
+- Toque em uma resposta para escolhê-la. Toque em outra para mudar de ideia, até que a enquete seja encerrada.
 - O cartão mostra quantas pessoas escolheram cada resposta.
 
 ## Quem pode ver como você votou
@@ -51,4 +51,3 @@ Os proprietários e administradores que operam o servidor da sua comunidade aind
 ## Encerrar uma enquete antes do prazo
 
 Se você a iniciou, toque em **Encerrar enquete** e confirme com **Encerrar enquete** novamente (**OK** no aplicativo web).
-

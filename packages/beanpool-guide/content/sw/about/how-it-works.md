@@ -3,7 +3,7 @@ slug: how-it-works
 title: Kazi ya BeanPool
 summary: Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: d9e82e8017a2b050
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Maharagwe
@@ -43,7 +43,7 @@ Unaweza pia kumtumia mtu maharagwe kama zawadi, bila biashara yoyote.
 
 Unaweza kutumia zaidi kidogo ya ulichonacho, na kwenda chini ya sifuri. Hiki ni **kikomo chako cha mkopo**. Ni ahadi ya kuwasaidia wengine baadaye.
 
-Kikomo chako cha mkopo huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni (biashara ya maharagwe 1 au 2 tu ni ndogo sana kuhesabiwa). Mdhamini pia anaweza kukupa mwanzo kwa kukudhamini kwenye mwaliko wako au wasifu wako: maharagwe 25, 50, 75 au 100 kutoka bajeti yake ya udhamini.
+Kikomo chako cha mkopo huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni (biashara ya maharagwe 1 au 2 tu ni ndogo sana kuhesabiwa). Mtu ambaye jumuiya yako imemchagua kuwakaribisha wageni anaweza pia kukupa mwanzo mdogo kwa kukudhamini: maharagwe 25, 50 au 100.
 
 Kikomo chako cha mkopo hukua kulingana na **uaminifu** wako:
 
@@ -93,4 +93,3 @@ Jumuiya yako ina hazina ya pamoja ya maharagwe inayoitwa **Mali za Pamoja**. Ada
 **Kikundi** ni duara la wanachama lenye mazungumzo na machapisho yake yenyewe, linaloendeshwa na **mratibu** mmoja au zaidi. Mmoja wao ni **mratibu mkuu** — yeyote aliyetengeneza kikundi, mwanzoni.
 
 Unaweza kusoma jinsi wasimamizi na waratibu wanavyochaguliwa katika "Sheria na jinsi maamuzi hufanywa".
-

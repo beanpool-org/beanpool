@@ -4,7 +4,7 @@ title: Sondaggi
 summary: Fai una domanda veloce alla comunità. I sondaggi rilevano le opinioni; non cambiano nulla di per sé.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Un sondaggio pone una domanda rapida alla comunità. Mostra le opinioni; non cambia nulla da solo.
-source-hash: 74aa1008e60fa805
+source-hash: c1e4eb171c19552f
 ---
 
 ## Sondaggio o Decisione?
@@ -19,7 +19,7 @@ Mentre un sondaggio è aperto non viene riportato nulla a riguardo. Se lo facess
 
 ## Avviare un sondaggio
 
-- Tocca una risposta per sceglierla. Toccane un'altra per cambiare idea, fino alla chiusura del sondaggio: l'app ti chiede conferma prima di cambiare il tuo voto.
+- Tocca **+ PUBBLICA** nella scheda Mercato o sulla Mappa.
 - Scegli **Sondaggio della comunità**.
 - Scrivi la **Domanda**.
 - Aggiungi **Contesto / Note** se utile. Questo campo è facoltativo.
@@ -36,7 +36,7 @@ Puoi avere un solo sondaggio aperto alla volta, e una comunità può averne 5 ap
 
 I sondaggi si trovano nel Mercato. Tocca **Sondaggi** nella riga in alto per vedere solo i sondaggi. Un sondaggio viene elencato di nuovo una volta, sotto **Oggi**, il giorno prima che si chiuda.
 
-- Tocca una risposta per sceglierla. Toccane un'altra per cambiare idea, fino alla chiusura del sondaggio: l'app ti chiede conferma prima di cambiare il tuo voto.
+- Tocca una risposta per sceglierla. Toccane un'altra per cambiare idea, fino alla chiusura del sondaggio.
 - La scheda mostra quanti hanno scelto ciascuna risposta.
 
 ## Chi può vedere come hai votato
@@ -51,4 +51,3 @@ I proprietari e gli amministratori che gestiscono il server della tua comunità 
 ## Chiudere un sondaggio in anticipo
 
 Se lo hai avviato tu, tocca **Chiudi sondaggio**, poi di nuovo **Chiudi sondaggio** per confermare (**OK** nell'app web).
-

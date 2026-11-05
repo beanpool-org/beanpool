@@ -4,7 +4,7 @@ title: Encuestas
 summary: Haz una consulta rápida a la comunidad. Las encuestas miden opiniones; no cambian nada por sí solas.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Una encuesta hace una consulta rápida a la comunidad. Muestra lo que opina la gente; no cambia nada por sí sola.
-source-hash: 74aa1008e60fa805
+source-hash: c1e4eb171c19552f
 ---
 
 ## ¿Encuesta o Decisión?
@@ -19,7 +19,7 @@ Mientras una encuesta está abierta no dice nada al respecto. Si lo hiciera, alg
 
 ## Iniciar una encuesta
 
-- Toca una respuesta para elegirla. Toca otra para cambiar de opinión, hasta que la encuesta se cierre: la app te pide confirmación antes de cambiar tu voto.
+- Toca **PUBLICAR** en la pestaña Mercado o en el Mapa.
 - Elige **Encuesta comunitaria**.
 - Escribe la **Pregunta**.
 - Añade **Contexto / Notas** si ayuda. Esto es opcional.
@@ -36,7 +36,7 @@ Puedes tener una encuesta abierta a la vez, y una comunidad puede tener 5 abiert
 
 Las encuestas están en el Mercado. Toca **Encuestas** en la fila superior para ver solo encuestas. Una encuesta se lista de nuevo una vez, bajo **Hoy**, el día antes de que cierre.
 
-- Toca una respuesta para elegirla. Toca otra para cambiar de opinión, hasta que la encuesta se cierre: la app te pide confirmación antes de cambiar tu voto.
+- Toca una respuesta para elegirla. Toca otra para cambiar de opinión, hasta que la encuesta se cierre.
 - La tarjeta muestra cuántos eligieron cada respuesta.
 
 ## Quién puede ver cómo votaste
@@ -51,4 +51,3 @@ Los propietarios y administradores que gestionan el servidor de tu comunidad aú
 ## Cerrar una encuesta antes de tiempo
 
 Si tú la iniciaste, toca **Cerrar encuesta**, luego **Cerrar encuesta** de nuevo para confirmar (**Aceptar** en la app web).
-

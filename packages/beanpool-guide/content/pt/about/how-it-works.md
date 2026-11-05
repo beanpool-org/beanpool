@@ -3,7 +3,7 @@ slug: how-it-works
 title: Como o BeanPool funciona
 summary: Feijões, trocas, ofertas e pedidos, e crédito, em palavras simples.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: d9e82e8017a2b050
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Feijões
@@ -43,7 +43,7 @@ Você também pode enviar feijões para alguém como presente, sem uma troca.
 
 Você pode gastar um pouco mais do que tem e ficar abaixo de zero. Esta é a sua **linha de crédito**. É uma promessa de ajudar os outros mais tarde.
 
-Sua linha de crédito começa no zero. Ela se abre quando você conclui sua primeira troca no mercado (uma troca de apenas 1 ou 2 feijões é pequena demais para contar). Um recomendador também pode dar um impulso inicial afiançando você em seu convite ou perfil: 25, 50, 75 ou 100 feijões, tirados do orçamento dele.
+Sua linha de crédito começa no zero. Ela se abre quando você conclui sua primeira troca no mercado (uma troca de apenas 1 ou 2 feijões é pequena demais para contar). Alguém que sua comunidade escolheu para receber novatos também pode dar a você um começo garantindo por você: 25, 50 ou 100 feijões.
 
 Sua linha de crédito cresce com a sua **confiança**:
 
@@ -93,4 +93,3 @@ Um **empreendimento** continua ao longo do tempo e realiza trocas em seu própri
 Um **grupo** é um círculo de membros com conversas e publicações próprias, administrado por um ou mais **coordenadores**. Um deles é o **coordenador principal** — quem criou o grupo, inicialmente.
 
 Você pode ler como custódios e coordenadores são escolhidos em "Regras e decisões".
-

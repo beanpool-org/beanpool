@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Đề xuất một Quyết định
 summary: Yêu cầu cộng đồng cùng đưa ra một quyết định có tính ràng buộc.
 related: decisions, rules, polls, enterprises
-source-hash: 1415ed4b1b50784e
+source-hash: c5e90863bc9ac1f1
 ---
 
 ## Trước khi bắt đầu
 
-- Quyết định dành cho những việc mà máy chủ cộng đồng có thể tự thực thi: tạm ngưng hoặc phục hồi thành viên, đóng băng hoặc mở băng hạn mức của ai đó, hoặc chi trả đậu từ Quỹ chung. Đối với mọi việc khác, hãy tạo Thăm dò ý kiến.
+- Một Quyết định được dùng cho những việc mà máy chủ của cộng đồng bạn có thể thực thi: khai trừ hoặc tạm đình chỉ thành viên, đóng băng hoặc mở đóng băng tín dụng của ai đó, chọn người có quyền bảo lãnh, hoặc chi trả đậu từ Commons. Đối với bất kỳ việc nào khác, hãy bắt đầu một cuộc Thăm dò ý kiến.
 - Một Quyết định không thể khai trừ hoặc tạm đình chỉ chủ sở hữu hoặc quản trị viên của máy chủ cộng đồng. Xem "Quy tắc và cách quyết định vận hành".
 - Bạn có thể đề xuất khi đã hoàn thành một giao dịch, hoặc được quản trị viên cấp huy hiệu tin cậy. Quản trị viên của cộng đồng luôn có quyền đề xuất. Chỉ có một lượt bảo lãnh thì chưa đủ.
-- Bạn có thể đề xuất khi đã hoàn thành một giao dịch. Các quản trị viên của cộng đồng luôn có thể đề xuất. Huy hiệu tin cậy là không đủ.
+- Bạn có thể mở một Quyết định tại một thời điểm.
 - Cộng đồng toàn cầu không có Quyết định, vì vậy không có gì để đề xuất ở đó. Xem "Bỏ phiếu cho Quyết định".
 
 ## Đề xuất
@@ -47,4 +47,3 @@ Quy định này giúp hàng đợi không bị tắc nghẽn. Nếu một kho�
 - **This grant is bigger than the Commons could pay:** không yêu cầu nhiều hơn số tiền được nêu, hoặc chờ có thêm đậu chuyển vào.
 - **Số tiền không hợp lệ** (trong ứng dụng web, "Vui lòng nhập số tiền tài trợ hợp lệ bằng đậu (lớn hơn 0)."): hãy điền số lượng đậu.
 - **Lỗi:** kiểm tra lại để đảm bảo mô tả của bạn dài ít nhất 10 ký tự.
-

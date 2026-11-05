@@ -3,7 +3,7 @@ slug: credit-line
 title: Linea di credito
 summary: Quanto puoi andare sotto zero e come aumenta questa disponibilità.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 1019023b7b5bb263
+source-hash: d966829d85d430b1
 ---
 
 ## Che cos'è
@@ -23,7 +23,7 @@ Sul telefono, tocca la barra per visualizzare **Informazioni sul cursore del cre
 
 ## Come si apre
 
-Inizia a zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per contare), o quando un garante fa da garante per te nell'invito che ti ha fatto entrare o sul tuo profilo. Fino ad allora il Registro indica **Nessuna linea di credito attiva**. Puoi comunque scambiare con i fagioli in tuo possesso.
+Inizia da zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato), o quando qualcuno incaricato di accogliere i nuovi arrivati ti fa da garante. Fino ad allora il Mastro riporta **Nessuna linea di credito al momento**. Puoi comunque scambiare con i fagioli in tuo possesso.
 
 ## Come cresce
 
@@ -46,7 +46,7 @@ La riga sotto la barra lo indica, ad esempio "Pubblica un'offerta per aprire la 
 
 ## In una comunità con identità note
 
-Inizia a zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per contare), o quando un garante fa da garante per te nell'invito che ti ha fatto entrare o sul tuo profilo. Fino ad allora il Registro indica **Nessuna linea di credito attiva**. Puoi comunque scambiare con i fagioli in tuo possesso.
+Alcune comunità hanno amministratori che conoscono ogni membro per nome. Un membro confermato da un amministratore ottiene subito una linea di credito, **la soglia nota**: 1.000 fagioli a meno che la tua comunità non abbia scelto un altro importo. Corrisponde a circa 25 ore di lavoro per cui la comunità ti accorda fiducia. Aumenta il tuo limite, non il tuo livello: il tuo stemma di fiducia conta solo ciò che hai fatto. La soglia nota è attiva in ogni comunità con fagioli a meno che il suo proprietario non l'abbia disattivata.
 
 - Una sola Offerta attiva ti consente di utilizzarla per intero. Senza Offerte, non puoi usarla.
 - La fiducia che guadagni scambiando si aggiunge ad essa, fino al limite della comunità (2.000 fagioli a meno che non abbia scelto di più, fino a 5.000).
@@ -62,21 +62,10 @@ In alcune comunità qualsiasi membro può invitare persone, quindi gli amministr
 Gli amministratori della tua comunità possono congelare la linea di credito di un membro: per intero o, in una comunità con identità note, la quota derivante dall'essere un membro confermato.
 
 - Se congelano l'intera linea, o se la quota confermata rappresenta l'intera linea a tua disposizione, il Mastro riporta **La tua linea di credito è congelata**: non puoi spendere a debito per tutta la durata del blocco, ma puoi comunque vendere e ricevere fagioli, e spendere quanto possiedi sopra lo zero. Se eri a debito al momento del congelamento, il Mastro indica anche di quanti fagioli sei a debito: vendere o ricevere fagioli ti fa risalire, e una volta sopra lo zero puoi spendere ciò che possiedi.
-- Se congelano la parte confermata e possiedi anche credito derivante da una garanzia, da una donazione di linea di credito, da scambi o da un'assegnazione, la barra rimane visibile, con una nota sotto indicante che la parte confermata è congelata e il resto funziona regolarmente. Se ti trovi sotto la quota rimasta, il Registro indicherà anche **Spesa in pausa** (sotto).
+- Se congelano la quota confermata e possiedi anche credito derivante da una garanzia, dagli scambi o da un contributo, la barra rimane visibile con una nota sottostante indicante che la quota confermata è congelata e il resto funziona come prima. Se ti trovi sotto la disponibilità residua, il Mastro riporta anche **Spesa in pausa** (sotto).
 
-Il tuo livello non cambia, né sul tuo profilo né sulle tue offerte: conta ciò che hai fatto (i tuoi scambi e l'eventuale fiducia concessa da un amministratore), mai la parte della linea derivante dalla conferma, né alcun importo impostato dagli amministratori. Per chiederne il motivo o richiederne lo sblocco, rivolgiti a uno degli amministratori.
-
-## Donare parte della tua linea di credito
-
-Puoi cedere parte della tua linea di credito a un altro membro. Su **Invia**, apri la scheda **Linea di credito** accanto a **Fagioli**.
-
-- **Solo credito ricevuto in dono:** puoi cedere solo credito che un garante o un altro membro ti ha donato. Non puoi cedere il tuo limite garantito noto né il credito guadagnato scambiando.
-- **Solo ciò che non stai usando:** puoi cedere solo la quota di credito lasciata libera dal tuo saldo e dalle tue Offerte attive, affinché la donazione non metta mai in pausa le tue spese.
-- **Dopo il tuo primo scambio:** puoi cedere credito non appena completi il tuo primo scambio sul mercato, con la stessa regola valida per l'invio dei fagioli.
-- **Fino al limite della comunità:** puoi donare fino a 100 fagioli per dono (o il limite stabilito dal proprietario della comunità, se inferiore).
-- **Diventa loro definitivamente:** la linea di credito passa in modo permanente al destinatario. Non lo trasforma mai in garante. Non puoi donare credito a te stesso, a un'impresa o a un membro sospeso o congelato.
+Il tuo livello non cambia, sia sul tuo profilo che nelle tue inserzioni: conta ciò che hai fatto (una garanzia, i tuoi scambi e l'eventuale fiducia concessa da un amministratore), mai la quota della tua linea derivante dall'essere confermato, o qualsiasi importo stabilito per essa dagli amministratori. Per chiederne il motivo o farla riaprire, rivolgiti a uno degli amministratori.
 
 ## Spesa in pausa
 
 Se scendi sotto quanto consentito dalle tue Offerte, ad esempio perché hai rimosso un'Offerta, il Mastro riporta **Spesa in pausa**. Puoi comunque guadagnare e vendere. Pubblica un'Offerta o guadagna nuovamente per sbloccarla. Non ti viene tolto nulla.
-

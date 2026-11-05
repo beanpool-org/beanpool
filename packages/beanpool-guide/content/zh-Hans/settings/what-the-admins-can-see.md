@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: 管理员可见内容
 summary: 在管理员保留实名名单的社区中：名单记录的内容、谁可以查看、服务器保留哪些数据以及确认身份的含义。
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 3b82166b108108b4
+source-hash: 88d60b236e7653ab
 ---
 
 ## 实名名单
@@ -86,4 +86,3 @@ source-hash: 3b82166b108108b4
 ## 查询你的档案记录
 
 你可以向管理员询问你的名单记录写了什么，以进行更正，或者在你不再属于该社区时要求将其删除。名单由管理员保管，而非 BeanPool 官方。
-

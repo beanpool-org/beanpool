@@ -36,4 +36,3 @@ Auf dem Smartphone kann der Filter **Vertrauen** im Markt nur Beiträge von Mitg
 ## Admins und Abzeichen
 
 Die Admins einer Community können einem Mitglied ein Abzeichen verleihen. Das vertieft dessen Kreditrahmen wie erarbeitetes Vertrauen. Es zählt nicht als Handel: Es fügt kein Stimmguthaben hinzu und erlaubt es ihm nicht, Geschenke zu versenden.
-

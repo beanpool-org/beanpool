@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Mengajukan Keputusan
 summary: Minta komunitas mengambil keputusan yang mengikat.
 related: decisions, rules, polls, enterprises
-source-hash: 1415ed4b1b50784e
+source-hash: c5e90863bc9ac1f1
 ---
 
 ## Sebelum memulai
 
-- Keputusan ditujukan untuk hal yang dapat dijalankan oleh server komunitasmu: menangguhkan atau memulihkan anggota, membekukan atau mencairkan kredit seseorang, atau membayar kacang dari Commons. Untuk hal lain, buatlah Jajak Pendapat.
+- Sebuah Keputusan ditujukan untuk sesuatu yang dapat dijalankan oleh server komunitasmu: menghapus atau menangguhkan anggota, membekukan atau mencabut pembekuan kredit seseorang, memilih siapa yang boleh memberikan jaminan, atau membayarkan kacang dari Sarana Bersama. Untuk hal lainnya, mulailah Jajak Pendapat sebagai gantinya.
 - Keputusan tidak dapat menghapus atau menangguhkan pemilik atau admin dari server komunitasmu. Lihat "Aturan dan cara kerja keputusan".
 - Kamu dapat mengajukan usulan setelah kamu menyelesaikan transaksi, atau admin telah memberimu lencana percaya. Admin komunitasmu selalu dapat mengajukan usulan. Jaminan saja tidak cukup.
-- Kamu dapat mengajukan usulan setelah menyelesaikan sebuah transaksi. Admin komunitasmu selalu dapat mengajukan usulan. Lencana kepercayaan saja tidak cukup.
+- Kamu dapat memiliki satu Keputusan terbuka pada satu waktu.
 - Komunitas global tidak memiliki Keputusan, jadi tidak ada yang dapat diajukan di sana. Lihat "Memilih dalam Keputusan".
 
 ## Mengajukan usulan
@@ -47,4 +47,3 @@ Ini menjaga antrean tetap lancar. Jika suatu hibah disetujui saat dana Sarana Be
 - **This grant is bigger than the Commons could pay:** jangan meminta lebih dari jumlah yang disebutkan, atau tunggu sampai lebih banyak kacang masuk.
 - **Jumlah Tidak Valid** (di web app, "Masukkan jumlah hibah positif yang valid dalam kacang"): isi berapa banyak kacang.
 - **Kesalahan:** periksa apakah deskripsimu memiliki panjang setidaknya 10 karakter.
-

@@ -3,7 +3,7 @@ slug: rules
 title: Kurallar ve karar alma süreci
 summary: Oylama, katılım, gizli oylama, kimlerin oy verebileceği, askıya alma, üye çıkarma, sorumlular ve kolaylaştırıcılar.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: 5e6d3bb454c39428
+source-hash: be2e7321aab53ca8
 ---
 
 ## Topluluğa sormanın iki yolu
@@ -19,6 +19,7 @@ Bir üye hakkında:
 
 - Bir üyeyi askıya alabilir veya askıya almayı kaldırabilir.
 - Bir üyenin kredisini dondurabilir veya çözebilir.
+- Bir üyeye yeni gelenlere kefil olma hakkı verebilir veya bu hakkı geri alabilir.
 - Bir girişimden bir baş sorumluyu veya bir projeden bir lideri görevden alabilir.
 - Bir üyeyi topluluktan çıkarabilir veya geri kabul edebilir.
 
@@ -106,7 +107,7 @@ Topluluğunuzun sunucusunun sahipleri ve yöneticileri vardır. Ona bakarlar.
 
 - Bir yönetici açık bir Kararı durdurabilir ancak yazılı bir gerekçe belirtmelidir. Üyeler bunu Karar üzerinde okuyabilir.
 - Bir çıkarma kabul edilmişse ve 7 günlük bekleme süresindeyse bir yönetici onu durdurabilir veya derhal gerçekleşmesini sağlayabilir.
-- Sahipler ve kredi komitesi yöneticileri, onaylanmış bir üyeyi isim listesinde kefil yapabilir.
+- Yöneticiler üyelere yeni gelenlere kefil olma hakkı verebilir.
 - Yöneticiler bir üyeye güven rozeti verebilir. Bu ayrıca o üyeye o rozetin gerektirdiği güveni verir, böylece kredi limitlerini derinleştirir.
 - Yöneticiler tıkanmış takasları çözer ancak parçası oldukları bir takası asla çözemezler.
 
@@ -153,7 +154,4 @@ Bir grup koordinatörleri tarafından yönetilir ve bunlardan biri grubun **baş
 
 ## Kefil olma
 
-Sahipler ve yöneticiler rolleri gereği kefildir; bir sahip veya kredi komitesi yöneticisi, onaylanmış bir üyeyi isim listesinde kefil yapabilir. Her kefil bir bütçe alır (100 ile 2.000 fasulye arası, topluluk varsayılanı 1.000 fasulye).
-
-Kefiller, bir davetiyede yeni gelenler için veya profillerinden halihazırda içeride olan üyeler için bütçelerinden 25, 50, 75 veya 100 fasulye hazır seçeneklerinden birini seçerek kefil olabilir. Her kefil bir kişi için yalnızca bir kez kefil olabilir (toplamda 100 fasulyeye kadar yükseltilebilir), bir kişi için en fazla 3 kefil kefil olabilir (toplamda 300 fasulyeye kadar) ve bir kefil şu anda sıfırın altında olan biri için kefil olamaz. Güven rozetleri bu hakkı asla vermez.
-
+Yalnızca yöneticiler ve bir yönetici tarafından veya bir topluluk Kararı ile seçilen üyeler yeni gelenlere kefil olabilir. Bir kefalet, yeni gelene başlaması için küçük bir kredi limiti verir: 25, 50 veya 100 fasulye. Güven rozetleri bu hakkı asla vermez.

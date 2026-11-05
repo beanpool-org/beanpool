@@ -36,4 +36,3 @@ Telefonda Pazar'ın **Güven** filtresi yalnızca belirli bir rozete veya daha y
 ## Yöneticiler ve rozetler
 
 Bir topluluğun yöneticileri bir üyeye rozet verebilir. Bu, kazanılan güven gibi kredi limitlerini derinleştirir. Takas olarak sayılmaz: oy kredisi eklemez ve hediye göndermelerine izin vermez.
-

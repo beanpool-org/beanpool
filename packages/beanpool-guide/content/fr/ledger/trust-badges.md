@@ -36,4 +36,3 @@ Sur le téléphone, le filtre **Confiance** du Marché permet de n'afficher que 
 ## Les administrateurs et les badges
 
 Les administrateurs d'une communauté peuvent attribuer un badge à un membre. Cela accroît sa ligne de crédit, à l'image de la confiance acquise. Cela ne compte pas comme des échanges : cela n'ajoute pas de crédits de voix et ne lui permet pas d'envoyer des dons.
-

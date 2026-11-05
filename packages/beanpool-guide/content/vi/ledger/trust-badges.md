@@ -36,4 +36,3 @@ Trên điện thoại, bộ lọc **Tin cậy** của Chợ có thể chỉ hi�
 ## Quản trị viên và huy hiệu
 
 Quản trị viên cộng đồng có thể cấp huy hiệu cho một thành viên. Điều đó giúp mở rộng hạn mức tín dụng của họ, tương tự như điểm tin cậy tích lũy được. Nó không được tính là các giao dịch: nó không cộng thêm tín chỉ biểu quyết và không cho phép họ gửi quà tặng.
-

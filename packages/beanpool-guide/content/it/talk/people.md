@@ -4,7 +4,7 @@ title: Persone e amici
 summary: Trovare membri della comunità, i loro profili e badge di fiducia, e contrassegnare gli amici per accorgersi se qualcuno esce.
 related: messages, your-profile, joining, blocking
 help: I membri della tua comunità e i tuoi amici. Tocca una persona per vedere il suo profilo, oppure tocca 💬 accanto a un membro per scrivere un messaggio.
-source-hash: 094e89e2c072349f
+source-hash: 44b66169497e9909
 ---
 
 ## Trovare persone
@@ -37,13 +37,6 @@ Puoi scegliere di non essere mostrato come collegamento in comune di nessuno. Ne
 
 ## Garantire per qualcuno
 
-Un garante può garantire per un membro già iscritto, fornendogli una linea di credito per iniziare a commerciare. I garanti sono proprietari e amministratori per ruolo, e membri impostati come garanti nell'elenco dei nomi da un proprietario o amministratore della commissione credito.
+Alcuni membri vengono scelti dalla comunità per accogliere i nuovi arrivati. Possono garantire per un nuovo membro, il che assegna a quella persona una piccola linea di credito con cui iniziare. Sul profilo della persona toccano **Garantisci per il membro** e scelgono **Leggera** (25), **Standard** (50) o **Profonda** (100). Nessun fagiolo esce dal portafoglio di chi garantisce.
 
-Sul profilo del membro, il garante tocca **Garantisci per @nome** e sceglie **25**, **50**, **75** o **100** fagioli dal proprio budget di garanzia. Nessun fagiolo esce dal portafoglio personale del garante.
-
-- **Una garanzia per persona:** ciascun garante può garantire per una persona una sola volta. Puoi in seguito aumentare la garanzia per quella persona, fino a 100 fagioli in totale.
-- **Al massimo 3 garanti:** al massimo 3 garanti possono garantire per la stessa persona (fino a 300 fagioli complessivi).
-- **Mai sotto zero:** non puoi fare da garante per un membro che si trova attualmente sotto zero. Per aiutare chi è in debito, i membri possono donare parte della propria linea di credito in Invia, oppure proporre una Decisione comunitaria.
-
-Vedi "Entrare in BeanPool" e "La tua linea di credito".
-
+Chi può garantire viene deciso da un amministratore o da una Decisione della comunità, mai da un badge. Vedi "Regole e decisioni".

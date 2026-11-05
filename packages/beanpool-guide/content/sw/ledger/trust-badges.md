@@ -36,4 +36,3 @@ Kwenye simu, kichujio cha **Uaminifu** cha Soko kinaweza kuonyesha machapisho tu
 ## Wasimamizi na beji
 
 Wasimamizi wa jumuiya wanaweza kumpa mwanachama beji. Hiyo huongeza kikomo chake cha mkopo, kama vile uaminifu uliochumwa. Haihesabiwi kama biashara: haiongezi mikopo ya sauti na haimruhusu kutuma zawadi.
-

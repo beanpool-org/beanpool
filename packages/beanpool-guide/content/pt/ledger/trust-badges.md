@@ -36,4 +36,3 @@ No celular, o filtro **Confiança** do Mercado pode mostrar apenas publicações
 ## Administradores e emblemas
 
 Os administradores de uma comunidade podem conceder um emblema a um membro. Isso aprofunda a linha de crédito dele, assim como a confiança obtida. Isso não conta como trocas: não adiciona créditos de voz e não permite que ele envie presentes.
-

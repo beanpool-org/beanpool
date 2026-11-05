@@ -36,4 +36,3 @@ En el teléfono, el filtro **Confianza** del Mercado puede mostrar solo publicac
 ## Administradores e insignias
 
 Los administradores de una comunidad pueden otorgar una insignia a un miembro. Eso amplía su línea de crédito, como la confianza ganada. No cuenta como intercambios: no añade créditos de voz y no les permite enviar regalos.
-

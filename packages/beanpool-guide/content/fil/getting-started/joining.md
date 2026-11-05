@@ -4,7 +4,7 @@ title: Pagsali sa BeanPool
 summary: Dalawang paraan: isang komunidad, gamit ang imbitasyon ng miyembro, o ang pandaigdigang komunidad kapag bukas, gamit ang 12 lihim na salita o isang sign-in. Paghiling na sumali sa komunidad, at paano mag-imbita ng iba.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Sumali sa komunidad gamit ang imbitasyon ng miyembro, o sa pandaigdigang komunidad gamit ang 12 lihim na salita o isang sign-in.
-source-hash: e8148ea89abb9b77
+source-hash: 5a1feb7390e4c3fb
 ---
 
 ## Dalawang paraan para makapasok
@@ -117,4 +117,3 @@ Maaaring humiling ang mga tao na sumali sa iyong komunidad mula sa pandaigdigang
 - Ang **Huwag muna** ay walang sinasabi sa kanila maliban sa "wala pang sagot".
 
 Maaaring sumagot ang sinumang miyembro. Sa isang komunidad kung saan ang mga admin lamang ang nag-iimbita, ang mga may-ari at admin lamang nito ang nakakakita ng mga kahilingan at sumasagot sa mga ito. Tingnan ang "Paghahanap ng kalapit na komunidad".
-

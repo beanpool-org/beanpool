@@ -4,7 +4,7 @@ title: La tua privacy
 summary: Cosa possono vedere gli altri su di te e le impostazioni per controllarlo.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Cosa possono vedere gli altri membri su di te e gli interruttori per gestirlo.
-source-hash: 19d7d7439e729ce8
+source-hash: 7a296a90b991050e
 ---
 
 ## Aprire le Impostazioni
@@ -17,7 +17,7 @@ Tocca il pulsante con i cursori in alto a destra dello schermo. Nella web app su
 - Il tuo badge di affidabilità, le tue recensioni (nessun altro può vedere chi ha scritto una recensione) e il tuo profilo di affidabilità: quanti dei tuoi scambi sono stati completati e quanti annullati, e la percentuale di completamento, quanti pagamenti in Bean hai inviato o ricevuto dai membri oltre agli scambi completati, con quanti membri diversi hai effettuato pagamenti, ricevuto pagamenti o scambiato, quanti pagamenti e scambi hai effettuato con il membro che sta guardando e i tuoi Punti affidabilità. Gli amministratori vedono queste informazioni come qualsiasi altro membro, e la consultazione non viene registrata.
 - I tuoi annunci e dove si trovano i relativi segnaposto. Vedi "Dove va a finire il tuo segnaposto".
 - Come hai votato in un sondaggio, ma solo se l'autore ha impostato il sondaggio come **voto palese**. Altrimenti i sondaggi sono anonimi, e le votazioni sulle **Decisioni** sono sempre segrete.
-- Chi ti ha invitato. Sul telefono il tuo profilo mostra **Invito di** e il suo nome. Se sei entrato come membro fondatore o sei stato invitato direttamente dall'amministratore di sistema, viene invece indicato **Membro fondatore** o **Invitato direttamente dall'amministratore di sistema**.
+- Chi ti ha invitato. Sul telefono il tuo profilo riporta **Garantito da** e il suo nome. Se sei entrato come membro fondatore o sei stato invitato direttamente dall'amministratore di sistema, indica invece **Membro fondatore** o **Invitato direttamente dall'amministratore di sistema**. Se un membro ha fatto da garante per la tua linea di credito, il tuo profilo riporta **Garantito da** e il suo nome, sia nell'app per telefono sia nella web app.
 
 ## Cosa puoi vedere solo tu
 
@@ -60,4 +60,3 @@ I proprietari e gli amministratori che gestiscono il server della tua comunità 
 ## Per saperne di più
 
 Nelle Impostazioni, sotto **NOTE LEGALI E PRIVACY**, tocca **Informativa sulla privacy**.
-

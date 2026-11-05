@@ -4,7 +4,7 @@ title: Unirse a BeanPool
 summary: Dos vías: una comunidad con invitación de un miembro, o la comunidad global si está abierta, con 12 palabras secretas o un inicio de sesión. Pedir entrar e invitar a otros.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Únete a una comunidad con invitación de un miembro, o a la comunidad global con 12 palabras secretas o un inicio de sesión.
-source-hash: e8148ea89abb9b77
+source-hash: 5a1feb7390e4c3fb
 ---
 
 ## Dos formas de entrar
@@ -117,4 +117,3 @@ Las personas pueden solicitar unirse a tu comunidad desde la comunidad global. C
 - **Ahora no** no les dice más que "aún no hay respuesta".
 
 Cualquier miembro puede responder. En una comunidad donde solo los administradores invitan, solo sus propietarios y administradores ven las solicitudes y las responden. Consulta "Buscar una comunidad cerca".
-

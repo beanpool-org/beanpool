@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Ce que voient les admins
 summary: Dans une communauté où les administrateurs tiennent un registre de noms : ce qu'il contient sur vous, qui peut le lire, ce que garde le serveur et ce que signifie être confirmé.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 3b82166b108108b4
+source-hash: 88d60b236e7653ab
 ---
 
 ## Le registre des noms
@@ -86,4 +86,3 @@ Un propriétaire ou un administrateur peut connecter son propre assistant IA au 
 ## Se renseigner sur votre fiche
 
 Vous pouvez demander à vos administrateurs ce que contient votre fiche, pour la faire rectifier ou la supprimer si vous ne faites plus partie de la communauté. Ce sont eux qui conservent la liste, et non BeanPool.
-

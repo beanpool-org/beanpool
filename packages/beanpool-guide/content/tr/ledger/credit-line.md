@@ -3,7 +3,7 @@ slug: credit-line
 title: Kredi limitiniz
 summary: Sıfırın ne kadar altına inebileceğiniz ve bu limitin nasıl büyüdüğü.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 1019023b7b5bb263
+source-hash: d966829d85d430b1
 ---
 
 ## Nedir
@@ -46,7 +46,7 @@ Kredi limitinizin yalnızca yayındaki Tekliflerinizin izin verdiği kadarını 
 
 ## Bilinen bir toplulukta
 
-Sıfırdan başlar. Pazarda ilk takasını tamamladığında (sadece 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür) veya bir kefil seni getiren davette ya da profilinde senin için kefil olduğunda açılır. O zamana kadar Kayıt Defteri'nde **Henüz kredi limiti yok** yazar. Yine de elindeki fasulyelerle takas yapabilirsin.
+Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır, **bilinen taban**: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır. Limitinizi yükseltir, seviyenizi değil: güven rozetiniz yalnızca yaptıklarınızı saymaya devam eder. Bilinen taban, sahibi kapatmadıkça Fasulyesi olan her toplulukta açıktır.
 
 - Yayındaki tek bir Teklif bunun tamamını kullanmanızı sağlar. Teklif yoksa kullanamazsınız.
 - Takas yaparak kazandığınız güven, topluluğunuzun üst sınırına kadar buna eklenir (daha fazlasını seçmedikçe 2.000 Fasulye, 5.000'e kadar).
@@ -62,21 +62,10 @@ Bazı topluluklarda herhangi bir üye insanları davet edebilir, bu nedenle yön
 Topluluğunuzun yöneticileri bir üyenin kredi limitini dondurabilir: tamamını veya bilinen bir toplulukta teyit edilmiş bir üye olmaktan gelen kısmını.
 
 - Tamamını dondururlarsa veya teyit edilen kısım sahip olduğunuz limitin tamamıysa, Defter **Kredi limitiniz donduruldu** der: sürdüğü müddetçe eksiye harcama yapamazsınız ancak Fasulye satmaya ve almaya, sıfırın üzerinde sahip olduğunuzu harcamaya devam edebilirsiniz. Dondurduklarında ekside idiyseniz Defter kaç Fasulye ekside olduğunuzu da belirtir: Fasulye satmak veya almak sizi tekrar yukarı taşır ve sıfırın üzerine çıktığınızda sahip olduğunuzu harcayabilirsiniz.
-- Onaylanan kısmı dondururlarsa ve ayrıca bir kefaletten, kredi limiti hediyesinden, takastan veya hibeden gelen kredin varsa, çubuk kalır; onaylanan kısmın dondurulduğu ve geri kalanının eskisi gibi çalıştığı altında belirtilir. Kalanın altındaysan, Kayıt Defteri'nde **Harcama duraklatıldı** da yazar (aşağıda).
+- Teyit edilen kısmı dondururlarsa ve ayrıca bir kefaletten, takastan veya bir hibeden krediniz varsa, çubuk kalır ve altında teyit edilen kısmın dondurulduğu ve geri kalanının eskisi gibi çalıştığına dair bir not yer alır. Kalanın altındaysanız Defter **Harcama duraklatıldı** da der (aşağıda).
 
-Seviyen ne profilinde ne de ilanlarında değişir: onaylanmış olmaktan gelen kısım veya yöneticilerin belirlediği tutar değil, yaptıkların (takasların ve bir yöneticinin verdiği güven) sayılır. Nedenini sormak veya yeniden açılmasını sağlamak için yöneticilerden birine danış.
-
-## Kredi limitinin bir kısmını verme
-
-Kredi limitinin bir kısmını başka bir üyeye verebilirsin. **Gönder** ekranında, **Fasulye** yanındaki **Kredi limiti** sekmesini aç.
-
-- **Yalnızca birinin sana verdiği kredi:** Yalnızca bir kefilin veya başka bir üyenin sana verdiği krediyi devredebilirsin. Bilinen tabanını veya takas yaparak kazandığın krediyi veremezsin.
-- **Yalnızca kullanmadığın miktar:** Bakiyenin ve yayındaki Tekliflerinin boşta bıraktığı kadar kredi verebilirsin, böylece kredi vermek harcamalarını asla duraklatmaz.
-- **İlk takasından sonra:** Fasulye gönderme kuralında olduğu gibi, pazarda ilk takasını tamamladıktan sonra kredi verebilirsin.
-- **Topluluk sınırına kadar:** Hediye başına 100 fasulyeye kadar verebilirsin (veya bir sahip daha düşük bir sınır belirlediyse topluluğunun ayarı kadar).
-- **Kalıcı olarak onların olur:** Kredi limiti kalıcı olarak alıcıya geçer. Onu asla bir kefil yapmaz. Kendine, bir işletmeye veya duraklatılmış ya da dondurulmuş bir üyeye kredi veremezsin.
+Seviyeniz değişmez; profilinizde de ilanlarınızda da aynı kalır: yaptıklarınızı sayar (bir kefalet, takaslarınız ve bir yöneticinin size tanıdığı herhangi bir güven), asla teyit edilmekten gelen limitinizi veya yöneticilerin bunun için belirlediği herhangi bir miktarı saymaz. Nedenini sormak veya tekrar açtırmak için yöneticilerden birine danışın.
 
 ## Harcama duraklatıldı
 
 Tekliflerinizin izin verdiğinin altına düşerseniz, örneğin bir Teklifi kaldırdığınız için, Defter **Harcama duraklatıldı** der. Yine de kazanabilir ve satış yapabilirsiniz. Bir Teklif paylaşın veya tekrar kazanarak yükselin, bu durum kalkar. Sizden hiçbir şey alınmaz.
-

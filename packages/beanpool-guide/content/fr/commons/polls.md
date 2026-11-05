@@ -4,7 +4,7 @@ title: Sondages
 summary: Poser une question rapide à la communauté. Les sondages reflètent des avis ; ils ne changent rien à eux seuls.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Un sondage pose une question rapide à la communauté. Il donne une tendance ; il ne change rien par lui-même.
-source-hash: 74aa1008e60fa805
+source-hash: c1e4eb171c19552f
 ---
 
 ## Sondage ou Décision ?
@@ -19,7 +19,7 @@ Pendant qu'un sondage est ouvert, il ne mentionne rien de tout cela. Si c'était
 
 ## Lancer un sondage
 
-- Touchez une réponse pour la choisir. Touchez-en une autre pour changer d'avis, jusqu'à la clôture du sondage : l'application vous demande de confirmer avant de modifier votre vote.
+- Touchez **+ PUBLIER** dans l'onglet Marché ou sur la Carte.
 - Choisissez **Sondage communautaire**.
 - Rédigez la **Question**.
 - Ajoutez **Contexte / Remarques** si cela peut aider. C'est facultatif.
@@ -36,7 +36,7 @@ Vous pouvez avoir un seul sondage ouvert à la fois, et une communauté peut en 
 
 Les sondages se trouvent sur le Marché. Touchez **Sondages** sur la ligne du haut pour n'afficher que les sondages. Un sondage est de nouveau listé une fois, sous **Aujourd'hui**, la veille de sa clôture.
 
-- Touchez une réponse pour la choisir. Touchez-en une autre pour changer d'avis, jusqu'à la clôture du sondage : l'application vous demande de confirmer avant de modifier votre vote.
+- Touchez une réponse pour la choisir. Touchez-en une autre pour changer d'avis, jusqu'à la clôture du sondage.
 - La fiche indique combien de personnes ont choisi chaque réponse.
 
 ## Qui peut voir comment vous avez voté
@@ -51,4 +51,3 @@ Les propriétaires et administrateurs qui gèrent le serveur de votre communaut�
 ## Clôturer un sondage plus tôt
 
 Si vous l'avez lancé, touchez **Clôturer le sondage**, puis de nouveau **Clôturer le sondage** pour confirmer (**OK** dans l'application web).
-

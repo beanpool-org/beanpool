@@ -4,7 +4,7 @@ title: Thăm dò
 summary: Hỏi cộng đồng một câu hỏi nhanh. Thăm dò thể hiện ý kiến; tự chúng không làm thay đổi điều gì.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Khảo sát hỏi cộng đồng câu hỏi nhanh. Nó thể hiện suy nghĩ của mọi người; tự nó không làm đổi điều gì.
-source-hash: 74aa1008e60fa805
+source-hash: c1e4eb171c19552f
 ---
 
 ## Thăm dò hay Quyết định?
@@ -36,7 +36,7 @@ Bạn có thể mở một cuộc thăm dò tại một thời điểm, và mộ
 
 Các cuộc thăm dò nằm trong Chợ. Nhấn **Thăm dò** ở hàng trên cùng để chỉ xem các cuộc thăm dò. Một cuộc thăm dò được liệt kê lại một lần, dưới **Hôm nay**, vào ngày trước khi kết thúc.
 
-- Chạm vào câu trả lời để chọn. Chạm vào câu khác để đổi ý, cho đến khi cuộc thăm dò kết thúc: ứng dụng sẽ yêu cầu xác nhận trước khi thay đổi phiếu bầu.
+- Nhấn vào một câu trả lời để chọn. Nhấn vào câu trả lời khác để thay đổi ý định, cho đến khi cuộc thăm dò kết thúc.
 - Thẻ sẽ hiển thị số người đã chọn mỗi câu trả lời.
 
 ## Ai có thể thấy bạn đã bỏ phiếu thế nào
@@ -51,4 +51,3 @@ Các chủ sở hữu và quản trị viên vận hành máy chủ cộng đồ
 ## Đóng cuộc thăm dò sớm
 
 Nếu bạn là người tạo cuộc thăm dò, hãy nhấn **Đóng cuộc thăm dò**, sau đó nhấn **Đóng cuộc thăm dò** một lần nữa để xác nhận (**OK** trong ứng dụng web).
-

@@ -3,7 +3,7 @@ slug: credit-line
 title: Dein Kreditrahmen
 summary: Wie weit du ins Minus gehen kannst und wie dieser Rahmen wächst.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 1019023b7b5bb263
+source-hash: d966829d85d430b1
 ---
 
 ## Was es ist
@@ -23,7 +23,7 @@ Tippe auf dem Smartphone auf die Leiste, um **Info zum Schieberegler** zu öffne
 
 ## Wie er sich öffnet
 
-Er beginnt bei null. Er öffnet sich, wenn du deinen ersten Handel auf dem Markt abschließt (ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen), oder wenn ein Bürge bei der Einladung, die dich hereingebracht hat, oder auf deinem Profil für dich bürgt. Bis dahin steht im Kontobuch **Noch kein Kreditrahmen**. Du kannst weiterhin mit Bohnen handeln, die du besitzt.
+Er beginnt bei null. Er öffnet sich, sobald du deinen ersten Handel im Markt abschließt (ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen), oder wenn jemand, der zur Begrüßung von Neulingen ausgewählt wurde, für dich bürgt. Bis dahin steht im Buch **Noch kein Kreditrahmen**. Du kannst weiterhin mit Bohnen handeln, die du besitzt.
 
 ## Wie er wächst
 
@@ -46,7 +46,7 @@ Die Zeile unter der Leiste informiert dich darüber, zum Beispiel „Veröffentl
 
 ## In einer bekannten Community
 
-Er beginnt bei null. Er öffnet sich, wenn du deinen ersten Handel auf dem Markt abschließt (ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen), oder wenn ein Bürge bei der Einladung, die dich hereingebracht hat, oder auf deinem Profil für dich bürgt. Bis dahin steht im Kontobuch **Noch kein Kreditrahmen**. Du kannst weiterhin mit Bohnen handeln, die du besitzt.
+Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Ein Mitglied, das ein Admin bestätigt hat, erhält sofort einen Kreditrahmen, **den bekannten Kreditrahmen**: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut. Es erhöht dein Limit, nicht deine Stufe: Dein Vertrauensabzeichen zählt weiterhin nur das, was du selbst getan hast. Der bekannte Kreditrahmen ist in jeder Community mit Bohnen aktiviert, es sei denn, ihr Eigentümer hat ihn abgeschaltet.
 
 - Ein aktives Angebot ermöglicht es dir, den gesamten Betrag zu nutzen. Ohne Angebote kannst du ihn nicht nutzen.
 - Vertrauen, das du dir durch Handeln erarbeitest, kommt hinzu, bis zur Obergrenze deiner Community (2.000 Bohnen, sofern sie nicht mehr gewählt hat, bis zu 5.000).
@@ -62,21 +62,10 @@ In manchen Communitys kann jedes Mitglied Personen einladen, sodass die Admins n
 Die Admins deiner Community können den Kreditrahmen eines Mitglieds einfrieren: den gesamten Rahmen oder, in einer bekannten Community, den Teil, der aus der Bestätigung als Mitglied stammt.
 
 - Frieren sie den gesamten Rahmen ein oder besteht dein gesamter Rahmen nur aus dem bestätigten Teil, steht im Buch **Dein Kreditrahmen ist eingefroren**: Du kannst während dieser Zeit nicht ins Minus ausgeben, aber du kannst weiterhin Bohnen verkaufen und empfangen sowie das ausgeben, was du über null hältst. Warst du im Minus, als sie ihn eingefroren haben, nennt das Buch auch die Anzahl der Bohnen, mit denen du im Minus bist: Das Verkaufen oder Empfangen von Bohnen bringt dich wieder ins Plus, und sobald du über null bist, kannst du dein Guthaben ausgeben.
-- Wenn sie den bestätigten Teil einfrieren und du auch Kredit aus einer Bürgschaft, einer Kreditrahmen-Weitergabe, aus Handel oder einer Zuteilung hast, bleibt der Balken erhalten, mit einem Hinweis darunter, dass der bestätigte Teil eingefroren ist und der Rest wie bisher funktioniert. Liegst du unter dem verbleibenden Betrag, zeigt das Kontobuch auch **Ausgaben pausiert** an (unten).
+- Frieren sie den bestätigten Teil ein und du hast auch Kredit durch eine Bürgschaft, durch Handeln oder durch einen Zuschuss, bleibt die Leiste erhalten, mit einem Hinweis darunter, dass der bestätigte Teil eingefroren ist und der Rest wie gewohnt funktioniert. Liegst du unter dem, was verbleibt, meldet das Buch ebenfalls **Ausgaben pausiert** (unten).
 
-Deine Stufe ändert sich weder auf deinem Profil noch auf deinen Angeboten: Sie zählt, was du getan hast (deine Handelsaktivitäten und jedes Vertrauen, das dir ein Admin gewährt hat), niemals den Teil deines Kreditrahmens, der aus deiner Bestätigung stammt, oder einen von den Admins dafür festgelegten Betrag. Um nach dem Grund zu fragen oder ihn wieder öffnen zu lassen, wende dich an einen der Admins.
-
-## Einen Teil deines Kreditrahmens weitergeben
-
-Du kannst einen Teil deines Kreditrahmens an ein anderes Mitglied weitergeben. Öffne unter **Senden** den Reiter **Kreditrahmen** neben **Bohnen**.
-
-- **Nur Kredit, den dir jemand gegeben hat:** Du kannst nur Kredit weitergeben, den dir ein Bürge oder ein anderes Mitglied übertragen hat. Du kannst weder deinen bekannten Basiskredit noch durch Handel verdienten Kredit weitergeben.
-- **Nur was du nicht nutzt:** Du kannst nur so viel Kredit weitergeben, wie dein Kontostand und deine aktiven Angebote ungenutzt lassen, sodass das Weitergeben niemals deine Ausgaben pausiert.
-- **Nach deinem ersten Handel:** Du kannst Kredit weitergeben, sobald du deinen ersten Handel auf dem Markt abgeschlossen hast – dieselbe Regel wie beim Senden von Bohnen.
-- **Bis zum Community-Limit:** Du kannst bis zu 100 Bohnen pro Weitergabe vergeben (oder das Limit deiner Community, falls ein Eigentümer ein niedrigeres festgelegt hat).
-- **Es gehört ihnen dauerhaft:** Der Kreditrahmen geht dauerhaft an den Empfänger über. Er macht ihn niemals zum Bürgen. Du kannst keinen Kredit an dich selbst, einen Betrieb oder ein pausiertes oder eingefrorenes Mitglied vergeben.
+Deine Stufe ändert sich nicht, auf deinem Profil und deinen Einträgen gleichermaßen: Sie zählt, was du getan hast (eine Bürgschaft, deine Handelsgeschäfte und jegliches Vertrauen, das dir ein Admin gewährt hat), niemals den Teil deines Rahmens, der aus der Bestätigung stammt, oder einen Betrag, den die Admins dafür festgelegt haben. Um nach dem Grund zu fragen oder ihn wieder öffnen zu lassen, wende dich an einen der Admins.
 
 ## Ausgaben pausiert
 
 Fällst du unter das zurück, was deine Angebote erlauben, zum Beispiel weil du ein Angebot gelöscht hast, zeigt das Buch **Ausgaben pausiert**. Du kannst weiterhin verdienen und verkaufen. Veröffentliche ein Angebot oder verdiene dich wieder nach oben, und die Pause wird aufgehoben. Dir wird nichts weggenommen.
-

@@ -36,4 +36,3 @@ Di ponsel, filter **Kepercayaan** di Pasar dapat menampilkan hanya postingan dar
 ## Admin dan lencana
 
 Admin komunitas dapat memberikan lencana kepada seorang anggota. Hal itu memperdalam batas kredit mereka, seperti kepercayaan yang diperoleh dari bertransaksi. Itu tidak dihitung sebagai transaksi: itu tidak menambahkan kredit suara dan tidak memungkinkan mereka untuk mengirim hadiah.
-

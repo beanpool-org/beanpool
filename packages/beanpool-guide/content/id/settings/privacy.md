@@ -4,7 +4,7 @@ title: Privasimu
 summary: Apa yang bisa dilihat orang lain tentangmu, dan pengaturan yang mengaturnya.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Apa yang bisa dilihat anggota lain tentangmu, dan tombol sakelar yang mengaturnya.
-source-hash: 19d7d7439e729ce8
+source-hash: 7a296a90b991050e
 ---
 
 ## Membuka Pengaturan
@@ -17,7 +17,7 @@ Ketuk tombol penggeser di kanan atas layar. Di aplikasi web pada layar komputer 
 - Lencana percayamu, ulasanmu (tidak ada orang lain yang dapat melihat siapa yang menulis ulasan), dan profil percayamu: berapa banyak transaksimu yang selesai dan berapa banyak yang dibatalkan, serta bagian yang selesai, berapa banyak pembayaran Kacang yang telah kamu kirimkan atau terima dari anggota ditambah transaksi yang telah kamu selesaikan, dengan berapa banyak anggota berbeda kamu telah membayar, dibayar, atau bertransaksi, berapa banyak pembayaran dan transaksi yang telah kamu lakukan dengan anggota yang sedang melihat, serta Poin Percayamu. Admin melihatnya seperti halnya anggota mana pun, dan hal ini tidak dicatat dalam log.
 - Postinganmu, dan di mana pin postingan tersebut berada. Lihat "Di mana pinmu ditempatkan".
 - Bagaimana kamu memberikan suara pada Jajak Pendapat, tetapi hanya pada Jajak Pendapat yang pembuatnya menetapkan **pemungutan suara terbuka**. Jika tidak, Jajak Pendapat bersifat anonim, dan pemungutan suara pada **Keputusan** selalu rahasia.
-- Siapa yang mengundangmu. Di ponsel profilmu tertulis **Diundang oleh** dan nama mereka. Jika kamu bergabung sebagai anggota pendiri atau diundang langsung oleh admin sistem, maka tertulis **Anggota pendiri** atau **Diundang langsung oleh admin sistem** sebagai gantinya.
+- Siapa yang mengundangmu. Di ponsel profilmu tertulis **Dijamin oleh** dan nama mereka. Jika kamu bergabung sebagai anggota pendiri atau diundang langsung oleh admin sistem, profilmu akan tertulis **Anggota pendiri** atau **Diundang langsung oleh admin sistem**. Jika seorang anggota menjamin jalur kreditmu, profilmu tertulis **Dijamin oleh** dan nama mereka, di aplikasi ponsel dan aplikasi web.
 
 ## Yang hanya dapat dilihat olehmu
 
@@ -60,4 +60,3 @@ Pemilik dan admin yang menjalankan server komunitasmu masih dapat melihat apa ya
 ## Baca lebih lanjut
 
 Di Pengaturan, di bawah **HUKUM & PRIVASI**, ketuk **Kebijakan Privasi**.
-

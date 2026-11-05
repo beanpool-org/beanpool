@@ -3,7 +3,7 @@ slug: how-it-works
 title: So funktioniert BeanPool
 summary: Bohnen, Handel, Angebote und Gesuche sowie Kredit, in einfachen Worten.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: d9e82e8017a2b050
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Bohnen
@@ -43,7 +43,7 @@ Du kannst jemandem auch Bohnen als Geschenk senden, ganz ohne Handel.
 
 Du kannst etwas mehr ausgeben, als du hast, und unter null gehen. Dies ist dein **Kreditrahmen**. Es ist ein Versprechen, anderen später zu helfen.
 
-Dein Kreditrahmen beginnt bei null. Er öffnet sich, wenn du deinen ersten Handel im Markt abschließt (ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen). Ein Bürge kann dir auch einen Start ermöglichen, indem er für dich auf deiner Einladung oder in deinem Profil bürgt: 25, 50, 75 oder 100 Bohnen aus seinem Bürgschaftsbudget.
+Dein Kreditrahmen beginnt bei null. Er öffnet sich, wenn du deinen ersten Handel im Markt abschließt (ein Handel von nur 1 oder 2 Bohnen ist zu klein, um zu zählen). Jemand, den deine Community ausgewählt hat, um Neulinge zu begrüßen, kann dir auch einen kleinen Start ermöglichen, indem er für dich bürgt: 25, 50 oder 100 Bohnen.
 
 Dein Kreditrahmen wächst mit deinem **Vertrauen**:
 
@@ -70,7 +70,7 @@ Manche Communitys bestätigen, wer ihre Mitglieder sind. Dort erhält ein bestä
 
 ## Vertrauensabzeichen
 
-Dein Vertrauen wird als Abzeichen angezeigt. Die Abzeichen sind Neuling, Bewohner, Verwalter und Ältester. Das Vertrauen hinter deinem Abzeichen speist sich aus dem Vertrauen, das du dir durch Handeln erworben hast, und dem Vertrauen, das dir ein Admin gewährt hat. Ein Admin kann einem Mitglied direkt ein Abzeichen verleihen, ohne Handel. In einer Community, die ihre Mitglieder bestätigt, erhält ein bestätigtes Mitglied einen höheren Kreditrahmen, kein höheres Abzeichen: Sein Abzeichen zählt nur das, was es getan hat.
+Dein Vertrauen wird als Abzeichen angezeigt. Die Abzeichen sind Neuling, Bewohner, Verwalter und Ältester. Das Vertrauen hinter deinem Abzeichen setzt sich aus drei Dingen zusammen: Dem Start, den dir eine Bürgschaft gegeben hat, dem Vertrauen, das du durch Handeln erworben hast, und jeglichem Vertrauen, das dir ein Admin gewährt hat. Ein Admin kann einem Mitglied direkt ein Abzeichen verleihen, ohne Handelsgeschäfte. In einer Community, die ihre Mitglieder bestätigt, erhält ein bestätigtes Mitglied ein höheres Kreditlimit, kein höheres Abzeichen: Das Abzeichen zählt nur, was getan wurde.
 
 - Bewohner ab 200 Vertrauen.
 - Verwalter ab 600 Vertrauen.
@@ -93,4 +93,3 @@ Ein **Betrieb** besteht dauerhaft und handelt im eigenen Namen: Eine Bäckerei, 
 Eine **Gruppe** ist ein Kreis von Mitgliedern mit eigenem Chat und eigenen Beiträgen, geleitet von einem oder mehreren **Koordinatoren**. Einer von ihnen ist der **Hauptkoordinator** — zu Beginn die Person, die die Gruppe erstellt hat.
 
 Wie Verwalter und Koordinatoren ausgewählt werden, kannst du unter „Regeln und wie Entscheidungen funktionieren“ nachlesen.
-

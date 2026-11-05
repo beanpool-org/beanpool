@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Pagpanukala ng Desisyon
 summary: Hilingin sa komunidad na magdesisyon ng bagay na may bisa.
 related: decisions, rules, polls, enterprises
-source-hash: 1415ed4b1b50784e
+source-hash: c5e90863bc9ac1f1
 ---
 
 ## Bago ka magsimula
 
-- Ang Desisyon ay para sa mga bagay na kayang isagawa ng server ng komunidad: pagsuspinde o pagbabalik ng miyembro, pag-freeze o pag-unfreeze ng credit ng isang tao, o pagbabayad ng beans mula sa Commons. Para sa iba pa, magsimula ng Botohan.
+- Ang isang Desisyon ay para sa isang bagay na kayang isagawa ng server ng iyong komunidad: pag-alis o pagsuspinde ng isang miyembro, pag-freeze o pag-unfreeze ng kredito ng isang tao, pagpili kung sino ang maaaring mag-vouch, o pagbabayad ng munggo mula sa Komun. Para sa anumang iba pa, magsimula ng Botohan sa halip.
 - Hindi maaaring alisin o suspindihin ng isang Desisyon ang isang may-ari o admin ng server ng iyong komunidad. Tingnan ang "Mga tuntunin at mga desisyon".
 - Maaari kang magpanukala kapag nakakumpleto ka na ng kalakalan, o binigyan ka ng isang admin ng trust badge. Palaging maaaring magpanukala ang mga admin ng iyong komunidad. Ang vouch lamang ay hindi sapat.
-- Maaari kang magpanukala kapag nakatapos ka na ng isang palitan. Ang mga admin ng iyong komunidad ay laging maaaring magpanukala. Hindi sapat ang trust badge.
+- Maaari kang magkaroon ng isang bukas na Desisyon sa bawat pagkakataon.
 - Walang mga Desisyon ang pandaigdigang komunidad, kaya walang maipapanukala roon. Tingnan ang "Pagboto sa Desisyon".
 
 ## Pagpanukala
@@ -47,4 +47,3 @@ Pinapanatili nitong libre ang pila. Kung pumasa ang isang grant kapag kulang ang
 - **Ang grant na ito ay mas malaki kaysa sa kayang bayaran ng Komun:** humiling nang hindi hihigit sa halagang pinangalanan nito, o maghintay para sa higit pang mga munggo na pumasok.
 - **Di-wastong Halaga** (sa web app, "Mangyaring maglagay ng wastong positibong halaga ng kaloob sa munggo"): punan kung gaano karaming munggo.
 - **Error:** suriin na ang iyong paglalarawan ay hindi bababa sa 10 character ang haba.
-

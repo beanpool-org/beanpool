@@ -3,7 +3,7 @@ slug: credit-line
 title: Sua linha de crédito
 summary: Até quanto você pode ficar abaixo de zero e como esse valor aumenta.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 1019023b7b5bb263
+source-hash: d966829d85d430b1
 ---
 
 ## O que é
@@ -23,7 +23,7 @@ No celular, toque na barra para abrir **Informações do controle deslizante**, 
 
 ## Como é liberada
 
-Começa em zero. Abre-se quando você conclui sua primeira troca no mercado (uma troca de apenas 1 ou 2 feijões é pequena demais para contar), ou quando um recomendador apoia você no convite de entrada ou no seu perfil. Até lá, o Livro-razão indica **Sem linha de crédito ainda**. Você ainda pode negociar com os feijões que possui.
+Ela começa no zero. É liberada quando você conclui sua primeira troca no mercado (uma troca de apenas 1 ou 2 feijões é pequena demais para contar), ou quando alguém designado para receber novatos garante um aval para você. Até lá, o Registro exibe **Ainda sem linha de crédito**. Você ainda pode negociar usando os feijões que possui.
 
 ## Como aumenta
 
@@ -46,7 +46,7 @@ A linha abaixo da barra informa você, por exemplo: "Publique uma Oferta para ab
 
 ## Em uma comunidade de membros conhecidos
 
-Começa em zero. Abre-se quando você conclui sua primeira troca no mercado (uma troca de apenas 1 ou 2 feijões é pequena demais para contar), ou quando um recomendador apoia você no convite de entrada ou no seu perfil. Até lá, o Livro-razão indica **Sem linha de crédito ainda**. Você ainda pode negociar com os feijões que possui.
+Algumas comunidades têm administradores que conhecem cada membro pelo nome. Um membro confirmado por um administrador recebe uma linha de crédito imediatamente, **o piso conhecido**: 1.000 feijões, a menos que a sua comunidade tenha escolhido outro valor. Isso equivale a cerca de 25 horas de trabalho confiadas pela comunidade a você. Isso eleva o seu limite, não o seu nível: seu emblema de confiança continua contando apenas o que você realizou. O piso conhecido está ativado em todas as comunidades com feijões, a menos que o proprietário o tenha desativado.
 
 - Uma Oferta ativa permite que você use todo esse valor. Sem nenhuma Oferta, você não pode usá-lo.
 - A confiança obtida ao negociar se soma a isso, até o teto da sua comunidade (2.000 feijões, a menos que tenha escolhido mais, até 5.000).
@@ -62,21 +62,10 @@ Em algumas comunidades, qualquer membro pode convidar pessoas, portanto os admin
 Os administradores da sua comunidade podem congelar a linha de crédito de um membro: ela toda ou, em uma comunidade de membros conhecidos, a parte proveniente de ser membro confirmado.
 
 - Se congelarem ela toda, ou se a parte confirmada for toda a linha que você tem, o Registro exibirá **Sua linha de crédito está congelada**: você não pode gastar entrando no negativo enquanto o congelamento durar, mas ainda pode vender, receber feijões e gastar o que tiver acima de zero. Se você estava no negativo quando congelaram, o Registro também exibirá quantos feijões negativos você possui: vender ou receber feijões traz você de volta e, assim que você estiver acima de zero, poderá gastar o que possui.
-- Se congelarem a parte confirmada e você também tiver crédito de um recomendador, de doação de linha de crédito, de trocas ou de concessão, a barra continua visível, com um aviso indicando que a parte confirmada está congelada e o restante funciona como antes. Se você estiver abaixo do restante, o Livro-razão também indicará **Gastos pausados** (abaixo).
+- Se congelarem a parte confirmada e você também tiver crédito decorrente de um aval, de negociações ou de um subsídio, a barra continua ali, com um aviso abaixo de que a parte confirmada está congelada e o restante funciona como antes. Se você estiver abaixo do que restou, o Registro também exibirá **Gastos pausados** (abaixo).
 
-Seu nível não muda, tanto no perfil quanto nos anúncios: ele reflete o que você realizou (suas trocas e a confiança concedida por um administrador), nunca a parte da linha vinda da confirmação nem valores definidos por administradores. Para saber o motivo ou solicitar o desbloqueio, fale com um administrador.
-
-## Doar parte da sua linha de crédito
-
-Você pode doar parte da sua linha de crédito para outro membro. Em **Enviar**, abra a aba **Linha de crédito** ao lado de **Feijões**.
-
-- **Apenas crédito que alguém lhe deu:** você só pode doar crédito que um recomendador ou outro membro lhe concedeu. Não pode doar seu piso conhecido nem crédito obtido negociando.
-- **Apenas o que você não estiver usando:** você só pode doar a quantia que seu saldo e Ofertas ativas deixarem livre, de modo que doar crédito nunca pausa seus gastos.
-- **Após sua primeira troca:** você pode doar crédito assim que concluir sua primeira troca no mercado, a mesma regra aplicada ao envio de feijões.
-- **Até o limite da comunidade:** você pode doar até 100 feijões por presente (ou o limite estabelecido pelo proprietário da comunidade, se for menor).
-- **Fica com a pessoa em definitivo:** a linha de crédito passa permanentemente ao destinatário. Nunca o transforma em recomendador. Você não pode doar crédito a si mesmo, a uma empresa ou a um membro pausado ou congelado.
+Seu nível não muda, tanto no seu perfil quanto em seus anúncios: ele conta o que você realizou (um aval, suas trocas e qualquer confiança concedida por um administrador), nunca a parte da sua linha que vem de ser membro confirmado, nem qualquer valor definido pelos administradores para ela. Para perguntar o motivo ou solicitar o desbloqueio, fale com um dos administradores.
 
 ## Gastos pausados
 
 Se você ficar abaixo do que as suas Ofertas permitem, por exemplo porque retirou uma Oferta, o Registro exibirá **Gastos pausados**. Você ainda pode arrecadar e vender. Publique uma Oferta ou ganhe feijões para voltar a subir, e a restrição será removida. Nada é retirado de você.
-

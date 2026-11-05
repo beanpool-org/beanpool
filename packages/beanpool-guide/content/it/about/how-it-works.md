@@ -3,7 +3,7 @@ slug: how-it-works
 title: Come funziona BeanPool
 summary: Fagioli, scambi, offerte e richieste, e credito, in parole semplici.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: d9e82e8017a2b050
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Fagioli
@@ -43,7 +43,7 @@ Puoi anche inviare fagioli a qualcuno come dono, senza alcuno scambio.
 
 Puoi spendere un po' più di quanto hai e andare sotto zero. Questa è la tua **linea di credito**. È una promessa di aiutare gli altri in seguito.
 
-La tua linea di credito inizia a zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato). Un garante può anche offrirti un avvio facendoti da garante sul tuo invito o sul tuo profilo: 25, 50, 75 o 100 fagioli, attinti dal suo budget.
+La tua linea di credito inizia a zero. Si apre quando completi il tuo primo scambio nel mercato (uno scambio di soli 1 o 2 fagioli è troppo piccolo per essere conteggiato). Qualcuno scelto dalla tua comunità per dare il benvenuto ai nuovi arrivati può anche offrirti un piccolo inizio facendoti da garante: 25, 50 o 100 fagioli.
 
 La tua linea di credito cresce con la tua **fiducia**:
 
@@ -93,4 +93,3 @@ Un'**impresa** prosegue nel tempo e commercia a proprio nome: un forno, una bibl
 Un **gruppo** è una cerchia di membri con la propria chat e i propri annunci, gestito da uno o più **coordinatori**. Uno di loro è il **coordinatore principale** — colui che ha creato il gruppo, per cominciare.
 
 Puoi scoprire come vengono scelti i custodi e i coordinatori in "Regole e decisioni".
-

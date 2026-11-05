@@ -4,7 +4,7 @@ title: Membres et amis
 summary: Trouver des membres de votre communauté, ajouter des amis et parrainer quelqu'un.
 related: messages, your-profile, joining, blocking
 help: Les membres de votre communauté et vos amis. Touchez une personne pour voir son profil ou touchez 💬 près d'un membre pour lui écrire.
-source-hash: 094e89e2c072349f
+source-hash: 44b66169497e9909
 ---
 
 ## Trouver des personnes
@@ -37,13 +37,6 @@ Vous pouvez choisir de ne pas apparaître comme contact en commun pour autrui. D
 
 ## Se porter garant pour quelqu'un
 
-Un parrain peut parrainer un membre déjà inscrit pour lui ouvrir une ligne de crédit lui permettant de commencer à échanger. Les parrains sont propriétaires et administrateurs de par leur fonction, ou des membres désignés parrains sur la liste des noms par un propriétaire ou un administrateur du comité de crédit.
+Certains membres sont choisis par la communauté pour accueillir les nouveaux arrivants. Ils peuvent se porter garants pour un nouveau membre, ce qui lui accorde une petite ligne de crédit de départ. Sur le profil de la personne, ils touchent **Se porter garant pour le membre** et choisissent **Léger** (25), **Standard** (50) ou **Étendu** (100). Aucun Bean ne quitte le portefeuille du garant.
 
-Sur le profil du membre, le parrain touche **Parrainer @nom** et choisit **25**, **50**, **75** ou **100** haricots sur son budget de parrain. Aucun haricot ne quitte le portefeuille du parrain.
-
-- **Un seul parrainage par personne :** chaque parrain ne peut parrainer une même personne qu'une seule fois. Vous pourrez par la suite relever votre montant jusqu'à 100 haricots au total.
-- **Au maximum 3 parrains :** au plus 3 parrains peuvent parrainer la même personne (jusqu'à 300 haricots au total).
-- **Jamais en dessous de zéro :** vous ne pouvez pas parrainer un membre dont le solde est négatif. Pour aider une personne endettée, les membres peuvent lui céder une partie de leur ligne de crédit depuis Envoyer, ou proposer une Décision communautaire.
-
-Voir « Rejoindre BeanPool » et « Votre ligne de crédit ».
-
+La désignation des personnes autorisées à se porter garantes relève d'un administrateur ou d'une Décision de la communauté, jamais d'un badge. Voir « Règles et décisions ».

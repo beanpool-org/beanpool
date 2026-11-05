@@ -154,13 +154,19 @@ export function pollFacts(post: any, now = Date.now()) {
 export function usePollVote(
     livePost: any,
     setLivePost: (post: any) => void,
-    { currentPubkey, onVoteSuccess, onSent }: { currentPubkey?: string | null; onVoteSuccess?: () => void; onSent?: () => void },
+    { currentPubkey, onVoteSuccess, onSent, inline = false }: {
+        currentPubkey?: string | null; onVoteSuccess?: () => void; onSent?: () => void;
+        /** The node's refusal shown where the vote was cast (`error`, the grid's tile), not in an Alert (the card). */
+        inline?: boolean;
+    },
 ) {
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const { isClosed, options, userVotedOptionId } = pollFacts(livePost);
 
     const sendVote = async (optionId: string, typed?: string) => {
         setVotingOptionId(optionId);
+        setError(null);
         try {
             const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
             if (res?.post) {
@@ -169,7 +175,9 @@ export function usePollVote(
             onSent?.();
             onVoteSuccess?.();
         } catch (err: any) {
-            Alert.alert(t('Voting Error'), err.message ? signedRequestWords(err.message) : t('Could not record your vote.'));
+            const words = err.message ? signedRequestWords(err.message) : t('Could not record your vote.');
+            if (inline) setError(words);
+            else Alert.alert(t('Voting Error'), words);
         } finally {
             setVotingOptionId(null);
         }
@@ -209,7 +217,7 @@ export function usePollVote(
         await sendVote(optionId, typed);
     };
 
-    return { votingOptionId, handleVote };
+    return { votingOptionId, error, handleVote };
 }
 
 export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode, onOpen, onOpenProfile }: PollCardProps) {

@@ -14,15 +14,23 @@
  * the text block at this phone's font scale, as every tile is built), and the tile is laid over the whole row. The rules are
  * core's (poll-grid-tile.ts) and the card's (PollCard's pollFacts / pollStatusWords); the answers' room is measured by its
  * layout: as many one-line rows as fit, the rest as "+N more"; and each shown answer's words, laid out unclamped at its row's
- * width out of sight: more than one line is a cut answer.
+ * width out of sight: more than one line is a cut answer. The percentage beside them always keeps the room of "100% ✓", so a
+ * vote never changes that measure (#2926 review).
+ *
+ * A vote cast here holds the tile as it was when the member pressed, until it is counted: while it is sent, or while the node's
+ * refusal shows, the rows stay the buttons they were and the answers shown stay those shown. The refusal shows whole under the
+ * answers, read out as it appears; when the tile is short of room for it, the head, then the question, then the footer give
+ * way, only as far as the rows still need to be a finger's press tall, and come back with the next vote.
  */
 
-import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type NativeSyntheticEvent, type TextLayoutEventData } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type NativeSyntheticEvent, type TextLayoutEventData,
+} from 'react-native';
 import {
     MARKET_CARD_SHELL as SHELL, POLL_GRID_TILE, POLL_TILE_PRESS, gridTextBlockHeight, pollOtherLines, pollOtherOption, pollTileAction,
     pollTileAnswerLabel, pollTileAnswers, pollTileLabel, pollTileMore, pollTileOpenLabel, pollTilePressesFit, pollTileQuestionLines,
-    pollTileRowGrow, pollTileRowsThatFit, pollTileSummary, pollTileVoteBlock, t,
+    pollTileRowGrow, pollTileRowsThatFit, pollTileSummary, pollTileVoteBlock, t, type PollTileVoteBlock,
 } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { MemberAvatar } from './MemberAvatar';
@@ -33,6 +41,9 @@ import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
 
 /** Lines kept as word() elsewhere, shown here in the member's language (the card's own). */
 const LINES = { informal: INFORMAL_POLL_NOTE };
+
+/** What gives way to a refusal on a tile short of room for it, in order: the head, the question (and the note), the footer. */
+const GIVE_WAY = { head: 1, question: 2, foot: 3 } as const;
 
 interface PollGridTileProps {
     post: any;
@@ -62,11 +73,18 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
     // The node's answer to a vote cast here is drawn in place, as on the card; a new list from the Market replaces it.
     const [livePost, setLivePost] = useState(post);
     useEffect(() => { setLivePost(post); }, [post]);
-    const { votingOptionId, handleVote } = usePollVote(livePost, setLivePost, { currentPubkey, onVoteSuccess });
+    const { votingOptionId, error, handleVote } = usePollVote(livePost, setLivePost, { currentPubkey, onVoteSuccess, inline: true });
+    // A vote cast here, until it is counted: being sent, or refused and saying so.
+    const holding = Boolean(votingOptionId) || Boolean(error);
 
     const { isClosed, authorName, avatarUrl, options, totalVotes, userVotedOptionId, openVote, sealed, answered } = pollFacts(livePost);
-    const { answers, more } = pollTileAnswers(options, { totalVotes, userVotedOptionId, sealed, fit });
-    const block = pollTileVoteBlock({
+    // While a vote is held, the answers shown and whether the tile votes are those of the press: the refusal's own lines take
+    // room from the answers, and must not hide one behind "+N more" or turn the rows back into a tile that only opens.
+    const heldFit = useRef(fit);
+    if (!holding) heldFit.current = fit;
+    const shownFit = holding ? heldFit.current : fit;
+    const { answers, more } = pollTileAnswers(options, { totalVotes, userVotedOptionId, sealed, fit: shownFit });
+    const live = pollTileVoteBlock({
         closed: isClosed,
         canVote: Boolean(currentPubkey),
         other: pollOtherOption(options) !== null,
@@ -77,9 +95,30 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
         cut: answers.some(a => (lines[a.key] ?? 0) > 1),
         pressesFit: pollTilePressesFit(room, answers.length, rowGap),
     });
+    const heldBlock = useRef<PollTileVoteBlock | null>(live);
+    if (!holding) heldBlock.current = live;
+    const block = holding ? heldBlock.current : live;
     const votable = block === null;
+
+    // A refusal on a tile short of room for it: how much gives way (GIVE_WAY), measured after each layout, one step at a time,
+    // until the rows are each a finger's press tall again. It is the refusal's own: a new one, or none, starts from nothing.
+    // One step per layout: after a step the room is laid out again (onLayout) before the next is weighed, so a step never
+    // follows another on the room the first one changed.
+    const [give, setGive] = useState<{ error: string | null; n: number; room: number }>({ error: null, n: 0, room: 0 });
+    const giveWay = error && give.error === error ? give.n : 0;
+    useEffect(() => {
+        if (!error || !votable || giveWay >= GIVE_WAY.foot || !(room > 0)) return;
+        if (giveWay > 0 && give.room === room) return;
+        if (!pollTilePressesFit(room, answers.length, rowGap)) setGive({ error, n: giveWay + 1, room });
+    }, [error, votable, giveWay, give.room, room, answers.length, rowGap]);
+    // Read out as it appears: Android by the live region it is drawn in, iOS told in words.
+    useEffect(() => {
+        if (error && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(error);
+    }, [error]);
     const action = pollTileAction({ closed: isClosed, answered, votable });
     const label = pollTileLabel({ question: livePost.title, answerCount: options.length, totalVotes, closed: isClosed });
+    // The widest the percentage and the ✓ can be, as the row writes them: the room every row keeps for them (styles.pctColumn).
+    const pctRoom = '100% ✓';
     const authorKey: string = livePost.author_pubkey || livePost.authorPublicKey || '';
     const onAnswersLayout = (e: LayoutChangeEvent) => {
         const height = e.nativeEvent.layout.height;
@@ -118,7 +157,7 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
             </View>
             <View style={shell.gridCell} />
             <Tile style={[shell.card, styles.tile]} testID={`market-poll-tile-${livePost.id}`} {...tileProps}>
-                <Head style={styles.head} testID="poll-grid-head" {...(votable ? { onPress: onOpen, accessible: false } : {})}>
+                {giveWay < GIVE_WAY.head && <Head style={styles.head} testID="poll-grid-head" {...(votable ? { onPress: onOpen, accessible: false } : {})}>
                     <View style={styles.chips}>
                         <CardChip shell={shell} role="poll" label={t('🗳️ POLL')} testID="poll-badge" />
                         <CardChip shell={shell} role="quiet" label={pollStatusWords(livePost, isClosed)} testID="poll-status" />
@@ -128,9 +167,9 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
                         <MemberAvatar pubkey={authorKey} avatarUrl={avatarUrl} callsign={authorName} size={18} />
                         <Text style={styles.authorText} numberOfLines={1}>{authorName}</Text>
                     </View>
-                </Head>
+                </Head>}
 
-                <Text style={shell.gridTitle} numberOfLines={pollTileQuestionLines(options.length)} testID="poll-grid-question" onPress={votable ? onOpen : undefined}>{livePost.title}</Text>
+                {giveWay < GIVE_WAY.question && <Text style={shell.gridTitle} numberOfLines={pollTileQuestionLines(options.length)} testID="poll-grid-question" onPress={votable ? onOpen : undefined}>{livePost.title}</Text>}
 
                 <View style={[styles.answers, { gap: rowGap }]} onLayout={onAnswersLayout} testID="poll-grid-answers">
                     {answers.map(a => {
@@ -152,7 +191,11 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
                                         {words}
                                     </Text>
                                 </View>
-                                <Text style={styles.pct} testID="poll-grid-pct">{a.pct}%{a.chosen ? ' ✓' : ''}</Text>
+                                {/* The room of "100% ✓" on every row, voted or not (drawn with no height, out of sight), and what is shown at its end. */}
+                                <View style={styles.pctColumn} testID="poll-grid-pct-column">
+                                    <Text style={[styles.pct, styles.pctRoom]} importantForAccessibility="no" accessibilityElementsHidden testID="poll-grid-pct-room">{pctRoom}</Text>
+                                    <Text style={styles.pct} testID="poll-grid-pct">{a.pct}%{a.chosen ? ' ✓' : ''}</Text>
+                                </View>
                             </>
                         );
                         const testID = a.chosen ? 'poll-grid-answer-chosen' : 'poll-grid-answer';
@@ -163,8 +206,7 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
                                 <Pressable
                                     key={a.key}
                                     style={({ pressed }: { pressed: boolean }) => [...rowStyle, (pressed || busy) && styles.rowPressed]}
-                                    onPress={() => { void handleVote(optionId); }}
-                                    disabled={Boolean(votingOptionId)}
+                                    onPress={() => { if (!votingOptionId) void handleVote(optionId); }}
                                     accessibilityRole="button"
                                     accessibilityLabel={pollTileAnswerLabel(words ?? '', a.pct)}
                                     accessibilityState={{ selected: a.chosen, busy, disabled: Boolean(votingOptionId) }}
@@ -183,10 +225,15 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
                     )}
                 </View>
 
-                {/* On the worldwide community the card's own note, one line: a count there decides nothing. */}
-                {informal && <Text style={styles.note} numberOfLines={1} testID="poll-informal-note">{t('💬 {note}', { note: t(LINES.informal) })}</Text>}
+                {/* A vote the node refused: whole, under the answers, on as many lines as it takes. */}
+                {error && (
+                    <Text style={styles.refusal} accessibilityRole="alert" accessibilityLiveRegion="assertive" testID="poll-grid-error">{error}</Text>
+                )}
 
-                <Foot style={styles.foot} testID="poll-grid-foot" {...footProps}>
+                {/* On the worldwide community the card's own note, one line: a count there decides nothing. */}
+                {informal && giveWay < GIVE_WAY.question && <Text style={styles.note} numberOfLines={1} testID="poll-informal-note">{t('💬 {note}', { note: t(LINES.informal) })}</Text>}
+
+                {giveWay < GIVE_WAY.foot && <Foot style={styles.foot} testID="poll-grid-foot" {...footProps}>
                     {/* On a tile voted in place the turnout gives way first, then "Tap an answer to vote"; "Open poll ›" never. */}
                     <Text style={[styles.summary, action.hint ? styles.summaryGivesWay : null]} numberOfLines={1} testID="poll-grid-summary">{pollTileSummary({ totalVotes, closed: isClosed, openVote })}</Text>
                     {action.hint ? (
@@ -199,7 +246,7 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
                     ) : (
                         <Text style={styles.action} numberOfLines={1} testID={`poll-grid-action-${action.kind}`}>{action.words}</Text>
                     )}
-                </Foot>
+                </Foot>}
             </Tile>
         </View>
     );
@@ -232,6 +279,12 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         /** The words laid out unclamped at the row's width, out of sight and out of the layout. */
         measure: { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
         pct: { flexShrink: 0, fontSize: 12, fontWeight: '900', color: colors.market.poll.fg },
+        /** The percentage's column: as wide as the widest of "100% ✓" and what it shows, what it shows at its end. */
+        pctColumn: { flexShrink: 0, alignItems: 'flex-end' },
+        /** "100% ✓", laid out for its width only: no height, never seen. */
+        pctRoom: { height: 0, opacity: 0, overflow: 'hidden' },
+        /** A refusal: whole, wrapping, in the danger colour (as the card's Alert would have said it). */
+        refusal: { fontSize: 11, fontWeight: '600', color: colors.feedback.danger.fg },
         moreText: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700', color: colors.text.secondary },
         note: { fontSize: 11, fontWeight: '600', color: colors.market.poll.fg },
         foot: {

@@ -188,8 +188,8 @@ export default function NamesListScreen() {
             const url = await getAnchorUrl();
             if (!url) { setError(t('This phone isn’t connected to a community.')); return; }
             setAnchor(url);
-            const [result, vouchers] = await Promise.all([openNamesList(url, identity, STORE), fetchVouchers(url, identity)]);
-            setVoucherBlock(vouchers.ok ? vouchers.value : null);
+            const [result, block] = await Promise.all([openNamesList(url, identity, STORE), fetchVouchers(url, identity)]);
+            setVoucherBlock(block.ok ? block.value : null);
             await take(url, result);
         } finally {
             loadingRef.current = false;
@@ -550,7 +550,7 @@ export default function NamesListScreen() {
                         // Fetched for the export, so the node logs it as one: the PDF is made from this answer.
                         const fresh = await fetchNamesList(anchor, identity, true);
                         if (!fresh.ok) { setError(fresh.message); return; }
-                        const html = namesListHtml({ communityName, exportedBy: `@${identity.callsign}`, at: new Date(), entries: openEntries(fresh.value, opened) });
+                        const html = namesListHtml({ communityName, exportedBy: `@${identity.callsign}`, at: new Date(), entries: openEntries(fresh.value, opened, vouchers) });
                         // Required here, not at the top: a phone built before expo-print fails this export alone, and says so below.
                         const Print = require('expo-print') as typeof import('expo-print');
                         const Sharing = require('expo-sharing') as typeof import('expo-sharing');

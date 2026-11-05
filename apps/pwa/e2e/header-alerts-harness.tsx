@@ -12,12 +12,19 @@ import { createRoot } from 'react-dom/client';
 import { MobileHeader, SidebarStatus } from '../src/components/AppHeader';
 import { recordHomeAnswer } from '../src/lib/home-store';
 import type { NeedsItem } from '../src/lib/home-cards';
+import { showLanguage } from '../src/lib/language';
+import { t, word, type WordKey, type UiLang } from '@beanpool/core';
 import '../src/index.css';
 
 const q = new URLSearchParams(location.search);
 // Dark as lib/useTheme.ts makes it: Tailwind's dark: classes and the theme's own colours. (The chip's last sync is set in
 // header-alerts-harness.html, before lib/sync.ts reads it.)
 if (q.get('dark') === '1') document.documentElement.classList.add('dark', 'dark-theme');
+
+const lang = q.get('lang');
+if (lang) {
+    await showLanguage(lang as UiLang);
+}
 
 const ME = 'a'.repeat(64);
 const DEAL: NeedsItem = { kind: 'deal', count: 1, accent: true, label: 'A deal is waiting for you', target: { to: 'deal', postId: 'p1', txId: 't1' } };
@@ -28,10 +35,20 @@ const GROUP: NeedsItem = { kind: 'group', count: 3, accent: false, label: '3 new
 /** 0, 1, 3 and 5 kinds (5: every kind the web draws; the phone's 🛡️ has no web landing). */
 const NEEDS: Record<number, NeedsItem[]> = { 0: [], 1: [INVITE], 3: [DEAL, VOTE, INVITE], 5: [DEAL, VOTE, INVITE, MESSAGE, GROUP] };
 
-/** App.tsx's tab names (TABS, and the Pulse's). */
-const TAB_TITLES: Record<string, string> = {
-    home: 'Home', marketplace: 'Market', map: 'Map', projects: 'Commons', messages: 'Chat', people: 'People', ledger: 'Ledger', pulse: 'The Pulse',
+const TAB_KEYS: Record<string, WordKey> = {
+    home: word('Home', 'tab'),
+    marketplace: word('Market', 'tab'),
+    map: word('Map', 'tab'),
+    projects: word('Commons', 'tab'),
+    messages: word('Chat', 'tab'),
+    people: word('People', 'tab'),
+    ledger: word('Ledger', 'tab'),
 };
+
+function getTabTitle(tab: string): string {
+    if (tab === 'pulse') return t('The Pulse');
+    return TAB_KEYS[tab] ? t(TAB_KEYS[tab]) : '';
+}
 
 function landed(needs: number) {
     recordHomeAnswer({
@@ -58,7 +75,7 @@ function Harness() {
         };
     }, [state]);
     // App.tsx's own rule for the header's title: none on the map, which shows the community's logo.
-    const title = state.tab !== 'map' || state.settings ? TAB_TITLES[state.tab] ?? '' : null;
+    const title = state.tab !== 'map' || state.settings ? getTabTitle(state.tab) : null;
     return (
         <div className="flex h-screen overflow-hidden text-text-primary">
             <aside className="hidden md:flex flex-col w-64 shrink-0 bg-nature-50 dark:bg-nature-950 border-r border-nature-200 dark:border-nature-800 z-50">

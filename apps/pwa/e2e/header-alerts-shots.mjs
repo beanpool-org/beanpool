@@ -29,10 +29,9 @@ process.chdir(PWA_DIR);
 const SHOTS_DIR = process.env.HEADER_ALERTS_SHOTS_DIR || path.join(PWA_DIR, 'e2e', 'screenshots', 'header-alerts');
 fs.mkdirSync(SHOTS_DIR, { recursive: true });
 
-const WIDTHS = (process.env.HEADER_ALERTS_WIDTHS || '320,360,375,390,412,430,480,700,1280').split(',').map(Number);
+const WIDTHS = (process.env.HEADER_ALERTS_WIDTHS || '320,360,375,390,412,430,480,700,1024,1280').split(',').map(Number);
 const TEXT = [100, 130];
 const THEMES = ['light', 'dark'];
-const CHIPS = ['ago', 'plain'];
 /** [tab, kinds of need, Settings open]: one mounted header the whole way. */
 const ROUTE = [
     ['home', 0], ['home', 3], ['map', 3], ['home', 3], ['projects', 3], ['projects', 0], ['projects', 1],
@@ -110,14 +109,27 @@ const measure = () => {
         const settings = aside.querySelector('[data-testid="sidebar-settings"]');
         const help = r(aside.querySelector('[data-testid="sidebar-help"]'));
         const chipEl = aside.querySelector('[data-testid="sync-chip"]');
-        const words = chipEl.querySelector('[data-chip-words]');
+        const words = chipEl ? chipEl.querySelector('[data-chip-words]') : null;
         const buttons = row ? [...row.querySelectorAll('button')] : [];
+        const chipCut = chipEl ? (chipEl.scrollWidth > chipEl.clientWidth + 0.5 || (words && (words.scrollWidth > words.clientWidth + 0.5 || r(words).right > r(chipEl).right + 0.5))) : false;
         const sd = {
             drawn: buttons.map(b => b.dataset.testid.replace('header-needs-', '')),
             lines: new Set(buttons.map(b => Math.round(r(b).top))).size,
             settingsRight: Math.round(r(settings).right), helpRight: Math.round(help.right), asideRight: Math.round(a.right),
-            chip: Math.round(r(chipEl).width), chipWordsCut: words ? r(words).right > r(chipEl).right + 0.5 : false,
+            chip: chipEl ? Math.round(r(chipEl).width) : 0, chipWordsCut: chipCut,
         };
+        if (chipCut) out.problems.push(`side bar: sync chip text is cut or clipped (scrollWidth ${chipEl.scrollWidth} > clientWidth ${chipEl.clientWidth})`);
+        const sideBtns = [
+            aside.querySelector('[data-testid="sidebar-help"]'),
+            aside.querySelector('[data-testid="sidebar-invite"]'),
+            aside.querySelector('[data-testid="sidebar-settings"]'),
+        ].filter(Boolean);
+        for (const b of sideBtns) {
+            const br = r(b);
+            if (br.width < 43.5 || br.height < 43.5) {
+                out.problems.push(`side bar: ${b.dataset.testid} button shrinks below 44 px (${Math.round(br.width)}x${Math.round(br.height)})`);
+            }
+        }
         if (r(settings).right > a.right + 0.5 || help.right > a.right + 0.5) out.problems.push('side bar: ? or Settings past its edge');
         for (const b of buttons) if (r(b).right > a.right + 0.5 || r(b).left < a.left - 0.5) out.problems.push(`side bar: ${b.dataset.testid} past its edge`);
         if (row && row.contains(settings)) out.problems.push('side bar: the icons share Settings\' row');
@@ -130,41 +142,49 @@ const measure = () => {
 const results = [];
 let failures = 0;
 for (const width of WIDTHS) {
+    const isDesktop = width >= 768;
+    const chips = isDesktop ? ['online-time', 'offline-time', 'syncing', 'plain'] : ['ago', 'plain'];
+    const langs = isDesktop ? ['en', 'de', 'ru', 'ml'] : ['en'];
+    const route = isDesktop ? [['home', 0], ['home', 3], ['home', 3, true], ['people', 1]] : ROUTE;
+
     for (const text of TEXT) {
         for (const theme of THEMES) {
-            for (const chip of CHIPS) {
-                const ctx = await browser.newContext({ viewport: { width, height: 560 }, colorScheme: theme, reducedMotion: 'reduce' });
-                await ctx.route('**/*', (route) => {
-                    const u = new URL(route.request().url());
-                    return u.hostname === 'localhost' && !u.pathname.startsWith('/api/') ? route.continue() : route.abort();
-                });
-                const page = await ctx.newPage();
-                await page.goto(`${origin}/e2e/header-alerts-harness.html?chip=${chip}${theme === 'dark' ? '&dark=1' : ''}`, { waitUntil: 'load' });
-                await page.waitForFunction(() => !!window.harness);
-                // Settled layouts only: the sync chip eases into a new size over 0.3 s (its own inline transition), and a
-                // measure in the middle of that is of neither the old row nor the new one.
-                await page.addStyleTag({ content: `*, *::before, *::after { transition: none !important; }${text !== 100 ? ` html { font-size: ${text}% !important; }` : ''}` });
-                await page.evaluate(() => document.fonts.ready);
-                for (let i = 0; i < ROUTE.length; i++) {
-                    const [tab, needs, settings = false] = ROUTE[i];
-                    await page.evaluate((s) => window.harness.set(s), { tab, needs, settings });
-                    await page.evaluate(() => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 30)))));
-                    const m = await page.evaluate(measure);
-                    const key = `${width}-${text}-${theme}-${chip}-${String(i).padStart(2, '0')}-${tab}${settings ? '+settings' : ''}-${needs}`;
-                    results.push({ key, width, text, theme, chip, step: i, tab, needs, settings, ...m });
-                    if (m.problems.length) { failures++; console.log('FAIL', key, m.problems.join('; ')); }
-                    // Crops of what was measured, at most 900 px wide: the header row (its right-hand 900 px on a wide
-                    // screen), and on a wide screen the side bar's footer.
-                    if (m.header) {
-                        const hb = await page.locator('header').boundingBox();
-                        await page.screenshot({ path: path.join(SHOTS_DIR, `header-${key}.png`), clip: { x: Math.max(0, width - 900), y: 0, width: Math.min(width, 900), height: Math.ceil(hb.y + hb.height + 6) } });
+            for (const chip of chips) {
+                for (const lang of langs) {
+                    const ctx = await browser.newContext({ viewport: { width, height: 560 }, colorScheme: theme, reducedMotion: 'reduce' });
+                    await ctx.route('**/*', (route) => {
+                        const u = new URL(route.request().url());
+                        return u.hostname === 'localhost' && !u.pathname.startsWith('/api/') ? route.continue() : route.abort();
+                    });
+                    const page = await ctx.newPage();
+                    const langParam = lang && lang !== 'en' ? `&lang=${lang}` : '';
+                    await page.goto(`${origin}/e2e/header-alerts-harness.html?chip=${chip}${theme === 'dark' ? '&dark=1' : ''}${langParam}`, { waitUntil: 'load' });
+                    await page.waitForFunction(() => !!window.harness);
+                    // Settled layouts only: the sync chip eases into a new size over 0.3 s (its own inline transition), and a
+                    // measure in the middle of that is of neither the old row nor the new one.
+                    await page.addStyleTag({ content: `*, *::before, *::after { transition: none !important; }${text !== 100 ? ` html { font-size: ${text}% !important; }` : ''}` });
+                    await page.evaluate(() => document.fonts.ready);
+                    for (let i = 0; i < route.length; i++) {
+                        const [tab, needs, settings = false] = route[i];
+                        await page.evaluate((s) => window.harness.set(s), { tab, needs, settings });
+                        await page.evaluate(() => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 30)))));
+                        const m = await page.evaluate(measure);
+                        const key = `${width}-${text}-${theme}-${chip}${lang !== 'en' ? `-${lang}` : ''}-${String(i).padStart(2, '0')}-${tab}${settings ? '+settings' : ''}-${needs}`;
+                        results.push({ key, width, text, theme, chip, lang, step: i, tab, needs, settings, ...m });
+                        if (m.problems.length) { failures++; console.log('FAIL', key, m.problems.join('; ')); }
+                        // Crops of what was measured, at most 900 px wide: the header row (its right-hand 900 px on a wide
+                        // screen), and on a wide screen the side bar's footer.
+                        if (m.header) {
+                            const hb = await page.locator('header').boundingBox();
+                            await page.screenshot({ path: path.join(SHOTS_DIR, `header-${key}.png`), clip: { x: Math.max(0, width - 900), y: 0, width: Math.min(width, 900), height: Math.ceil(hb.y + hb.height + 6) } });
+                        }
+                        if (m.side) {
+                            const fb = await page.locator('aside > div').last().boundingBox();
+                            await page.screenshot({ path: path.join(SHOTS_DIR, `sidebar-${key}.png`), clip: { x: 0, y: Math.max(0, Math.floor(fb.y - 8)), width: Math.ceil(fb.width + 8), height: Math.ceil(fb.height + 16) } });
+                        }
                     }
-                    if (m.side) {
-                        const fb = await page.locator('aside > div').last().boundingBox();
-                        await page.screenshot({ path: path.join(SHOTS_DIR, `sidebar-${key}.png`), clip: { x: 0, y: Math.max(0, Math.floor(fb.y - 8)), width: Math.ceil(fb.width + 8), height: Math.ceil(fb.height + 16) } });
-                    }
+                    await ctx.close();
                 }
-                await ctx.close();
             }
         }
     }

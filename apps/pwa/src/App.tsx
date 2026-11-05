@@ -197,6 +197,7 @@ export function App() {
     const canSeeKnocks = invitesMode !== 'preview' && takesKnocks(nodeInfo) && mayInviteHere(nodeInfo, inviteRole);
     const [projectsInitialStart, setProjectsInitialStart] = useState(false);
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
+    const [peopleNavNonce, setPeopleNavNonce] = useState(0);
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide' | 'area'>('menu');
     // The guide page Settings opens at (Home's Tips card, Read more); null: the guide's front page.
@@ -531,6 +532,7 @@ export function App() {
         // From Home's cards: People's community list or its invites, and Settings at the profile.
         if (tab === 'people-community' || tab === 'people-invites') {
             setPeopleSubView(tab === 'people-invites' ? 'invites' : 'community');
+            setPeopleNavNonce(n => n + 1);
             setActiveTab('people');
             return;
         }
@@ -1095,7 +1097,10 @@ export function App() {
                         isGuest={isGuest}
                         identityPubkey={identity?.publicKey}
                         activeTab={activeTab}
-                        onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
+                        onNavigate={(tab, ctxId, txId) => {
+                            closePagesOver();
+                            navigateToTab(tab, ctxId, txId);
+                        }}
                         settingsSeen={settingsSeen}
                         setShowSettings={setSettingsFromCog}
                     />
@@ -1163,7 +1168,10 @@ export function App() {
                     settingsSeen={settingsSeen}
                     setShowSettings={setSettingsFromCog}
                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
-                    onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
+                    onNavigate={(tab, ctxId, txId) => {
+                        closePagesOver();
+                        navigateToTab(tab, ctxId, txId);
+                    }}
                 />
 
                 {/* Main Scrollable Canvas */}
@@ -1313,6 +1321,8 @@ export function App() {
                                 <PeoplePage
                                     identity={identity}
                                     initialView={peopleSubView}
+                                    navNonce={peopleNavNonce}
+                                    onViewChange={setPeopleSubView}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     preview={invitesMode === 'preview'}

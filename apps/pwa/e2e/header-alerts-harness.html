@@ -6,11 +6,30 @@
     <title>Header Alerts Harness</title>
     <script>
         window.process = { env: {} };
-        // The chip's last sync, as lib/sync.ts keeps it, before that module reads it: an hour-old sync draws "Offline" with
-        // "59m ago" under it (?chip=ago, its widest), none "Offline" alone (?chip=plain). No node answers here.
+        // The chip's last sync, as lib/sync.ts keeps it, before that module reads it:
+        // - online-time / online: connected with a recent sync ("Online, 2m ago")
+        // - offline-time / ago: disconnected with an hour-old sync ("Offline, 59m ago", its widest)
+        // - syncing: connected with no last sync yet (dot pulsing, "Online")
+        // - plain: disconnected with no last sync ("Offline" alone)
         try {
-            var plain = new URLSearchParams(location.search).get('chip') === 'plain';
-            localStorage.setItem('beanpool-sync-state', JSON.stringify({ connected: false, lastSyncTime: plain ? null : Date.now() - 59 * 60000, merkleRoot: null, accountCount: 0 }));
+            var params = new URLSearchParams(location.search);
+            var chip = params.get('chip');
+            var syncState;
+            if (chip === 'online' || chip === 'online-time') {
+                syncState = { connected: true, lastSyncTime: Date.now() - 2 * 60000, merkleRoot: null, accountCount: 0 };
+            } else if (chip === 'syncing') {
+                syncState = { connected: true, lastSyncTime: null, merkleRoot: null, accountCount: 0 };
+            } else if (chip === 'plain') {
+                syncState = { connected: false, lastSyncTime: null, merkleRoot: null, accountCount: 0 };
+            } else {
+                // 'ago' or 'offline-time' (default: 59m ago)
+                syncState = { connected: false, lastSyncTime: Date.now() - 59 * 60000, merkleRoot: null, accountCount: 0 };
+            }
+            localStorage.setItem('beanpool-sync-state', JSON.stringify(syncState));
+            var lang = params.get('lang');
+            if (lang) {
+                localStorage.setItem('beanpool-language', lang);
+            }
         } catch (e) { /* private window */ }
     </script>
 </head>

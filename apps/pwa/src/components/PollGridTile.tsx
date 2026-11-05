@@ -220,7 +220,9 @@ export function PollGridTile({ post, onOpen, testId, informal = false, identity 
                         </span>
                     )}
                     <span data-testid="poll-grid-action" data-kind={action.kind} className={action.hint ? GRID_POLL_ACTION_HERE : GRID_POLL_ACTION}>
-                        {action.hint && <span data-testid="poll-grid-hint" className="min-w-0 truncate">{action.hint}{' · '}</span>}
+                        {action.hint && <span data-testid="poll-grid-hint" className="min-w-0 truncate">{action.hint}</span>}
+                        {/* The separator stays whole when the hint gives way: "Tap an answer to v… · Open poll ›". */}
+                        {action.hint && <span aria-hidden="true" className="shrink-0 whitespace-pre">{' · '}</span>}
                         <span className="shrink-0">{action.words}</span>
                     </span>
                 </div>

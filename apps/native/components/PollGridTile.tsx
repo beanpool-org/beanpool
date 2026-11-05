@@ -191,7 +191,9 @@ export function PollGridTile({ post, onOpen, fontScale, informal = false, curren
                     <Text style={[styles.summary, action.hint ? styles.summaryGivesWay : null]} numberOfLines={1} testID="poll-grid-summary">{pollTileSummary({ totalVotes, closed: isClosed, openVote })}</Text>
                     {action.hint ? (
                         <View style={styles.actionHere} testID={`poll-grid-action-${action.kind}`}>
-                            <Text style={[styles.action, styles.hint]} numberOfLines={1} testID="poll-grid-hint">{action.hint}{' · '}</Text>
+                            <Text style={[styles.action, styles.hint]} numberOfLines={1} testID="poll-grid-hint">{action.hint}</Text>
+                            {/* The separator stays whole when the hint gives way: "Tap an answer to v… · Open poll ›". */}
+                            <Text style={[styles.action, styles.separator]} numberOfLines={1}>{' · '}</Text>
                             <Text style={styles.action} numberOfLines={1}>{action.words}</Text>
                         </View>
                     ) : (
@@ -242,4 +244,5 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         summaryGivesWay: { flexShrink: 100 },
         actionHere: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, minWidth: 0, marginLeft: 'auto' },
         hint: { flexShrink: 1, minWidth: 0, marginLeft: 0 },
+        separator: { marginLeft: 0 },
     });

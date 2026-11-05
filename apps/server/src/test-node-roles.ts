@@ -30,15 +30,11 @@ import {
     getBalance,
     hasListedOffer,
     hasLiveOffer,
-    canVouch,
     canOperate,
     canOperateTreasury,
     canAdministerTreasury,
     keeperOf,
-    unvouchMember,
     createTreasury,
-    adminSetVoucher,
-    vouchMember,
     adminPruneUser,
     purgeMemberSelf,
     adminSetUserStatus,
@@ -338,7 +334,6 @@ async function main() {
     // Owner (Alice): has overrides
     assert(hasListedOffer('gen_alice') === true, 'Owner hasListedOffer override');
     assert(hasLiveOffer('gen_alice') === true, 'Owner hasLiveOffer override');
-    assert(canVouch('gen_alice') === true, 'Owner canVouch override');
     assert(canOperate('gen_alice') === true, 'Owner canOperate override');
     assert(canAdministerTreasury('gen_alice', tPub) === true, 'Owner canAdministerTreasury override');
     assert(canOperateTreasury('gen_alice', tPub) === false, 'Owner with no operator binding cannot spend (#774)');
@@ -347,7 +342,6 @@ async function main() {
     // Admin (Dave): also has overrides
     assert(hasListedOffer('dave') === true, 'Admin hasListedOffer override');
     assert(hasLiveOffer('dave') === true, 'Admin hasLiveOffer override');
-    assert(canVouch('dave') === true, 'Admin canVouch override');
     assert(canOperate('dave') === true, 'Admin canOperate override');
     assert(canAdministerTreasury('dave', tPub) === true, 'Admin canAdministerTreasury override');
     assert(canOperateTreasury('dave', tPub) === false, 'Admin with no operator binding cannot spend (#774)');
@@ -356,7 +350,6 @@ async function main() {
     // Plain user: no overrides
     assert(hasListedOffer('plain_user') === false, 'Plain member does NOT have hasListedOffer override');
     assert(hasLiveOffer('plain_user') === false, 'Plain member does NOT have hasLiveOffer override');
-    assert(canVouch('plain_user') === false, 'Plain member does NOT have canVouch override');
     assert(canOperate('plain_user') === false, 'Plain member does NOT have canOperate override');
     assert(canAdministerTreasury('plain_user', tPub) === false, 'Plain member does NOT have canAdministerTreasury override');
     assert(canOperateTreasury('plain_user', tPub) === false, 'Plain member does NOT have canOperateTreasury override');
@@ -365,18 +358,9 @@ async function main() {
     // SYSTEM: no overrides
     assert(hasListedOffer('SYSTEM') === false, 'SYSTEM does NOT have hasListedOffer override');
     assert(hasLiveOffer('SYSTEM') === false, 'SYSTEM does NOT have hasLiveOffer override');
-    assert(canVouch('SYSTEM') === false, 'SYSTEM does NOT have canVouch override');
     assert(canOperate('SYSTEM') === false, 'SYSTEM does NOT have canOperate override');
     assert(canAdministerTreasury('SYSTEM', tPub) === false, 'SYSTEM does NOT have canAdministerTreasury override');
     assert(canOperateTreasury('SYSTEM', tPub) === false, 'SYSTEM does NOT have canOperateTreasury override');
-
-    // unvouchMember override check:
-    adminSetVoucher('gen_alice', true);
-    vouchMember('gen_alice', 'plain_user');
-    assert(getBalance('plain_user').floor === -25, 'plain_user vouched');
-    // Dave (admin) can withdraw Alice's vouch because Dave is admin
-    unvouchMember('dave', 'plain_user');
-    assert(getBalance('plain_user').floor === 0, 'Admin Dave withdrew Alice voucher vouch');
 
     // ── 9. Read paths expose nodeRole ──
     const aliceBal = getBalance('gen_alice');

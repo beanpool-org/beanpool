@@ -175,10 +175,10 @@ describe('the phone propose form on a Beans-off community ({ beans: false, decis
         expect(radio('Suspend Member')).toBeTruthy();
         expect(radio('Unsuspend Member')).toBeTruthy();
         expect(radio('Reinstate Member')).toBeTruthy();
-        expect(radio('Grant Voucher')).toBeTruthy();
-        expect(radio('Revoke Voucher')).toBeTruthy();
 
-        // Refused effects are absent
+        // Refused effects are absent. The old voucher switch is no Decision at all (the vouching reset, R0).
+        expect(radio('Grant Voucher')).toBeFalsy();
+        expect(radio('Revoke Voucher')).toBeFalsy();
         expect(radio('Freeze Credit')).toBeFalsy();
         expect(radio('Unfreeze Credit')).toBeFalsy();
         expect(radio('Remove a lead keeper or project leader')).toBeFalsy();

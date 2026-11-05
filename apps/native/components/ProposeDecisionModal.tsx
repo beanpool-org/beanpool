@@ -56,8 +56,6 @@ const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label:
         { id: 'reinstate_member', label: word('Reinstate Member'), desc: word('Cancel pending removal and restore account (simple majority)') },
         { id: 'freeze_credit', label: word('Freeze Credit'), desc: word('Lock credit floor to zero') },
         { id: 'unfreeze_credit', label: word('Unfreeze Credit'), desc: word('Restore credit floor (simple majority)') },
-        { id: 'grant_voucher', label: word('Grant Voucher'), desc: word('Authorise member to vouch for newcomers') },
-        { id: 'revoke_voucher', label: word('Revoke Voucher'), desc: word('Remove vouching privileges') },
         { id: 'remove_lead_keeper', label: word('Remove a lead keeper or project leader'), desc: word("Replace an enterprise's lead keeper or a project's leader") },
     ],
     pool: [

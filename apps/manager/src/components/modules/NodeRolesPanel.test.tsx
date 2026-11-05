@@ -519,7 +519,6 @@ describe('PeopleSafetySection → Owners & admins tab', () => {
                     onFreezeUser={vi.fn()}
                     onPruneUser={vi.fn()}
                     onUpdateTier={vi.fn()}
-                    onToggleVoucher={vi.fn()}
                     onToggleOperator={vi.fn()}
                     rolesViewer={{ kind: 'key', memberPubkey: BOB, role: 'admin' }}
                 />

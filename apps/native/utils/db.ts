@@ -351,7 +351,6 @@ async function _doInitDB() {
             last_active_at DATETIME,
             profile_updated_at DATETIME,
             earned_credit REAL DEFAULT 0,
-            elder_vouched_by TEXT,
             archetype TEXT
         );
 
@@ -732,8 +731,9 @@ ${TOOL_DOCS_TABLE}
         // Profile sync: track when a profile was last updated for cache-busting
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0;`); } catch (e) {}
-        // Elder vouch: who endorsed this member (lifts the floor-gate for founding members)
-        try { await database.execAsync(`ALTER TABLE members ADD COLUMN elder_vouched_by TEXT;`); } catch (e) {}
+        // The old vouch's "who vouched" column goes (the vouching reset, R0): nothing on this phone reads or writes it any
+        // more, and no index, trigger or view here names it. A build from before adds it back, empty, so a downgrade is safe.
+        try { await database.execAsync(`ALTER TABLE members DROP COLUMN elder_vouched_by;`); } catch (e) {}
         // Community Working Style / Archetype signature
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN archetype TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN author_energy_cycled INTEGER DEFAULT 0;`); } catch (e) {}
@@ -1719,8 +1719,6 @@ export async function refreshBalanceFromServer(pubkey: string) {
                 reviewCount: balData.reviewCount ?? 0,
                 trustStats: balData.trustStats ?? null,
                 isBlockedFromTrading: !!balData.isBlockedFromTrading,
-                elderVouchedBy: balData.elderVouchedBy ?? null,
-                canVouch: !!balData.canVouch,
                 canOperate: !!balData.canOperate,
                 keeperOf: Array.isArray(balData.keeperOf) ? balData.keeperOf : [],
                 isTreasury: !!balData.isTreasury,
@@ -1764,12 +1762,10 @@ export async function getBalance(pubkey: string) {
     let avgRating = 0;
     let reviewCount = 0;
     let isBlockedFromTrading = false;
-    let elderVouchedBy: string | null = null;
-    let canVouch = false;      // this account may hand out the -20/-50/-100 vouch floor
     let canOperate = false;    // this member keeps SOMETHING — shows the keeper layer at all
     let keeperOf: string[] = []; // #106: the specific enterprises they may drive — gate per-card on this
     let isTreasury = false;    // this account IS a community treasury, not a person
-    let activated = false;     // has a credit line at all (earned/vouched/granted)
+    let activated = false;     // has a credit line at all (earned/granted/known)
     let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
     let usableFloor: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
     let liveOffers = 0;        // v3: count of live Offers (drives the credit ladder)
@@ -1797,8 +1793,6 @@ export async function getBalance(pubkey: string) {
             reviewCount = parsed.reviewCount ?? 0;
             trustStats = parsed.trustStats ?? null;
             isBlockedFromTrading = !!parsed.isBlockedFromTrading;
-            elderVouchedBy = parsed.elderVouchedBy ?? null;
-            canVouch = !!parsed.canVouch;
             canOperate = !!parsed.canOperate;
             keeperOf = Array.isArray(parsed.keeperOf) ? parsed.keeperOf : [];
             isTreasury = !!parsed.isTreasury;
@@ -1826,8 +1820,6 @@ export async function getBalance(pubkey: string) {
         trustStats,
         commons: commons?.balance || 0,
         isBlockedFromTrading,
-        elderVouchedBy,
-        canVouch,
         canOperate,
         keeperOf,
         isTreasury,
@@ -1840,17 +1832,6 @@ export async function getBalance(pubkey: string) {
         knownFrozen,
         creditFrozen,
     };
-}
-
-/**
- * Whether the node says this member can vouch now (the invite screen's control, people.tsx). getBalance answers from this
- * phone's copy and refreshes it behind that answer, so on its own it would show someone appointed since the last read
- * nothing, and someone stood down a choice the node then refuses. With no answer from the node the copy stands: that screen
- * offers no vouch offline, and the node decides again when the invite is made.
- */
-export async function askCanVouch(pubkey: string): Promise<boolean> {
-    await refreshBalanceFromServer(pubkey);
-    return (await getBalance(pubkey)).canVouch;
 }
 
 export async function getTransactions(pubkey: string) {
@@ -2022,7 +2003,7 @@ export async function fetchNodeCallsign(anchorUrl: string, pubkey: string, priva
 
 /**
  * Viewer-aware Trust Profile for another member: tier, track record, completion
- * rate, mutual connections, "vouched in by", and a safety recommendation band.
+ * rate, mutual connections, "invited by", and a safety recommendation band.
  * Signed (the server uses the verified signer as the viewer for mutuals).
  * Returns null when off-grid or the member/endpoint is unavailable.
  */
@@ -3565,8 +3546,6 @@ export type DecisionEffect =
     | 'unsuspend_member'
     | 'freeze_credit'
     | 'unfreeze_credit'
-    | 'grant_voucher'
-    | 'revoke_voucher'
     | 'remove_lead_keeper'
     | 'reinstate_member'
     /**
@@ -4236,7 +4215,7 @@ export async function readNearbyHeld(): Promise<{ set: string[]; tied: string[];
 /**
  * What a phone on a community that says `membersOnDemand` must hold, and what it holds (DESIGN-global-members-by-area
  * §2.2.1; the plan is utils/members-on-demand.ts): `referenced` = everyone in its conversations, both sides of its deals,
- * raters and rated, its friends and whoever vouched it in; `held` = every card with when it was last fetched by key.
+ * raters and rated, and its friends; `held` = every card with when it was last fetched by key.
  * Listing authors are not referenced: the by-area row carries their name and face. Null when the copy can't be read.
  */
 export async function readMembersOnDemandWorld(ownKey: string): Promise<{ referenced: string[]; held: { key: string; fetchedAt: string | null }[] } | null> {
@@ -4248,9 +4227,8 @@ export async function readMembersOnDemandWorld(ownKey: string): Promise<{ refere
              UNION SELECT seller_pubkey FROM marketplace_transactions
              UNION SELECT rater_pubkey FROM ratings WHERE target_pubkey = ?
              UNION SELECT target_pubkey FROM ratings WHERE rater_pubkey = ?
-             UNION SELECT friend_pubkey FROM friends WHERE owner_pubkey = ?
-             UNION SELECT elder_vouched_by FROM members WHERE public_key = ? AND elder_vouched_by IS NOT NULL`,
-            [ownKey, ownKey, ownKey, ownKey]
+             UNION SELECT friend_pubkey FROM friends WHERE owner_pubkey = ?`,
+            [ownKey, ownKey, ownKey]
         );
         const held = await database.getAllAsync<{ key: string; fetchedAt: string | null }>(
             'SELECT public_key AS key, card_fetched_at AS fetchedAt FROM members'
@@ -4394,7 +4372,6 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const joinedAt = m.joinedAt || m.joined_at || null;
             const profileUpdatedAt = m.profileUpdatedAt || m.profile_updated_at || null;
             const ec = m.earnedCredit || m.earned_credit || 0;
-            const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             let arch = m.archetype || null;
             let finalArch = arch;
             // The node SAYING a member has no working style: the field is there, and null. A removal reaches other members'
@@ -4433,7 +4410,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             }
             if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
             await txn.runAsync(
-                `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, archetype) VALUES (?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET
                    callsign = excluded.callsign,
                    archetype = CASE WHEN ? THEN excluded.archetype
@@ -4442,11 +4419,10 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
                                      ELSE COALESCE(excluded.avatar_url, members.avatar_url) END,
                    joined_at = COALESCE(excluded.joined_at, members.joined_at),
                    profile_updated_at = COALESCE(excluded.profile_updated_at, members.profile_updated_at),
-                   earned_credit = excluded.earned_credit,
-                   elder_vouched_by = COALESCE(members.elder_vouched_by, excluded.elder_vouched_by)`,
-                // The CASE placeholders are the 9th (archetype) and 10th (avatar, last) `?` in the statement text, so
-                // they bind AFTER the eight VALUES parameters.
-                [pk, cs, av, joinedAt, profileUpdatedAt, ec, evb, finalArch, archetypeNullClears ? 1 : 0, avatarNullClears ? 1 : 0]
+                   earned_credit = excluded.earned_credit`,
+                // The CASE placeholders are the 8th (archetype) and 9th (avatar, last) `?` in the statement text, so
+                // they bind AFTER the seven VALUES parameters.
+                [pk, cs, av, joinedAt, profileUpdatedAt, ec, finalArch, archetypeNullClears ? 1 : 0, avatarNullClears ? 1 : 0]
             );
         }
 
@@ -8031,24 +8007,6 @@ export async function recordOnboardingEvent(event: string, variant = ''): Promis
         // Deliberately silent. Not even a console.warn: this runs on the join path, and a
         // red box in a fresh user's face over telemetry would be its own bug.
     }
-}
-
-// Vouch for a member at a level (1=-25, 2=-50, 3=-100). Signed POST — the server verifies the
-// actor holds the vouch capability and rejects self-vouch. Optimistically mirrors the vouch
-// locally so the badge/floor reflect immediately; applyDelta later reconciles from the server.
-export async function vouchMember(targetPubkey: string, level: 1 | 2 | 3 = 1): Promise<{ success: boolean }> {
-    const result = await _signedRequest('/api/profile/vouch', { targetPubkey, level });
-    try {
-        const identity = await loadIdentity();
-        if (identity) {
-            const database = await getDb();
-            await database.runAsync(
-                `UPDATE members SET elder_vouched_by = COALESCE(elder_vouched_by, ?) WHERE public_key = ?`,
-                [identity.publicKey, targetPubkey]
-            );
-        }
-    } catch {}
-    return result;
 }
 
 export async function toggleMessageReactionApi(messageId: string, authorPubkey: string, emoji: string) {

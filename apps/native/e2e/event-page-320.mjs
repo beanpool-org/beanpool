@@ -110,7 +110,6 @@ const OVERRIDES = {
         fetchMyEvents: `async () => []`,
         fetchMemberPreferences: `async () => ({})`,
         isRouteMissing: `() => false`,
-        askCanVouch: `async () => false`,
     },
     'utils/use-node-profile': { useNodeProfile: `() => ({ profile: 'local', checkedAt: '', features: { beans: true, invites: true, knocks: true, door: 'members' } })` },
     'utils/identity': { loadIdentity: `async () => globalThis.__identity` },

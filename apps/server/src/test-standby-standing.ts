@@ -12,19 +12,19 @@
  *
  *  1. The main server M: an enterprise, Probe Co, with a purpose, a map pin, a working capital ceiling, two keepers who
  *     each pledge backing, an external sale (earned surplus) and a legacy credit floor; a project with a goal and a
- *     deadline; Elders (granted credit), an appointed voucher and two members he vouched for (at 50 and 25), a frozen
+ *     deadline; Elders (granted credit), two members given a Resident badge (granted credit too), a frozen
  *     Elder, a member on holiday and one with a notification opt-out, a reminder default, and a Home layout and interests
  *     (slice H1 of scratch/global-node/DESIGN-home-dashboard-fable.md). A preference save moves the member's row, as
  *     holiday does.
  *  2. The standby S's first copy: every members column (but last_active_at), every preference, keeper and pledge is M's,
  *     stamps included; the copy records the importer's format.
- *  3. Between two pulls, on M: the vouch at 25 withdrawn, a keeper unbound, a pledge released, the enterprise paused, its
+ *  3. Between two pulls, on M: one of those badges taken back, a keeper unbound, a pledge released, the enterprise paused, its
  *     ceiling changed by the admin (a write of that column alone), another opt-out, a moved Home card and a new interest. A
  *     delta brings every one.
  *  4. A whole copy leaves every row and stamp as M's, and puts back the members touch triggers the import set aside.
  *  5. A keeper who is also a pledger, and a pledger no longer a keeper, are re-keyed between two pulls: the standby follows
  *     both re-keys and the whole set of keepers together, and ends equal to M.
- *  6. A standby as the old importer left it (no standing, no preferences, keepers or pledges, the withdrawn vouch kept,
+ *  6. A standby as the old importer left it (no standing, no preferences, keepers or pledges,
  *     format 3) re-seeds itself with its next pull, once, and ends equal to M; the pull after is a delta.
  *  7. A standby writes no pledge of its own (#1276 review 4118882837): on S, a keeper's release (by every alias), a new
  *     pledge, a step-down and an admin's unbind that would settle a pledge each answer 409 standby, and its engine refuses
@@ -42,11 +42,11 @@
  *     none of its rows at boot. M, booted on this
  *     build as if for the first time (its marker gone), brings the goal into the schema's rules once: the column's
  *     default, the row stamped, nothing else changed.
- *  9. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the withdrawn
- *     vouch gives no credit back, the frozen Elder stays at 0); the enterprise's page answers for its keeper, paused; the
+ *  9. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the badge
+ *     taken back gives no credit back, the frozen Elder stays at 0); the enterprise's page answers for its keeper, paused; the
  *     board is M's (the paused enterprise's listing and the holiday member's stay off); the holiday member can't be traded
  *     with; the enterprises pay no demurrage; the opt-outs hold; the member reads her Home
- *     (and nobody else does); the appointed voucher vouches; the enterprise is on the
+ *     (and nobody else does); the enterprise is on the
  *     map; its lead resumes it and a re-keyed keeper posts for it.
  *
  * Run:
@@ -390,13 +390,13 @@ function withDb(dir: string, fn: (db: Database.Database) => void): void {
     try { fn(db); } finally { db.close(); }
 }
 
-/** A member's balance answer, as it decides what they can do: the floor, the granted credit, the vouch; the balance to the cent. */
+/** A member's balance answer, as it decides what they can do: the floor, the granted credit; the balance to the cent. */
 function standingOf(a: Answer): unknown {
     if (a.status !== 200) return a.status;
     const b = a.body ?? {};
     return {
         balance: typeof b.balance === 'number' ? Math.round(b.balance * 100) / 100 : b.balance, floor: b.floor, tier: b.tier?.name ?? b.tier,
-        grantedCredit: b.grantedCredit, elderVouchedBy: b.elderVouchedBy, callsign: b.callsign,
+        grantedCredit: b.grantedCredit, callsign: b.callsign,
     };
 }
 
@@ -468,9 +468,8 @@ async function main(): Promise<void> {
         const seed = built('Eve starts a project with a goal and a deadline', await S_(eve, '/api/treasury', {
             name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount: 100, deadlineAt: deadline,
         }));
-        built('the admin makes Bo a voucher', await A(`/api/local/admin/users/${bo.pk}/voucher`, { grant: true }));
-        built('Bo vouches for Eve at 50', await S_(bo, '/api/profile/vouch', { targetPubkey: eve.pk, level: 2 }));
-        built('and for Lou at 25', await S_(bo, '/api/profile/vouch', { targetPubkey: lou.pk, level: 1 }));
+        built('the admin gives Eve a Resident badge', await A(`/api/local/admin/users/${eve.pk}/tier`, { tier: 'Resident' }));
+        built('and Lou one', await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Resident' }));
         built('the admin freezes Fay\'s credit (an Elder: her floor goes to 0)', await A(`/api/local/admin/users/${fay.pk}/freeze`, { freeze: true }));
         built('Hal goes on holiday', await S_(hal, '/api/members/holiday', { enabled: true }));
         const annBefore = ((await main.send('rows')) as Rows).members.find((r) => r.public_key === ann.pk)?.updated_at;
@@ -510,8 +509,8 @@ async function main(): Promise<void> {
         assert(MEMBERS_TOUCH.every((t) => s.touch.includes(t)), `the members touch triggers are in place after the import (${s.touch.join(', ')})`);
 
         // ── 3. Changes between two pulls, then a delta ──
-        console.log('\n— 3. between two pulls: a vouch withdrawn, a keeper unbound, a pledge released, a pause, a ceiling, an opt-out —');
-        built('Bo withdraws his vouch for Lou, which the first copy copied', await S_(bo, '/api/profile/unvouch', { targetPubkey: lou.pk }));
+        console.log('\n— 3. between two pulls: a badge taken back, a keeper unbound, a pledge released, a pause, a ceiling, an opt-out —');
+        built("the admin takes Lou's badge back, which the first copy copied", await A(`/api/local/admin/users/${lou.pk}/tier`, { tier: 'Newcomer' }));
         built('the admin unbinds Dee from Probe Co', await api(m, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${dee.pk}`, { admin: await main.send('owner-session') }));
         built('Kip releases 1 of his 2 Beans of backing', await S_(kip, `/api/treasury/${probe.publicKey}/release`, { amount: 1 }));
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));
@@ -521,17 +520,17 @@ async function main(): Promise<void> {
             publicKey: ann.pk, preferences: { 'home.layout': { ...annHome, order: ['beans', 'events', 'market'], updatedAt: new Date().toISOString() }, interests: ['food', 'garden', 'tools'] },
         }));
         const m3: Rows = await main.send('rows');
-        require_(m3.members.find((r) => r.public_key === lou.pk)?.elder_vouched_by === null
+        require_(m3.members.find((r) => r.public_key === lou.pk)?.earned_credit === 0
             && m3.members.find((r) => r.public_key === probe.publicKey)?.paused === 1
             && m3.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling === 80
             && !m3.treasury_operators.some((o) => o.member_pubkey === dee.pk)
             && m3.enterprise_pledges.some((p) => p.keeper === kip.pk && p.released_at !== null),
-            'M: the vouch is gone, Probe Co is paused with its new ceiling, Dee is no keeper, and a pledge of Kip\'s is released');
+            'M: Lou\'s badge is gone, Probe Co is paused with its new ceiling, Dee is no keeper, and a pledge of Kip\'s is released');
         const delta = await standby.send('pull', {});
         s = await standby.send('rows');
         assert(delta.ok === true && delta.mode === 'delta', `the delta lands (${delta.ok ? delta.mode : delta.error})`);
-        assert(s.members.find((r) => r.public_key === lou.pk)?.elder_vouched_by === null && s.members.find((r) => r.public_key === lou.pk)?.vouch_credit === 0,
-            `the withdrawn vouch is gone on S too (${JSON.stringify(s.members.find((r) => r.public_key === lou.pk)?.elder_vouched_by)})`);
+        assert(s.members.find((r) => r.public_key === lou.pk)?.earned_credit === 0,
+            `the badge taken back is gone on S too (${JSON.stringify(s.members.find((r) => r.public_key === lou.pk)?.earned_credit)})`);
         assert(s.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling === 80, 'the ceiling the admin changed alone arrives');
         assert(!s.treasury_operators.some((o) => o.member_pubkey === dee.pk), 'the unbound keeper is no keeper on S');
         assert(rowsDiff(m3, s).length === 0, `every row and stamp is M's after the delta (differences ${first(rowsDiff(m3, s))})`);
@@ -568,13 +567,11 @@ async function main(): Promise<void> {
         await standby.kill('SIGTERM');
         copyDir(dir('standby'), dir('old'));
         withDb(dir('old'), (db) => {
-            // What the old import wrote: no standing, and the first voucher it copied kept (COALESCE); nothing of
-            // member_preferences, treasury_operators or enterprise_pledges.
+            // What the old import wrote: no standing; nothing of member_preferences, treasury_operators or enterprise_pledges.
             for (const t of ['members_touch_updated_at', 'members_touch_board_standing']) db.exec(`DROP TRIGGER IF EXISTS ${t}`);
-            db.prepare(`UPDATE members SET is_treasury = 0, can_vouch = 0, vouch_credit = 0, credit_frozen = 0, earned_credit = 0, earned_surplus = 0,
+            db.prepare(`UPDATE members SET is_treasury = 0, credit_frozen = 0, earned_credit = 0, earned_surplus = 0,
                         working_capital_ceiling = NULL, legacy_credit_floor = NULL, purpose = NULL, goal_amount = NULL, deadline_at = NULL,
                         lifecycle = 'ongoing', paused = 0, lat = NULL, lng = NULL`).run();
-            db.prepare('UPDATE members SET elder_vouched_by = ? WHERE public_key = ?').run(bo.pk, lou.pk);
             db.prepare('DELETE FROM member_preferences').run();
             db.prepare('DELETE FROM treasury_operators').run();
             db.prepare('DELETE FROM enterprise_pledges').run();
@@ -763,10 +760,10 @@ async function main(): Promise<void> {
             everyone.map(async ([n, pk, reader]) => [n, standingOf(await api(base, 'GET', `/api/ledger/balance/${pk}`, { as: reader }))])));
         await main.send('fresh-trust');
         const onMain = { standing: await standingOn(m), board: await boardOn(m) };
-        require_((onMain.standing as any).Eve?.elderVouchedBy === bo.pk && (onMain.standing as any).Lou?.elderVouchedBy === null
+        require_((onMain.standing as any).Eve?.grantedCredit === 200 && (onMain.standing as any).Lou?.grantedCredit === 0
             && (onMain.standing as any).Fay?.floor === 0 && (onMain.standing as any).Fay?.grantedCredit > 0
             && !onMain.board.includes(checkId) && !onMain.board.includes(walking.id),
-            `M: Eve is vouched and Lou no longer; Fay, an Elder, is frozen at 0; the paused enterprise's listing and the holiday member's are off its board (${JSON.stringify({ eve: (onMain.standing as any).Eve, lou: (onMain.standing as any).Lou, fay: (onMain.standing as any).Fay })})`);
+            `M: Eve holds her badge's credit and Lou no longer; Fay, an Elder, is frozen at 0; the paused enterprise's listing and the holiday member's are off its board (${JSON.stringify({ eve: (onMain.standing as any).Eve, lou: (onMain.standing as any).Lou, fay: (onMain.standing as any).Fay })})`);
         refused.push(...(await main.send('fetches')).blocked);
         await main.send('checkpoint');
         await main.kill('SIGKILL');
@@ -790,7 +787,7 @@ async function main(): Promise<void> {
         const promoted = { standing: await standingOn(p), board: await boardOn(p) };
         const floorsDiffer = Object.keys(onMain.standing).filter((n) => JSON.stringify((onMain.standing as any)[n]) !== JSON.stringify((promoted.standing as any)[n]));
         assert(floorsDiffer.length === 0,
-            `every balance, floor, tier and granted credit is M's, the withdrawn vouch giving no credit back (differ: ${floorsDiffer.map((n) => `${n} ${JSON.stringify((onMain.standing as any)[n])} / ${JSON.stringify((promoted.standing as any)[n])}`).join(' | ') || 'none'})`);
+            `every balance, floor, tier and granted credit is M's, the badge taken back giving no credit back (differ: ${floorsDiffer.map((n) => `${n} ${JSON.stringify((onMain.standing as any)[n])} / ${JSON.stringify((promoted.standing as any)[n])}`).join(' | ') || 'none'})`);
         assert(JSON.stringify(promoted.board) === JSON.stringify(onMain.board),
             `the board is M's: the paused enterprise's listing and the holiday member's stay off (${promoted.board.length} against ${onMain.board.length})`);
         const page = await api(p, 'GET', `/api/treasury/${probe.publicKey}`, { as: kip2 });
@@ -813,8 +810,6 @@ async function main(): Promise<void> {
         const boReadsAnn = await api(p, 'GET', `/api/members/preferences?publicKey=${ann.pk}`, { as: bo });
         assert(!JSON.stringify(boReadsAnn.body ?? '').includes('home.layout') && !JSON.stringify(boReadsAnn.body ?? '').includes('"tools"'),
             `and nobody else's to read (${brief(boReadsAnn)})`);
-        const vouched = await P_(bo, '/api/profile/vouch', { targetPubkey: hal.pk, level: 1 });
-        assert(vouched.status === 200, `the appointed voucher vouches (${brief(vouched)})`);
         const pins = await api(p, 'GET', '/api/enterprises/map', { as: ann });
         assert(pins.status === 200 && JSON.stringify(pins.body).includes(probe.publicKey), `Probe Co is on the map (${brief(pins)})`);
         const resumed = await P_(cy, `/api/treasury/${probe.publicKey}/resume`);

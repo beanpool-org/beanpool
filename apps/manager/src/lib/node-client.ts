@@ -256,7 +256,6 @@ export interface MemberItem {
     callsign?: string;
     tier?: string;
     standing?: string;
-    canVouch?: boolean;
     canOperate?: boolean;
     creditFrozen?: boolean;
     isFrozen?: boolean;
@@ -987,7 +986,6 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
                     callsign: rawCallsign,
                     tier: typeof m.tier === 'string' ? m.tier : (typeof m.standing === 'string' ? m.standing : 'Newcomer'),
                     standing: typeof m.standing === 'string' ? m.standing : (typeof m.tier === 'string' ? m.tier : 'Newcomer'),
-                    canVouch: Boolean(m.canVouch ?? m.isVoucher),
                     canOperate: Boolean(m.canOperate ?? m.isOperator ?? m.can_operate),
                     nodeRole: (m.nodeRole === 'owner' || m.nodeRole === 'admin' || m.nodeRole === 'moderator') ? m.nodeRole : null,
                 };
@@ -1888,25 +1886,6 @@ export async function updateNodeUserTier(
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ tier, ...passwordField(adminPassword) }),
-    });
-    if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-    }
-    return res.json();
-}
-
-export async function updateNodeUserVoucher(
-    nodeUrl: string,
-    pubkey: string,
-    canVouch: boolean,
-    adminPassword?: string,
-    tfaToken?: string
-): Promise<{ success: boolean; granted: boolean }> {
-    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/voucher`);
-    const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ grant: canVouch, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);

@@ -3,7 +3,7 @@
  * show no price. Before, every row read "OFFER 0 🫘" under the line that says Beans are earned in a local community
  * (global previews audit, item 1, B10-profile-other-320.png). On a local node the price stays.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureMode } from '@beanpool/core';
 import { PublicProfilePage } from './PublicProfilePage';
@@ -36,8 +36,8 @@ const listing = {
 };
 vi.mock('../lib/api', () => ({
     getMemberProfile: vi.fn(async () => ({
-        publicKey: 'kofi-pubkey', callsign: 'Kofi', avatar: null, bio: '', role: 'member', elderVouchedBy: null,
-        stats: { totalVouchesGiven: 0, ratingsReceivedCount: 0, averageRating: 0, vouchesReceivedCount: 0 },
+        publicKey: 'kofi-pubkey', callsign: 'Kofi', avatar: null, bio: '', role: 'member',
+        stats: { ratingsReceivedCount: 0, averageRating: 0 },
     })),
     updateMemberProfile: vi.fn(),
     getMemberRatings: vi.fn(async () => []),
@@ -46,7 +46,6 @@ vi.mock('../lib/api', () => ({
     getRatingsGiven: vi.fn(async () => ({ ratings: [] })),
     getFriends: vi.fn(async () => []),
     submitRating: vi.fn(),
-    vouchMemberApi: vi.fn(),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
 }));
 
@@ -108,7 +107,7 @@ describe('a profile reads nothing of the reader\'s where Beans are in preview (g
         expect(getBalance).not.toHaveBeenCalled();
     });
 
-    it('global (previews), another member\'s profile: my balance (the vouch button\'s) is never asked', async () => {
+    it('global (previews), another member\'s profile: my balance is never asked', async () => {
         beansMode = 'preview';
         vi.mocked(communityInfoOnce).mockImplementation(async () => GLOBAL_INFO as never);
         renderKofi();
@@ -117,12 +116,16 @@ describe('a profile reads nothing of the reader\'s where Beans are in preview (g
         expect(getBalance).not.toHaveBeenCalled();
     });
 
-    it('local (live): my own balance is asked on my profile, and on another\'s, as before', async () => {
+    it('local (live): my own balance is asked on my profile; on another\'s none is (mine only drove the vouch button, gone with R0)', async () => {
         renderMine();
         await waitFor(() => expect(getBalance).toHaveBeenCalledWith(me.publicKey));
+        cleanup();
         vi.mocked(getBalance).mockClear();
+        vi.mocked(getMarketplacePosts).mockClear();
         renderKofi();
-        await waitFor(() => expect(getBalance).toHaveBeenCalledWith(me.publicKey));
-        expect(getBalance).not.toHaveBeenCalledWith('kofi-pubkey');
+        expect(await screen.findByText('Pottery lessons on Sundays')).toBeInTheDocument();
+        await waitFor(() => expect(getMarketplacePosts).toHaveBeenCalled());
+        await new Promise(r => setTimeout(r, 0));
+        expect(getBalance).not.toHaveBeenCalled();
     });
 });

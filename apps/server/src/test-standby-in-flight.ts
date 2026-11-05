@@ -313,7 +313,7 @@ async function child(): Promise<void> {
             const fl = await import('./federation-link.js');
             const id = a.ids;
             const calls: [string, () => unknown][] = [
-                ['createDecision', () => de.createDecision({ authorPubkey: id.dee, title: 'On a standby', description: 'Never', touches: 'member', effect: 'grant_voucher', subject: id.kip } as any)],
+                ['createDecision', () => de.createDecision({ authorPubkey: id.dee, title: 'On a standby', description: 'Never', touches: 'member', effect: 'freeze_credit', subject: id.kip } as any)],
                 ['castDecisionVote', () => de.castDecisionVote(id.decision, id.dee, true)],
                 ['tickDecisions', () => de.tickDecisions(Date.now() + 30 * DAY)],
                 ['adminEmergencySuspend', () => de.adminEmergencySuspend(id.kip, 'owner:password', 'On a standby')],
@@ -386,7 +386,7 @@ async function child(): Promise<void> {
                 lou: one('SELECT status FROM members WHERE public_key = ?', id.lou)?.status ?? null,
                 louRole: one('SELECT role FROM node_roles WHERE member_pubkey = ?', id.lou)?.role ?? null,
                 held: (one('SELECT COUNT(*) AS n FROM suspended_node_roles') as any).n,
-                cyVouches: one('SELECT can_vouch FROM members WHERE public_key = ?', id.cy)?.can_vouch ?? null,
+                cyFrozen: one('SELECT credit_frozen FROM members WHERE public_key = ?', id.cy)?.credit_frozen ?? null,
                 change: one('SELECT status, reason FROM enterprise_keeper_changes WHERE request_id = ?', id.request) ?? null,
                 request: one('SELECT status FROM enterprise_keeper_requests WHERE id = ?', id.request)?.status ?? null,
                 niaKeeps: !!one('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?', id.probe, id.nia),
@@ -595,8 +595,8 @@ async function main(): Promise<void> {
         const convenor = built('Bo proposes Dee as the group\'s convenor', await S_(bo, `/api/groups/${groupId}/succession/propose`, { candidatePubkey: dee.pk }));
         const convenorVoteId = (convenor.proposal?.id ?? convenor.id) as string;
         require_(convenor.executed === false, `M: the convenor vote is open (${JSON.stringify(convenor).slice(0, 160)})`);
-        const grant = built('Gwen proposes making Cy a voucher', await S_(gwen, '/api/commons/decisions', {
-            title: 'Make Cy a voucher', description: 'Cy has helped half the street', touches: 'member', effect: 'grant_voucher', subject: cy.pk,
+        const grant = built('Gwen proposes freezing Cy\'s credit', await S_(gwen, '/api/commons/decisions', {
+            title: 'Freeze Cy\'s credit', description: 'Cy has gone quiet with deals half done', touches: 'member', effect: 'freeze_credit', subject: cy.pk,
         })).decision;
         for (const v of [gwen, bo, nia]) built(`${v.name} votes for it`, await S_(v, `/api/commons/decisions/${grant.id}/vote`, { support: true }));
         // Kip's removal of Rex, proposed before removal by vote S3 (a member proposes none since), closing in a few seconds.
@@ -774,8 +774,8 @@ async function main(): Promise<void> {
             `a day on, the removal still waits out its grace and the vote is open (${JSON.stringify(early)}; ${f.removal}, Rex ${f.rex}, ${f.decision})`);
         const sweep = await standby.send('tick-decisions', { asOf: Date.now() + 8 * DAY });
         f = await standby.send('facts', { ids });
-        assert(f.ballots === 4 && f.decision === 'executed' && f.cyVouches === 1,
-            `eight days on, the Decision counts M's three ballots and Dee's, passes and is carried out: Cy vouches (${f.ballots}; ${f.decision}; ${JSON.stringify(sweep)})`);
+        assert(f.ballots === 4 && f.decision === 'executed' && f.cyFrozen === 1,
+            `eight days on, the Decision counts M's three ballots and Dee's, passes and is carried out: Cy's credit is frozen (${f.ballots}; ${f.decision}; ${JSON.stringify(sweep)})`);
         assert(f.removal === 'executed' && f.rex === 'pruned', `the removal is carried out after its grace (${f.removal}; Rex ${f.rex})`);
         assert(f.suspension !== 'open' && f.lou === 'active' && f.louRole === 'owner' && f.held === 0,
             `the suspension nobody kept ends: Lou is active and an owner again (${f.suspension}; ${f.lou}, ${f.louRole}; held ${f.held})`);

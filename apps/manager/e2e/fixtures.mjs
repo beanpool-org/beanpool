@@ -82,7 +82,6 @@ const MEMBERS = [
         standing: 'Elder',
         status: 'active',
         nodeRole: 'owner',
-        canVouch: true,
         canOperate: true,
         creditFrozen: false,
         isFrozen: false,
@@ -99,7 +98,6 @@ const MEMBERS = [
         standing: 'Steward',
         status: 'active',
         nodeRole: 'admin',
-        canVouch: true,
         canOperate: true,
         creditFrozen: false,
         isFrozen: false,
@@ -116,7 +114,6 @@ const MEMBERS = [
         standing: 'Resident',
         status: 'active',
         nodeRole: 'moderator',
-        canVouch: true,
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
@@ -131,7 +128,6 @@ const MEMBERS = [
         standing: 'Newcomer',
         status: 'suspended',
         nodeRole: null,
-        canVouch: false,
         canOperate: false,
         creditFrozen: true,
         isFrozen: true,
@@ -146,7 +142,6 @@ const MEMBERS = [
         standing: 'Elder',
         status: 'active',
         nodeRole: null,
-        canVouch: true,
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
@@ -161,7 +156,6 @@ const MEMBERS = [
         standing: 'Resident',
         status: 'active',
         nodeRole: null,
-        canVouch: false,
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
@@ -176,7 +170,6 @@ const MEMBERS = [
         standing: 'Newcomer',
         status: 'active',
         nodeRole: null,
-        canVouch: false,
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
@@ -191,7 +184,6 @@ const MEMBERS = [
         standing: 'Resident',
         status: 'active',
         nodeRole: null,
-        canVouch: true,
         canOperate: false,
         creditFrozen: false,
         isFrozen: false,
@@ -1593,7 +1585,6 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (/^\/api\/local\/admin\/users\/[^/]+\/freeze$/.test(pathname)) return ok({ success: true, frozen: true });
     if (/^\/api\/local\/admin\/users\/[^/]+\/prune$/.test(pathname)) return ok({ success: true });
     if (/^\/api\/local\/admin\/users\/[^/]+\/tier$/.test(pathname)) return ok({ success: true, tier: 'Resident' });
-    if (/^\/api\/local\/admin\/users\/[^/]+\/voucher$/.test(pathname)) return ok({ success: true, granted: true });
     if (/^\/api\/local\/admin\/users\/[^/]+\/operator$/.test(pathname)) return ok({ success: true });
     if (/^\/api\/local\/admin\/users\/[^/]+\/suspend$/.test(pathname)) return ok({ success: true, decision: { id: 'dec-suspend-1', closesAt: '2026-09-26T00:00:00.000Z' } });
     if (/^\/api\/local\/admin\/users\/[^/]+\/status$/.test(pathname)) return ok({ success: true });

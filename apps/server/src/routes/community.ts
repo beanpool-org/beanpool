@@ -1,5 +1,5 @@
 /**
- * Community, Auth, Members, Invites, Profiles, Ledger, Trust, Vouch,
+ * Community, Auth, Members, Invites, Profiles, Ledger, Trust,
  * Friends, Recovery, Push Notifications, Preferences, Ratings routes.
  */
 
@@ -13,7 +13,7 @@ import {
     getCommunityInfo, getPublicCommunityInfo,
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
-    vouchMember, unvouchMember, canVouch, readInviteVouch, hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
+    hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
     updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
     getPublicCommunityHealth,
     seedGenesisMember,
@@ -1146,7 +1146,6 @@ router.get('/api/community/members', async (ctx) => {
                     status: m.status,
                     lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
                     earnedCredit: m.earnedCredit,
-                    elderVouchedBy: m.elderVouchedBy,
                     archetype: m.archetype,
                     nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
                 };
@@ -1186,18 +1185,10 @@ router.post('/api/community/register', async (ctx) => {
 // ===================== INVITE API (PUBLIC) =====================
 
 router.post('/api/invite/generate', async (ctx) => {
-    const { publicKey, intendedFor, vouchLevel } = (ctx as any).requestBody || {};
+    const { publicKey, intendedFor } = (ctx as any).requestBody || {};
     if (!publicKey) {
         ctx.status = 400;
         ctx.body = { error: 'publicKey is required' };
-        return;
-    }
-    // A vouch this invite carries (the node decides, never the app): a level from anyone who can't vouch is refused, and
-    // no code is made. `publicKey` is the signer (the middleware's spoof check). An invite with none is as it always was.
-    const vouch = readInviteVouch(publicKey, vouchLevel);
-    if (vouch.refusal) {
-        ctx.status = vouch.refusal.status;
-        ctx.body = { error: vouch.refusal.error, code: vouch.refusal.code };
         return;
     }
     // 20 made a day and 50 unused at once, per member, an owner's or admin's the owners' setting (W-main,
@@ -1205,7 +1196,7 @@ router.post('/api/invite/generate', async (ctx) => {
     // comes first), before anything is written. Where only admins
     // invite (config/door.ts), a member who is no owner or admin is answered 403 `admins_only` before the limit.
     let invite: ReturnType<typeof generateInvite>;
-    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey), undefined, vouch.level); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
+    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!invite) {
         ctx.status = 403;
         // A member whose account is paused brings nobody in while it lasts (removal by vote S1), and is told so.
@@ -1689,11 +1680,10 @@ router.get('/api/ledger/balance/:publicKey', async (ctx) => {
         ...getBalance(publicKey),
         callsign: member.callsign,
         trustStats: trust.stats, // tradeCount, uniquePartners, ageDays
-        grantedCredit: trust.grantedCredit,   // vouch/genesis/admin grants (separate lane, no vote weight)
+        grantedCredit: trust.grantedCredit,   // genesis/admin grants (separate lane, no vote weight)
         qualifiedValue: trust.qualifiedValue, // diversity-capped trade value behind the earned score
         avgRating: trust.avgRating,           // reputation multiplier inputs
         reviewCount: trust.reviewCount,
-        elderVouchedBy: member.elderVouchedBy || null,
         hasListedOffer: listedOffer,
         // Gate 1: blocked from posting Needs / accepting Offers until an Offer is listed.
         isBlockedFromTrading: offerFirst && !listedOffer,
@@ -1731,59 +1721,6 @@ router.post('/api/trust/profile', async (ctx) => {
         return;
     }
     ctx.body = profile;
-});
-
-// Vouch: the (signed) viewer vouches for targetPubkey, handing them the -20 credit floor.
-// Server-authoritative — vouchMember() verifies the actor holds the vouch capability
-// (members.can_vouch, admin-granted) and rejects self-vouch. This lifts the target's
-// no-overdraft activation gate, unlocking the welcome voucher + any earned trust banked.
-router.post('/api/profile/vouch', async (ctx) => {
-    const voucher = ctx.state.actor as string | undefined;
-    const { targetPubkey, level } = (ctx as any).requestBody || {};
-    if (!voucher) {
-        ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
-        return;
-    }
-    if (!targetPubkey) {
-        ctx.status = 400;
-        ctx.body = { error: 'targetPubkey is required' };
-        return;
-    }
-    try {
-        // Level 1 = -25, 2 = -50, 3 = -100 credit floor. Default to 1 if omitted/invalid.
-        const lvl = level === 2 || level === 3 ? level : 1;
-        vouchMember(voucher, targetPubkey, lvl);
-        ctx.body = { success: true, level: lvl };
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, word('Vouch failed')) };
-    }
-});
-
-// Withdraw a vouch. The original voucher may withdraw their own; the admin may force-revoke.
-// unvouchMember() blocks a non-admin withdrawal while the target is still carrying a negative
-// balance (they'd be stranded below the new floor of 0).
-router.post('/api/profile/unvouch', async (ctx) => {
-    const actor = ctx.state.actor as string | undefined;
-    const { targetPubkey } = (ctx as any).requestBody || {};
-    if (!actor) {
-        ctx.status = 401;
-        ctx.body = { error: 'A signed request is required' };
-        return;
-    }
-    if (!targetPubkey) {
-        ctx.status = 400;
-        ctx.body = { error: 'targetPubkey is required' };
-        return;
-    }
-    try {
-        unvouchMember(actor, targetPubkey);
-        ctx.body = { success: true };
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, word('Withdraw failed')) };
-    }
 });
 
 router.post('/api/ledger/transfer', async (ctx) => {
@@ -2498,7 +2435,6 @@ function directoryMembers(rows: ReturnType<typeof getMemberDirectoryRows>) {
         avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref ?? (r.photo_inline ? MEMBER_PHOTO_INLINE_REF : null)),
         profileUpdatedAt: r.profile_updated_at || null,
         earnedCredit: r.earned_credit ?? 0,
-        elderVouchedBy: r.elder_vouched_by || null,
         archetype: r.archetype || null,
     }));
 }

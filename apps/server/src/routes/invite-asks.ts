@@ -8,7 +8,7 @@
  *   POST /api/invite/asks/:id/withdraw    → { ok: true } | 404 `not_found`
  * An owner or admin, by nodeRoleOf; anyone else 403 `admins_only`:
  *   GET  /api/invite/asks?limit&offset    → { asks: [ask + askerPubkey, askerCallsign], total, limit, offset }
- *   POST /api/invite/asks/:id/send        { vouchLevel? } → { ok: true } | 404 `not_found`
+ *   POST /api/invite/asks/:id/send        → { ok: true } | 404 `not_found`
  *   POST /api/invite/asks/:id/no          { reason? } → { ok: true } | 404 `not_found`
  *
  * All 404 `feature_off` where invites are off (routes/profile-feature-gate.ts). A standby refuses a write, 503 `standby`, and
@@ -16,7 +16,7 @@
  * `checkAdminAuth`, so neither an automation token nor the node password reaches one.
  */
 import Router from '@koa/router';
-import { dispatchPushNotification, isNodeMember, assertMemberActive, getNodeRole, readInviteVouch, readsAsMember } from '../state-engine.js';
+import { dispatchPushNotification, isNodeMember, assertMemberActive, getNodeRole, readsAsMember } from '../state-engine.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { cleanMemberText } from '../agent/fence.js';
 import {
@@ -179,11 +179,9 @@ export function createInviteAskRoutes(deps: RouteDeps): Router {
         const admin = answerer(ctx);
         if (!admin) return;
         if (refusedOnStandby(ctx)) return;
-        const vouch = readInviteVouch(admin, ((ctx as any).requestBody || {}).vouchLevel);
-        if (vouch.refusal) return answer(ctx, vouch.refusal.status, vouch.refusal.error, vouch.refusal.code);
         let outcome: ReturnType<typeof answerWithInvite>;
         try {
-            outcome = answerWithInvite(String(ctx.params.id), admin, vouch.level);
+            outcome = answerWithInvite(String(ctx.params.id), admin);
         } catch (e) {
             if (respondProfileRefusal(ctx, e)) return;
             throw e;

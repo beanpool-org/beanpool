@@ -21,24 +21,13 @@ CREATE TABLE IF NOT EXISTS members (
     contact_visibility TEXT,
     status TEXT DEFAULT 'active',
     last_active_at DATETIME,
-    -- Elder vouch: the Elder who endorsed this member. For a founding member
-    -- (0 completed trades, not genesis pre-seeded) this also lifts the no-overdraft
-    -- floor-gate. Distinct from `invited_by` ("Vouched in by" — who brought them in).
-    elder_vouched_by TEXT REFERENCES members(public_key),
-    -- Vouch capability (the "appointed voucher" / super-Elder switch). Admin-granted only,
-    -- via adminSetVoucher. Handing out the -20 credit floor is the one Sybil-critical power,
-    -- so it is NOT derived from Elder *tier* (an earned cosmetic badge) — it is this flag.
-    can_vouch INTEGER DEFAULT 0,
-    -- The vouch level's credit floor (25/50/100) recorded when an appointed voucher vouches.
-    -- 0 when not vouched. Paired with elder_vouched_by (who vouched).
-    vouch_credit REAL DEFAULT 0,
     -- Hard credit freeze: forced 0 floor when set by admin.
     credit_frozen INTEGER DEFAULT 0,
     -- Community treasury: this "member" is a community-owned account (the Commons' trading
     -- face) — it authors an enterprise's offers/needs and settles escrow, but is exempt from
     -- demurrage and kept out of the member directory. Set once by createTreasury.
     is_treasury INTEGER DEFAULT 0,
-    -- Operator capability (treasury steward). Admin-granted like can_vouch: lets this member
+    -- Operator capability (treasury steward). Admin-granted: lets this member
     -- drive a treasury (post its offers/needs, approve/release its escrow) from the Commons tab.
     -- Named 'operate' to dodge the 'Steward' tier and 'node role' (topology) name collisions.
     can_operate INTEGER DEFAULT 0,
@@ -186,10 +175,6 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- (the joiner is a member either way). Declared here for the same reason as genesis_type.
     names_entry_id TEXT,
     names_bind_outcome TEXT,
-    -- A vouch the invite carries, for someone who can vouch to give in one step (engine/invites.ts): 1, 2 or 3, as core
-    -- vouchCreditForLevel, applied at the redeem by the invite's maker if the maker still may. NULL for every other
-    -- invite. Offline tickets and seed invites never carry one. Declared here for the same reason as genesis_type.
-    vouch_level INTEGER,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -1477,7 +1462,7 @@ CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
     callsign, invited_by, invite_code, home_node_url, avatar_ref, avatar_bytes, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
-    archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
+    archetype, credit_frozen, is_treasury, can_operate, joined_at, public_key,
     legacy_credit_floor, earned_surplus, working_capital_ceiling,
     purpose, goal_amount, deadline_at, lifecycle, paused,
     paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at,

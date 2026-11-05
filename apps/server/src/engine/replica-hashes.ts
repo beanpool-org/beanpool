@@ -112,7 +112,16 @@ export interface TableHashes {
  * server hashes `decision_electors` over two more columns. REPLICA_FORMAT stays: an older importer drops only a juror's
  * Serve and a reminder's time, and no community has a jury until its owners choose one.
  */
-export const TABLE_HASHES_VERSION = 20;
+/**
+ * 21: the vouching reset (R0, db/vouch-reset.ts): members loses elder_vouched_by, can_vouch and vouch_credit, and
+ * invite_codes loses vouch_level. Raised for the same reason as 8, the other way: a standby updated before its main
+ * server hashes `members` and `invite_codes` over fewer columns, so it would read every copy as not exact and force-resync
+ * until the main server is updated; with the version raised, the two compare row counts only until then. REPLICA_FORMAT
+ * stays: each side's import writes only the columns its own table has (engine/sync.ts writeMemberStanding,
+ * engine/plain-tables.ts importTable), so neither refuses the other's rows, and each server's own first boot resets its
+ * own copy the same way.
+ */
+export const TABLE_HASHES_VERSION = 21;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

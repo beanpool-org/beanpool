@@ -30,7 +30,6 @@ import {
     canOperate,
     canOperateTreasury,
     canAdministerTreasury,
-    canVouch,
     keeperOf,
     hasListedOffer,
     hasLiveOffer,
@@ -85,7 +84,6 @@ async function main() {
     const initialTreasury = initialTreasuryRow?.public_key || 'test_initial_treasury';
     assert(canOperate('') === false, "canOperate('') must NOT grant admin override when no active admin exists");
     assert(canOperateTreasury('', initialTreasury) === false, "canOperateTreasury('') must NOT grant admin override when no active admin exists");
-    assert(canVouch('') === false, "canVouch('') must NOT grant vouch override when no active admin exists");
     assert(keeperOf('').length === 0, "keeperOf('') must return empty array when no active admin exists");
     assert(hasListedOffer('') === false, "hasListedOffer('') must return false when no active admin exists");
     assert(hasLiveOffer('') === false, "hasLiveOffer('') must return false when no active admin exists");
@@ -116,7 +114,6 @@ async function main() {
     assert(canOperate(alicePubkey) === true, 'real genesis admin has canOperate override');
     assert(canAdministerTreasury(alicePubkey, farmPubkey) === true, 'real genesis admin has canAdministerTreasury override');
     assert(canOperateTreasury(alicePubkey, farmPubkey) === false, 'admin with no operator binding cannot spend (#774)');
-    assert(canVouch(alicePubkey) === true, 'real genesis admin has canVouch override');
     assert(keeperOf(alicePubkey).length === 0, 'admin keeperOf is empty with no explicit binding (#774)');
     assert(hasListedOffer(alicePubkey) === true, 'real genesis admin has hasListedOffer override');
     assert(hasLiveOffer(alicePubkey) === true, 'real genesis admin has hasLiveOffer override');
@@ -133,7 +130,6 @@ async function main() {
     // Negative assertions for empty actor string on a node WITH an active genesis member:
     assert(canOperate('') === false, "canOperate('') must NOT grant admin override when an active admin exists");
     assert(canOperateTreasury('', farmPubkey) === false, "canOperateTreasury('') must NOT grant admin override when an active admin exists");
-    assert(canVouch('') === false, "canVouch('') must NOT grant vouch override when an active admin exists");
     assert(keeperOf('').length === 0, "keeperOf('') must return empty array when an active admin exists");
     assert(hasListedOffer('') === false, "hasListedOffer('') must return false when an active admin exists");
     assert(hasLiveOffer('') === false, "hasLiveOffer('') must return false when an active admin exists");
@@ -152,7 +148,6 @@ async function main() {
     // Negative assertions for empty actor when all genesis members are inactive:
     assert(canOperate('') === false, "canOperate('') must NOT grant admin override when all genesis members are inactive");
     assert(canOperateTreasury('', farmPubkey) === false, "canOperateTreasury('') must NOT grant admin override when all genesis members are inactive");
-    assert(canVouch('') === false, "canVouch('') must NOT grant vouch override when all genesis members are inactive");
     assert(keeperOf('').length === 0, "keeperOf('') must return empty array when all genesis members are inactive");
     assert(hasListedOffer('') === false, "hasListedOffer('') must return false when all genesis members are inactive");
     assert(hasLiveOffer('') === false, "hasLiveOffer('') must return false when all genesis members are inactive");

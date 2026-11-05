@@ -47,7 +47,7 @@ apps/native/
 │   ├── CategoryPickerSheet.tsx  # Bottom sheet for marketplace category selection
 │   ├── MyDealsSheet.tsx         # Bottom sheet for viewing active deals (offers/needs in escrow)
 │   ├── PostAuthorTrust.tsx      # Trust badge display for post authors (ratings, join date)
-│   ├── TrustPickerSheet.tsx     # Bottom sheet for Elders to vouch for newcomers
+│   ├── TrustPickerSheet.tsx     # Bottom sheet for the market's trust-level filter
 │   ├── PhotoCarousel.tsx        # Carousel element for viewing post photos
 │   ├── InfoModal.tsx            # Generic info popover gate component
 │   └── info-content/            # 10 dedicated text templates for info modals (Balance, Circulation, Trust, etc.)

@@ -260,8 +260,6 @@ describe('the propose form on Beans off (utils/beans-off.ts)', () => {
             'suspend_member',
             'unsuspend_member',
             'reinstate_member',
-            'grant_voucher',
-            'revoke_voucher',
         ]);
         expect(memberEffects).not.toContain('freeze_credit');
         expect(memberEffects).not.toContain('unfreeze_credit');
@@ -281,8 +279,6 @@ describe('the propose form on Beans off (utils/beans-off.ts)', () => {
                 'reinstate_member',
                 'freeze_credit',
                 'unfreeze_credit',
-                'grant_voucher',
-                'revoke_voucher',
                 'remove_lead_keeper',
             ]);
             expect(decisionEffectsFor('pool', f)).toEqual([

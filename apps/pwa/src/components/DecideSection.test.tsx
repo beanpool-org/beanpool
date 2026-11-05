@@ -18,7 +18,7 @@ const decisionCard = (id: string, franchise: '1m1v' | 'quadratic_trade', myVote:
     title: `Decision ${id}`,
     description: 'A decision for the test',
     touches: franchise === '1m1v' ? 'member' : 'pool',
-    effect: franchise === '1m1v' ? 'grant_voucher' : 'grant_enterprise',
+    effect: franchise === '1m1v' ? 'freeze_credit' : 'grant_enterprise',
     subject: 'subject',
     params: franchise === '1m1v' ? null : { amount: 50 },
     franchise,

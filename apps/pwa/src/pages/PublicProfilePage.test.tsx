@@ -49,12 +49,9 @@ const mockProfile: MemberProfile = {
     avatar: null,
     bio: 'Test bio',
     role: 'member',
-    elderVouchedBy: null,
     stats: {
-        totalVouchesGiven: 0,
         ratingsReceivedCount: 0,
         averageRating: 0,
-        vouchesReceivedCount: 0,
     },
 } as any;
 
@@ -94,7 +91,6 @@ vi.mock('../lib/api', () => ({
     addFriendApi: vi.fn(async () => ({ success: true })),
     removeFriendApi: vi.fn(async () => ({ success: true })),
     submitRating: vi.fn(),
-    vouchMemberApi: vi.fn(),
     getPublicChannels: vi.fn(async () => []),
     getTreasury: vi.fn(async () => mockTreasuryDetail),
     getTreasuryDetail: vi.fn(async () => mockTreasuryDetail),

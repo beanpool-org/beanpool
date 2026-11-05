@@ -931,14 +931,14 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     grantedCredit: number;
     /** The known grant (community modes slice 4): 0 unless the confirmation dial is on and the member is confirmed. */
     knownGrant: number;
-    /** vouch + earned + granted, before the cap: the part the offer bands meter. */
+    /** earned + granted, before the cap: the part the offer bands meter. */
     otherAllowance: number;
     /** An admin froze this confirmed member's known floor (known_floor_exceptions.frozen): no known line while it lasts. */
     knownFrozen: boolean;
     /** An admin froze this member's whole credit line (members.credit_frozen, the manager's "Freeze"): no line while it lasts. */
     creditFrozen: boolean;
     /**
-     * The credit `tier` is read from (tierForCredit(tierCredit) is `tier`): what the member did, vouch + earned + granted
+     * The credit `tier` is read from (tierForCredit(tierCredit) is `tier`): what the member did, earned + granted
      * under the cap, never the known grant (an enterprise: its line less its keepers' known pledges). A freeze doesn't move
      * it. A post card's badge takes it, so every surface shows the same tier.
      */
@@ -946,12 +946,11 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
-    vouched: boolean;
     activated: boolean;
 } {
     const stats = getMemberTrustStats(db, publicKey);
 
-    const memberRow = prepared(db, "SELECT earned_credit, elder_vouched_by, vouch_credit, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
+    const memberRow = prepared(db, "SELECT earned_credit, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
     const isTreasury = memberRow?.is_treasury === 1;
 
     // Enterprise Derived Floor model (docs/the-commons.md §2.4, §6 Slice 4)
@@ -974,7 +973,6 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
             qualifiedValue: 0,
             avgRating: 5.0,
             reviewCount: 0,
-            vouched: false,
             activated: ef.activated,
             knownFrozen: false,
             creditFrozen: false,
@@ -982,15 +980,11 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
         };
     }
 
-    // GRANTED-credit lane: genesis pre-seed + admin Elder grants (adminSetElder) + Elder vouch.
+    // GRANTED-credit lane: genesis pre-seed + admin Elder grants (adminSetElder).
     // Stored in members.earned_credit (legacy column name). It is a credit-*limit* input only —
     // it mints/moves no beans — and it is kept SEPARATE from the earned score, so grants deepen
     // the floor but never count as "earned" (governance votes use earned/value only, not grants).
     const grantedCredit = memberRow?.earned_credit || 0;
-    const elderVouched = !!memberRow?.elder_vouched_by;
-    // The vouch level's credit floor (25/50/100). A vouch recorded before the level system, or
-    // with no stored amount, defaults to the light level.
-    const vouchCredit = elderVouched ? (memberRow?.vouch_credit > 0 ? memberRow.vouch_credit : PROTOCOL_CONSTANTS.VOUCH_CREDIT_LIGHT) : 0;
     const isCreditFrozen = memberRow?.credit_frozen === 1;
 
     const c = PROTOCOL_CONSTANTS;
@@ -1014,26 +1008,25 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     const multiplier = reviewCount > 0 ? (0.5 + 0.5 * (avgRating / 5.0)) : 1.0;
     const earnedCredit = Math.max(0, Math.floor(rawEarned * multiplier));
 
-    // Activation gate — a member has NO credit line at all (floor stays at 0; no overdraft) until an
-    // appointed voucher vouches for them, or an admin/genesis grant graduates a founding member.
-    // Trust Model v3: a completed real trade (earnedCredit > 0) opens the floor on its own — no
-    // vouch required. Restores the documented behaviour (docs/trust-model-shipped.md §1).
+    // Activation gate — a member has NO credit line at all (floor stays at 0; no overdraft) until a
+    // completed real trade (earnedCredit > 0) opens it (Trust Model v3, docs/trust-model-shipped.md §1),
+    // an admin/genesis grant graduates a founding member, or an admin confirms them (the known grant).
     // The known floor (community modes slice 4): a confirmed member's grant, and the community's cap (default
     // CREDIT_FLOOR_CAP). With the confirmation dial off both are today's: knownGrant 0, cap 2,000.
     // Less what of it they have pledged to enterprises (known-floor.ts: own line + known pledges <= their grant).
     const knownGrant = memberUsableKnownGrant(db, publicKey, extraKnownPledged);
     const cap = creditCap(db);
-    const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0 || knownGrant > 0;
-    const otherAllowance = vouchCredit + earnedCredit + grantedCredit;
+    const activated = grantedCredit > 0 || earnedCredit > 0 || knownGrant > 0;
+    const otherAllowance = earnedCredit + grantedCredit;
     const allowance = (activated && !isCreditFrozen)
         ? Math.min(cap, knownGrant + otherAllowance)
         : 0;
 
-    // Floor = -(voucher + earned + granted) once activated, clamped so the deepest floor is
-    // -CREDIT_FLOOR_CAP; 0 for an un-vouched member. CREDIT_BASE_FLOOR is 0 — no baked-in overdraft.
+    // Floor = -(known + earned + granted) once activated, clamped so the deepest floor is the community's
+    // cap; 0 for a member with none of them. CREDIT_BASE_FLOOR is 0 — no baked-in overdraft.
     const floor = c.CREDIT_BASE_FLOOR - allowance;
 
-    // The tier counts what the member did: vouch + earned + granted, under the same cap (Marty, 21 Oct: "Badge counts what
+    // The tier counts what the member did: earned + granted, under the same cap (Marty, 21 Oct: "Badge counts what
     // they did only"). The known grant is the admins' confirmation, which stays private, and every member reads the tier
     // (a post card's badge, the trust profile), so it never counts towards it: a confirmed member's limit is higher than
     // their badge. A freeze takes the line away, not the tier: tiers are merit badges, and a frozen member keeps the one
@@ -1046,6 +1039,6 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
     // multiplier inputs, surfaced so the client can show them honestly.
-    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated, knownFrozen, creditFrozen: isCreditFrozen, tierCredit };
+    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, activated, knownFrozen, creditFrozen: isCreditFrozen, tierCredit };
 }
 

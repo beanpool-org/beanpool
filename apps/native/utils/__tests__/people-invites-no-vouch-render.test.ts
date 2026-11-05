@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * Vouch for them on the phone, the whole of app/(tabs)/people.tsx rendered for real (the mount of
- * showcase-people-render.test.ts): who sees the control, what goes to the node, and that a level never turns into an offline
- * ticket, which would carry none while the voucher believed it had. Its fetch is a fake node: nothing leaves the test.
- * askCanVouch, which answers who can vouch, is driven through the real utils/db.ts in invite-vouch-right.test.ts.
+ * People → Invites after the vouching reset (R0, DESIGN-invites-and-names-list-amend2-fable.md §1.3): the whole of
+ * app/(tabs)/people.tsx rendered for real (the mount of showcase-people-render.test.ts) on a local community with Beans and
+ * invites. The screen offers no vouch and says no vouch word; an invite's body is the member's key and nothing else; a dropped
+ * connection still makes the offline ticket, as it always did. Its fetch is a fake node: nothing leaves the test.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
@@ -84,13 +84,11 @@ vi.mock('../../app/ThemeContext', async () => {
         useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }),
     };
 });
-vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { publicKey: 'a-voucher-key', callsign: 'Robin', privateKey: 'aa' } }) }));
+vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: { publicKey: 'a-member-key', callsign: 'Robin', privateKey: 'aa' } }) }));
 
-const who = vi.hoisted(() => ({ canVouch: true, asked: 0 }));
 const tickets = vi.hoisted(() => ({ made: 0 }));
 const never = () => new Promise<never>(() => {});
 vi.mock('../db', () => ({
-    askCanVouch: async () => { who.asked++; return who.canVouch; },
     getDb: () => new Promise<never>(() => {}), getFriendsLocal: async () => [], addFriendLocal: () => new Promise<never>(() => {}),
     removeFriendLocal: () => new Promise<never>(() => {}), createConversationApi: () => new Promise<never>(() => {}),
 }));
@@ -115,15 +113,15 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElem
 vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 
 import PeopleScreen from '../../app/(tabs)/people';
-import { INVITE_VOUCH_WORDS, t } from '@beanpool/core';
+import { t } from '@beanpool/core';
 
 const NODE = 'https://node.example';
-const LOCAL = { beans: true, invites: true, inviteVouch: true, showcase: false };
+const LOCAL = { beans: true, invites: true, showcase: false };
 const rememberProfile = (features: Record<string, boolean>) =>
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features, checkedAt: new Date().toISOString() } }));
 
-/** The fake node: the last bodies it took, and how it answers the next invite. */
-const node = { made: [] as Array<Record<string, unknown>>, down: false, refusal: null as null | { status: number; body: unknown } };
+/** The fake node: the bodies it took, and whether it can be reached. */
+const node = { made: [] as Array<Record<string, unknown>>, down: false };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 let host: HTMLDivElement;
@@ -135,20 +133,16 @@ beforeEach(() => {
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     rememberProfile(LOCAL);
-    who.canVouch = true;
-    who.asked = 0;
     tickets.made = 0;
     alerts.said.length = 0;
     node.made = [];
     node.down = false;
-    node.refusal = null;
     globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
         const u = String(url);
         if (u.endsWith('/api/invite/generate')) {
             if (node.down) throw new TypeError('Network request failed');
             node.made.push(JSON.parse(String(init?.body)));
-            if (node.refusal) return json(node.refusal.body, node.refusal.status);
-            return json({ success: true, invite: { code: 'INV-TEST-0001' } });
+            return json({ success: true, invite: { code: `INV-TEST-000${node.made.length}` } });
         }
         if (u.endsWith('/api/community/health')) return json({ ok: true });
         if (u.includes('/api/invite/mine/')) return json({ invites: [] });
@@ -159,8 +153,6 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const settle = async () => { for (let i = 0; i < 8; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 const open = async () => { await act(async () => { root.render(createElement(PeopleScreen) as any); }); await settle(); };
-const radios = () => Array.from(host.querySelectorAll('[role="radio"]')).map((r) => `${r.getAttribute('aria-label')}:${r.getAttribute('aria-checked')}`);
-const pick = async (level: number) => { await act(async () => { (host.querySelector(`[data-testid="invite-vouch-${level}"]`) as HTMLElement).click(); }); await settle(); };
 const generate = async () => {
     const button = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Generate'));
     expect(button, 'the Generate button').toBeTruthy();
@@ -168,76 +160,27 @@ const generate = async () => {
     await settle();
 };
 
-describe('who sees Vouch for them', () => {
-    it('someone who can vouch: four named choices, None on', async () => {
+describe('People → Invites offers no vouch (the vouching reset, R0)', () => {
+    it('no vouch control and no vouch word', async () => {
         await open();
-        expect(who.asked).toBe(1);
-        expect(radios()).toEqual(['None:true', '25 Beans:false', '50 Beans:false', '100 Beans:false']);
+        expect(host.textContent).toContain(t('📤 Invite Someone'));
+        expect(host.textContent).toContain('Generate');
+        expect(host.querySelectorAll('[role="radio"]')).toHaveLength(0);
+        expect(host.textContent).not.toMatch(/vouch/i);
+        expect(Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label')).join(' | ')).not.toMatch(/vouch/i);
     });
 
-    it('a member who can\'t vouch: no control', async () => {
-        who.canVouch = false;
-        await open();
-        expect(radios()).toEqual([]);
-        expect(host.querySelector('[data-testid="invite-vouch"]')).toBeNull();
-    });
-
-    it('a node that doesn\'t say an invite can carry one (Beans off, or older): no control, and nothing asked', async () => {
-        rememberProfile({ beans: true, invites: true, showcase: false });
-        await open();
-        expect(radios()).toEqual([]);
-        expect(who.asked).toBe(0);
-    });
-
-    it('a phone that can\'t reach the node: no control, so the button is the offline ticket as ever', async () => {
-        (globalThis.fetch as any).mockImplementation(async () => { throw new TypeError('Network request failed'); });
-        await open();
-        expect(radios()).toEqual([]);
-        expect(host.textContent).toContain('Generate Offline Ticket');
-    });
-});
-
-describe('what goes to the node', () => {
-    it('None sends no level at all: the body as it always was', async () => {
+    it('an invite\'s body is the member\'s key and nothing else, the first time and the next', async () => {
         await open();
         await generate();
-        expect(node.made).toHaveLength(1);
-        expect(Object.keys(node.made[0]).sort()).toEqual(['publicKey']);
+        await generate();
+        expect(node.made).toHaveLength(2);
+        for (const body of node.made) expect(Object.keys(body).sort()).toEqual(['publicKey']);
+        expect(alerts.said).toEqual([]);
+        expect(host.textContent).not.toMatch(/vouch/i);
     });
 
-    it('sends the level picked, then goes back to None so a second invite carries nothing by accident', async () => {
-        await open();
-        await pick(2);
-        expect(radios()).toEqual(['None:false', '25 Beans:false', '50 Beans:true', '100 Beans:false']);
-        await generate();
-        expect(node.made[0]).toMatchObject({ publicKey: 'a-voucher-key', vouchLevel: 2 });
-        expect(radios()[0]).toBe('None:true');
-        await generate();
-        expect(node.made[1]).not.toHaveProperty('vouchLevel');
-    });
-});
-
-describe('a level never turns into a ticket', () => {
-    it('the node refuses: its words, no ticket, and the choice stays for the member to change', async () => {
-        node.refusal = { status: 403, body: { error: INVITE_VOUCH_WORDS.notAVoucher, code: 'not_a_voucher' } };
-        await open();
-        await pick(3);
-        await generate();
-        expect(alerts.said).toEqual([[t('Could not vouch'), t(INVITE_VOUCH_WORDS.notAVoucher)]]);
-        expect(tickets.made).toBe(0);
-        expect(radios()[3]).toBe('100 Beans:true');
-    });
-
-    it('the connection goes after a level was picked: it says so, and makes no ticket', async () => {
-        await open();
-        await pick(1);
-        node.down = true;
-        await generate();
-        expect(alerts.said).toEqual([[t('Could not vouch'), t(INVITE_VOUCH_WORDS.noOfflineVouch)]]);
-        expect(tickets.made).toBe(0);
-    });
-
-    it('on None, a dropped connection still makes the ticket, as it always did', async () => {
+    it('a dropped connection still makes the offline ticket, as it always did', async () => {
         await open();
         node.down = true;
         await generate();

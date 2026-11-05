@@ -21,7 +21,7 @@ vi.mock('../lib/features', async () => {
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
     return {
-        ...actual, myNodeRoleOnce: vi.fn(), request: vi.fn(), getBalance: vi.fn(),
+        ...actual, myNodeRoleOnce: vi.fn(), request: vi.fn(),
         getMyEvents: vi.fn(async () => []), getNotificationPreferences: vi.fn(async () => ({})), getNodeApiUrl: () => 'https://mullum.beanpool.org',
     };
 });
@@ -48,7 +48,6 @@ const community = (f: Record<string, unknown>) => vi.mocked(features.useCommunit
 beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.request).mockResolvedValue({ role: null });
-    vi.mocked(api.getBalance).mockResolvedValue({ canVouch: false } as any);
 });
 afterEach(() => cleanup());
 

@@ -34,6 +34,7 @@ vi.mock('../lib/visitor-lobby-gate', () => ({
 vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 
 import { InvitePage } from './InvitePage';
+import { generateInvite } from '../lib/api';
 import { backToEnglish, bracketed, bypassing, showIn, xx } from '../words-xx.test-support';
 
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Ana', createdAt: '2026-10-01T00:00:00.000Z' };
@@ -110,5 +111,20 @@ describe('the Invites page in the pseudo-locale', () => {
         fireEvent.click(screen.getByRole('button', { name: '🌳 Tree' }));
         expect(await screen.findByText('Joined 3 Oct 2026 · 1 invite')).toBeInTheDocument();
         expect(bracketed()).toBe(0);
+    });
+
+    it('nothing on it says vouch (the reset, R0): the codes, a new code and the tree, and the invite asks with the key alone', async () => {
+        vi.mocked(generateInvite).mockClear();
+        render(<InvitePage identity={IDENTITY} />);
+        expect(await screen.findByText('For: Kim')).toBeInTheDocument();
+        expect(screen.queryByRole('radio')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/vouch/i);
+        fireEvent.click(screen.getByRole('button', { name: /Generate New Invite/ }));
+        await waitFor(() => expect(generateInvite).toHaveBeenCalledTimes(1));
+        expect(generateInvite).toHaveBeenCalledWith(IDENTITY.publicKey, undefined);
+        expect(document.body.textContent).not.toMatch(/vouch/i);
+        fireEvent.click(screen.getByRole('button', { name: '🌳 Tree' }));
+        expect(await screen.findByText('Joined 3 Oct 2026 · 1 invite')).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/vouch/i);
     });
 });

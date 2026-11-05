@@ -18,7 +18,7 @@
  *    - Ties fail
  * 4. Tick-driven close without admin intervention (7-day window)
  * 5. Pre-flight assertions & execution_void for dead subjects
- * 6. Reversible member effects (suspend/unsuspend, freeze/unfreeze, voucher, remove lead keeper)
+ * 6. Reversible member effects (suspend/unsuspend, freeze/unfreeze, remove lead keeper)
  * 7. Pool grants to an enterprise with auth_signer='system:decision:<id>' and conservation audit
  * 8. Underfunded grants -> passed_queued_for_funds queue, auto-execution when funded, 90-day expiry
  * 9. Destructive member removal: 7-day grace period, immediate suspension, admin halt with reason, admin accelerate, auto-prune on grace expiry
@@ -392,37 +392,6 @@ async function runDecisionsSuite() {
     tickDecisions();
     testAssert((db.prepare("SELECT credit_frozen FROM members WHERE public_key = ?").get(targetUser) as any).credit_frozen === 0, 'Member credit unfrozen by restoration decision');
 
-    // Test grant_voucher / revoke_voucher
-    const decVoucher = createDecision({
-        authorPubkey: admin,
-        title: 'Grant voucher capability to Alice',
-        description: 'Appoint voucher',
-        touches: 'member',
-        effect: 'grant_voucher',
-        subject: m1,
-    });
-    castDecisionVote(decVoucher.id, voterA, true);
-    castDecisionVote(decVoucher.id, voterB, true);
-    castDecisionVote(decVoucher.id, voterC, true);
-    closeForTick(decVoucher.id);
-    tickDecisions();
-    testAssert((db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(m1) as any).can_vouch === 1, 'Alice granted can_vouch=1');
-
-    const decRevokeVoucher = createDecision({
-        authorPubkey: admin,
-        title: 'Revoke voucher capability from Alice',
-        description: 'Revocation',
-        touches: 'member',
-        effect: 'revoke_voucher',
-        subject: m1,
-    });
-    castDecisionVote(decRevokeVoucher.id, voterA, true);
-    castDecisionVote(decRevokeVoucher.id, voterB, true);
-    castDecisionVote(decRevokeVoucher.id, voterC, true);
-    closeForTick(decRevokeVoucher.id);
-    tickDecisions();
-    testAssert((db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(m1) as any).can_vouch === 0, 'Alice voucher capability revoked (can_vouch=0)');
-
     // ── 5. Dead Subjects & Preflight Assertion ──────────────────────────────
     console.log('\n--- 5. Dead Subjects & Preflight Assertion ---');
 
@@ -644,17 +613,17 @@ async function runDecisionsSuite() {
     testAssert(rerun.success && rerun.status === 'executed', 'executeDecision is idempotent on executed decisions');
 
     // Rollback test: an execution that throws inside the transaction. A temporary trigger makes the
-    // grant_voucher write fail part-way, the way a real constraint violation would.
-    const m1VouchBefore = (db.prepare('SELECT can_vouch FROM members WHERE public_key = ?').get(m1) as any).can_vouch;
-    db.exec(`CREATE TRIGGER zz_block_vouch_m1 BEFORE UPDATE OF can_vouch ON members
-             WHEN NEW.public_key = '${m1}' BEGIN SELECT RAISE(ABORT, 'vouch blocked by test'); END;`);
-    const badDecision = { id: insertStoredDecision({ author: admin, effect: 'grant_voucher', touches: 'member', subject: m1 }) };
+    // freeze_credit write fail part-way, the way a real constraint violation would.
+    const m1FrozenBefore = (db.prepare('SELECT credit_frozen FROM members WHERE public_key = ?').get(m1) as any).credit_frozen;
+    db.exec(`CREATE TRIGGER zz_block_freeze_m1 BEFORE UPDATE OF credit_frozen ON members
+             WHEN NEW.public_key = '${m1}' BEGIN SELECT RAISE(ABORT, 'freeze blocked by test'); END;`);
+    const badDecision = { id: insertStoredDecision({ author: admin, effect: 'freeze_credit', touches: 'member', subject: m1 }) };
     const execBadRes = executeDecision(badDecision.id);
-    db.exec('DROP TRIGGER zz_block_vouch_m1');
+    db.exec('DROP TRIGGER zz_block_freeze_m1');
     testAssert(!execBadRes.success && execBadRes.status === 'execution_blocked', 'Failed execution rolls back to execution_blocked');
     testAssert(getDecision(badDecision.id)!.status === 'execution_blocked', 'Decision status persisted as execution_blocked');
-    const m1VouchAfter = (db.prepare('SELECT can_vouch FROM members WHERE public_key = ?').get(m1) as any).can_vouch;
-    testAssert(m1VouchAfter === m1VouchBefore, `A failed execution leaves the member unchanged (can_vouch ${m1VouchBefore} -> ${m1VouchAfter})`);
+    const m1FrozenAfter = (db.prepare('SELECT credit_frozen FROM members WHERE public_key = ?').get(m1) as any).credit_frozen;
+    testAssert(m1FrozenAfter === m1FrozenBefore, `A failed execution leaves the member unchanged (credit_frozen ${m1FrozenBefore} -> ${m1FrozenAfter})`);
 
     // Effects removed on 2026-09-19 (did nothing, or voted on earned standing) cannot be proposed at all.
     for (const [effect, touches] of [
@@ -679,7 +648,7 @@ async function runDecisionsSuite() {
         title: 'Vote check decision',
         description: 'Testing vote validation',
         touches: 'member',
-        effect: 'grant_voucher',
+        effect: 'freeze_credit',
         subject: m1,
     });
     const nanVoteRes = castDecisionVote(decForVoteCheck.id, voterA, true, NaN);
@@ -706,9 +675,9 @@ async function runDecisionsSuite() {
 
     // Head-of-line blocking resilience in tickDecisions:
     // Create an expired decision with broken params that throws, plus a normal valid expired decision
-    db.exec(`CREATE TRIGGER zz_block_vouch_hol BEFORE UPDATE OF can_vouch ON members
-             WHEN NEW.public_key = '${m1}' BEGIN SELECT RAISE(ABORT, 'vouch blocked by test'); END;`);
-    const brokenExpiredDec = { id: insertStoredDecision({ author: voterB, effect: 'grant_voucher', touches: 'member', subject: m1 }) };
+    db.exec(`CREATE TRIGGER zz_block_freeze_hol BEFORE UPDATE OF credit_frozen ON members
+             WHEN NEW.public_key = '${m1}' BEGIN SELECT RAISE(ABORT, 'freeze blocked by test'); END;`);
+    const brokenExpiredDec = { id: insertStoredDecision({ author: voterB, effect: 'freeze_credit', touches: 'member', subject: m1 }) };
     castDecisionVote(brokenExpiredDec.id, voterA, true, 1);
     castDecisionVote(brokenExpiredDec.id, voterC, true, 1);
     castDecisionVote(brokenExpiredDec.id, admin, true, 1);
@@ -721,7 +690,7 @@ async function runDecisionsSuite() {
         title: 'Good expired decision following broken one',
         description: 'Should still execute',
         touches: 'member',
-        effect: 'grant_voucher',
+        effect: 'freeze_credit',
         subject: targetGoodMember,
         params: {},
     });
@@ -731,7 +700,7 @@ async function runDecisionsSuite() {
     closeForTick(goodExpiredDec.id);
 
     tickDecisions();
-    db.exec('DROP TRIGGER zz_block_vouch_hol');
+    db.exec('DROP TRIGGER zz_block_freeze_hol');
     testAssert(getDecision(brokenExpiredDec.id)!.status === 'execution_blocked', 'Failing expired decision isolated as execution_blocked');
     testAssert(getDecision(goodExpiredDec.id)!.status === 'executed', 'Subsequent expired decision executed successfully without HOL blocking');
 

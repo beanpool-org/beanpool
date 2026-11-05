@@ -92,8 +92,6 @@ export function decisionEffectsFor(touch: DecisionTouch, features: NodeFeatures 
             'reinstate_member',
             'freeze_credit',
             'unfreeze_credit',
-            'grant_voucher',
-            'revoke_voucher',
             'remove_lead_keeper',
         ];
     }
@@ -101,8 +99,6 @@ export function decisionEffectsFor(touch: DecisionTouch, features: NodeFeatures 
         'suspend_member',
         'unsuspend_member',
         'reinstate_member',
-        'grant_voucher',
-        'revoke_voucher',
     ];
 }
 

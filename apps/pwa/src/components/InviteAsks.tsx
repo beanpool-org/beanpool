@@ -10,10 +10,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
     INVITE_ASK_LIMITS, INVITE_ASK_WORDS, formatDate, inviteAskAnswerWords, inviteAskReady, t,
-    type InviteAskAnswer, type InviteAskToAnswer, type InviteAskWaiting, type VouchLevel,
+    type InviteAskAnswer, type InviteAskToAnswer, type InviteAskWaiting,
 } from '@beanpool/core';
 import { askAnAdmin, readAsksToAnswer, readMyAsks, sayNoToAsk, sendInviteForAsk, takeBackAsk } from '../lib/invite-asks';
-import { InviteVouchChoice } from './InviteVouchChoice';
 import { useDialogFocus } from './dialog-focus';
 
 const askedWords = (iso: string) => t(INVITE_ASK_WORDS.asked, { date: formatDate(new Date(iso), 'day-month-year') });
@@ -148,11 +147,10 @@ export function AskAnAdmin({ onCopy, onShare }: { onCopy: (code: string) => void
     );
 }
 
-function AskCard({ ask, offersVouch, busy, onSend, onNo }: {
-    ask: InviteAskToAnswer; offersVouch: boolean; busy: boolean;
-    onSend: (level: VouchLevel | null) => void; onNo: (reason: string) => void;
+function AskCard({ ask, busy, onSend, onNo }: {
+    ask: InviteAskToAnswer; busy: boolean;
+    onSend: () => void; onNo: (reason: string) => void;
 }) {
-    const [level, setLevel] = useState<VouchLevel | null>(null);
     const [saying, setSaying] = useState(false);
     const [reason, setReason] = useState('');
     return (
@@ -172,20 +170,17 @@ function AskCard({ ask, offersVouch, busy, onSend, onNo }: {
                     </div>
                 </form>
             ) : (
-                <>
-                    <div className="mt-3">{offersVouch && <InviteVouchChoice value={level} onChange={setLevel} />}</div>
-                    <div className="flex flex-wrap gap-2">
-                        <button type="button" className={STRONG} onClick={() => onSend(level)} disabled={busy} data-testid={`invite-ask-invite-${ask.id}`}>{t(INVITE_ASK_WORDS.sendInvite)}</button>
-                        <button type="button" className={QUIET} onClick={() => setSaying(true)} disabled={busy} data-testid={`invite-ask-no-${ask.id}`}>{t(INVITE_ASK_WORDS.say)}</button>
-                    </div>
-                </>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className={STRONG} onClick={onSend} disabled={busy} data-testid={`invite-ask-invite-${ask.id}`}>{t(INVITE_ASK_WORDS.sendInvite)}</button>
+                    <button type="button" className={QUIET} onClick={() => setSaying(true)} disabled={busy} data-testid={`invite-ask-no-${ask.id}`}>{t(INVITE_ASK_WORDS.say)}</button>
+                </div>
             )}
         </div>
     );
 }
 
 /** For an owner or admin: the asks waiting, oldest first. The node answers anyone else 403, and there is no section. */
-export function InviteAsksToAnswer({ offersVouch }: { offersVouch: boolean }) {
+export function InviteAsksToAnswer() {
     const [asks, setAsks] = useState<InviteAskToAnswer[] | null>(null);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
@@ -211,9 +206,8 @@ export function InviteAsksToAnswer({ offersVouch }: { offersVouch: boolean }) {
                 <AskCard
                     key={ask.id}
                     ask={ask}
-                    offersVouch={offersVouch}
                     busy={busy}
-                    onSend={level => void answer(sendInviteForAsk(ask.id, level), t(INVITE_ASK_WORDS.sent))}
+                    onSend={() => void answer(sendInviteForAsk(ask.id), t(INVITE_ASK_WORDS.sent))}
                     onNo={reason => void answer(sayNoToAsk(ask.id, reason), t(INVITE_ASK_WORDS.told))}
                 />
             ))}

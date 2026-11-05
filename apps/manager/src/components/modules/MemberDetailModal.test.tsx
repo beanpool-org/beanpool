@@ -10,7 +10,6 @@ describe('MemberDetailModal', () => {
         publicKey: 'pubkey-1234567890-abcdef',
         platform: 'ios',
         standing: 'Citizen',
-        vouched_by_pubkey: 'root-pubkey-001',
         joinedAt: '2026-01-01T00:00:00Z',
         lastActiveAt: '2026-08-20T12:00:00Z',
     };
@@ -68,24 +67,21 @@ describe('MemberDetailModal', () => {
         expect(handleToggleFreeze).toHaveBeenCalledWith('pubkey-1234567890-abcdef');
     });
 
-    it('handles vouch and operator toggles when provided', async () => {
-        const handleToggleVouch = vi.fn();
+    it('handles the operator toggle when provided, and has no voucher switch (the reset, R0)', async () => {
         const handleToggleOperator = vi.fn();
         render(
             <MemberDetailModal
                 member={mockMember}
                 isFrozen={false}
-                isVoucher={false}
                 isOperator={false}
                 onToggleFreeze={vi.fn()}
-                onToggleVouch={handleToggleVouch}
                 onToggleOperator={handleToggleOperator}
                 onClose={vi.fn()}
             />
         );
 
-        await userEvent.click(screen.getByText('🛡️ Promote'));
-        expect(handleToggleVouch).toHaveBeenCalledWith('pubkey-1234567890-abcdef', false);
+        expect(screen.queryByText(/Promote|Demote/)).toBeNull();
+        expect(document.body.textContent).not.toMatch(/vouch/i);
 
         await userEvent.click(screen.getByText('🏛️ Grant Operator'));
         expect(handleToggleOperator).toHaveBeenCalledWith('pubkey-1234567890-abcdef', false);

@@ -58,7 +58,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         setItem: vi.fn(async () => {}),
     },
 }));
-vi.mock('../db', () => ({ signedRequestWithMethod: vi.fn(), signedGet: vi.fn(), askCanVouch: vi.fn(async () => false) }));
+vi.mock('../db', () => ({ signedRequestWithMethod: vi.fn(), signedGet: vi.fn() }));
 vi.mock('../nodes', () => ({ isGuestNode: vi.fn(async () => false) }));
 vi.mock('../use-node-profile', () => ({ useNodeProfile: () => mockState.profile }));
 vi.mock('../node-admin', () => ({

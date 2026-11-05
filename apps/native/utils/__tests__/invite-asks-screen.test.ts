@@ -72,7 +72,7 @@ const type = async (el: HTMLElement | null, text: string) => {
 };
 const mount = async (el: unknown) => { await act(async () => { root.render(el as any); }); await flush(); };
 const member = (onShare = vi.fn()) => mount(createElement(AskAnAdmin, { anchorUrl: 'https://node.example', identity: IDENTITY, onShare }));
-const admin = (offersVouch = false) => mount(createElement(InviteAsksToAnswer, { anchorUrl: 'https://node.example', identity: IDENTITY, offersVouch }));
+const admin = () => mount(createElement(InviteAsksToAnswer, { anchorUrl: 'https://node.example', identity: IDENTITY }));
 const posted = () => node.calls.filter((c) => c.body !== undefined);
 
 beforeEach(() => {
@@ -154,23 +154,16 @@ describe('answering on the phone', () => {
         expect(host.textContent).toBe('');
     });
 
-    it('names who asked, and sends an invite with None by default', async () => {
+    // The vouching reset (R0): an invite sent for an ask carries no vouch, and the card says no vouch word.
+    it('names who asked, and sends an invite that carries nothing but itself', async () => {
         node.get['/api/invite/asks'] = { asks: [ASK], total: 1 };
         await admin();
         expect(by('invite-ask-a1')?.textContent).toContain('Asked by Mel');
-        expect(by('invite-vouch')).toBeNull();
+        expect(host.textContent).not.toMatch(/vouch/i);
         node.get['/api/invite/asks'] = { asks: [], total: 0 };
         await click(by('invite-ask-invite-a1'));
         expect(posted()).toEqual([{ path: '/api/invite/asks/a1/send', body: {} }]);
         expect(host.textContent).toContain('Sent. The code is with the member now.');
-    });
-
-    it('offers the vouch to someone who can give one, and sends the level chosen', async () => {
-        node.get['/api/invite/asks'] = { asks: [ASK], total: 1 };
-        await admin(true);
-        await click(by('invite-vouch-2'));
-        await click(by('invite-ask-invite-a1'));
-        expect(posted()[0].body).toEqual({ vouchLevel: 2 });
     });
 
     it('No opens a short reason, and sends it', async () => {

@@ -12,13 +12,13 @@ import {
     getAllMembers, getAllProfiles, getMember, getAdminMembersPage, parseAdminMemberPageKey, getAdminMemberCounts, type Member,
     getPosts, getCommunityHealth,
     getReports, getReportCount,
-    adminSetCreditFrozen, adminSetElder, adminSetVoucher, adminSetTier,
+    adminSetCreditFrozen, adminSetElder, adminSetTier,
     adminDeletePost, adminPruneUser, adminBulkDeletePosts,
     type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
     getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, isOwnerLevelActor, nodeRoleOf, heldNodeRoleOf, type MemberNodeRole,
-    canVouch, getMemberTrustProfile,
+    getMemberTrustProfile,
     getMemberStats,
     getTradeTotals,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
@@ -1168,10 +1168,8 @@ function adminMemberRows(members: Member[], keys?: string[]) {
     }
 
     return members.filter(m => m.status !== 'pruned').map(m => {
-        const isVoucher = canVouch(m.publicKey);
         // The member's real tier, from the same profile their own app shows. `m.earnedCredit` is only
-        // the granted lane (it leaves out earned trade and vouches), and vouching is a capability
-        // shown by canVouch, not a tier.
+        // the granted lane (it leaves out earned trade).
         const tier = getMemberTrustProfile(m.publicKey).tier.name;
         // An admin sees no more of a member's contact details than any member does: the choice reads "Hidden —
         // only you can see it", and the manager never shows them. `profiles` goes through the same rule as
@@ -1189,7 +1187,6 @@ function adminMemberRows(members: Member[], keys?: string[]) {
             lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
             tier,
             standing: tier,
-            canVouch: isVoucher,
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
             platform: platformMap.get(m.publicKey) || (m as any).platform || 'unknown',
         };
@@ -2065,8 +2062,7 @@ router.post('/api/local/admin/users/:pubkey/freeze', async (ctx) => {
 });
 
 // Promote a member to (or demote from) the Elder tier — grants Elder *standing* (a deep
-// credit floor via granted credit), but NOT password-admin powers. NOTE: Elder standing no
-// longer confers the power to vouch; that is the separate, explicit voucher capability below.
+// credit floor via granted credit), but NOT password-admin powers. Tiers gate nothing.
 // Body: { password, grant?: boolean } (defaults to grant).
 router.post('/api/local/admin/users/:pubkey/elder', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -2082,27 +2078,9 @@ router.post('/api/local/admin/users/:pubkey/elder', async (ctx) => {
     }
 });
 
-// Grant or revoke the vouch capability (the "appointed voucher" / super-Elder switch). This
-// is the single Sybil-critical power: an appointed voucher can hand out the -20 credit floor
-// to newcomers. Admin-only, decoupled from tier so grinding to Elder never confers it.
-// Body: { password, grant?: boolean } (defaults to grant).
-router.post('/api/local/admin/users/:pubkey/voucher', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
-    const body = (ctx as any).requestBody || {};
-    const grant = body.grant !== false; // default: grant
-    try {
-        adminSetVoucher(ctx.params.pubkey, grant);
-        logger.info('ADMIN', `${grant ? 'Granted' : 'Revoked'} vouch capability for ${ctx.params.pubkey.substring(0, 12)}`);
-        ctx.body = { success: true, granted: grant };
-    } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update voucher capability' };
-    }
-});
-
 // Assign a TIER BADGE to a member. The badge grants that tier's trust value (granted-credit
 // lane), landing the member's floor at the tier entry: Resident -200, Steward -600, Elder
-// -1400, Newcomer clears it. Distinct from the vouch capability above. Body: { password, tier }.
+// -1400, Newcomer clears it. Body: { password, tier }.
 router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};

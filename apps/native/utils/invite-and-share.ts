@@ -7,11 +7,10 @@
  * only then. Where they can't, there is no button: asking an admin is another slice. Never to a guest of the community, who
  * has no invites to give, nor where the node takes none.
  *
- * What it makes: the node's own invite (POST /api/invite/generate), with the Vouch for them choice of the People tab for
- * someone who can vouch (None unless they choose). Never an offline ticket: a ticket can't take a friend to a listing, and
- * can't carry a vouch. With no answer from the node, nothing is made and the member is told so.
+ * What it makes: the node's own invite (POST /api/invite/generate). Never an offline ticket: a ticket can't take a friend
+ * to a listing. With no answer from the node, nothing is made and the member is told so.
  */
-import { INVITE_SHARE_WORDS, inviteAndShareLink, inviteVouchRefusalWords, t, type VouchLevel } from '@beanpool/core';
+import { INVITE_SHARE_WORDS, inviteAndShareLink, t } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import { adminsOnlyRefusal, invitesOffRefusal, mayInviteHere, pausedRefusal, type InviteRole } from './invite-entries';
 import { invitesOn, type NodeFeatures } from './node-profile';
@@ -52,8 +51,7 @@ export const INVITE_FOR_SHARE_WAIT_MS = 15_000;
  * phone knows them), and nothing is shared.
  */
 export async function makeInviteForShare(
-    anchorUrl: string, identity: BeanPoolIdentity, vouchLevel: VouchLevel | null, features: NodeFeatures | null | undefined,
-    deps: MakeInviteDeps = {},
+    anchorUrl: string, identity: BeanPoolIdentity, features: NodeFeatures | null | undefined, deps: MakeInviteDeps = {},
 ): Promise<InviteForShare> {
     const offline: InviteForShare = { ok: false, offline: true, message: t(INVITE_SHARE_WORDS.offline) };
     const stop = new AbortController();
@@ -62,20 +60,20 @@ export async function makeInviteForShare(
         timer = setTimeout(() => { stop.abort(); resolve(offline); }, INVITE_FOR_SHARE_WAIT_MS);
     });
     try {
-        return await Promise.race([askForInvite(anchorUrl, identity, vouchLevel, features, deps, stop.signal, offline), limit]);
+        return await Promise.race([askForInvite(anchorUrl, identity, features, deps, stop.signal, offline), limit]);
     } finally {
         clearTimeout(timer);
     }
 }
 
 async function askForInvite(
-    anchorUrl: string, identity: BeanPoolIdentity, vouchLevel: VouchLevel | null, features: NodeFeatures | null | undefined,
+    anchorUrl: string, identity: BeanPoolIdentity, features: NodeFeatures | null | undefined,
     deps: MakeInviteDeps, signal: AbortSignal, offline: InviteForShare,
 ): Promise<InviteForShare> {
     const doFetch = deps.fetchImpl ?? fetch;
     const notMade: InviteForShare = { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
     const url = `${anchorUrl}/api/invite/generate`;
-    const body = JSON.stringify({ publicKey: identity.publicKey, vouchLevel: vouchLevel ?? undefined });
+    const body = JSON.stringify({ publicKey: identity.publicKey });
     let res: Response;
     try {
         // Loaded when a tap needs it: the key's crypto is not read by a screen that only draws the button.
@@ -94,7 +92,5 @@ async function askForInvite(
     const said = await res.json().catch(() => null) as { error?: unknown } | null;
     const refusal = invitesOffRefusal(res.status, said, features) ?? adminsOnlyRefusal(res.status, said) ?? pausedRefusal(res.status, said);
     if (refusal) return { ok: false, offline: false, message: refusal };
-    // The node refused the vouch: its words, and no invite that would quietly carry none.
-    if (vouchLevel !== null && typeof said?.error === 'string') return { ok: false, offline: false, message: inviteVouchRefusalWords(said.error) };
     return notMade;
 }

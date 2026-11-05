@@ -35,8 +35,8 @@ const listing = (photos: unknown) => ({
 let rows: unknown[] = [];
 vi.mock('../lib/api', () => ({
     getMemberProfile: vi.fn(async () => ({
-        publicKey: 'kofi-pubkey', callsign: 'Kofi', avatar: null, bio: '', role: 'member', elderVouchedBy: null,
-        stats: { totalVouchesGiven: 0, ratingsReceivedCount: 0, averageRating: 0, vouchesReceivedCount: 0 },
+        publicKey: 'kofi-pubkey', callsign: 'Kofi', avatar: null, bio: '', role: 'member',
+        stats: { ratingsReceivedCount: 0, averageRating: 0 },
     })),
     updateMemberProfile: vi.fn(),
     getMemberRatings: vi.fn(async () => []),
@@ -45,7 +45,6 @@ vi.mock('../lib/api', () => ({
     getRatingsGiven: vi.fn(async () => ({ ratings: [] })),
     getFriends: vi.fn(async () => []),
     submitRating: vi.fn(),
-    vouchMemberApi: vi.fn(),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
 }));
 

@@ -2496,9 +2496,6 @@
                     : earnedGrant >= 200 ? 'Resident'
                     : 'Newcomer';
                 const isElderGranted = badgeTier === 'Elder';
-                // Appointed-voucher capability (members.can_vouch) — surfaced by the admin /data
-                // endpoint. Distinct from tier: it's the explicit power to hand out the welcome floor.
-                const canV = !!member.canVouch;
 
                 const bFlags = getBranchFlags(pubkey);
                 const hasFlags = bFlags.length > 0;
@@ -2515,10 +2512,6 @@
                 let elderPill = '';
                 if (isElderGranted) {
                     elderPill = `<span style="background:#f59e0b;color:#fff;font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:12px;margin-left:0.3rem;font-weight:700;" title="Elder tier badge — floor −1400">⛰️ Elder</span>`;
-                }
-                let voucherPill = '';
-                if (canV) {
-                    voucherPill = `<span style="background:#10b981;color:#fff;font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:12px;margin-left:0.3rem;font-weight:700;" title="Appointed voucher — can verify (vouch for) newcomers, handing them the welcome floor">🤝 Voucher</span>`;
                 }
 
                 // Personal stat chips (compact inline indicators)
@@ -2555,7 +2548,6 @@
                 const directFlags = nodeFlags[member.callsign] || nodeFlags[pubkey] || [];
                 const matchesType = auditFilter === 'all' ? true
                     : auditFilter === 'reported' ? memberReportCount > 0
-                    : auditFilter === 'voucher' ? canV
                     : directFlags.some(f => f.type === auditFilter);
                 const q = memberSearch.trim().toLowerCase();
                 const matchesSearch = !q
@@ -2583,7 +2575,7 @@
                                 <div class="member-body">
                                     <div class="member-head">
                                         <strong style="color:${isPruned ? '#64748b' : isActive ? '#f8fafc' : '#f59e0b'}">${isPruned ? '🗑️ ' : !isActive ? '⏸️ ' : ''}${esc(member.callsign)} <span class="member-id">(${pubkey.substring(0,8)})</span></strong>
-                                        ${flagPill}${reportPill}${elderPill}${voucherPill}${chipHtml}
+                                        ${flagPill}${reportPill}${elderPill}${chipHtml}
                                     </div>
                                     <div class="member-active">Active: ${member.lastActiveAt ? new Date(member.lastActiveAt).toLocaleDateString(undefined, { timeZone: 'UTC' }) : 'Never'}</div>
                                     <div class="member-actions">
@@ -2596,9 +2588,6 @@
                                             <option value="Steward" ${badgeTier==='Steward'?'selected':''}>🏛️ Steward</option>
                                             <option value="Elder" ${badgeTier==='Elder'?'selected':''}>⛰️ Elder</option>
                                         </select>` : ''}
-                                        ${!isSystemAccount && !isPruned ? (canV
-                                            ? `<button class="btn btn-sm" style="background:#10b981;color:#fff;border-color:#10b981;" onclick="event.preventDefault(); adminAction('/users/${pubkey}/voucher', {grant:false})" title="Revoke the vouch capability — this member can no longer hand the welcome floor to newcomers. Mints/moves no beans.">🤝 Voucher ✓</button>`
-                                            : `<button class="btn btn-sm btn-outline" style="border-color:#10b981;color:#34d399;" onclick="event.preventDefault(); adminAction('/users/${pubkey}/voucher', {grant:true})" title="Grant the vouch capability so this trusted member can verify (vouch for) newcomers, handing them the welcome floor. Mints/moves no beans.">🤝 Grant vouch</button>`) : ''}
                                         ${!isSystemAccount && !isPruned ? `<button class="btn btn-sm btn-danger" onclick="event.preventDefault(); adminAction('/users/${pubkey}/prune')">Prune User</button>` : ''}
                                         ${!isSystemAccount && children.length > 0 ? `<button class="btn btn-sm btn-danger" onclick="event.preventDefault(); adminAction('/branches/${pubkey}/prune')">Prune Branch</button>` : ''}
                                         ${!isPruned ? `<button class="btn btn-sm btn-primary" style="background:#2563eb;color:#fff;border-color:#2563eb;" onclick="event.preventDefault(); promptWarning('${pubkey}')">✉️ Message</button>` : ''}
@@ -2648,8 +2637,6 @@
                 const type = el.dataset.count;
                 const count = type === 'reported'
                     ? Object.keys(reportsByMember).length
-                    : type === 'voucher'
-                    ? members.filter(m => m.canVouch).length
                     : membersByFlag[type]?.size || 0;
                 el.textContent = count > 0 ? count : '';
             });

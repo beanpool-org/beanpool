@@ -69,8 +69,7 @@ const data = vi.hoisted(() => ({
     balance: null as null | Record<string, unknown>,
     friends: [] as unknown[],
     trust: null as null | Record<string, unknown>,
-    vouched: [] as unknown[],
-    vouchError: null as null | Error,
+    friendError: null as null | Error,
 }));
 vi.mock('../db', () => ({
     getMemberProfile: vi.fn(async (k: string) => data.profiles[k] ?? null),
@@ -80,11 +79,10 @@ vi.mock('../db', () => ({
     getRatingsGiven: vi.fn(async () => data.given),
     getFriendsLocal: vi.fn(async () => data.friends),
     isFriendLocal: vi.fn(async () => false),
-    addFriendLocal: vi.fn(async () => undefined),
+    addFriendLocal: vi.fn(async () => { if (data.friendError) throw data.friendError; }),
     removeFriendLocal: vi.fn(async () => undefined),
     createConversationApi: vi.fn(async (_type: string, _participants: string[], _createdBy: string) => ({ id: 'conv-dm-kofi' })),
     getTrustProfile: vi.fn(async () => data.trust),
-    vouchMember: vi.fn(async (...a: unknown[]) => { if (data.vouchError) throw data.vouchError; data.vouched.push(a); }),
     updateMemberProfile: vi.fn(async () => undefined),
 }));
 vi.mock('../blocklist', () => ({
@@ -125,7 +123,7 @@ import PublicProfileScreen from '../../app/public-profile';
 import { bypassing, bracketed, unfit } from './profile-events-words-harness';
 
 /** The node's own words (slice S4) and what members wrote. */
-const NODE_WORDS = ['New & unvouched — take normal precautions', 'New member with no completed trades yet.', 'Meet somewhere public the first time.'];
+const NODE_WORDS = ['New here — take normal precautions', 'New member with no completed trades yet.', 'Meet somewhere public the first time.'];
 const MEMBERS = ['Kofi', 'Rosa', 'Wren', 'Grows tomatoes and fixes bikes.', 'Bike repair', 'Tomato seedlings', 'Great tomatoes, on time.', 'Lovely to deal with.', 'Kofi Tube'];
 
 const TRUST = (over: Record<string, unknown> = {}) => ({
@@ -133,7 +131,7 @@ const TRUST = (over: Record<string, unknown> = {}) => ({
     risk: { band: 'red', headline: NODE_WORDS[0], reasons: [NODE_WORDS[1]], tips: [NODE_WORDS[2]] },
     vouchedInBy: { kind: 'admin', publicKey: null, callsign: null, avatarUrl: null, tier: null },
     mutualCount: 1, mutualConnections: [{ publicKey: ROSA, callsign: 'Rosa', avatarUrl: null }],
-    joinedAt: '2026-03-01T00:00:00.000Z', lastActiveAt: new Date(Date.now() - 3 * 86_400_000).toISOString(), elderVouch: null,
+    joinedAt: '2026-03-01T00:00:00.000Z', lastActiveAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
     ...over,
 });
 const RATINGS = {
@@ -170,11 +168,10 @@ beforeEach(() => {
     data.posts = POSTS;
     data.ratings = RATINGS;
     data.given = [];
-    data.balance = { balance: 12.5, earnedCredit: 40, tier: { name: 'Resident', emoji: '🏡' }, trustStats: { tradeCount: 3 }, canVouch: false };
+    data.balance = { balance: 12.5, earnedCredit: 40, tier: { name: 'Resident', emoji: '🏡' }, trustStats: { tradeCount: 3 } };
     data.friends = [{}, {}];
     data.trust = TRUST();
-    data.vouched.length = 0;
-    data.vouchError = null;
+    data.friendError = null;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
@@ -224,35 +221,22 @@ describe('another member\'s profile in the pseudo-locale: every word came throug
         expect(bypassing(host, [...NODE_WORDS, ...MEMBERS], said())).toEqual([]);
     });
 
-    it('a mixed track record vouched in by a member, the vouch levels, and blocking', async () => {
+    it('a mixed track record invited by a member, and blocking', async () => {
         data.trust = TRUST({
             stats: { tradeCount: 4, uniquePartners: 1 }, completionRate: 0.5, tier: { name: 'Steward', emoji: '🌿' }, earnedCredit: 120,
             vouchedInBy: { kind: 'member', publicKey: ROSA, callsign: 'Rosa', avatarUrl: null, tier: 'Elder' },
             mutualCount: 2, mutualConnections: [{ publicKey: ROSA, callsign: 'Rosa', avatarUrl: null }, { publicKey: '4'.repeat(64), callsign: null, avatarUrl: null }],
         });
-        data.balance = { ...data.balance!, canVouch: true };
         nav.params = { publicKey: KOFI, callsign: 'Kofi' };
         await renderIn('xx');
         const mixed = xx('⚠️ {label} Completed {n} trades with a {pct}% completion rate across {partners}.')
             .replace('{n}', '4').replace('{pct}', '50').replace('{partners}', xx('{n} partner').replace('{n}', '1')).split('{label}');
         expect(host.textContent).toContain(`${mixed[0]}${xx('Mixed Track Record:')}${mixed[1]}`);
         expect(host.textContent).toContain(xx('Steward'));
-        expect(host.textContent).toContain(xx('🌱 Vouched in by {name}').replace('{name}', 'Rosa'));
+        expect(host.textContent).toContain(xx('🌱 Invited by {name}').replace('{name}', 'Rosa'));
         expect(host.textContent).toContain(xx('{tier} tier · tap to reach out').replace('{tier}', xx('Elder')));
         expect(host.textContent).toContain(xx('👥 {n} connections in common').replace('{n}', '2'));
         expect(bypassing(host, [...NODE_WORDS, ...MEMBERS, '4'.repeat(8)], said())).toEqual([]);
-
-        await click(button('🤝 Vouch for Member'), 'Vouch');
-        expect(said()).toEqual([xx('Vouch for {name}').replace('{name}', 'Kofi'),
-            xx('Choose how deep a credit line to extend. This lets them trade on credit down to that floor — it reflects your confidence in them. No beans leave your wallet.'),
-            xx('Light · −{n}').replace('{n}', '25'), xx('Standard · −{n}').replace('{n}', '50'), xx('Deep · −{n}').replace('{n}', '100'), xx('Cancel')]);
-        alerts.said.length = 0;
-        data.trust = null;
-        await act(async () => { await alerts.buttons[1].onPress?.(); });
-        await settle();
-        expect(data.vouched).toEqual([[KOFI, 2]]);
-        // No fresh profile from the node: the badge names the voucher, as before.
-        expect(host.textContent).toContain(xx('Vouched by {name}').replace('{name}', 'Wren'));
 
         await click(buttonReading(xx('Block {name}').replace('{name}', 'Kofi')), 'Block Kofi');
         expect(said()).toEqual([xx('Block {name}?').replace('{name}', 'Kofi'),
@@ -297,37 +281,32 @@ describe('another member\'s profile in the pseudo-locale: every word came throug
         expect(bypassing(host, [...NODE_WORDS, ...MEMBERS], said())).toEqual([]);
     });
 
-    it("a vouch the phone couldn't send: _signedRequest's sentences in the member's language, the node's words as given", async () => {
-        data.balance = { ...data.balance!, canVouch: true };
+    // The profile's vouch went with the vouching reset (R0), and this case with it: the same sentences now from the one other
+    // signed action on this screen that shows them (Add friend, through signedRequestWords).
+    it("a friend the phone couldn't add: _signedRequest's sentences in the member's language, the node's words as given", async () => {
         nav.params = { publicKey: KOFI, callsign: 'Kofi' };
         const cases: Array<[string, string]> = [
             ['You are off-grid. Please connect to a BeanPool Node to perform this action.', xx('You are off-grid. Please connect to a BeanPool Node to perform this action.')],
             ['No identity found. You must be logged in.', xx('No identity found. You must be logged in.')],
             ['Network request failed. You must be connected to a node.', xx('Network request failed. You must be connected to a node.')],
             ['Server returned 502', xx('Server returned {status}').replace('{status}', '502')],
-            ['You have already vouched for this member.', 'You have already vouched for this member.'],
+            ['That member has left this community.', 'That member has left this community.'],
         ];
         await renderIn('xx');
         for (const [thrown, body] of cases) {
-            data.vouchError = new Error(thrown);
+            data.friendError = new Error(thrown);
             alerts.said.length = 0;
-            await click(button('🤝 Vouch for Member'), 'Vouch');
-            alerts.said.length = 0;
-            await act(async () => { await alerts.buttons[1].onPress?.(); });
-            await settle();
-            expect(said(), thrown).toEqual([xx('Could not vouch'), body]);
+            await click(button('+ Add friend'), 'Add friend');
+            expect(said(), thrown).toEqual([xx('Not added'), body]);
         }
-        expect(data.vouched).toEqual([]);
         expect(bypassing(host, [...NODE_WORDS, ...MEMBERS], said().slice(0, -1))).toEqual([]);
     });
 
-    it('a member with no name and no card, and an elder\'s vouch with no name: every sentence has its own words in place of the name', async () => {
+    it('a member with no name and no card: every sentence has its own words in place of the name', async () => {
         data.profiles[KOFI] = null;
-        data.trust = TRUST({ elderVouch: { callsign: null } });
         nav.params = { publicKey: KOFI };
         await renderIn('xx');
         expect(host.textContent).toContain(xx('Take the 60-second quiz to get tips for working with this member.'));
-        expect(host.textContent).toContain(xx('Vouched by an Elder'));
         expect(host.querySelector(`[aria-label="${xx('Block user')}"]`)).not.toBeNull();
         expect(host.textContent).toContain(xx('Block User'));
         expect(bypassing(host, [...NODE_WORDS, ...MEMBERS], said())).toEqual([]);
@@ -434,6 +413,20 @@ describe('in English nothing is bracketed, and the words are as they were', () =
         }
     });
 
+    // The vouching reset (R0): "vouch" is gone from the profile, and the inviter's line reads Invited by.
+    it('another member invited by a member: "Invited by", and no vouch word anywhere on it', async () => {
+        data.trust = TRUST({ vouchedInBy: { kind: 'member', publicKey: ROSA, callsign: 'Rosa', avatarUrl: null, tier: 'Elder' } });
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderIn('en');
+        expect(host.textContent).toContain('🌱 Invited by Rosa');
+        // Every word on it, the node's own sentences (its trust verdict, shown as it sends them) included.
+        expect(host.textContent).toContain(NODE_WORDS[0]);
+        expect(host.textContent).not.toMatch(/vouch/i);
+        const labels = Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label')).join(' | ');
+        expect(labels).not.toMatch(/vouch/i);
+        expect(Array.from(host.querySelectorAll('button')).map((b) => b.textContent).join(' | ')).not.toMatch(/vouch/i);
+    });
+
     it('the member\'s own', async () => {
         nav.params = { publicKey: OWN };
         await renderIn('en');
@@ -442,12 +435,14 @@ describe('in English nothing is bracketed, and the words are as they were', () =
             'Take the 60-second quiz on how you prefer to work. Neighbours then get tips for working with you.', 'Received (2)', 'Given']) {
             expect(host.textContent, english).toContain(english);
         }
+        // The vouching reset (R0): no vouch word on the member's own profile either.
+        expect(host.textContent).not.toMatch(/vouch/i);
     });
 });
 
 describe('the profile at 320 dp with 1.3× text, in the pseudo-locale', () => {
     it('another member: no word wider than the page, nothing stuck in a row; the tabs shrink to fit their third', async () => {
-        data.trust = TRUST({ vouchedInBy: { kind: 'member', publicKey: ROSA, callsign: 'Rosa', avatarUrl: null, tier: 'Elder' }, elderVouch: { callsign: 'Rosa' } });
+        data.trust = TRUST({ vouchedInBy: { kind: 'member', publicKey: ROSA, callsign: 'Rosa', avatarUrl: null, tier: 'Elder' } });
         nav.params = { publicKey: KOFI, callsign: 'Kofi' };
         await renderIn('xx');
         // 320 - 2 × 16 (the cards' margin) - 2 × 14 (their padding).

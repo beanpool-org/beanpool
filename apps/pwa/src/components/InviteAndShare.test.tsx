@@ -3,9 +3,9 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 
 /**
  * "Invite and share" on a listing, on the web (components/InviteAndShare.tsx): who is offered the button, what a tap makes
- * (the node's invite, with the Vouch for them choice for someone who can vouch), what is handed to the share sheet (the
- * listing's title and `{community}/?invite={code}&post={id}`), and what it never makes (an offline ticket). Fake node: the
- * api is stubbed and nothing leaves the test.
+ * (the node's invite, and nothing on it about vouching: the reset, R0), what is handed to the share sheet (the listing's
+ * title and `{community}/?invite={code}&post={id}`), and what it never makes (an offline ticket). Fake node: the api is
+ * stubbed and nothing leaves the test.
  */
 
 const { generateInvite, getBalance, request, communityInfoOnce, loadIdentity } = vi.hoisted(() => ({
@@ -51,9 +51,8 @@ const IDENTITY = { publicKey: 'pk-me', privateKey: 'sk', callsign: 'Ana', create
 const ORIGIN = window.location.origin;
 const shares: Array<{ title?: string; text?: string; url?: string }> = [];
 
-async function open(info: unknown = { features: { invites: true, door: 'members' } }, opts: { canVouch?: boolean; role?: string | null } = {}) {
+async function open(info: unknown = { features: { invites: true, door: 'members' } }, opts: { role?: string | null } = {}) {
     communityInfoOnce.mockResolvedValue(info);
-    getBalance.mockResolvedValue({ canVouch: opts.canVouch === true });
     request.mockResolvedValue({ role: opts.role ?? null });
     render(<InviteOnly post={POST} />);
     await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
@@ -109,31 +108,24 @@ describe('what a tap makes and hands over', () => {
         expect(generateInvite).not.toHaveBeenCalled();
         tap('invite-and-share-make');
         await waitFor(() => expect(shares).toHaveLength(1));
-        expect(generateInvite).toHaveBeenCalledWith('pk-me', undefined, undefined);
+        expect(generateInvite).toHaveBeenCalledWith('pk-me');
         expect(shares[0]).toEqual({ title: POST.title, text: POST.title, url: `${ORIGIN}/?invite=INV-AB12-CD34&post=${POST.id}` });
         expect(screen.queryByTestId('invite-and-share-panel')).toBeNull();
     });
 
-    it('someone who can vouch chooses, None unless they do', async () => {
+    it('nothing on it says vouch (the reset, R0): on a community with Beans the panel has no choice, the invite carries only the key, and no balance is asked', async () => {
         generateInvite.mockResolvedValue({ success: true, invite: { code: 'INV-AB12-CD34' } });
-        await open({ features: { invites: true, inviteVouch: true, door: 'members' } }, { canVouch: true });
+        await open({ features: { invites: true, beans: true, door: 'members' } });
         await waitFor(() => screen.getByTestId('invite-and-share-button'));
         tap('invite-and-share-button');
-        await waitFor(() => expect(screen.getByTestId('invite-vouch')).toBeTruthy());
-        expect((screen.getByRole('radio', { name: 'None' }) as HTMLInputElement).checked).toBe(true);
-        fireEvent.click(screen.getByRole('radio', { name: '50 Beans' }));
+        expect(screen.getByTestId('invite-and-share-panel')).toBeTruthy();
+        expect(screen.queryByRole('radio')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/vouch/i);
         tap('invite-and-share-make');
-        await waitFor(() => expect(generateInvite).toHaveBeenCalledWith('pk-me', undefined, 2));
-    });
-
-    it('someone who cannot vouch sees no choice and sends no level', async () => {
-        generateInvite.mockResolvedValue({ success: true, invite: { code: 'INV-AB12-CD34' } });
-        await open({ features: { invites: true, inviteVouch: true, door: 'members' } }, { canVouch: false });
-        await waitFor(() => screen.getByTestId('invite-and-share-button'));
-        tap('invite-and-share-button');
-        expect(screen.queryByTestId('invite-vouch')).toBeNull();
-        tap('invite-and-share-make');
-        await waitFor(() => expect(generateInvite).toHaveBeenCalledWith('pk-me', undefined, undefined));
+        await waitFor(() => expect(shares).toHaveLength(1));
+        expect(generateInvite).toHaveBeenCalledWith('pk-me');
+        expect(getBalance).not.toHaveBeenCalled();
+        expect(document.body.textContent).not.toMatch(/vouch/i);
     });
 });
 

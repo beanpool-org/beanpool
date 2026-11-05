@@ -16,7 +16,7 @@ Tap the sliders button at the top right of the screen. In the web app on a wide 
 - Your trust badge, your reviews (nobody else can see who wrote a review), and your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. The admins see it as any member does, and it isn't logged.
 - Your posts, and where their pins are. See "Where your pin goes".
 - How you voted on a Poll, but only on a Poll its creator made an **open vote**. Polls are anonymous otherwise, and votes on **Decisions** are always secret.
-- Who invited you. On the phone your profile says **Vouched in by** and their name. If you came in as a founding member or were invited directly by the system admin, it says **Founding member** or **Invited directly by the system admin** instead. If a member vouched for your credit line, your profile says **Vouched by** and their name, in the phone app and the web app.
+- Who invited you. On the phone your profile says **Invited by** and their name. If you came in as a founding member or were invited directly by the system admin, it says **Founding member** or **Invited directly by the system admin** instead.
 
 ## What only you can see
 

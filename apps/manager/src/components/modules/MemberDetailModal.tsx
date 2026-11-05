@@ -23,10 +23,8 @@ export interface MemberModalItem {
     publicKey?: string;
     pubkey?: string;
     platform?: string;
-    canVouch?: boolean;
     standing?: string;
     nodeRole?: MemberNodeRole | null;
-    vouched_by_pubkey?: string;
     joinedAt?: string;
     joined_at?: string;
     lastActiveAt?: string;
@@ -48,7 +46,6 @@ interface MemberDetailModalProps {
     flags?: MemberFlag[];
     members?: any[];
     isFrozen: boolean;
-    isVoucher?: boolean;
     isOperator?: boolean;
     nodeRole?: MemberNodeRole | null;
     /** The role of whoever is viewing this member's profile ('owner' | 'admin' | 'moderator' | null). */
@@ -58,7 +55,6 @@ interface MemberDetailModalProps {
     /** True if this member is the community's only owner. */
     isSoleOwner?: boolean;
     onToggleFreeze: (pubkey: string) => void;
-    onToggleVouch?: (pubkey: string, isCurrentlyVoucher: boolean) => void;
     onToggleOperator?: (pubkey: string, isCurrentlyOperator: boolean) => void;
     /** `code`: an owner's fresh proof, when the node asked it for an owner's or admin's role (FreshProofRequiredError). */
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
@@ -86,14 +82,12 @@ export function MemberDetailModal({
     flags = [],
     members = [],
     isFrozen,
-    isVoucher,
     isOperator,
     nodeRole,
     viewerRole,
     ownerCount,
     isSoleOwner,
     onToggleFreeze,
-    onToggleVouch,
     onToggleOperator,
     onGrantNodeRole,
     onRevokeNodeRole,
@@ -112,7 +106,6 @@ export function MemberDetailModal({
 }: MemberDetailModalProps) {
     const [copiedPubkey, setCopiedPubkey] = useState(false);
     const copiedPubkeyTimer = useTimeout();
-    const [revokedVouch, setRevokedVouch] = useState(false);
     const [showPruneConfirm, setShowPruneConfirm] = useState(false);
     const [showPruneBranch, setShowPruneBranch] = useState(false);
     const [showRekeyWizard, setShowRekeyWizard] = useState(false);
@@ -387,7 +380,7 @@ export function MemberDetailModal({
     };
 
     // Calculate synthetic or real trust metrics
-    const trustScore = isFrozen ? 12 : activeMemberFlags.length > 0 ? 38 : member?.canVouch ? 96 : 78;
+    const trustScore = isFrozen ? 12 : activeMemberFlags.length > 0 ? 38 : 78;
 
     return (
         <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
@@ -465,7 +458,7 @@ export function MemberDetailModal({
                 </div>
 
                 {/* Standing & Trust Score Grid */}
-                <div className="grid grid-cols-3 gap-3 text-xs">
+                <div className="grid grid-cols-2 gap-3 text-xs">
                     <div className="bg-nature-900/60 border border-nature-800/80 p-3 rounded-xl space-y-1">
                         <span className="text-[10px] text-nature-400 block font-semibold uppercase">Account Standing</span>
                         <span className={`font-mono font-bold text-xs uppercase ${
@@ -486,36 +479,14 @@ export function MemberDetailModal({
                         </div>
                     </div>
 
-                    <div className="bg-nature-900/60 border border-nature-800/80 p-3 rounded-xl space-y-1">
-                        <span className="text-[10px] text-nature-400 block font-semibold uppercase">Vouch Right</span>
-                        <span className={`font-mono font-bold text-xs ${
-                            isFrozen ? 'text-red-400' : isVoucher ? 'text-emerald-400 font-extrabold' : 'text-nature-300'
-                        }`}>
-                            {isFrozen ? 'REVOKED' : isVoucher ? 'VOUCHER' : 'STANDARD'}
-                        </span>
-                    </div>
                 </div>
 
-                {/* Vouch Lineage & Network Position */}
+                {/* Joined and last active */}
                 <div className="bg-nature-900/80 border border-nature-800 p-4 rounded-2xl space-y-3 text-xs">
                     <span className="text-[10px] font-extrabold uppercase font-mono tracking-wider text-nature-400 block">
-                        Network Vouch Lineage
+                        Activity
                     </span>
                     <div className="space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-x-2 text-nature-300">
-                            <span className="text-nature-400">Vouched By:</span>
-                            <span className="font-mono font-semibold text-white">
-                                {member?.vouched_by_pubkey
-                                    ? getMemberDisplayName({ pubkey: member.vouched_by_pubkey }, profiles)
-                                    : 'System Genesis (Root Node)'}
-                            </span>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-between gap-x-2 text-nature-300">
-                            <span className="text-nature-400">Direct Vouched Downstream:</span>
-                            <span className="font-mono font-bold text-emerald-400">
-                                {isVoucher ? '3 Members' : '0 Members'}
-                            </span>
-                        </div>
                         <div className="flex flex-wrap items-center justify-between gap-x-2 text-nature-300">
                             <span className="text-nature-400">Joined Date:</span>
                             <span className="font-mono text-nature-200">
@@ -797,20 +768,6 @@ export function MemberDetailModal({
                         </div>
                     ) : (
                         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                            <button
-                                disabled={isFrozen}
-                                onClick={() => onToggleVouch?.(pubkey, !!isVoucher)}
-                                className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
-                                    isFrozen
-                                        ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'
-                                        : isVoucher
-                                        ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border-amber-800/80 hover:opacity-90'
-                                        : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border-emerald-800 hover:opacity-90'
-                                }`}
-                            >
-                                {isVoucher ? 'Demote' : '🛡️ Promote'}
-                            </button>
-
                             {onToggleOperator && (
                                 <button
                                     disabled={isFrozen}

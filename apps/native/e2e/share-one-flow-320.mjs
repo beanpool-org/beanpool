@@ -79,7 +79,6 @@ const STUBS = {
     'nodes': `export const isGuestNode = async () => false;`,
     'node-admin': `export const askNodeRole = async () => ({ role: globalThis.__role ?? null, communityName: 'Castlemaine' }); export const cachedNodeRoleHeard = askNodeRole; export const persistNodeRole = async () => {}; export const readPersistedNodeRole = async () => undefined;`,
     'NodeStatusContext': `export const useNodeStatus = () => ({ recognition: 'member', nodeUrl: 'https://castlemaine.beanpool.org', recheck: async () => 'member' });`,
-    'db': `export const askCanVouch = async () => !!globalThis.__canVouch;`,
     'crypto': `export const buildSignedHeaders = async () => ({});`,
     // The ask form is opened by a tap, which these shots never make: the button is what they look at.
     'InviteAsks': `export const AskSheet = () => null;`,
@@ -91,9 +90,9 @@ const stubFor = (spec, importer = '') => {
     if (!spec.startsWith('.')) return null;
     const base = path.basename(spec);
     if (['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'NodeStatusContext', 'InviteAsks'].includes(base)) return base;
-    // The key, the stored communities, the role and the balance are the button's own reads: stubbed for it alone, so the
-    // real modules still serve everything else that imports them.
-    return ['identity', 'nodes', 'node-admin', 'db', 'crypto'].includes(base) && /^(invite-and-share|InviteAndShare|use-share-role)\./.test(path.basename(importer)) ? base : null;
+    // The key, the stored communities and the role are the button's own reads: stubbed for it alone, so the real modules
+    // still serve everything else that imports them.
+    return ['identity', 'nodes', 'node-admin', 'crypto'].includes(base) && /^(invite-and-share|InviteAndShare|use-share-role)\./.test(path.basename(importer)) ? base : null;
 };
 
 // ─── The page: each case renders the real screens for one state ─────────────────────────────────────────────────────
@@ -115,9 +114,6 @@ if (q.get('lang') === 'ta') setLanguage('ta', [ta]);
 const who = q.get('who') || 'member';
 const onlyAdmins = who === 'admins-only' || who === 'admins-only-no-asks' || who === 'admin';
 globalThis.__features = { shareOutside: who === 'outside', knocks: true, invites: true, inviteAsks: who !== 'admins-only-no-asks', door: onlyAdmins ? 'admins' : 'members' };
-// vouch=1: someone who can vouch, where the community has it (the tallest invite panel).
-if (q.get('vouch') === '1') globalThis.__features.inviteVouch = true;
-globalThis.__canVouch = q.get('vouch') === '1';
 globalThis.__role = who === 'admin' ? 'admin' : null;
 const POST_ID = '3f0c8a8e-1b2c-4d5e-8f90-123456789abc';
 createRoot(document.getElementById('root')).render(
@@ -276,14 +272,14 @@ try {
                 // screen and the ways scroll under it, never pushed off the top.
                 await page.setViewportSize({ width: WIDTH, height: 569 });
                 for (const lang of ['en', 'ta']) {
-                    await open(`scheme=${scheme}&lang=${lang}&who=outside&vouch=1`);
+                    await open(`scheme=${scheme}&lang=${lang}&who=outside`);
                     await page.locator('[data-testid="share-open-button"]').click();
                     await page.locator('[data-testid="invite-and-share-button"]').click();
-                    await page.locator('[role="radio"]').first().waitFor();
+                    await page.locator('[data-testid="invite-and-share-panel"]').waitFor();
                     await page.waitForTimeout(400); // the sheet's fade-in, so the shot shows it as a member sees it
                     const top =await page.evaluate(() => document.querySelector('[data-testid="share-sheet"]').getBoundingClientRect().top);
                     if (top < 0) problems.push(`${tag} (${lang}, 569 tall): the sheet's top is ${Math.round(top)}px above the screen`);
-                    await measure(`${tag}, invite panel with the vouch, ${lang}, 569 tall`, { minButton: 43.5 });
+                    await measure(`${tag}, invite panel, ${lang}, 569 tall`);
                 }
                 await page.setViewportSize({ width: WIDTH, height: 640 });
             }

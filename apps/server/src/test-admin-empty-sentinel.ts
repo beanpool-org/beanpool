@@ -6,10 +6,8 @@
  * 1. hasListedOffer('') is false (not exempt).
  * 2. hasLiveOffer('') is false.
  * 3. liveOfferCount('') is 0 (not granted max band).
- * 4. canVouch('') is false (cannot vouch or mint floors).
  * 5. canOperate('') is false (cannot operate treasuries).
  * 6. canAdministerTreasury('', treasury) is false.
- * 7. unvouchMember('', target) refuses with not-admin error.
  * 9. adminSendMessage(target, body) throws no genesis admin error.
  * 10. resolveVouchedInBy(target) with invited_by = '' returns null (not admin).
  * 11. When genesis admin is seeded, real admin succeeds and '' is still rejected.
@@ -21,9 +19,9 @@ import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import {
     initStateEngine, getAdminPubkey, hasListedOffer, hasLiveOffer, liveOfferCount,
-    canVouch, canOperate, canAdministerTreasury, unvouchMember,
+    canOperate, canAdministerTreasury,
     adminSendMessage, resolveVouchedInBy, createTreasury, seedGenesisMember,
-    vouchMember, adminSetVoucher, transfer
+    transfer
 } from './state-engine.js';
 
 let passed = 0;
@@ -67,24 +65,9 @@ async function runTests() {
     check(hasLiveOffer('') === false, "hasLiveOffer('') is false");
     check(liveOfferCount('') === 0, "liveOfferCount('') is 0");
 
-    // ── 2. Empty string identity does not get vouch or operate capabilities ──
-    check(canVouch('') === false, "canVouch('') is false");
+    // ── 2. Empty string identity does not get operate capabilities ──
     check(canOperate('') === false, "canOperate('') is false");
     check(canAdministerTreasury('', treasury) === false, "canAdministerTreasury('', treasury) is false");
-
-    // ── 3. Empty string identity cannot unvouch as admin ──
-    // Vouch alice via an appointed voucher
-    const voucher = makeMember('voucher');
-    adminSetVoucher(voucher, true);
-    vouchMember(voucher, alice);
-
-    try {
-        unvouchMember('', alice);
-        check(false, "unvouchMember('', alice) should have thrown");
-    } catch (e: any) {
-        check(e.message === 'Only the voucher who vouched, or an admin, can withdraw a vouch',
-            "unvouchMember('', alice) refuses with not-admin error");
-    }
 
     // ── 5. adminSendMessage throws when no admin exists ──
     try {
@@ -109,14 +92,12 @@ async function runTests() {
     check(hasListedOffer(adminPubkey) === true, 'Admin has listed offer exemption');
     check(hasLiveOffer(adminPubkey) === true, 'Admin has live offer exemption');
     check(liveOfferCount(adminPubkey) > 0, 'Admin has max offer count');
-    check(canVouch(adminPubkey) === true, 'Admin can vouch');
     check(canOperate(adminPubkey) === true, 'Admin coarse canOperate is true');
     check(canAdministerTreasury(adminPubkey, treasury) === true, 'Admin can administer treasury');
 
     // Empty string is STILL rejected:
     check(hasListedOffer('') === false, "hasListedOffer('') remains false even when admin exists");
     check(hasLiveOffer('') === false, "hasLiveOffer('') remains false even when admin exists");
-    check(canVouch('') === false, "canVouch('') remains false even when admin exists");
     check(canOperate('') === false, "canOperate('') remains false even when admin exists");
     check(canAdministerTreasury('', treasury) === false, "canAdministerTreasury('', treasury) remains false even when admin exists");
 

@@ -1,13 +1,13 @@
 /**
  * MEASURES the web's Invite and share button at the floor, 320 px with 1.3x text, light and dark, in English, the pseudo-locale
  * `xx` (every sentence ~35 % longer) and Tamil. The real SharePostButtons in a real Chromium layout (e2e/invite-and-share-harness.tsx),
- * four ways: the button closed; the panel open for someone who can vouch; the panel open for a plain member; and the
- * panel after a tap with the node unreachable (the line that says an offline ticket can't take anyone to a listing). Where this
- * member may not invite (only admins invite and they are none) there must be no button at all.
+ * three ways: the button closed; the panel open; and the panel after a tap with the node unreachable (the line that says an
+ * offline ticket can't take anyone to a listing). Where this member may not invite (only admins invite and they are none)
+ * there must be no button at all.
  * Nothing here touches a node: every /api request is answered by the page route below.
  *
- * Checks: nothing past the screen, nothing scrolls sideways, no words cut, every button 44 px or more; the voucher sees four
- * radios with None on; a plain member sees none.
+ * Checks: nothing past the screen, nothing scrolls sideways, no words cut, every button 44 px or more; the panel has no
+ * choice on it (the vouching reset, R0).
  *
  *   node e2e/invite-and-share-320.mjs [shots-dir]    # exits non-zero on any problem
  *
@@ -32,9 +32,9 @@ function answer(url, who) {
     const u = new URL(url);
     if (u.pathname === '/api/community/info') {
         return json({ memberCount: 12, postCount: 30, transactionCount: 4, commonsBalance: 0, profile: 'local',
-            features: { beans: true, invites: true, inviteVouch: true, door: who === 'locked-out' ? 'admins' : 'members', shareOutside: true } });
+            features: { beans: true, invites: true, door: who === 'locked-out' ? 'admins' : 'members', shareOutside: true } });
     }
-    if (u.pathname.startsWith('/api/ledger/balance/')) return json({ balance: 0, floor: 0, usableFloor: 0, canVouch: who === 'voucher' });
+    if (u.pathname.startsWith('/api/ledger/balance/')) return json({ balance: 0, floor: 0, usableFloor: 0 });
     if (u.pathname === '/api/node-admin/me') return json({ role: null });
     return null;
 }
@@ -75,7 +75,7 @@ const failures = [];
 try {
     for (const lang of ['en', 'xx', 'ta']) {
         for (const theme of ['light', 'dark']) {
-            for (const state of ['closed', 'voucher', 'member', 'offline', 'locked-out']) {
+            for (const state of ['closed', 'member', 'offline', 'locked-out']) {
                 const who = state === 'closed' ? 'member' : state;
                 const context = await browser.newContext({ viewport: { width: WIDTH, height: HEIGHT }, colorScheme: theme });
                 await context.route('**/*', (route) => {
@@ -107,10 +107,10 @@ try {
                 await page.waitForSelector('[data-testid="share-members-button"]', { timeout: 20_000 });
                 if (state !== 'locked-out') await page.waitForSelector('[data-testid="invite-and-share-button"]', { timeout: 20_000 });
                 else await page.waitForTimeout(800);
-                if (state === 'voucher' || state === 'member' || state === 'offline') {
+                if (state === 'member' || state === 'offline') {
                     // The choice closes the menu and opens its panel under the row.
                     await page.click('[data-testid="invite-and-share-button"]');
-                    if (state === 'voucher') await page.waitForSelector('[data-testid="invite-vouch"]', { timeout: 10_000 });
+                    await page.waitForSelector('[data-testid="invite-and-share-panel"]', { timeout: 10_000 });
                 }
                 if (state === 'offline') {
                     await page.click('[data-testid="invite-and-share-make"]');
@@ -125,8 +125,7 @@ try {
                 for (const p of m.problems) failures.push(`${tag}: ${p}`);
                 if (pageErrors.length) failures.push(`${tag}: page errors ${JSON.stringify(pageErrors)}`);
                 if (state === 'locked-out' && m.hasButton) failures.push(`${tag}: a member where only admins invite sees the button`);
-                if (state === 'voucher' && (m.radios.length !== 4 || !m.radios[0]?.endsWith('(on)'))) failures.push(`${tag}: the vouch choice is ${m.radios.join(', ') || 'missing'}`);
-                if ((state === 'member' || state === 'offline') && m.radios.length !== 0) failures.push(`${tag}: a plain member sees the vouch control`);
+                if ((state === 'member' || state === 'offline') && m.radios.length !== 0) failures.push(`${tag}: the panel has a choice on it (${m.radios.join(', ')})`);
                 if (state === 'offline' && !m.note) failures.push(`${tag}: no note after the node was unreachable`);
                 console.log(`${tag}: ${m.problems.length} problem(s); ${m.radios.join(', ') || 'no control'}${m.note ? `; note: ${m.note.slice(0, 50)}` : ''}`);
                 await context.close();

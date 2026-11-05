@@ -82,9 +82,8 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // its URL is made under the new key.
     move('member_photos', 'public_key');
 
-    // (b) members foreign keys (referrals & vouches)
+    // (b) members foreign keys (referrals)
     move('members', 'invited_by');
-    move('members', 'elder_vouched_by');
 
     // (c) accounts (ledger balance & epochs)
     move('accounts', 'public_key');

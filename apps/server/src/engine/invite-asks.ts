@@ -11,8 +11,7 @@
  *
  * ## What an answer makes
  *
- * "Send invite" is an ordinary invite: made by the admin who answers, with the Vouch for them choice of any invite
- * (`generateInvite`, under the same limit, W-main). It names nobody: `intended_for` stays empty, so nothing of the request
+ * "Send invite" is an ordinary invite: made by the admin who answers (`generateInvite`, under the same limit, W-main). It names nobody: `intended_for` stays empty, so nothing of the request
  * is on it. Anyone who holds the code joins with it. "No" carries a reason if the admin wrote one.
  *
  * ## What is kept, and for how long
@@ -45,7 +44,7 @@
 import crypto from 'node:crypto';
 import { db, deletePlainRows } from '../db/db.js';
 import { getMember, isNodeMember, isSuspendedAccount } from '@beanpool/engine';
-import { INVITE_ASK_LIMITS, INVITE_ASK_WORDS, type InviteAskAnswer, type InviteAskToAnswer, type InviteAskWaiting, type VouchLevel } from '@beanpool/core';
+import { INVITE_ASK_LIMITS, INVITE_ASK_WORDS, type InviteAskAnswer, type InviteAskToAnswer, type InviteAskWaiting } from '@beanpool/core';
 import { assertFeatureOn, getProfileSwitches } from '../config/node-profile.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getDoor } from '../config/door.js';
@@ -181,11 +180,11 @@ export type AskAnswerOutcome = { ok: true; asker: string } | { ok: false; reason
  * "Send invite": in one transaction the invite, the ask's delete and the notice that holds the code, so an invite nobody
  * can read is never made. A refusal of the invite (the admin's limit) throws, and nothing commits.
  */
-export function answerWithInvite(id: string, admin: string, vouchLevel: VouchLevel | undefined, now = Date.now()): AskAnswerOutcome {
+export function answerWithInvite(id: string, admin: string, now = Date.now()): AskAnswerOutcome {
     return db.transaction((): AskAnswerOutcome => {
         const row = liveAsk(id, now);
         if (!row) return { ok: false, reason: 'not_found' };
-        const invite = generateInvite(admin, undefined, () => assertMayMakeInvite(admin), undefined, vouchLevel);
+        const invite = generateInvite(admin, undefined, () => assertMayMakeInvite(admin));
         if (!invite) throw new Error('an ask could not be answered: the invite was not made');
         deletePlainRows('invite_asks', 'id = ?', id);
         const kept = keepNotice(row.asker_pubkey, INVITE_ASK_WORDS.noticeTitle, INVITE_ASK_WORDS.noticeBody,

@@ -21,8 +21,8 @@ import { CARD_INK, COMPACT_END, COMPACT_LEAD, COMPACT_PICTURE, COMPACT_ROW, COMP
 /** The grid's 4:3 frame anchors upright photos towards the top third (market-card-43). */
 const GRID_CROP: CSSProperties = { objectPosition: '50% 33%' };
 
-/** A listing's type on its badge (the badge's `uppercase` class puts it in capitals); a type this build doesn't know, as written. */
-function typeWords(type: string): string {
+/** A listing's type on its badge (the badge's `uppercase` class puts it in capitals); a type this build doesn't know, as written. The listing's page draws the same chip. */
+export function typeWords(type: string): string {
     return type === 'offer' ? t('offer', undefined, 'post type') : type === 'need' ? t('need', undefined, 'post type') : String(type ?? '');
 }
 

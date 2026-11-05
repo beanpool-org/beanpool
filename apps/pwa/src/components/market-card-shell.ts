@@ -471,6 +471,13 @@ export const PAGE_TYPE = {
     when: 'text-lg font-black leading-tight',
     /** An event's title: 20/800. */
     title: 'text-xl font-extrabold leading-snug',
+    /** A listing's title (Offer / Need, slice DW3): 22/800. */
+    listingTitle: 'text-[1.375rem] font-extrabold leading-snug',
+    /** The terms box's value ("Free, a swap, or ask"): core's page.termsValue, 18/800. */
+    termsValue: 'text-lg font-extrabold leading-snug',
+    /** The price in the terms box: core's page.pagePrice, 28/800; its unit beside it 15/500. */
+    price: 'text-[1.75rem] font-extrabold leading-tight',
+    priceUnit: 'text-[0.9375rem] font-medium',
     /** The place, the online line: 14/600, the page's own words. */
     place: 'text-sm font-semibold',
     /** The description: 15 on 22. */

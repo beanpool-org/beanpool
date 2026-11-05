@@ -25,6 +25,7 @@ import { useInviteAndShare } from './InviteAndShare';
 import { AskSheet } from './InviteAsks';
 import { nodeOrigin } from './EventExtras';
 import { MenuChoices, useInFlowMenu, type MenuChoice, type SharePart } from './ShareMenu';
+import { PAGE_BUTTON } from './market-card-shell';
 
 /** The quiet, neutral outline (DESIGN-detail-pages-fable.md §2.2): the page's own words on the card ground, no colour of its own. */
 const QUIET_BUTTON ='min-h-[48px] px-3 rounded-xl border text-sm font-bold bg-white dark:bg-nature-900 cursor-pointer break-words '
@@ -229,18 +230,25 @@ export function useShare(post: MarketplacePost, opts: ShareOptions): { trigger: 
     };
 }
 
-/** A listing's Share: one button, and the menu of the ways this member has here. */
-export function SharePostButtons({ post, isMember }: { post: MarketplacePost; isMember?: boolean | null }) {
+/**
+ * A listing's Share: one button, and the menu of the ways this member has here. On the listing's page it is the quiet row
+ * (DESIGN-detail-pages-fable.md §2.4, slice DW3): `lead` (Message) beside it, both in the page's neutral outline, as the event
+ * page's chat, Share and Add to calendar; the menu and what a way leaves behind under the row.
+ */
+export function SharePostButtons({ post, isMember, lead }: { post: MarketplacePost; isMember?: boolean | null; lead?: ReactNode }) {
     const share = useShare(post, {
         kind: post.type === 'event' ? 'event' : 'listing',
         isMember,
-        triggerClassName: `w-full ${QUIET_BUTTON}`,
+        triggerClassName: `grow basis-auto break-words ${PAGE_BUTTON.quiet}`,
         triggerTestId: 'share-button',
         membersLineTestId: 'share-members-note',
     });
     return (
-        <div data-testid="share-post" className="flex flex-col gap-2 mt-4">
-            {share.trigger}
+        <div data-testid="share-post" className="flex flex-col gap-2 min-w-0">
+            <div data-testid="listing-quiet-row" className="flex flex-wrap gap-2">
+                {lead}
+                {share.trigger}
+            </div>
             {share.menu}
             {share.after}
         </div>

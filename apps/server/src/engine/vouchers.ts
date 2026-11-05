@@ -577,12 +577,13 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
     assertBeansOn();
     if (!isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', VOUCHER_WORDS.ownerOnly);
     if (body.memberGift !== undefined) throw new VoucherError(400, 'moved_to_community_shape', VOUCHER_WORDS.giftInCoreSettings);
-    if (body.voucherBudget !== undefined && !isBudgetLevel(body.voucherBudget)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
+    const newBudget = body.voucherBudget;
+    if (newBudget !== undefined && !isBudgetLevel(newBudget)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
     const before = voucherSettings();
     // Each write names its key (test-replication-manifest reads every node_config write); the default removes the row.
     db.transaction(() => {
-        if (body.voucherBudget !== undefined && body.voucherBudget !== before.voucherBudget) {
-            writeVoucherBudgetSetting(actor, before.voucherBudget, body.voucherBudget);
+        if (newBudget !== undefined && newBudget !== before.voucherBudget) {
+            writeVoucherBudgetSetting(actor, before.voucherBudget, newBudget);
         }
     })();
     return voucherSettings();

@@ -355,6 +355,11 @@ async function main(): Promise<void> {
         /Known floor for confirmed members, the floor \(\d+ → 1300\); Known floor for confirmed members, the cap \(\d+ → 3000\)/);
     await refusedClean("where members' copies go, from a computer", () => post({ changes: { recoveryCopies: 'none' } }, asComputer()), 403, 'phone_required');
     await provenChange("where members' copies go, from the phone", { recoveryCopies: 'none' }, asPhone(), {}, 'recoveryCopies', /\(vault → none\)/);
+    await refusedClean('the voucher budget, from a computer', () => post({ changes: { voucherBudget: 1500 } }, asComputer()), 403, 'phone_required');
+    nMark = noticeMark();
+    await provenChange('the voucher budget, from the phone', { voucherBudget: 1500 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1000 → 1500\)/);
+    assert(noticesSince(nMark).some((x) => /budget for each voucher is now 1,500 Beans/.test(x.body)), 'voucher budget changed, and members are told');
+    await provenChange('the voucher budget back to 1000', { voucherBudget: 1000 }, asPhone(), {}, 'voucherBudget', /Budget per voucher \(1500 → 1000\)/);
     {
         // Two Core settings in one request: one proof, a core.unlock line before each.
         const m = logMark();

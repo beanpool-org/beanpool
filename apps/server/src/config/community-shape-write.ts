@@ -172,6 +172,7 @@ const NOTICE = {
     floorOn: word("Your community's owners changed how it works: confirmed members can owe up to {floor} Beans now (the known floor)."),
     floorOff: word("Your community's owners changed how it works: confirmed members no longer have a known floor, and go back to the credit they have earned."),
     floorNow: word("Your community's owners changed how it works: confirmed members' known floor is now {floor} Beans."),
+    voucherBudget: word("Your community's owners changed how it works: the budget for each voucher is now {budget} Beans."),
     giftOn: word("Your community's owners changed how it works: a member can give another up to {max} Beans of the credit line someone gave them, at once."),
     giftOff: word("Your community's owners changed how it works: members no longer give part of their credit line to each other."),
     dmOn: word("Your community's owners changed how it works: a first message from someone new now waits until you accept it."),
@@ -207,6 +208,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'wordsDoor': return on ? tr(NOTICE.wordsOn) : tr(NOTICE.wordsOff);
         case 'knocks': return on ? tr(NOTICE.knocksOn) : tr(NOTICE.knocksOff);
         case 'beans': return on ? tr(NOTICE.beansOn) : tr(NOTICE.beansOff);
+        case 'voucherBudget': return tr(NOTICE.voucherBudget, { budget: beansAmount(Number(change.to)) });
         case 'memberGift': return change.to === '0' ? tr(NOTICE.giftOff) : tr(NOTICE.giftOn, { max: change.to });
         case 'dmRequests': return on ? tr(NOTICE.dmOn) : tr(NOTICE.dmOff);
         case 'decisions': return on ? tr(NOTICE.decisionsOn) : tr(NOTICE.decisionsOff);

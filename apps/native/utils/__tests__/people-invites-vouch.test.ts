@@ -70,6 +70,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         removeItem: vi.fn(async (k: string) => { store.map.delete(k); }),
     },
 }));
+// V2 (#2914): People's Vouchers block reads the names-list key, which imports expo-secure-store (a native module).
+vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('react-native-qrcode-svg', () => ({ default: () => null }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: async () => {} }));
@@ -78,7 +80,11 @@ vi.mock('react-native-keyboard-controller', () => ({
     KeyboardAwareScrollView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
     useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }),
 }));
-vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+vi.mock('react-native-safe-area-context', () => ({
+    useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }),
+    SafeAreaView: ({ children, edges, testID }: { children?: unknown; edges?: string[]; testID?: string }) =>
+        createElement('div', { 'data-safe-area': (edges ?? ['top', 'right', 'bottom', 'left']).join(','), 'data-testid': testID }, children as any),
+}));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return {

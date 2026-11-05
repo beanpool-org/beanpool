@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Kupendekeza Uamuzi
 summary: Iombe jumuiya kuamua jambo lenye masharti ya kisheria au wajibu.
 related: decisions, rules, polls, enterprises
-source-hash: c5e90863bc9ac1f1
+source-hash: 1415ed4b1b50784e
 ---
 
 ## Kabla hujaanza
 
-- Uamuzi ni kwa ajili ya kitu ambacho seva ya jumuiya yako inaweza kutekeleza: kumwondoa au kumsimamisha mwanachama, kugandisha au kufungua mkopo wa mtu, kuchagua nani anayeweza kudhamini, au kulipa maharagwe kutoka kwenye Mali za Pamoja. Kwa jambo lingine lolote, anzisha Kura ya maoni badala yake.
+- Uamuzi ni wa jambo ambalo seva ya jumuiya yako inaweza kutekeleza moja kwa moja: kumsimamisha au kumrejesha mwanachama, kugandisha au kuondoa ugandishaji wa mkopo wa mtu, au kulipa maharagwe kutoka Commons. Kwa jambo lingine lolote, anzisha Kura ya maoni badala yake.
 - Uamuzi hauwezi kumwondoa au kumsimamisha mmiliki au msimamizi wa seva ya jumuiya yako. Tazama "Sheria na jinsi maamuzi hufanywa".
 - Unaweza kupendekeza mara tu unapokamilisha biashara, au msimamizi anapokupa beji ya uaminifu. Wasimamizi wa jumuiya yako wanaweza kupendekeza kila wakati. Dhamana pekee haitoshi.
-- Unaweza kuwa na Uamuzi mmoja ulio wazi kwa wakati mmoja.
+- Unaweza kupendekeza mara tu unapokamilisha biashara. Wasimamizi wa jumuiya yako wanaweza kupendekeza wakati wowote. Beji ya uaminifu haitoshi.
 - Jumuiya ya kimataifa haina Maamuzi, kwa hivyo hakuna cha kupendekeza huko. Tazama "Kupiga kura ya Uamuzi".
 
 ## Kupendekeza
@@ -47,3 +47,4 @@ Hii hufanya foleni ibaki wazi. Ikiwa ruzuku itapitishwa wakati Mali za Pamoja zi
 - **Ruzuku hii ni kubwa kuliko kile ambacho Mali za Pamoja zinaweza kulipa:** usiombe zaidi ya kiasi kinachotajwa, au subiri maharagwe zaidi yaingie.
 - **Kiasi Batili** (kwenye programu ya wavuti, "Tafadhali weka kiasi halali cha ruzuku katika Maharagwe zaidi ya 0"): jaza maharagwe mangapi.
 - **Hitilafu:** kagua kama maelezo yako yana urefu wa angalau herufi 10.
+

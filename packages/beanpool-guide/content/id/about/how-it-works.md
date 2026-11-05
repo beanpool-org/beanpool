@@ -3,7 +3,7 @@ slug: how-it-works
 title: Cara kerja BeanPool
 summary: Kacang, perdagangan, penawaran dan permintaan, serta kredit, secara sederhana.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: a3d4bd4eee0c67cb
+source-hash: d9e82e8017a2b050
 ---
 
 ## Kacang
@@ -43,7 +43,7 @@ Kamu juga dapat mengirimkan kacang kepada seseorang sebagai hadiah, tanpa adanya
 
 Kamu dapat berbelanja sedikit lebih banyak dari yang kamu miliki, dan berada di bawah nol. Ini adalah **batas kreditmu**. Ini adalah janji untuk membantu orang lain nanti.
 
-Batas kreditmu dimulai dari nol. Batas ini terbuka saat kamu menyelesaikan transaksi pertamamu di pasar (transaksi yang hanya bernilai 1 atau 2 kacang terlalu kecil untuk dihitung). Seseorang yang dipilih komunitasmu untuk menyambut pendatang baru juga dapat memberimu permulaan kecil dengan menjaminmu: 25, 50, atau 100 kacang.
+Batas kreditmu dimulai dari nol. Batas kredit terbuka saat kamu menyelesaikan transaksi pertamamu di pasar (transaksi 1 atau 2 kacang saja terlalu kecil untuk dihitung). Seorang penjamin juga dapat memberimu permulaan dengan menjaminmu pada undangan atau profilmu: 25, 50, 75, atau 100 kacang, dari anggaran penjamin mereka.
 
 Batas kreditmu bertumbuh seiring **kepercayaanmu**:
 
@@ -93,3 +93,4 @@ Sebuah **usaha** terus berjalan dan bertransaksi atas namanya sendiri: toko roti
 Sebuah **grup** adalah lingkaran anggota dengan obrolan dan postingannya sendiri, yang dijalankan oleh satu atau lebih **koordinator**. Salah satunya adalah **koordinator utama** — siapa pun yang membuat grup tersebut pada awalnya.
 
 Kamu dapat membaca bagaimana pengurus dan koordinator dipilih di "Rules and how decisions work".
+

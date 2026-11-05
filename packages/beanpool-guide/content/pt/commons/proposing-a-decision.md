@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Propor uma Decisão
 summary: Peça à comunidade para decidir algo de forma vinculativa.
 related: decisions, rules, polls, enterprises
-source-hash: c5e90863bc9ac1f1
+source-hash: 1415ed4b1b50784e
 ---
 
 ## Antes de começar
 
-- Uma Decisão serve para algo que o servidor da sua comunidade possa executar: remover ou suspender um membro, congelar ou descongelar o crédito de alguém, escolher quem pode dar aval ou pagar feijões dos Bens comuns. Para qualquer outra coisa, crie uma Enquete.
+- Uma Decisão serve para algo que o servidor da sua comunidade possa executar: suspender ou reintegrar um membro, congelar ou descongelar o crédito de alguém, ou pagar feijões dos Bens Comuns. Para qualquer outra coisa, crie uma Enquete.
 - Uma Decisão não pode remover ou suspender um proprietário ou administrador do servidor da sua comunidade. Consulte "Regras e decisões".
 - Você pode fazer uma proposta depois de concluir uma troca ou se um administrador tiver concedido um emblema de confiança a você. Os administradores da sua comunidade sempre podem propor. Apenas um aval não é suficiente.
-- Você pode ter uma Decisão aberta por vez.
+- Você pode propor assim que concluir uma troca. Os administradores da sua comunidade sempre podem propor. Uma insígnia de confiança não é suficiente.
 - A comunidade global não tem Decisões, portanto não há o que propor por lá. Consulte "Votar em uma Decisão".
 
 ## Fazer uma proposta
@@ -47,3 +47,4 @@ Isso mantém a fila livre. Se um subsídio for aprovado quando os Bens comuns es
 - **Este subsídio é maior do que os Bens comuns poderiam pagar:** solicite no máximo o valor indicado ou aguarde a entrada de mais feijões.
 - **Valor inválido** (no aplicativo web, "Digite um valor positivo válido de concessão em feijões"): preencha a quantidade de feijões.
 - **Erro:** verifique se a sua descrição tem pelo menos 10 caracteres.
+

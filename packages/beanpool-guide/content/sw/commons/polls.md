@@ -4,7 +4,7 @@ title: Kura za maoni
 summary: Uliza jumuiya swali la haraka. Kura za maoni huonyesha mtazamo; hazibadili chochote zenyewe.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Kura ya maoni huuliza jumuiya swali la haraka. Inaonyesha mawazo ya watu; haibadili chochote yenyewe.
-source-hash: c1e4eb171c19552f
+source-hash: 74aa1008e60fa805
 ---
 
 ## Kura ya maoni au Uamuzi?
@@ -36,7 +36,7 @@ Unaweza kuwa na kura moja ya maoni iliyo wazi kwa wakati mmoja, na jumuiya inawe
 
 Kura za maoni ziko Sokoni. Gusa **Kura za maoni** katika safu ya juu ili kuona kura za maoni pekee. Kura ya maoni huorodheshwa tena mara moja, chini ya **Leo**, siku moja kabla ya kufungwa.
 
-- Gusa jibu ili kulichagua. Gusa lingine ili kubadili nia yako, hadi kura ya maoni ifungwe.
+- Gusa jibu ili kulichagua. Gusa jingine ili kubadili nia yako, hadi kura ya maoni itakapofungwa: programu itakuomba uthibitishe kabla ya kubadilisha kura yako.
 - Kadi huonyesha ni watu wangapi waliochagua kila jibu.
 
 ## Nani anayeweza kuona jinsi ulivyopiga kura
@@ -51,3 +51,4 @@ Wamiliki na wasimamizi wanaoendesha seva ya jumuiya yako bado wanaweza kuona kil
 ## Kufunga kura ya maoni mapema
 
 Ikiwa wewe ndiye uliyeianzisha, gusa **Funga Kura ya Maoni**, kisha **Funga Kura ya Maoni** tena ili kuthibitisha (**Sawa** kwenye programu ya wavuti).
+

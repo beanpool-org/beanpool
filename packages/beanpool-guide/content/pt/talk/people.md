@@ -4,7 +4,7 @@ title: Pessoas e amigos
 summary: Encontre membros da sua comunidade, adicione amigos e apoie alguém.
 related: messages, your-profile, joining, blocking
 help: Os membros da sua comunidade e seus amigos. Toque em alguém para ver o perfil ou em 💬 junto a um amigo para conversar.
-source-hash: 44b66169497e9909
+source-hash: 094e89e2c072349f
 ---
 
 ## Encontrando pessoas
@@ -37,6 +37,13 @@ Você pode optar por não ser exibido como conexão em comum de ninguém. Nas Co
 
 ## Apoiando alguém
 
-Alguns membros são escolhidos pela comunidade para acolher recém-chegados. Eles podem apoiar um novo membro, o que oferece a essa pessoa uma linha de crédito inicial para começar a negociar. No perfil da pessoa, eles tocam em **Apoiar membro** e escolhem **Leve** (25), **Padrão** (50) ou **Profundo** (100). Nenhum feijão sai da carteira de quem apoia.
+Um recomendador pode apoiar um membro que já tenha entrado, concedendo-lhe uma linha de crédito para começar a negociar. Recomendadores são proprietários e administradores por função, bem como membros definidos como recomendadores na lista de nomes por um proprietário ou administrador do comitê de crédito.
 
-Quem tem autorização para apoiar membros é decidido por um administrador ou por uma Decisão da comunidade, nunca por um selo. Veja "Regras e como funcionam as decisões".
+No perfil do membro, o recomendador toca em **Apoiar @nome** e escolhe **25**, **50**, **75** ou **100** feijões do seu orçamento. Nenhum feijão sai da carteira do recomendador.
+
+- **Um apoio por pessoa:** cada recomendador pode apoiar uma pessoa uma vez. Você pode posteriormente aumentar seu apoio a ela, até 100 feijões no total.
+- **No máximo 3 recomendadores:** no máximo 3 recomendadores podem apoiar a mesma pessoa (até 300 feijões no total).
+- **Nunca abaixo de zero:** você não pode apoiar um membro que esteja negativado no momento. Para ajudar quem está em débito, membros podem doar parte de sua linha de crédito em Enviar, ou propor uma Decisão comunitária.
+
+Consulte "Entrando no BeanPool" e "Sua linha de crédito".
+

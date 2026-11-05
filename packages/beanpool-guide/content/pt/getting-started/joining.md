@@ -4,7 +4,7 @@ title: Entrar no BeanPool
 summary: Duas formas de entrar: uma comunidade com convite de membro, ou a comunidade global se estiver aberta, com 12 palavras secretas ou login. Pedir entrada e convidar outros.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Entre em uma comunidade com convite de um membro ou na comunidade global com 12 palavras secretas ou um login.
-source-hash: 5a1feb7390e4c3fb
+source-hash: e8148ea89abb9b77
 ---
 
 ## Duas formas de entrar
@@ -110,3 +110,4 @@ As pessoas podem pedir para entrar na sua comunidade a partir da comunidade glob
 - **Agora não** não informa nada além de "sem resposta por enquanto".
 
 Qualquer membro pode responder. Em uma comunidade onde apenas administradores convidam, somente os proprietários e administradores veem os pedidos e respondem a eles. Consulte "Encontrar uma comunidade próxima".
+

@@ -4,7 +4,7 @@ title: Jajak pendapat
 summary: Ajukan pertanyaan cepat ke komunitas. Jajak pendapat melihat opini; tidak mengubah aturan apa pun secara langsung.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Jajak pendapat menanyakan hal cepat ke komunitas. Ini melihat opini dan tidak mengubah aturan apa pun.
-source-hash: c1e4eb171c19552f
+source-hash: 74aa1008e60fa805
 ---
 
 ## Jajak Pendapat atau Keputusan?
@@ -19,7 +19,7 @@ Saat jajak pendapat sedang terbuka, jajak pendapat tidak menyebutkan apa pun ten
 
 ## Memulai jajak pendapat
 
-- Ketuk **+ TAMBAH POSTINGAN** pada tab Pasar atau Peta.
+- Ketuk jawaban untuk memilihnya. Ketuk yang lain untuk mengubah pikiranmu, hingga jajak pendapat ditutup: aplikasi meminta konfirmasi sebelum mengubah suaramu.
 - Pilih **Jajak Pendapat Komunitas**.
 - Tulis **Pertanyaan**.
 - Tambahkan **Konteks / Catatan** jika membantu. Ini bersifat opsional.
@@ -36,7 +36,7 @@ Kamu dapat memiliki satu jajak pendapat yang terbuka pada satu waktu, dan suatu 
 
 Jajak pendapat ada di Pasar. Ketuk **Jajak Pendapat** di baris atas untuk hanya melihat jajak pendapat. Jajak pendapat ditampilkan lagi sekali, di bawah **Hari ini**, sehari sebelum ditutup.
 
-- Ketuk jawaban untuk memilihnya. Ketuk jawaban lain untuk mengubah pilihanmu, hingga jajak pendapat ditutup.
+- Ketuk jawaban untuk memilihnya. Ketuk yang lain untuk mengubah pikiranmu, hingga jajak pendapat ditutup: aplikasi meminta konfirmasi sebelum mengubah suaramu.
 - Kartu menampilkan berapa banyak orang yang memilih setiap jawaban.
 
 ## Siapa yang bisa melihat pilihan suaramu
@@ -51,3 +51,4 @@ Pemilik dan admin yang mengelola server komunitasmu tetap dapat melihat setiap s
 ## Menutup jajak pendapat lebih awal
 
 Jika kamu yang memulainya, ketuk **Tutup Jajak Pendapat**, lalu **Tutup Jajak Pendapat** lagi untuk mengonfirmasi (**Oke** di web app).
+

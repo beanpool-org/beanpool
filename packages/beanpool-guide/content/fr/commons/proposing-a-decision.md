@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Proposer une Décision
 summary: Demander à la communauté de voter une décision contraignante.
 related: decisions, rules, polls, enterprises
-source-hash: c5e90863bc9ac1f1
+source-hash: 1415ed4b1b50784e
 ---
 
 ## Avant de commencer
 
-- Une Décision concerne une action que le serveur de votre communauté peut exécuter : exclure ou suspendre un membre, geler ou dégeler le crédit de quelqu'un, choisir qui peut parrainer, ou verser des haricots depuis les Communs. Pour toute autre question, lancez plutôt un Sondage.
+- Une Décision concerne une action que le serveur de votre communauté peut exécuter : exclure ou suspendre un membre, geler ou dégeler le crédit de quelqu'un, ou verser des haricots depuis les Communs. Pour toute autre question, lancez plutôt un Sondage.
 - Une Décision ne peut ni exclure ni suspendre un propriétaire ou un administrateur du serveur de votre communauté. Voir « Règles et décisions ».
 - Vous pouvez faire une proposition dès que vous avez conclu un échange, ou qu'un administrateur vous a attribué un badge de confiance. Les administrateurs de votre communauté peuvent toujours proposer. Un parrainage seul ne suffit pas.
-- Vous pouvez avoir une seule Décision ouverte à la fois.
+- Vous pouvez faire une proposition dès que vous avez conclu un échange. Les administrateurs de votre communauté peuvent toujours proposer. Un badge de confiance ne suffit pas.
 - La communauté globale ne comporte pas de Décisions, il n'y a donc rien à y proposer. Voir « Voter une Décision ».
 
 ## Faire une proposition
@@ -47,3 +47,4 @@ Cela évite d'encombrer la file d'attente. Si une subvention est adoptée alors 
 - **Cette aide dépasse ce que les Communs peuvent verser :** ne demandez pas plus que le montant indiqué, ou attendez que d'autres haricots arrivent.
 - **Montant non valide** (dans l'application web, « Veuillez saisir un montant de subvention positif et valide en haricots ») : renseignez le nombre de haricots.
 - **Erreur :** vérifiez que votre description comporte au moins 10 caractères.
+

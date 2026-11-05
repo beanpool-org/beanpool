@@ -4,7 +4,7 @@ title: Entrare in BeanPool
 summary: Due modi per entrare: una comunità, con l'invito di un membro, o la comunità globale se aperta, con 12 parole segrete o un accesso. Chiedere di entrare e invitare altri.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Unisciti a una comunità con l'invito di un membro o alla comunità globale con 12 parole segrete o un account collegato.
-source-hash: 5a1feb7390e4c3fb
+source-hash: e8148ea89abb9b77
 ---
 
 ## Due modi per entrare
@@ -117,3 +117,4 @@ Le persone possono chiedere di entrare nella tua comunità dalla comunità globa
 - **Non ora** comunica loro soltanto "nessuna risposta per ora".
 
 Qualsiasi membro può rispondere. In una comunità in cui invitano solo gli amministratori, solo i suoi proprietari e amministratori vedono le richieste e vi rispondono. Vedi "Trovare una comunità vicina".
+

@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Bir Karar önerme
 summary: Topluluktan bağlayıcı bir karar almasını isteyin.
 related: decisions, rules, polls, enterprises
-source-hash: c5e90863bc9ac1f1
+source-hash: 1415ed4b1b50784e
 ---
 
 ## Başlamadan önce
 
-- Bir Karar, topluluğunuzun sunucusunun yürütebileceği bir şey içindir: bir üyeyi çıkarma veya askıya alma, birinin kredisini dondurma veya çözme, kimin kefil olabileceğini seçme ya da Ortak Alandan fasulye ödeme. Başka herhangi bir şey için bunun yerine bir Anket başlatın.
+- Bir Karar, topluluk sunucunun doğrudan uygulayabileceği bir konu içindir: bir üyeyi askıya almak veya eski durumuna getirmek, birinin kredisini dondurmak veya çözmek ya da Ortak Havuzdan fasulye ödemek. Başka herhangi bir konu için bunun yerine bir Anket başlat.
 - Bir Karar, topluluğunuzun sunucusunun bir sahibini veya yöneticisini çıkaramaz ya da askıya alamaz. "Kurallar ve karar alma süreci" bölümüne bakın.
 - Bir takası tamamladığınızda veya bir yönetici size bir güven rozeti verdiğinde önerebilirsiniz. Topluluğunuzun yöneticileri her zaman önerebilir. Yalnızca bir kefalet yeterli değildir.
-- Bir seferde açık bir Kararınız olabilir.
+- İlk takasını tamamlar tamamlamaz öneride bulunabilirsin. Topluluğunun yöneticileri her zaman öneride bulunabilir. Bir güven rozeti yeterli değildir.
 - Küresel toplulukta Kararlar yoktur, bu nedenle orada önerilecek bir şey yoktur. "Karara oy verme" bölümüne bakın.
 
 ## Önerme
@@ -47,3 +47,4 @@ Bu, kuyruğun serbest kalmasını sağlar. Ortak Alanda eksik varken bir hibe ka
 - **This grant is bigger than the Commons could pay:** belirttiği miktardan fazlasını istemeyin veya daha fazla fasulye gelmesini bekleyin.
 - **Geçersiz Tutar** (web uygulamasında "Lütfen Fasulye cinsinden geçerli ve pozitif bir hibe miktarı girin."): kaç fasulye olduğunu doldurun.
 - **Hata:** açıklamanızın en az 10 karakter uzunluğunda olduğunu kontrol edin.
+

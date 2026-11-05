@@ -114,6 +114,32 @@ test('member-facing words: no internal names, no code words, beans not Ʀ, badge
     }
 });
 
+test('§1.3: legacy vouching words and phrases are absent across the guide and operator manual', () => {
+    const files = [
+        ...fs.readdirSync(CONTENT_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => path.join(CONTENT_DIR, f)),
+        ...fs.readdirSync(OPERATORS_DIR, { recursive: true }).map(String).filter(f => f.endsWith('.md')).map(f => path.join(OPERATORS_DIR, f)),
+    ];
+    const banned = [
+        [/\bVouched in by\b/i, 'replaced by "Invited by" (§1.3)'],
+        [/\bAppointed vouchers?\b/i, 'appointed vouchers term removed (§1.3)'],
+        [/\bPromote and Demote\b/i, 'Promote and Demote removed (§1.3)'],
+        [/\bgive or take away vouching\b/i, 'vouching decisions removed (§1.3)'],
+        [/\bchoosing who may vouch\b/i, 'choosing who may vouch removed (§1.3)'],
+        [/\bVouch for Member\b/i, 'old profile vouch button removed (§1.3)'],
+        [/\bLight \(25\)/i, 'old preset names removed (§1.3)'],
+        [/\b(give|giving) a member the right to vouch\b/i, 'decision effect removed (§1.3)'],
+        [/\b(take|taking) away the right to vouch\b/i, 'decision effect removed (§1.3)'],
+        [/\b25, 50 or 100\b/i, 'presets are 25, 50, 75 or 100 (§4)'],
+    ];
+    for (const file of files) {
+        const text = fs.readFileSync(file, 'utf8');
+        for (const [re, why] of banned) {
+            const m = re.exec(text);
+            assert.equal(m, null, `found "${m?.[0]}" in ${path.relative(path.resolve(CONTENT_DIR, '..'), file)} — ${why}`);
+        }
+    }
+});
+
 test('parser: the supported subset', () => {
     const g = parseGuideMarkdown('---\nslug: a-b\ntitle: T\nsummary: S\nrelated: c\n---\n\n## H\n\nOne\ntwo **bold**.\n\n- x\n- y\n\n### Sub\n', 'x.md');
     assert.deepEqual(g.blocks, [

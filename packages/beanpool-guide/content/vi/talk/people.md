@@ -4,7 +4,7 @@ title: Mọi người và bạn bè
 summary: Tìm thành viên trong cộng đồng, kết bạn và bảo lãnh cho một người.
 related: messages, your-profile, joining, blocking
 help: Thành viên cộng đồng và bạn bè. Nhấn vào ai đó để xem hồ sơ, hoặc nhấn 💬 bên cạnh một thành viên để nhắn tin cho họ.
-source-hash: 44b66169497e9909
+source-hash: 094e89e2c072349f
 ---
 
 ## Tìm kiếm mọi người
@@ -37,6 +37,13 @@ Bạn có thể chọn không hiển thị mình là kết nối chung của b�
 
 ## Bảo lãnh cho một người
 
-Một số thành viên được cộng đồng lựa chọn để chào đón những người mới đến. Họ có thể bảo lãnh cho một thành viên mới, điều này mang lại cho người đó một hạn mức tín dụng nhỏ để bắt đầu. Trên hồ sơ của người đó, họ nhấn vào **Bảo lãnh cho thành viên** và chọn **Nhẹ** (25), **Tiêu chuẩn** (50) hoặc **Sâu** (100). Không có Đậu nào rời khỏi ví của chính người bảo lãnh.
+Người bảo lãnh có thể bảo lãnh cho thành viên đã tham gia để cấp cho họ hạn mức tín dụng bắt đầu giao dịch. Người bảo lãnh là chủ sở hữu và quản trị viên theo vai trò, hoặc thành viên được chỉ định trong danh sách tên bởi chủ sở hữu hoặc quản trị viên ban tín dụng.
 
-Ai có thể bảo lãnh là do một quản trị viên hoặc một Quyết định của cộng đồng quyết định, không bao giờ dựa trên huy hiệu. Xem "Quy tắc và cách quyết định vận hành".
+Trên hồ sơ của thành viên, người bảo lãnh chạm vào **Bảo lãnh cho @tên** và chọn **25**, **50**, **75** hoặc **100** đậu từ ngân sách bảo lãnh. Không có hạt đậu nào bị trừ từ ví cá nhân của người bảo lãnh.
+
+- **Một lần bảo lãnh cho mỗi người:** mỗi người bảo lãnh chỉ có thể bảo lãnh cho một người một lần. Sau này bạn có thể nâng mức bảo lãnh lên đến 100 đậu tổng cộng.
+- **Tối đa 3 người bảo lãnh:** tối đa 3 người bảo lãnh cho cùng một người (tổng cộng lên tới 300 đậu).
+- **Không bảo lãnh khi đang âm:** bạn không thể bảo lãnh cho thành viên hiện đang có số dư âm. Để giúp người đang nợ, các thành viên có thể tặng một phần hạn mức tín dụng trong mục Gửi, hoặc đề xuất Quyết định cộng đồng.
+
+Xem "Tham gia BeanPool" và "Hạn mức tín dụng của bạn".
+

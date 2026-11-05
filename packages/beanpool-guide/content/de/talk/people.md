@@ -4,7 +4,7 @@ title: Leute und Freunde
 summary: Mitglieder finden, Freunde, Profile, jemanden in eine Gruppe einladen und wer dich sehen kann.
 related: messages, your-profile, joining, blocking
 help: Die Mitglieder deiner Community und deine Freunde. Tippe auf eine Person für das Profil oder auf 💬, um ihr zu schreiben.
-source-hash: 44b66169497e9909
+source-hash: 094e89e2c072349f
 ---
 
 ## Personen finden
@@ -37,6 +37,13 @@ Du kannst festlegen, bei niemandem als gemeinsame Verbindung angezeigt zu werden
 
 ## Für jemanden bürgen
 
-Einige Mitglieder werden von der Community ausgewählt, um Neulinge willkommen zu heißen. Sie können für ein neues Mitglied bürgen, was dieser Person einen kleinen Start-Kreditrahmen verschafft. Auf dem Profil der Person tippen sie auf **Für Mitglied bürgen** und wählen **Leicht** (25), **Standard** (50) oder **Tief** (100). Es fließen keine Bohnen aus dem Guthaben des Bürgen ab.
+Ein Bürge kann für ein Mitglied bürgen, das bereits beigetreten ist, und ihm so einen Kreditrahmen für den Beginn des Handelns verschaffen. Bürgen sind Eigentümer und Admins kraft ihrer Rolle sowie Mitglieder, die von einem Eigentümer oder Admin des Kreditausschusses auf der Namensliste als Bürgen festgelegt wurden.
 
-Wer bürgen darf, entscheidet ein Admin oder ein Community-Beschluss, niemals ein Abzeichen. Siehe „Regeln und Entscheidungen“.
+Auf dem Profil des Mitglieds tippt ein Bürge auf **Für @name bürgen** und wählt **25**, **50**, **75** oder **100** Bohnen aus seinem Bürgschaftsbudget. Es verlassen dabei keine Bohnen das eigene Guthaben des Bürgen.
+
+- **Eine Bürgschaft pro Person:** Jeder Bürge kann für eine Person einmal bürgen. Du kannst deine Bürgschaft für diese Person später auf bis zu 100 Bohnen insgesamt erhöhen.
+- **Höchstens 3 Bürgen:** Maximal 3 Bürgen können für dieselbe Person bürgen (insgesamt bis zu 300 Bohnen).
+- **Niemals unter Null:** Du kannst nicht für ein Mitglied bürgen, das sich gerade im Minus befindet. Um jemandem mit Schulden zu helfen, können Mitglieder unter „Senden“ einen Teil ihres Kreditrahmens weitergeben oder einen Community-Beschluss vorschlagen.
+
+Siehe „BeanPool beitreten“ und „Dein Kreditrahmen“.
+

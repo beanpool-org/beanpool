@@ -3,7 +3,7 @@ slug: how-it-works
 title: Cách BeanPool hoạt động
 summary: Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: a3d4bd4eee0c67cb
+source-hash: d9e82e8017a2b050
 ---
 
 ## Đậu
@@ -43,7 +43,7 @@ Bạn cũng có thể gửi Đậu cho ai đó như một món quà tặng, khô
 
 Bạn có thể chi tiêu nhiều hơn một chút so với số Đậu bạn đang có, và số dư có thể xuống dưới mức 0. Đây là **hạn mức tín dụng** của bạn. Đó là một lời hứa sẽ giúp đỡ người khác sau này.
 
-Hạn mức tín dụng của bạn bắt đầu từ số 0. Nó sẽ mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ 1 hoặc 2 Đậu là quá nhỏ để được tính). Người được cộng đồng chọn để chào đón thành viên mới cũng có thể hỗ trợ bạn một khởi đầu nhỏ bằng cách bảo lãnh cho bạn: 25, 50 hoặc 100 Đậu.
+Hạn mức tín dụng của bạn bắt đầu từ số không. Hạn mức mở khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ 1 hoặc 2 đậu là quá nhỏ để tính). Người bảo lãnh cũng có thể hỗ trợ khởi đầu bằng cách bảo lãnh cho bạn trên lời mời hoặc hồ sơ: 25, 50, 75 hoặc 100 đậu từ ngân sách bảo lãnh của họ.
 
 Hạn mức tín dụng của bạn sẽ tăng lên cùng với mức **uy tín** của bạn:
 
@@ -93,3 +93,4 @@ Một **doanh nghiệp** hoạt động liên tục và giao dịch dưới tên
 Một **nhóm** là một tập hợp các thành viên có phần chat và bài đăng riêng, được điều hành bởi một hoặc nhiều **điều hành viên**. Một trong số họ là **trưởng ban điều hành** — ban đầu là người đã tạo ra nhóm.
 
 Bạn có thể đọc cách chọn người quản lý và điều hành viên trong "Quy tắc và cách quyết định vận hành".
+

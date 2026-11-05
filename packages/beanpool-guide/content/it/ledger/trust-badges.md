@@ -3,7 +3,7 @@ slug: trust-badges
 title: Badge di fiducia
 summary: Nuovo arrivato, Residente, Custode e Saggio. Cosa significano e perché non sbloccano privilegi.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: a6cc3bb74fc395bb
+source-hash: 9cb2cc1e373c7763
 ---
 
 ## Cosa sono
@@ -17,7 +17,7 @@ Il tuo badge di fiducia mostra quanta fiducia hai costruito:
 
 Un membro che non ha ancora effettuato scambi mostra **FOUNDING** sui propri post.
 
-La fiducia deriva da una garanzia al momento dell'ingresso, dagli scambi completati e dalla fiducia concessa da un amministratore. In una comunità che conferma i propri membri, essere confermati assegna un limite di credito più alto, non un badge più alto: il tuo badge conta solo ciò che hai fatto, quindi non mostra mai che sei confermato.
+La fiducia deriva dagli scambi completati e dalla fiducia concessa da un amministratore. In una comunità che conferma i propri membri, essere confermati garantisce un limite di credito più elevato, non un badge superiore: il badge conta solo ciò che hai fatto, quindi non indica mai la conferma dell'identità.
 
 ## Non sbloccano nulla
 
@@ -36,3 +36,4 @@ Sul telefono, il filtro **Fiducia** del Mercato può mostrare solo i post di mem
 ## Amministratori e badge
 
 Gli amministratori di una comunità possono assegnare un badge a un membro. Ciò amplia la loro linea di credito, come la fiducia guadagnata. Non viene conteggiato come scambi: non aggiunge crediti di voto e non consente loro di inviare doni.
+

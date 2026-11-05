@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: व्यवस्थापक क्या देख सकते हैं
 summary: ऐसे समुदाय में जिसके व्यवस्थापक नामों की सूची रखते हैं: यह आपके बारे में क्या रखती है, इसे कौन पढ़ सकता है, सर्वर क्या रखता है, और पुष्टि होने का क्या अर्थ है।
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 88d60b236e7653ab
+source-hash: 3b82166b108108b4
 ---
 
 ## The names list
@@ -86,3 +86,4 @@ source-hash: 88d60b236e7653ab
 ## Asking about your entry
 
 आप अपने व्यवस्थापकों से पूछ सकते हैं कि आपकी प्रविष्टि क्या कहती है, इसे सही करने के लिए, या जब आप समुदाय से नहीं जुड़े रहते हैं तो इसे हटाने के लिए। वे सूची रखते हैं, BeanPool नहीं।
+

@@ -4,7 +4,7 @@ title: Bergabung ke BeanPool
 summary: Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Gabung ke komunitas dengan undangan anggota, atau komunitas global dengan 12 kata rahasia atau akun masuk.
-source-hash: 5a1feb7390e4c3fb
+source-hash: e8148ea89abb9b77
 ---
 
 ## Dua cara masuk
@@ -117,3 +117,4 @@ Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketika a
 - **Jangan sekarang** tidak memberi tahu apa pun kepada mereka selain "belum ada jawaban".
 
 Setiap anggota dapat menjawab. Di komunitas yang hanya adminnya yang mengundang, hanya pemilik dan adminnya yang dapat melihat permintaan dan menjawabnya. Lihat "Finding a community near you".
+

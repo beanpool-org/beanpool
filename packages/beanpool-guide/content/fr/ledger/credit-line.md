@@ -3,7 +3,7 @@ slug: credit-line
 title: Votre ligne de crédit
 summary: Jusqu'où descendre sous zéro et comment elle augmente.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: d966829d85d430b1
+source-hash: 1019023b7b5bb263
 ---
 
 ## Ce que c'est
@@ -23,7 +23,7 @@ Sur le téléphone, touchez la barre pour ouvrir les **Infos sur le curseur de c
 
 ## Comment elle s'ouvre
 
-Elle commence à zéro. Elle s'ouvre dès que vous concluez votre premier échange sur le marché (un échange de 1 ou 2 haricots seulement est trop petit pour compter), ou lorsque quelqu'un désigné pour accueillir les nouveaux arrivants se porte garant pour vous. Jusque-là, le Registre indique **Pas encore de ligne de crédit**. Vous pouvez toujours échanger avec les haricots que vous détenez.
+Elle commence à zéro. Elle s'ouvre lorsque vous concluez votre premier échange sur le marché (un échange de seulement 1 ou 2 haricots est trop petit pour compter), ou lorsqu'un parrain vous parraine sur l'invitation qui vous a fait entrer ou sur votre profil. Jusque-là, le Grand livre indique **Pas encore de ligne de crédit**. Vous pouvez toujours échanger avec les haricots que vous détenez.
 
 ## Comment elle augmente
 
@@ -46,7 +46,7 @@ La ligne sous la barre vous indique la marche à suivre, par exemple « Publiez 
 
 ## Dans une communauté avec identités confirmées
 
-Certaines communautés ont des administrateurs qui connaissent chaque membre par son nom. Un membre confirmé par un administrateur bénéficie immédiatement d'une ligne de crédit, **le plancher connu** : 1 000 haricots, sauf si votre communauté a choisi un autre montant. Cela représente environ 25 heures de travail pour lesquelles la communauté vous accorde sa confiance. Cela augmente votre limite, pas votre niveau : votre badge de confiance ne compte toujours que ce que vous avez accompli. Le plancher connu est activé dans chaque communauté avec des haricots, à moins que son propriétaire ne l'ait désactivé.
+Elle commence à zéro. Elle s'ouvre lorsque vous concluez votre premier échange sur le marché (un échange de seulement 1 ou 2 haricots est trop petit pour compter), ou lorsqu'un parrain vous parraine sur l'invitation qui vous a fait entrer ou sur votre profil. Jusque-là, le Grand livre indique **Pas encore de ligne de crédit**. Vous pouvez toujours échanger avec les haricots que vous détenez.
 
 - Une Offre active vous permet de l'utiliser en entier. Sans aucune Offre, vous ne pouvez pas l'utiliser.
 - La confiance que vous gagnez en échangeant s'y ajoute, jusqu'au plafond de votre communauté (2 000 haricots à moins qu'elle n'ait choisi davantage, jusqu'à 5 000).
@@ -62,10 +62,21 @@ Dans certaines communautés, chaque membre peut inviter des personnes, les admin
 Les administrateurs de votre communauté peuvent suspendre la ligne de crédit d'un membre : en totalité, ou, dans une communauté avec membres connus, la part issue du statut de membre confirmé.
 
 - S'ils suspendent la totalité, ou si la part confirmée constitue toute votre ligne, le Registre indique **Votre ligne de crédit est suspendue** : vous ne pouvez plus dépenser à découvert tant que dure la mesure, mais vous pouvez toujours vendre et recevoir des haricots, et dépenser ce que vous détenez au-dessus de zéro. Si vous étiez à découvert au moment de la suspension, le Registre indique aussi le montant de ce découvert : vendre ou recevoir des haricots fait remonter votre solde, et dès que vous repassez au-dessus de zéro, vous pouvez dépenser vos avoirs.
-- S'ils suspendent la part confirmée et que vous disposez également de crédit issu d'un parrainage, d'échanges ou d'une subvention, la barre reste en place, assortie d'une mention précisant que la part confirmée est suspendue et que le reste fonctionne comme avant. Si vous vous trouvez en dessous du montant restant, le Registre affiche également **Dépenses suspendues** (voir ci-dessous).
+- Si la part confirmée est gelée et que vous disposez également de crédit issu d'un parrainage, d'un don de ligne de crédit, d'échanges ou d'une allocation, la jauge reste affichée, avec une mention indiquant que la part confirmée est gelée et que le reste continue de fonctionner. Si vous êtes en dessous de ce qui reste, le Grand livre indique également **Dépenses suspendues** (ci-dessous).
 
-Votre niveau ne change pas, aussi bien sur votre profil que sur vos annonces : il ne compte que ce que vous avez accompli (un parrainage, vos échanges et toute confiance accordée par un administrateur), jamais la part de votre ligne issue du statut confirmé, ni aucun montant défini par les administrateurs pour celle-ci. Pour en demander la raison ou obtenir sa réouverture, adressez-vous à l'un des administrateurs.
+Votre niveau ne change pas, ni sur votre profil ni sur vos annonces : il prend en compte ce que vous avez accompli (vos échanges et la confiance accordée par un administrateur), jamais la part provenant de votre statut confirmé ni un quelconque montant défini par les administrateurs. Pour en savoir plus ou demander son déblocage, adressez-vous à l'un des administrateurs.
+
+## Céder une partie de votre ligne de crédit
+
+Vous pouvez transmettre une partie de votre ligne de crédit à un autre membre. Dans **Envoyer**, ouvrez l’onglet **Ligne de crédit** situé à côté de **Haricots**.
+
+- **Uniquement du crédit reçu :** vous ne pouvez donner que du crédit qu'un parrain ou un autre membre vous a transmis. Vous ne pouvez pas céder votre plancher garanti ni le crédit que vous avez gagné en échangeant.
+- **Uniquement ce que vous n'utilisez pas :** vous ne pouvez céder que la part de crédit laissée libre par votre solde et vos Offres en cours, de sorte qu'un don ne suspend jamais vos dépenses.
+- **Après votre premier échange :** vous pouvez céder du crédit dès que vous avez réalisé votre premier échange sur le marché, comme pour l'envoi de haricots.
+- **Jusqu'à la limite fixée par la communauté :** vous pouvez donner jusqu'à 100 haricots par transmission (ou la valeur fixée par le propriétaire de la communauté si elle est inférieure).
+- **C'est à eux pour de bon :** la ligne de crédit est définitivement acquise au bénéficiaire. Elle ne fait jamais de lui un parrain. Vous ne pouvez pas céder de crédit à vous-même, à une entreprise, ni à un membre dont le compte est suspendu ou gelé.
 
 ## Dépenses suspendues
 
 Si vous descendez en dessous de ce que vos Offres autorisent, par exemple parce que vous avez retiré une Offre, le Registre indique **Dépenses suspendues**. Vous pouvez toujours gagner des haricots et vendre. Publiez une Offre, ou gagnez des haricots pour remonter, et la suspension se lève. Rien ne vous est retiré.
+

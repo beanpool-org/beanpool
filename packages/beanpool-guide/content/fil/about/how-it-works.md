@@ -3,7 +3,7 @@ slug: how-it-works
 title: Paggana ng BeanPool
 summary: Munggo, kalakalan, mga alok at kahilingan, at kredito, sa simpleng salita.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: a3d4bd4eee0c67cb
+source-hash: d9e82e8017a2b050
 ---
 
 ## Munggo
@@ -43,7 +43,7 @@ Maaari ka ring magpadala ng munggo sa isang tao bilang regalo, nang walang kalak
 
 Maaari kang gumastos nang kaunti pa kaysa sa mayroon ka, at bumaba sa ilalim ng zero. Ito ang iyong **linya ng kredito**. Isa itong pangako na tutulong sa iba sa ibang pagkakataon.
 
-Nagsisimula ang iyong linya ng kredito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kalakalan sa merkado (ang kalakalan na 1 o 2 munggo lamang ay masyadong maliit para mabilang). Ang isang taong pinili ng iyong komunidad upang tanggapin ang mga baguhan ay maaari ding magbigay sa iyo ng kaunting panimula sa pamamagitan ng pag-vouch para sa iyo: 25, 50 o 100 munggo.
+Nagsisimula sa zero ang iyong credit line. Nagbubukas ito kapag natapos mo ang iyong unang palitan sa pamilihan (ang palitan na 1 o 2 beans lang ay masyadong maliit para ibilang). Ang isang tagapagpatunay ay maaari ding magbigay sa iyo ng panimula sa pamamagitan ng pagpapatunay para sa iyo sa iyong imbitasyon o profile: 25, 50, 75 o 100 beans, mula sa kanilang badyet ng tagapagpatunay.
 
 Lumalago ang iyong linya ng kredito kasama ng iyong **tiwala**:
 
@@ -93,3 +93,4 @@ Ang isang **negosyo** ay nagpapatuloy at nakikipagkalakalan sa sarili nitong pan
 Ang isang **grupo** ay isang lupon ng mga miyembro na may sariling chat at mga post, na pinapatakbo ng isa o higit pang **mga tagapag-ugnay**. Ang isa sa kanila ang **punong tagapag-ugnay** nito — sinumang gumawa ng grupo, sa simula.
 
 Mababasa mo kung paano pinipili ang mga tagapangalaga at tagapag-ugnay sa "Mga tuntunin at mga desisyon".
+

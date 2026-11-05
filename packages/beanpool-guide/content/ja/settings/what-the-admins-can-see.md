@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: 管理者が確認できる情報
 summary: 管理者が名簿を保持しているコミュニティにおいて、記録される情報、閲覧権限、サーバーの保持情報、認証済みの意味を説明します。
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 88d60b236e7653ab
+source-hash: 3b82166b108108b4
 ---
 
 ## 氏名リスト
@@ -86,3 +86,4 @@ source-hash: 88d60b236e7653ab
 ## 自分の登録情報についての問い合わせ
 
 登録項目に何が書かれているかを管理者に尋ねたり、訂正を求めたり、コミュニティに所属しなくなった際に削除を依頼したりすることができます。名簿を保持しているのは管理者であり、BeanPoolではありません。
+

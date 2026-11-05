@@ -3,7 +3,7 @@ slug: rules
 title: Aturan dan cara kerja keputusan
 summary: Pemungutan suara, partisipasi, suara rahasia, siapa yang berhak memilih, penangguhan, mengeluarkan anggota, pengurus, serta koordinator dan koordinator utama.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: be2e7321aab53ca8
+source-hash: 5e6d3bb454c39428
 ---
 
 ## Dua cara bertanya kepada komunitas
@@ -19,7 +19,6 @@ Mengenai anggota:
 
 - Menangguhkan anggota, atau mencabut penangguhan.
 - Membekukan kredit anggota, atau mencairkannya kembali.
-- Memberi anggota hak untuk menjamin pendatang baru, atau mencabutnya.
 - Menghapus pengurus utama dari suatu usaha, atau pemimpin dari suatu proyek.
 - Mengeluarkan anggota dari komunitas, atau memulihkan keanggotaan mereka.
 
@@ -107,7 +106,7 @@ Server komunitasmu memiliki pemilik dan admin. Mereka yang merawatnya.
 
 - Seorang admin dapat menghentikan Keputusan yang sedang terbuka, tetapi harus memberikan alasan tertulis. Anggota dapat membacanya pada Keputusan tersebut.
 - Jika keputusan mengeluarkan telah disetujui dan berada dalam masa tunggu 7 hari, admin dapat menghentikannya, atau langsung melaksanakannya seketika.
-- Admin dapat memberikan hak kepada anggota untuk menjamin pendatang baru.
+- Pemilik dan admin komite kredit dapat menjadikan anggota terkonfirmasi sebagai penjamin pada daftar nama.
 - Admin dapat memberikan lencana kepercayaan kepada anggota. Ini juga memberi anggota tersebut kepercayaan yang dibutuhkan lencana itu, sehingga memperdalam batas kredit mereka.
 - Admin menyelesaikan transaksi yang terhenti, tetapi tidak pernah pada transaksi yang melibatkan diri mereka sendiri.
 
@@ -154,4 +153,7 @@ Sebuah grup dijalankan oleh para koordinatornya, dan salah satunya adalah **koor
 
 ## Penjaminan
 
-Hanya admin, dan anggota yang dipilih oleh admin atau melalui Keputusan komunitas, yang dapat menjamin pendatang baru. Penjaminan memberi pendatang baru batas kredit kecil untuk memulai: 25, 50, atau 100 kacang. Lencana kepercayaan tidak pernah memberikan hak ini.
+Pemilik dan admin adalah penjamin berdasarkan peran, dan pemilik atau admin komite kredit dapat menetapkan anggota terkonfirmasi sebagai penjamin pada daftar nama. Setiap penjamin menerima anggaran (100 hingga 2.000 Kacang, dengan standar komunitas 1.000 Kacang).
+
+Penjamin dapat menjamin pendatang baru melalui undangan, atau anggota yang sudah bergabung melalui profil mereka, dengan memilih dari preset 25, 50, 75, atau 100 Kacang dari anggaran mereka. Setiap penjamin hanya dapat menjamin satu orang satu kali (dapat ditingkatkan hingga total 100 Kacang), maksimal 3 penjamin dapat menjamin satu orang yang sama (total hingga 300 Kacang), dan penjamin tidak dapat menjamin seseorang yang saldonya di bawah nol saat ini. Lencana kepercayaan tidak pernah memberikan hak ini.
+

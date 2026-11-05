@@ -4,7 +4,7 @@ title: Privatsphäre
 summary: Was andere über dich sehen können und welche Einstellungen dies steuern.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Was andere Mitglieder über dich sehen können und mit welchen Schaltern du es steuerst.
-source-hash: 7a296a90b991050e
+source-hash: 19d7d7439e729ce8
 ---
 
 ## Die Einstellungen öffnen
@@ -17,7 +17,7 @@ Tippe oben rechts auf dem Bildschirm auf die Schieberegler-Schaltfläche. In der
 - Dein Vertrauensabzeichen, deine Bewertungen (niemand sonst kann sehen, wer eine Bewertung geschrieben hat) und dein Vertrauensprofil: wie viele deiner Handelsgeschäfte abgeschlossen und wie viele abgebrochen wurden sowie die Abschlussquote, wie viele Bohnenzahlungen du an Mitglieder gesendet oder von ihnen empfangen hast plus die von dir abgeschlossenen Trades, mit wie vielen verschiedenen Mitgliedern du Transaktionen hattest, wie viele Zahlungen und Trades du mit dem jeweiligen betrachtenden Mitglied hattest, und deine Vertrauenspunkte. Die Admins sehen dies genau wie jedes andere Mitglied, und es wird nicht protokolliert.
 - Deine Beiträge und wo deren Stecknadeln liegen. Siehe „Wo dein Pin steht“.
 - Wie du bei einer Umfrage abgestimmt hast, jedoch nur bei einer Umfrage, die ihr Ersteller als **offene Abstimmung** angelegt hat. Andernfalls sind Umfragen anonym, und Stimmen bei **Entscheidungen** sind immer geheim.
-- Wer dich eingeladen hat. Auf dem Smartphone zeigt dein Profil **Hereingebürgt von** und dessen Namen. Wenn du als Gründungsmitglied beigetreten bist oder direkt vom System-Admin eingeladen wurdest, steht dort stattdessen **Gründungsmitglied** oder **Direkt vom System-Admin eingeladen**. Wenn ein Mitglied für deinen Kreditrahmen gebürgt hat, zeigt dein Profil sowohl in der Smartphone-App als auch in der Web-App **Verbürgt von** und dessen Namen an.
+- Wer dich eingeladen hat. Auf dem Smartphone zeigt dein Profil **Eingeladen von** und den jeweiligen Namen an. Wenn du als Gründungsmitglied beigetreten bist oder direkt vom Systemadministrator eingeladen wurdest, steht dort stattdessen **Gründungsmitglied** oder **Direkt vom Systemadministrator eingeladen**.
 
 ## Was nur du sehen kannst
 
@@ -60,3 +60,4 @@ Die Eigentümer und Admins, die den Server deiner Community betreiben, können w
 ## Weiterlesen
 
 Tippe in den Einstellungen unter **Rechtliches & Datenschutz** auf **Datenschutzerklärung**.
+

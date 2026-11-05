@@ -4,7 +4,7 @@ title: Watu na marafiki
 summary: Tafuta wanachama wa jumuiya yako, ongeza marafiki, na mdhamini mtu.
 related: messages, your-profile, joining, blocking
 help: Wanachama wa jumuiya yako na marafiki zako. Gusa mtu kuona wasifu wake, au gusa 💬 karibu na mwanachama kumtumia ujumbe.
-source-hash: 44b66169497e9909
+source-hash: 094e89e2c072349f
 ---
 
 ## Kutafuta watu
@@ -37,6 +37,13 @@ Unaweza kuchagua kutoonyeshwa kama unganisho la pamoja la mtu yeyote. Katika Mip
 
 ## Kumdhamini mtu
 
-Baadhi ya wanachama huchaguliwa na jumuiya kuwakaribisha wageni. Wanaweza kumdhamini mwanachama mpya, jambo ambalo humpa mtu huyo kiwango kidogo cha mkopo cha kuanzia. Kwenye wasifu wa mtu huyo, wanagusa **🤝 Mdhamini Mwanachama** na kuchagua **Kiasi** (25), **Kawaida** (50) au **Kikubwa** (100). Hakuna Maharagwe yanayoondoka kwenye mkoba wa mdhamini mwenyewe.
+Mdhamini anaweza kumdhamini mwanachama ambaye tayari amejiunga, akimpa kikomo cha mkopo ili kuanza biashara. Wadhamini ni wamiliki na wasimamizi kwa jukumu, na wanachama waliowekwa kuwa wadhamini kwenye orodha ya majina na mmiliki au msimamizi wa kamati ya mikopo.
 
-Ni nani anayeweza kudhamini huamuliwa na msimamizi au kwa Uamuzi wa jumuiya, kamwe si kwa beji. Tazama "Sheria na jinsi maamuzi hufanywa".
+Kwenye wasifu wa mwanachama, mdhamini anagusa **Mdhamini @jina** na kuchagua Maharagwe **25**, **50**, **75** au **100** kutoka bajeti yake ya udhamini. Hakuna Maharagwe yanayotoka kwenye pochi binafsi ya mdhamini.
+
+- **Udhamini mmoja kwa kila mtu:** kila mdhamini anaweza kumdhamini mtu mara moja tu. Unaweza kuongeza udhamini wako kwao baadaye, hadi jumla ya Maharagwe 100.
+- **Wadhamini wasiozidi 3:** upeo wa wadhamini 3 wanaweza kumdhamini mtu mmoja (hadi jumla ya Maharagwe 300).
+- **Si chini ya sifuri kamwe:** huwezi kumdhamini mwanachama aliye chini ya sifuri kwa sasa. Kusaidia mtu mwenye deni, wanachama wanaweza kutoa sehemu ya kikomo chao cha mkopo kwenye Tuma, au kupendekeza Uamuzi wa jumuiya.
+
+Tazama "Kujiunga na BeanPool" na "Kikomo chako cha mkopo".
+

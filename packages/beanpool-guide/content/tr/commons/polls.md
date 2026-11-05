@@ -4,7 +4,7 @@ title: Anketler
 summary: Topluluğa hızlı bir soru sorun. Anketler fikirleri gösterir; tek başlarına hiçbir şeyi değiştirmezler.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Anket topluluğa hızlı bir soru sorar. İnsanların ne düşündüğünü gösterir; tek başına bir şeyi değiştirmez.
-source-hash: c1e4eb171c19552f
+source-hash: 74aa1008e60fa805
 ---
 
 ## Anket mi, Karar mı?
@@ -19,7 +19,7 @@ Bir anket açıkken bu konuda hiçbir şey söylemez. Söylemiş olsaydı her oy
 
 ## Bir anket başlatma
 
-- Pazar sekmesinde veya Harita'da **+ İLAN EKLE**'ye dokunun.
+- Seçmek için bir yanıta dokun. Anket kapanana kadar fikrini değiştirmek için bir başkasına dokun: oyu değiştirmeden önce uygulama onay ister.
 - **Topluluk Anketi** seçeneğini belirleyin.
 - **Soru**yu yazın.
 - Yardımcı olacaksa **Bağlam / Notlar** ekleyin. Bu isteğe bağlıdır.
@@ -36,7 +36,7 @@ Bir seferde açık bir anketiniz olabilir ve bir topluluğun aynı anda 5 açık
 
 Anketler Pazar'dadır. Yalnızca anketleri görmek için üst satırdaki **Anketler**'e dokunun. Bir anket, kapanmasından bir gün önce **Bugün** altında bir kez yeniden listelenir.
 
-- Seçmek için bir yanıta dokunun. Anket kapanana kadar fikrinizi değiştirmek için başka bir yanıta dokunun.
+- Seçmek için bir yanıta dokun. Anket kapanana kadar fikrini değiştirmek için bir başkasına dokun: oyu değiştirmeden önce uygulama onay ister.
 - Kart, her yanıtı kaç kişinin seçtiğini gösterir.
 
 ## Nasıl oy verdiğinizi kimler görebilir
@@ -51,3 +51,4 @@ Topluluğunuzun sunucusunu işleten sahipler ve yöneticiler orada saklanan her 
 ## Bir anketi erken kapatma
 
 Anketi siz başlattıysanız **Anketi Kapat** seçeneğine dokunun, ardından onaylamak için tekrar **Anketi Kapat** seçeneğine dokunun (web uygulamasında **Tamam**).
+

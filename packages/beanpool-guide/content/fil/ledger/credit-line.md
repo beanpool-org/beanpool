@@ -3,7 +3,7 @@ slug: credit-line
 title: Iyong credit line
 summary: Kung gaano kababa sa zero ang puwede mong abutin, at paano ito lumalago.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: d966829d85d430b1
+source-hash: 1019023b7b5bb263
 ---
 
 ## Ano ito
@@ -23,7 +23,7 @@ Sa telepono, i-tap ang bar para sa **Impormasyon sa Credit Slider**, na nagpapal
 
 ## Paano ito nagbubukas
 
-Nagsisimula ito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang kalakalan sa merkado (ang isang kalakalan na 1 o 2 munggo lamang ay masyadong maliit para mabilang), o kapag ang isang taong pinili upang sumalubong sa mga baguhan ay nag-vouch para sa iyo. Hanggang sa panahong iyon sinasabi ng Talaan na **Wala pang credit line**. Maaari ka pa ring makipagkalakalan gamit ang mga munggo na hawak mo.
+Nagsisimula ito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang palitan sa pamilihan (masyadong maliit ang palitan na 1 o 2 beans lang para ibilang), o kapag nagpatunay para sa iyo ang isang tagapagpatunay sa imbitasyong nagdala sa iyo o sa iyong profile. Hanggang sa panahong iyon, sinasabi sa Ledger na **Wala pang credit line**. Maaari ka pa ring makipagpalitan gamit ang mga hawak mong beans.
 
 ## Paano ito lumalago
 
@@ -46,7 +46,7 @@ Sinasabi sa iyo ng linya sa ilalim ng bar, halimbawa "Mag-post ng alok para buks
 
 ## Sa isang kilalang komunidad
 
-Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line, **ang kilalang floor**: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad. Itinataas nito ang iyong limitasyon, hindi ang iyong antas: binibilang pa rin ng iyong trust badge kung ano lamang ang iyong nagawa na. Naka-on ang kilalang floor sa bawat komunidad na may Munggo maliban kung ini-off ito ng may-ari nito.
+Nagsisimula ito sa zero. Nagbubukas ito kapag nakumpleto mo ang iyong unang palitan sa pamilihan (masyadong maliit ang palitan na 1 o 2 beans lang para ibilang), o kapag nagpatunay para sa iyo ang isang tagapagpatunay sa imbitasyong nagdala sa iyo o sa iyong profile. Hanggang sa panahong iyon, sinasabi sa Ledger na **Wala pang credit line**. Maaari ka pa ring makipagpalitan gamit ang mga hawak mong beans.
 
 - Ang isang live na Alok ay nagbibigay-daan sa iyo na gamitin ang lahat nito. Kapag walang Mga Alok, hindi mo ito magagamit.
 - Ang tiwalang kinikita mo sa pakikipagkalakalan ay nagdaragdag dito, hanggang sa limitasyon ng iyong komunidad (2,000 Munggo maliban kung pumili ito ng higit pa, hanggang sa 5,000).
@@ -62,10 +62,21 @@ Sa ilang komunidad kahit sinong miyembro ay maaaring mag-imbita ng mga tao, kaya
 Maaaring i-freeze ng mga admin ng iyong komunidad ang credit line ng isang miyembro: ang lahat nito, o, sa isang kilalang komunidad, ang bahaging nagmumula sa pagiging kumpirmadong miyembro.
 
 - Kung i-freeze nila ang lahat nito, o ang kumpirmadong bahagi lamang ang buong linyang mayroon ka, sinasabi ng Talaan na **Naka-freeze ang iyong credit line**: hindi ka maaaring gumastos sa debit habang umiiral ito, ngunit maaari ka pa ring magbenta at tumanggap ng Munggo, at gastusin ang hawak mo sa itaas ng zero. Kung ikaw ay nasa debit noong ini-freeze nila ito, sinasabi rin ng Talaan kung gaano karaming Munggo ang iyong debit: ang pagbebenta o pagtanggap ng Munggo ay magbabalik sa iyo paitaas, at kapag ikaw ay nasa itaas na ng zero ay maaari mong gastusin ang iyong hawak.
-- Kung i-freeze nila ang kumpirmadong bahagi at mayroon ka ring kredito mula sa isang vouch, mula sa pakikipagkalakalan o mula sa isang grant, mananatili ang bar, na may tala sa ilalim nito na ang kumpirmadong bahagi ay naka-freeze at ang iba pa ay gumagana tulad ng dati. Kung ikaw ay nasa ilalim ng natitira, sinasabi rin ng Talaan na **Nakahinto ang paggastos** (sa ibaba).
+- Kung i-freeze nila ang kumpirmadong bahagi at mayroon ka ring credit mula sa patunay, regalo ng credit line, pakikipagpalitan o grant, mananatili ang bar, na may tala sa ilalim na naka-freeze ang kumpirmadong bahagi at gumagana ang iba tulad ng dati. Kung ikaw ay nasa ilalim ng natitira, sinasabi rin sa Ledger ang **Naka-pause ang paggastos** (sa ibaba).
 
-Hindi nagbabago ang iyong antas, sa iyong profile at sa iyong mga listing: binibilang nito kung ano ang iyong nagawa (isang vouch, ang iyong mga kalakalan at anumang tiwala na ipinagkaloob sa iyo ng admin), hindi kailanman ang bahagi ng iyong linya na nagmumula sa pagiging kumpirmado, o anumang halagang itinakda ng mga admin para dito. Upang itanong kung bakit, o upang mabuksan itong muli, magtanong sa isa sa mga admin.
+Hindi nagbabago ang iyong antas, sa iyong profile man o sa iyong mga post: binibilang nito ang nagawa mo (ang iyong mga palitan at anumang tiwalang ibinigay ng admin), hindi kailanman ang bahagi ng iyong line na mula sa pagiging kumpirmado, o anumang halagang itinakda ng mga admin para dito. Upang itanong kung bakit o para mabuksan itong muli, magtanong sa isa sa mga admin.
+
+## Pagbibigay ng bahagi ng iyong credit line
+
+Maaari kang magbigay ng bahagi ng iyong credit line sa ibang miyembro. Sa **Ipadala**, buksan ang tab na **Credit line** sa tabi ng **Beans**.
+
+- **Credit lamang na ibinigay sa iyo ng iba:** maaari ka lamang magbigay ng credit na ibinigay sa iyo ng tagapagpatunay o ibang miyembro. Hindi mo maaaring ibigay ang iyong batayang kumpirmadong sahig o credit na nakuha mo sa pakikipagpalitan.
+- **Tanging ang hindi mo ginagamit:** maaari ka lamang magbigay ng credit na hindi nagagamit ng iyong balanse at ng iyong mga aktibong Alok, kaya ang pagbibigay ng credit ay hindi kailanman nagpapa-pause sa iyong paggastos.
+- **Pagkatapos ng iyong unang palitan:** maaari kang magbigay ng credit kapag nakumpleto mo na ang iyong unang palitan sa pamilihan, katulad ng panuntunan sa pagpapadala ng Beans.
+- **Hanggang sa limitasyon ng komunidad:** maaari kang magbigay ng hanggang 100 Beans bawat regalo (o ang itinakda ng iyong komunidad kung nagtakda ng mas mababang limitasyon ang may-ari).
+- **Sa kanila na ito nang tuluyan:** permanenteng mapupunta ang credit line sa tatanggap. Hindi nito ginagawang tagapagpatunay ang tatanggap kailanman. Hindi ka maaaring magbigay ng credit sa iyong sarili, sa isang enterprise, o sa miyembrong naka-pause o naka-freeze.
 
 ## Nakahinto ang paggastos
 
 Kung pupunta ka sa ilalim ng pinapayagan ng iyong Mga Alok, halimbawa dahil inalis mo ang isang Alok, sinasabi ng Talaan na **Nakahinto ang paggastos**. Maaari ka pa ring kumita at magbenta. Mag-post ng Alok, o kumita pabalik paitaas, at aalisin ito. Walang kukunin mula sa iyo.
+

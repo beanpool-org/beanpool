@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: 管理員可見內容
 summary: 在管理員保留實名名單的社群中：名單記錄的內容、誰可以查看、伺服器保留哪些資料以及確認身分的含義。
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 88d60b236e7653ab
+source-hash: 3b82166b108108b4
 ---
 
 ## 實名名單
@@ -86,3 +86,4 @@ source-hash: 88d60b236e7653ab
 ## 查詢你的條目
 
 你可以向管理員詢問你的條目內容以進行更正，或在不再屬於該社群時要求刪除。名單由管理員維護，而非 BeanPool。
+

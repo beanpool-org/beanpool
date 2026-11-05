@@ -3,7 +3,7 @@ slug: credit-line
 title: Hạn mức tín dụng
 summary: Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: d966829d85d430b1
+source-hash: 1019023b7b5bb263
 ---
 
 ## Hạn mức tín dụng là gì
@@ -23,7 +23,7 @@ Trên điện thoại, nhấn vào thanh này để xem **Thông tin thanh trư�
 
 ## Cách mở hạn mức
 
-Hạn mức bắt đầu từ số 0. Nó mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ có 1 hoặc 2 đậu là quá nhỏ để được tính), hoặc khi một người được chọn để chào đón thành viên mới đứng ra bảo lãnh cho bạn. Cho đến lúc đó, Sổ cái sẽ báo **Chưa có hạn mức tín dụng**. Bạn vẫn có thể giao dịch bằng số đậu bạn đang có.
+Bắt đầu từ số không. Hạn mức mở khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ 1 hoặc 2 đậu là quá nhỏ để tính), hoặc khi có người bảo lãnh cho bạn trên lời mời hoặc trên hồ sơ. Cho đến lúc đó Sổ cái hiển thị **Chưa có hạn mức tín dụng**. Bạn vẫn có thể giao dịch bằng số đậu đang có.
 
 ## Cách hạn mức tăng lên
 
@@ -46,7 +46,7 @@ Dòng chữ bên dưới thanh trượt sẽ cho bạn biết điều này, ví 
 
 ## Trong cộng đồng quy định
 
-Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức, **mức sàn quy định**: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn. Điều này giúp nâng hạn mức của bạn, không phải cấp độ của bạn: huy hiệu tin cậy của bạn vẫn chỉ tính những gì bạn đã làm. Mức sàn quy định được bật trong mọi cộng đồng có Đậu trừ khi chủ sở hữu cộng đồng tắt nó.
+Bắt đầu từ số không. Hạn mức mở khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ 1 hoặc 2 đậu là quá nhỏ để tính), hoặc khi có người bảo lãnh cho bạn trên lời mời hoặc trên hồ sơ. Cho đến lúc đó Sổ cái hiển thị **Chưa có hạn mức tín dụng**. Bạn vẫn có thể giao dịch bằng số đậu đang có.
 
 - Một Lời đề nghị đang mở cho phép bạn sử dụng toàn bộ hạn mức đó. Nếu không có Lời đề nghị nào, bạn không thể sử dụng.
 - Mức độ tin cậy bạn tích lũy qua giao dịch sẽ cộng thêm vào hạn mức, lên đến mức trần của cộng đồng bạn (2.000 Đậu trừ khi cộng đồng chọn mức cao hơn, lên đến 5.000).
@@ -62,10 +62,21 @@ Trong một số cộng đồng, bất kỳ thành viên nào cũng có thể m�
 Quản trị viên cộng đồng có thể đóng băng hạn mức tín dụng của một thành viên: toàn bộ hạn mức, hoặc trong một cộng đồng quy định, là phần đến từ việc là thành viên đã được xác nhận.
 
 - Nếu họ đóng băng toàn bộ, hoặc phần được xác nhận là tất cả hạn mức bạn có, Sổ cái sẽ báo **Hạn mức tín dụng của bạn đã bị đóng băng**: bạn không thể chi tiêu xuống mức âm trong thời gian này, nhưng bạn vẫn có thể bán và nhận Đậu, cũng như chi tiêu số đậu bạn đang có trên mức 0. Nếu bạn đang ở mức âm khi họ đóng băng, Sổ cái cũng cho biết bạn đang âm bao nhiêu Đậu: việc bán hàng hoặc nhận Đậu sẽ nâng số dư của bạn lên, và khi bạn đạt trên mức 0, bạn có thể chi tiêu số đậu bạn nắm giữ.
-- Nếu họ đóng băng phần được xác nhận và bạn cũng có tín dụng từ việc bảo lãnh, từ giao dịch hoặc từ một khoản tài trợ, thanh trượt vẫn giữ nguyên, kèm theo ghi chú bên dưới rằng phần được xác nhận đã bị đóng băng và phần còn lại vẫn hoạt động như trước. Nếu bạn ở dưới mức còn lại, Sổ cái cũng sẽ báo **Tạm dừng chi tiêu** (bên dưới).
+- Nếu phần xác minh bị đóng băng và bạn cũng có tín dụng từ bảo lãnh, tặng hạn mức tín dụng, giao dịch hoặc trợ cấp, thanh hạn mức vẫn hiển thị cùng ghi chú phần xác minh bị đóng băng và phần còn lại hoạt động bình thường. Nếu bạn chi tiêu vượt quá mức còn lại, Sổ cái cũng sẽ thông báo **Tạm dừng chi tiêu** (bên dưới).
 
-Cấp độ của bạn không thay đổi, trên hồ sơ cũng như trên các tin đăng của bạn: cấp độ này tính những gì bạn đã làm (lời bảo lãnh, các giao dịch của bạn và điểm tin cậy do quản trị viên cấp cho bạn), không bao giờ tính phần hạn mức đến từ việc được xác nhận, hay bất kỳ số tiền nào mà quản trị viên đặt cho phần đó. Để hỏi lý do hoặc đề nghị mở lại hạn mức, hãy liên hệ với một trong các quản trị viên.
+Cấp độ của bạn không thay đổi, cả trên hồ sơ lẫn các bài đăng: cấp độ chỉ tính những gì bạn đã làm (giao dịch và sự tin cậy từ quản trị viên), không bao gồm phần hạn mức do xác minh hay bất kỳ số tiền nào do quản trị viên ấn định. Để hỏi lý do hoặc yêu cầu mở lại, hãy liên hệ quản trị viên.
+
+## Tặng một phần hạn mức tín dụng
+
+Bạn có thể tặng một phần hạn mức tín dụng của mình cho thành viên khác. Trong mục **Gửi**, mở tab **Hạn mức tín dụng** cạnh tab **Đậu**.
+
+- **Chỉ tặng tín dụng được người khác trao:** bạn chỉ có thể tặng phần tín dụng mà người bảo lãnh hoặc thành viên khác đã tặng cho bạn. Không thể tặng hạn mức sàn xác minh hoặc tín dụng kiếm được từ giao dịch.
+- **Chỉ tặng phần bạn chưa sử dụng:** bạn chỉ có thể tặng lượng tín dụng mà số dư và các Chào bán đang hoạt động chưa dùng đến, do đó việc tặng không bao giờ làm tạm dừng chi tiêu của bạn.
+- **Sau giao dịch đầu tiên:** bạn có thể tặng hạn mức tín dụng sau khi hoàn thành giao dịch đầu tiên trên chợ, tương tự quy tắc gửi đậu.
+- **Trong giới hạn cộng đồng:** bạn có thể tặng tối đa 100 đậu mỗi lần (hoặc giới hạn của cộng đồng nếu chủ sở hữu đặt mức thấp hơn).
+- **Thuộc về họ vĩnh viễn:** hạn mức tín dụng chuyển hẳn sang người nhận. Điều này không biến họ thành người bảo lãnh. Bạn không thể tặng cho chính mình, cho doanh nghiệp hoặc cho thành viên bị tạm ngưng hay đóng băng.
 
 ## Tạm dừng chi tiêu
 
 Nếu bạn vượt xuống dưới mức mà các Lời đề nghị của bạn cho phép, ví dụ do bạn đã gỡ bỏ một Lời đề nghị, Sổ cái sẽ báo **Tạm dừng chi tiêu**. Bạn vẫn có thể kiếm và bán hàng. Hãy đăng một Lời đề nghị, hoặc kiếm thêm đậu để đưa số dư lên, và trạng thái tạm dừng sẽ được gỡ bỏ. Không có gì bị lấy đi từ bạn.
+

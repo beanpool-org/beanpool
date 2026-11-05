@@ -4,7 +4,7 @@ title: 加入 BeanPool
 summary: 兩種加入方式：憑成員邀請加入在地社群，或在開放時憑 12 個助記詞或一次登入加入全球社群。申請加入社群以及如何邀請他人。
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: 憑成員邀請加入在地社群，或在開放時憑 12 個助記詞或一次登入加入全球社群。
-source-hash: 5a1feb7390e4c3fb
+source-hash: e8148ea89abb9b77
 ---
 
 ## 兩種加入方式
@@ -117,3 +117,4 @@ source-hash: 5a1feb7390e4c3fb
 - **先不要**不會告訴他們任何多餘資訊，僅顯示「尚未回覆」。
 
 任何成員都可以回覆申請。在僅限管理員邀請的社群中，只有其所有者和管理員能看到並回覆申請。參見「尋找附近的社群」。
+

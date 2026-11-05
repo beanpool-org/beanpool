@@ -3,7 +3,7 @@ slug: how-it-works
 title: Cómo funciona BeanPool
 summary: Frijoles, intercambios, ofertas y necesidades, y crédito, en palabras sencillas.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: a3d4bd4eee0c67cb
+source-hash: d9e82e8017a2b050
 ---
 
 ## Frijoles
@@ -43,7 +43,7 @@ También puedes enviar frijoles a alguien como un regalo, sin ningún trato.
 
 Puedes gastar un poco más de lo que tienes y tener un saldo negativo. Esta es tu **línea de crédito**. Es una promesa de ayudar a otros más adelante.
 
-Tu línea de crédito comienza en cero. Se habilita cuando completas tu primer trato en el mercado (un trato de solo 1 o 2 frijoles es demasiado pequeño para contar). Alguien a quien tu comunidad haya elegido para dar la bienvenida a los recién llegados también puede darte un pequeño comienzo al avalarte: 25, 50 o 100 frijoles.
+Tu línea de crédito comienza en cero. Se habilita cuando completas tu primer trato en el mercado (un trato de solo 1 o 2 frijoles es demasiado pequeño para contar). Un avalista también puede darte un comienzo avalándote en tu invitación o perfil: 25, 50, 75 o 100 frijoles, de su presupuesto de avalista.
 
 Tu línea de crédito crece con tu **confianza**:
 
@@ -70,7 +70,7 @@ Algunas comunidades confirman quiénes son sus miembros. Allí, un miembro confi
 
 ## Insignias de confianza
 
-Tu confianza se muestra como una insignia. Las insignias son Recién llegado, Residente, Cuidador y Anciano. La confianza detrás de tu insignia suma tres cosas: el inicio que te dio un aval, la confianza que ganaste comerciando y cualquier confianza que te haya otorgado un administrador. Un administrador puede darle a un miembro una insignia directamente, sin tratos. En una comunidad que confirma a sus miembros, un miembro confirmado obtiene un límite de crédito más alto, no una insignia más alta: su insignia solo cuenta lo que ha hecho.
+Tu confianza se muestra como una insignia. Las insignias son Recién llegado, Residente, Cuidador y Anciano. La confianza detrás de tu insignia proviene de la confianza que ganaste comerciando y cualquier confianza que te haya otorgado un administrador. Un administrador puede darle a un miembro una insignia directamente, sin tratos. En una comunidad que confirma a sus miembros, un miembro confirmado obtiene un límite de crédito más alto, no una insignia más alta: su insignia solo cuenta lo que ha hecho.
 
 - Residente a partir de 200 de confianza.
 - Cuidador a partir de 600 de confianza.
@@ -93,3 +93,4 @@ Un **emprendimiento** se mantiene activo y comercia a su propio nombre: una pana
 Un **grupo** es un círculo de miembros con su propio chat y publicaciones, gestionado por uno o más **convocantes**. Uno de ellos es su **convocante principal** —quien creó el grupo, para empezar.
 
 Puedes leer cómo se eligen los custodios y convocantes en "Reglas y cómo decidir".
+

@@ -3,7 +3,7 @@ slug: credit-line
 title: Kikomo chako cha mkopo
 summary: Jinsi unavyoweza kwenda chini ya sifuri, na jinsi inavyoongezeka.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: d966829d85d430b1
+source-hash: 1019023b7b5bb263
 ---
 
 ## Ni nini
@@ -46,7 +46,7 @@ Mstari ulio chini ya upau hukuambia, kwa mfano "Weka ofa ili kufungua mstari wak
 
 ## Katika jumuiya inayojulikana
 
-Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja, **kima cha chini kinachojulikana**: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo. Kinainua kikomo chako, si kiwango chako: beji yako ya uaminifu bado inahesabu tu kile ulichofanya. Kima cha chini kinachojulikana kimewashwa katika kila jumuiya yenye Maharagwe isipokuwa mmiliki wake awe amekizima.
+Huanzia sifuri. Hufunguka unapokamilisha biashara yako ya kwanza sokoni (biashara ya maharagwe 1 au 2 tu ni ndogo mno kuhesabiwa), au wakati mdhamini anapokudhamini kwenye mwaliko uliokuingiza au kwenye wasifu wako. Hadi wakati huo leja husema **Bado hakuna kikomo cha mkopo**. Bado unaweza kufanya biashara na maharagwe uliyonayo.
 
 - Ofa moja inayotumika inakuruhusu kutumia chote. Bila Ofa zozote, huwezi kukitumia.
 - Uaminifu unaouchuma kwa kufanya biashara huongezwa juu yake, hadi kufikia kiwango cha juu cha jumuiya yako (Maharagwe 2,000 isipokuwa iwe ilichagua zaidi, hadi 5,000).
@@ -62,10 +62,21 @@ Katika baadhi ya jumuiya mwanachama yeyote anaweza kualika watu, kwa hivyo wasim
 Wasimamizi wa jumuiya yako wanaweza kusimamisha kikomo cha mkopo cha mwanachama: chote, au, katika jumuiya inayojulikana, sehemu inayotokana na kuwa mwanachama aliyethibitishwa.
 
 - Wakikisimamisha chote, au sehemu iliyothibitishwa ikiwa ndicho kikomo chote ulicho nacho, Leja inasema **Mstari wako wa mkopo umesitishwa**: huwezi kutumia kuingia kwenye deni wakati kikiwa kimesitishwa, lakini bado unaweza kuuza na kupokea Maharagwe, na kutumia unayoshikilia zaidi ya sifuri. Ikiwa ulikuwa kwenye deni walipokisitisha, Leja pia inasema una deni la Maharagwe mangapi: kuuza au kupokea Maharagwe kunakurudisha juu, na mara unapokuwa juu ya sifuri unaweza kutumia unayoshikilia.
-- Wakigandisha sehemu iliyothibitishwa na ukiwa pia una mkopo kutokana na dhamana, kutokana na kufanya biashara au kutokana na ruzuku, upau unabaki, kukiwa na dokezo chini yake kwamba sehemu iliyothibitishwa imegandishwa na yaliyosalia yanafanya kazi kama awali. Ikiwa uko chini ya kile kilichobaki, Leja inasema **Matumizi yamesitishwa** pia (hapa chini).
+- Wakigandisha sehemu iliyothibitishwa na una mkopo kutoka kwa udhamini, zawadi ya kikomo cha mkopo, biashara au ruzuku, upau hubaki, ukiwa na dokezo chini yake kwamba sehemu iliyothibitishwa imegandishwa na iliyobaki inafanya kazi kama awali. Ikiwa uko chini ya kile kilichobaki, leja pia husema **Matumizi yamesitishwa** (chini).
 
-Kiwango chako hakibadiliki, kwenye wasifu wako na kwenye orodha zako pia: kinahesabu kile ulichofanya (udhamini, biashara zako na uaminifu wowote ambao msimamizi alikupa), kamwe si sehemu ya kikomo chako inayotokana na kuthibitishwa, au kiasi chochote ambacho wasimamizi waliweka kwa ajili yake. Ili kuuliza kwa nini, au kukifanya kifunguliwe tena, muulize mmoja wa wasimamizi.
+Kiwango chako hakibadiliki, kwenye wasifu wako na kwenye matangazo yako pia: kinahesabu kile ulichofanya (biashara zako na uaminifu wowote aliopewa na msimamizi), kamwe sehemu inayotokana na kuthibitishwa au kiasi chochote kilichowekwa na wasimamizi. Kuuliza sababu au kufungua tena, muulize mmoja wa wasimamizi.
+
+## Kutoa sehemu ya kikomo chako cha mkopo
+
+Unaweza kumpa mwanachama mwingine sehemu ya kikomo chako cha mkopo. Kwenye **Tuma**, fungua kichupo cha **Kikomo cha mkopo** karibu na **Maharagwe**.
+
+- **Mkopo uliopewa na mtu tu:** unaweza kutoa tu mkopo ambao mdhamini au mwanachama mwingine alikupa. Huwezi kutoa sakafu yako inayojulikana au mkopo uliopata kwa kufanya biashara.
+- **Kile usichotumia tu:** unaweza kutoa tu mkopo ambao salio lako na Matoleo yako yanayaacha bila kutumika, kwa hivyo kutoa mkopo hakusitishi kamwe matumizi yako.
+- **Baada ya biashara yako ya kwanza:** unaweza kutoa mkopo mara tu unapokamilisha biashara yako ya kwanza sokoni, sheria ile ile kama kutuma Maharagwe.
+- **Hadi kikomo cha jumuiya:** unaweza kutoa hadi Maharagwe 100 kwa kila zawadi (au mpangilio wa jumuiya yako ikiwa mmiliki aliweka kikomo cha chini).
+- **Ni mali yao kabisa:** kikomo cha mkopo kinahamia kwa mpokeaji kabisa. Hakumfanyi kuwa mdhamini kamwe. Huwezi kutoa mkopo kwako mwenyewe, kwa biashara au kwa mwanachama aliyesitishwa au kugandishwa.
 
 ## Matumizi yamesitishwa
 
 Ukienda chini ya kile ambacho Ofa zako zinaruhusu, kwa mfano kwa sababu uliondoa Ofa, Leja inasema **Matumizi yamesitishwa**. Bado unaweza kuchuma na kuuza. Weka Ofa, au fanya biashara ili kurudi juu, na inaondolewa. Hakuna kinachochukuliwa kutoka kwako.
+

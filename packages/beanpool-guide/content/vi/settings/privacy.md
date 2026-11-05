@@ -4,7 +4,7 @@ title: Quyền riêng tư
 summary: Những gì người khác có thể thấy về bạn và các cài đặt để kiểm soát điều đó.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Những gì thành viên khác có thể thấy về bạn và các nút bật tắt để kiểm soát.
-source-hash: 7a296a90b991050e
+source-hash: 19d7d7439e729ce8
 ---
 
 ## Mở Cài đặt
@@ -17,7 +17,7 @@ Nhấn vào nút có biểu tượng các thanh trượt ở góc trên bên ph�
 - Huy hiệu tin cậy của bạn, các đánh giá về bạn (không ai khác có thể thấy ai đã viết đánh giá), và hồ sơ tin cậy của bạn: bao nhiêu giao dịch của bạn đã hoàn thành và bao nhiêu giao dịch đã bị hủy, cùng tỷ lệ hoàn thành, bao nhiêu khoản thanh toán Đậu bạn đã gửi hoặc nhận từ các thành viên cộng với các giao dịch bạn đã hoàn tất, bạn đã thanh toán, được thanh toán hoặc giao dịch với bao nhiêu thành viên khác nhau, bao nhiêu khoản thanh toán và giao dịch bạn đã thực hiện với thành viên đang xem, và Điểm tin cậy của bạn. Quản trị viên nhìn thấy những thông tin này như bất kỳ thành viên nào, và điều đó không được ghi vào nhật ký.
 - Các bài đăng của bạn, và vị trí các ghim của chúng. Xem "Vị trí ghim của bạn".
 - Cách bạn đã bỏ phiếu trong một Cuộc khảo sát, nhưng chỉ trong Cuộc khảo sát mà người tạo đặt là **Biểu quyết công khai**. Các cuộc khảo sát khác đều ẩn danh, và các cuộc bỏ phiếu về **Quyết định** luôn luôn bí mật.
-- Ai đã mời bạn. Trên điện thoại, hồ sơ của bạn ghi **Được bảo lãnh bởi** và tên của họ. Nếu bạn tham gia với tư cách thành viên sáng lập hoặc được quản trị viên hệ thống mời trực tiếp, hồ sơ sẽ ghi **Thành viên sáng lập** hoặc **Được quản trị viên hệ thống mời trực tiếp** thay thế. Nếu một thành viên bảo lãnh cho hạn mức tín dụng của bạn, hồ sơ của bạn sẽ ghi **Được bảo lãnh bởi** và tên của họ, trong ứng dụng điện thoại và ứng dụng web.
+- Ai đã mời bạn. Trên điện thoại, hồ sơ của bạn hiển thị **Được mời bởi** và tên của họ. Nếu bạn tham gia với tư cách thành viên sáng lập hoặc được quản trị viên hệ thống mời trực tiếp, hồ sơ sẽ hiển thị **Thành viên sáng lập** hoặc **Được mời trực tiếp bởi quản trị viên hệ thống** thay thế.
 
 ## Những gì chỉ có bạn mới có thể thấy
 
@@ -60,3 +60,4 @@ Các chủ sở hữu và quản trị viên vận hành máy chủ cộng đồ
 ## Đọc thêm
 
 Trong Cài đặt, dưới mục **Pháp lý & quyền riêng tư**, nhấn **Chính sách quyền riêng tư**.
+

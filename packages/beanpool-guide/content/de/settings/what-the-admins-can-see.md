@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Was die Admins sehen
 summary: In einer Community mit Namensliste: was über dich gespeichert wird, wer es lesen darf, was der Server behält und was bestätigt bedeutet.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 88d60b236e7653ab
+source-hash: 3b82166b108108b4
 ---
 
 ## Die Namensliste
@@ -86,3 +86,4 @@ Ein Eigentümer oder Admin kann seinen eigenen KI-Assistenten mit dem Server ver
 ## Nach deinem Eintrag fragen
 
 Du kannst deine Admins fragen, was in deinem Eintrag steht, um ihn zu korrigieren oder ihn löschen zu lassen, wenn du der Community nicht mehr angehörst. Sie führen die Liste, nicht BeanPool.
+

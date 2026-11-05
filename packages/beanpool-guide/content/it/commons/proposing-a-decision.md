@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Proporre una Decisione
 summary: Chiedi alla comunità di prendere una decisione vincolante.
 related: decisions, rules, polls, enterprises
-source-hash: c5e90863bc9ac1f1
+source-hash: 1415ed4b1b50784e
 ---
 
 ## Prima di iniziare
 
-- Una Decisione serve per qualcosa che il server della tua comunità può eseguire: rimuovere o sospendere un membro, congelare o scongelare il credito di qualcuno, scegliere chi può fare da garante, o pagare fagioli dai Beni comuni. Per qualsiasi altra cosa, avvia invece un Sondaggio.
+- Una Decisione serve per qualcosa che il server della tua comunità può eseguire: sospendere o riammettere un membro, congelare o scongelare il credito di qualcuno, o erogare fagioli dal Fondo comune. Per qualsiasi altra cosa, avvia invece un Sondaggio.
 - Una Decisione non può rimuovere o sospendere un proprietario o un amministratore del server della tua comunità. Vedi "Regole e decisioni".
 - Puoi proporre una decisione dopo aver completato uno scambio, o se un amministratore ti ha assegnato un badge di fiducia. Gli amministratori della tua comunità possono sempre proporre. Una garanzia da sola non è sufficiente.
-- Puoi avere una sola Decisione aperta alla volta.
+- Puoi proporre una decisione non appena completi uno scambio. Gli amministratori della tua comunità possono sempre proporre. Un badge di fiducia non è sufficiente.
 - La comunità globale non ha Decisioni, quindi non c'è nulla da proporre lì. Vedi "Votare una Decisione".
 
 ## Come proporre
@@ -47,3 +47,4 @@ Questo mantiene libera la coda. Se un contributo viene approvato quando i Beni c
 - **Questo contributo è più grande di quanto i Beni comuni possano pagare:** richiedi un importo non superiore a quello indicato, oppure attendi l'arrivo di altri fagioli.
 - **Importo non valido** (nell'app web, "Inserisci un importo positivo valido in fagioli per il sussidio"): inserisci quanti fagioli.
 - **Errore:** verifica che la descrizione sia lunga almeno 10 caratteri.
+

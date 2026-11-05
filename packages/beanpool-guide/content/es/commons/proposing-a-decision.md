@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Proponer una Decisión
 summary: Pide a la comunidad que decida algo vinculante.
 related: decisions, rules, polls, enterprises
-source-hash: c5e90863bc9ac1f1
+source-hash: 1415ed4b1b50784e
 ---
 
 ## Antes de empezar
 
-- Una Decisión es para algo que el servidor de tu comunidad pueda llevar a cabo: remover o suspender a un miembro, congelar o descongelar el crédito de alguien, elegir quién puede avalar o pagar frijoles desde los Bienes comunes. Para cualquier otra cosa, inicia una Encuesta en su lugar.
+- Una Decisión es para algo que el servidor de tu comunidad pueda llevar a cabo: suspender a un miembro o restablecerlo, congelar o descongelar el crédito de alguien o pagar frijoles desde los Bienes comunes. Para cualquier otra cosa, inicia una Encuesta en su lugar.
 - Una Decisión no puede remover ni suspender a un propietario o administrador del servidor de tu comunidad. Consulta "Reglas y cómo funcionan las decisiones".
 - Puedes proponer una vez que hayas completado un intercambio, o si un administrador te ha otorgado una insignia de confianza. Los administradores de tu comunidad siempre pueden proponer. Un aval por sí solo no es suficiente.
-- Puedes tener una Decisión abierta a la vez.
+- Puedes proponer una vez que hayas completado un intercambio. Los administradores de tu comunidad siempre pueden proponer. Una insignia de confianza no es suficiente.
 - La comunidad global no tiene Decisiones, por lo que no hay nada que proponer allí. Consulta "Votar una Decisión".
 
 ## Cómo proponer
@@ -47,3 +47,4 @@ Esto mantiene libre la cola. Si se aprueba un subsidio cuando los Bienes comunes
 - **Este subsidio es mayor de lo que los Bienes comunes podrían pagar:** no pidas más del monto que indica, o espera a que ingresen más frijoles.
 - **Monto no válido** (en la app web, "Introduce un monto positivo válido de subsidio en frijoles"): completa cuántos frijoles.
 - **Error:** comprueba que tu descripción tenga al menos 10 caracteres.
+

@@ -3,15 +3,15 @@ slug: proposing-a-decision
 title: Beschluss vorschlagen
 summary: Die Community bitten, eine verbindliche Entscheidung zu treffen.
 related: decisions, rules, polls, enterprises
-source-hash: c5e90863bc9ac1f1
+source-hash: 1415ed4b1b50784e
 ---
 
 ## Bevor du beginnst
 
-- Ein Beschluss ist für etwas gedacht, das der Server deiner Community selbstständig ausführen kann: ein Mitglied ausschließen oder suspendieren, den Kreditrahmen von jemandem einfrieren oder freigeben, festlegen, wer bürgen darf, oder Bohnen aus dem Gemeingut auszahlen. Für alles andere starte stattdessen eine Umfrage.
+- Ein Beschluss ist für etwas gedacht, das der Server deiner Community selbstständig ausführen kann: ein Mitglied ausschließen oder suspendieren, den Kreditrahmen von jemandem einfrieren oder freigeben, oder Bohnen aus dem Gemeingut auszahlen. Für alles andere starte stattdessen eine Umfrage.
 - Ein Beschluss kann keinen Eigentümer oder Admin des Servers deiner Community ausschließen oder suspendieren. Siehe „Regeln und Entscheidungen“.
 - Du kannst einen Beschluss vorschlagen, sobald du einen Handel abgeschlossen hast oder ein Admin dir ein Vertrauensabzeichen verliehen hat. Die Admins deiner Community können jederzeit Vorschläge einreichen. Eine Bürgschaft allein reicht nicht aus.
-- Du kannst jeweils einen offenen Beschluss gleichzeitig haben.
+- Du kannst einen Beschluss vorschlagen, sobald du einen Handel abgeschlossen hast. Die Admins deiner Community können jederzeit Vorschläge einreichen. Ein Vertrauensabzeichen reicht nicht aus.
 - Die globale Community hat keine Beschlüsse, daher gibt es dort nichts vorzuschlagen. Siehe „Über Beschlüsse abstimmen“.
 
 ## Einen Vorschlag einreichen
@@ -47,3 +47,4 @@ Dadurch bleibt die Warteschlange frei. Wird ein Zuschuss angenommen, während da
 - **This grant is bigger than the Commons could pay:** Beantrage nicht mehr als den genannten Betrag oder warte, bis weitere Bohnen eingehen.
 - **Ungültiger Betrag** (in der Web-App: „Bitte gib einen gültigen positiven Förderbetrag in Bohnen ein“): Gib an, wie viele Bohnen es sein sollen.
 - **Fehler:** Überprüfe, ob deine Beschreibung mindestens 10 Zeichen lang ist.
+

@@ -4,7 +4,7 @@ title: BeanPool beitreten
 summary: Zwei Wege: eine Community mit Einladung oder die globale Community mit 12 geheimen Wörtern oder einem Login. Beitritt anfragen und andere einladen.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Tritt einer Community per Einladung bei oder der globalen Community mit 12 geheimen Wörtern oder einem Login.
-source-hash: 5a1feb7390e4c3fb
+source-hash: e8148ea89abb9b77
 ---
 
 ## Zwei Wege hinein
@@ -117,3 +117,4 @@ Menschen können aus der globalen Community heraus um Beitritt zu deiner Communi
 - **Nicht jetzt** teilt der Person nichts weiter mit als „noch keine Antwort“.
 
 Jedes Mitglied kann antworten. In einer Community, in der nur die Admins einladen, sehen nur deren Eigentümer und Admins die Anfragen und antworten darauf. Siehe „Community in deiner Nähe finden“.
+

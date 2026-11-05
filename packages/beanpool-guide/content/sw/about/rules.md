@@ -3,7 +3,7 @@ slug: rules
 title: Sheria na jinsi maamuzi hufanywa
 summary: Kupiga kura, mahudhurio, kura ya siri, nani anaweza kupiga kura, kusimamishwa, kuondoa mwanachama, wasimamizi, na wawezeshaji na wawezeshaji wakuu.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: be2e7321aab53ca8
+source-hash: 5e6d3bb454c39428
 ---
 
 ## Njia mbili za kuuliza jumuiya
@@ -19,7 +19,6 @@ Kuhusu mwanachama:
 
 - Kumsimamisha mwanachama, au kuondoa kusimamishwa.
 - Kugandisha mkopo wa mwanachama, au kuufungua.
-- Kumpa mwanachama haki ya kuwadhamini wageni, au kuiondoa.
 - Kumuondoa msimamizi mkuu kutoka kwenye biashara, au kiongozi kutoka kwenye mradi.
 - Kumuondoa mwanachama kutoka kwenye jumuiya, au kumrejesha.
 
@@ -154,4 +153,7 @@ Kikundi huendeshwa na waratibu wake, na mmoja wao ni **mratibu mkuu**. Yeyote an
 
 ## Kudhamini
 
-Wasimamizi pekee, na wanachama waliochaguliwa na msimamizi au kwa Uamuzi wa jumuiya, ndio wanaoweza kuwadhamini wageni. Udhamini humpa mgeni kikomo kidogo cha mkopo cha kuanzia: maharagwe 25, 50 au 100. Beji za uaminifu hazitoi haki hii kamwe.
+Wamiliki na wasimamizi ni wadhamini kwa jukumu lao, na mmiliki au msimamizi wa kamati ya mikopo anaweza kumfanya mwanachama aliyethibitishwa kuwa mdhamini kwenye orodha ya majina. Kila mdhamini hupokea bajeti (Maharagwe 100 hadi 2,000, huku chaguomsingi la jumuiya likiwa Maharagwe 1,000).
+
+Wadhamini wanaweza kuwadhamini wageni kwenye mwaliko au wanachama waliomo tayari kutoka kwenye wasifu wao, wakichagua viwango vilivyowekwa awali vya Maharagwe 25, 50, 75 au 100 kutoka bajeti yao. Kila mdhamini anaweza kumdhamini mtu mara moja tu (inayoweza kupandishwa hadi jumla ya Maharagwe 100), upeo wa wadhamini 3 unaweza kumdhamini mtu mmoja (hadi jumla ya Maharagwe 300), na mdhamini hawezi kumdhamini mtu aliye chini ya sifuri kwa sasa. Beji za uaminifu hazitoi haki hii kamwe.
+

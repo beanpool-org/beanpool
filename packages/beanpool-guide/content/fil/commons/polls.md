@@ -4,7 +4,7 @@ title: Mga Poll
 summary: Magtanong sa komunidad ng mabilisang tanong. Nagpapakita ang mga poll ng opinyon; wala itong binabago nang kusa.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Nagtatanong ang poll sa komunidad ng mabilisang tanong. Ipinapakita nito kung ano ang iniisip ng mga tao; wala itong binabago nang kusa.
-source-hash: c1e4eb171c19552f
+source-hash: 74aa1008e60fa805
 ---
 
 ## Botohan o Desisyon?
@@ -19,7 +19,7 @@ Habang bukas ang isang botohan ay wala itong sinasabi tungkol dito. Kung sasabih
 
 ## Pagsisimula ng isang botohan
 
-- I-tap ang **+ ADD POST** sa tab ng Merkado o sa Mapa.
+- I-tap ang sagot para piliin ito. I-tap ang iba para baguhin ang iyong pasya, hanggang sa magsara ang botohan: hihingi muna ng kumpirmasyon ang app bago baguhin ang iyong boto.
 - Pumili ng **Botohan ng Komunidad**.
 - Isulat ang **Tanong**.
 - Magdagdag ng **Konteksto / mga tala** kung makakatulong ito. Opsyonal ito.
@@ -36,7 +36,7 @@ Maaari kang magkaroon ng isang bukas na botohan sa bawat pagkakataon, at ang isa
 
 Nasa Merkado ang mga botohan. I-tap ang **Mga Poll** sa itaas na hanay upang makita lamang ang mga botohan. Inililista muli nang isang beses ang isang botohan, sa ilalim ng **Ngayong araw**, sa araw bago ito magsara.
 
-- I-tap ang isang sagot upang piliin ito. I-tap ang isa pa upang magbago ang iyong isip, hanggang sa magsara ang botohan.
+- I-tap ang sagot para piliin ito. I-tap ang iba para baguhin ang iyong pasya, hanggang sa magsara ang botohan: hihingi muna ng kumpirmasyon ang app bago baguhin ang iyong boto.
 - Ipinapakita ng card kung ilan ang pumili sa bawat sagot.
 
 ## Sino ang makakakita kung paano ka bumoto
@@ -51,3 +51,4 @@ Makikita pa rin ng mga may-ari at admin na nagpapatakbo ng server ng iyong komun
 ## Maagang pagsasara ng botohan
 
 Kung ikaw ang nagsimula nito, i-tap ang **Isara ang Botohan**, pagkatapos ay **Isara ang Botohan** muli upang kumpirmahin (**OK** sa web app).
+

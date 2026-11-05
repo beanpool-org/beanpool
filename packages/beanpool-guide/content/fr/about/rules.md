@@ -3,7 +3,7 @@ slug: rules
 title: Règles et décisions
 summary: Vote, participation, vote secret, qui peut voter, suspension, exclusion d'un membre, gestionnaires, coordinateurs et coordinateurs principaux.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: be2e7321aab53ca8
+source-hash: 5e6d3bb454c39428
 ---
 
 ## Deux façons d'interroger la communauté
@@ -19,7 +19,6 @@ La communauté globale dispose de Sondages mais pas de Décisions : tout le mond
 
 - Suspendre un membre, ou lever une suspension.
 - Bloquer le crédit d'un membre, ou le débloquer.
-- Donner à un membre le droit de parrainer les nouveaux arrivants, ou le lui retirer.
 - Retirer un gestionnaire principal d'une entreprise, ou un responsable d'un projet.
 - Exclure un membre de la communauté, ou le réintégrer.
 
@@ -34,7 +33,7 @@ Une aide ne peut dépasser ce que détiennent les Communs actuellement plus ce q
 
 ## Qui peut proposer une Décision
 
-Tout membre actif dont le crédit n'est pas bloqué, et qui a réalisé des échanges sur le marché ou reçu un badge de confiance d'un administrateur. Un parrainage seul ne suffit pas. Les administrateurs le peuvent aussi. Vous pouvez avoir une seule Décision ouverte à la fois. Vous devez en expliquer la raison, en au moins 10 caractères.
+Tout membre actif dont le crédit n'est pas gelé et qui a déjà conclu un échange sur le marché. Un badge de confiance ne suffit pas. Les administrateurs le peuvent aussi. Vous pouvez avoir une seule Décision ouverte à la fois. Vous devez expliquer la raison, en au moins 10 caractères.
 
 ## Qui peut voter
 
@@ -107,7 +106,7 @@ Le serveur de votre communauté a des propriétaires et des administrateurs. Ils
 
 - Un administrateur peut arrêter une Décision en cours, mais doit donner une raison écrite. Les membres peuvent la lire sur la Décision.
 - Si une exclusion a été adoptée et est dans son délai d'attente de 7 jours, un administrateur peut l'interrompre, ou l'exécuter sur-le-champ.
-- Les administrateurs peuvent donner aux membres le droit de parrainer les nouveaux arrivants.
+- Les propriétaires et les administrateurs du comité de crédit peuvent désigner un membre confirmé comme parrain sur la liste des noms.
 - Les administrateurs peuvent attribuer un badge de confiance à un membre. Cela donne également à ce membre la confiance requise par ce badge, ce qui augmente sa ligne de crédit.
 - Les administrateurs débloquent les échanges interrompus, mais jamais un échange auquel ils prennent part.
 
@@ -154,4 +153,7 @@ Un groupe est dirigé par ses coordinateurs, et l'un d'eux est son **coordinateu
 
 ## Parrainage
 
-Seuls les administrateurs, et les membres choisis par un administrateur ou par une Décision communautaire, peuvent parrainer les nouveaux arrivants. Un parrainage donne au nouvel arrivant une petite ligne de crédit pour commencer : 25, 50 ou 100 haricots. Les badges de mérite ne confèrent jamais ce droit.
+Les propriétaires et les administrateurs sont parrains de par leur rôle, et un propriétaire ou un administrateur du comité de crédit peut désigner un membre confirmé comme parrain sur la liste des noms. Chaque parrain reçoit un budget (de 100 à 2 000 haricots, la valeur par défaut de la communauté étant de 1 000 haricots).
+
+Les parrains peuvent parrainer de nouveaux arrivants sur une invitation, ou des membres déjà inscrits depuis leur profil, en choisissant parmi les montants prédéfinis de 25, 50, 75 ou 100 haricots sur leur budget. Chaque parrain ne peut parrainer une personne qu'une seule fois (montant augmentable jusqu'à 100 haricots au total), au maximum 3 parrains peuvent parrainer la même personne (jusqu'à 300 haricots au total), et un parrain ne peut pas parrainer quelqu'un dont le solde est négatif. Les badges de confiance ne confèrent jamais ce droit.
+

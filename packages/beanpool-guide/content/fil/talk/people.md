@@ -4,7 +4,7 @@ title: Mga tao at kaibigan
 summary: Paghahanap ng mga miyembro ng iyong komunidad, kanilang mga profile at trust badge, at pagmarka ng mga kaibigan upang mapansin kapag umalis ang isa.
 related: messages, your-profile, joining, blocking
 help: Mga miyembro ng komunidad mo at mga kaibigan mo. I-tap ang isang tao para makita ang profile, o ang 💬 sa tabi ng miyembro para magmensahe.
-source-hash: 44b66169497e9909
+source-hash: 094e89e2c072349f
 ---
 
 ## Paghahanap ng mga tao
@@ -37,6 +37,13 @@ Maaari mong piliin na hindi ipakita bilang karaniwang koneksyon ninuman. Sa Mga 
 
 ## Pagpapatunay para sa isang tao
 
-Ang ilang miyembro ay pinipili ng komunidad upang sumalubong sa mga bagong dating. Maaari silang magpatunay para sa isang bagong miyembro, na nagbibigay sa taong iyon ng maliit na linya ng kredito upang magsimula. Sa profile ng tao, tina-tap nila ang **Magpatunay para sa Miyembro** at pinipili ang **Magaan** (25), **Karaniwan** (50) o **Malalim** (100). Walang Munggo na aalis sa sariling wallet ng nagpapatunay.
+Maaaring magpatunay ang isang tagapagpatunay para sa miyembrong nakasali na, na nagbibigay sa kanila ng credit line upang magsimulang makipagpalitan. Ang mga tagapagpatunay ay mga may-ari at admin ayon sa tungkulin, at mga miyembrong itinakda bilang mga tagapagpatunay sa listahan ng mga pangalan ng isang may-ari o admin ng credit committee.
 
-Kung sino ang maaaring magpatunay ay ipinapasiya ng isang admin o sa pamamagitan ng isang Desisyon ng komunidad, hindi kailanman sa pamamagitan ng isang badge. Tingnan ang "Mga patakaran at paano gumagana ang mga desisyon".
+Sa profile ng miyembro, tina-tap ng tagapagpatunay ang **Magpatunay para kay @pangalan** at pipili ng **25**, **50**, **75** o **100** Beans, mula sa kanilang badyet ng tagapagpatunay. Walang Beans na nababawas sa sariling pitaka ng tagapagpatunay.
+
+- **Isang patunay bawat tao:** bawat tagapagpatunay ay maaaring magpatunay para sa isang tao nang isang beses. Maaari mo ring itaas ang iyong patunay para sa kanila sa ibang pagkakataon, hanggang 100 Beans sa kabuuan.
+- **Hindi hihigit sa 3 tagapagpatunay:** hanggang 3 tagapagpatunay ang maaaring magpatunay para sa iisang tao (hanggang 300 Beans sa kabuuan).
+- **Hindi kailanman sa ilalim ng zero:** hindi ka maaaring magpatunay para sa miyembrong nasa ilalim ng zero ngayon. Upang matulungan ang may utang, maaaring magbigay ang mga miyembro ng bahagi ng kanilang credit line sa Ipadala, o magpanukala ng Desisyon ng komunidad.
+
+Tingnan ang "Pagsali sa BeanPool" at "Ang iyong credit line".
+

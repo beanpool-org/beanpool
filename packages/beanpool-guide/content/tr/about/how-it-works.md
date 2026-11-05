@@ -3,7 +3,7 @@ slug: how-it-works
 title: BeanPool nasıl çalışır
 summary: Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: a3d4bd4eee0c67cb
+source-hash: d9e82e8017a2b050
 ---
 
 ## Fasulye
@@ -43,7 +43,7 @@ Bir takas olmadan da birine hediye olarak fasulye gönderebilirsiniz.
 
 Sahip olduğunuzdan biraz daha fazlasını harcayabilir ve sıfırın altına inebilirsiniz. Bu sizin **kredi limitinizdir**. Daha sonra başkalarına yardım etme sözüdür.
 
-Kredi limitiniz sıfırdan başlar. Pazardaki ilk takasınızı tamamladığınızda açılır (yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür). Topluluğunuzun yeni gelenleri karşılamak için seçtiği biri de size kefil olarak küçük bir başlangıç sağlayabilir: 25, 50 veya 100 fasulye.
+Kredi limitin sıfırdan başlar. Pazarda ilk takasını tamamladığında açılır (yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür). Bir kefil de davetinde veya profilinde senin için kefil olarak bir başlangıç sağlayabilir: kefil bütçesinden 25, 50, 75 veya 100 fasulye.
 
 Kredi limitiniz **güveninizle** büyür:
 
@@ -93,3 +93,4 @@ Bir **girişim** süreklidir ve kendi adına takas yapar: bir fırın, bir alet 
 Bir **grup**, bir veya daha fazla **koordinatör** tarafından yönetilen, kendi sohbeti ve gönderileri olan bir üye çevresidir. Bunlardan biri grubun **baş koordinatörüdür**; başlangıçta grubu oluşturan kişi kimse odur.
 
 Sorumluların ve koordinatörlerin nasıl seçildiğini "Kurallar ve kararların nasıl işlediği" bölümünden okuyabilirsiniz.
+

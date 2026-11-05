@@ -4,7 +4,7 @@ title: Confidentialité
 summary: Ce que les autres voient de vous et les réglages qui le contrôlent.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Ce que les autres membres voient de vous et les interrupteurs qui le contrôlent.
-source-hash: 7a296a90b991050e
+source-hash: 19d7d7439e729ce8
 ---
 
 ## Ouvrir les Paramètres
@@ -17,7 +17,7 @@ Touchez le bouton avec des curseurs en haut à droite de l'écran. Dans l'applic
 - Votre badge de confiance, vos évaluations (personne d'autre ne peut voir qui a rédigé une évaluation), et votre profil de confiance : combien de vos échanges ont été menés à terme et combien ont été annulés, la proportion d'échanges menés à terme, combien de paiements en haricots vous avez envoyés ou reçus de membres en plus des échanges réalisés, avec combien de membres différents vous avez payé, été payé ou échangé, combien de paiements et d'échanges vous avez effectués avec le membre qui consulte votre profil, ainsi que vos Points de confiance. Les administrateurs le voient comme n'importe quel membre, et cette consultation n'est pas journalisée.
 - Vos publications et l'emplacement de leurs repères. Voir « Emplacement du repère ».
 - Votre vote sur un sondage, mais uniquement sur un sondage pour lequel son créateur a activé le **Vote ouvert**. Les sondages sont anonymes dans le cas contraire, et les votes sur les **Décisions** sont toujours secrets.
-- La personne qui vous a invité. Sur le téléphone, votre profil indique **Parrainé par** suivi de son nom. Si vous êtes arrivé en tant que membre fondateur ou avez été invité directement par l'administrateur système, il indique **Membre fondateur** ou **Invité directement par l'admin système**. Si un membre s'est porté garant pour votre ligne de crédit, votre profil indique **Garanti par** suivi de son nom, dans l'application mobile et dans l'application web.
+- La personne qui vous a invité. Sur le téléphone, votre profil indique **Invitation de** suivi de son nom. Si vous êtes arrivé en tant que membre fondateur ou avez été invité directement par l'administrateur système, il indique **Membre fondateur** ou **Invité directement par l'admin système** à la place.
 
 ## Ce que vous êtes seul à voir
 
@@ -60,3 +60,4 @@ Les propriétaires et administrateurs qui gèrent le serveur de votre communaut�
 ## En savoir plus
 
 Dans les Paramètres, sous **Mentions légales et confidentialité**, touchez **Politique de confidentialité**.
+

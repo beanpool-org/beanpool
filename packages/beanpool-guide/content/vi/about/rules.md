@@ -3,7 +3,7 @@ slug: rules
 title: Quy tắc và cách quyết định vận hành
 summary: Bỏ phiếu, tỷ lệ tham gia, bỏ phiếu kín, ai có quyền bỏ phiếu, đình chỉ, xóa thành viên, người quản lý, cùng người triệu tập.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: be2e7321aab53ca8
+source-hash: 5e6d3bb454c39428
 ---
 
 ## Hai cách để tham khảo ý kiến cộng đồng
@@ -19,7 +19,6 @@ Về một thành viên:
 
 - Đình chỉ một thành viên, hoặc dỡ bỏ lệnh đình chỉ.
 - Đóng băng hạn mức tín dụng của một thành viên, hoặc mở đóng băng.
-- Cấp quyền cho một thành viên bảo lãnh người mới, hoặc thu hồi quyền này.
 - Bãi nhiệm người quản lý chính khỏi một doanh nghiệp, hoặc trưởng nhóm khỏi một dự án.
 - Khai trừ một thành viên khỏi cộng đồng, hoặc phục hồi tư cách thành viên cho họ.
 
@@ -154,4 +153,7 @@ Một nhóm được điều hành bởi các điều hành viên của nhóm, v
 
 ## Bảo lãnh
 
-Chỉ các quản trị viên, và các thành viên được quản trị viên hoặc Quyết định của cộng đồng chỉ định, mới có thể bảo lãnh cho người mới. Một sự bảo lãnh sẽ mang lại cho người mới một hạn mức tín dụng nhỏ ban đầu: 25, 50 hoặc 100 Đậu. Các huy hiệu tin cậy không bao giờ cấp quyền hạn này.
+Chủ sở hữu và quản trị viên là người bảo lãnh theo vai trò, đồng thời chủ sở hữu hoặc quản trị viên ban tín dụng có thể chỉ định một thành viên đã xác minh làm người bảo lãnh trong danh sách tên. Mỗi người bảo lãnh nhận được một ngân sách (100 đến 2.000 đậu, mặc định của cộng đồng là 1.000 đậu).
+
+Người bảo lãnh có thể bảo lãnh cho người mới trên lời mời hoặc thành viên đã tham gia từ hồ sơ của họ, chọn các mức định sẵn 25, 50, 75 hoặc 100 đậu từ ngân sách. Mỗi người bảo lãnh chỉ có thể bảo lãnh cho một người một lần (có thể nâng lên tối đa 100 đậu tổng cộng), tối đa 3 người bảo lãnh cho một người (tối đa 300 đậu tổng cộng), và không thể bảo lãnh cho người đang có số dư âm. Huy hiệu tin cậy không bao giờ cấp quyền này.
+

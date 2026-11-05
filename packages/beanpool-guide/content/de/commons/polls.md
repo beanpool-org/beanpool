@@ -4,7 +4,7 @@ title: Umfragen
 summary: Der Community eine schnelle Frage stellen. Umfragen zeigen Meinungen, ändern aber allein nichts.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 help: Eine Umfrage stellt eine schnelle Frage an alle. Sie zeigt ein Stimmungsbild, ändert allein aber nichts.
-source-hash: c1e4eb171c19552f
+source-hash: 74aa1008e60fa805
 ---
 
 ## Umfrage oder Beschluss?
@@ -19,7 +19,7 @@ Solange eine Umfrage offen ist, wird hierzu nichts angezeigt. Wäre dies der Fal
 
 ## Eine Umfrage starten
 
-- Tippe auf dem Tab „Markt“ oder auf der Karte auf **+ BEITRAG ERSTELLEN**.
+- Tippe auf eine Antwort, um sie auszuwählen. Tippe auf eine andere, um deine Meinung zu ändern, bis die Umfrage schließt: Die App bittet dich um Bestätigung, bevor deine Stimme geändert wird.
 - Wähle **Community-Umfrage**.
 - Schreibe die **Frage**.
 - Füge **Kontext / Notizen** hinzu, falls es hilft. Dies ist optional.
@@ -36,7 +36,7 @@ Du kannst jeweils eine Umfrage gleichzeitig offen haben, und eine Community kann
 
 Umfragen befinden sich im Markt. Tippe in der oberen Zeile auf **Umfragen**, um nur Umfragen anzuzeigen. Eine Umfrage wird am Tag vor ihrem Ende noch einmal unter **Heute** aufgeführt.
 
-- Tippe auf eine Antwort, um sie auszuwählen. Tippe auf eine andere, um deine Meinung zu ändern, bis die Umfrage schließt.
+- Tippe auf eine Antwort, um sie auszuwählen. Tippe auf eine andere, um deine Meinung zu ändern, bis die Umfrage schließt: Die App bittet dich um Bestätigung, bevor deine Stimme geändert wird.
 - Die Karte zeigt, wie viele jede Antwort gewählt haben.
 
 ## Wer sehen kann, wie du abgestimmt hast
@@ -51,3 +51,4 @@ Die Betreiber und Admins, die den Server deiner Community verwalten, können wei
 ## Eine Umfrage vorzeitig schließen
 
 Wenn du sie gestartet hast, tippe auf **Umfrage schließen** und dann zur Bestätigung erneut auf **Umfrage schließen** (in der Web-App **OK**).
+

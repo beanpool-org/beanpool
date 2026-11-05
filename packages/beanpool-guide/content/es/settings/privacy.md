@@ -4,7 +4,7 @@ title: Tu privacidad
 summary: Qué pueden ver los demás sobre ti y los ajustes que lo controlan.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Qué pueden ver otros miembros sobre ti y las opciones que lo controlan.
-source-hash: 7a296a90b991050e
+source-hash: 19d7d7439e729ce8
 ---
 
 ## Abrir Ajustes
@@ -17,7 +17,7 @@ Toca el botón de controles deslizantes en la esquina superior derecha de la pan
 - Tu insignia de confianza, tus reseñas (nadie más puede ver quién escribió una reseña) y tu perfil de confianza: cuántos de tus intercambios se finalizaron y cuántos se cancelaron, la proporción finalizada, cuántos pagos en frijoles has enviado a miembros o recibido de ellos más los intercambios que has finalizado, con cuántos miembros diferentes has pagado, cobrado o intercambiado, cuántos pagos e intercambios has hecho con el miembro que está mirando, y tus Puntos de confianza. Los administradores lo ven igual que cualquier miembro, y no queda registrado.
 - Tus publicaciones y dónde están sus pines. Consulta «Dónde va tu pin».
 - Cómo votaste en una encuesta, pero solo en una encuesta cuyo creador estableció como **votación abierta**. De lo contrario, las encuestas son anónimas, y los votos en **Decisiones** siempre son secretos.
-- Quién te invitó. En el teléfono tu perfil dice **Avalado por** y su nombre. Si entraste como miembro fundador o fuiste invitado directamente por el administrador del sistema, dice **Miembro fundador** o **Invitado directamente por el administrador del sistema** en su lugar. Si un miembro avaló tu línea de crédito, tu perfil dice **Avalado por** y su nombre, tanto en la app del teléfono como en la aplicación web.
+- Quién te invitó. En el teléfono tu perfil dice **Invitación de** y su nombre. Si entraste como miembro fundador o fuiste invitado directamente por el administrador del sistema, dice **Miembro fundador** o **Invitado directamente por el administrador del sistema** en su lugar.
 
 ## Qué puedes ver solo tú
 
@@ -60,3 +60,4 @@ Los propietarios y administradores que gestionan el servidor de tu comunidad aú
 ## Más información
 
 En Ajustes, en **LEGAL Y PRIVACIDAD**, toca **Política de privacidad**.
+

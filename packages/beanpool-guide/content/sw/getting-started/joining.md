@@ -4,7 +4,7 @@ title: Kujiunga na BeanPool
 summary: Njia mbili za kuingia: jumuiya, kwa mwaliko wa mwanachama, au jumuiya ya kimataifa ikiwa wazi, kwa maneno 12 ya siri au kuingia mara moja. Kuomba kujiunga na kuwaalika wengine.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Jiunge na jumuiya kwa mwaliko wa mwanachama, au jumuiya ya kimataifa kwa maneno 12 ya siri au kuingia mara moja.
-source-hash: 5a1feb7390e4c3fb
+source-hash: e8148ea89abb9b77
 ---
 
 ## Njia mbili za kuingia
@@ -117,3 +117,4 @@ Watu wanaweza kuomba kujiunga na jumuiya yako kutoka kwa jumuiya ya kimataifa. W
 - **Si sasa** haiwaambii chochote zaidi ya "bado hakuna jibu".
 
 Mwanachama yeyote anaweza kujibu. Katika jumuiya ambayo wasimamizi pekee ndio wanaoalika, wamiliki na wasimamizi wake pekee ndio wanaoona maombi na kuyajibu. Tazama "Kupata jumuiya iliyo karibu nawe".
+

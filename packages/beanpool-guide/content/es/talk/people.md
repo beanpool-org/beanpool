@@ -4,7 +4,7 @@ title: Personas y amistades
 summary: Encuentra miembros de tu comunidad, agrega amistades y avala a alguien.
 related: messages, your-profile, joining, blocking
 help: Los miembros de tu comunidad y tus amistades. Toca a alguien para ver su perfil o toca 💬 junto a un miembro para escribirle.
-source-hash: 44b66169497e9909
+source-hash: 094e89e2c072349f
 ---
 
 ## Encontrar personas
@@ -37,6 +37,13 @@ Puedes elegir no aparecer como conexión en común de nadie. En Ajustes, bajo **
 
 ## Avalar a alguien
 
-La comunidad elige a algunos miembros para dar la bienvenida a los recién llegados. Pueden avalar a un miembro nuevo, lo que le otorga una pequeña línea de crédito para comenzar. En el perfil de la persona, tocan **Avalar a miembro** y eligen **Ligero** (25), **Estándar** (50) o **Profundo** (100). No sale ningún frijol de la billetera de quien avala.
+Un avalista puede avalar a un miembro que ya se haya unido, dándole una línea de crédito para comenzar a intercambiar. Los avalistas son propietarios y administradores por función, y miembros designados como avalistas en la lista de nombres por un propietario o administrador del comité de crédito.
 
-Quién puede avalar lo decide un administrador o una Decisión comunitaria, nunca una insignia. Consulta «Las reglas y cómo funcionan las decisiones».
+En el perfil del miembro, un avalista toca **Avalar a @nombre** y elige **25**, **50**, **75** o **100** frijoles de su presupuesto de avalista. No sale ningún frijol de la billetera del avalista.
+
+- **Un aval por persona:** cada avalista puede avalar a una persona una sola vez. Más adelante puedes aumentar tu aval para esa persona, hasta 100 frijoles en total.
+- **Como máximo 3 avalistas:** como máximo 3 avalistas pueden avalar a la misma persona (hasta 300 frijoles en total).
+- **Nunca por debajo de cero:** no puedes avalar a un miembro que esté actualmente por debajo de cero. Para ayudar a alguien endeudado, los miembros pueden ceder parte de su línea de crédito en Enviar, o proponer una Decisión comunitaria.
+
+Consulta "Unirse a BeanPool" y "Tu línea de crédito".
+

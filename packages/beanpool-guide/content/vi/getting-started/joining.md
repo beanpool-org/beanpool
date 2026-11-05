@@ -4,7 +4,7 @@ title: Tham gia BeanPool
 summary: Hai cách tham gia: cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu khi mở, bằng 12 từ bí mật hoặc đăng nhập. Xin gia nhập và mời người khác.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Tham gia cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu với 12 từ bí mật hay một lần đăng nhập.
-source-hash: 5a1feb7390e4c3fb
+source-hash: e8148ea89abb9b77
 ---
 
 ## Hai cách tham gia
@@ -117,3 +117,4 @@ Mọi người có thể xin gia nhập cộng đồng của bạn từ cộng �
 - **Không phải bây giờ** không thông báo gì cho họ ngoài việc "chưa có câu trả lời".
 
 Bất kỳ thành viên nào cũng có thể trả lời. Trong một cộng đồng nơi chỉ quản trị viên mới được mời, chỉ các chủ sở hữu và quản trị viên của cộng đồng mới thấy các yêu cầu và trả lời chúng. Xem "Tìm một cộng đồng gần bạn".
+

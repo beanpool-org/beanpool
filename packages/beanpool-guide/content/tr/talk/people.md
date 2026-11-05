@@ -4,7 +4,7 @@ title: Kişiler ve arkadaşlar
 summary: Topluluk üyelerini bulma, arkadaş ekleme ve birine kefil olma.
 related: messages, your-profile, joining, blocking
 help: Topluluğunuzun üyeleri ve arkadaşlarınız. Profilini görmek için birine dokunun veya bir üyeye mesaj atmak için yanındaki 💬 simgesine dokunun.
-source-hash: 44b66169497e9909
+source-hash: 094e89e2c072349f
 ---
 
 ## Kişileri bulma
@@ -37,6 +37,13 @@ Kimsenin ortak bağlantısı olarak gösterilmemeyi seçebilirsiniz. Ayarlar'da 
 
 ## Birine kefil olma
 
-Bazı üyeler yeni gelenleri karşılamak üzere topluluk tarafından seçilir. Yeni bir üyeye kefil olabilirler; bu da o kişiye başlaması için küçük bir kredi limiti verir. Kişinin profilinde **Üyeye Kefil Ol** seçeneğine dokunurlar ve **Hafif** (25), **Standart** (50) veya **Derin** (100) seçeneğini belirlerler. Kefilin kendi cüzdanından hiçbir Fasulye çıkmaz.
+Bir kefil, daha önce katılmış bir üye için kefil olarak ona takasa başlaması için bir kredi limiti sağlayabilir. Kefiller rol gereği sahip ve yöneticilerdir; ayrıca bir sahip veya kredi komitesi yöneticisi tarafından isim listesinde kefil olarak belirlenen üyelerdir.
 
-Kimin kefil olabileceğine bir yönetici veya bir topluluk Kararı ile karar verilir, asla bir rozetle karar verilmez. Bkz. "Kurallar ve karar alma süreci".
+Üyenin profilinde kefil, **@ad için kefil ol** seçeneğine dokunur ve kefil bütçesinden **25**, **50**, **75** veya **100** fasulye seçer. Kefilin kendi cüzdanından hiçbir fasulye çıkmaz.
+
+- **Kişi başına bir kefalet:** Her kefil bir kişi için yalnızca bir kez kefil olabilir. Daha sonra o kişi için kefaletini toplamda 100 fasulyeye kadar yükseltebilirsin.
+- **En fazla 3 kefil:** Aynı kişi için en fazla 3 kefil kefil olabilir (toplamda 300 fasulyeye kadar).
+- **Asla sıfırın altında değil:** Şu anda sıfırın altında olan bir üye için kefil olamazsın. Borcu olan birine yardım etmek için üyeler Gönder bölümünden kredi limitlerinin bir kısmını verebilir veya bir Topluluk Kararı önerebilir.
+
+Bkz. "BeanPool'a Katılma" ve "Kredi limitin".
+

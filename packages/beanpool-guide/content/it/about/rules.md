@@ -3,7 +3,7 @@ slug: rules
 title: Regole e decisioni
 summary: Votazioni, partecipazione, voto segreto, chi può votare, sospensione, rimozione di un membro, custodi, coordinatori e coordinatori principali.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: be2e7321aab53ca8
+source-hash: 5e6d3bb454c39428
 ---
 
 ## Due modi per interpellare la comunità
@@ -19,7 +19,6 @@ Riguardo a un membro:
 
 - Sospendere un membro, o revocare una sospensione.
 - Congelare il credito di un membro, o scongelarlo.
-- Concedere a un membro il diritto di fare da garante per i nuovi arrivati, o revocarlo.
 - Rimuovere un custode principale da un'impresa, o un responsabile da un progetto.
 - Rimuovere un membro dalla comunità, o reintegrarlo.
 
@@ -34,7 +33,7 @@ Un sussidio non può superare quanto attualmente contenuto nei Beni comuni più 
 
 ## Chi può avviare una Decisione
 
-Qualsiasi membro attivo il cui credito non sia congelato, e che abbia effettuato scambi nel mercato o a cui sia stato assegnato un badge di fiducia da un amministratore. Una garanzia da sola non è sufficiente. Anche gli amministratori possono farlo. Puoi avere una sola Decisione aperta alla volta. Devi spiegarne il motivo in almeno 10 caratteri.
+Qualsiasi membro attivo il cui credito non sia congelato e che abbia completato scambi nel mercato. Un badge di fiducia non è sufficiente. Anche gli amministratori possono farlo. Puoi avere una sola Decisione aperta alla volta. Devi spiegare il motivo, in almeno 10 caratteri.
 
 ## Chi può votare
 
@@ -154,4 +153,7 @@ Un gruppo è gestito dai suoi coordinatori, e uno di essi è il suo **coordinato
 
 ## Garanzie per i nuovi arrivati
 
-Solo gli amministratori e i membri scelti da un amministratore o da una Decisione della comunità possono fare da garanti per i nuovi arrivati. Una garanzia fornisce al nuovo arrivato una piccola linea di credito per iniziare: 25, 50 o 100 fagioli. I badge di fiducia non conferiscono mai questo diritto.
+I proprietari e gli amministratori sono garanti di diritto, e un proprietario o amministratore della commissione credito può nominare garante un membro confermato nell'elenco dei nomi. Ciascun garante riceve un budget (da 100 a 2.000 fagioli, con un valore predefinito della comunità di 1.000 fagioli).
+
+I garanti possono garantire per i nuovi arrivati su un invito, oppure per i membri già presenti dal loro profilo, scegliendo tra valori preimpostati di 25, 50, 75 o 100 fagioli dal loro budget. Ciascun garante può garantire per una persona una sola volta (aumentabile fino a 100 fagioli complessivi), al massimo 3 garanti possono garantire per la stessa persona (fino a 300 fagioli in totale), e un garante non può garantire per chi si trova attualmente sotto zero. I badge di fiducia non danno mai questo diritto.
+

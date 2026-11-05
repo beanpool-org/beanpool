@@ -4,7 +4,7 @@ title: Gizliliğiniz
 summary: Başkalarının sizin hakkınızda neleri görebileceği ve bunu denetleyen ayarlar.
 related: your-profile, your-area, pin-locations, blocking, messages
 help: Diğer üyelerin sizin hakkınızda neleri görebileceği ve bunu denetleyen anahtarlar.
-source-hash: 7a296a90b991050e
+source-hash: 19d7d7439e729ce8
 ---
 
 ## Ayarlar'ı açma
@@ -17,7 +17,7 @@ Ekranın sağ üst tarafındaki kaydırıcılar düğmesine dokunun. Geniş bir 
 - Güven rozetiniz, yorumlarınız (yorumu kimin yazdığını başka hiç kimse göremez) ve güven profiliniz: takaslarınızdan kaçının tamamlandığı ve kaçının iptal edildiği ve tamamlanma oranı, üyelere gönderdiğiniz veya üyelerden aldığınız Fasulye ödemesi sayısı artı tamamladığınız takaslar, ödeme yaptığınız, ödeme aldığınız veya takas yaptığınız kaç farklı üye olduğu, bakan üyeyle kaç ödeme ve takas yaptığınız ve Güven Puanınız. Yöneticiler de bunu herhangi bir üyenin gördüğü gibi görür ve günlüğe kaydedilmez.
 - Gönderileriniz ve işaretlerinin nerede olduğu. "İşaretinizin konumu" bölümüne bakın.
 - Bir Ankette nasıl oy kullandığınız; ancak yalnızca oluşturan kişinin **açık oylama** yaptığı bir Ankette. Bunun dışında anketler anonimdir ve **Kararlar** üzerindeki oylar her zaman gizlidir.
-- Sizi kimin davet ettiği. Telefonda profilinizde **tarafından kefil olundu** ve o kişinin adı yazar. Kurucu üye olarak katıldıysanız veya doğrudan sistem yöneticisi tarafından davet edildiyseniz bunun yerine **Kurucu üye** veya **Doğrudan sistem yöneticisi tarafından davet edildi** yazar. Bir üye kredi limitinize kefil olduysa telefon uygulamasında ve web uygulamasında profilinizde **kefil oldu** ve o kişinin adı yazar.
+- Seni kim davet etti. Telefonda profilinde **Davet eden:** ve adı görünür. Kurucu üye olarak katıldıysan veya doğrudan sistem yöneticisi tarafından davet edildiysen bunun yerine **Kurucu üye** veya **Doğrudan sistem yöneticisi tarafından davet edildi** yazar.
 
 ## Yalnızca sizin görebildikleriniz
 
@@ -60,3 +60,4 @@ Topluluğunuzun sunucusunu işleten sahipler ve yöneticiler orada nelerin sakla
 ## Daha fazla oku
 
 Ayarlar'da, **YASAL VE GİZLİLİK** altında **Gizlilik Politikası**'na dokunun.
+

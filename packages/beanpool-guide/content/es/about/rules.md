@@ -3,7 +3,7 @@ slug: rules
 title: Reglas y cómo decidir
 summary: Votación, participación, votaciones secretas, quién vota, suspensión, expulsar a un miembro, custodios, coordinadores y coordinadores principales.
 related: decisions, proposing-a-decision, polls, keepers, groups, people
-source-hash: be2e7321aab53ca8
+source-hash: 5e6d3bb454c39428
 ---
 
 ## Dos formas de consultar a la comunidad
@@ -19,7 +19,6 @@ Sobre un miembro:
 
 - Suspender a un miembro o levantar una suspensión.
 - Congelar el crédito de un miembro o descongelarlo.
-- Otorgar a un miembro el derecho de avalar a recién llegados o retirárselo.
 - Remover a un custodio principal de un emprendimiento, o a un líder de un proyecto.
 - Remover a un miembro de la comunidad o reincorporarlo.
 
@@ -34,7 +33,7 @@ Un subsidio no puede ser por un monto mayor a lo que los Bienes comunes tienen a
 
 ## Quién puede iniciar una Decisión
 
-Cualquier miembro activo cuyo crédito no esté congelado, y que haya comerciado en el mercado o haya recibido una insignia de confianza de un administrador. Un aval por sí solo no es suficiente. Los administradores también pueden hacerlo. Puedes tener una Decisión abierta a la vez. Debes explicar el motivo con al menos 10 caracteres.
+Cualquier miembro activo cuyo crédito no esté congelado y que haya realizado intercambios en el mercado. Una insignia de confianza no es suficiente. Los administradores también pueden. Puedes tener una Decisión abierta a la vez. Debes explicar el motivo, con al menos 10 caracteres.
 
 ## Quién puede votar
 
@@ -107,7 +106,7 @@ El servidor de tu comunidad tiene propietarios y administradores. Ellos lo cuida
 
 - Un administrador puede detener una Decisión abierta, pero debe dar un motivo por escrito. Los miembros pueden leerlo en la Decisión.
 - Si se aprobó una remoción y está en su período de espera de 7 días, un administrador puede detenerla o hacer que ocurra de inmediato.
-- Los administradores pueden otorgar a los miembros el derecho de avalar a recién llegados.
+- Los propietarios y los administradores del comité de crédito pueden nombrar avalista a un miembro confirmado en la lista de nombres.
 - Los administradores pueden otorgar a un miembro una insignia de confianza. Esto también le otorga a ese miembro la confianza que esa insignia requiere, por lo que amplía su línea de crédito.
 - Los administradores resuelven tratos atascados, pero nunca uno del que formen parte.
 
@@ -154,4 +153,7 @@ Un grupo es administrado por sus coordinadores, y uno de ellos es su **coordinad
 
 ## Avalar
 
-Solo los administradores y los miembros elegidos por un administrador o por una Decisión comunitaria pueden avalar a los recién llegados. Un aval le da al recién llegado una pequeña línea de crédito para comenzar: 25, 50 o 100 frijoles. Las insignias de confianza nunca otorgan este derecho.
+Los propietarios y administradores son avalistas por rol, y un propietario o administrador del comité de crédito puede nombrar avalista a un miembro confirmado en la lista de nombres. Cada avalista recibe un presupuesto (de 100 a 2.000 frijoles, con un valor predeterminado de la comunidad de 1.000 frijoles).
+
+Los avalistas pueden avalar a recién llegados en una invitación, o a miembros ya registrados desde su perfil, eligiendo entre valores predeterminados de 25, 50, 75 o 100 frijoles de su presupuesto. Cada avalista puede avalar a una persona una sola vez (aumentable hasta 100 frijoles en total), un máximo de 3 avalistas pueden avalar a la misma persona (hasta 300 frijoles en total), y un avalista no puede avalar a alguien que esté por debajo de cero en ese momento. Las insignias de confianza nunca otorgan este derecho.
+

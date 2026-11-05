@@ -199,7 +199,7 @@ const settle = async () => { for (let i = 0; i < 10; i++) await act(async () => 
 async function renderAs(who: Who) {
     const p = PEOPLE[who];
     me.identity = { publicKey: p.publicKey, privateKey: key('f'), callsign: p.callsign };
-    await act(async () => { root.render(createElement(PeopleScreen)); });
+    await act(async () => { root.render(createElement(PeopleScreen) as any); });
     await settle();
 }
 const block = () => host.querySelector('[data-testid="vouchers-block"]');

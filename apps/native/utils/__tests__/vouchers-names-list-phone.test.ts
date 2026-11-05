@@ -133,7 +133,7 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); container.remove(); });
 
 const renderCard = async (props: Record<string, unknown>) => {
-    await act(async () => { root.render(createElement(VoucherCard, { anchorUrl: 'https://community.test', identity, memberPubkey: NODE_CARD.memberPubkey, ...props } as any)); });
+    await act(async () => { root.render(createElement(VoucherCard, { anchorUrl: 'https://community.test', identity, memberPubkey: NODE_CARD.memberPubkey, ...props } as any) as any); });
 };
 const button = (label: string) => container.querySelector(`button[aria-label="${label}"]`) as HTMLButtonElement | null;
 const press = async (el: Element | null) => {

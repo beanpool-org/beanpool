@@ -944,7 +944,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                         className="w-full p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-[15px] font-medium text-left flex justify-between items-center shadow-sm cursor-pointer"
                                     >
                                         <span>{selectedMember?.callsign || t('Select recipient...')}</span>
-                                        <span className="text-nature-400 text-xs">▼</span>
+                                        <span className="text-nature-600 dark:text-nature-400 text-xs" aria-hidden="true">▼</span>
                                     </button>
 
                                     {showMemberPicker && (

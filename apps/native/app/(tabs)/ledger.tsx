@@ -400,6 +400,8 @@ export default function LedgerScreen() {
         confirmBtn: { backgroundColor: colors.brand.fill, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
         confirmBtnOff: { backgroundColor: colors.border.default },
         confirmBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '700' },
+        // Waiting for a recipient and an amount: the words still read on the grey (white was 1.2:1 there in light).
+        confirmBtnTextOff: { color: colors.text.secondary },
         txnRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
         txnRowDoor: { minHeight: 44 },
         txnIcon: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
@@ -1098,7 +1100,7 @@ export default function LedgerScreen() {
                             const off = sending || !sendTo || !sendAmount || (credit && (giftOffer?.canGive ?? 0) <= 0);
                             return (
                                 <Pressable testID="send-confirm" style={[styles.confirmBtn, off && styles.confirmBtnOff]} accessibilityRole="button" onPress={credit ? handleGift : handleSend} disabled={off}>
-                                    <Text style={styles.confirmBtnText}>{sending ? (credit ? t('Giving…') : t('Sending...')) : credit ? t('Give credit line') : t('Confirm Transfer')}</Text>
+                                    <Text style={[styles.confirmBtnText, off && styles.confirmBtnTextOff]}>{sending ? (credit ? t('Giving…') : t('Sending...')) : credit ? t('Give credit line') : t('Confirm Transfer')}</Text>
                                 </Pressable>
                             );
                         })()}

@@ -125,16 +125,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
         return () => { cancelled = true; };
     }, [asksRole]);
 
-    const handleVote = async (optionId: string, typed?: string) => {
-        if (isClosed) {
-            setError(t('This poll has ended and can no longer receive votes.'));
-            return;
-        }
-        if (!identity) {
-            setError(t('Please connect your member identity to vote.'));
-            return;
-        }
-
+    const sendVote = async (optionId: string, typed?: string) => {
         setVotingOptionId(optionId);
         setError(null);
         try {
@@ -150,6 +141,29 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
         } finally {
             setVotingOptionId(null);
         }
+    };
+
+    const handleVote = async (optionId: string, typed?: string) => {
+        if (isClosed) {
+            setError(t('This poll has ended and can no longer receive votes.'));
+            return;
+        }
+        if (!identity) {
+            setError(t('Please connect your member identity to vote.'));
+            return;
+        }
+
+        if (userVotedOptionId && userVotedOptionId !== optionId) {
+            const currentOpt = options.find(o => o.id === userVotedOptionId);
+            const currentLabel = currentOpt ? (currentOpt.other ? pollOtherLines.other() : currentOpt.text) : (userVotedOptionId ?? '');
+            const newOpt = options.find(o => o.id === optionId);
+            const newLabel = newOpt ? (newOpt.other ? pollOtherLines.other() : newOpt.text) : optionId;
+            if (!window.confirm(t('You voted for “{current}”. Change it to “{new}”?', { current: currentLabel, new: newLabel }))) {
+                return;
+            }
+        }
+
+        await sendVote(optionId, typed);
     };
 
     const handleClosePoll = async () => {

@@ -165,16 +165,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
         return () => { cancelled = true; };
     }, [asksRole]);
 
-    const handleVote = async (optionId: string, typed?: string) => {
-        if (isClosed) {
-            Alert.alert(t('Poll Closed'), t('This poll has ended and can no longer receive votes.'));
-            return;
-        }
-        if (!currentPubkey) {
-            Alert.alert(t('Sign In Required'), t('Please connect your member identity to vote in polls.'));
-            return;
-        }
-
+    const sendVote = async (optionId: string, typed?: string) => {
         setVotingOptionId(optionId);
         try {
             const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
@@ -189,6 +180,40 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
         } finally {
             setVotingOptionId(null);
         }
+    };
+
+    const handleVote = async (optionId: string, typed?: string) => {
+        if (isClosed) {
+            Alert.alert(t('Poll Closed'), t('This poll has ended and can no longer receive votes.'));
+            return;
+        }
+        if (!currentPubkey) {
+            Alert.alert(t('Sign In Required'), t('Please connect your member identity to vote in polls.'));
+            return;
+        }
+
+        if (userVotedOptionId && userVotedOptionId !== optionId) {
+            const currentOpt = options.find(o => o.id === userVotedOptionId);
+            const currentLabel = currentOpt ? (currentOpt.other ? pollOtherLines.other() : currentOpt.text) : (userVotedOptionId ?? '');
+            const newOpt = options.find(o => o.id === optionId);
+            const newLabel = newOpt ? (newOpt.other ? pollOtherLines.other() : newOpt.text) : optionId;
+            Alert.alert(
+                t('Change your vote?'),
+                t('You voted for “{current}”. Change it to “{new}”?', { current: currentLabel, new: newLabel }),
+                [
+                    { text: t('Keep my vote'), style: 'cancel' },
+                    {
+                        text: t('Change'),
+                        onPress: () => {
+                            void sendVote(optionId, typed);
+                        },
+                    },
+                ]
+            );
+            return;
+        }
+
+        await sendVote(optionId, typed);
     };
 
     const handleClosePoll = () => {

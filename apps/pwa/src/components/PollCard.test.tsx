@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PollCard } from './PollCard';
 import * as api from '../lib/api';
 
@@ -13,6 +13,10 @@ vi.mock('../lib/api', async () => {
 });
 
 describe('PollCard (PWA)', () => {
+    beforeEach(() => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+    });
+
     const mockPost: any = {
         id: 'post_poll_123',
         type: 'poll',

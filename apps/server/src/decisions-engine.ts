@@ -147,8 +147,6 @@ export type DecisionEffect =
     | 'unsuspend_member'
     | 'freeze_credit'
     | 'unfreeze_credit'
-    | 'grant_voucher'
-    | 'revoke_voucher'
     | 'remove_lead_keeper'
     | 'reinstate_member'
     // Opened only by an admin's emergency suspension before removal by vote S2 (a pause opens remove_member since), never
@@ -575,8 +573,6 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     unfreeze_credit: 'member',
     remove_member: 'member',
     reinstate_member: 'member',
-    grant_voucher: 'member',
-    revoke_voucher: 'member',
     remove_lead_keeper: 'member',
     keep_suspension: 'member',
     pay_out: 'scope',
@@ -2048,14 +2044,6 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 }
                 case 'unfreeze_credit': {
                     db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject!);
-                    break;
-                }
-                case 'grant_voucher': {
-                    db.prepare('UPDATE members SET can_vouch = 1 WHERE public_key = ?').run(decision.subject!);
-                    break;
-                }
-                case 'revoke_voucher': {
-                    db.prepare('UPDATE members SET can_vouch = 0 WHERE public_key = ?').run(decision.subject!);
                     break;
                 }
                 case 'keep_suspension': {

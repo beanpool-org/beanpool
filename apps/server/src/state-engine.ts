@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, isVouchLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, TierName, AudienceScope, PushNoticeKind, TourRecord, UnreadAnswer } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, DM_LINE_DISCLOSURE_KIND, isLang, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
 export type { EscrowRefundShortfall };
@@ -32,7 +32,8 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR, takeVouchResetReport } from './db/db.js';
+import { countsLine } from './db/vouch-reset.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -77,7 +78,7 @@ import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WIT
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
-import { scrubMemberFromLogs } from './logger.js';
+import { scrubMemberFromLogs, logger } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { deleteCommunityCopy } from './engine/community-copy.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
@@ -721,10 +722,29 @@ const wsClients = new WsClients();
 
 // ===================== INIT =====================
 
+/**
+ * The vouching reset's one system_logs line and the owners' alert (db/vouch-reset.ts, R0), when this boot reset anything:
+ * the counts it read before writing, and the rows it changed. Numbers only. Never throws: a boot that reset is a boot.
+ */
+function reportVouchResetAtBoot(): void {
+    const r = takeVouchResetReport();
+    if (!r) return;
+    try {
+        const line = `Vouching reset: old vouching is off on this node. Counted first: ${countsLine(r.counts)}. `
+            + `${r.membersReset} member row(s) turned off, ${r.invitesDeleted} unused invite(s) that promised a vouch deleted, `
+            + `and the four vouch columns dropped.`;
+        logger.info('SYS', line, { ...r.counts, membersReset: r.membersReset, invitesDeleted: r.invitesDeleted });
+        void import('./services/alerts.js').then((alerts) => alerts.raiseOnce('reset.vouching', line)).catch(() => { });
+    } catch (e) {
+        console.error('[Boot] Could not log the vouching reset:', e);
+    }
+}
+
 export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    reportVouchResetAtBoot();
     // Here and not at this file's top level: engine/agent-takedowns.ts is in an import cycle with this file, so a process that loads
     // engine/pulse-resolver.ts first runs this file's top level before that one has set up its own.
     setTakedownRemoval(makeTakedownFinal);
@@ -2167,7 +2187,7 @@ export { generateInvite, adminGenerateInvite };
 
 /** `joinerSigned`: the request carries a fresh signature by `publicKey` itself, the only way a visitor's row joins. */
 export function redeemInvite(code: string, publicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
-    return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned, vouchOnJoin);
+    return redeemInviteEngine(broadcast, code, publicKey, callsign, joinerSigned);
 }
 
 export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, callsign: string, joinerSigned = false): { success: boolean; error?: string; code?: string; member?: Member; alreadyMember?: boolean } {
@@ -2504,7 +2524,6 @@ export function getMemberTrustProfile(publicKey: string): {
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
-    vouched: boolean;
     activated: boolean;
     knownFrozen: boolean;
     creditFrozen: boolean;
@@ -2525,7 +2544,7 @@ export interface TradeRiskAssessment {
 /**
  * Shared safety verdict used by the Trust Profile and (later) the at-trade
  * accept/confirm gate, so badge / profile / gate all agree. Friction scales
- * with risk: invisible for trusted circles, explicit caution for new+unvouched.
+ * with risk: invisible for trusted circles, explicit caution for someone new with no record.
  * See docs/trust-profile-and-trade-safety.md §4.
  */
 export function assessTradeRisk(s: {
@@ -2554,7 +2573,7 @@ export function assessTradeRisk(s: {
         return { band: 'green', headline: "You've traded together before", reasons, tips: [] };
     }
     if (s.mutualCount >= 1 && !poorCompletion) {
-        reasons.push(`You share ${s.mutualCount} connection${s.mutualCount === 1 ? '' : 's'} — someone you know can vouch for them.`);
+        reasons.push(`You share ${s.mutualCount} connection${s.mutualCount === 1 ? '' : 's'} — someone you know can speak for them.`);
         if (s.tradeCount > 0) reasons.push(`${s.tradeCount} completed trade${s.tradeCount === 1 ? '' : 's'} on record.`);
         return { band: 'green', headline: 'In your circle', reasons, tips: [] };
     }
@@ -2568,7 +2587,7 @@ export function assessTradeRisk(s: {
         return { band: 'green', headline: 'Established member', reasons, tips: [] };
     }
 
-    // 🔴 New & unvouched, or a poor track record → explicit caution + tips.
+    // 🔴 New with no record, or a poor track record → explicit caution + tips.
     const brandNew = s.tradeCount === 0 && s.ageDays < 14;
     if (brandNew || poorCompletion) {
         if (poorCompletion) {
@@ -2577,7 +2596,7 @@ export function assessTradeRisk(s: {
             reasons.push('New member with no completed trades yet.');
         }
         reasons.push('No connections in common with you.');
-        return { band: 'red', headline: 'New & unvouched — take normal precautions', reasons, tips: meetingTips };
+        return { band: 'red', headline: 'New here — take normal precautions', reasons, tips: meetingTips };
     }
 
     // 🟡 New to you — a real but limited record, no shared connections.
@@ -2626,13 +2645,6 @@ export interface ViewerTrustProfile {
         avatarUrl: string | null;
         tier: string | null;
     } | null;
-    // Elder endorsement (distinct from vouchedInBy / inviter). Present when an
-    // Elder has vouched for this member; lifts the floor-gate for founding members.
-    elderVouch: {
-        publicKey: string;
-        callsign: string;
-        avatarUrl: string | null;
-    } | null;
     risk: TradeRiskAssessment;
     /**
      * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
@@ -2643,7 +2655,7 @@ export interface ViewerTrustProfile {
 }
 
 /**
- * "Vouched in by" — who brought this member in.
+ * "Invited by" — who brought this member in.
  *
  * A peer inviter is returned by name, so invitations carry accountability: bringing someone in
  * puts your name on their profile and makes you a reachable reference if a trade goes wrong. When
@@ -2758,7 +2770,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         priorTradesWithViewer = priorRow?.count || 0;
     }
 
-    // "Vouched in by" — who brought this member in. A peer inviter is shown by
+    // "Invited by" — who brought this member in. A peer inviter is shown by
     // name with a tappable link, so invitations carry accountability: bringing
     // someone in puts your name on their profile and makes you a reachable
     // reference if a trade goes wrong. When the inviter is the system admin or a
@@ -2776,19 +2788,6 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         ageDays: stats.ageDays,
     });
 
-    // Elder endorsement badge — who (if anyone) has vouched for this member.
-    let elderVouch: ViewerTrustProfile['elderVouch'] = null;
-    if (member.elderVouchedBy) {
-        const voucher = getMember(member.elderVouchedBy);
-        if (voucher) {
-            elderVouch = {
-                publicKey: voucher.publicKey,
-                callsign: voucher.callsign,
-                avatarUrl: avatarUrlOf(voucher.publicKey, voucher.avatarRef),
-            };
-        }
-    }
-
     return {
         publicKey: targetPubkey,
         callsign: member.callsign,
@@ -2805,7 +2804,6 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         mutualCount,
         priorTradesWithViewer,
         vouchedInBy,
-        elderVouch,
         risk,
         ...(member.isTreasury && !nodeOwnAccountKeys().has(targetPubkey) ? { isTreasury: true as const } : {}),
     };
@@ -2818,7 +2816,7 @@ function roundedBalance(publicKey: string): number {
     return Math.round(ledger.getAccount(publicKey).balance * 100) / 100;
 }
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; tierCredit: number; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; tierCredit: number; earnedCredit: number; commonsBalance: number; activated: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
     const { floor, tier, tierCredit, earnedCredit, activated, knownGrant, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
     const balance = roundedBalance(publicKey);
     const liveOffers = liveOfferCount(publicKey);
@@ -2839,16 +2837,14 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         knownFrozen: !isTreasury && knownFrozen,
         creditFrozen: !isTreasury && creditFrozen,
         tier,
-        // tierCredit: the credit `tier` is read from (vouch + earned + granted, never the known grant, so a confirmed
+        // tierCredit: the credit `tier` is read from (earned + granted, never the known grant, so a confirmed
         // member's limit is higher than it; a freeze doesn't move it): the apps' trust figure, so the Levels card reads
         // the same level as the badge (memberLevel in @beanpool/core).
         tierCredit,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
-        // activated: has a credit line at all (earned/vouched/granted) — a brand-new member is false.
-        // canVouch: this member holds the appointed-voucher capability (drives the client vouch UI).
+        // activated: has a credit line at all (earned/granted/known) — a brand-new member is false.
         activated,
-        canVouch: canVouch(publicKey),
         // canOperate: this member is a keeper of SOMETHING — a coarse "show the steward layer at all"
         // flag. Never gate a specific enterprise's controls on it (#106); use keeperOf below.
         canOperate: canOperate(publicKey),
@@ -3779,19 +3775,6 @@ function usableFloorWithKnownPledge(publicKey: string, extraKnownPledged: number
     }
 
     return -normalDerivedAllowance;
-}
-
-/**
- * Does this member hold the vouch capability (the "appointed voucher" / super-Elder)?
- * Handing out the -20 credit floor is the one Sybil-critical power, so it is NOT derived
- * from Elder *tier* (an earned cosmetic badge — grinding to Elder must not confer the power
- * to mint floors for a sock army). It is an explicit, admin-granted flag (members.can_vouch,
- * set via adminSetVoucher), plus the system admin who always holds it.
- */
-export function canVouch(publicKey: string): boolean {
-    if (isAdminPubkey(publicKey)) return true;
-    const row = db.prepare("SELECT can_vouch FROM members WHERE public_key = ?").get(publicKey) as any;
-    return !!row?.can_vouch;
 }
 
 /**
@@ -5732,99 +5715,6 @@ export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; fai
 }
 
 
-
-/**
- * Record an appointed voucher's vouch for a member at a chosen level. Server-authoritative:
- * only a member holding the vouch capability (or the system admin) may vouch, and never for
- * themselves. A vouch hands out the level's credit floor (level 1 = -25, 2 = -50, 3 = -100):
- * it lifts the no-overdraft activation gate (see getMemberTrustProfile), unlocking that floor
- * plus any earned trust already banked. Monotonic — a later vouch overwrites the recorded one
- * (a re-vouch can raise or lower the level).
- */
-export function vouchMember(voucherPubkey: string, targetPubkey: string, level: VouchLevel = 1): { ok: true } {
-    writeVouch(voucherPubkey, targetPubkey, level);
-    broadcast({ type: 'profile_updated', publicKey: targetPubkey });
-    return { ok: true };
-}
-
-/** A vouch's checks and its row: vouchMember's, and an invite's at the redeem, which announces it once that has committed. */
-function writeVouch(voucherPubkey: string, targetPubkey: string, level: VouchLevel): void {
-    if (voucherPubkey === targetPubkey) throw new Error(word('You cannot vouch for yourself'));
-    // A visitor's row is no voucher, as a key with no row is none (getActingMember).
-    if (!getActingMember(voucherPubkey)) throw new Error(word('Voucher not found'));
-    // can_vouch outlasts a prune, and a pending re-key leaves it on the old key: neither hands out a credit floor.
-    assertNodeMember(voucherPubkey);
-    const target = getMember(targetPubkey);
-    if (!target) throw new Error(word('Member not found'));
-    // An enterprise or a project is kept by its keepers, not vouched for (DESIGN-shops-round3 §0 row 11): its credit line
-    // is its keepers' pledges, so a vouch's floor does nothing for it, and the profile it opened showed one as trust. A
-    // vouch an enterprise already has is left as it is.
-    if (target.isTreasury) throw new Error(word('An enterprise is kept, not vouched for.'));
-    if (!canVouch(voucherPubkey)) throw new Error(word('Only appointed vouchers can vouch for members'));
-    const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
-    const vouchCredit = vouchCreditForLevel(lvl);
-    // profile_updated_at too: the member directory names who vouched, and a phone's delta read carries only the rows whose
-    // profile_updated_at moved (engine getMemberDirectoryRows). Without it the vouch reached phones at their hourly full read.
-    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ?, profile_updated_at = ? WHERE public_key = ?`)
-        .run(voucherPubkey, vouchCredit, new Date().toISOString(), targetPubkey);
-}
-
-/**
- * The vouch an invite carries, at its redeem (engine/invites.ts), inside the redeem's transaction. It is a hand vouch by
- * the invite's maker in every way but the moment: the same checks and the same row, so "Vouched by" shows and it can be
- * withdrawn the same way. The right is asked again here: a maker who has lost it vouches for nobody, and the person
- * still joins, because a vouch never stops a join. So whatever refuses is caught, and nothing rolls back. A maker who is
- * paused or has left never gets here: their invite admits nobody, with a vouch or without (redeemInvite's canInvite).
- */
-function vouchOnJoin(voucherPubkey: string, joinerPubkey: string, level: VouchLevel): boolean {
-    if (!getProfileSwitches().beans) return false;
-    try {
-        writeVouch(voucherPubkey, joinerPubkey, level);
-        return true;
-    } catch (e) {
-        console.warn(`🤝 An invite's vouch was not applied: ${(e as Error)?.message}`);
-        return false;
-    }
-}
-
-/** What a level asked for on a new invite comes to: the level (none: undefined), or the refusal. No code is made on one. */
-export function readInviteVouch(inviterPubkey: string, raw: unknown): { level?: VouchLevel; refusal?: { status: number; error: string; code: string } } {
-    if (raw === undefined || raw === null) return {};
-    if (!isVouchLevel(raw)) return { refusal: { status: 400, error: word('A vouch on an invite is 25, 50 or 100 Beans, or none.'), code: 'bad_vouch_level' } };
-    if (!getProfileSwitches().beans) return { refusal: { status: 403, error: BEANS_OFF_MESSAGE, code: PROFILE_NO_BEANS } };
-    if (!canVouch(inviterPubkey)) return { refusal: { status: 403, error: word('Only owners, admins and appointed vouchers can vouch for someone on an invite.'), code: 'not_a_voucher' } };
-    return { level: raw };
-}
-
-/**
- * Withdraw a vouch. The original voucher may withdraw their own; the system admin may
- * force-revoke anyone's. Removing a vouch removes the -20 floor, so a non-admin withdrawal
- * is blocked while the member is still carrying a negative balance (they'd be stranded below
- * the new floor of 0) — they must return to >= 0 first. Idempotent when not currently vouched.
- */
-export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: true } {
-    const target = getMember(targetPubkey);
-    if (!target) throw new Error(word('Member not found'));
-    const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
-    const vouchedBy = row?.elder_vouched_by || null;
-    if (!vouchedBy) return { ok: true };
-    const isAdmin = isAdminPubkey(actorPubkey);
-    if (!isAdmin && actorPubkey !== vouchedBy) throw new Error(word('Only the voucher who vouched, or an admin, can withdraw a vouch'));
-    // Nor a pruned voucher, nor the old key of one being re-keyed (whose node role, if any, waits on the old key
-    // until the re-key completes). An admin key with no member row at all, the legacy single-admin setting, is as before.
-    if (!isAdmin || getMember(actorPubkey)) assertNodeMember(actorPubkey);
-    // An enterprise's or a project's line is its keepers' pledges, never the vouch (the treasury branch of
-    // getMemberTrustProfile returns before it reads vouch_credit): withdrawing one leaves its floor where it was, so its
-    // voucher is not held until it is back at 0 (an enterprise trades below 0 as a matter of course).
-    if (!isAdmin && !target.isTreasury && getBalance(targetPubkey).balance < 0) {
-        throw new Error(word('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.'));
-    }
-    // profile_updated_at too, for the directory's delta (vouchMember).
-    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0, profile_updated_at = ? WHERE public_key = ?`)
-        .run(new Date().toISOString(), targetPubkey);
-    broadcast({ type: 'profile_updated', publicKey: targetPubkey });
-    return { ok: true };
-}
 
 export function createPost(
     type: 'offer' | 'need' | 'poll' | 'event', category: string, title: string, description: string, credits: number,
@@ -8635,13 +8525,11 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolea
 }
 
 /**
- * Admin: promote a member to (or demote from) the Elder tier so they can help verify
- * (vouch for) other members. Pulls the SAME lever as a genesis "Elder invite" — it sets
- * the member's pre-seeded earned_credit, which lowers their credit floor into the Elder
- * band; tier follows from floor as usual (one source of truth, no separate role). Grants
- * the Elder vouch/verify capability + Elder borrowing/gifting standing, but NOT
- * password-admin powers (prune, delete, announcements), which stay behind the admin
- * password.
+ * Admin: promote a member to (or demote from) the Elder tier. Pulls the SAME lever as a genesis
+ * "Elder invite" — it sets the member's pre-seeded earned_credit, which lowers their credit floor
+ * into the Elder band; tier follows from floor as usual (one source of truth, no separate role).
+ * Grants Elder borrowing/gifting standing, but NOT password-admin powers (prune, delete,
+ * announcements), which stay behind the admin password.
  *
  * Balance-safe: earned_credit is a borrowing *limit*, not a ledger balance. This makes no
  * transaction and mints/moves no beans — the member keeps their exact balance (positive
@@ -8652,8 +8540,7 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean): boolea
  * Assign a tier BADGE to a member (admin-only). The badge grants that tier's trust value into
  * the granted-credit lane, so the member's floor lands at the tier's entry (Resident -200,
  * Steward -600, Elder -1400; Newcomer clears the grant). Balance-safe — grants a credit *limit*,
- * mints/moves no beans. This is a floor grant only; the separate can_vouch capability
- * (adminSetVoucher) is what confers the power to vouch. Idempotent.
+ * mints/moves no beans. This is a floor grant only; tiers gate nothing. Idempotent.
  */
 export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     if (!getMember(publicKey)) throw new Error('Member not found');
@@ -8671,20 +8558,7 @@ export function adminSetElder(publicKey: string, granted: boolean): { ok: true }
 }
 
 /**
- * Grant or revoke the vouch capability (the "appointed voucher" / super-Elder switch).
- * Admin-only — this is the single Sybil-critical power (handing out the -20 floor), so it is
- * never derived from tier; an admin appoints trusted members (typically Elders) explicitly.
- * Toggling can_vouch mints no beans and changes no floors of its own. Idempotent.
- */
-export function adminSetVoucher(publicKey: string, granted: boolean): { ok: true } {
-    if (!getMember(publicKey)) throw new Error('Member not found');
-    db.prepare("UPDATE members SET can_vouch=? WHERE public_key=?").run(granted ? 1 : 0, publicKey);
-    broadcast({ type: 'profile_updated', publicKey });
-    return { ok: true };
-}
-
-/**
- * Grant or revoke the treasury operator capability. Admin-only; mirrors adminSetVoucher.
+ * Grant or revoke the treasury operator capability. Admin-only.
  * Toggling can_operate mints no beans and changes no floors. Idempotent.
  */
 export function adminSetOperator(publicKey: string, granted: boolean): { ok: true } {
@@ -9277,11 +9151,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 contact_value = NULL,
                 contact_visibility = NULL,
                 archetype = NULL,
-                can_vouch = 0,
-                vouch_credit = 0,
                 can_operate = 0,
                 credit_frozen = 0,
-                elder_vouched_by = NULL,
                 area_lat = NULL,
                 area_lng = NULL,
                 area_updated_at = NULL,

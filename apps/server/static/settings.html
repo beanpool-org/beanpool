@@ -520,8 +520,8 @@
         #admin-members-tree .member-id { font-size: 0.62rem; font-family: monospace; color: #475569; }
         #admin-members-tree .member-active { font-size: 0.7rem; color: #94a3b8; }
         #admin-members-tree .member-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-        /* Single-line buttons at natural width — flex-shrink was squeezing "Grant vouch" /
-           "Prune User" into ragged two-line buttons. min-height keeps every control the same height. */
+        /* Single-line buttons at natural width — flex-shrink was squeezing "Prune User" /
+           "Prune Branch" into ragged two-line buttons. min-height keeps every control the same height. */
         #admin-members-tree .member-actions .btn,
         #admin-members-tree .member-actions .tier-select { white-space: nowrap; flex-shrink: 0; min-height: 1.95rem; }
         #admin-members-tree .member-actions .btn { padding: 0.32rem 0.6rem; font-size: 0.7rem; line-height: 1.1; }
@@ -1419,7 +1419,7 @@
             <!-- Admin Members & Audit -->
             <div class="glass" data-tab="members" style="display:none;">
                 <h3>🌳 Members & Audit Tree</h3>
-                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;">Manage members and prune suspicious branches. Members with pending reports show a 🚩 badge. Use the <strong style="color:#fbbf24;">Tier</strong> picker to set a member's credit-floor badge (🥚 Newcomer → ⛰️ Elder) — this only widens/narrows their credit limit; their balance is never touched. Use <strong style="color:#34d399;">🤝 Grant vouch</strong> to appoint a trusted member as a voucher so they can verify (vouch for) newcomers, handing them the welcome floor. Tier and vouch are separate: a badge sets the floor; the vouch capability is the explicit power to bring newcomers in.</p>
+                <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;">Manage members and prune suspicious branches. Members with pending reports show a 🚩 badge. Use the <strong style="color:#fbbf24;">Tier</strong> picker to set a member's credit-floor badge (🥚 Newcomer → ⛰️ Elder) — this only widens/narrows their credit limit; their balance is never touched.</p>
                 <div id="member-search-row">
                     <div style="position:relative; flex:1;">
                         <span style="position:absolute; left:0.6rem; top:50%; transform:translateY(-50%); color:#64748b; font-size:0.8rem; pointer-events:none;">🔍</span>
@@ -1433,8 +1433,6 @@
                 <div id="audit-filter-bar" style="font-size: 0.75rem; display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; padding: 0.4rem 0;">
                     <button class="audit-filter-btn active" data-filter="all" onclick="setAuditFilter('all')"
                         style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:#334155;color:#f8fafc;cursor:pointer;font-size:0.72rem;font-weight:600;">All</button>
-                    <button class="audit-filter-btn" data-filter="voucher" onclick="setAuditFilter('voucher')"
-                        style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#34d399;cursor:pointer;font-size:0.72rem;font-weight:600;">🤝 Vouchers <span class="filter-count" data-count="voucher"></span></button>
                     <button class="audit-filter-btn" data-filter="invite_spam" onclick="setAuditFilter('invite_spam')"
                         style="padding:3px 8px;border-radius:6px;border:1px solid #334155;background:transparent;color:#ef4444;cursor:pointer;font-size:0.72rem;font-weight:600;">⚠️ Sybil <span class="filter-count" data-count="invite_spam"></span></button>
                     <button class="audit-filter-btn" data-filter="sybil_funnel" onclick="setAuditFilter('sybil_funnel')"

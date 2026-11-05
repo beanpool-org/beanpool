@@ -13,6 +13,15 @@ import {
     Shape,
     ShapeSettings,
     KnownFloorSettings,
+    isCoreSetting,
+    coreLocked,
+    coreAwaitsOwner,
+    recoveryCopiesName,
+    removalDeciderName,
+    readRecoveryCopies,
+    confirmCoreSettings,
+    adviseOwners,
+    saveCommunityPlace,
 } from './community-shape';
 
 describe('community-shape lib', () => {
@@ -82,6 +91,82 @@ describe('community-shape lib', () => {
         it('returns unpause message for members', () => {
             const msg = unpauseConsequence('members');
             expect(msg).toContain('every member can make invites');
+        });
+    });
+
+    describe('core helper functions', () => {
+        it('isCoreSetting checks whether key is in CORE_SETTINGS', () => {
+            expect(isCoreSetting('join')).toBe(true);
+            expect(isCoreSetting('wordsDoor')).toBe(true);
+            expect(isCoreSetting('beans')).toBe(true);
+            expect(isCoreSetting('knownFloor')).toBe(true);
+            expect(isCoreSetting('memberGift')).toBe(true);
+            expect(isCoreSetting('decisions')).toBe(true);
+            expect(isCoreSetting('shareOutside')).toBe(true);
+            expect(isCoreSetting('recoveryCopies')).toBe(true);
+            expect(isCoreSetting('openDoor')).toBe(false);
+            expect(isCoreSetting('knocks')).toBe(false);
+            expect(isCoreSetting('randomKey')).toBe(false);
+        });
+
+        it('coreLocked returns true if core lock is set, false otherwise', () => {
+            expect(coreLocked(null)).toBe(false);
+            expect(coreLocked(undefined)).toBe(false);
+            expect(coreLocked({} as any)).toBe(false);
+            expect(coreLocked({ core: { settings: [], lock: null } } as any)).toBe(false);
+            expect(coreLocked({ core: { settings: [], lock: { at: '2026-10-01', by: 'pk', byCallsign: 'alice' } } } as any)).toBe(true);
+        });
+
+        it('coreAwaitsOwner checks if owner needs to confirm unlocked core settings', () => {
+            const baseShape: any = {
+                standby: false,
+                core: { settings: [], lock: null },
+            };
+
+            // Owner on unlocked non-standby with core
+            expect(coreAwaitsOwner(baseShape, true)).toBe(true);
+
+            // Admin (not owner)
+            expect(coreAwaitsOwner(baseShape, false)).toBe(false);
+
+            // Shape missing
+            expect(coreAwaitsOwner(null, true)).toBe(false);
+            expect(coreAwaitsOwner(undefined, true)).toBe(false);
+
+            // Standby node
+            expect(coreAwaitsOwner({ ...baseShape, standby: true }, true)).toBe(false);
+
+            // Node without core block (older node)
+            expect(coreAwaitsOwner({ standby: false } as any, true)).toBe(false);
+
+            // Already locked core
+            expect(coreAwaitsOwner({ ...baseShape, core: { settings: [], lock: { at: '2026-10-01', by: 'pk', byCallsign: 'alice' } } }, true)).toBe(false);
+        });
+    });
+
+    describe('recovery copies and removal decider helpers', () => {
+        it('recoveryCopiesName returns human-readable label or fallback', () => {
+            expect(recoveryCopiesName('vault')).toBe("BeanPool's key vault");
+            expect(recoveryCopiesName('server')).toBe('This server');
+            expect(recoveryCopiesName('none')).toBe('Nowhere');
+            expect(recoveryCopiesName('custom')).toBe('custom');
+        });
+
+        it('removalDeciderName returns human-readable label or fallback', () => {
+            expect(removalDeciderName('automatic')).toBe('Automatic');
+            expect(removalDeciderName('everyone')).toBe('Everyone');
+            expect(removalDeciderName('jury')).toBe('A jury');
+            expect(removalDeciderName('other')).toBe('other');
+        });
+
+        it('readRecoveryCopies parses valid RecoveryCopies value or null', () => {
+            expect(readRecoveryCopies('vault')).toBe('vault');
+            expect(readRecoveryCopies('server')).toBe('server');
+            expect(readRecoveryCopies('none')).toBe('none');
+            expect(readRecoveryCopies('unknown')).toBeNull();
+            expect(readRecoveryCopies(null)).toBeNull();
+            expect(readRecoveryCopies(undefined)).toBeNull();
+            expect(readRecoveryCopies(123)).toBeNull();
         });
     });
 
@@ -214,6 +299,109 @@ describe('community-shape lib', () => {
                 expect(err.code).toBe('INVALID');
                 expect(err.setting).toBe('openDoor');
             }
+        });
+
+        it('confirmCoreSettings posts lock change and returns body', async () => {
+            const mockRes = { shape: { kind: 'local' }, told: 'members' };
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => mockRes,
+            } as Response);
+
+            const res = await confirmCoreSettings('http://localhost:8080', 'pass', { beans: false }, 'tfa_token');
+            expect(res).toEqual(mockRes);
+            expect(globalThis.fetch).toHaveBeenCalledWith(
+                '/proxy/http/localhost:8080/api/local/admin/community-shape',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({
+                        password: 'pass',
+                        changes: { beans: false },
+                        lock: true,
+                    }),
+                    headers: expect.objectContaining({
+                        'X-Admin-2FA-Session': 'tfa_token',
+                    }),
+                })
+            );
+        });
+
+        it('confirmCoreSettings throws shapeError on failure', async () => {
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                ok: false,
+                status: 409,
+                json: async () => ({ error: 'Core already locked', code: 'core_locked' }),
+            } as Response);
+
+            try {
+                await confirmCoreSettings('http://localhost:8080', 'pass', {});
+                expect.fail('Should have thrown');
+            } catch (err: any) {
+                expect(err.message).toBe('Core already locked');
+                expect(err.status).toBe(409);
+                expect(err.code).toBe('core_locked');
+            }
+        });
+
+        it('adviseOwners posts advice note and returns body', async () => {
+            const mockRes = { shape: { kind: 'local' }, told: 'owners' };
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => mockRes,
+            } as Response);
+
+            const res = await adviseOwners('http://localhost:8080', 'pass', 'beans', ' Keep beans on! ');
+            expect(res).toEqual(mockRes);
+            expect(globalThis.fetch).toHaveBeenCalledWith(
+                '/proxy/http/localhost:8080/api/local/admin/community-shape/advice',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({
+                        password: 'pass',
+                        setting: 'beans',
+                        advice: 'Keep beans on!',
+                    }),
+                })
+            );
+        });
+
+        it('adviseOwners throws shapeError on failure', async () => {
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                ok: false,
+                status: 400,
+                json: async () => ({ error: 'Advice too long', code: 'advice_too_long' }),
+            } as Response);
+
+            await expect(adviseOwners('http://localhost:8080', 'pass', 'beans', 'Too long')).rejects.toThrow('Advice too long');
+        });
+
+        it('saveCommunityPlace posts service radius coordinates', async () => {
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({ ok: true }),
+            } as Response);
+
+            await saveCommunityPlace('http://localhost:8080', 'pass', { lat: 51.5, lng: -0.1 });
+            expect(globalThis.fetch).toHaveBeenCalledWith(
+                '/proxy/http/localhost:8080/api/local/admin/node/config',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({
+                        password: 'pass',
+                        serviceRadius: { lat: 51.5, lng: -0.1, radiusKm: 0 },
+                    }),
+                })
+            );
+        });
+
+        it('saveCommunityPlace throws shapeError on failure', async () => {
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                ok: false,
+                status: 500,
+                json: async () => ({ error: 'Failed to save config' }),
+            } as Response);
+
+            await expect(saveCommunityPlace('http://localhost:8080', 'pass', { lat: 51.5, lng: -0.1 })).rejects.toThrow('Failed to save config');
         });
     });
 

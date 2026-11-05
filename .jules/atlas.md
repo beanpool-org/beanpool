@@ -299,3 +299,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `checkRecoveryCodeApi` in `apps/manager/src/lib/node-client.ts` was untested directly.
 **Learning:** Testing `checkRecoveryCodeApi` verified matching recovery code response parsing, non-matching code handling (`matches: false, codeId: null`), typo status 400 responses (`typo: true` with error message), and unexpected server error rethrowing.
 **Action:** Continue identifying helper functions in `apps/manager/src/lib/node-client.ts` or other utilities for direct unit test coverage.
+
+## 2026-11-05 - [manager tests] community-shape helper and API unit tests
+**Gap:** `isCoreSetting`, `coreLocked`, `coreAwaitsOwner`, `recoveryCopiesName`, `removalDeciderName`, `readRecoveryCopies`, `confirmCoreSettings`, `adviseOwners`, and `saveCommunityPlace` in `apps/manager/src/lib/community-shape.ts` lacked direct unit test coverage in `community-shape.test.ts`.
+**Learning:** Testing `confirmCoreSettings` verifies header construction including `X-Admin-2FA-Session` and shapeError error handling on HTTP conflict/failure.
+**Action:** Continue expanding unit test coverage for remaining untested utilities and components across `apps/manager/`.

@@ -96,7 +96,7 @@ export function InvitesModule({ activeNode, viewer }: InvitesModuleProps) {
                             activeNode ? getTfaSessionToken(activeNode.id) : undefined
                         );
                     code = res.code;
-                    issuedVouchAmount = res.vouchAmount ?? (selectedPreset || undefined);
+                    issuedVouchAmount = typeof res.vouchAmount === 'number' ? res.vouchAmount : undefined;
                 } catch (err: unknown) {
                     setGenerateError({
                         reason: err instanceof Error && err.message ? err.message : 'The node could not be reached',

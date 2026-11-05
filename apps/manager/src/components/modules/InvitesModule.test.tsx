@@ -401,6 +401,42 @@ describe('InvitesModule', () => {
             expect(screen.getByTestId('card-vouch-badge')).toHaveTextContent('🤝 25 Beans vouched');
         });
 
+        it('does not display vouch badge if node response omits vouchAmount', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
+                voucher: true,
+                budget: { left: 550, level: 1000, held: 100, vouched: 350 },
+                presets: [25, 50, 75, 100],
+                vouchMax: 100,
+                budgetMax: 2000,
+            });
+            vi.mocked(nodeClient.generateNodeInvite).mockResolvedValue({
+                success: true,
+                code: 'INV-NOVOUCH',
+                type: 'standard',
+            });
+
+            render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument();
+            });
+
+            const count1Btn = screen.getByRole('button', { name: '1' });
+            await userEvent.click(count1Btn);
+
+            const preset25Btn = screen.getByTestId('vouch-preset-25');
+            await userEvent.click(preset25Btn);
+
+            const generateBtn = screen.getByRole('button', { name: /Generate 1 Pass/i });
+            await userEvent.click(generateBtn);
+
+            await waitFor(() => {
+                expect(screen.getByText('Generated Passes (1)')).toBeInTheDocument();
+            });
+
+            expect(screen.queryByTestId('card-vouch-badge')).toBeNull();
+        });
+
         it('disables presets that exceed budget and warns when budget is 0', async () => {
             vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
                 voucher: true,

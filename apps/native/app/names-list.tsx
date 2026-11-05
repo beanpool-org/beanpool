@@ -1068,7 +1068,7 @@ export default function NamesListScreen() {
                             ))}
                             <View style={styles.buttonRow}>
                                 {e.voucher ? btn(t('See voucher card ›'), () => setSelectedVoucherPubkey(e.voucher!.memberPubkey), 'small') : null}
-                                {!e.voucher && isCommittee && e.confirmation?.status === 'confirmed'
+                                {!e.voucher && isCommittee && e.confirmation?.status === 'confirmed' && e.confirmation.memberPubkey !== identity?.publicKey
                                     ? btn(t('Make a voucher'), () => {
                                         setMakeVoucherAmount(opened?.voucherSettings?.voucherBudget ?? 1000);
                                         setMode({ kind: 'make_voucher', entry: e, memberPubkey: e.confirmation!.memberPubkey, callsign: e.confirmation!.callsign ?? '' });

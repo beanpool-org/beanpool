@@ -235,8 +235,8 @@ describe('vouchers on the phone (slice V2)', () => {
                 },
             };
 
-            const canMake = (entry: OpenedEntry, isCommittee: boolean) =>
-                isCommittee && !entry.voucher && entry.confirmation?.status === 'confirmed';
+            const canMake = (entry: OpenedEntry, isCommittee: boolean, viewerPubkey: string = 'viewer_pk') =>
+                isCommittee && !entry.voucher && entry.confirmation?.status === 'confirmed' && entry.confirmation.memberPubkey !== viewerPubkey;
 
             // Confirmed entry with committee admin: ALLOWED
             expect(canMake(confirmedEntry, isCommitteeTrue)).toBe(true);
@@ -255,6 +255,9 @@ describe('vouchers on the phone (slice V2)', () => {
 
             // Already a voucher: FORBIDDEN
             expect(canMake(alreadyVoucherEntry, isCommitteeTrue)).toBe(false);
+
+            // Own confirmed entry: FORBIDDEN (own_budget refusal prevention)
+            expect(canMake(confirmedEntry, isCommitteeTrue, 'pk1')).toBe(false);
         });
     });
 

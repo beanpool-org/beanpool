@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { AddedYouLines } from '../../components/AddedYouLines';
-import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -52,6 +53,8 @@ import { communityListEmpty, communityListNote, joinedWords, type CommunityListN
 import { signedRequestWords } from '../../components/signed-request-lines';
 import { welcomeLineWords } from '../../components/welcome/welcome-lines';
 import { DoorRuleLine } from '../../components/DoorRuleLine';
+import { fetchVouchers, type VoucherSummaryRow, type VoucherSettings } from '../../utils/names-list';
+import { VoucherCard } from '../../components/VoucherCard';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -175,6 +178,25 @@ export default function PeopleScreen() {
             backgroundColor: colors.feedback.warning.solid, justifyContent: 'center', alignItems: 'center',
             borderWidth: 2, borderColor: colors.text.inverse,
         },
+
+        // Vouchers block for owners and committee admins (§11)
+        vouchersBlock: {
+            marginBottom: 24, padding: 16, borderRadius: 14, backgroundColor: colors.surface.card,
+            borderWidth: 1, borderColor: colors.border.default,
+        },
+        voucherRow: {
+            minHeight: 48, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default,
+            justifyContent: 'center',
+        },
+        voucherRowText: {
+            fontSize: 14, lineHeight: 20, color: colors.text.body, fontWeight: '500',
+        },
+        voucherAddRow: {
+            minHeight: 48, paddingTop: 14, justifyContent: 'center',
+        },
+        voucherAddText: {
+            fontSize: 15, fontWeight: '700', color: colors.brand.primary,
+        },
     }));
 
     const params = useLocalSearchParams<{ view?: string }>();
@@ -213,6 +235,8 @@ export default function PeopleScreen() {
     const [tierName, setTierName] = useState('');
     const [isGuest, setIsGuest] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
+    const [vouchersData, setVouchersData] = useState<{ vouchers: VoucherSummaryRow[]; settings: VoucherSettings } | null>(null);
+    const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
 
     const [members, setMembers] = useState<any[]>([]);
     // The search the list on screen was read for, set with it; null until the first read lands. Only a list read for no
@@ -313,12 +337,30 @@ export default function PeopleScreen() {
         }
     }, [view]);
 
+    const reloadVouchers = useCallback(async (url?: string) => {
+        const u = url || anchorUrl;
+        if (!u || !identity) return;
+        const res = await fetchVouchers(u, identity);
+        if (res.ok) setVouchersData(res.value);
+        else setVouchersData(null);
+    }, [anchorUrl, identity]);
+
+    useEffect(() => {
+        if (view === 'invites') {
+            void reloadVouchers();
+        } else {
+            setVouchersData(null);
+        }
+    }, [view, reloadVouchers]);
+
     useFocusEffect(
         useCallback(() => {
             if (view === 'community' && listNote === 'noArea') {
                 loadMembers('', sortOption);
+            } else if (view === 'invites') {
+                void reloadVouchers();
             }
-        }, [view, listNote, sortOption, membersOnDemand])
+        }, [view, listNote, sortOption, membersOnDemand, reloadVouchers])
     );
 
     useEffect(() => {
@@ -1251,6 +1293,49 @@ export default function PeopleScreen() {
 
                             {(invitesPreview || (makesInvites && mayInvite)) && (
                             <>
+                            {/* Vouchers block: owners and credit-committee admins (§11) */}
+                            {vouchersData && (
+                                <View style={styles.vouchersBlock} testID="vouchers-block">
+                                    <Text style={styles.sectionHeader}>{t('Vouchers')}</Text>
+                                    <Text style={styles.sectionDesc}>
+                                        {t('Members with a budget to vouch for the people they invite.')}
+                                    </Text>
+                                    {vouchersData.vouchers.map((v) => (
+                                        <Pressable
+                                            key={v.memberPubkey}
+                                            style={styles.voucherRow}
+                                            onPress={() => setSelectedVoucherPubkey(v.memberPubkey)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={t('{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›', {
+                                                name: v.callsign,
+                                                left: formatNumber(v.left),
+                                                budget: formatNumber(v.level),
+                                                vouched: formatNumber(v.peopleVouched),
+                                                belowZero: formatNumber(v.belowZero),
+                                            })}
+                                        >
+                                            <Text style={styles.voucherRowText}>
+                                                {t('{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›', {
+                                                    name: v.callsign,
+                                                    left: formatNumber(v.left),
+                                                    budget: formatNumber(v.level),
+                                                    vouched: formatNumber(v.peopleVouched),
+                                                    belowZero: formatNumber(v.belowZero),
+                                                })}
+                                            </Text>
+                                        </Pressable>
+                                    ))}
+                                    <Pressable
+                                        style={styles.voucherAddRow}
+                                        onPress={() => router.push('/names-list')}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('+ Make someone a voucher')}
+                                    >
+                                        <Text style={styles.voucherAddText}>{t('+ Make someone a voucher')}</Text>
+                                    </Pressable>
+                                </View>
+                            )}
+
                             {/* GENERATE INVITE SECTION */}
                             <Text style={styles.sectionHeader}>{t('📤 Invite Someone')}</Text>
                             <Text style={styles.sectionDesc}>{t('Invite links are single-use and valid for 30 days. If you are offline, an offline ticket will be generated instead.')}</Text>
@@ -1464,6 +1549,23 @@ export default function PeopleScreen() {
 
 
             </KeyboardAvoidingView>
+
+            <Modal visible={!!selectedVoucherPubkey} animationType="slide" onRequestClose={() => setSelectedVoucherPubkey(null)}>
+                <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface.page }} edges={['top', 'left', 'right', 'bottom']}>
+                    {anchorUrl && identity && selectedVoucherPubkey && (
+                        <VoucherCard
+                            anchorUrl={anchorUrl}
+                            identity={identity}
+                            memberPubkey={selectedVoucherPubkey}
+                            onClose={() => setSelectedVoucherPubkey(null)}
+                            onVoucherUpdated={async () => {
+                                const res = await fetchVouchers(anchorUrl, identity);
+                                if (res.ok) setVouchersData(res.value);
+                            }}
+                        />
+                    )}
+                </SafeAreaView>
+            </Modal>
         </View>
     );
 }

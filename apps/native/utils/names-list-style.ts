@@ -87,6 +87,19 @@ export function namesListStyleSpec(colors: AppColors) {
         entryMeta: { fontSize: 13, lineHeight: 18, color: colors.text.secondary },
         lockedText: { fontSize: 14, lineHeight: 20, color: colors.feedback.warning.fg },
 
+        voucherTag: { alignSelf: 'flex-start' as const, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong },
+        voucherTagText: { fontSize: 12, fontWeight: '700' as const, color: colors.text.heading },
+
+        chipRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 },
+        chip: {
+            minHeight: 48, minWidth: 80, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 24,
+            backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong,
+            alignItems: 'center' as const, justifyContent: 'center' as const,
+        },
+        chipActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
+        chipText: { fontSize: 14, fontWeight: '600' as const, color: colors.text.body },
+        chipTextActive: { color: colors.text.inverse, fontWeight: '700' as const },
+
         input: {
             minHeight: 48, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1,
             borderColor: colors.border.strong, backgroundColor: colors.surface.card, color: colors.text.body, fontSize: 16,

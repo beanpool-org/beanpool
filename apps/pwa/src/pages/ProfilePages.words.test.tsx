@@ -57,6 +57,7 @@ vi.mock('../lib/api', () => ({
     getFriends: vi.fn(async () => [{ publicKey: 'f1' }, { publicKey: 'f2' }]),
     submitRating: vi.fn(async () => ({})),
     getPublicChannels: vi.fn(async () => ({ channels: [] })),
+    getMyVouching: vi.fn(async () => null),
 }));
 
 /** What members wrote, and a tier's name (the node's, worded by the Ledger's sweep). */

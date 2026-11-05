@@ -33,7 +33,7 @@ export async function makeInviteForShare(
     vouchAmount?: number,
 ): Promise<InviteForShare> {
     try {
-        const res = await make(publicKey, undefined, vouchAmount);
+        const res = vouchAmount !== undefined ? await make(publicKey, undefined, vouchAmount) : await make(publicKey);
         const code = res?.invite?.code;
         return typeof code === 'string' && code ? { ok: true, code } : { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
     } catch (e) {
@@ -42,8 +42,10 @@ export async function makeInviteForShare(
         if (typeof status !== 'number') return { ok: false, offline: true, message: t(INVITE_SHARE_WORDS.offline) };
         const refusal = invitesOffRefusal(e) ?? adminsOnlyRefusal(e) ?? pausedRefusal(e);
         if (refusal) return { ok: false, offline: false, message: refusal };
-        const serverMsg = typeof (e as any)?.message === 'string' && (e as any).message ? (e as any).message : typeof (e as any)?.error === 'string' && (e as any).error ? (e as any).error : null;
-        if (serverMsg) return { ok: false, offline: false, message: serverMsg };
+        if (vouchAmount !== undefined) {
+            const serverMsg = typeof (e as any)?.message === 'string' && (e as any).message ? (e as any).message : typeof (e as any)?.error === 'string' && (e as any).error ? (e as any).error : null;
+            if (serverMsg) return { ok: false, offline: false, message: serverMsg };
+        }
         return { ok: false, offline: false, message: t(INVITE_SHARE_WORDS.notMade) };
     }
 }

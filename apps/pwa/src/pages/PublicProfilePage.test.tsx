@@ -99,6 +99,7 @@ vi.mock('../lib/api', () => ({
     getEnterpriseDecisions: vi.fn(async () => null),
     proposeEnterpriseDecision: vi.fn(async () => ({ success: true })),
     voteEnterpriseDecision: vi.fn(async () => ({ success: true })),
+    getMyVouching: vi.fn(async () => null),
 }));
 
 describe('PublicProfilePage & TreasuryDetailPage bottom padding regression (#791 / #792)', () => {

@@ -11,6 +11,7 @@ vi.mock('../../lib/node-client', async () => {
     return {
         ...actual,
         generateNodeInvite: vi.fn(),
+        fetchMyVouching: vi.fn(),
     };
 });
 
@@ -292,6 +293,157 @@ describe('InvitesModule', () => {
         printButton.addEventListener.mock.calls[0][1]();
         expect(printWindow.print).toHaveBeenCalledTimes(1);
         expect(printWindow.setTimeout).toHaveBeenCalledWith(expect.any(Function), 400);
+    });
+
+    describe('Voucher Presets on Invites & QR (V5)', () => {
+        const OWNER_KEY: any = { kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' };
+        const ADMIN_KEY: any = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
+        const PASSWORD_VIEWER: any = { kind: 'password' };
+
+        it('does NOT render presets under password session', () => {
+            render(<InvitesModule activeNode={mockNode} viewer={PASSWORD_VIEWER} />);
+            expect(screen.queryByTestId('vouch-preset-section')).not.toBeInTheDocument();
+            expect(nodeClient.fetchMyVouching).not.toHaveBeenCalled();
+        });
+
+        it('does NOT render presets when viewer is not provided (defaults to password)', () => {
+            render(<InvitesModule activeNode={mockNode} />);
+            expect(screen.queryByTestId('vouch-preset-section')).not.toBeInTheDocument();
+            expect(nodeClient.fetchMyVouching).not.toHaveBeenCalled();
+        });
+
+        it('does NOT render presets under key session if the node says not a voucher', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
+                voucher: false,
+                presets: [25, 50, 75, 100],
+                vouchMax: 100,
+                budgetMax: 2000,
+            });
+
+            render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
+
+            await waitFor(() => {
+                expect(nodeClient.fetchMyVouching).toHaveBeenCalled();
+            });
+            expect(screen.queryByTestId('vouch-preset-section')).not.toBeInTheDocument();
+        });
+
+        it('renders presets under key session when the node says is a voucher', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
+                voucher: true,
+                budget: { left: 550, level: 1000, held: 100, vouched: 350 },
+                presets: [25, 50, 75, 100],
+                vouchMax: 100,
+                budgetMax: 2000,
+            });
+
+            render(<InvitesModule activeNode={mockNode} viewer={ADMIN_KEY} />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument();
+            });
+
+            expect(screen.getByTestId('vouch-budget-left')).toHaveTextContent(
+                'From your budget: 550 of 1,000 left'
+            );
+            expect(screen.getByTestId('vouch-preset-None')).toBeInTheDocument();
+            expect(screen.getByTestId('vouch-preset-25')).toBeInTheDocument();
+            expect(screen.getByTestId('vouch-preset-50')).toBeInTheDocument();
+            expect(screen.getByTestId('vouch-preset-75')).toBeInTheDocument();
+            expect(screen.getByTestId('vouch-preset-100')).toBeInTheDocument();
+        });
+
+        it('passes selected preset to generateNodeInvite and displays vouch badge on generated card', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
+                voucher: true,
+                budget: { left: 550, level: 1000, held: 100, vouched: 350 },
+                presets: [25, 50, 75, 100],
+                vouchMax: 100,
+                budgetMax: 2000,
+            });
+            vi.mocked(nodeClient.generateNodeInvite).mockResolvedValue({
+                success: true,
+                code: 'INV-VOUCH-25',
+                type: 'standard',
+                vouchAmount: 25,
+            });
+
+            render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument();
+            });
+
+            // Select 1 pass
+            const count1Btn = screen.getByRole('button', { name: '1' });
+            await userEvent.click(count1Btn);
+
+            // Select 25 Beans preset
+            const preset25Btn = screen.getByTestId('vouch-preset-25');
+            await userEvent.click(preset25Btn);
+
+            // Generate
+            const generateBtn = screen.getByRole('button', { name: /Generate 1 Pass/i });
+            await userEvent.click(generateBtn);
+
+            await waitFor(() => {
+                expect(screen.getByText('Generated Passes (1)')).toBeInTheDocument();
+            });
+
+            expect(nodeClient.generateNodeInvite).toHaveBeenCalledWith(
+                'https://test-node.beanpool.org',
+                'secretpassword',
+                'standard',
+                undefined,
+                25
+            );
+
+            expect(screen.getByTestId('card-vouch-badge')).toHaveTextContent('🤝 25 Beans vouched');
+        });
+
+        it('disables presets that exceed budget and warns when budget is 0', async () => {
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
+                voucher: true,
+                budget: { left: 50, level: 1000, held: 600, vouched: 350 },
+                presets: [25, 50, 75, 100],
+                vouchMax: 100,
+                budgetMax: 2000,
+            });
+
+            const { unmount: unmount1 } = render(<InvitesModule activeNode={mockNode} viewer={OWNER_KEY} />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('vouch-preset-section')).toBeInTheDocument();
+            });
+
+            expect(screen.getByTestId('vouch-preset-None')).not.toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-25')).not.toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-50')).not.toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-75')).toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-100')).toBeDisabled();
+
+            unmount1();
+
+            // When left === 0
+            vi.mocked(nodeClient.fetchMyVouching).mockResolvedValue({
+                voucher: true,
+                budget: { left: 0, level: 1000, held: 650, vouched: 350 },
+                presets: [25, 50, 75, 100],
+                vouchMax: 100,
+                budgetMax: 2000,
+            });
+
+            render(<InvitesModule activeNode={{ ...mockNode, id: 'node-2' }} viewer={OWNER_KEY} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('No budget left. Ask an owner for more.')).toBeInTheDocument();
+            });
+            expect(screen.getByTestId('vouch-preset-None')).not.toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-25')).toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-50')).toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-75')).toBeDisabled();
+            expect(screen.getByTestId('vouch-preset-100')).toBeDisabled();
+        });
     });
 });
 

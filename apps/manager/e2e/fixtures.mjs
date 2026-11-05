@@ -1113,6 +1113,18 @@ const COMMUNITY_SHAPE = {
             source: 'default',
             lock: null,
         },
+        voucherBudget: {
+            value: 1000,
+            configured: 1000,
+            source: 'default',
+            lock: null,
+        },
+        memberGift: {
+            value: 100,
+            configured: 100,
+            source: 'default',
+            lock: null,
+        },
         dmRequests: { value: true, configured: true, source: 'default', lock: null },
         decisions: { value: true, configured: true, source: 'default', lock: null },
         listed: { value: true, configured: true, source: 'default', lock: null },
@@ -1565,7 +1577,41 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/reset') return ok({ success: true });
     if (pathname === '/api/admin/login') return ok({ success: true });
     if (pathname === '/api/admin/check-update') return ok({ updateAvailable: false, currentVersion: '1.4.2' });
-    if (pathname === '/api/admin/seed-invite') return ok({ success: true, code: 'BEANPOOL-INVITE-4471', type: 'standard' });
+    if (pathname === '/api/vouchers/me') {
+        return ok({
+            voucher: true,
+            budget: { left: 550, level: 1000, held: 100, vouched: 350 },
+            source: 'entry',
+            presets: [25, 50, 75, 100],
+            vouchMax: 100,
+            budgetMax: 2000,
+            history: [],
+        });
+    }
+    if (/^\/api\/names\/vouchers\/[^/]+$/.test(pathname)) {
+        return ok({
+            memberPubkey: 'a'.repeat(64),
+            callsign: 'jane',
+            source: 'entry',
+            left: 550,
+            level: 1000,
+            held: 100,
+            vouched: 350,
+            history: [],
+            people: [],
+            canChange: true,
+        });
+    }
+    if (pathname === '/api/admin/seed-invite') {
+        let parsed = {};
+        try { parsed = bodyText ? JSON.parse(bodyText) : {}; } catch {}
+        return ok({
+            success: true,
+            code: 'BEANPOOL-INVITE-4471',
+            type: parsed.type || 'standard',
+            ...(parsed.vouchAmount ? { vouchAmount: parsed.vouchAmount } : {}),
+        });
+    }
 
     // ---- posts / users / members mutation endpoints (settings screens trigger, don't render lists from these) ----
     if (/^\/api\/local\/admin\/posts\/[^/]+\/delete$/.test(pathname)) return ok({ success: true });

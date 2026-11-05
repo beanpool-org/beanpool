@@ -383,7 +383,7 @@ export function PeopleSafetySection({
                             intro="Pause new members, and who can ask to join. The door itself (who can invite) is under Core settings."
                         />
                     </SectionErrorBoundary>
-                    <InvitesModule activeNode={activeNode} />
+                    <InvitesModule activeNode={activeNode} viewer={rolesViewer} />
                 </div>
             )}
 

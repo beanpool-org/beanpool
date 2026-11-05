@@ -28,6 +28,9 @@
  *     answer 405 with Allow: GET, HEAD, because their paths match the profile read (GET /api/profile/:publicKey). Beside
  *     them, routes that are still there answer, so neither can be a server that serves nothing.
  *  6. The measure script prints the seven counts, numbers only, and exits 2 on a node where F or G is above zero.
+ *  7. `git grep` for every identifier §1.3 deletes finds it nowhere outside docs/ and scratch/ but the reset's own files:
+ *     this suite, db/vouch-reset.ts, the phone's DROP COLUMN line and its test, the old shape a fixture keeps on purpose
+ *     (__fixtures__/schema-v1.2.18.sql), and the hash version's history notes.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-vouch-reset.ts
  */
@@ -384,6 +387,36 @@ async function main(): Promise<void> {
     } finally {
         for (const n of nodes) await n.kill().catch(() => { });
     }
+
+    // ── 7. nothing of the old vouch model is left ──
+    console.log('\n— 7. git grep finds the §1.3 identifiers only in the reset\'s own files —');
+    const ids = ['can_vouch', 'canVouch', 'vouch_credit', 'vouchCredit', 'elder_vouched_by', 'elderVouchedBy', 'vouch_level', 'vouchLevel',
+        'VOUCH_CREDIT', 'VouchLevel', 'VOUCH_LEVELS', 'isVouchLevel', 'vouchCreditForLevel', 'vouchMember', 'unvouchMember', 'writeVouch',
+        'vouchOnJoin', 'readInviteVouch', 'adminSetVoucher', 'grant_voucher', 'revoke_voucher', 'askCanVouch', 'vouchMemberApi',
+        'unvouchMemberApi', 'updateNodeUserVoucher', 'InviteVouchChoice', 'invite-vouch\\.ts', 'inviteVouch', 'INVITE_VOUCH'];
+    const repo = path.resolve(path.dirname(SCRIPT), '..', '..', '..');
+    let hits: string[] = [];
+    try {
+        hits = execFileSync('git', ['grep', '-n', '-E', ids.join('|'), '--', ':!docs/', ':!scratch/'], { cwd: repo, encoding: 'utf-8' })
+            .split('\n').filter(Boolean);
+    } catch (e: any) {
+        if (e?.status !== 1) throw e; // 1: nothing found
+    }
+    const allowed: Record<string, (line: string) => boolean> = {
+        'apps/server/src/test-vouch-reset.ts': () => true,
+        'apps/server/src/db/vouch-reset.ts': () => true,
+        'apps/server/src/__fixtures__/schema-v1.2.18.sql': () => true,
+        'apps/native/utils/__tests__/members-old-column-drop.test.ts': () => true,
+        'apps/native/utils/db.ts': (l) => /ALTER TABLE members DROP COLUMN elder_vouched_by/.test(l),
+        'apps/server/src/engine/replica-hashes.ts': (l) => /^\s*\*/.test(l),
+    };
+    const stray = hits.filter((h) => {
+        const [file, , ...rest] = h.split(':');
+        const check = allowed[file];
+        return !check || !check(rest.join(':'));
+    });
+    assert(hits.length > 0 && stray.length === 0,
+        `outside docs/ and scratch/, only the reset's own files name them (${hits.length} lines; stray: ${stray.slice(0, 8).join(' | ') || 'none'})`);
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} check(s) failed`);

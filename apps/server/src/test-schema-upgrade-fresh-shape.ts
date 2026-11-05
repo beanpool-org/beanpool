@@ -243,7 +243,7 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
     //                   the pre-fix image dies with `no such column: status` and the fixed one boots.
     const LEGACY_SHAPES: Record<string, string[]> = {
         posts: ['updated_at', 'search_keywords', 'price_type', 'cash_also_needed'],
-        // (can_vouch, vouch_credit and elder_vouched_by were here until the vouching reset dropped them: R0, db/vouch-reset.ts.)
+        // (The three vouch columns were here until the vouching reset dropped them: R0, db/vouch-reset.ts.)
         members: ['earned_credit', 'profile_updated_at', 'updated_at', 'is_treasury', 'can_operate', 'credit_frozen'],
         abuse_reports: ['status', 'updated_at', 'target_pulse_item_id'],
     };

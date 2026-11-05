@@ -15,8 +15,8 @@
  *  7. A demoted admin's held code redeems with no vouch and the sentence; the committee flag clears with the role.
  *  8. A revoked confirmation stops a list budget; a held code comes back at expiry, a redeemed one never.
  *  9. Both departure paths: the Commons pays exactly as before (memo, amount) and the room is stamped written off.
- * 10. The password session is refused on every writer; Beans off (before any Bean moves) refuses every writer and writes no
- *     role budget.
+ * 10. The password session is refused on every writer; Beans off (before any Bean moves) refuses every writer (an ask's and
+ *     a knock's answer with a vouch included) and writes no role budget.
  * 11. The boot's grant (migration:vouchers) to an owner or admin who never had a budget, once.
  * 12. Property test: across random sequences no voucher's lines sum below zero and left + held never passes 2,000.
  * 13. A thousand vouches: the ledger audit sums to zero, and no Bean moved.
@@ -206,14 +206,26 @@ async function main(): Promise<void> {
     require_(madeBeforeOff.status === 200 && madeBeforeOff.body?.invite?.vouchAmount === 25, 'Owen holds 25 on an invite while Beans are on');
     setSwitchOverride('beans', false);
     require_(!getProfileSwitches().beans, 'Beans are switched off (no Bean has moved yet)');
+    // An ask (taken where only admins invite) and a knock waiting, for their answers with a vouch below.
+    const doorBeforeOff = getDoor();
+    setDoor('admins');
+    const offAsk = await call(mel, 'POST', '/api/invite/asks', { firstName: 'Ona', howKnown: 'Ona mends nets at the harbour' });
+    const offKnocker = newId('Oz');
+    const offKnocked = await call(offKnocker, 'POST', '/api/join/knock', { callsign: 'Oz', message: 'Hello from Oz, I live up the hill.' });
+    require_(offAsk.status === 201 && offKnocked.status === 201, `an ask and a knock wait while Beans are off (${show(offAsk)} | ${show(offKnocked)})`);
+    const offKnock = (db.prepare('SELECT id FROM join_requests WHERE pubkey = ?').get(offKnocker.pk) as { id: string }).id;
     const linesBeforeOff = allLines();
+    const invitesBeforeOff = count('SELECT COUNT(*) AS n FROM invite_codes');
     const off = [
         await call(owen, 'POST', `/api/names/vouchers/${ada.pk}/budget`, { level: 500 }), await vouch(owen, mel, 25), await generate(owen, 25),
         await call(owen, 'POST', '/api/names/vouchers', { entryId: janeEntryOff, amount: 500 }), await call(ada, 'DELETE', `/api/names/vouchers/${owen.pk}`),
         await call(owen, 'POST', '/api/names/vouchers/settings', { voucherBudget: 500 }), await call(owen, 'POST', '/api/names/committee', { memberPubkey: dan.pk, on: true }),
+        await call(owen, 'POST', `/api/invite/asks/${offAsk.body?.ask?.id}/send`, { vouchAmount: 25 }), await call(owen, 'POST', `/api/join/knocks/${offKnock}/approve`, { vouchAmount: 25 }),
     ];
-    assert(off.every((r) => r.status === 403 && r.body?.code === 'profile_no_beans') && allLines() === linesBeforeOff,
-        `10. with Beans off every writer is refused, nothing written (${off.map((r) => `${r.status} ${r.body?.code}`).join(', ')})`);
+    setDoor(doorBeforeOff);
+    assert(off.every((r) => r.status === 403 && r.body?.code === 'profile_no_beans') && allLines() === linesBeforeOff
+        && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBeforeOff,
+        `10. with Beans off every writer is refused, an ask's and a knock's answer with a vouch included, nothing written (${off.map((r) => `${r.status} ${r.body?.code}`).join(', ')})`);
     const offJoiner = newId('Ola');
     const offRedeem = await redeem(offJoiner, madeBeforeOff.body?.invite?.code);
     assert(offRedeem.status === 200 && offRedeem.body?.vouch?.ended === VOUCHER_WORDS.voucherEnded && roomOf(offJoiner.pk) === 0

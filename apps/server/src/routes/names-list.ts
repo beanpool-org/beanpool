@@ -41,6 +41,9 @@
  *   POST   /api/names/vouchers/:member/budget       { level } → card + changed: set the budget to a level (100 to 2,000)
  *   POST   /api/names/vouchers/settings             { voucherBudget?, memberGift? } → settings (an owner)
  *   POST   /api/names/committee                     { memberPubkey, on } → { memberPubkey, committee } (an owner)
+ * Making a voucher, each set-to change and Stop vouching are each a notice to the voucher (Marty's §10.2): kept in the
+ * writer's transaction, then told live and pushed (community.notice) once it has committed. A set-to raises a budget only
+ * for an active voucher whose credit line isn't frozen (409 `paused`, `frozen`); it lowers one whatever their state.
  *
  * Refusals, before anything is read or written: unsigned 401; a key that isn't an active member's here 403
  * `not_member`; a member, a moderator or a visitor 403 `admins_only`; the global node 404 `feature_off` (it keeps no

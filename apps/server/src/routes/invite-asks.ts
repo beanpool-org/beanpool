@@ -9,7 +9,8 @@
  * An owner or admin, by nodeRoleOf; anyone else 403 `admins_only`:
  *   GET  /api/invite/asks?limit&offset    → { asks: [ask + askerPubkey, askerCallsign], total, limit, offset }
  *   POST /api/invite/asks/:id/send        { vouchAmount? } → { ok: true } | 404 `not_found` | a vouch's refusal
- *                                         (engine/vouchers.ts: 403 `not_a_voucher`, 400 `bad_amount`, 409 `not_enough`)
+ *                                         (engine/vouchers.ts: 403 `not_a_voucher`, 400 `bad_amount`, 409 `frozen` or
+ *                                         `not_enough`; 403 `profile_no_beans` with Beans off)
  *   POST /api/invite/asks/:id/no          { reason? } → { ok: true } | 404 `not_found`
  *
  * All 404 `feature_off` where invites are off (routes/profile-feature-gate.ts). A standby refuses a write, 503 `standby`, and

@@ -36,10 +36,28 @@
  * The poll-tiles case (5 Nov 2026): a 4-answer poll beside events, a 2-answer and a 6-answer poll, at 320, 320 x 1.3, 768,
  * 1024 and 1280, in English and German (`--only=poll-tiles`; its pictures are poll-tiles-<width>-<lang>-<scheme>.png).
  *
+ * The poll-vote case (Marty and Damo, 6 Nov 2026: voted in the tile only when the whole poll is in front of the member): a
+ * two-answer poll, voted in place at every width; a three-answer one, voted in place where three 44 px rows fit (1280), and
+ * opening at 320 where they do not; and the 4-answer poll whose answers are cut or hidden, which never is; at 320, 320 x 1.3
+ * and 1280 (`--only=poll-vote`). On every poll tile voted in place, in every case: no answer row is
+ * cut (its words wider than their box, or the row past the answers' room) and each is a finger's press tall (44 px).
+ *
+ * The poll-vote-after case (#2926 review): polls on the edge of fitting, voted. A vote is cast in the first tile voted in place
+ * among the borderline ones (by the keyboard: the row focused, Enter), answered as the node answers it, and the Market's
+ * refresh brings it back voted; a poll voted on its page comes back voted too. Then every poll is voted in place, or opens,
+ * exactly as before the vote, its footer's action is the same words, and the keyboard is still on the row it voted with. Then
+ * a second poll's vote is refused with the longest refusal the node sends: its words are whole (on as many lines as they
+ * take, inside the tile), the rows are still buttons a press tall, and the keyboard is still on the row. Pictures of each poll
+ * before, after the vote, and refused (`--only=poll-vote-after`; poll-vote-after-<width>-<scheme>-voted-<n>.png and
+ * -refused.png).
+ *
  * `--miss=self-start` puts #1092's cell back (`self-start`, no `h-full`), `--miss=block` lets the text block take its own
  * height, `--miss=time-one-line` makes an event's time one shrinking line (the end piece cut instead of dropped whole), and
  * `--miss=dash-first` moves the dash onto the start piece, `--miss=poll-square` puts the 2 x 2 poll back (the band Marty
- * saw) and `--miss=poll-own-height` lets the poll take its own height: each must make this exit non-zero (a check that cannot fail is
+ * saw), `--miss=poll-own-height` lets the poll take its own height and `--miss=poll-press-short` squashes a tile voted in
+ * place back to one-line rows (under 44 px), `--miss=pct-room` drops the room kept for "100% ✓" (the vote then turns a
+ * borderline tile off, as the review measured), `--miss=refusal-cut` puts a refusal back on one cut line, and
+ * `--miss=focus-drop` disables a row as it is pressed (the keyboard falls to the page): each must make this exit non-zero (a check that cannot fail is
  * not a check). `--only=<case>[,<case>]` runs those cases.
  *
  * Nothing here talks to a node: every /api call is answered from e2e/fixtures.mjs (harness.mjs).
@@ -57,7 +75,7 @@ const out = args.find(a => !a.startsWith('--'));
 const miss = (args.find(a => a.startsWith('--miss=')) || '').slice('--miss='.length) || null;
 const only = (args.find(a => a.startsWith('--only=')) || '').slice('--only='.length) || null;
 if (!out) {
-    console.error('usage: node e2e/market-grid-shots.mjs <out-dir> [--miss=self-start|block|time-one-line|dash-first|poll-square|poll-own-height] [--only=<case>]');
+    console.error('usage: node e2e/market-grid-shots.mjs <out-dir> [--miss=self-start|block|time-one-line|dash-first|poll-square|poll-own-height|poll-press-short|pct-room|refusal-cut|focus-drop] [--only=<case>]');
     process.exit(2);
 }
 const MISSES = {
@@ -71,6 +89,19 @@ const MISSES = {
     'poll-square': '[data-testid="poll-grid-cell"] { grid-row: span 2 / span 2 !important; }',
     // The poll's tile in the flow, at its own height, instead of over a tile's invisible box.
     'poll-own-height': '[data-testid="poll-grid-tile"] { position: static !important; } [data-testid="poll-grid-ghost"] { display: none !important; }',
+    // A tile voted in place whose answer rows are one line tall again (22 px), under a finger's 44 px press.
+    'poll-press-short': '[data-votable="true"] [data-testid="poll-grid-answer"] { min-height: 0 !important; max-height: 1.375rem !important; }',
+    // The percentage's room only what it shows (the vote's ✓ and a new digit then come out of the words' box).
+    'pct-room': '[data-testid="poll-grid-pct"]::after { content: none !important; }',
+    // A refusal on one line, cut with "…", as it was in the footer.
+    'refusal-cut': '[data-testid="poll-grid-error"] { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }',
+    // A row disabled as it is pressed, as `disabled` did while a vote was sent: the keyboard falls to the page.
+    'focus-drop': () => {
+        document.addEventListener('click', (e) => {
+            const row = e.target.closest?.('[data-testid="poll-grid-answer"]');
+            if (row && row.tagName === 'BUTTON') setTimeout(() => { row.disabled = true; }, 0);
+        }, true);
+    },
     'dash-first': () => {
         for (const row of document.querySelectorAll('[data-testid="event-tile-time"]')) {
             const [start, end] = row.querySelectorAll('[data-testid="event-time-piece"]');
@@ -192,6 +223,52 @@ const POLL_6 = poll({
     pollOptions: ['Bread and sourdough', 'Bike repair for beginners', 'Seed saving and swapping', 'Basic carpentry', 'Composting at home', 'Phone and computer help']
         .map((text, i) => ({ id: `s${i}`, text, votes: [4, 3, 2, 2, 1, 0][i], percentage: [33, 25, 17, 17, 8, 0][i] })),
 });
+/** A short poll, all of it in a 320 px tile: three one-word answers. */
+const POLL_SHORT = poll({
+    id: 'p-short', title: 'Market day?', totalVotes: 5, createdAt: iso(-0.5 * HOUR),
+    pollOptions: [
+        { id: 'm1', text: 'Saturday', votes: 3, percentage: 60 },
+        { id: 'm2', text: 'Sunday', votes: 2, percentage: 40 },
+        { id: 'm3', text: 'Either', votes: 0, percentage: 0 },
+    ],
+});
+/** Two one-word answers under a one-line question: the most a 320 px tile at 1.3x text holds a press tall. */
+const POLL_YES = poll({
+    id: 'p-yes', title: 'Bring a plate?', totalVotes: 4, createdAt: iso(-0.75 * HOUR),
+    pollOptions: [{ id: 'y1', text: 'Yes', votes: 3, percentage: 75 }, { id: 'y2', text: 'No', votes: 1, percentage: 25 }],
+});
+/**
+ * On the edge of fitting (#2926 review): the reviewer's two-answer poll, 35 and 34 characters; 30 characters, which a 320 px tile
+ * holds beside "100% ✓"; and 50, which no 320 px tile holds. Each, and the two refused below, as their node answers a vote.
+ */
+const POLL_HALL = poll({
+    id: 'p-hall', title: 'Where should we meet?', totalVotes: 4, createdAt: iso(-0.6 * HOUR),
+    pollOptions: [
+        { id: 'h1', text: 'Saturday morning at the market hall', votes: 3, percentage: 75 },
+        { id: 'h2', text: 'Sunday morning at the bowling club', votes: 1, percentage: 25 },
+    ],
+});
+const POLL_WHOLE = poll({
+    id: 'p-whole', title: 'When is the swap?', totalVotes: 4, createdAt: iso(-0.65 * HOUR),
+    pollOptions: [{ id: 'w1', text: 'Saturday morning at the market', votes: 3, percentage: 75 }, { id: 'w2', text: 'No', votes: 1, percentage: 25 }],
+});
+const POLL_LONG = poll({
+    id: 'p-long', title: 'Where is the stall?', totalVotes: 4, createdAt: iso(-0.7 * HOUR),
+    pollOptions: [{ id: 'l1', text: 'Saturday morning at the market hall, near the gate', votes: 3, percentage: 75 }, { id: 'l2', text: 'No', votes: 1, percentage: 25 }],
+});
+const POLL_CHAIR = poll({
+    id: 'p-chair', title: 'Bring a chair?', totalVotes: 4, createdAt: iso(-0.8 * HOUR),
+    pollOptions: [{ id: 'c1', text: 'Yes', votes: 3, percentage: 75 }, { id: 'c2', text: 'No', votes: 1, percentage: 25 }],
+});
+/** A poll as the node answers a vote on `optionId`: one more vote, on that answer, the percentages anew, the ✓ on it. */
+const votedOn = (p, optionId) => {
+    const options = p.pollOptions.map(o => ({ ...o, votes: o.votes + (o.id === optionId ? 1 : 0) }));
+    const total = p.totalVotes + 1;
+    return { ...p, totalVotes: total, userVotedOptionId: optionId, pollOptions: options.map(o => ({ ...o, percentage: Math.round((o.votes / total) * 100) })) };
+};
+/** The longest refusal a node sends to a vote (apps/server/src/engine/posts.ts votePoll): a sealed poll answered. */
+const LONGEST_REFUSAL = 'You have already answered this poll, and nothing links your answer to you, so it cannot be changed.';
+
 /** The brief's widths and languages for the poll's tile. */
 const POLL_WIDTHS = ['320', '320-x1.3', '768-shim', '1024-shim', '1280-shim', '1920-shim'];
 const POLL_LANGS = ['en', 'de'];
@@ -212,6 +289,39 @@ const CASES = [
     {
         name: 'poll-tiles', pins: [], widths: POLL_WIDTHS, langs: POLL_LANGS, polls: 3,
         posts: [POLL_4, ...EVENTS.map(e => e.post), POLL_2, ...POSTS.filter(p => p.type !== 'poll'), POLL_6],
+    },
+    // Voted in the tile (6 Nov 2026): the two-answer poll in place at every width; the three-answer one where its three rows
+    // can each be 44 px tall (at 320 px the room holds two: measured 6 Nov, it opens there); the 4-answer poll never (its
+    // answers are cut or behind "+N more").
+    {
+        name: 'poll-vote', pins: [], widths: ['320', '320-x1.3', '1280-shim'], polls: 4,
+        posts: [POLL_YES, POLL_2, POLL_SHORT, ...POSTS.filter(p => p.type !== 'poll'), POLL_4],
+        votable: (spec) => ({
+            [POLL_YES.title]: true,
+            [POLL_2.title]: (spec.textScale ?? 1) === 1,
+            [POLL_SHORT.title]: spec.width >= 768,
+            [POLL_4.title]: false,
+        }),
+    },
+    // Voted, and refused (#2926 review). The 34-35 character answers vote in place at 1280; the 50-character one nowhere (cut at
+    // 1280 too, measured 6 Nov); at 320 px the 34-35 character ones do not fit beside
+    // "100% ✓" (209 px of words in 196 at 1x, measured 6 Nov), so that tile opens, before the vote and after it alike.
+    {
+        name: 'poll-vote-after', pins: [], widths: ['320', '320-x1.3', '1280-shim'], polls: 5,
+        posts: [POLL_HALL, POLL_WHOLE, POLL_LONG, POLL_YES, ...POSTS.filter(p => p.type !== 'poll'), POLL_CHAIR],
+        votable: (spec) => ({
+            [POLL_HALL.title]: spec.width >= 768,
+            [POLL_WHOLE.title]: spec.width >= 768 || (spec.textScale ?? 1) === 1,
+            [POLL_LONG.title]: false,
+            [POLL_YES.title]: true,
+            [POLL_CHAIR.title]: true,
+        }),
+        vote: {
+            // The first of these voted in place here is voted; the others come back voted on their page.
+            cast: [[POLL_HALL, 'h1'], [POLL_WHOLE, 'w1'], [POLL_YES, 'y1']],
+            elsewhere: [[POLL_LONG, 'l1']],
+            refuse: [POLL_CHAIR, 'c1'],
+        },
     },
 ];
 
@@ -320,11 +430,28 @@ function measure() {
                     }
                     if (el.getAttribute('data-testid') === 'poll-grid-answers' && el.scrollHeight > el.clientHeight + 1) overflows.push(`the answers need ${el.scrollHeight}px in ${el.clientHeight}px: a row is cut`);
                 }
+                // Voted in place (PollGridTile's data-votable): each answer row whole, inside the answers' room, a press tall.
+                const votable = tile.getAttribute('data-votable') === 'true';
+                const pressMisses = [];
+                if (votable) {
+                    const roomBox = tile.querySelector('[data-testid="poll-grid-answers"]').getBoundingClientRect();
+                    for (const rowEl of tile.querySelectorAll('[data-testid="poll-grid-answer"]')) {
+                        const rr = rowEl.getBoundingClientRect();
+                        const words = rowEl.querySelector('[data-testid="poll-grid-answer-words"]');
+                        const name = `answer "${words?.textContent ?? rowEl.textContent}"`;
+                        if (rowEl.tagName !== 'BUTTON') pressMisses.push(`${name} is no button`);
+                        if (rr.height < 44 - 0.5) pressMisses.push(`${name} is ${rr.height.toFixed(1)}px tall, under a 44 px press`);
+                        if (rr.top < roomBox.top - 0.5 || rr.bottom > roomBox.bottom + 0.5) pressMisses.push(`${name} runs out of the answers' room`);
+                        if (words && words.scrollWidth > words.clientWidth) pressMisses.push(`${name} is cut (${words.scrollWidth} > ${words.clientWidth})`);
+                    }
+                }
                 poll = {
+                    votable, block: tile.getAttribute('data-vote-block') || null, pressMisses,
                     bands, overflows,
                     answers: tile.querySelectorAll('[data-testid="poll-grid-answer"]').length,
                     more: tile.querySelector('[data-testid="poll-grid-more"]')?.textContent ?? null,
                     question: tile.querySelector('h3')?.textContent ?? '',
+                    id: tile.getAttribute('data-poll'),
                 };
             }
             return {
@@ -345,8 +472,8 @@ function measure() {
     };
 }
 
-/** Every check for one measured page; returns the misses. */
-function check(m, spec, pins, events = []) {
+/** Every check for one measured page; returns the misses. `votable`: each named poll's question, and whether it must be voted in place. */
+function check(m, spec, pins, events = [], votable = null) {
     const misses = [];
     const fail = (msg) => misses.push(msg);
     const block = BLOCK_REM * m.root;
@@ -391,6 +518,7 @@ function check(m, spec, pins, events = []) {
             if (tile && p.tracksHeight > tile + 1) fail(`${name}'s row is ${p.tracksHeight.toFixed(1)}px for tiles of ${tile.toFixed(1)}px: the poll made it taller`);
             for (const b of p.poll?.bands ?? []) if (b.px > 32) fail(`${name} has a ${b.px.toFixed(1)}px blank band between ${b.between}`);
             for (const x of p.poll?.overflows ?? []) fail(`${name}: ${x}`);
+            for (const x of p.poll?.pressMisses ?? []) fail(`${name} (voted in place): ${x}`);
         }
         // No empty cell a later one-cell tile could have taken.
         const filled = g.rows.map(() => new Array(g.cols).fill(false));
@@ -401,6 +529,15 @@ function check(m, spec, pins, events = []) {
             if (empty && later) fail(`${at}row ${r + 1} has ${empty} empty cell(s) and a tile drawn below it`);
         });
     });
+    // The case's polls that must, or must not, be voted in place (6 Nov 2026).
+    if (votable) {
+        const polls = m.grids.flatMap(g => g.cells.filter(c => c.kind === 'poll' && c.poll));
+        for (const [question, want] of Object.entries(votable)) {
+            const c = polls.find(x => x.poll.question === question);
+            if (!c) { fail(`no poll tile for "${question}"`); continue; }
+            if (c.poll.votable !== want) fail(`poll "${question}" ${c.poll.votable ? 'is voted in place' : `opens (${c.poll.block})`}; expected it to ${want ? 'be voted in place' : 'open'}`);
+        }
+    }
     // The case's events, each drawn as a tile with the rows it is here for (so the zone and the copy really were read).
     const tiles = m.grids.flatMap(g => g.cells.filter(c => c.kind === 'event' && c.ev));
     for (const e of events) {
@@ -439,10 +576,124 @@ function report(m) {
         for (const c of g.cells) {
             const what = c.kind === 'event' && c.ev
                 ? ` | ${c.ev.rows.join(' | ')} | time shows "${c.ev.time}" (${c.ev.shownPieces} of ${c.ev.pieces})${c.ev.mark ? ` | mark "${c.ev.mark}"` : ''}${c.ev.lock ? ' | 🔒' : ''}`
-                : c.kind === 'poll' && c.poll ? ` ${c.colSpan} x ${c.rowSpan}, ${c.poll.answers} answer row(s)${c.poll.more ? ` + "${c.poll.more}"` : ''}, widest band ${Math.max(0, ...c.poll.bands.map(b => b.px)).toFixed(0)}px` : '';
+                : c.kind === 'poll' && c.poll ? ` ${c.colSpan} x ${c.rowSpan}, ${c.poll.answers} answer row(s)${c.poll.more ? ` + "${c.poll.more}"` : ''}, widest band ${Math.max(0, ...c.poll.bands.map(b => b.px)).toFixed(0)}px, ${c.poll.votable ? 'voted in place' : `opens (${c.poll.block})`}` : '';
             console.log(`      r${c.row + 1}c${c.col + 1} ${c.kind.padEnd(7)} ${c.pinned ? '📌 ' : ''}tile ${c.tileH.toFixed(0)}${c.blockH ? ` block ${c.blockH.toFixed(1)}` : ''}${what}  "${c.label}"`);
         }
     }
+}
+
+/** Each poll tile on the page: voted in place or not (and why), its footer's action, its id. */
+function pollStates() {
+    return [...document.querySelectorAll('[data-testid="poll-grid-tile"]')].map(t => ({
+        id: t.getAttribute('data-poll'),
+        votable: t.getAttribute('data-votable') === 'true',
+        block: t.getAttribute('data-vote-block') || null,
+        action: t.querySelector('[data-testid="poll-grid-action"]')?.textContent ?? null,
+        cut: [...t.querySelectorAll('[data-testid="poll-grid-answer-words"]')].filter(w => w.scrollWidth > w.clientWidth).map(w => `"${w.textContent}" ${w.scrollWidth} > ${w.clientWidth}`),
+    }));
+}
+
+/** Where the keyboard is: the poll and the row's name, or the element it fell to. */
+function focusAt() {
+    const a = document.activeElement;
+    return { poll: a?.closest?.('[data-testid="poll-grid-tile"]')?.getAttribute('data-poll') ?? null, label: a?.getAttribute?.('aria-label') ?? null, tag: a?.tagName ?? null };
+}
+
+/** A refused tile: its refusal whole and inside the tile, its rows buttons a press tall inside the answers' room, what gave way. */
+function refusedState(id) {
+    const t = document.querySelector(`[data-testid="poll-grid-tile"][data-poll="${id}"]`);
+    if (!t) return { misses: [`no tile for ${id}`] };
+    const misses = [];
+    const e = t.querySelector('[data-testid="poll-grid-error"]');
+    const tr = t.getBoundingClientRect();
+    const cs = getComputedStyle(t);
+    const inner = { top: tr.top + parseFloat(cs.paddingTop) - 0.5, bottom: tr.bottom - parseFloat(cs.paddingBottom) + 0.5 };
+    if (!e) misses.push('no refusal shown');
+    else {
+        if (e.getAttribute('role') !== 'alert') misses.push('the refusal is not role="alert"');
+        if (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1) misses.push(`the refusal is cut (${e.scrollWidth}x${e.scrollHeight} in ${e.clientWidth}x${e.clientHeight})`);
+        const r = e.getBoundingClientRect();
+        if (r.top < inner.top || r.bottom > inner.bottom) misses.push(`the refusal runs out of the tile (${r.top.toFixed(1)}-${r.bottom.toFixed(1)} in ${inner.top.toFixed(1)}-${inner.bottom.toFixed(1)})`);
+    }
+    const room = t.querySelector('[data-testid="poll-grid-answers"]').getBoundingClientRect();
+    for (const row of t.querySelectorAll('[data-testid="poll-grid-answer"]')) {
+        const r = row.getBoundingClientRect();
+        const name = `answer "${row.querySelector('[data-testid="poll-grid-answer-words"]')?.textContent}"`;
+        if (row.tagName !== 'BUTTON' || row.disabled) misses.push(`${name} is no button to press`);
+        if (r.height < 44 - 0.5) misses.push(`${name} is ${r.height.toFixed(1)}px tall, under a 44 px press`);
+        if (r.top < room.top - 0.5 || r.bottom > room.bottom + 0.5) misses.push(`${name} runs out of the answers' room`);
+    }
+    if (t.getAttribute('data-votable') !== 'true') misses.push(`the tile stopped voting (${t.getAttribute('data-vote-block')})`);
+    const gaveWay = ['poll-grid-head', 'poll-grid-question', 'poll-grid-foot'].filter(x => !t.querySelector(`[data-testid="${x}"]`));
+    return { misses, gaveWay, lines: e ? Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)) : 0 };
+}
+
+/** The poll-vote-after steps on an open page (its feed `posts`, which the Market reads again after a vote); returns the misses. */
+async function voteSteps(page, kase, posts, name) {
+    const misses = [];
+    const shoot = async (id, suffix) => {
+        const cell = page.locator(`[data-testid="poll-grid-cell"]:has([data-poll="${id}"])`);
+        if (await cell.count()) await cell.first().screenshot({ path: path.join(out, `${name}-${suffix}.png`), animations: 'disabled' });
+    };
+    const before = await page.evaluate(pollStates);
+    const castOn = kase.vote.cast.find(([p]) => before.find(s => s.id === p.id)?.votable);
+    const answerRow = (id, optionId) => {
+        const p = posts.find(x => x.id === id);
+        const text = p.pollOptions.find(o => o.id === optionId).text;
+        return page.locator(`[data-poll="${id}"] [data-testid="poll-grid-answer"]`, { has: page.locator('[data-testid="poll-grid-answer-words"]', { hasText: text }) }).first();
+    };
+    let refusing = false;
+    await page.route('**/api/marketplace/posts/*/vote', async (route) => {
+        const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2));
+        if (refusing) return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: LONGEST_REFUSAL }) });
+        const { optionId } = JSON.parse(route.request().postData() || '{}');
+        const at = posts.findIndex(p => p.id === id);
+        if (at < 0) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Poll not found' }) });
+        // The node's answer, and the Market's list read again after it: the poll voted, and the others voted on their page.
+        posts[at] = votedOn(posts[at], optionId);
+        for (const [p, o] of kase.vote.elsewhere) { const i = posts.findIndex(x => x.id === p.id); if (i >= 0) posts[i] = votedOn(p, o); }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, post: posts[at] }) });
+    });
+    if (castOn) {
+        const [p, optionId] = castOn;
+        await shoot(p.id, 'voted-before');
+        const row = answerRow(p.id, optionId);
+        const want = await row.getAttribute('aria-label');
+        await row.focus();
+        await page.keyboard.press('Enter');
+        await page.waitForFunction((id) => document.querySelector(`[data-poll="${id}"] [data-testid="poll-grid-chosen"]`), p.id, { timeout: 10_000 }).catch(() => {});
+        await settle(page);
+        const after = await page.evaluate(pollStates);
+        for (const b of before) {
+            const a = after.find(x => x.id === b.id);
+            if (!a) { misses.push(`poll ${b.id} is gone after the vote`); continue; }
+            if (a.votable !== b.votable) misses.push(`poll ${b.id} ${b.votable ? 'was voted in place' : `opened (${b.block})`} before the vote and ${a.votable ? 'is voted in place' : `opens (${a.block}${a.cut.length ? `: ${a.cut.join(', ')}` : ''})`} after it`);
+            if (a.action !== b.action) misses.push(`poll ${b.id}'s footer says "${a.action}" after the vote ("${b.action}" before)`);
+        }
+        if (!(await page.locator(`[data-poll="${p.id}"] [data-testid="poll-grid-chosen"]`).count())) misses.push(`the vote on ${p.id} drew no ✓`);
+        const f = await page.evaluate(focusAt);
+        const answer = p.pollOptions.find(o => o.id === optionId).text;
+        if (f.poll !== p.id || !(f.label ?? '').startsWith(`Vote: ${answer},`)) misses.push(`the keyboard is on ${f.tag} "${f.label}" after the vote (expected the row "${want}")`);
+        await shoot(p.id, 'voted-after');
+        console.log(`    voted "${answer}" in ${p.id}: ${after.map(a => `${a.id} ${a.votable ? 'in place' : `opens (${a.block})`}`).join(', ')}; keyboard on "${f.label}"`);
+    } else {
+        misses.push('no borderline poll is voted in place here, so no vote was cast');
+    }
+    // A refused vote, on a poll voted in place at every width.
+    const [rp, rOption] = kase.vote.refuse;
+    refusing = true;
+    const rRow = answerRow(rp.id, rOption);
+    await rRow.focus();
+    await page.keyboard.press('Enter');
+    await page.waitForSelector(`[data-poll="${rp.id}"] [data-testid="poll-grid-error"]`, { timeout: 10_000 }).catch(() => {});
+    await settle(page);
+    const r = await page.evaluate(refusedState, rp.id);
+    for (const x of r.misses) misses.push(`refused in ${rp.id}: ${x}`);
+    const f = await page.evaluate(focusAt);
+    if (f.poll !== rp.id || !(f.label ?? '').startsWith('Vote: ')) misses.push(`the keyboard is on ${f.tag} "${f.label}" after the refusal (expected the row it pressed)`);
+    console.log(`    refused in ${rp.id}: ${r.lines} line(s), gave way: ${r.gaveWay?.join(', ') || 'nothing'}; keyboard on "${f.label}"`);
+    await shoot(rp.id, 'refused');
+    return misses;
 }
 
 const problems = [];
@@ -454,9 +705,10 @@ try {
         for (const spec of WIDTHS) {
             if (kase.minColumns && spec.columns < kase.minColumns) continue;
             if (kase.widths && !kase.widths.includes(spec.name)) continue;
-            const posts = kase.posts ?? postsWithPollAt(spec.columns - 1);
+            const feed = kase.posts ?? postsWithPollAt(spec.columns - 1);
             for (const lang of kase.langs ?? [null]) for (const dark of [false, true]) {
                 const name = `${kase.name}-${spec.name}${lang ? `-${lang}` : ''}-${dark ? 'dark' : 'light'}`;
+                const posts = [...feed];
                 const { context, page, unrouted } = await openMarket(browser, origin, {
                     width: spec.width, height: 1200, dark, textScale: spec.textScale ?? 1, posts, timezoneId: READER_TZ, lang,
                 });
@@ -470,7 +722,7 @@ try {
                 const unexpected = [...new Set(unrouted)].filter(p => !ANSWERED_404.has(p));
                 if (unexpected.length) problems.push(`${name}: unanswered API paths ${unexpected.join(', ')}`);
                 const m = await page.evaluate(measure);
-                const misses = check(m, spec, kase.pins, kase.events);
+                const misses = check(m, spec, kase.pins, kase.events, kase.votable ? kase.votable(spec) : null);
                 if (kase.needs && !m.grids.some(g => g.cells.some(c => c.kind === kase.needs))) misses.push(`no ${kase.needs} tile drawn`);
                 const polls = m.grids.flatMap(g => g.cells.filter(c => c.kind === 'poll')).length;
                 if (kase.polls && polls !== kase.polls) misses.push(`${polls} poll tile(s) drawn (expected ${kase.polls})`);
@@ -488,6 +740,7 @@ try {
                         });
                     }
                 }
+                if (kase.vote) misses.push(...await voteSteps(page, kase, posts, name));
                 console.log(`${misses.length ? '✗' : '✓'} ${name} (root ${m.root}px, block ${(BLOCK_REM * m.root).toFixed(1)}px)  ${file}`);
                 if (!dark) report(m);
                 for (const x of misses) {

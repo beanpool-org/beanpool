@@ -145,64 +145,39 @@ export function pollFacts(post: any, now = Date.now()) {
     return { isClosed, authorName, avatarUrl, options, totalVotes, userVotedOptionId, votesList, openVote, sealed, answered };
 }
 
-export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode, onOpen, onOpenProfile }: PollCardProps) {
-    const { colors } = useTheme();
-    const styles = useStyles(makeStyles);
-    // The style box (components/market-card-shell.ts): the card's shell, its chips and the compact row.
-    const shell = useCardShell();
-
-    const [livePost, setLivePost] = useState(post);
+/**
+ * The card's vote, the one path for the card and the grid's tile (PollGridTile, voted in place when the whole poll is in front
+ * of the member: Marty and Damo, 6 Nov 2026): votePoll, the node's answer drawn in place (`setLivePost`), and a change of vote
+ * asked first (#2907: "Change your vote?", Keep my vote / Change). `onSent` is the card's own tidy-up after a vote (its Other
+ * line).
+ */
+export function usePollVote(
+    livePost: any,
+    setLivePost: (post: any) => void,
+    { currentPubkey, onVoteSuccess, onSent, inline = false }: {
+        currentPubkey?: string | null; onVoteSuccess?: () => void; onSent?: () => void;
+        /** The node's refusal shown where the vote was cast (`error`, the grid's tile), not in an Alert (the card). */
+        inline?: boolean;
+    },
+) {
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
-    const [isClosing, setIsClosing] = useState(false);
-    const [showVoters, setShowVoters] = useState(false);
-    const [typingOther, setTypingOther] = useState(false);
-    const [otherWords, setOtherWords] = useState('');
-    const [ownerHere, setOwnerHere] = useState(false);
-    const [showPinSheet, setShowPinSheet] = useState(false);
-    const [unpinning, setUnpinning] = useState(false);
-    // The "···" is for an owner or admin (Pin, Take the pin off) and for a pinned poll's author (Take the pin off).
-    const pinRole = usePinRole(pinsOn, currentPubkey);
-
-    // Keep livePost in sync if prop changes
-    React.useEffect(() => {
-        setLivePost((prev: any) => ({
-            ...post,
-            pollVotes: (prev?.pollVotes && prev.pollVotes.length > 0) ? prev.pollVotes : post.pollVotes,
-        }));
-    }, [post]);
-
-    const isAuthor = Boolean(currentPubkey && (livePost.author_pubkey === currentPubkey || livePost.authorPublicKey === currentPubkey));
-    const { isClosed, authorName, avatarUrl, options, totalVotes, userVotedOptionId, votesList, openVote, sealed, answered } = pollFacts(livePost);
-    // Where its votes came from: only once an anonymous poll has closed. While it is open the card says nothing about it,
-    // not even that it will (the node sends nothing then either: @beanpool/engine pollOriginsMayShow).
-    const showOrigins = pollOriginsShown(isClosed, openVote);
-    const originsLine = showOrigins ? pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes ?? livePost.poll_new_or_words_votes) : null;
-
-    // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
-    const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
-
-    const offersOther = pollOtherOption(options) !== null;
-    // Only a card with words to offer asks; a member's card asks nothing. The node decides who reads.
-    const asksRole = offersOther && !isAuthor && Boolean(currentPubkey);
-    React.useEffect(() => {
-        if (!asksRole) return;
-        let cancelled = false;
-        void isOwnerHere().then(owner => { if (!cancelled && owner) setOwnerHere(true); });
-        return () => { cancelled = true; };
-    }, [asksRole]);
+    const [error, setError] = useState<string | null>(null);
+    const { isClosed, options, userVotedOptionId } = pollFacts(livePost);
 
     const sendVote = async (optionId: string, typed?: string) => {
         setVotingOptionId(optionId);
+        setError(null);
         try {
             const res = await (typed === undefined ? votePoll(livePost.id, optionId) : votePoll(livePost.id, optionId, typed));
             if (res?.post) {
                 setLivePost(res.post);
             }
-            setTypingOther(false);
-            setOtherWords('');
+            onSent?.();
             onVoteSuccess?.();
         } catch (err: any) {
-            Alert.alert(t('Voting Error'), err.message ? signedRequestWords(err.message) : t('Could not record your vote.'));
+            const words = err.message ? signedRequestWords(err.message) : t('Could not record your vote.');
+            if (inline) setError(words);
+            else Alert.alert(t('Voting Error'), words);
         } finally {
             setVotingOptionId(null);
         }
@@ -241,6 +216,59 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false,
 
         await sendVote(optionId, typed);
     };
+
+    return { votingOptionId, error, handleVote };
+}
+
+export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false, pinsOn = false, viewMode, onOpen, onOpenProfile }: PollCardProps) {
+    const { colors } = useTheme();
+    const styles = useStyles(makeStyles);
+    // The style box (components/market-card-shell.ts): the card's shell, its chips and the compact row.
+    const shell = useCardShell();
+
+    const [livePost, setLivePost] = useState(post);
+    const [isClosing, setIsClosing] = useState(false);
+    const [showVoters, setShowVoters] = useState(false);
+    const [typingOther, setTypingOther] = useState(false);
+    const [otherWords, setOtherWords] = useState('');
+    const [ownerHere, setOwnerHere] = useState(false);
+    const [showPinSheet, setShowPinSheet] = useState(false);
+    const [unpinning, setUnpinning] = useState(false);
+    // The "···" is for an owner or admin (Pin, Take the pin off) and for a pinned poll's author (Take the pin off).
+    const pinRole = usePinRole(pinsOn, currentPubkey);
+
+    // Keep livePost in sync if prop changes
+    React.useEffect(() => {
+        setLivePost((prev: any) => ({
+            ...post,
+            pollVotes: (prev?.pollVotes && prev.pollVotes.length > 0) ? prev.pollVotes : post.pollVotes,
+        }));
+    }, [post]);
+
+    const isAuthor = Boolean(currentPubkey && (livePost.author_pubkey === currentPubkey || livePost.authorPublicKey === currentPubkey));
+    const { isClosed, authorName, avatarUrl, options, totalVotes, userVotedOptionId, votesList, openVote, sealed, answered } = pollFacts(livePost);
+    // Where its votes came from: only once an anonymous poll has closed. While it is open the card says nothing about it,
+    // not even that it will (the node sends nothing then either: @beanpool/engine pollOriginsMayShow).
+    const showOrigins = pollOriginsShown(isClosed, openVote);
+    const originsLine = showOrigins ? pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes ?? livePost.poll_new_or_words_votes) : null;
+
+    // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
+    const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
+
+    const offersOther = pollOtherOption(options) !== null;
+    // Only a card with words to offer asks; a member's card asks nothing. The node decides who reads.
+    const asksRole = offersOther && !isAuthor && Boolean(currentPubkey);
+    React.useEffect(() => {
+        if (!asksRole) return;
+        let cancelled = false;
+        void isOwnerHere().then(owner => { if (!cancelled && owner) setOwnerHere(true); });
+        return () => { cancelled = true; };
+    }, [asksRole]);
+
+    // The vote, the one path the grid's tile votes by too: after a vote the Other line closes and empties.
+    const { votingOptionId, handleVote } = usePollVote(livePost, setLivePost, {
+        currentPubkey, onVoteSuccess, onSent: () => { setTypingOther(false); setOtherWords(''); },
+    });
 
     const handleClosePoll = () => {
         Alert.alert(

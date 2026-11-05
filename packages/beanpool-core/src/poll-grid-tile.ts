@@ -15,7 +15,12 @@
  *
  * What it shows is the card's own: the percentages as PollCard shows them, before voting too; the ✓ on the member's answer
  * only where the card shows it (never on a sealed poll, whose answer the node cannot name); a sealed poll they answered says
- * "You answered ✓"; a closed poll says Closed and "See results ›". No vote controls: the tile is one button.
+ * "You answered ✓"; a closed poll says Closed and "See results ›".
+ *
+ * Voted in the tile (Marty and Damo, 6 Nov 2026: "if there are 2+ more it should jump to the card mandatory so you are
+ * presented with all answers. Otherwise the poll will be loaded"): only when the WHOLE poll is in front of the member
+ * (pollTileVoteBlock). Then each answer row is a button that votes as the card does, and the question, the author and the
+ * footer ("Tap an answer to vote · Open poll ›") open the poll. Otherwise the tile is one button that opens it, as before.
  *
  * Pure: no React, no I/O. The apps measure the answers' room (the web's ResizeObserver, the phone's onLayout) and draw.
  */
@@ -138,11 +143,103 @@ export function pollTileSummary({ totalVotes, closed, openVote }: { totalVotes: 
         : tn(totalVotes, '{n} vote · Anonymous', '{n} votes · Anonymous');
 }
 
-/** The footer's right: what a tap does, or that a sealed poll has the member's answer. */
-export function pollTileAction({ closed, answered }: { closed: boolean; answered: boolean }): { kind: 'vote' | 'results' | 'answered'; words: string } {
+/**
+ * The footer's right: what a tap does, or that a sealed poll has the member's answer. On a tile voted in place (`votable`,
+ * pollTileVoteBlock) it says both, "Tap an answer to vote · Open poll ›": `hint` is the first half, which gives way (cut with
+ * "…") when the line is short of room, and `words` the second, which never does. The turnout beside them gives way first.
+ */
+export function pollTileAction({ closed, answered, votable = false }: { closed: boolean; answered: boolean; votable?: boolean }): { kind: 'vote' | 'results' | 'answered' | 'here'; words: string; hint?: string } {
     if (closed) return { kind: 'results', words: t('See results ›') };
     if (answered) return { kind: 'answered', words: t('You answered ✓') };
+    if (votable) return { kind: 'here', hint: t('Tap an answer to vote'), words: t('Open poll ›') };
     return { kind: 'vote', words: t('Tap to vote ›') };
+}
+
+/**
+ * The least height of an answer row that is a button (px on the web, dp on the phone): a finger's press. An answer row is a
+ * button only when every row can be this tall in the answers' room (pollTilePressesFit), so the tile never offers presses
+ * smaller than a finger.
+ */
+export const POLL_TILE_PRESS = 44;
+
+/**
+ * Whether `rows` answer rows, each POLL_TILE_PRESS tall with `gap` between them, fit a room `room` tall (one unit, px or dp).
+ * False until the room is measured. Half a pixel of slack, as pollTileRowsThatFit.
+ */
+export function pollTilePressesFit(room: number, rows: number, gap: number): boolean {
+    if (!(room > 0) || !(rows > 0)) return false;
+    return room + 0.5 >= rows * POLL_TILE_PRESS + (rows - 1) * Math.max(0, gap);
+}
+
+/** Why a tile is not voted in place; null when it is. */
+export type PollTileVoteBlock =
+    /** The poll has closed: its results only. */
+    | 'closed'
+    /** Not signed in as a member here: the page says how to join. */
+    | 'member'
+    /** The poll offers a typed Other: its line to type is on the page. */
+    | 'other'
+    /** A sealed poll the member has answered: their answer is final. */
+    | 'answered'
+    /** The answers' room is not measured yet. */
+    | 'unmeasured'
+    /** Some answer is hidden behind "+N more": the page shows them all, so no answer is chosen unseen. */
+    | 'more'
+    /** Some answer's words are cut ("…"): the page shows them whole. */
+    | 'cut'
+    /** The rows cannot each be a finger's press tall (POLL_TILE_PRESS) in the room. */
+    | 'small';
+
+/** What the tile knows when it decides whether it is voted in place. */
+export interface PollTileVoteFacts {
+    closed: boolean;
+    /** Signed in, and a member of this community. */
+    canVote: boolean;
+    /** The poll offers a typed Other (pollOtherOption). */
+    other: boolean;
+    /** pollIsSealed, and the member has answered it. */
+    sealed: boolean;
+    answered: boolean;
+    /** The answers' room has been measured (and, where the app measures words, every shown answer's words too). */
+    measured: boolean;
+    /** How many answers are behind "+N more" (pollTileAnswers). */
+    more: number;
+    /** Some shown answer's words do not fit its row (the web's scrollWidth past its clientWidth, the phone's laid-out lines). */
+    cut: boolean;
+    /** Every shown answer row can be POLL_TILE_PRESS tall (pollTilePressesFit). */
+    pressesFit: boolean;
+}
+
+/**
+ * Whether the grid's poll tile is voted in place, and if not, why (Marty and Damo, 6 Nov 2026: the whole poll in front of the
+ * member, or the page). One rule for both apps. The tile is voted in place only when ALL hold:
+ *   1. every answer is shown (no "+N more" row);
+ *   2. no answer's words are cut;
+ *   3. the poll has no typed Other;
+ *   4. it is not a sealed poll the member has answered, and it has not closed;
+ *   5. the member can vote here (signed in, a member);
+ * and the room is measured, and every row can be a finger's press tall. Otherwise a tap anywhere opens the poll's page.
+ */
+export function pollTileVoteBlock(f: PollTileVoteFacts): PollTileVoteBlock | null {
+    if (f.closed) return 'closed';
+    if (!f.canVote) return 'member';
+    if (f.other) return 'other';
+    if (f.sealed && f.answered) return 'answered';
+    if (!f.measured) return 'unmeasured';
+    if (f.more > 0) return 'more';
+    if (f.cut) return 'cut';
+    if (!f.pressesFit) return 'small';
+    return null;
+}
+
+/** An answer row's name as a screen reader reads its button on a tile voted in place: "Vote: Saturday, 60%". */
+export function pollTileAnswerLabel(answer: string, pct: number): string {
+    return t('Vote: {answer}, {rate}%', { answer, rate: pct });
+}
+
+/** The footer's name as a screen reader reads it on a tile voted in place: it opens the poll's page. */
+export function pollTileOpenLabel(question: string): string {
+    return t('Open poll: {title}', { title: question });
 }
 
 /** The tile's one label, as a screen reader reads the button: the question, its answers and votes, and what it opens. */

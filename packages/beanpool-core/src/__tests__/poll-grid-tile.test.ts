@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-    POLL_GRID_TILE, pollTileAction, pollTileAnswers, pollTileLabel, pollTileMore, pollTilePercent, pollTileQuestionLines, pollTileRowGrow,
-    pollTileRowsThatFit, pollTileSummary, pollTileTotal,
+    POLL_GRID_TILE, POLL_TILE_PRESS, pollTileAction, pollTileAnswerLabel, pollTileAnswers, pollTileLabel, pollTileMore, pollTileOpenLabel,
+    pollTilePercent, pollTilePressesFit, pollTileQuestionLines, pollTileRowGrow, pollTileRowsThatFit, pollTileSummary, pollTileTotal,
+    pollTileVoteBlock, type PollTileVoteFacts,
 } from '../poll-grid-tile.js';
 
 /**
@@ -114,5 +115,82 @@ describe('the tile\'s words', () => {
             .toBe('Poll: What next?. 4 answers, 1 vote. Opens to vote');
         expect(pollTileLabel({ question: 'What next', answerCount: 2, totalVotes: 3, closed: true }))
             .toBe('Poll: What next. 2 answers, 3 votes. Opens the results');
+    });
+});
+
+/**
+ * Voted in the tile only when the whole poll is in front of the member (Marty and Damo, 6 Nov 2026: "if there are 2+ more it
+ * should jump to the card mandatory so you are presented with all answers. Otherwise the poll will be loaded").
+ */
+describe('pollTileVoteBlock: voted in the tile only when the whole poll is in front of the member', () => {
+    /** A short poll, measured, every answer whole and a press tall, a member signed in: voted in place. */
+    const whole: PollTileVoteFacts = {
+        closed: false, canVote: true, other: false, sealed: false, answered: false, measured: true, more: 0, cut: false, pressesFit: true,
+    };
+
+    it('the whole poll in front of a member: voted in place', () => {
+        expect(pollTileVoteBlock(whole)).toBeNull();
+    });
+
+    it('1. any answer behind "+N more" opens the page, one hidden answer or many', () => {
+        expect(pollTileVoteBlock({ ...whole, more: 1 })).toBe('more');
+        expect(pollTileVoteBlock({ ...whole, more: 4 })).toBe('more');
+    });
+
+    it('2. an answer whose words are cut opens the page', () => {
+        expect(pollTileVoteBlock({ ...whole, cut: true })).toBe('cut');
+    });
+
+    it('3. a poll with a typed Other opens the page, where its line to type is', () => {
+        expect(pollTileVoteBlock({ ...whole, other: true })).toBe('other');
+    });
+
+    it('4. a sealed poll the member answered opens the page; so does a closed poll (results only)', () => {
+        expect(pollTileVoteBlock({ ...whole, sealed: true, answered: true })).toBe('answered');
+        expect(pollTileVoteBlock({ ...whole, closed: true })).toBe('closed');
+        // Closed wins over everything: there is nothing to vote on.
+        expect(pollTileVoteBlock({ ...whole, closed: true, more: 2, cut: true })).toBe('closed');
+    });
+
+    it('5. a reader who cannot vote here (signed out, not a member) opens the page', () => {
+        expect(pollTileVoteBlock({ ...whole, canVote: false })).toBe('member');
+    });
+
+    it('nothing measured yet, or rows that cannot be a finger\'s press tall: the page', () => {
+        expect(pollTileVoteBlock({ ...whole, measured: false })).toBe('unmeasured');
+        expect(pollTileVoteBlock({ ...whole, pressesFit: false })).toBe('small');
+    });
+});
+
+describe('pollTilePressesFit: every row a finger\'s press tall', () => {
+    it('a press is 44 (px on the web, dp on the phone)', () => {
+        expect(POLL_TILE_PRESS).toBe(44);
+    });
+
+    it('rows of 44 and the gaps between them fit the room, or they do not', () => {
+        // Three rows of 44 with 4 between: 3 x 44 + 2 x 4 = 140.
+        expect(pollTilePressesFit(140, 3, 4)).toBe(true);
+        expect(pollTilePressesFit(139.6, 3, 4)).toBe(true);
+        expect(pollTilePressesFit(139, 3, 4)).toBe(false);
+        expect(pollTilePressesFit(44, 1, 4)).toBe(true);
+    });
+
+    it('false until something is measured', () => {
+        expect(pollTilePressesFit(0, 3, 4)).toBe(false);
+        expect(pollTilePressesFit(Number.NaN, 3, 4)).toBe(false);
+        expect(pollTilePressesFit(200, 0, 4)).toBe(false);
+    });
+});
+
+describe('the words on a tile voted in place', () => {
+    it('the footer says an answer votes and the rest opens the poll; closed and answered say what they said', () => {
+        expect(pollTileAction({ closed: false, answered: false, votable: true })).toEqual({ kind: 'here', hint: 'Tap an answer to vote', words: 'Open poll ›' });
+        expect(pollTileAction({ closed: false, answered: false, votable: false })).toEqual({ kind: 'vote', words: 'Tap to vote ›' });
+        expect(pollTileAction({ closed: true, answered: false, votable: true }).kind).toBe('results');
+    });
+
+    it('each answer\'s button reads out as the vote it casts; the footer as what it opens', () => {
+        expect(pollTileAnswerLabel('Saturday', 60)).toBe('Vote: Saturday, 60%');
+        expect(pollTileOpenLabel('Market day: Saturday or Sunday?')).toBe('Open poll: Market day: Saturday or Sunday?');
     });
 });

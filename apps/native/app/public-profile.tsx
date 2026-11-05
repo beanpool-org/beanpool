@@ -36,7 +36,7 @@ import { meetingTips } from '../utils/market-global';
 import { TIER_WORDS } from '../utils/trust-tier';
 import { Sentence } from '../components/Sentence';
 import { signedRequestWords } from '../components/signed-request-lines';
-import { askMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
+import { askMyVouching, rereadMyVouching, vouchFromProfile, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 
 
@@ -1462,6 +1462,7 @@ export default function PublicProfileScreen() {
                                         budgetLeft={myVouching.budget?.left ?? 0}
                                         budgetTotal={myVouching.budget?.level ?? 0}
                                         priorVouch={effectivePriorVouch}
+                                        personName={profile?.callsign || callsignStr || ''}
                                     />
                                     {!!vouchRefusal && (
                                         <Text style={styles.vouchRefusal} accessibilityRole="alert" testID="profile-vouch-refusal">
@@ -1490,9 +1491,11 @@ export default function PublicProfileScreen() {
                                                     vouchAmount: profileVouchPreset,
                                                     raise: isRaise,
                                                 });
-                                                if (!isRaise && !res.ok && res.code === 'already_vouched') {
-                                                    const prior = res.prior ?? (myPriorVouch > 0 ? myPriorVouch : 25);
-                                                    setNodePriorVouch(prior);
+                                                // The node's figure for your earlier vouch, when it sent one (`already_vouched`,
+                                                // `over_max`). Without it nothing is guessed: the node's own sentence is shown.
+                                                const prior = !res.ok && typeof res.prior === 'number' && res.prior > 0 ? res.prior : null;
+                                                if (prior !== null) setNodePriorVouch(prior);
+                                                if (!isRaise && !res.ok && res.code === 'already_vouched' && prior !== null) {
                                                     const newTotal = prior + profileVouchPreset;
                                                     Alert.alert(
                                                         t(VOUCH_PRESET_WORDS.raiseTitle),
@@ -1516,11 +1519,14 @@ export default function PublicProfileScreen() {
                                                                             raise: true,
                                                                         });
                                                                         if (raiseRes.ok) {
+                                                                            // The node's new total: the heading and the greyed presets follow it.
+                                                                            if (raiseRes.total > 0) setNodePriorVouch(raiseRes.total);
                                                                             setVouchSuccess(t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: raiseRes.total }));
                                                                             setProfileVouchPreset(null);
-                                                                            const updated = await askMyVouching(anchorUrl, identity);
-                                                                            setMyVouching(updated);
+                                                                            // A failed re-read keeps the card, its figures and this banner.
+                                                                            void rereadMyVouching(anchorUrl, identity, setMyVouching);
                                                                         } else {
+                                                                            if (typeof raiseRes.prior === 'number' && raiseRes.prior > 0) setNodePriorVouch(raiseRes.prior);
                                                                             setVouchRefusal(raiseRes.message);
                                                                         }
                                                                     } catch (e: any) {
@@ -1535,12 +1541,14 @@ export default function PublicProfileScreen() {
                                                     return;
                                                 }
                                                 if (res.ok) {
+                                                    // The node's new total: the heading and the greyed presets follow it.
+                                                    if (res.total > 0) setNodePriorVouch(res.total);
                                                     setVouchSuccess(isRaise
                                                         ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || callsignStr || '', total: res.total })
                                                         : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || callsignStr || '', amount: profileVouchPreset }));
                                                     setProfileVouchPreset(null);
-                                                    const updated = await askMyVouching(anchorUrl, identity);
-                                                    setMyVouching(updated);
+                                                    // A failed re-read keeps the card, its figures and this banner.
+                                                    void rereadMyVouching(anchorUrl, identity, setMyVouching);
                                                 } else {
                                                     setVouchRefusal(res.message);
                                                 }

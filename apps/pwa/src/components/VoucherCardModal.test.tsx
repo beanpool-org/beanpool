@@ -104,6 +104,17 @@ describe('VoucherCardModal (slice V3, §5, §10)', () => {
         expect(closeBtn.className).toMatch(/min-h-\[44px\]/);
     });
 
+    it('the quick budget levels (500 · 1,000 · 1,500 · 2,000) are at least 44 px tall, like the steppers (#2915 round 4)', async () => {
+        render(<VoucherCardModal memberPubkey={SAMPLE_CARD.memberPubkey} onClose={() => {}} />);
+        await waitFor(() => expect(screen.getByText('Set budget to')).toBeInTheDocument());
+
+        for (const lvl of [500, 1000, 1500, 2000]) {
+            const pill = screen.getByTestId(`voucher-level-${lvl}`);
+            expect(pill.className).toMatch(/min-h-\[44px\]/);
+            expect(pill.className).not.toMatch(/min-h-\[40px\]/);
+        }
+    });
+
     it('controls "Set budget to": quick levels, raise/lower stepper, never below held', async () => {
         render(<VoucherCardModal memberPubkey={SAMPLE_CARD.memberPubkey} onClose={() => {}} />);
         await waitFor(() => expect(screen.getByText('Set budget to')).toBeInTheDocument());

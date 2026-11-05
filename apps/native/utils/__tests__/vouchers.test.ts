@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { askMyVouching, vouchFromProfile } from '../vouchers';
+import { askMyVouching, rereadMyVouching, vouchFromProfile } from '../vouchers';
 
 const signedGets = vi.hoisted(() => ({ calls: [] as any[], res: null as any }));
 const signedPosts = vi.hoisted(() => ({ calls: [] as any[], res: null as any }));
@@ -142,5 +142,64 @@ describe('Native vouchers utils (slice V3)', () => {
             expect(res.code).toBe('already_vouched');
             expect(res.prior).toBe(25);
         }
+    });
+
+    it('vouchFromProfile leaves prior unset when the node sends none (the apps then guess nothing)', async () => {
+        signedPosts.res = { ok: false, json: async () => ({ error: 'You’ve already vouched for @Sam.', code: 'already_vouched' }) };
+        const res = await vouchFromProfile(ANCHOR, ID, { memberPubkey: 'target-pk', vouchAmount: 25 });
+        expect(res.ok).toBe(false);
+        if (!res.ok) {
+            expect(res.prior).toBeUndefined();
+            expect(res.message).toBe('You’ve already vouched for @Sam.');
+        }
+    });
+});
+
+/** #2915 round 4, note 6: a failed re-read after a vouch that landed keeps the card and its banner. */
+describe('rereadMyVouching', () => {
+    const GOOD = {
+        voucher: true,
+        budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 5, level: 1000 },
+        presets: [25, 50, 75, 100],
+        vouchMax: 100,
+        budgetMax: 2000,
+        vouchedBy: [],
+    };
+
+    beforeEach(() => {
+        signedGets.calls = [];
+        signedGets.res = null;
+    });
+
+    it('hands the fresh figures over when the read works', async () => {
+        signedGets.res = { ok: true, json: async () => GOOD };
+        const apply = vi.fn();
+        await rereadMyVouching(ANCHOR, ID, apply, 0);
+        expect(apply).toHaveBeenCalledTimes(1);
+        expect(apply).toHaveBeenCalledWith(GOOD);
+        expect(signedGets.calls).toHaveLength(1);
+    });
+
+    it('never hands null over when the read fails, and tries once more quietly', async () => {
+        signedGets.res = { ok: false, json: async () => ({}) };
+        const apply = vi.fn();
+        await rereadMyVouching(ANCHOR, ID, apply, 0);
+        expect(apply).not.toHaveBeenCalled();
+        expect(signedGets.calls).toHaveLength(2);
+    });
+
+    it('a second try that works hands the figures over once', async () => {
+        let n = 0;
+        const { signedGet } = await import('../node-post');
+        vi.mocked(signedGet).mockImplementation(async (anchor: string, path: string, identity: any) => {
+            signedGets.calls.push({ anchor, path, identity });
+            n += 1;
+            return (n === 1 ? { ok: false, json: async () => ({}) } : { ok: true, json: async () => GOOD }) as any;
+        });
+        const apply = vi.fn();
+        await rereadMyVouching(ANCHOR, ID, apply, 0);
+        expect(apply).toHaveBeenCalledTimes(1);
+        expect(apply).toHaveBeenCalledWith(GOOD);
+        expect(signedGets.calls).toHaveLength(2);
     });
 });

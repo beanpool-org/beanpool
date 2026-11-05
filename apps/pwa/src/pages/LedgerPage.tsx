@@ -22,6 +22,7 @@ import {
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
+import { MyBudgetModal } from '../components/MyBudgetModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerVouchedBy, ledgerBudget, type TierName } from '@beanpool/core';
@@ -1262,67 +1263,10 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             />
 
             {showBudgetModal && myVouching?.budget && (
-                <div
-                    className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50"
-                    role="dialog"
-                    aria-modal="true"
-                    onClick={() => setShowBudgetModal(false)}
-                >
-                    <div
-                        className="w-full sm:max-w-[480px] max-h-[85vh] overflow-y-auto p-5 rounded-t-2xl sm:rounded-2xl bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 shadow-xl"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                            <h3 className="m-0 text-base font-extrabold text-nature-950 dark:text-white">
-                                {t('Your budget to vouch from')}
-                            </h3>
-                            <button
-                                type="button"
-                                onClick={() => setShowBudgetModal(false)}
-                                className="p-1 text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-0 cursor-pointer"
-                                aria-label={t('Close')}
-                            >
-                                ✕
-                            </button>
-                        </div>
-                        <div className="p-3.5 mb-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 space-y-1 text-xs text-nature-700 dark:text-nature-300">
-                            <div className="text-sm font-extrabold text-nature-950 dark:text-white">
-                                {t('{left} of {total} left', { left: formatNumber(myVouching.budget.left), total: formatNumber(myVouching.budget.level) })}
-                            </div>
-                            <div>{t('Vouched {amount} to {people} who joined', { amount: formatNumber(myVouching.budget.vouched), people: tn(myVouching.budget.peopleVouched, '{n} person', '{n} people') })}</div>
-                            <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(myVouching.budget.held), invites: tn(myVouching.budget.heldInvites, '{n} invite', '{n} invites') })}</div>
-                        </div>
-
-                        <div className="mb-4">
-                            <h4 className="m-0 mb-2 text-sm font-bold text-nature-950 dark:text-white">
-                                {t('Budget history')}
-                            </h4>
-                            <div className="space-y-2 max-h-[35vh] overflow-y-auto pr-1">
-                                {!myVouching.history || myVouching.history.length === 0 ? (
-                                    <p className="m-0 p-3 text-xs text-nature-500">{t('No budget history yet.')}</p>
-                                ) : (
-                                    myVouching.history.map((h, i) => (
-                                        <div key={i} className="p-2.5 rounded-lg border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-xs">
-                                            <div className="flex items-start justify-between gap-2 font-bold text-nature-950 dark:text-white">
-                                                <span className="flex-1 break-words">{formatHistoryLine(h)}</span>
-                                                <span className="text-[11px] text-nature-400 font-normal shrink-0">{h.at ? formatDate(new Date(h.at), 'day-month-year') : ''}</span>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900">
-                            <h4 className="m-0 mb-1 text-sm font-bold text-nature-950 dark:text-white">
-                                {t('Ask for more')}
-                            </h4>
-                            <p className="m-0 text-xs text-nature-600 dark:text-nature-300 leading-relaxed">
-                                {t('To get a bigger budget to vouch from, ask an owner of this community.')}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                <MyBudgetModal
+                    vouching={myVouching as MyVouching & { budget: NonNullable<MyVouching['budget']> }}
+                    onClose={() => setShowBudgetModal(false)}
+                />
             )}
         </div>
     );

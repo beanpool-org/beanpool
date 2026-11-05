@@ -16,10 +16,13 @@ export interface VouchPresetChoiceProps {
     onChange: (value: number | null) => void;
     budgetLeft: number;
     budgetTotal: number;
+    /** What you have vouched for this person already (the node's figure): a preset past VOUCH_MAX with it is greyed. */
     priorVouch?: number;
+    /** Their callsign, for the sentence a greyed-by-the-cap preset says. */
+    personName?: string;
 }
 
-export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch }: VouchPresetChoiceProps) {
+export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch, personName }: VouchPresetChoiceProps) {
     const { colors } = useTheme();
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
@@ -81,14 +84,22 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
         ? t(vouchPresets.noneLeft)
         : t(vouchPresets.fromBudget, { left: formatNumber(budgetLeft), total: formatNumber(budgetTotal) });
 
-    const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean }[] = [
+    const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean; why?: string }[] = [
         { amount: null, label: t(vouchPresets.none), ariaLabel: t(vouchPresets.none), disabled: false },
-        ...VOUCH_PRESETS.map((p) => ({
-            amount: p,
-            label: String(p),
-            ariaLabel: t(vouchPresets.beans, { amount: p }),
-            disabled: p > budgetLeft || (priorVouch !== undefined && priorVouch > 0 && priorVouch + p > VOUCH_MAX),
-        })),
+        ...VOUCH_PRESETS.map((p) => {
+            const wouldExceedMax = priorVouch !== undefined && priorVouch > 0 && priorVouch + p > VOUCH_MAX;
+            const notEnoughBudget = p > budgetLeft;
+            return {
+                amount: p,
+                label: String(p),
+                ariaLabel: t(vouchPresets.beans, { amount: p }),
+                disabled: notEnoughBudget || wouldExceedMax,
+                // The cap first: more budget would not make this preset possible.
+                why: wouldExceedMax
+                    ? t(vouchPresets.pastMax, { name: personName ?? '', max: formatNumber(VOUCH_MAX) })
+                    : notEnoughBudget ? t(vouchPresets.notEnough) : undefined,
+            };
+        }),
     ];
 
     return (
@@ -96,7 +107,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
             <Text style={styles.label}>{t(vouchPresets.label)}</Text>
             <Text style={styles.subtitle}>{subtitle}</Text>
             <View style={styles.row}>
-                {choices.map(({ amount, label, ariaLabel, disabled }) => {
+                {choices.map(({ amount, label, ariaLabel, disabled, why }) => {
                     const isSelected = value === amount;
                     return (
                         <Pressable
@@ -106,7 +117,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
                             accessibilityRole="radio"
                             accessibilityState={{ selected: isSelected, disabled }}
                             accessibilityLabel={ariaLabel}
-                            accessibilityHint={disabled ? t(vouchPresets.notEnough) : undefined}
+                            accessibilityHint={disabled ? why : undefined}
                             testID={`invite-vouch-${amount ?? 'none'}`}
                             style={[
                                 styles.chip,

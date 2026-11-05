@@ -327,11 +327,14 @@ async function main(): Promise<void> {
     const second = await vouch(jane, sam, 25);
     assert(second.status === 409 && second.body?.code === 'already_vouched' && second.body?.error === 'You’ve already vouched for @Sam.',
         `6. a second separate vouch by the same voucher is refused: "${second.body?.error}"`);
+    // The apps word "You vouched 25 for @Sam before. Raise it to 50?" from this figure, and guess nothing without it.
+    assert(second.body?.prior === 25, `6. the already_vouched refusal carries the voucher's earlier vouch as prior (${show(second)})`);
     const raise100 = await vouch(jane, sam, 75, true);
     assert(raise100.status === 200 && raise100.body?.total === 100 && count("SELECT COUNT(*) AS n FROM room_gifts WHERE from_pubkey = ? AND to_pubkey = ?", jane.pk, sam.pk) === 2,
         `6. a raise to 100 passes: a further hold and room_gifts row on the same pair (${show(raise100)})`);
     const past = await vouch(jane, sam, 25, true);
     assert(past.status === 409 && past.body?.code === 'over_max', `6. a raise past 100 is refused (${show(past)})`);
+    assert(past.body?.prior === 100, `6. the over_max refusal carries the pair's total so far as prior (${show(past)})`);
     require_((await vouch(owen, sam, 25)).status === 200 && (await vouch(ada, sam, 25)).status === 200, 'Owen and Ada vouch for Sam too: three vouchers');
     require_((await call(owen, 'POST', '/api/names/vouchers', { entryId: confirm(bea, owen), amount: 500 })).status === 201, 'Bea is made a voucher');
     const fourth = await vouch(bea, sam, 25);
@@ -362,7 +365,7 @@ async function main(): Promise<void> {
     require_(umaJoins.status === 200 && umaJoins.body?.vouch?.landed === 50 && roomOf(uma.pk) === 50, `Uma joins on Jane's invite with a 50 vouch (${show(umaJoins)})`);
     const umaSecond = await vouch(jane, uma, 25);
     const umaRaise = await vouch(jane, uma, 50, true);
-    assert(umaSecond.body?.code === 'already_vouched' && umaRaise.status === 200 && umaRaise.body?.total === 100,
+    assert(umaSecond.body?.code === 'already_vouched' && umaSecond.body?.prior === 50 && umaRaise.status === 200 && umaRaise.body?.total === 100,
         `6. an invite vouch counts as that pair's one vouch: a separate one refused, a raise to 100 passes (${umaSecond.body?.code} ${show(umaRaise)})`);
     const selfVouch = await vouch(jane, jane, 25);
     assert(selfVouch.status === 403 && selfVouch.body?.code === 'own_vouch', '6. never for yourself');

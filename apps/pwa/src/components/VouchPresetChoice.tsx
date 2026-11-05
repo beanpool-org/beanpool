@@ -5,6 +5,8 @@
  * Shows:
  *   - "From your budget: 550 of 1,000 left" under it
  *   - A preset above what is left is greyed ("Not enough budget left")
+ *   - A preset that would take your vouches for this person past 100 is greyed, and says so
+ *     ("Your vouches for @sam can’t go past 100 Beans."): the cap, not the budget, is the reason
  *   - Nothing left: "No budget left. Ask an owner for more."
  *
  * Accessible radios, wrapping cleanly at 320 px with 1.3x text; each choice >= 44 px tall.
@@ -17,17 +19,20 @@ export interface VouchPresetChoiceProps {
     onChange: (value: number | null) => void;
     budgetLeft: number;
     budgetTotal: number;
+    /** What you have vouched for this person already (the node's figure): a preset past VOUCH_MAX with it is greyed. */
     priorVouch?: number;
+    /** Their callsign, for the sentence a greyed-by-the-cap preset says. */
+    personName?: string;
 }
 
-export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch }: VouchPresetChoiceProps) {
+export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, priorVouch, personName }: VouchPresetChoiceProps) {
     const id = useId();
     const noneLeft = budgetLeft <= 0;
     const subtitle = noneLeft
         ? t(vouchPresets.noneLeft)
         : t(vouchPresets.fromBudget, { left: formatNumber(budgetLeft), total: formatNumber(budgetTotal) });
 
-    const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean }[] = [
+    const choices: { amount: number | null; label: string; ariaLabel: string; disabled: boolean; why?: string }[] = [
         { amount: null, label: t(vouchPresets.none), ariaLabel: t(vouchPresets.none), disabled: false },
         ...VOUCH_PRESETS.map((p) => {
             const wouldExceedMax = priorVouch !== undefined && priorVouch > 0 && priorVouch + p > VOUCH_MAX;
@@ -37,6 +42,10 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
                 label: String(p),
                 ariaLabel: t(vouchPresets.beans, { amount: p }),
                 disabled: notEnoughBudget || wouldExceedMax,
+                // The cap first: more budget would not make this preset possible.
+                why: wouldExceedMax
+                    ? t(vouchPresets.pastMax, { name: personName ?? '', max: formatNumber(VOUCH_MAX) })
+                    : notEnoughBudget ? t(vouchPresets.notEnough) : undefined,
             };
         }),
     ];
@@ -50,13 +59,13 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
                 {subtitle}
             </p>
             <div className="flex flex-wrap gap-2">
-                {choices.map(({ amount, label, ariaLabel, disabled }) => {
+                {choices.map(({ amount, label, ariaLabel, disabled, why }) => {
                     const checked = amount === value;
                     return (
                         <label
                             key={String(amount)}
                             className={`relative flex-auto min-w-[52px] ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
-                            title={disabled ? t(vouchPresets.notEnough) : undefined}
+                            title={disabled ? why : undefined}
                         >
                             <input
                                 type="radio"

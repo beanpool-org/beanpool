@@ -204,7 +204,8 @@ export function VoucherCardModal({ memberPubkey, onClose, onUpdated }: VoucherCa
                                                     type="button"
                                                     onClick={() => setTargetLevel(lvl)}
                                                     disabled={lvl < minLevel}
-                                                    className={`min-h-[40px] px-2 py-1.5 rounded-lg text-xs font-extrabold border cursor-pointer transition-colors ${
+                                                    data-testid={`voucher-level-${lvl}`}
+                                                    className={`min-h-[44px] px-2 py-1.5 rounded-lg text-xs font-extrabold border cursor-pointer transition-colors ${
                                                         targetLevel === lvl
                                                             ? 'bg-bp-commit-fill text-bp-commit-on border-transparent'
                                                             : 'bg-oat-50 dark:bg-nature-950 text-nature-800 dark:text-nature-200 border-nature-200 dark:border-nature-800 hover:border-nature-400'

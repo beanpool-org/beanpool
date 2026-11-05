@@ -7,7 +7,7 @@ import {
     fetchJoinRequests, approveJoinRequest, declineJoinRequest, joinRequestAge, KNOCK_UNREACHABLE_TEXT,
     type JoinRequest,
 } from '../utils/knock-inbox';
-import { askMyVouching, type MyVouching } from '../utils/vouchers';
+import { askMyVouching, rereadMyVouching, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from './VouchPresetChoice';
 import { t, tn, word } from '@beanpool/core';
 
@@ -111,7 +111,8 @@ export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
             setTotal(prev => { const n = Math.max(0, prev - 1); onCount?.(n); return n; });
             setRefusal(null);
             setDone(verb === 'approve' ? t('You invited {name}. Their app will find the invite by itself.', { name: req.callsign }) : null);
-            if (verb === 'approve' && chosenVouch) askMyVouching(anchorUrl, identity).then(setMyVouching).catch(() => {});
+            // A failed re-read keeps the presets as they were (utils/vouchers.ts rereadMyVouching).
+            if (verb === 'approve' && chosenVouch) void rereadMyVouching(anchorUrl, identity, setMyVouching);
             // More are waiting than this page shows (it holds the first 20): read it again, so the next ones come up and
             // the count is the node's.
             if (Math.max(0, total - 1) > left) load();

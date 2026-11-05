@@ -5374,7 +5374,6 @@
   "{left} of {total} left · {vouched} vouched · {below} below zero": "بقي {left} من {total} · تمت تزكية {vouched} · {below} تحت الصفر",
   "+ Make someone a voucher": "+ تعيين شخص ما مزكّيًا",
   "Each invite code is single-use and valid for 30 days. Generate a new code for each person you invite.": "كل رمز دعوة صالح للاستخدام مرة واحدة ولمدة 30 يومًا. أنشئ رمزًا جديدًا لكل شخص تدعوه.",
-  "The names list is managed in the operator manual or manager (apps/manager). S2 web names list entry screen is coming soon.": "تتم إدارة قائمة الأسماء في دليل المشغل أو المدير (apps/manager). ستتوفر شاشة إدخال قائمة أسماء الويب S2 قريبًا.",
   "OK": "حسنًا",
   "Enter a valid amount": "أدخل مبلغًا صحيحًا",
   "✓ Given!": "✓ تم المنح!",

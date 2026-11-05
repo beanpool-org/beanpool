@@ -289,7 +289,8 @@ export function InviteAsksToAnswer({ anchorUrl, identity }: { anchorUrl: string;
 
     const load = useCallback(async () => {
         setAsks(await readAsksToAnswer(anchorUrl, identity));
-        askMyVouching(anchorUrl, identity).then(setMyVouching).catch(() => {});
+        // A failed read keeps what is shown: askMyVouching's null is "could not read", not "not a voucher".
+        askMyVouching(anchorUrl, identity).then((mv) => { if (mv) setMyVouching(mv); }).catch(() => {});
     }, [anchorUrl, identity]);
     useFocusEffect(useCallback(() => { void load(); }, [load]));
 

@@ -31,7 +31,7 @@ import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
-import { askMyVouching, type MyVouching } from '../../utils/vouchers';
+import { askMyVouching, rereadMyVouching, type MyVouching } from '../../utils/vouchers';
 import { VouchPresetChoice } from '../../components/VouchPresetChoice';
 import {
     guestDoorButton, guestDoorText, guestDoorLabel, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
@@ -533,7 +533,7 @@ export default function PeopleScreen() {
                         await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
                         setGenerating(false);
                         if (anchorUrl && identity) {
-                            void askMyVouching(anchorUrl, identity).then(setMyVouching).catch(() => {});
+                            void rereadMyVouching(anchorUrl, identity, setMyVouching);
                         }
                         return;
                     }

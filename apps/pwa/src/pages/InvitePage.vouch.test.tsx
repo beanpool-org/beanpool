@@ -195,6 +195,24 @@ describe('InvitePage Vouching & Presets (V3, §4 & §11)', () => {
         expect(screen.getByTestId('make-voucher-button')).toBeInTheDocument();
     });
 
+    it('"+ Make someone a voucher" says one plain sentence, no developer words, and closes on Escape (#2915 round 4)', async () => {
+        render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
+        await waitFor(() => expect(screen.getByTestId('make-voucher-button')).toBeInTheDocument());
+
+        const row = screen.getByTestId('make-voucher-button');
+        row.focus();
+        fireEvent.click(row);
+        const dialog = screen.getByRole('dialog', { name: '+ Make someone a voucher' });
+        expect(dialog).toHaveTextContent('Make vouchers on the names list in the phone app.');
+        // Never a repo folder, a slice code or a promise of screens to come.
+        expect(dialog.textContent).not.toMatch(/apps\/|manager|\bS\d\b|coming soon/i);
+        expect(document.activeElement).toBe(screen.getByRole('heading', { name: '+ Make someone a voucher' }));
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: '+ Make someone a voucher' })).toBeNull();
+        expect(document.activeElement).toBe(row);
+    });
+
     it('does not render Vouchers block when member is not owner/committee admin', async () => {
         vi.mocked(getVouchersBlock).mockRejectedValueOnce(new Error('committee_only'));
 

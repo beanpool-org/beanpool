@@ -24,6 +24,7 @@ import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/Sho
 import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
 import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { VoucherCardModal } from '../components/VoucherCardModal';
+import { MakeVoucherNotice } from '../components/MakeVoucherNotice';
 import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, vouchPresets } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
@@ -756,33 +757,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                 />
             )}
 
-            {showMakeVoucherNotice && (
-                <div
-                    className="fixed inset-0 z-[320] flex items-center justify-center p-4 bg-black/50"
-                    role="dialog"
-                    aria-modal="true"
-                    onClick={() => setShowMakeVoucherNotice(false)}
-                >
-                    <div
-                        className="w-full max-w-[420px] p-5 rounded-2xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 shadow-xl"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <h3 className="m-0 mb-2 text-base font-extrabold text-nature-950 dark:text-white">
-                            {t('+ Make someone a voucher')}
-                        </h3>
-                        <p className="m-0 mb-4 text-sm text-nature-600 dark:text-nature-300 leading-relaxed">
-                            {t('The names list is managed in the operator manual or manager (apps/manager). S2 web names list entry screen is coming soon.')}
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => setShowMakeVoucherNotice(false)}
-                            className="w-full min-h-[44px] py-2 px-4 rounded-xl font-bold bg-bp-commit-fill text-bp-commit-on border-0 cursor-pointer"
-                        >
-                            {t('OK')}
-                        </button>
-                    </div>
-                </div>
-            )}
+            {showMakeVoucherNotice && <MakeVoucherNotice onClose={() => setShowMakeVoucherNotice(false)} />}
         </div>
     );
 }

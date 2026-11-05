@@ -4662,7 +4662,6 @@
   "{left} of {total} left · {vouched} vouched · {below} below zero": "{total}-এর মধ্যে {left} বাকি আছে · {vouched} নিশ্চয়তাপ্রাপ্ত · {below} শূন্যের নিচে",
   "+ Make someone a voucher": "+ কাউকে নিশ্চয়তাকারী করুন",
   "Each invite code is single-use and valid for 30 days. Generate a new code for each person you invite.": "প্রতিটি আমন্ত্রণ কোড একক ব্যবহারের জন্য এবং 30 দিনের জন্য বৈধ। আপনি যাকে আমন্ত্রণ জানাচ্ছেন তাঁর জন্য একটি নতুন কোড তৈরি করুন।",
-  "The names list is managed in the operator manual or manager (apps/manager). S2 web names list entry screen is coming soon.": "নামের তালিকা অপারেটর ম্যানুয়াল বা ম্যানেজারে (apps/manager) পরিচালিত হয়। S2 ওয়েব নামের তালিকা এন্ট্রি স্ক্রিন শীঘ্রই আসছে।",
   "OK": "ঠিক আছে",
   "Enter a valid amount": "একটি বৈধ পরিমাণ লিখুন",
   "✓ Given!": "✓ দেওয়া হয়েছে!",

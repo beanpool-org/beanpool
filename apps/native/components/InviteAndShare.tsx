@@ -20,7 +20,7 @@ import { onlyAdminsInvite, type InviteRole } from '../utils/invite-entries';
 import { inviteLink } from '../utils/names-invite';
 import { makeInviteForShare, offersInviteAndShare } from '../utils/invite-and-share';
 import type { BeanPoolIdentity } from '../utils/identity';
-import { askMyVouching, type MyVouching } from '../utils/vouchers';
+import { askMyVouching, rereadMyVouching, type MyVouching } from '../utils/vouchers';
 import { VouchPresetChoice } from './VouchPresetChoice';
 
 export interface InviteAndShare {
@@ -93,7 +93,8 @@ export function useInviteAndShare(post: { id: string; title: string }, enabled: 
                 return false;
             }
             setVouchPreset(null);
-            askMyVouching(who.anchor, who.identity).then(setMyVouching).catch(() => {});
+            // A failed re-read keeps the presets as they were (utils/vouchers.ts rereadMyVouching).
+            void rereadMyVouching(who.anchor, who.identity, setMyVouching);
             await Share.share({ message: `${post.title}\n${inviteLink(who.anchor, made.code, post.id)}`, title: post.title });
             return true;
         } catch (e: any) {

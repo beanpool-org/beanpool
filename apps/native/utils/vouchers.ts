@@ -58,6 +58,27 @@ export async function askMyVouching(
     }
 }
 
+/**
+ * After a vouch or an invite that landed: read the budget again and hand it to `apply`. A failed read (offline, a 5xx)
+ * hands nothing, so the screen keeps what it shows (the card, its figures, a success banner), and it tries once more,
+ * quietly, after `retryMs`. Never `apply(null)`: askMyVouching's null means "could not read", not "not a voucher".
+ */
+export async function rereadMyVouching(
+    anchor: string,
+    identity: BeanPoolIdentity,
+    apply: (mv: MyVouching) => void,
+    retryMs = 3000,
+): Promise<void> {
+    const first = await askMyVouching(anchor, identity);
+    if (first) {
+        apply(first);
+        return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, retryMs));
+    const second = await askMyVouching(anchor, identity);
+    if (second) apply(second);
+}
+
 export async function vouchFromProfile(
     anchor: string,
     identity: BeanPoolIdentity,

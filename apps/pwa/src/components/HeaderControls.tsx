@@ -119,22 +119,45 @@ export function HelpIcon({ className, strokeWidth = 1.5 }: { className: string; 
     );
 }
 
+/** The person-plus icon (the web's equivalent of the phone's account-plus-outline): Invite friends. */
+export function InviteIcon({ className, strokeWidth = 1.75 }: { className: string; strokeWidth?: number }) {
+    return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={strokeWidth} stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
+        </svg>
+    );
+}
+
 /**
  * Each control in the pill: a 24 px icon in a target 44 px tall (it overhangs the 38 px pill by 3 px above and below, so the
- * header keeps its height) and a third of the pill wide (33 px). Gold (Marty, 14 Oct 2026: "maybe gold", over the header photo),
+ * header keeps its height). Gold (Marty, 14 Oct 2026: "maybe gold", over the header photo),
  * the library's gold fill, as the phone's selected Settings icon; lighter (the gold's own hover) under the pointer.
  */
 const PILL_BUTTON = 'flex-1 min-w-0 h-[44px] -my-[4px] p-0 border-0 bg-transparent cursor-pointer flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill';
 const PILL_ICON = 'w-[24px] h-[24px] shrink-0';
 
 /**
- * The mobile header's pill: your profile, the "?" and Settings (its own file so its fit at 320 px can be measured alone).
+ * The mobile header's pill: your profile, the "?", Invite friends and Settings (its own file so its fit at 320 px can be measured alone).
  * Charcoal in both themes, the gold pair's own words colour, so the gold icons on it are the library's gold pair the other
  * way round (7.5:1) whatever the photo is under it. Above the header's dimming layer (in dark it is black at 50%, and the
  * pill sat under it, dimmed with the photo), still under the map tab's logo where they meet. Settings open: a gold disc with a charcoal icon in it (the pair as the
  * library draws it), so the open state is a filled shape and not a change of colour alone.
  */
-export function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
+export function HeaderControls({
+    showSettings,
+    setShowSettings,
+    identityPubkey,
+    onOpenProfile,
+    onNavigate,
+    isMember = true,
+}: {
+    showSettings: boolean;
+    setShowSettings: (v: boolean) => void;
+    identityPubkey?: string;
+    onOpenProfile: (pk: string) => void;
+    onNavigate?: (tab: string, ctxId?: string, txId?: string) => void;
+    isMember?: boolean;
+}) {
     return (
         <div data-testid="header-pill" className="relative z-[5] bg-bp-gold-on" style={{
             display: 'flex',
@@ -168,6 +191,21 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
                 <HelpIcon className={PILL_ICON} strokeWidth={1.75} />
             </button>
 
+            {isMember && (
+                <button
+                    onClick={() => {
+                        setShowSettings(false);
+                        onNavigate?.('people-invites');
+                    }}
+                    aria-label={t('Invite friends')}
+                    title={t('Invite friends')}
+                    data-testid="header-invite"
+                    className={`${PILL_BUTTON} text-bp-gold-fill hover:text-bp-gold-hover`}
+                >
+                    <InviteIcon className={PILL_ICON} strokeWidth={1.75} />
+                </button>
+            )}
+
             <button
                 onClick={() => setShowSettings(!showSettings)}
                 aria-label={t('Settings')}
@@ -187,12 +225,22 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
 }
 
 /**
- * The sidebar's "?" and Settings (wide screens, beside the sync status), gold as the pill's: on the sidebar's own pale or
+ * The sidebar's "?", Invite friends, and Settings (wide screens, beside the sync status), gold as the pill's: on the sidebar's own pale or
  * dark ground that is the library's gold for icons on a page (ink.warning: amber-800 in light, where the gold fill is only
  * 2.1:1 on the pale sidebar; amber-400 in dark). 24 px icons in 44 px targets. Settings open: the gold disc with a charcoal
  * icon, as the pill's.
  */
-export function SidebarControls({ showSettings, setShowSettings }: { showSettings: boolean; setShowSettings: (v: boolean) => void }) {
+export function SidebarControls({
+    showSettings,
+    setShowSettings,
+    onNavigate,
+    isMember = true,
+}: {
+    showSettings: boolean;
+    setShowSettings: (v: boolean) => void;
+    onNavigate?: (tab: string, ctxId?: string, txId?: string) => void;
+    isMember?: boolean;
+}) {
     return (
         <>
             <button
@@ -204,6 +252,20 @@ export function SidebarControls({ showSettings, setShowSettings }: { showSetting
             >
                 <HelpIcon className="w-6 h-6" strokeWidth={1.75} />
             </button>
+            {isMember && (
+                <button
+                    onClick={() => {
+                        setShowSettings(false);
+                        onNavigate?.('people-invites');
+                    }}
+                    aria-label={t('Invite friends')}
+                    title={t('Invite friends')}
+                    data-testid="sidebar-invite"
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-colors cursor-pointer text-bp-ink-warning hover:bg-nature-200/60 dark:hover:bg-nature-800/60"
+                >
+                    <InviteIcon className="w-6 h-6" strokeWidth={1.75} />
+                </button>
+            )}
             <button
                 onClick={() => setShowSettings(!showSettings)}
                 aria-label={t('Settings')}

@@ -92,6 +92,8 @@ export function MobileHeader({
                 setShowSettings={setShowSettings}
                 identityPubkey={identityPubkey}
                 onOpenProfile={onOpenProfile}
+                onNavigate={onNavigate}
+                isMember={!isGuest}
             />
         </header>
     );
@@ -99,7 +101,7 @@ export function MobileHeader({
 
 /**
  * The side bar's status (768 px and up): the needs-you icons on a row of their own, then the connection status with the
- * "?" and Settings. The side bar is 256 px: its row holds the status and those two, and a row of icons beside them pushed
+ * "?", Invite friends and Settings. The side bar is 256 px: its row holds the status and those three, and a row of icons beside them pushed
  * Settings off it, so they don't share it.
  */
 export function SidebarStatus({ isGuest, identityPubkey, activeTab, onNavigate, settingsSeen, setShowSettings }: {
@@ -115,7 +117,12 @@ export function SidebarStatus({ isGuest, identityPubkey, activeTab, onNavigate, 
             <NeedsYouIcons identityPubkey={identityPubkey} onNavigate={onNavigate} activeTab={activeTab} variant="sidebar" />
             <div className="flex items-center justify-between px-2 py-1">
                 <SyncStatus isMember={!isGuest} />
-                <SidebarControls showSettings={settingsSeen} setShowSettings={setShowSettings} />
+                <SidebarControls
+                    showSettings={settingsSeen}
+                    setShowSettings={setShowSettings}
+                    onNavigate={onNavigate}
+                    isMember={!isGuest}
+                />
             </div>
         </>
     );

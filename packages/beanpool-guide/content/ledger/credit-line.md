@@ -67,12 +67,12 @@ Your level doesn't change, on your profile and on your listings alike: it counts
 
 ## Giving part of your credit line
 
-You can give part of your credit line to another member. On **Send**, open the **Credit line** tab beside **Beans**.
+You can give part of your credit line to another member. If you hold credit line someone gave you, and your community has giving switched on, **Send** shows a **Credit line** tab beside **Beans**: open it. Without both, there is no tab.
 
 - **Only credit someone gave you:** you can only give credit that a voucher or another member gave you. You cannot give your known floor or credit you earned by trading.
 - **Only what you aren't using:** you can give only as much credit as your balance and your live Offers leave unused, so giving credit never pauses your spending.
 - **After your first trade:** you can give credit once you have completed your first trade in the market, the same rule as sending Beans.
-- **Up to the community limit:** you can give up to 100 Beans per gift (or your community's setting, if an owner set a lower limit).
+- **Up to the community's setting:** a gift is at most 100 Beans, or less if an owner set it lower. A setting of 0 switches giving off.
 - **It is theirs for good:** the credit line moves to the recipient permanently. It never makes them a voucher. You cannot give credit to yourself, an enterprise, or a paused or frozen member.
 
 ## Spending paused

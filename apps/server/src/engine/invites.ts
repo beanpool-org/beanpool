@@ -319,7 +319,8 @@ export function redeemInvite(
         const outcome = invite.names_entry_id ? confirmByInvite(invite.created_by, invite.names_entry_id, publicKey) : null;
         db.prepare("UPDATE invite_codes SET used_by = ?, used_at = ?, names_bind_outcome = ? WHERE code COLLATE NOCASE = ?")
             .run(publicKey, new Date().toISOString(), outcome, code);
-        if (invite.vouch_amount) vouch = landInviteVouch(invite.created_by, invite.code, publicKey, invite.vouch_amount);
+        const voucherMaker = invite.issued_by || invite.created_by;
+        if (invite.vouch_amount) vouch = landInviteVouch(voucherMaker, invite.code, publicKey, invite.vouch_amount);
         return m;
     })();
     if (!member) {

@@ -473,6 +473,14 @@ async function main(): Promise<void> {
     const owenBudgetAfter = count('SELECT COALESCE(SUM(amount), 0) AS n FROM voucher_allocations WHERE member_pubkey = ?', owen.pk);
     assert(owenBudgetBefore - owenBudgetAfter === 25, `10. 25 Beans held from voucher's budget for seed-invite (${owenBudgetBefore} -> ${owenBudgetAfter})`);
 
+    // Redeeming the seed invite lands the vouch from the issuing admin/owner (owen):
+    const rita = newId('rita');
+    const ritaRedeem = await redeem(rita, owenSeed.body.code);
+    assert(ritaRedeem.status === 200 && ritaRedeem.body?.success === true, `10. seed invite with vouch redeems successfully (${show(ritaRedeem)})`);
+    const ritaVouchGift = db.prepare("SELECT amount, from_pubkey, to_pubkey FROM room_gifts WHERE invite_code = ? AND kind = 'vouch'").get(owenSeed.body.code) as { amount: number; from_pubkey: string; to_pubkey: string } | undefined;
+    assert(ritaVouchGift && ritaVouchGift.amount === 25 && ritaVouchGift.from_pubkey === owen.pk && ritaVouchGift.to_pubkey === rita.pk,
+        `10. seed invite vouch lands from issuing admin owen (${JSON.stringify(ritaVouchGift)})`);
+
     // ── 11. The boot's grant to an owner or admin who never had a budget ──────────────────────────────────────
     db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'admin', 'shell')").run(kai.pk);
     const granted = grantMissingRoleBudgets();

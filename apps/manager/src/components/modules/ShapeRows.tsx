@@ -65,6 +65,7 @@ export function logSettingName(setting: string): string {
         'knownFloor.on': t('Known floor for confirmed members'),
         'knownFloor.floor': t('Confirmed members owe up to'),
         'knownFloor.cap': t('Floor cap'),
+        memberGift: t('Members giving part of their credit line'),
         dmRequests: t('First message from someone new'),
         shareOutside: t('Members may share listings outside the community'),
         decisions: t('Community votes (Decisions)'),
@@ -110,6 +111,8 @@ export function logValueDisplay(setting: string, val: string | null): string {
     }
     if (setting === 'recoveryCopies') return recoveryCopiesName(val);
     if (setting === 'removalDecider') return removalDeciderName(val);
+    // The members' credit-line gift (G1): as its row reads it, "On · up to 100 Beans" or "Off".
+    if (setting === 'memberGift') return val === '0' ? t('Off') : t('On · up to {n} Beans').replace('{n}', Number(val).toLocaleString('en'));
     if (val === 'on' || val === 'true') return t('On');
     if (val === 'off' || val === 'false') return t('Off');
     return val;

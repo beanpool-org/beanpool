@@ -27,6 +27,8 @@ vi.mock('../components/CommonsInfoModal', () => ({ CommonsInfoModal: () => null 
 vi.mock('../components/RepaymentCard', () => ({ RepaymentCard: () => null }));
 vi.mock('../lib/api', () => ({
     getBalance: vi.fn(),
+    // V3: the Ledger asks whether this member is a voucher (null = not one), beside the gift offer.
+    getMyVouching: vi.fn(async () => null),
     getTransactions: vi.fn(async () => []),
     getMembers: vi.fn(async () => []),
     getMemberCards: vi.fn(async () => []),
@@ -164,7 +166,12 @@ describe('the Ledger in the pseudo-locale', () => {
     it('the Wallet with nothing to send yet, no rows, and an export that failed', async () => {
         const said: string[] = [];
         vi.stubGlobal('alert', (m: string) => { said.push(m); });
-        vi.mocked(request).mockRejectedValueOnce(new Error(''));
+        // The export's read fails. The page reads the Credit line tab's offer too (G1, lib/credit-gift.ts), which answers
+        // nothing here (no tab), so the refusal is the export's alone, whichever read comes first.
+        vi.mocked(request).mockImplementation(async (_method: string, path: string) => {
+            if (path === '/api/ledger/export') throw new Error('');
+            return undefined as never;
+        });
         await showIn('xx');
         await open(NEWCOMER);
         fireEvent.click(screen.getByRole('button', { name: xx('💸 Wallet') }));
@@ -174,6 +181,7 @@ describe('the Ledger in the pseudo-locale', () => {
         expect(said).toEqual([xx('Export failed')]);
         expect(bypassing(document.body, { others: OTHERS, said })).toEqual([]);
         vi.unstubAllGlobals();
+        vi.mocked(request).mockReset();
     });
 
     it('a balance that could not be read, and the worldwide community\'s picker notes', async () => {

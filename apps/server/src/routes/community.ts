@@ -25,7 +25,7 @@ import {
     registerPushToken, removePushToken, applyPushLeave,
     getMemberPreferences, setMemberPreferences, setHolidayMode, homePreferencesNamed,
     getMemberStats,
-    dispatchPushNotification,
+    dispatchPushNotification, broadcast,
     exportLedgerFor, canOperateTreasury,
     getNodeRole, exportSyncState, getNodeConfig,
     createTreasury,
@@ -36,7 +36,8 @@ import {
     isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
-import { VoucherError, vouchFromProfile, myVouching } from '../engine/vouchers.js';
+import { VoucherError, vouchFromProfile, myVouching, tellVoucherNotice } from '../engine/vouchers.js';
+import { CreditGiftError, creditGiftOffer, giveCreditLine } from '../engine/credit-gift.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { pushKeyHex } from '../engine/push-notices.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
@@ -1252,6 +1253,42 @@ router.get('/api/vouchers/me', async (ctx) => {
     }
     ctx.set('Cache-Control', 'private, no-store');
     ctx.body = myVouching(actor);
+});
+
+// A member gives part of their credit line (engine/credit-gift.ts; DESIGN-invites-and-names-list-amend2-fable.md §6, slice
+// G1): the Credit line tab beside Beans on Send. GET is what the signer may give now (their own numbers only); POST
+// `{ memberPubkey, amount }` gives it, from the room someone gave them. The signer gives, signed with their own key and
+// nothing else (the send route's rule); the body names only who receives it. Every rule is checked in the gift's own
+// transaction before its first write, and each refusal answers in its own status, code and sentence.
+router.get('/api/credit/gift', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = creditGiftOffer(actor);
+});
+router.post('/api/credit/gift', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor || (ctx.state as any).authSig?.signer !== actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'no-store');
+    try {
+        ctx.body = giveCreditLine(actor, (ctx as any).requestBody || {}, (notice) => tellVoucherNotice(notice, { broadcast, dispatchPushNotification }));
+    } catch (e) {
+        if (e instanceof CreditGiftError) {
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
+            return;
+        }
+        if (respondProfileRefusal(ctx, e)) return;
+        throw e;
+    }
 });
 
 /**

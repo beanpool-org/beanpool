@@ -219,6 +219,21 @@
                             <p>Installa l'app e apri il link o scansiona il codice QR che ti ha dato un membro; un invito vale una sola volta e dura 30 giorni.</p>
                         </div>
                     </div>
+                    <script>
+                    // On a computer, the yellow button goes straight to the global community and the browser line is hidden.
+                    (function () {
+                        var ua = navigator.userAgent || "";
+                        var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && "ontouchend" in document);
+                        var isAndroid = !isIOS && /android/i.test(ua);
+                        if (!isIOS && !isAndroid) {
+                            var btn = document.querySelector(".hero-door a.btn-primary");
+                            var browserLine = document.querySelector(".hero-door .door-browser");
+                            var lang = (document.documentElement && document.documentElement.lang) || "en";
+                            if (btn) btn.href = "https://global.beanpool.org/?lang=" + encodeURIComponent(lang);
+                            if (browserLine) browserLine.hidden = true;
+                        }
+                    })();
+                    </script>
                     <p class="hero-web-note">I fagioli risiedono nelle comunità locali, ciascuna sul proprio server. La comunità globale ti mostra come funziona e ti guida verso una comunità. Ti mostra il funzionamento dei fagioli attraverso una comunità di esempio.</p>
 
                     <div class="hero-logos-group">

@@ -52,6 +52,7 @@ import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../co
 import { sampleBalance, sampleEscrowTotal, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } from '../../utils/credit-line-card';
 import { signedRequestWords } from '../../components/signed-request-lines';
+import { getCreditGiftOffer, giveCreditLine, type CreditGiftOffer } from '../../utils/credit-gift';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -218,6 +219,11 @@ export default function LedgerScreen() {
     }, [sendSuccess]);
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
+    // The Credit line tab beside Beans on Send (slice G1, utils/credit-gift.ts): the node's answer at each load, never a
+    // copy; null (or not offered) is no tab. `sendKind`: which tab the form is on. Never read in preview (loadData,
+    // openSend and handleGift return first there), and never drawn there (giftTab).
+    const [giftOffer, setGiftOffer] = useState<CreditGiftOffer | null>(null);
+    const [sendKind, setSendKind] = useState<'beans' | 'credit'>('beans');
 
     // Labels drawn in capitals are written in capitals in the words themselves (never textTransform, which upper-cases a
     // translation by the phone's rules, not its language's).
@@ -373,6 +379,13 @@ export default function LedgerScreen() {
         sendBtnLocked: { backgroundColor: colors.border.default, opacity: 0.7 },
         sendBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800', flexShrink: 1, textAlign: 'center' },
         sendForm: { backgroundColor: colors.surface.app, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default },
+        // Beans / Credit line (G1): two tabs the width of the form, each wrapping its words at 320 dp and 1.3× text.
+        kindTabs: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+        kindTab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 6, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card },
+        kindTabOn: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
+        kindTabText: { fontSize: 14, fontWeight: '700', color: colors.text.secondary, textAlign: 'center', flexShrink: 1 },
+        kindTabTextOn: { color: colors.text.inverse },
+        giftWords: { fontSize: 13, color: colors.text.body, lineHeight: 19, marginBottom: 10 },
         recipientRow: { backgroundColor: colors.surface.card, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
         recipientText: { fontSize: 15, fontWeight: '600', color: colors.text.heading },
         pickerBox: { backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, overflow: 'hidden' },
@@ -393,6 +406,8 @@ export default function LedgerScreen() {
         confirmBtn: { backgroundColor: colors.brand.fill, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
         confirmBtnOff: { backgroundColor: colors.border.default },
         confirmBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '700' },
+        // Waiting for a recipient and an amount: the words still read on the grey (white was 1.2:1 there in light).
+        confirmBtnTextOff: { color: colors.text.secondary },
         txnRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
         txnRowDoor: { minHeight: 44 },
         txnIcon: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
@@ -438,6 +453,7 @@ export default function LedgerScreen() {
         if (heldSample) { setBalanceState(NO_BALANCE); setTxns(NO_TXNS); setEscrowTotal(0); setHeldSample(false); }
         const latest = <T,>(set: (v: T) => void) => (v: T) => { if (gen === loadGen.current) set(v); };
         if (identity?.publicKey) {
+            getCreditGiftOffer().then(latest(setGiftOffer)).catch(() => {});
             getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);
             getTransactions(identity.publicKey).then(latest(setTxns)).catch(console.error);
             getBlockedUsers().then(list => setBlocked(new Set(list))).catch(() => {});
@@ -536,10 +552,31 @@ export default function LedgerScreen() {
         } finally { setSending(false); }
     };
 
-    // Open the Send flow from anywhere (Levels hero or Wallet). Surfaces the form in the Wallet tab.
+    // The Credit line tab: the node checks every rule and answers a refusal in its own sentence, shown as it comes.
+    const handleGift = async () => {
+        if (preview) return;
+        if (!sendTo || !sendAmount || !identity?.publicKey) return;
+        if (!sendRead.ok && isAmbiguousAmount(sendRead.refusal)) { setSendError(amountRefusalWords(sendRead.refusal)); return; }
+        const amount = sendRead.ok ? sendRead.value : NaN;
+        if (isNaN(amount)) { setSendError(t('Enter a valid amount')); return; }
+        setSending(true); setSendError(null); setSendSuccess(false);
+        try {
+            await giveCreditLine(identity.publicKey, sendTo, amount);
+            hapticSuccess();
+            setSendSuccess(true);
+            setSendTo(''); setSendAmount(''); setMemberSearch('');
+            loadData();
+        } catch (e: any) {
+            hapticWarning();
+            setSendError(e?.message ? signedRequestWords(e.message) : t('Transfer failed'));
+        } finally { setSending(false); }
+    };
+
+    // Open the Send flow from anywhere (Levels hero or Wallet). Surfaces the form in the Wallet tab. With Beans locked
+    // and part of the credit line to give, it opens on the Credit line tab.
     const openSend = async () => {
         if (preview) { setSheetOpen(true); return; }
-        if (!canSend) {
+        if (!canSend && !giftOpen) {
             if (earned <= 0) {
                 Alert.alert(
                     t('First trade required'),
@@ -563,7 +600,9 @@ export default function LedgerScreen() {
         loadMembers();
         setActiveTab('financials');
         setSendError(null); setSendSuccess(false);
+        setSendKind(canSend ? 'beans' : 'credit');
         setShowSend(true);
+        getCreditGiftOffer().then(setGiftOffer).catch(() => {});
     };
 
     // Trust calculations (value-based)
@@ -579,6 +618,16 @@ export default function LedgerScreen() {
     const avgRating = balanceState.avgRating || 0;
     const reviewCount = balanceState.reviewCount || 0;
     const canSend = balanceState.balance > 0 && earned > 0; // gate: positive balance AND at least 1 completed trade (earnedCredit > 0)
+    // The Credit line tab is there when the node offers it (0 in the owner's setting: never), and opens Send on its own
+    // when the node says part of the line can be given now.
+    const giftTab = !preview && giftOffer?.offered === true;
+    const giftOpen = giftTab && (giftOffer?.canGive ?? 0) > 0;
+    // The Wallet's Send: locked only when neither Beans nor part of the credit line can go, and never while the form is
+    // open, so a member who has just given all they could closes it with Cancel (round 2 of #2912, as on the web).
+    const sendLocked = !canSend && !giftOpen && !showSend;
+    const sendLabel = showSend ? t('Cancel')
+        : sendLocked ? (earned <= 0 ? t('Send Beans (needs 1 completed trade)') : t('Send Beans (needs positive balance)'))
+        : canSend ? t('Send Beans') : t('Give part of your credit line');
     const ts = balanceState.trustStats;
     const uniquePartners = ts?.uniquePartners || 0;
 
@@ -656,13 +705,13 @@ export default function LedgerScreen() {
                         accessibilityRole="button"
                         // Dark takes the success tint, as Invite Members beside it does: the green words were 1.84:1 on green50.
                         style={[styles.perkPill, {
-                            borderColor: canSend ? (theme === 'dark' ? colors.feedback.success.border : palette.green200) : colors.border.default,
-                            backgroundColor: canSend ? (theme === 'dark' ? colors.feedback.success.bg : palette.green50) : colors.surface.app,
+                            borderColor: canSend || giftOpen ? (theme === 'dark' ? colors.feedback.success.border : palette.green200) : colors.border.default,
+                            backgroundColor: canSend || giftOpen ? (theme === 'dark' ? colors.feedback.success.bg : palette.green50) : colors.surface.app,
                         }]}
                         onPress={openSend}
                     >
-                        <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: canSend ? colors.brand.primary : colors.text.muted }]}>{canSend ? t('Send Beans') : earned <= 0 ? t('Send (needs 1st trade)') : t('Send (needs +ve balance)')}</Text>
+                        <MaterialCommunityIcons name={canSend || giftOpen ? 'send' : 'lock-outline'} size={13} color={canSend || giftOpen ? colors.brand.primary : colors.text.muted} />
+                        <Text style={[styles.perkText, { color: canSend || giftOpen ? colors.brand.primary : colors.text.muted }]}>{canSend ? t('Send Beans') : giftOpen ? t('Give part of your credit line') : earned <= 0 ? t('Send (needs 1st trade)') : t('Send (needs +ve balance)')}</Text>
                     </Pressable>}
                     {/* Not in preview: inviting is off on a node that previews Beans (global), and its Invites screen says so. */}
                     {!preview && <View style={[styles.perkPill, {
@@ -962,27 +1011,39 @@ export default function LedgerScreen() {
 
                 {/* ── Send Beans ── (in preview the marker's action: it keeps its place and words, and opens the sheet) */}
                 {preview ? <LocalCommunityMark variant="action" feature="beans" label={t('Send Beans')} /> : <Pressable
-                    style={[styles.sendBtn, showSend && styles.sendBtnOpen, !canSend && styles.sendBtnLocked]}
+                    style={[styles.sendBtn, showSend && styles.sendBtnOpen, sendLocked && styles.sendBtnLocked]}
                     accessibilityRole="button"
-                    accessibilityLabel={!canSend ? undefined : showSend ? t('Cancel') : t('Send Beans')}
+                    accessibilityLabel={sendLocked ? undefined : sendLabel}
                     onPress={showSend ? () => { setShowSend(false); setSendError(null); setSendSuccess(false); } : openSend}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                         <MaterialCommunityIcons
-                            name={!canSend ? 'lock-outline' : showSend ? 'close' : 'send'}
+                            name={sendLocked ? 'lock-outline' : showSend ? 'close' : 'send'}
                             size={17}
-                            color={!canSend ? colors.text.secondary : showSend ? colors.text.heading : colors.text.inverse}
+                            color={sendLocked ? colors.text.secondary : showSend ? colors.text.heading : colors.text.inverse}
                         />
-                        <Text style={[styles.sendBtnText, showSend && styles.sendBtnTextOpen, !canSend && { color: colors.text.secondary }]}>
-                            {!canSend
-                                ? (earned <= 0 ? t('Send Beans (needs 1 completed trade)') : t('Send Beans (needs positive balance)'))
-                                : showSend ? t('Cancel') : t('Send Beans')}
-                        </Text>
+                        <Text style={[styles.sendBtnText, showSend && styles.sendBtnTextOpen, sendLocked && { color: colors.text.secondary }]}>{sendLabel}</Text>
                     </View>
                 </Pressable>}
 
                 {showSend && !preview && (
                     <View style={styles.sendForm}>
+                        {giftTab && (
+                            <View style={styles.kindTabs} accessibilityRole="tablist" testID="send-kind-tabs">
+                                {([['beans', t('Beans')], ['credit', t('Credit line')]] as const).map(([kind, name]) => (
+                                    <Pressable
+                                        key={kind}
+                                        testID={`send-kind-${kind}`}
+                                        style={[styles.kindTab, sendKind === kind && styles.kindTabOn]}
+                                        accessibilityRole="tab"
+                                        accessibilityState={{ selected: sendKind === kind }}
+                                        onPress={() => { setSendKind(kind); setSendError(null); setSendSuccess(false); }}
+                                    >
+                                        <Text style={[styles.kindTabText, sendKind === kind && styles.kindTabTextOn]}>{name}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        )}
                         <Pressable style={styles.recipientRow} accessibilityRole="button" onPress={() => setShowMemberPicker(!showMemberPicker)}>
                             <Text style={[styles.recipientText, !selectedMember && { color: colors.text.muted }, { flexShrink: 1 }]}>{selectedMember?.callsign || t('Select recipient...')}</Text>
                             <MaterialCommunityIcons name={showMemberPicker ? 'chevron-up' : 'chevron-down'} size={20} color={colors.text.secondary} />
@@ -1003,27 +1064,55 @@ export default function LedgerScreen() {
                                 </ScrollView>
                             </View>
                         )}
-                        <TextInput style={styles.sendInput} accessibilityLabel={t('Amount to send')} placeholder={t('Amount')} placeholderTextColor={colors.text.muted} keyboardType="numeric" value={sendAmount} onChangeText={setSendAmount} />
-                        <TextInput style={styles.sendInput} accessibilityLabel={t('Memo')} placeholder={t('Memo (optional)')} placeholderTextColor={colors.text.muted} value={sendMemo} onChangeText={setSendMemo} />
-                        {(() => {
-                            const parsedAmount = sendRead.ok ? sendRead.value : NaN;
-                            if (!isNaN(parsedAmount) && parsedAmount > 0) {
-                                return (
-                                    <View style={styles.taxBreakdown}>
-                                        <View style={styles.breakdownRow}>
-                                            <Text style={styles.breakdownLabel}>{t('Recipient receives:')}</Text>
-                                            <CurrencyDisplay amount={formatNumber(parsedAmount, 2)} style={styles.breakdownValue} asView />
-                                        </View>
-                                    </View>
-                                );
-                            }
-                            return null;
-                        })()}
+                        {sendKind === 'credit' ? (
+                            <>
+                                {/* What the node says can be given now, or the node's own sentence for why nothing can. */}
+                                <Text style={styles.giftWords} testID="credit-gift-words">
+                                    {(giftOffer?.canGive ?? 0) > 0
+                                        ? (selectedMember
+                                            ? t('Give @{name} part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { name: selectedMember.callsign, max: formatNumber(giftOffer?.canGive ?? 0) })
+                                            : t('Give part of your credit line. You can give up to {max}: the part someone gave you that you aren’t using. It’s theirs for good.', { max: formatNumber(giftOffer?.canGive ?? 0) }))
+                                        : (giftOffer?.why ?? '')}
+                                </Text>
+                                <TextInput style={styles.sendInput} accessibilityLabel={t('Credit line to give')} placeholder={t('Amount')} placeholderTextColor={colors.text.muted} keyboardType="number-pad" value={sendAmount} onChangeText={setSendAmount} />
+                            </>
+                        ) : !canSend ? (
+                            <Text style={styles.giftWords} testID="send-beans-locked">
+                                {earned <= 0
+                                    ? t('Direct sends are unlocked after your first completed trade on the Marketplace, and require a positive balance.')
+                                    : t('You can only send beans you currently hold — direct sends require a positive balance.')}
+                            </Text>
+                        ) : (
+                            <>
+                                <TextInput style={styles.sendInput} accessibilityLabel={t('Amount to send')} placeholder={t('Amount')} placeholderTextColor={colors.text.muted} keyboardType="numeric" value={sendAmount} onChangeText={setSendAmount} />
+                                <TextInput style={styles.sendInput} accessibilityLabel={t('Memo')} placeholder={t('Memo (optional)')} placeholderTextColor={colors.text.muted} value={sendMemo} onChangeText={setSendMemo} />
+                                {(() => {
+                                    const parsedAmount = sendRead.ok ? sendRead.value : NaN;
+                                    if (!isNaN(parsedAmount) && parsedAmount > 0) {
+                                        return (
+                                            <View style={styles.taxBreakdown}>
+                                                <View style={styles.breakdownRow}>
+                                                    <Text style={styles.breakdownLabel}>{t('Recipient receives:')}</Text>
+                                                    <CurrencyDisplay amount={formatNumber(parsedAmount, 2)} style={styles.breakdownValue} asView />
+                                                </View>
+                                            </View>
+                                        );
+                                    }
+                                    return null;
+                                })()}
+                            </>
+                        )}
                         {sendError && <View style={styles.errBox}><Text style={styles.errText}>{sendError}</Text></View>}
-                        {sendSuccess && <View style={styles.okBox}><Text style={styles.okText}>{t('✓ Sent!')}</Text></View>}
-                        <Pressable style={[styles.confirmBtn, (sending || !sendTo || !sendAmount) && styles.confirmBtnOff]} accessibilityRole="button" onPress={handleSend} disabled={sending || !sendTo || !sendAmount}>
-                            <Text style={styles.confirmBtnText}>{sending ? t('Sending...') : t('Confirm Transfer')}</Text>
-                        </Pressable>
+                        {sendSuccess && <View style={styles.okBox}><Text style={styles.okText}>{sendKind === 'credit' ? t('✓ Given!') : t('✓ Sent!')}</Text></View>}
+                        {(sendKind === 'credit' || canSend) && (() => {
+                            const credit = sendKind === 'credit';
+                            const off = sending || !sendTo || !sendAmount || (credit && (giftOffer?.canGive ?? 0) <= 0);
+                            return (
+                                <Pressable testID="send-confirm" style={[styles.confirmBtn, off && styles.confirmBtnOff]} accessibilityRole="button" onPress={credit ? handleGift : handleSend} disabled={off}>
+                                    <Text style={[styles.confirmBtnText, off && styles.confirmBtnTextOff]}>{sending ? (credit ? t('Giving…') : t('Sending...')) : credit ? t('Give credit line') : t('Confirm Transfer')}</Text>
+                                </Pressable>
+                            );
+                        })()}
                     </View>
                 )}
 

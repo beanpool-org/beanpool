@@ -390,3 +390,133 @@ test('beanpool.org claims /global for the app on iPhones, and keeps the paths it
     assert.ok(paths.includes('/app*'), 'the old app paths');
     assert.ok(!paths.some((p) => p === '*' || p === '/*'), 'no path takes every page of the website into the app');
 });
+
+/**
+ * Evaluates Door 1 on the home page or 404.html:
+ * extracts the yellow button and browser line, executes the page's inline script
+ * for Door 1 under the given visitor condition, and returns the resulting state.
+ */
+function visitDoor1({ pageFile = 'index.html', lang = 'en', ua, touch = false, noScript = false }) {
+    const filePath = lang === 'en' ? path.join(SITE, pageFile) : path.join(SITE, lang, pageFile);
+    const html = fs.readFileSync(filePath, 'utf8');
+    const clean = html.replace(/<!--[\s\S]*?-->/g, '');
+    const doorsIdx = clean.indexOf('class="hero-doors"');
+    assert.ok(doorsIdx !== -1, `${pageFile} (${lang}): has .hero-doors`);
+    const door1Idx = clean.indexOf('class="hero-door"', doorsIdx);
+    assert.ok(door1Idx !== -1, `${pageFile} (${lang}): has .hero-door`);
+    const door1End = clean.indexOf('</div>', door1Idx);
+    const door1Markup = clean.slice(door1Idx, door1End);
+
+    // Initial button href
+    const btnMatch = door1Markup.match(/<a\b([^>]*)>([\s\S]*?)<\/a>/);
+    assert.ok(btnMatch, `${pageFile} (${lang}): has button in door 1`);
+    const initialHref = btnMatch[1].match(/\bhref="([^"]*)"/)?.[1];
+
+    // Initial browser line
+    const browserMatch = door1Markup.match(/<p\b([^>]*\bclass="[^"]*door-browser[^"]*"[^>]*)>([\s\S]*?)<\/p>/);
+    assert.ok(browserMatch, `${pageFile} (${lang}): has browser line in door 1`);
+    const initialHidden = /(?:^|\s)hidden(?=\s|$|\/)/.test(browserMatch[1].replace(/"[^"]*"/g, '""'));
+
+    if (noScript) {
+        return { href: initialHref, hidden: initialHidden };
+    }
+
+    // Find the inline script for door 1 / global-direct
+    const scripts = [...clean.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+    const doorScript = scripts.find((s) => s[2].includes('.hero-door') || (s[2].includes('global.beanpool.org') && s[2].includes('btn')));
+    if (!doorScript) {
+        return { href: initialHref, hidden: initialHidden };
+    }
+
+    const btnEl = {
+        href: initialHref,
+        getAttribute: (name) => (name === 'href' ? btnEl.href : null),
+        setAttribute: (name, val) => { if (name === 'href') btnEl.href = val; },
+    };
+    const browserEl = {
+        hidden: initialHidden,
+        getAttribute: (name) => (name === 'hidden' ? (browserEl.hidden ? '' : null) : null),
+        setAttribute: (name, val) => { if (name === 'hidden') browserEl.hidden = true; },
+    };
+
+    const docLang = clean.match(/<html\b[^>]*\blang="([^"]*)"/i)?.[1] || lang;
+    const document = {
+        documentElement: { lang: docLang },
+        querySelector: (sel) => {
+            if (sel.includes('btn-primary') || (sel.includes('.hero-door') && sel.includes('a'))) return btnEl;
+            if (sel.includes('door-browser')) return browserEl;
+            return null;
+        },
+        querySelectorAll: (sel) => {
+            const res = document.querySelector(sel);
+            return res ? [res] : [];
+        },
+    };
+    if (touch) document.ontouchend = null;
+
+    vm.runInNewContext(doorScript[2], {
+        document,
+        navigator: { userAgent: ua },
+        location: { hostname: 'beanpool.org' },
+        window: {},
+    });
+
+    return { href: btnEl.href, hidden: browserEl.hidden };
+}
+
+const CHECK_LANGS = ['en', 'de', 'es'];
+
+test('on a computer (desktop UA), Try it now goes straight to global.beanpool.org with the page lang and the browser line is hidden', () => {
+    for (const lang of CHECK_LANGS) {
+        for (const ua of [UA.mac, UA.windows]) {
+            // Home page
+            const home = visitDoor1({ pageFile: 'index.html', lang, ua });
+            assert.equal(home.href, lang === 'en' ? 'https://global.beanpool.org' : `https://global.beanpool.org/?lang=${lang}`, `${lang}/index.html on ${ua}: button goes straight to global community`);
+            assert.equal(home.hidden, true, `${lang}/index.html on ${ua}: browser line is hidden`);
+
+            // 404 page
+            const notFound = visitDoor1({ pageFile: '404.html', lang, ua });
+            assert.equal(notFound.href, lang === 'en' ? 'https://global.beanpool.org' : `https://global.beanpool.org/?lang=${lang}`, `${lang}/404.html on ${ua}: button goes straight to global community`);
+            assert.equal(notFound.hidden, true, `${lang}/404.html on ${ua}: browser line is hidden`);
+        }
+    }
+});
+
+test('on phone user agents (Android and iPhone), Try it now stays "global" and the browser line is shown', () => {
+    for (const lang of CHECK_LANGS) {
+        for (const visitor of [{ ua: UA.android }, { ua: UA.iphone }, { ua: UA.mac, touch: true }]) {
+            // Home page
+            const home = visitDoor1({ pageFile: 'index.html', lang, ua: visitor.ua, touch: visitor.touch });
+            assert.equal(home.href, 'global', `${lang}/index.html on ${visitor.ua}: button keeps /global for phone`);
+            assert.equal(home.hidden, false, `${lang}/index.html on ${visitor.ua}: browser line is shown`);
+
+            // 404 page
+            const notFound = visitDoor1({ pageFile: '404.html', lang, ua: visitor.ua, touch: visitor.touch });
+            assert.equal(notFound.href, 'global', `${lang}/404.html on ${visitor.ua}: button keeps /global for phone`);
+            assert.equal(notFound.hidden, false, `${lang}/404.html on ${visitor.ua}: browser line is shown`);
+        }
+    }
+});
+
+test('with no script, Try it now is "global" and the browser line is shown', () => {
+    for (const lang of CHECK_LANGS) {
+        const home = visitDoor1({ pageFile: 'index.html', lang, noScript: true });
+        assert.equal(home.href, 'global', `${lang}/index.html with no script: button is global`);
+        assert.equal(home.hidden, false, `${lang}/index.html with no script: browser line is shown`);
+
+        const notFound = visitDoor1({ pageFile: '404.html', lang, noScript: true });
+        assert.equal(notFound.href, 'global', `${lang}/404.html with no script: button is global`);
+        assert.equal(notFound.hidden, false, `${lang}/404.html with no script: browser line is shown`);
+    }
+});
+
+test('home and 404 pages use the same device detection logic as global.html', () => {
+    assert.match(SCRIPT, /var\s+isIOS\s*=\s*\/iphone\|ipad\|ipod\/i\.test\(ua\)\s*\|\|\s*\(\/Macintosh\/\.test\(ua\)\s*&&\s*'ontouchend'\s+in\s+document\);/);
+    assert.match(SCRIPT, /var\s+isAndroid\s*=\s*!isIOS\s*&&\s*\/android\/i\.test\(ua\);/);
+
+    for (const file of ['index.html', '404.html']) {
+        const page = fs.readFileSync(path.join(SITE, file), 'utf8');
+        assert.match(page, /var\s+isIOS\s*=\s*\/iphone\|ipad\|ipod\/i\.test\(ua\)\s*\|\|\s*\(\/Macintosh\/\.test\(ua\)\s*&&\s*'ontouchend'\s+in\s+document\);/, `${file} has identical isIOS check`);
+        assert.match(page, /var\s+isAndroid\s*=\s*!isIOS\s*&&\s*\/android\/i\.test\(ua\);/, `${file} has identical isAndroid check`);
+    }
+});

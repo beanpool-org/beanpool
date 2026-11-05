@@ -93,6 +93,7 @@ export const VOUCHER_WORDS = {
     notAdmin: word('Only an admin can be put on the credit committee. Every owner is on it already.'),
     ownerOnly: word('Only an owner changes this.'),
     badGift: word('A member’s credit-line gift is 0 (off) to 100 Beans.'),
+    giftInCoreSettings: word('Members giving part of their credit line is a core setting: an owner changes it in Settings, Core settings, which asks for their proof once the core settings are locked. Nothing in this request was saved.'),
     voucherEnded: word('The vouch on this invite ended before you joined; you start with no credit line'),
     frozen: word('Your credit line is frozen, so you can’t vouch from your budget until an admin unfreezes it.'),
     noticeTitle: word('Your budget to vouch from'),
@@ -135,11 +136,27 @@ export function voucherBudgetSetting(): number {
     return isBudgetLevel(n) ? n : VOUCHER_BUDGET_DEFAULT;
 }
 
-/** The most of their credit line a member may give at once (slice G1): the owner's setting, 0 (off) to 100. */
-export function memberGiftSetting(): number {
-    const raw = configRow(MEMBER_GIFT_KEY);
+/** The member_gift row as the setting it is: 0 (off) to 100; no row, or one that isn't a setting, the default (100). */
+export function memberGiftFromRow(raw: string | null): number {
     const n = raw === null ? NaN : Number(raw);
     return isMemberGiftSetting(n) ? n : MEMBER_GIFT_DEFAULT;
+}
+
+/** The most of their credit line a member may give at once (slice G1): the owner's setting, 0 (off) to 100. */
+export function memberGiftSetting(): number {
+    return memberGiftFromRow(configRow(MEMBER_GIFT_KEY));
+}
+
+/**
+ * Writes the member_gift setting (the default removes the row) and its `gift_setting` line in the known floor's log,
+ * inside the caller's transaction. Its one caller is How this community works (Core settings,
+ * config/community-shape-write.ts), which stamps the line `at` as its own log's line, so the two read as one change: a
+ * Core setting is changed nowhere else (setVoucherSettings refuses it).
+ */
+export function writeMemberGiftSetting(actor: string, before: number, value: number, at?: string): void {
+    if (value === MEMBER_GIFT_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(MEMBER_GIFT_KEY);
+    else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(MEMBER_GIFT_KEY, String(value));
+    logLine(actor, 'gift_setting', null, before, value, at);
 }
 
 export function voucherSettings() {
@@ -151,9 +168,9 @@ export function voucherSettings() {
 
 // ── The log every owner and admin reads (known_floor_log, config/known-floor.ts) ─────────────────────────────────────
 
-function logLine(actor: string, action: string, member: string | null, oldValue: unknown, newValue: unknown): void {
-    db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(newId(), actor, action, member, oldValue == null ? null : String(oldValue), newValue == null ? null : String(newValue));
+function logLine(actor: string, action: string, member: string | null, oldValue: unknown, newValue: unknown, at: string = now()): void {
+    db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(newId(), actor, action, member, oldValue == null ? null : String(oldValue), newValue == null ? null : String(newValue), at);
 }
 
 // ── Who ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -532,13 +549,20 @@ export function setCreditCommittee(actor: string, body: { memberPubkey?: unknown
     return { memberPubkey: pk, committee: isOnCreditCommittee(pk) };
 }
 
-/** The owner's two settings (POST /api/names/vouchers/settings `{ voucherBudget?, memberGift? }`), each change a log line. */
+/**
+ * The owner's voucher budget setting (POST /api/names/vouchers/settings `{ voucherBudget }`), each change a log line.
+ * The members' credit-line gift is a Core setting (config/core-settings.ts, slice G1), so it is changed only under How this
+ * community works (POST /api/local/admin/community-shape `memberGift`), which asks the owner's fresh proof once the core
+ * settings are locked, writes the unlock line and the change in both logs, alerts the owners and tells the members. Sent
+ * here, the whole request is refused before anything is written (400 `moved_to_community_shape`), as node/config refuses
+ * the settings that moved there: half a save would look like a whole one (round 2 of #2912: this route skipped all four).
+ */
 export function setVoucherSettings(actor: string, body: { voucherBudget?: unknown; memberGift?: unknown }) {
     assertPlainTablesWritable();
     assertBeansOn();
     if (!isNodeOwner(actor)) throw new VoucherError(403, 'owner_only', VOUCHER_WORDS.ownerOnly);
+    if (body.memberGift !== undefined) throw new VoucherError(400, 'moved_to_community_shape', VOUCHER_WORDS.giftInCoreSettings);
     if (body.voucherBudget !== undefined && !isBudgetLevel(body.voucherBudget)) throw new VoucherError(400, 'bad_level', VOUCHER_WORDS.badLevel);
-    if (body.memberGift !== undefined && !isMemberGiftSetting(body.memberGift)) throw new VoucherError(400, 'bad_gift', VOUCHER_WORDS.badGift);
     const before = voucherSettings();
     // Each write names its key (test-replication-manifest reads every node_config write); the default removes the row.
     db.transaction(() => {
@@ -546,11 +570,6 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
             if (body.voucherBudget === VOUCHER_BUDGET_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(VOUCHER_BUDGET_KEY);
             else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(VOUCHER_BUDGET_KEY, String(body.voucherBudget));
             logLine(actor, 'budget_setting', null, before.voucherBudget, body.voucherBudget);
-        }
-        if (body.memberGift !== undefined && body.memberGift !== before.memberGift) {
-            if (body.memberGift === MEMBER_GIFT_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(MEMBER_GIFT_KEY);
-            else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(MEMBER_GIFT_KEY, String(body.memberGift));
-            logLine(actor, 'gift_setting', null, before.memberGift, body.memberGift);
         }
     })();
     return voucherSettings();
@@ -734,6 +753,29 @@ function tradingOf(pk: string): Map<string, TradingMark> {
     return new Map(rows.map((r) => [r.pk, r.outside > 0 ? 'others' : r.deals > 0 ? 'inside' : 'none']));
 }
 
+/**
+ * The card's Passed on line (amend2 §5 "Passed on: 50 of their 350 to 1 person · 0 of it below zero"; slice G1,
+ * engine/credit-gift.ts): of the room rooted at this voucher, what sits now with the members it was passed on to as a
+ * gift (each gift piece's open part: its amount less what was split from it again), how many members hold it, and how
+ * much of it is held by someone below zero now. "Of their 350" is the card's `vouched`: a gift only splits a vouch, so
+ * this is never more. A ring passing the same 100 round (A → B → C → A) reads "passed on 100 … held by 1 person" (§5);
+ * a piece whose holder left was stamped written off and counts in the written-off line, not here. No balance figure:
+ * "below zero" marks the room, never by how much.
+ */
+function passedOnOf(pk: string): { amount: number; people: number; belowZero: number } {
+    const pieces = (db.prepare(`SELECT g.to_pubkey AS holder,
+            g.amount - COALESCE((SELECT SUM(c.amount) FROM room_gifts c WHERE c.source_gift_id = g.id), 0) AS open
+        FROM room_gifts g WHERE g.kind = 'gift' AND g.root_pubkey = ? AND g.written_off IS NULL`).all(pk) as { holder: string; open: number }[])
+        .filter((p) => p.open > 0);
+    const holders = new Set(pieces.map((p) => p.holder));
+    const below = new Set([...holders].filter((h) => belowZeroNow(h)));
+    return {
+        amount: pieces.reduce((s, p) => s + p.open, 0),
+        people: holders.size,
+        belowZero: pieces.filter((p) => below.has(p.holder)).reduce((s, p) => s + p.open, 0),
+    };
+}
+
 /** One voucher's numbers (the vouchers block's row, the card's head). No balance figure: "below zero" is a count. */
 export function voucherSummary(pk: string) {
     const row = voucherRow(pk);
@@ -741,14 +783,13 @@ export function voucherSummary(pk: string) {
     const people = db.prepare(`SELECT DISTINCT to_pubkey AS pk FROM room_gifts WHERE kind = 'vouch' AND from_pubkey = ?`).all(pk) as { pk: string }[];
     const below = people.filter((p) => belowZeroNow(p.pk)).length;
     const writtenOff = (db.prepare('SELECT COALESCE(SUM(written_off), 0) AS n FROM room_gifts WHERE root_pubkey = ?').get(pk) as { n: number }).n;
-    const passed = db.prepare(`SELECT COALESCE(SUM(amount), 0) AS n, COUNT(DISTINCT to_pubkey) AS c FROM room_gifts WHERE kind = 'gift' AND root_pubkey = ?`).get(pk) as { n: number; c: number };
     const sent = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ? AND vouch_amount IS NOT NULL').get(pk) as { n: number }).n;
     const marks = [...tradingOf(pk).values()];
     return {
         memberPubkey: pk, callsign: callsignOf(pk), source: row?.source ?? null, entryId: row?.entry_id ?? null,
         madeBy: row?.made_by ?? null, madeByCallsign: callsignOf(row?.made_by), madeAt: row?.made_at ?? null,
         stoppedAt: row?.stopped_at ?? null, stopReason: row?.stop_reason ?? null,
-        ...b, belowZero: below, writtenOff, passedOn: { amount: passed.n, people: passed.c }, invitesWithVouch: sent,
+        ...b, belowZero: below, writtenOff, passedOn: passedOnOf(pk), invitesWithVouch: sent,
         trading: { withOthers: marks.filter((m) => m === 'others').length, insideOnly: marks.filter((m) => m === 'inside').length },
     };
 }

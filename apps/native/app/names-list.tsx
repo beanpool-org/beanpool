@@ -189,7 +189,6 @@ export default function NamesListScreen() {
     }, [identity, take]);
 
     useFocusEffect(useCallback(() => { void load(); }, [load]));
-    useEffect(() => { void load(); }, [load]);
 
     useEffect(() => { openedRef.current = opened; }, [opened]);
     const state = opened?.state ?? null;
@@ -202,6 +201,11 @@ export default function NamesListScreen() {
         if (!opened?.vouchers) return [];
         return opened.vouchers.filter((v) => !entries.some((e) => e.voucher?.memberPubkey === v.memberPubkey || e.confirmation?.memberPubkey === v.memberPubkey));
     }, [opened?.vouchers, entries]);
+    const filteredRoleVouchers = useMemo(() => {
+        const q = query.trim().toLocaleLowerCase();
+        if (!q) return roleVouchersWithoutEntry;
+        return roleVouchersWithoutEntry.filter((rv) => (rv.callsign || '').toLocaleLowerCase().includes(q));
+    }, [roleVouchersWithoutEntry, query]);
     const filteredShown = useMemo(() => {
         if (filter === 'vouchers') {
             return shown.filter((e) => !!e.voucher);
@@ -816,24 +820,28 @@ export default function NamesListScreen() {
                                 <Text style={styles.entryNote}>{r.detail}</Text>
                             </View>
                         ))}
-                        <Text style={styles.label} accessibilityRole="header">{t('VOUCHERS')}</Text>
-                        <Text style={styles.hint}>{t('Members who vouch for new joiners, and how much of their vouched credit was written off.')}</Text>
-                        {opened?.vouchers && opened.vouchers.length === 0 ? <Text style={styles.hint}>{t('Nobody has a voucher budget.')}</Text> : null}
-                        {[...(opened?.vouchers ?? [])].sort((a, b) => (b.writtenOff || 0) - (a.writtenOff || 0)).map((v) => (
-                            <View key={v.memberPubkey} style={styles.entry}>
-                                <Text style={styles.entryName}>{callsignOf(v.memberPubkey) ? `@${callsignOf(v.memberPubkey)}` : v.callsign}</Text>
-                                <Text style={styles.entryNote}>
-                                    {t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
-                                        left: formatNumber(v.left),
-                                        level: formatNumber(v.level),
-                                        vouched: formatNumber(v.vouched),
-                                        belowZero: v.belowZero,
-                                        writtenOff: formatNumber(v.writtenOff),
-                                        passedOn: formatNumber(v.passedOn?.amount ?? 0),
-                                    })}
-                                </Text>
-                            </View>
-                        ))}
+                        {opened?.vouchers && (
+                            <>
+                                <Text style={styles.label} accessibilityRole="header">{t('VOUCHERS')}</Text>
+                                <Text style={styles.hint}>{t('Members who vouch for new joiners, and how much of their vouched credit was written off.')}</Text>
+                                {opened.vouchers.length === 0 ? <Text style={styles.hint}>{t('Nobody has a voucher budget.')}</Text> : null}
+                                {[...opened.vouchers].sort((a, b) => (b.writtenOff || 0) - (a.writtenOff || 0)).map((v) => (
+                                    <View key={v.memberPubkey} style={styles.entry}>
+                                        <Text style={styles.entryName}>{callsignOf(v.memberPubkey) ? `@${callsignOf(v.memberPubkey)}` : v.callsign}</Text>
+                                        <Text style={styles.entryNote}>
+                                            {t('{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on', {
+                                                left: formatNumber(v.left),
+                                                level: formatNumber(v.level),
+                                                vouched: formatNumber(v.vouched),
+                                                belowZero: v.belowZero,
+                                                writtenOff: formatNumber(v.writtenOff),
+                                                passedOn: formatNumber(v.passedOn?.amount ?? 0),
+                                            })}
+                                        </Text>
+                                    </View>
+                                ))}
+                            </>
+                        )}
                     </>
                 ) : null}
                 {logList(mode.logs.balance)}
@@ -1002,24 +1010,26 @@ export default function NamesListScreen() {
                     {btn(t('Export as PDF'), exportPdf, 'secondary', t('Makes a PDF of the list on this phone, to keep with your paper copy'))}
                     {btn(t('Community health'), () => { void openHealth(); }, 'secondary', t('Opens who is past a debt line (every opening is logged for all admins)'))}
                 </View>
-                <View style={styles.chipRow}>
-                    <Pressable
-                        style={[styles.chip, filter === 'all' && styles.chipActive]}
-                        onPress={() => setFilter('all')}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('All')}
-                    >
-                        <Text style={[styles.chipText, filter === 'all' && styles.chipTextActive]}>{t('All')}</Text>
-                    </Pressable>
-                    <Pressable
-                        style={[styles.chip, filter === 'vouchers' && styles.chipActive]}
-                        onPress={() => setFilter('vouchers')}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('Vouchers')}
-                    >
-                        <Text style={[styles.chipText, filter === 'vouchers' && styles.chipTextActive]}>{t('Vouchers')}</Text>
-                    </Pressable>
-                </View>
+                {isCommittee && (
+                    <View style={styles.chipRow}>
+                        <Pressable
+                            style={[styles.chip, filter === 'all' && styles.chipActive]}
+                            onPress={() => setFilter('all')}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('All')}
+                        >
+                            <Text style={[styles.chipText, filter === 'all' && styles.chipTextActive]}>{t('All')}</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.chip, filter === 'vouchers' && styles.chipActive]}
+                            onPress={() => setFilter('vouchers')}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Vouchers')}
+                        >
+                            <Text style={[styles.chipText, filter === 'vouchers' && styles.chipTextActive]}>{t('Vouchers')}</Text>
+                        </Pressable>
+                    </View>
+                )}
                 <TextInput
                     style={styles.search} value={query} onChangeText={setQuery} placeholder={t('Search names and notes')}
                     placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel={t('Search names and notes')}
@@ -1071,7 +1081,7 @@ export default function NamesListScreen() {
                                 {!e.voucher && isCommittee && e.confirmation?.status === 'confirmed' && e.confirmation.memberPubkey !== identity?.publicKey
                                     ? btn(t('Make a voucher'), () => {
                                         setMakeVoucherAmount(opened?.voucherSettings?.voucherBudget ?? 1000);
-                                        setMode({ kind: 'make_voucher', entry: e, memberPubkey: e.confirmation!.memberPubkey, callsign: e.confirmation!.callsign ?? '' });
+                                        setMode({ kind: 'make_voucher', entry: e, memberPubkey: e.confirmation!.memberPubkey, callsign: e.confirmation!.callsign || callsignOf(e.confirmation!.memberPubkey) || e.text?.name || '' });
                                     }, 'small')
                                     : null}
                                 {btn(e.text ? t('Change') : t('Type it again'), () => openForm(e), 'small')}
@@ -1088,7 +1098,7 @@ export default function NamesListScreen() {
                         </View>
                     );
                 })}
-                {filter === 'vouchers' && roleVouchersWithoutEntry.map((rv) => (
+                {filter === 'vouchers' && filteredRoleVouchers.map((rv) => (
                     <View key={rv.memberPubkey} style={styles.entry}>
                         <Text style={styles.entryName}>@{rv.callsign}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
@@ -1109,8 +1119,12 @@ export default function NamesListScreen() {
                         </View>
                     </View>
                 ))}
-                {filter === 'vouchers' && filteredShown.length === 0 && roleVouchersWithoutEntry.length === 0 ? (
-                    <Text style={styles.hint}>{t('No vouchers yet. Vouchers get a budget to vouch for new members they invite.')}</Text>
+                {filter === 'vouchers' && filteredShown.length === 0 && filteredRoleVouchers.length === 0 ? (
+                    <Text style={styles.hint}>
+                        {query.trim()
+                            ? t('No vouchers match your search.')
+                            : t('No vouchers yet. Vouchers get a budget to vouch for new members they invite.')}
+                    </Text>
                 ) : null}
                 {state.me.owner ? (
                     <>
@@ -1222,6 +1236,7 @@ export default function NamesListScreen() {
                             anchorUrl={anchor}
                             identity={identity}
                             memberPubkey={selectedVoucherPubkey}
+                            entry={entries.find((e) => e.voucher?.memberPubkey === selectedVoucherPubkey || e.confirmation?.memberPubkey === selectedVoucherPubkey) ?? null}
                             onClose={() => setSelectedVoucherPubkey(null)}
                             onVoucherUpdated={() => { void load(); }}
                         />

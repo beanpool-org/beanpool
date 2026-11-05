@@ -18,7 +18,6 @@ About a member:
 
 - Suspend a member, or lift a suspension.
 - Freeze a member's credit, or unfreeze it.
-- Give a member the right to vouch for newcomers, or take it away.
 - Remove a lead keeper from an enterprise, or a leader from a project.
 - Remove a member from the community, or reinstate them. Nobody proposes a removal: that vote opens when an admin suspends the member (see "Emergency suspension").
 
@@ -33,7 +32,7 @@ A grant can be for no more than the Commons holds now plus what came into it in 
 
 ## Who can start a Decision
 
-Any active member whose credit is not frozen, and who has traded in the market. A trust badge or a vouch is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.
+Any active member whose credit is not frozen, and who has traded in the market. A trust badge is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.
 
 ## Who can vote
 
@@ -136,7 +135,7 @@ Your community's server has owners and admins. They look after it.
 - If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.
 - An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.
 - An admin cannot remove a member without the community's vote. Where too few members can vote, an owner may decide it (see "A small community"). Where the people who run the server have switched community votes off, the admins remove members themselves.
-- Admins can give members the right to vouch for newcomers.
+- Owners and credit-committee admins can make a confirmed member a voucher on the names list.
 - Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.
 - Admins sort out stuck trades, but never one they are part of.
 
@@ -184,4 +183,6 @@ A group is run by its convenors, and one of them is its **lead convenor**. Whoev
 
 ## Vouching
 
-Only admins, and members chosen by an admin or by a community Decision, can vouch for newcomers. A vouch gives the newcomer a small credit line to start with: 25, 50 or 100 beans. Trust badges never give this right.
+Owners and admins are vouchers by role, and an owner or credit-committee admin can make a confirmed member a voucher on the names list. Each voucher receives a budget (100 to 2,000 Beans, with a community default of 1,000 Beans).
+
+Vouchers can vouch for newcomers on an invite, or for members already inside from their profile, choosing from presets of 25, 50, 75 or 100 Beans from their budget. Each voucher can vouch for a person once (raisable up to 100 Beans total), at most 3 vouchers can vouch for one person (up to 300 Beans total), and a voucher cannot vouch for someone who is below zero now. Trust badges never give this right.

@@ -110,14 +110,18 @@ Any member can invite people, unless the community has chosen that only its admi
 
 A community's admins can turn invites off for the whole community.
 
-**Vouching on an invite.** If you can vouch for people (owners, admins and members the community has appointed to vouch), **Invites** also shows **Vouch for them**: **None**, **25**, **50** or **100**. It starts on **None** every time. Pick an amount and you vouch for that person the moment they join, so you don't have to look out for them under a name you may not recognise. It is the same as vouching from their profile: **Vouched by** shows you, and you can withdraw it the same way.
+**Vouching on an invite.** If you are a voucher (owners and admins by role, and members set as vouchers on the names list by an owner or committee admin), **Invites** also shows **Vouch for them**: **None**, **25**, **50**, **75** or **100**, taken from your voucher budget. Under the choices, it shows your unspent budget ("From your budget: 550 of 1,000 left"). A preset above what is left is greyed ("Not enough budget left"), and with nothing left it says "No budget left. Ask an owner for more." Pick an amount and that amount is held from your budget. When the person joins with the invite, they receive that starting credit line from your budget.
 
-- If you lose the right to vouch before they join, they still join, with no vouch.
-- The invite doesn't tell them beforehand. Once they have joined, the vouch shows as any vouch does.
-- A ticket made without a connection can't carry a vouch. To make one, choose **None**.
-- There is no vouch where a community has no Beans, so the global community doesn't show this.
+- If an invite expires without being used, or you delete it, the held amount returns to your budget.
+- If you stop being a voucher before they join, they still join, with no credit line.
+- A ticket made without a connection cannot carry a vouch.
+- There are no vouchers where a community has no Beans, so the global community does not show this.
 
-**Inviting from a post.** A post or an event also has **Invite and share**, which makes one invite (with the same **Vouch for them** choice) and sends your friend a link that brings them to that post once they have joined. See "Browsing the Market".
+**Vouching for someone already inside.** A voucher can also vouch for a member who has already joined: open their profile and tap **Vouch for @name**, choosing from the same presets (**25**, **50**, **75** or **100** Beans) from your budget. You can only vouch for each person once, though you can later raise your vouch for them up to 100 in total. At most 3 vouchers may vouch for the same person (up to 300 Beans total). You cannot vouch for someone who is below zero: hardship help goes through credit-line gifts or community Decisions.
+
+**The Vouchers block.** Owners and credit-committee admins see a **Vouchers** block at the top of **Invites** (behind the person icon with a plus). It lists each voucher, their remaining budget, how many people they have vouched for, and how many are below zero. Tapping a voucher opens their voucher card, where owners and committee admins can adjust their budget with **Set budget to**. A final row, **+ Make someone a voucher**, opens the names list.
+
+**Inviting from a post.** A post or an event also has **Invite and share**, which makes one invite (with the same **Vouch for them** choice for vouchers) and sends your friend a link that brings them to that post once they have joined. See "Browsing the Market".
 
 **Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. On the web app the **Tree** stays, and so do the codes you made earlier: they still work until they lapse. An owner or admin with no signal can still make a paper ticket, from the last role the community gave them. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge.
 

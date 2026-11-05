@@ -22,7 +22,7 @@ On the phone, tap the bar for **Credit Slider Info**, which explains each part.
 
 ## How it opens
 
-It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when someone chosen to welcome newcomers vouches for you, on your profile or on the invite that brought you in. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold.
+It starts at zero. It opens when you complete your first trade in the market (a trade of only 1 or 2 beans is too small to count), or when a voucher vouches for you on the invite that brought you in or on your profile. Until then the Ledger says **No credit line yet**. You can still trade with beans you hold.
 
 ## How it grows
 
@@ -61,9 +61,19 @@ In some communities any member can invite people, so the admins don't know every
 Your community's admins can freeze a member's credit line: all of it, or, in a known community, the part that comes from being a confirmed member.
 
 - If they freeze all of it, or the confirmed part is all the line you have, the Ledger says **Your credit line is frozen**: you can't spend into debit while it lasts, but you can still sell and receive Beans, and spend what you hold above zero. If you were in debit when they froze it, the Ledger also says how many Beans you are in debit: selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.
-- If they freeze the confirmed part and you also have credit from a vouch, from trading or from a grant, the bar stays, with a note under it that the confirmed part is frozen and the rest works as before. If you are below what is left, the Ledger says **Spending paused** too (below).
+- If they freeze the confirmed part and you also have credit from a vouch, a credit-line gift, trading or a grant, the bar stays, with a note under it that the confirmed part is frozen and the rest works as before. If you are below what is left, the Ledger says **Spending paused** too (below).
 
-Your level doesn't change, on your profile and on your listings alike: it counts what you have done (a vouch, your trades and any trust an admin granted you), never the part of your line that comes from being confirmed, or any amount the admins set for it. To ask why, or to have it opened again, ask one of the admins.
+Your level doesn't change, on your profile and on your listings alike: it counts what you have done (your trades and any trust an admin granted you), never the part of your line that comes from being confirmed, or any amount the admins set for it. To ask why, or to have it opened again, ask one of the admins.
+
+## Giving part of your credit line
+
+You can give part of your credit line to another member. On **Send**, open the **Credit line** tab beside **Beans**.
+
+- **Only credit someone gave you:** you can only give credit that a voucher or another member gave you. You cannot give your known floor or credit you earned by trading.
+- **Only what you aren't using:** you can give only as much credit as your balance and your live Offers leave unused, so giving credit never pauses your spending.
+- **After your first trade:** you can give credit once you have completed your first trade in the market, the same rule as sending Beans.
+- **Up to the community limit:** you can give up to 100 Beans per gift (or your community's setting, if an owner set a lower limit).
+- **It is theirs for good:** the credit line moves to the recipient permanently. It never makes them a voucher. You cannot give credit to yourself, an enterprise, or a paused or frozen member.
 
 ## Spending paused
 

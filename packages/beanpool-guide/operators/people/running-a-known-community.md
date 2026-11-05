@@ -91,7 +91,7 @@ In a LETS, a member the committee knows can go into debt by an agreed amount fro
 
 - **The switch.** "Confirmed members get the known floor" is on in every community unless an owner switches it off. With nobody confirmed it changes nobody's limit: only a member an admin confirms gets the known floor. Switched off, no confirmed member has it, and nobody loses Beans they hold (below).
 - **The known floor.** 1,000 Beans to start: about 25 hours of work the community is trusting each confirmed member for. 40 Beans is an hour.
-- **The cap.** The most anyone here may owe, from every source together: the known floor, a vouch, and the trust they earn by trading. 2,000 Beans to start; an owner can raise it to 5,000. The known floor can't be more than the cap.
+- **The cap.** The most anyone here may owe, from every source together: the known floor, vouched credit, and the trust they earn by trading. 2,000 Beans to start; an owner can raise it to 5,000. The known floor can't be more than the cap.
 - **One offer.** A confirmed member can use their whole known floor while they keep at least one offer listed. With none, they can't go below zero on it. Trust they earn by trading still opens up in steps as they list more offers, as it does for everyone.
 - **Who it applies to.** Only members with a confirmation from an admin. A confirmation waiting for a second admin doesn't count yet; one taken back stops counting at once.
 - **Enterprises.** An enterprise counts up to half of each confirmed keeper's known floor towards its own. A keeper who keeps several enterprises shares that half between them.
@@ -111,6 +111,18 @@ A change needs an owner or admin signed in with their own key, so the log can sa
 ### Everyone sees the changes
 
 Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read one member's lines on that member's **Known floor** panel. A raise above the community's known floor is its own line, so other admins notice.
+
+## Vouchers
+
+A community can appoint trusted members to vouch for newcomers and members already inside, giving them a small credit line to start trading with.
+
+- **Who is a voucher.** Being on the names list makes nobody a voucher on its own. An owner or credit-committee admin can tap **Make a voucher** on a confirmed entry in the names list. Owners and admins are also vouchers by role from the day the role is granted. Moderators are not. Role vouchers appear in the names list's **Vouchers** filter with **Add their name**.
+- **Budgets.** Each voucher gets an allocation of 100 to 2,000 Beans in steps of 100, prefilled with the community's default budget (1,000 Beans, set by an owner in Core settings). The allocation is written in an append-only ledger on the server, not a balance in Beans.
+- **Top-ups and adjustments.** An owner or committee admin can tap **Set budget to** on a voucher's card at any time to raise or lower their unspent budget. The control offers quick levels (**500**, **1,000**, **1,500**, **2,000**) and a 100-step stepper. It can be lowered any time, but never below what is held on unused invites, and it never claws back credit already vouched. No voucher may hold more than 2,000 in hand (left plus held).
+- **The voucher card.** Opening a voucher on the names list or in the Vouchers block opens their card: budget left, amount vouched to people who joined, amount held on unused invites, invites sent with a vouch, how many of their vouched members are below zero now, trading counts, and how much of their vouched credit was passed on to others.
+- **Budget history.** Under the card, **Budget history** lists every grant, top-up, invite hold, returned hold and stop. Vouchers can also read their own budget history on their Ledger.
+- **The Vouchers block.** Owners and committee admins see a **Vouchers** block at the top of **People → Invites**, showing each voucher with their budget left, vouched count, and below-zero count. Tapping a row opens that voucher's card. A final row, **+ Make someone a voucher**, opens the names list.
+- **Stopping a voucher.** An owner or committee admin can tap **Stop vouching**. Stopping releases open holds back (their invites remain valid but carry no vouch; the joiner is told the vouch ended before they joined and starts with no credit line). It writes a stop entry for what was left, and takes back nothing already given. If an owner or admin loses their role, their role budget stops automatically.
 
 ## Running a mixed community
 

@@ -57,7 +57,7 @@ import {
 } from './engine/vouchers.js';
 // The whole module too, for one export read by name (tellVoucherNotice): a missing one is a failed check, not a load error.
 import * as vouchersModule from './engine/vouchers.js';
-import { getDoor, setDoor } from './config/door.js';
+import { getDoor, setDoor, DEFAULT_DOOR } from './config/door.js';
 import { listKeptNotices } from './engine/kept-notices.js';
 import { setKnownFloorException } from './config/known-floor.js';
 
@@ -106,6 +106,8 @@ async function call(id: Id | null, method: Method, urlPath: string, body?: unkno
     return { status: res.status, body: parsed, text };
 }
 const show = (r: Res | null) => (r ? `${r.status} ${r.text.slice(0, 220)}` : '-');
+/** The door back as it was: only a community's doors are stored (an open door is never one set on a node). */
+const restoreDoor = (d: ReturnType<typeof getDoor>) => setDoor(d === 'open' ? DEFAULT_DOOR : d);
 
 const generate = (id: Id, vouchAmount?: unknown) => call(id, 'POST', '/api/invite/generate', { publicKey: id.pk, ...(vouchAmount === undefined ? {} : { vouchAmount }) });
 const redeem = (id: Id, code: string) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
@@ -222,7 +224,7 @@ async function main(): Promise<void> {
         await call(owen, 'POST', '/api/names/vouchers/settings', { voucherBudget: 500 }), await call(owen, 'POST', '/api/names/committee', { memberPubkey: dan.pk, on: true }),
         await call(owen, 'POST', `/api/invite/asks/${offAsk.body?.ask?.id}/send`, { vouchAmount: 25 }), await call(owen, 'POST', `/api/join/knocks/${offKnock}/approve`, { vouchAmount: 25 }),
     ];
-    setDoor(doorBeforeOff);
+    restoreDoor(doorBeforeOff);
     assert(off.every((r) => r.status === 403 && r.body?.code === 'profile_no_beans') && allLines() === linesBeforeOff
         && count('SELECT COUNT(*) AS n FROM invite_codes') === invitesBeforeOff,
         `10. with Beans off every writer is refused, an ask's and a knock's answer with a vouch included, nothing written (${off.map((r) => `${r.status} ${r.body?.code}`).join(', ')})`);
@@ -553,7 +555,7 @@ async function main(): Promise<void> {
     assert(askAnswered.status === 200 && askWaiting() === 0 && askCode.vouch_amount === 50
         && count("SELECT COUNT(*) AS n FROM voucher_allocations WHERE member_pubkey = ? AND kind = 'hold' AND ref = ?", lou.pk, askCode.code) === 1,
         `15. Lou answers the ask with a 50: the invite carries it, held from his budget with the code (${show(askAnswered)})`);
-    setDoor(doorBefore);
+    restoreDoor(doorBefore);
     const ivy = newId('Ivy');
     const ivyJoins = await redeem(ivy, askCode.code);
     assert(ivyJoins.status === 200 && ivyJoins.body?.vouch?.landed === 50 && roomOf(ivy.pk) === 50, `15. and it lands on whoever joins with it (${show(ivyJoins)})`);

@@ -157,7 +157,7 @@ export function memberGiftSetting(): number {
  * Writes the voucher_budget setting (the default removes the row) and its `budget_setting` line in the known floor's log,
  * inside the caller's transaction.
  */
-export function writeVoucherBudgetSetting(actor: string, before: number, value: number, at?: string): void {
+export function saveVoucherBudgetSetting(actor: string, before: number, value: number, at?: string): void {
     if (value === VOUCHER_BUDGET_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(VOUCHER_BUDGET_KEY);
     else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(VOUCHER_BUDGET_KEY, String(value));
     logLine(actor, 'budget_setting', null, before, value, at);
@@ -587,7 +587,7 @@ export function setVoucherSettings(actor: string, body: { voucherBudget?: unknow
     // Each write names its key (test-replication-manifest reads every node_config write); the default removes the row.
     db.transaction(() => {
         if (newBudget !== undefined && newBudget !== before.voucherBudget) {
-            writeVoucherBudgetSetting(actor, before.voucherBudget, newBudget);
+            saveVoucherBudgetSetting(actor, before.voucherBudget, newBudget);
         }
     })();
     return voucherSettings();

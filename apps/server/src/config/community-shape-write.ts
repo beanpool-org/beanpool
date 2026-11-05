@@ -70,7 +70,7 @@
  */
 import { word, wordsFor, isMemberGiftSetting, isBudgetLevel, type WordKey } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { VOUCHER_WORDS, writeMemberGiftSetting, writeVoucherBudgetSetting } from '../engine/vouchers.js';
+import { VOUCHER_WORDS, writeMemberGiftSetting, saveVoucherBudgetSetting } from '../engine/vouchers.js';
 import { getNodeConfig, updateNodeConfig, noticeToEveryMember, type NodeConfig } from '../state-engine.js';
 import { getNodeRole } from './node-role.js';
 import { getConfiguredSwitches, setSwitchOverride, type ProfileSwitch } from './node-profile.js';
@@ -338,7 +338,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown, opts: { freshPr
         if (switches.some(([name, on]) => name === 'dmRequests' && on === false)) closeCopyDoors(at);
         if (door) setDoor(door);
         if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
-        if (budget !== null) writeVoucherBudgetSetting(by.actor, S.voucherBudget.configured, budget, at);
+        if (budget !== null) saveVoucherBudgetSetting(by.actor, S.voucherBudget.configured, budget, at);
         if (gift !== null) writeMemberGiftSetting(by.actor, S.memberGift.configured, gift, at);
         if (Object.keys(share).length > 0) updateNodeConfig(share);
         if (copies) setRecoveryCopies(copies);

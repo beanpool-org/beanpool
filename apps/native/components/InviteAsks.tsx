@@ -20,6 +20,8 @@ import { useStyles, useTheme } from '../app/ThemeContext';
 import { useModalKeyboardLift } from './useModalKeyboardLift';
 import { useScrollFieldIntoView } from './useScrollFieldIntoView';
 import { askAnAdmin, readAsksToAnswer, readMyAsks, sayNoToAsk, sendInviteForAsk, takeBackAsk } from '../utils/invite-asks';
+import { askMyVouching, type MyVouching } from '../utils/vouchers';
+import { VouchPresetChoice } from './VouchPresetChoice';
 import type { BeanPoolIdentity } from '../utils/identity';
 
 const askedWords = (iso: string) => t(INVITE_ASK_WORDS.asked, { date: formatDate(new Date(iso), 'day-month-year') });
@@ -222,19 +224,30 @@ export function AskAnAdmin({ anchorUrl, identity, onShare }: { anchorUrl: string
     );
 }
 
-function AskCard({ ask, busy, onSend, onNo }: {
-    ask: InviteAskToAnswer; busy: boolean;
-    onSend: () => void; onNo: (reason: string) => void;
+function AskCard({ ask, busy, myVouching, onSend, onNo }: {
+    ask: InviteAskToAnswer; busy: boolean; myVouching: MyVouching | null;
+    onSend: (vouch?: number) => void; onNo: (reason: string) => void;
 }) {
     const { colors } = useTheme();
     const styles = useAskStyles();
     const [saying, setSaying] = useState(false);
     const [reason, setReason] = useState('');
+    const [vouchPreset, setVouchPreset] = useState<number | null>(null);
     return (
         <View style={styles.card} testID={`invite-ask-${ask.id}`}>
             <Text style={styles.who}>{t(INVITE_ASK_WORDS.askedBy, { name: ask.askerCallsign })}</Text>
             <Text style={styles.meta}>{askedWords(ask.askedAt)}</Text>
             <Fenced name={ask.firstName} line={ask.howKnown} />
+            {myVouching?.voucher && (
+                <View style={{ marginTop: 8 }}>
+                    <VouchPresetChoice
+                        value={vouchPreset}
+                        onChange={setVouchPreset}
+                        budgetLeft={myVouching.budget?.left ?? 0}
+                        budgetTotal={myVouching.budget?.level ?? 0}
+                    />
+                </View>
+            )}
             {saying ? (
                 <>
                     <Text style={[styles.label, { marginTop: 12 }]}>{t(INVITE_ASK_WORDS.reason)}</Text>
@@ -256,7 +269,7 @@ function AskCard({ ask, busy, onSend, onNo }: {
                 </>
             ) : (
                 <View style={styles.actions}>
-                    <Button label={t(INVITE_ASK_WORDS.sendInvite)} strong onPress={onSend} disabled={busy} testID={`invite-ask-invite-${ask.id}`} />
+                    <Button label={t(INVITE_ASK_WORDS.sendInvite)} strong onPress={() => onSend(vouchPreset ?? undefined)} disabled={busy} testID={`invite-ask-invite-${ask.id}`} />
                     <Button label={t(INVITE_ASK_WORDS.say)} onPress={() => setSaying(true)} disabled={busy} testID={`invite-ask-no-${ask.id}`} />
                 </View>
             )}
@@ -269,11 +282,15 @@ export function InviteAsksToAnswer({ anchorUrl, identity }: { anchorUrl: string;
     const { colors } = useTheme();
     const styles = useAskStyles();
     const [asks, setAsks] = useState<InviteAskToAnswer[] | null>(null);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const [note, setNote] = useState<string | null>(null);
     const [refusal, setRefusal] = useState<string | null>(null);
 
-    const load = useCallback(async () => { setAsks(await readAsksToAnswer(anchorUrl, identity)); }, [anchorUrl, identity]);
+    const load = useCallback(async () => {
+        setAsks(await readAsksToAnswer(anchorUrl, identity));
+        askMyVouching(anchorUrl, identity).then(setMyVouching).catch(() => {});
+    }, [anchorUrl, identity]);
     useFocusEffect(useCallback(() => { void load(); }, [load]));
 
     const answer = async (id: string, go: () => ReturnType<typeof sendInviteForAsk>, done: string) => {
@@ -298,7 +315,8 @@ export function InviteAsksToAnswer({ anchorUrl, identity }: { anchorUrl: string;
                     key={ask.id}
                     ask={ask}
                     busy={busy !== null}
-                    onSend={() => void answer(ask.id, () => sendInviteForAsk(anchorUrl, identity, ask.id), t(INVITE_ASK_WORDS.sent))}
+                    myVouching={myVouching}
+                    onSend={vouch => void answer(ask.id, () => sendInviteForAsk(anchorUrl, identity, ask.id, vouch), t(INVITE_ASK_WORDS.sent))}
                     onNo={reason => void answer(ask.id, () => sayNoToAsk(anchorUrl, identity, ask.id, reason), t(INVITE_ASK_WORDS.told))}
                 />
             ))}

@@ -17,14 +17,14 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
-    getBalance, getTransactions, sendTransfer, request, saveHomePreferences,
-    type BalanceInfo, type TierInfo, type Transaction, type Member, type MarketplaceTransaction
+    getBalance, getTransactions, sendTransfer, request, saveHomePreferences, getMyVouching,
+    type BalanceInfo, type TierInfo, type Transaction, type Member, type MarketplaceTransaction, type MyVouching
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
 import { RepaymentCard } from '../components/RepaymentCard';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, ledgerVouchedBy, ledgerBudget, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -159,6 +159,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     viewerIsMemberRef.current = viewerIsMember;
     const [ownBalanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null);
     const balanceInfo = sample ? sample.balance : ownBalanceInfo;
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [showBudgetModal, setShowBudgetModal] = useState(false);
     const [txns, setTxns] = useState<Transaction[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
     const [loading, setLoading] = useState(true);
@@ -261,6 +263,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 }
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
+                getMyVouching().then(v => { if (isMountedRef.current) setMyVouching(v); }).catch(() => {});
                 setTxns(txn);
                 if (mem) setMembers(mem.filter(m => m.publicKey !== myKey));
                 setError(null);
@@ -538,6 +541,11 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">
                                 {t('You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)')}
                             </div>
+                            {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
+                                <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
+                                    {balanceInfo.vouchedBy.map(v => ledgerVouchedBy(v.callsign)).join(' · ')}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -547,6 +555,11 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                     <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} knownGrant={balanceInfo?.knownGrant ?? 0} />
                     {knownFrozenPartNote(balanceInfo ?? {}) && (
                         <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo ?? {})}</p>
+                    )}
+                    {balanceInfo?.vouchedBy && balanceInfo.vouchedBy.length > 0 && (
+                        <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300" data-testid="ledger-vouched-by">
+                            {balanceInfo.vouchedBy.map(v => ledgerVouchedBy(v.callsign)).join(' · ')}
+                        </div>
                     )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {frozen && (
@@ -558,6 +571,22 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 { limit: Math.abs(usableFloor) })}</span>
                         </div>
                     )}
+                </div>
+            )}
+
+            {myVouching?.voucher && myVouching.budget && (
+                <div className="mb-4">
+                    <button
+                        type="button"
+                        onClick={() => setShowBudgetModal(true)}
+                        className="w-full text-left bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-3.5 shadow-sm flex items-center justify-between gap-2 hover:bg-oat-50 dark:hover:bg-nature-800/40 cursor-pointer transition-colors border-0"
+                        data-testid="ledger-budget-row"
+                    >
+                        <span className="text-sm font-extrabold text-nature-900 dark:text-white">
+                            {ledgerBudget(myVouching.budget.left, myVouching.budget.level)}
+                        </span>
+                        <span className="text-nature-400 font-bold ml-1">›</span>
+                    </button>
                 </div>
             )}
 
@@ -1099,6 +1128,76 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                 onClose={() => setShowCommonsInfo(false)} 
                 commonsBalance={balanceInfo?.commonsBalance ?? 0} 
             />
+
+            {showBudgetModal && myVouching?.budget && (
+                <div
+                    className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50"
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={() => setShowBudgetModal(false)}
+                >
+                    <div
+                        className="w-full sm:max-w-[480px] max-h-[85vh] overflow-y-auto p-5 rounded-t-2xl sm:rounded-2xl bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 shadow-xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                            <h3 className="m-0 text-base font-extrabold text-nature-950 dark:text-white">
+                                {t('Your budget to vouch from')}
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowBudgetModal(false)}
+                                className="p-1 text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-0 cursor-pointer"
+                                aria-label={t('Close')}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-3.5 mb-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 space-y-1 text-xs text-nature-700 dark:text-nature-300">
+                            <div className="text-sm font-extrabold text-nature-950 dark:text-white">
+                                {t('{left} of {total} left', { left: formatNumber(myVouching.budget.left), total: formatNumber(myVouching.budget.level) })}
+                            </div>
+                            <div>{t('Vouched {amount} to {people} who joined', { amount: formatNumber(myVouching.budget.vouched), people: tn(myVouching.budget.peopleVouched, '{n} person', '{n} people') })}</div>
+                            <div>{t('Held {amount} on {invites} not used yet', { amount: formatNumber(myVouching.budget.held), invites: tn(myVouching.budget.heldInvites, '{n} invite', '{n} invites') })}</div>
+                        </div>
+
+                        <div className="mb-4">
+                            <h4 className="m-0 mb-2 text-sm font-bold text-nature-950 dark:text-white">
+                                {t('Budget history')}
+                            </h4>
+                            <div className="space-y-2 max-h-[35vh] overflow-y-auto pr-1">
+                                {!myVouching.history || myVouching.history.length === 0 ? (
+                                    <p className="m-0 p-3 text-xs text-nature-500">{t('No budget history yet.')}</p>
+                                ) : (
+                                    myVouching.history.map((h, i) => (
+                                        <div key={i} className="p-2.5 rounded-lg border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-xs">
+                                            <div className="flex items-center justify-between font-bold text-nature-950 dark:text-white">
+                                                <span>{t('{amount} Beans ({kind})', { amount: h.amount > 0 ? `+${formatNumber(h.amount)}` : formatNumber(h.amount), kind: h.kind })}</span>
+                                                <span className="text-[11px] text-nature-400 font-normal">{formatDate(new Date(h.at), 'day-month-year')}</span>
+                                            </div>
+                                            <div className="text-nature-500 dark:text-nature-400 mt-0.5 flex flex-wrap gap-x-2">
+                                                <span>{h.actorCallsign ? t('by @{name}', { name: h.actorCallsign }) : t('actor: {actor}', { actor: h.actor })}</span>
+                                                {h.person && <span>{t('for @{name}', { name: h.person.callsign })}</span>}
+                                                {h.why && <span className="opacity-80">({h.why})</span>}
+                                                {h.outcome && <span className="opacity-80">[{h.outcome}]</span>}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900">
+                            <h4 className="m-0 mb-1 text-sm font-bold text-nature-950 dark:text-white">
+                                {t('Ask for more')}
+                            </h4>
+                            <p className="m-0 text-xs text-nature-600 dark:text-nature-300 leading-relaxed">
+                                {t('To get a bigger budget to vouch from, ask an owner of this community.')}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

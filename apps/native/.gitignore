@@ -4,3 +4,5 @@ credentials.json
 .env
 .env.*
 !.env.example
+e2e/screenshots/**/*.png
+

@@ -88,13 +88,14 @@ const STUBS = {
     'peek': `export const makePeekLink = async () => ({ link: 'https://castlemaine.beanpool.org/?post=p&peek=t', expiresAt: '' }); export const peekStopsHere = () => 0;`,
     // The ask form (#2775) is opened by a tap these shots never make; stubbed as share-one-flow-320.mjs does.
     'InviteAsks': `export const AskSheet = () => null;`,
+    'vouchers': `export const askMyVouching = async () => null; export const vouchFromProfile = async () => ({ ok: true });`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec, importer = '') => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
     const base = path.basename(spec);
-    if (['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'InviteAsks', 'NodeStatusContext'].includes(base)) return base;
+    if (['ThemeContext', 'IdentityContext', 'peek', 'use-node-profile', 'InviteAsks', 'NodeStatusContext', 'vouchers'].includes(base)) return base;
     // The key, the stored communities and the role are the button's own reads: stubbed for it alone, so the real modules
     // still serve everything else that imports them.
     return ['identity', 'nodes', 'node-admin', 'crypto'].includes(base) && /^(invite-and-share|InviteAndShare|use-share-role)\./.test(path.basename(importer)) ? base : null;

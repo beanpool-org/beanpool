@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { t, tn, word } from '@beanpool/core';
-import { answerJoinRequest, getJoinRequests, type JoinRequest } from '../lib/api';
+import { answerJoinRequest, getJoinRequests, getMyVouching, type JoinRequest, type MyVouching } from '../lib/api';
 import { MemberAvatar } from './MemberAvatar';
+import { VouchPresetChoice } from './VouchPresetChoice';
 
 /**
  * The words of this section (the phone's components/WantsToJoin.tsx, word for word: one catalog entry serves both apps).
@@ -33,6 +34,8 @@ function requestMeta(r: JoinRequest): string {
  */
 export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) => void; canSee?: boolean }) {
     const [requests, setRequests] = useState<JoinRequest[] | null>(null);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [vouchPresets, setVouchPresets] = useState<Record<string, number | null>>({});
     const [total, setTotal] = useState(0);
     const [hidden, setHidden] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -44,6 +47,11 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
 
     const load = useCallback(async () => {
         if (!canSee) return;
+        try {
+            setMyVouching(await getMyVouching());
+        } catch {
+            setMyVouching(null);
+        }
         const r = await getJoinRequests();
         if (r.ok) {
             setRequests(r.knocks);
@@ -64,7 +72,8 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
 
     const answer = async (req: JoinRequest, verb: 'approve' | 'decline') => {
         setBusy(req.id);
-        const r = await answerJoinRequest(req.id, verb);
+        const chosenVouch = verb === 'approve' && myVouching?.voucher ? vouchPresets[req.id] : null;
+        const r = await answerJoinRequest(req.id, verb, chosenVouch ?? undefined);
         setBusy(null);
         if (r.ok) {
             const left = (requests ?? []).filter(k => k.id !== req.id).length;
@@ -117,6 +126,16 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
                             </div>
                         </div>
                         <p dir="auto" className="m-0 mt-2.5 text-sm leading-relaxed text-nature-800 dark:text-nature-100 break-words whitespace-pre-wrap">{req.message}</p>
+                        {myVouching?.voucher && (
+                            <div className="mt-3">
+                                <VouchPresetChoice
+                                    value={vouchPresets[req.id] ?? null}
+                                    onChange={(val) => setVouchPresets(prev => ({ ...prev, [req.id]: val }))}
+                                    budgetLeft={myVouching.budget?.left ?? 0}
+                                    budgetTotal={myVouching.budget?.level ?? 0}
+                                />
+                            </div>
+                        )}
                         <div className="flex flex-wrap gap-2 mt-3">
                             <button
                                 type="button"

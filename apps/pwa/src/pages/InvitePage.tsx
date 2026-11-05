@@ -11,15 +11,20 @@
  * member who is no owner or admin there makes none either, and is told who does, in plain words.
  */
 
-import { useState, useEffect } from 'react';
-import { buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
+import { useState, useEffect, useCallback } from 'react';
+import {
+    buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, getInviteTree, getMyVouching, getVouchersBlock,
+    request, type CommunityInfo, type InviteCode, type MyVouching, type VoucherSummary,
+} from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { marked, modeFor, readsOwn, useReaderFeatures } from '../lib/features';
 import { LocalCommunityAction, LocalCommunityLine, LocalCommunityStrip, type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { SampleHeader, sampleInvites, sampleInviteTree } from '../components/ShowcasePreviews';
 import { AskAnAdmin, InviteAsksToAnswer } from '../components/InviteAsks';
-import { LOCAL_COMMUNITY_LINES, formatDate, inviteShareText, offersInviteAsk, shareAddress, t, tn } from '@beanpool/core';
+import { VouchPresetChoice } from '../components/VouchPresetChoice';
+import { VoucherCardModal } from '../components/VoucherCardModal';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, vouchPresets } from '@beanpool/core';
 import {
     communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
     adminsOnlyText, adminsOnlyRefusal, pausedRefusal, OFFLINE_ADMINS_ONLY_TEXT, INVITE_WORDS, type InviteRole,
@@ -124,6 +129,38 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     // Said under the button when no invite was made and the page stays as it is (offline where only admins invite).
     const [notice, setNotice] = useState<string | null>(null);
 
+    // Vouchers (V3): the signer's budget presets, and the Vouchers block for owners and committee admins (§11).
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [vouchPreset, setVouchPreset] = useState<number | null>(null);
+    const [vouchersData, setVouchersData] = useState<VoucherSummary[] | null>(null);
+    const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
+    const [showMakeVoucherNotice, setShowMakeVoucherNotice] = useState(false);
+
+    const loadMyVouching = useCallback(async () => {
+        if (isPreview) return;
+        try {
+            const data = await getMyVouching();
+            setMyVouching(data);
+        } catch {
+            setMyVouching(null);
+        }
+    }, [isPreview]);
+
+    const loadVouchersBlock = useCallback(async () => {
+        if (isPreview) return;
+        try {
+            const data = await getVouchersBlock();
+            setVouchersData(data?.vouchers ?? null);
+        } catch {
+            setVouchersData(null);
+        }
+    }, [isPreview]);
+
+    useEffect(() => {
+        void loadMyVouching();
+        void loadVouchersBlock();
+    }, [loadMyVouching, loadVouchersBlock]);
+
     // The member's own codes and their invite tree: never asked where invites are in preview (the global node, which
     // makes no invite; lib/features readsOwn).
     useEffect(() => {
@@ -191,21 +228,25 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
         setGenerating(true);
         setCopied(false);
         setNotice(null);
+        const chosenVouch = myVouching?.voucher ? vouchPreset : null;
         try {
             // Online first (parity with native): a server-minted INV- code is
             // short, single-use enforced centrally, and lands in the node's
             // invite tree. Only fall back to a self-signed offline ticket when
             // the node can't be reached.
             try {
-                const res = await generateInvite(identity.publicKey, intendedFor.trim() || undefined);
+                const res = await generateInvite(identity.publicKey, intendedFor.trim() || undefined, chosenVouch ?? undefined);
                 if (res?.invite?.code) {
                     setNewCode(res.invite.code);
                     setIntendedFor('');
                     setShowQR(true);
+                    setVouchPreset(null);
                     setInvites(prev => [res.invite, ...prev]);
+                    void loadMyVouching();
+                    void loadVouchersBlock();
                     return;
                 }
-            } catch (e) {
+            } catch (e: any) {
                 // The node takes no invites (it said so before this page heard): its words, and no offline ticket, which
                 // it would refuse just the same.
                 const refusal = invitesOffRefusal(e);
@@ -228,7 +269,18 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     setNotice(pausedWords);
                     return;
                 }
-                /* node unreachable — offline fallback below */
+                // A refused vouch shows the node's sentence and makes no ticket:
+                const serverMsg = typeof e?.message === 'string' && e.message ? e.message : typeof e?.error === 'string' && e.error ? e.error : null;
+                if (chosenVouch !== null && serverMsg && typeof e?.status === 'number') {
+                    setNotice(serverMsg);
+                    return;
+                }
+                // An offline ticket never carries a vouch:
+                if (chosenVouch !== null) {
+                    setNotice(t(vouchPresets.noOfflineVouch));
+                    return;
+                }
+                /* node unreachable on None — offline fallback below */
             }
 
             // Where only admins invite, a ticket only from a member the node has said is one (lib/node-invites.ts).
@@ -445,6 +497,43 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                     ) : (
                         <>
                     {!isPreview && doorAdmins && nodeInfo?.features?.inviteAsks === true && <InviteAsksToAnswer />}
+                    {!isPreview && vouchersData !== null && (
+                        <div className="mb-6" data-testid="vouchers-block">
+                            <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
+                                {t('Vouchers')}
+                            </h2>
+                            <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl overflow-hidden shadow-sm divide-y divide-nature-100 dark:divide-nature-800">
+                                {vouchersData.map((v) => (
+                                    <button
+                                        key={v.memberPubkey}
+                                        type="button"
+                                        onClick={() => setSelectedVoucherPubkey(v.memberPubkey)}
+                                        className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-center justify-between gap-2 border-0 bg-transparent cursor-pointer"
+                                        data-testid={`voucher-row-${v.callsign}`}
+                                    >
+                                        <span className="text-sm font-semibold text-nature-900 dark:text-white truncate">
+                                            {t('{name} · {left} of {total} left · {vouched} vouched · {below} below zero', {
+                                                name: v.callsign,
+                                                left: formatNumber(v.left),
+                                                total: formatNumber(v.level),
+                                                vouched: v.peopleVouched,
+                                                below: v.belowZero,
+                                            })}
+                                        </span>
+                                        <span className="text-nature-400 font-bold ml-2">›</span>
+                                    </button>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowMakeVoucherNotice(true)}
+                                    className="w-full text-left p-3.5 hover:bg-oat-50 dark:hover:bg-nature-800/50 transition-colors flex items-center gap-2 border-0 bg-transparent cursor-pointer text-sm font-bold text-bp-ink-accent"
+                                    data-testid="make-voucher-button"
+                                >
+                                    {t('+ Make someone a voucher')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
                         {t('🎟️ Invite Someone')}
                     </h2>
@@ -459,6 +548,15 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                         onChange={e => setIntendedFor(e.target.value)}
                         className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
                     />
+
+                    {myVouching?.voucher && (
+                        <VouchPresetChoice
+                            value={vouchPreset}
+                            onChange={setVouchPreset}
+                            budgetLeft={myVouching.budget?.left ?? 0}
+                            budgetTotal={myVouching.budget?.level ?? 0}
+                        />
+                    )}
 
 
                     {isPreview ? (
@@ -640,6 +738,44 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
                             ))}
                         </div>
                     )}
+                </div>
+            )}
+            {selectedVoucherPubkey && (
+                <VoucherCardModal
+                    memberPubkey={selectedVoucherPubkey}
+                    onClose={() => setSelectedVoucherPubkey(null)}
+                    onUpdated={() => {
+                        void loadVouchersBlock();
+                        void loadMyVouching();
+                    }}
+                />
+            )}
+
+            {showMakeVoucherNotice && (
+                <div
+                    className="fixed inset-0 z-[320] flex items-center justify-center p-4 bg-black/50"
+                    role="dialog"
+                    aria-modal="true"
+                    onClick={() => setShowMakeVoucherNotice(false)}
+                >
+                    <div
+                        className="w-full max-w-[420px] p-5 rounded-2xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 shadow-xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="m-0 mb-2 text-base font-extrabold text-nature-950 dark:text-white">
+                            {t('+ Make someone a voucher')}
+                        </h3>
+                        <p className="m-0 mb-4 text-sm text-nature-600 dark:text-nature-300 leading-relaxed">
+                            {t('The names list is managed in the operator manual or manager (apps/manager). S2 web names list entry screen is coming soon.')}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setShowMakeVoucherNotice(false)}
+                            className="w-full min-h-[44px] py-2 px-4 rounded-xl font-bold bg-bp-commit-fill text-bp-commit-on border-0 cursor-pointer"
+                        >
+                            {t('OK')}
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

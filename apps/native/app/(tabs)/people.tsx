@@ -26,11 +26,13 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
 import { LocalCommunityMark, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleInvites, sampleInviteTree } from '../../components/showcase/sample-screens';
-import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, type WordKey } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, inviteShareText, offersInviteAsk, shareAddress, t, tn, word, vouchPresets, type WordKey } from '@beanpool/core';
 import { fetchPeekCommunityName } from '../../utils/peek';
 import { shareCommunityName } from '../../utils/invite-share-name';
 import { Sentence } from '../../components/Sentence';
 import { invitesOn, membersByKey } from '../../utils/node-profile';
+import { askMyVouching, type MyVouching } from '../../utils/vouchers';
+import { VouchPresetChoice } from '../../components/VouchPresetChoice';
 import {
     guestDoorButton, guestDoorText, guestDoorLabel, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
     mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, pausedRefusal, offlineTicketRefusal, type InviteRole,
@@ -275,6 +277,16 @@ export default function PeopleScreen() {
         return () => { alive = false; };
     }, [doorAdminsOnly, identity, anchorUrl, isGuest, view]);
     const mayInvite = mayInviteHere(nodeProfile?.features, inviteRole);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [vouchPreset, setVouchPreset] = useState<number | null>(null);
+    useEffect(() => {
+        if (!anchorUrl || !identity || isGuest) return;
+        let alive = true;
+        askMyVouching(anchorUrl, identity).then(mv => {
+            if (alive) setMyVouching(mv);
+        }).catch(() => {});
+        return () => { alive = false; };
+    }, [anchorUrl, identity?.publicKey, isGuest, view]);
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -481,12 +493,14 @@ export default function PeopleScreen() {
     const handleGenerate = async () => {
         if (!identity || invitesPreview) return;
         setGenerating(true);
+        const chosenVouch = myVouching?.voucher ? vouchPreset : null;
         try {
             // First attempt Online generation via API
             try {
                 const apiPayload = {
                     publicKey: identity.publicKey,
                     intendedFor: intendedFor || undefined,
+                    ...(chosenVouch !== null ? { vouchAmount: chosenVouch } : {}),
                 };
                 const apiPayloadStr = JSON.stringify(apiPayload);
                 const generateUrl = `${anchorUrl}/api/invite/generate`;
@@ -504,18 +518,23 @@ export default function PeopleScreen() {
                         const code = data.invite.code;
                         setNewCode(code);
                         setIntendedFor('');
+                        setVouchPreset(null);
                         
                         const inviteObj = {
                             code,
                             createdBy: identity.publicKey,
                             createdAt: new Date().toISOString(),
-                            intendedFor: intendedFor || undefined
+                            intendedFor: intendedFor || undefined,
+                            ...(chosenVouch !== null ? { vouchAmount: chosenVouch } : {}),
                         };
                         
                         const updated = [inviteObj, ...invites];
                         setInvites(updated);
                         await AsyncStorage.setItem(`bp_offline_invites_${identity.publicKey}`, JSON.stringify(updated));
                         setGenerating(false);
+                        if (anchorUrl && identity) {
+                            void askMyVouching(anchorUrl, identity).then(setMyVouching).catch(() => {});
+                        }
                         return;
                     }
                 } else {
@@ -543,9 +562,23 @@ export default function PeopleScreen() {
                         Alert.alert(t('No invites for now'), paused);
                         return;
                     }
+                    // A refused vouch shows the node's sentence and makes no ticket:
+                    const serverMsg = typeof body?.error === 'string' && body.error ? body.error : typeof body?.message === 'string' && body.message ? body.message : null;
+                    if (chosenVouch !== null && serverMsg) {
+                        Alert.alert(t('Could not vouch'), serverMsg);
+                        return;
+                    }
+                    if (chosenVouch !== null) {
+                        Alert.alert(t('Could not vouch'), t(vouchPresets.noOfflineVouch));
+                        return;
+                    }
                 }
             } catch (err) {
                 console.log('Online invite generation failed. Falling back to offline ticket...', err);
+                if (chosenVouch !== null) {
+                    Alert.alert(t('Offline'), t(vouchPresets.noOfflineVouch));
+                    return;
+                }
             }
 
             // Where only admins invite, a ticket only from a member the node has said is one (invite-entries.ts).
@@ -1262,6 +1295,15 @@ export default function PeopleScreen() {
                                 style={styles.input}
                                 placeholderTextColor={colors.text.muted}
                             />
+
+                            {myVouching?.voucher && (
+                                <VouchPresetChoice
+                                    value={vouchPreset}
+                                    onChange={setVouchPreset}
+                                    budgetLeft={myVouching.budget?.left ?? 0}
+                                    budgetTotal={myVouching.budget?.level ?? 0}
+                                />
+                            )}
 
                             {invitesPreview ? (
                                 <LocalCommunityMark variant="action" feature="invites" label={isOnline ? t('✨ Generate Ticket') : t('✨ Generate Offline Ticket')} />

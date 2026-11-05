@@ -13,13 +13,14 @@
  */
 import { useEffect, useState } from 'react';
 import { INVITE_SHARE_WORDS, t } from '@beanpool/core';
-import { request } from '../lib/api';
+import { getMyVouching, request, type MyVouching } from '../lib/api';
 import { useCommunityInfo } from '../lib/features';
 import { loadIdentity, type BeanPoolIdentity } from '../lib/identity';
 import { handOver } from '../lib/hand-over';
 import { inviteAndShareLink, makeInviteForShare, offersInviteAndShare } from '../lib/invite-and-share';
 import { onlyAdminsInvite, readInviteRole, type InviteRole } from '../lib/node-invites';
 import { nodeOrigin } from './EventExtras';
+import { VouchPresetChoice } from './VouchPresetChoice';
 import type { SharePart } from './ShareMenu';
 
 /**
@@ -31,6 +32,8 @@ export function useInviteAndShare(post: { id: string; title: string }, offered: 
     const info = useCommunityInfo();
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [role, setRole] = useState<InviteRole | undefined>(undefined);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [vouchPreset, setVouchPreset] = useState<number | null>(null);
     const [open, setOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
@@ -42,7 +45,14 @@ export function useInviteAndShare(post: { id: string; title: string }, offered: 
     useEffect(() => {
         if (!offered) return;
         let cancelled = false;
-        loadIdentity().then((id) => { if (!cancelled) setIdentity(id); }).catch(() => { if (!cancelled) setIdentity(null); });
+        loadIdentity().then((id) => {
+            if (!cancelled) {
+                setIdentity(id);
+                if (id) {
+                    getMyVouching().then((mv) => { if (!cancelled) setMyVouching(mv); }).catch(() => {});
+                }
+            }
+        }).catch(() => { if (!cancelled) setIdentity(null); });
         return () => { cancelled = true; };
     }, [offered]);
     // Where only admins invite, this member's role, as the node says it. A refusal is an answer (no role); no answer at all
@@ -77,11 +87,13 @@ export function useInviteAndShare(post: { id: string; title: string }, offered: 
         setBusy(true);
         setNote(null);
         try {
-            const made = await makeInviteForShare(identity.publicKey);
+            const chosenVouch = myVouching?.voucher ? vouchPreset : null;
+            const made = await makeInviteForShare(identity.publicKey, undefined, chosenVouch ?? undefined);
             if (!made.ok) {
                 setNote({ text: made.message, ok: false });
                 return;
             }
+            setVouchPreset(null);
             await finish(inviteAndShareLink(nodeOrigin(), made.code, post.id));
         } catch (e) {
             setNote({ text: (e as Error)?.message || t(INVITE_SHARE_WORDS.notMade), ok: false });
@@ -100,6 +112,16 @@ export function useInviteAndShare(post: { id: string; title: string }, offered: 
                 {open && (
                     <div data-testid="invite-and-share-panel" className="rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 p-3">
                         <p className="m-0 mb-3 text-sm text-nature-950 dark:text-white break-words">{t(INVITE_SHARE_WORDS.panel)}</p>
+                        {myVouching?.voucher && (
+                            <div className="mb-3">
+                                <VouchPresetChoice
+                                    value={vouchPreset}
+                                    onChange={setVouchPreset}
+                                    budgetLeft={myVouching.budget?.left ?? 0}
+                                    budgetTotal={myVouching.budget?.level ?? 0}
+                                />
+                            </div>
+                        )}
                         <button type="button" data-testid="invite-and-share-make" onClick={make} disabled={busy}
                             className="w-full min-h-[48px] px-3 rounded-xl border-0 text-sm font-bold cursor-pointer break-words bg-bp-commit-fill text-bp-commit-on disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1">
                             {t(INVITE_SHARE_WORDS.make)}

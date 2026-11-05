@@ -13,6 +13,8 @@ import {
     type InviteAskAnswer, type InviteAskToAnswer, type InviteAskWaiting,
 } from '@beanpool/core';
 import { askAnAdmin, readAsksToAnswer, readMyAsks, sayNoToAsk, sendInviteForAsk, takeBackAsk } from '../lib/invite-asks';
+import { getMyVouching, type MyVouching } from '../lib/api';
+import { VouchPresetChoice } from './VouchPresetChoice';
 import { useDialogFocus } from './dialog-focus';
 
 const askedWords = (iso: string) => t(INVITE_ASK_WORDS.asked, { date: formatDate(new Date(iso), 'day-month-year') });
@@ -147,17 +149,28 @@ export function AskAnAdmin({ onCopy, onShare }: { onCopy: (code: string) => void
     );
 }
 
-function AskCard({ ask, busy, onSend, onNo }: {
-    ask: InviteAskToAnswer; busy: boolean;
-    onSend: () => void; onNo: (reason: string) => void;
+function AskCard({ ask, busy, myVouching, onSend, onNo }: {
+    ask: InviteAskToAnswer; busy: boolean; myVouching: MyVouching | null;
+    onSend: (vouch?: number) => void; onNo: (reason: string) => void;
 }) {
     const [saying, setSaying] = useState(false);
     const [reason, setReason] = useState('');
+    const [vouchPreset, setVouchPreset] = useState<number | null>(null);
     return (
         <div className={CARD} data-testid={`invite-ask-${ask.id}`}>
             <p dir="auto" className="m-0 text-[15px] font-extrabold text-nature-950 dark:text-white break-words">{t(INVITE_ASK_WORDS.askedBy, { name: ask.askerCallsign })}</p>
             <p className={META}>{askedWords(ask.askedAt)}</p>
             <Fenced name={ask.firstName} line={ask.howKnown} />
+            {myVouching?.voucher && (
+                <div className="mt-3">
+                    <VouchPresetChoice
+                        value={vouchPreset}
+                        onChange={setVouchPreset}
+                        budgetLeft={myVouching.budget?.left ?? 0}
+                        budgetTotal={myVouching.budget?.level ?? 0}
+                    />
+                </div>
+            )}
             {saying ? (
                 <form className="mt-3" onSubmit={e => { e.preventDefault(); onNo(reason); }}>
                     <label className={LABEL}>
@@ -171,7 +184,7 @@ function AskCard({ ask, busy, onSend, onNo }: {
                 </form>
             ) : (
                 <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" className={STRONG} onClick={onSend} disabled={busy} data-testid={`invite-ask-invite-${ask.id}`}>{t(INVITE_ASK_WORDS.sendInvite)}</button>
+                    <button type="button" className={STRONG} onClick={() => onSend(vouchPreset ?? undefined)} disabled={busy} data-testid={`invite-ask-invite-${ask.id}`}>{t(INVITE_ASK_WORDS.sendInvite)}</button>
                     <button type="button" className={QUIET} onClick={() => setSaying(true)} disabled={busy} data-testid={`invite-ask-no-${ask.id}`}>{t(INVITE_ASK_WORDS.say)}</button>
                 </div>
             )}
@@ -182,10 +195,18 @@ function AskCard({ ask, busy, onSend, onNo }: {
 /** For an owner or admin: the asks waiting, oldest first. The node answers anyone else 403, and there is no section. */
 export function InviteAsksToAnswer() {
     const [asks, setAsks] = useState<InviteAskToAnswer[] | null>(null);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const [refusal, setRefusal] = useState<string | null>(null);
-    const load = useCallback(async () => { setAsks(await readAsksToAnswer()); }, []);
+    const load = useCallback(async () => {
+        setAsks(await readAsksToAnswer());
+        try {
+            setMyVouching(await getMyVouching());
+        } catch {
+            setMyVouching(null);
+        }
+    }, []);
     useEffect(() => { void load(); }, [load]);
     const answer = async (go: Promise<{ ok: true } | { ok: false; message: string | null }>, done: string) => {
         setBusy(true);
@@ -207,7 +228,8 @@ export function InviteAsksToAnswer() {
                     key={ask.id}
                     ask={ask}
                     busy={busy}
-                    onSend={() => void answer(sendInviteForAsk(ask.id), t(INVITE_ASK_WORDS.sent))}
+                    myVouching={myVouching}
+                    onSend={(vouch) => void answer(sendInviteForAsk(ask.id, vouch), t(INVITE_ASK_WORDS.sent))}
                     onNo={reason => void answer(sayNoToAsk(ask.id, reason), t(INVITE_ASK_WORDS.told))}
                 />
             ))}

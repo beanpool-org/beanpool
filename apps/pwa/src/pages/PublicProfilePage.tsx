@@ -1,15 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
     getMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
-    addFriendApi, submitRating, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
-    type PublicCreatorChannel
+    addFriendApi, submitRating, getPublicChannels, getTrustProfile, getMyVouching, vouchForMember,
+    type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo, type PublicCreatorChannel, type MyVouching
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, formatDate, formatNumber, t, tn, vouchFor, raiseVouchFor, VOUCH_MAX, type QuizResult } from '@beanpool/core';
+import { VouchPresetChoice } from '../components/VouchPresetChoice';
 import { ListPhoto } from '../components/ListPhoto';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { keepQuizResult, publishQuizResult, shownWorkingStyle } from '../lib/working-style';
@@ -70,6 +71,12 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [reviewComment, setReviewComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
     const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
+    const [trust, setTrust] = useState<any>(null);
+    const [myVouching, setMyVouching] = useState<MyVouching | null>(null);
+    const [profileVouchPreset, setProfileVouchPreset] = useState<number | null>(25);
+    const [vouchBusy, setVouchBusy] = useState(false);
+    const [vouchRefusal, setVouchRefusal] = useState<string | null>(null);
+    const [vouchSuccess, setVouchSuccess] = useState<string | null>(null);
 
     const isSelf = pubkey === identity.publicKey;
     // The key whose profile has answered and is no enterprise's (or couldn't be read): until then nothing of a member's
@@ -191,7 +198,9 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             isSelf ? getFriends(pubkey).catch(() => []) : getFriends(identity.publicKey).catch(() => []),
             // Viewer's own profile (when viewing someone else) — drives Collaboration Chemistry synergy card.
             isSelf ? Promise.resolve(null) : getMemberProfile(identity.publicKey, identity.publicKey).catch(() => null),
-        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerProf]) => {
+            isSelf ? Promise.resolve(null) : getTrustProfile(pubkey).catch(() => null),
+            isSelf ? Promise.resolve(null) : getMyVouching().catch(() => null),
+        ]).then(([prof, rat, posts, bal, givenRatings, friends, viewerProf, trustData, vouchingData]) => {
             if (cancelled) return;
             if (prof) setProfile(prof);
             if (isSelf) {
@@ -199,6 +208,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             } else if (viewerProf) {
                 setViewerProfile(viewerProf);
             }
+            if (trustData) setTrust(trustData);
+            if (vouchingData) setMyVouching(vouchingData);
             if (rat) {
                 setStats({ average: rat.average, count: rat.count, asProvider: rat.asProvider, asReceiver: rat.asReceiver });
                 setRatings(rat.ratings || []);
@@ -220,6 +231,18 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
         return () => { cancelled = true; };
     }, [pubkey, identity.publicKey, isSelf]);
+
+    const myPriorVouch = useMemo(() => {
+        if (!myVouching?.history) return 0;
+        let sum = 0;
+        for (const h of myVouching.history) {
+            if (h.person?.memberPubkey === pubkey && (h.for === 'profile' || h.outcome === 'vouched')) {
+                sum += Math.abs(h.amount);
+            }
+        }
+        return sum;
+    }, [myVouching, pubkey]);
+    const isRaise = myPriorVouch > 0;
 
     const renderStars = (avg: number) => {
         const rounded = Math.round(avg || 0);
@@ -403,6 +426,100 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     <ChannelChips channels={channels} />
 
                 </div>
+
+                {/* Invited by */}
+                {trust?.vouchedInBy && (
+                    <div className="mx-4 mt-3 p-3 rounded-2xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm flex items-center gap-3" data-testid="profile-invited-by">
+                        {trust.vouchedInBy.kind === 'member' ? (
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <MemberAvatar avatarUrl={trust.vouchedInBy.avatarUrl} pubkey={trust.vouchedInBy.publicKey} callsign={trust.vouchedInBy.callsign || '?'} size={32} />
+                                <div className="flex-1 min-w-0">
+                                    <p className="m-0 text-sm font-bold text-nature-950 dark:text-white truncate">
+                                        {t('🌱 Invited by {name}', { name: trust.vouchedInBy.callsign ?? '' })}
+                                    </p>
+                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400 truncate">
+                                        {t('{tier} tier', { tier: tierWords(trust.vouchedInBy.tier) })}
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <span className="text-xl">🛡️</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="m-0 text-sm font-bold text-nature-950 dark:text-white truncate">
+                                        {trust.vouchedInBy.kind === 'founder' ? t('Founding member') : t('Invited directly by the system admin')}
+                                    </p>
+                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400 truncate">
+                                        {trust.vouchedInBy.kind === 'founder' ? t('Here since the community began') : t('Vetted by the admin at sign-up')}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Vouch for @sam (V3 §9) */}
+                {!isSelf && myVouching?.voucher && (
+                    <div className="mx-4 mt-4 p-4 rounded-2xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 shadow-sm" data-testid="profile-vouch">
+                        <h3 className="m-0 mb-1 text-base font-extrabold text-nature-950 dark:text-white">
+                            {isRaise
+                                ? raiseVouchFor(profile?.callsign || '')
+                                : vouchFor(profile?.callsign || '')}
+                        </h3>
+                        {isRaise && (
+                            <p className="m-0 mb-3 text-xs text-nature-600 dark:text-nature-300">
+                                {t('You already vouched {prior} Beans for @{name}. You can raise it up to {max} Beans.', {
+                                    prior: myPriorVouch,
+                                    name: profile?.callsign || '',
+                                    max: VOUCH_MAX,
+                                })}
+                            </p>
+                        )}
+                        <VouchPresetChoice
+                            value={profileVouchPreset}
+                            onChange={setProfileVouchPreset}
+                            budgetLeft={myVouching.budget?.left ?? 0}
+                            budgetTotal={myVouching.budget?.level ?? 0}
+                        />
+                        {vouchRefusal && (
+                            <p role="alert" className="m-0 mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs font-bold text-amber-800 dark:text-amber-300 leading-relaxed" data-testid="profile-vouch-refusal">
+                                {vouchRefusal}
+                            </p>
+                        )}
+                        {vouchSuccess && (
+                            <p role="status" className="m-0 mt-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs font-bold text-emerald-800 dark:text-emerald-300 leading-relaxed" data-testid="profile-vouch-success">
+                                {vouchSuccess}
+                            </p>
+                        )}
+                        <button
+                            type="button"
+                            disabled={vouchBusy || !profileVouchPreset}
+                            onClick={async () => {
+                                if (!profileVouchPreset) return;
+                                setVouchBusy(true);
+                                setVouchRefusal(null);
+                                setVouchSuccess(null);
+                                try {
+                                    const res = await vouchForMember(pubkey, profileVouchPreset, isRaise);
+                                    setVouchSuccess(isRaise
+                                        ? t('Raised vouch for @{name} to {total} Beans.', { name: profile?.callsign || '', total: res.total })
+                                        : t('Vouched {amount} Beans for @{name}.', { name: profile?.callsign || '', amount: profileVouchPreset }));
+                                    const updated = await getMyVouching();
+                                    setMyVouching(updated);
+                                } catch (e: any) {
+                                    const msg = typeof e?.message === 'string' && e.message ? e.message : typeof e?.error === 'string' && e.error ? e.error : t('Could not vouch.');
+                                    setVouchRefusal(msg);
+                                } finally {
+                                    setVouchBusy(false);
+                                }
+                            }}
+                            className="w-full mt-3 min-h-[44px] py-2.5 px-4 rounded-xl text-sm font-bold bg-bp-commit-fill text-bp-commit-on border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+                            data-testid="profile-vouch-submit"
+                        >
+                            {vouchBusy ? t('Saving...') : isRaise ? raiseVouchFor(profile?.callsign || '') : vouchFor(profile?.callsign || '')}
+                        </button>
+                    </div>
+                )}
 
                 {/* ─── Collaboration Chemistry ─── */}
                 {(() => {

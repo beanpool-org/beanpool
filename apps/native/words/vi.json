@@ -959,9 +959,7 @@
   "Withdrawing...": "Đang rút yêu cầu...",
   "Withdraw Request": "Rút lại đề nghị",
   "Accept this Offer?": "Chấp nhận Chia sẻ này?",
-  "Offer to Fulfill?": "Đề nghị giúp đỡ?",
   "🔒 Trust Wallet Protocol": "🔒 Giao thức Ví uỷ thác",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Giao dịch này được bảo vệ và giữ trong uỷ thác. Bên chi trả đã gửi tín dụng. Khi hoàn tất, bạn sẽ nhận được tín dụng sau khi trừ 1.5% phí giao dịch {owned} để đóng góp vào Quỹ chung.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Bằng cách tiếp tục, bạn gửi {credits} tín dụng vào Ví uỷ thác tạm thời. Khi hoàn tất, bên cung cấp sẽ nhận tín dụng sau khi trừ 1.5% phí giao dịch {owned} để đóng góp vào Quỹ chung.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Bằng cách tiếp tục, bạn gửi tín dụng đã được ủy quyền vào Ví uỷ thác tạm thời. Khi hoàn tất, bên cung cấp sẽ nhận tín dụng sau khi trừ 1.5% phí giao dịch {owned} để đóng góp vào Quỹ chung.",
   "TRUST COMMITMENT (HOURS)": "CAM KẾT UỶ THÁC (GIỜ)",
@@ -974,7 +972,6 @@
   "Set up profile": "Thiết lập hồ sơ",
   "⏳ Pending Confirmation": "⏳ Đang chờ xác nhận",
   "🤝 Accept Offer": "🤝 Chấp nhận chia sẻ",
-  "✋ Offer to Fulfill": "✋ Đề nghị giúp đỡ",
   "✋ Fulfillment Requests ({n})": "✋ Yêu cầu giúp đỡ ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "other": "★ {average} ({n} đánh giá)"

@@ -27,6 +27,8 @@ import { layOut, type Layout } from './yoga-dom-layout';
 const themeIs = vi.hoisted(() => ({ now: 'light' as 'light' | 'dark' }));
 /** Each host's onLayout, by testID, so a case can hand the photo frame the height Yoga gave it. */
 const layouts = vi.hoisted(() => new Map<string, (e: unknown) => void>());
+/** What the page handed the carousel last (the photo opens whole, slice DP4: its onOpen). */
+const carouselSaw = vi.hoisted(() => ({ props: null as null | { photos?: string[]; onOpen?: (index: number, uri: string) => void } }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', checkbox: 'checkbox' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(8).filter((x) => x && typeof x === 'object'));
@@ -37,6 +39,7 @@ vi.mock('react-native', () => {
         if (testID) attrs['data-testid'] = testID;
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (props.source?.uri) attrs['data-src'] = props.source.uri; // an <Image>'s photo, so a case can say WHICH photo is drawn
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (accessibilityState?.selected !== undefined) attrs['aria-selected'] = String(accessibilityState.selected);
         if (disabled || accessibilityState?.disabled) attrs['aria-disabled'] = 'true';
@@ -130,7 +133,7 @@ vi.mock('../../components/MemberAvatar', async () => {
 // The carousel as the frame hands it: the height it was given, the corners it was given.
 vi.mock('../../components/PhotoCarousel', async () => {
     const { createElement: h } = await import('react');
-    return { PhotoCarousel: (p: { height?: number; borderRadius?: number }) => h('div', { 'data-testid': 'event-carousel', 'data-height': String(p.height), 'data-radius': String(p.borderRadius), 'data-style': JSON.stringify({ height: p.height }) }) };
+    return { PhotoCarousel: (p: { height?: number; borderRadius?: number; photos?: string[]; onOpen?: (index: number, uri: string) => void }) => (carouselSaw.props = p, h('div', { 'data-testid': 'event-carousel', 'data-height': String(p.height), 'data-radius': String(p.borderRadius), 'data-style': JSON.stringify({ height: p.height }) })) };
 });
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
 
@@ -182,6 +185,7 @@ beforeEach(() => {
     who.key = ME;
     node.view = null;
     layouts.clear();
+    carouselSaw.props = null;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
@@ -533,5 +537,35 @@ describe('the photo frame hands the carousel its own height', () => {
         const carousel = byId('event-carousel')!;
         expect(carousel.getAttribute('data-height')).toBe('216');
         expect(carousel.getAttribute('data-radius')).toBe(String(MARKET_CARD_SHELL.radius));
+    });
+});
+
+// The photo opens whole (DESIGN-detail-pages-fable.md §2.6, slice DP4; Marty, 7 Nov): the page hands the carousel onOpen, and a
+// photo it names opens in the chat's full-screen viewer, the photo's own URL (no second size exists: memory photos-stay-800px).
+// The carousel's half (the button, the index, the URL) is proved in photo-carousel-open-render.test.ts.
+describe('the photo opens whole', () => {
+    const viewer = () => host.querySelector('[data-modal]');
+    const viewed = () => viewer()?.querySelector('img[aria-label="Full-size photo"]')?.getAttribute('data-src') ?? null;
+    const openFrame = async () => {
+        await draw(MULLUM, { ...BY_ID, myRsvp: null });
+        await act(async () => { layouts.get('event-photo-frame')!({ nativeEvent: { layout: { x: 0, y: 0, width: 288, height: 216 } } }); });
+    };
+
+    it("the page gives the carousel onOpen; a photo it names opens whole with its own URL, and Close photo closes it", async () => {
+        await openFrame();
+        expect(typeof carouselSaw.props?.onOpen).toBe('function');
+        expect(viewer()).toBeNull();
+        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0]); });
+        expect(viewed()).toBe('https://mullum.example/uploads/market.webp');
+        await act(async () => { buttonNamed('Close photo')!.click(); });
+        expect(viewer()).toBeNull();
+    });
+
+    it('a tap anywhere on the open photo closes it too', async () => {
+        await openFrame();
+        await act(async () => { carouselSaw.props!.onOpen!(0, MULLUM.photos[0]); });
+        expect(viewer()).not.toBeNull();
+        await act(async () => { buttonNamed('Dismiss full-size photo')!.click(); });
+        expect(viewer()).toBeNull();
     });
 });

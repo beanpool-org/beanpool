@@ -63,7 +63,10 @@ export function ChatWaitingPhoto({ uri, styles, disabled, onRemove }: { uri: str
     );
 }
 
-/** The photo full screen, over the chat, until tapped or closed. Nothing when `uri` is null. */
+/**
+ * The photo full screen, over the chat or a detail page (the listing's and the event's, whose 4:3 frame crops: DESIGN-detail-pages-fable.md
+ * §2.6, slice DP4), until tapped or closed. Nothing when `uri` is null.
+ */
 export function ChatPhotoViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();

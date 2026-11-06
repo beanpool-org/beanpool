@@ -1008,9 +1008,7 @@
   "Withdrawing...": "Απόσυρση...",
   "Withdraw Request": "Απόσυρση αιτήματος",
   "Accept this Offer?": "Αποδοχή αυτής της Προσφοράς;",
-  "Offer to Fulfill?": "Προσφορά για εκπλήρωση;",
   "🔒 Trust Wallet Protocol": "🔒 Πρωτόκολλο πορτοφολιού καταπιστεύματος",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Αυτή η συναλλαγή προστατεύεται και διακρατείται σε καταπίστευμα. Ο πληρωτής έχει ήδη δεσμεύσει τις πιστώσεις. Με την ολοκλήρωση, θα λάβετε τις πιστώσεις καθαρές μείον 1.5% τέλος {owned} για το κοινό ταμείο.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Συνεχίζοντας, δεσμεύετε {credits} πιστώσεις σε προσωρινό πορτοφόλι καταπιστεύματος. Με την ολοκλήρωση, ο πάροχος λαμβάνει τις πιστώσεις καθαρές μείον 1.5% {owned} για το κοινό ταμείο.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Συνεχίζοντας, δεσμεύετε τις εξουσιοδοτημένες πιστώσεις σας σε προσωρινό πορτοφόλι καταπιστεύματος. Με την ολοκλήρωση, ο πάροχος λαμβάνει τις πιστώσεις καθαρές μείον 1.5% {owned} για το κοινό ταμείο.",
   "TRUST COMMITMENT (HOURS)": "ΔΕΣΜΕΥΣΗ ΚΑΤΑΠΙΣΤΕΥΜΑΤΟΣ (ΩΡΕΣ)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "Ρύθμιση προφίλ",
   "⏳ Pending Confirmation": "⏳ Εκκρεμεί επιβεβαίωση",
   "🤝 Accept Offer": "🤝 Αποδοχή Προσφοράς",
-  "✋ Offer to Fulfill": "✋ Προσφορά για εκπλήρωση",
   "✋ Fulfillment Requests ({n})": "✋ Αιτήματα εκπλήρωσης ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} κριτική)",

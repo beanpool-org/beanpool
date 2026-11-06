@@ -1008,9 +1008,7 @@
   "Withdrawing...": "പിൻവലിക്കുന്നു...",
   "Withdraw Request": "അഭ്യർത്ഥന പിൻവലിക്കുക",
   "Accept this Offer?": "ഈ ഓഫർ സ്വീകരിക്കണോ?",
-  "Offer to Fulfill?": "പൂർത്തിയാക്കാൻ ഓഫർ ചെയ്യണോ?",
   "🔒 Trust Wallet Protocol": "🔒 ട്രസ്റ്റ് വാലറ്റ് പ്രോട്ടോക്കോൾ",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "ഈ ഇടപാട് സംരക്ഷിക്കപ്പെട്ടതും ട്രസ്റ്റിൽ സൂക്ഷിച്ചിട്ടുള്ളതുമാണ്. നൽകേണ്ടയാൾ ഇതിനകം ക്രെഡിറ്റുകൾ നൽകിയിട്ടുണ്ട്. പൂർത്തിയാകുമ്പോൾ, കോമൺസ് പൂളിനായി 1.5% ഇടപാട് ഫീസ് {owned} കുറച്ചുള്ള ക്രെഡിറ്റ് ലഭിക്കും.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "തുടരുന്നതിലൂടെ, ഒരു താൽക്കാലിക ട്രസ്റ്റ് വാലറ്റിലേക്ക് {credits} ക്രെഡിറ്റുകൾ നിങ്ങൾ നൽകുന്നു. പൂർത്തിയാകുമ്പോൾ, കോമൺസ് പൂളിനായി 1.5% ഇടപാട് ഫീസ് {owned} കുറച്ചുള്ള ക്രെഡിറ്റ് ദാതാവിന് ലഭിക്കും.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "തുടരുന്നതിലൂടെ, നിങ്ങളുടെ അംഗീകൃത ക്രെഡിറ്റുകൾ ഒരു താൽക്കാലിക ട്രസ്റ്റ് വാലറ്റിലേക്ക് നൽകുന്നു. പൂർത്തിയാകുമ്പോൾ, കോമൺസ് പൂളിനായി 1.5% ഇടപാട് ഫീസ് {owned} കുറച്ചുള്ള ക്രെഡിറ്റ് ദാതാവിന് ലഭിക്കും.",
   "TRUST COMMITMENT (HOURS)": "ട്രസ്റ്റ് ഉറപ്പ് (മണിക്കൂറുകൾ)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "പ്രൊഫൈൽ സജ്ജീകരിക്കുക",
   "⏳ Pending Confirmation": "⏳ സ്ഥിരീകരണത്തിനായി കാത്തിരിക്കുന്നു",
   "🤝 Accept Offer": "🤝 ഓഫർ സ്വീകരിക്കുക",
-  "✋ Offer to Fulfill": "✋ പൂർത്തിയാക്കാൻ സന്നദ്ധത അറിയിക്കുക",
   "✋ Fulfillment Requests ({n})": "✋ പൂർത്തിയാക്കൽ അഭ്യർത്ഥനകൾ ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} അവലോകനം)",

@@ -1008,9 +1008,7 @@
   "Withdrawing...": "Ritiro in corso...",
   "Withdraw Request": "Ritira richiesta",
   "Accept this Offer?": "Accettare questa Offerta?",
-  "Offer to Fulfill?": "Offrirti di soddisfare?",
   "🔒 Trust Wallet Protocol": "🔒 Protocollo Portafoglio di Garanzia",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Questa transazione è protetta e vincolata in garanzia. L'acquirente ha già impegnato i crediti. Al completamento, riceverai i crediti al netto della commissione dell'1,5% {owned} destinata al Fondo Comune.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Procedendo, impegni {credits} crediti in un Portafoglio di Garanzia temporaneo. Al completamento, il fornitore riceve i crediti al netto della commissione dell'1,5% {owned} per il Fondo Comune.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Procedendo, impegni i tuoi crediti autorizzati in un Portafoglio di Garanzia temporaneo. Al completamento, il fornitore riceve i crediti al netto della commissione dell'1,5% {owned} per il Fondo Comune.",
   "TRUST COMMITMENT (HOURS)": "IMPEGNO DI GARANZIA (ORE)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "Configura profilo",
   "⏳ Pending Confirmation": "⏳ In attesa di conferma",
   "🤝 Accept Offer": "🤝 Accetta Offerta",
-  "✋ Offer to Fulfill": "✋ Offriti di soddisfare",
   "✋ Fulfillment Requests ({n})": "✋ Richieste di adempimento ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} recensione)",

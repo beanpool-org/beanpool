@@ -1008,9 +1008,7 @@
   "Withdrawing...": "প্রত্যাহার করা হচ্ছে...",
   "Withdraw Request": "অনুরোধ প্রত্যাহার করুন",
   "Accept this Offer?": "এই প্রস্তাবটি গ্রহণ করবেন?",
-  "Offer to Fulfill?": "পূরণ করার প্রস্তাব দেবেন?",
   "🔒 Trust Wallet Protocol": "🔒 ট্রাস্ট ওয়ালেট প্রোটোকল",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "এই লেনদেনটি সুরক্ষিত এবং আস্থায় সংরক্ষিত। প্রদানকারী ইতোমধ্যে ক্রেডিট বরাদ্দ করেছেন। সম্পন্ন হলে, আপনি যৌথ তহবিলের জন্য ১.৫% ফি {owned} বাদ দিয়ে নেট ক্রেডিট পাবেন।",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "এগিয়ে যাওয়ার মাধ্যমে, আপনি একটি অস্থায়ী আস্থার ওয়ালেটে {credits} ক্রেডিট বরাদ্দ করছেন। কাজ শেষ হলে, সেবাদাতা যৌথ তহবিলের ১.৫% ফি {owned} বাদ দিয়ে নেট ক্রেডিট পাবেন।",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "এগিয়ে যাওয়ার মাধ্যমে, আপনি আপনার অনুমোদিত ক্রেডিট একটি অস্থায়ী আস্থার ওয়ালেটে বরাদ্দ করছেন। কাজ শেষ হলে, সেবাদাতা ১.৫% ফি {owned} বাদ দিয়ে নেট ক্রেডিট পাবেন।",
   "TRUST COMMITMENT (HOURS)": "আস্থার অঙ্গীকার (ঘণ্টা)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "প্রোফাইল সেট আপ করুন",
   "⏳ Pending Confirmation": "⏳ নিশ্চিতকরণ মুলতুবি রয়েছে",
   "🤝 Accept Offer": "🤝 প্রস্তাব গ্রহণ করুন",
-  "✋ Offer to Fulfill": "✋ পূরণ করার প্রস্তাব দিন",
   "✋ Fulfillment Requests ({n})": "✋ পূরণের অনুরোধ ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n}টি রিভিউ)",

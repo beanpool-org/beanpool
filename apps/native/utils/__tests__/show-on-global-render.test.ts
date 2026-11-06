@@ -359,7 +359,7 @@ describe('a copy of an Offer or a Need', () => {
         await press('event-copy-ask');
         expect(world.pushed).toHaveLength(1);
         expect(world.pushed[0]).toContain('community-card');
-        expect(page.textContent).not.toMatch(/Accept|Message|Offer to Fulfill|Ask to borrow|POSTED BY|ASKING PRICE|hidden/);
+        expect(page.textContent).not.toMatch(/Accept|Message|I can do this|Ask to borrow|POSTED BY|ASKING PRICE|hidden/);
         expect(byId('listing-copy-report')).not.toBeNull();
     });
 

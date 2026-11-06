@@ -32,7 +32,7 @@ Under **Contact details** you can add a phone number, an email or a WhatsApp num
 Once you add one, choose **Who can see this?**:
 
 - **Hidden:** nobody.
-- **Trade Partners:** members you have a deal with. It counts from the moment one of you taps **Accept Offer** or **Offer to Fulfill** on the other's post, even if the deal is later cancelled or turned down. Sending beans on their own is not a deal.
+- **Trade Partners:** members you have a deal with. It counts from the moment one of you taps **Accept Offer** or **I can do this** on the other's post, even if the deal is later cancelled or turned down. Sending beans on their own is not a deal.
 - **Friends:** people you have added as friends.
 - **Community:** every member of your community.
 

@@ -32,6 +32,7 @@ vi.mock('react-native', () => {
         if (onPress && !disabled) attrs.onClick = (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress({ stopPropagation() {} }); };
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (props.source?.uri) attrs['data-src'] = props.source.uri; // an <Image>'s photo, so a test can say WHICH photo is drawn
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (placeholder) attrs.placeholder = placeholder;
@@ -88,7 +89,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
-vi.mock('expo-image', () => ({ Image: (p: { accessibilityLabel?: string }) => createElement('img', p.accessibilityLabel ? { 'aria-label': p.accessibilityLabel } : null) }));
+vi.mock('expo-image', () => ({ Image: (p: { accessibilityLabel?: string; source?: { uri?: string } }) => createElement('img', { ...(p.accessibilityLabel ? { 'aria-label': p.accessibilityLabel } : {}), ...(p.source?.uri ? { 'data-src': p.source.uri } : {}) }) }));
 vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {}, WHEN_UNLOCKED_THIS_DEVICE_ONLY: 1, WHEN_UNLOCKED: 2, AFTER_FIRST_UNLOCK: 3 }));
 vi.mock('expo-crypto', async () => {
     const { randomBytes } = await import('node:crypto');
@@ -280,6 +281,19 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         await press('🤝 Accept Offer');
         expect(alerts.said).toContain(pseudoLocalise('Finish your profile first'));
         expect(bypassing()).toEqual([]);
+    });
+
+    it("another member's Need: \"I can do this\" and its sentence, the amount and the name through t(), the fee left to the deal (cold start N4)", async () => {
+        const ASKED = { ...NEED, id: 'p-need-asked', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_type: 'fixed', credits: 20 };
+        await open(ASKED);
+        expect(host.textContent).toContain(pseudoLocalise('✋ I can do this'));
+        await press('✋ I can do this');
+        expect(host.textContent).toContain(pseudoLocalise('I can do this'));
+        const line = host.querySelector('[data-testid="need-answer-line"]')?.textContent ?? '';
+        expect(line).toBe(pseudoLocalise("You'd do it for {price}. {name} agrees, you do it, {name} confirms, and the Beans are yours.")
+            .replace('{price}', pseudoLocalise('{n} Beans').replace('{n}', '20')).split('{name}').join(KOFI.callsign));
+        expect(host.textContent).not.toContain(pseudoLocalise('🔒 Trust Wallet Protocol'));
+        expect(bypassing(), 'the confirmation').toEqual([]);
     });
 
     it('a lendable Offer is asked for, never taken in one step (Free and priced); then the borrower waits for the yes', async () => {
@@ -508,6 +522,57 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(host.textContent).toContain('(4.5) • 3 Reviews');
         expect(host.textContent).toContain('ASKING PRICE');
         expect(host.querySelector('img[aria-label="Photo 2 of 2"]')).not.toBeNull();
+    });
+});
+
+// The photo opens whole (DESIGN-detail-pages-fable.md §2.6, slice DP4; Marty, 7 Nov: "maybe we should? why not"): the page's 4:3
+// frame crops, so a tap shows the SAME photo the page already holds, whole, in the chat's full-screen viewer. No bigger copy
+// exists (memory photos-stay-800px): the viewer gets the photo's own URL, its keys and all.
+describe('the photo opens whole', () => {
+    const photoButton = (n: number, of: number) => host.querySelector<HTMLElement>(`button[aria-label="Photo ${n} of ${of}"]`);
+    const viewer = () => host.querySelector('[data-modal]');
+    const viewed = () => viewer()?.querySelector('img[aria-label="Full-size photo"]')?.getAttribute('data-src') ?? null;
+    /** A button by its English label, exactly (`press` looks for the pseudo-locale's). */
+    const tap = async (label: string) => {
+        const el = host.querySelector<HTMLElement>(`button[aria-label="${label}"]`);
+        expect(el, label).toBeTruthy();
+        await act(async () => { el!.click(); });
+        await settle(4);
+    };
+
+    it("a press on the first photo opens the viewer with that photo's own URL; Close photo closes it", async () => {
+        await open(OFFER, 'en');
+        expect(viewer()).toBeNull();
+        expect(photoButton(1, 2)).not.toBeNull();
+        expect(photoButton(2, 2)).not.toBeNull();
+        await act(async () => { photoButton(1, 2)!.click(); });
+        expect(viewed()).toBe('https://mullum.example/p/1.jpg');
+        await tap('Close photo');
+        expect(viewer()).toBeNull();
+    });
+
+    it('each photo opens as itself, and a tap anywhere on the viewer closes it', async () => {
+        await open(OFFER, 'en');
+        await act(async () => { photoButton(2, 2)!.click(); });
+        expect(viewed()).toBe('https://mullum.example/p/2.jpg');
+        await tap('Dismiss full-size photo');
+        expect(viewer()).toBeNull();
+    });
+
+    it("the photo's keys go with it, and nothing is made smaller or bigger", async () => {
+        const KEYED = 'https://mullum.example/api/marketplace/posts/p1/photos/0?v=1791608803169&k=Yqpu8qmgAGQ';
+        await open({ ...OFFER, photos: JSON.stringify([KEYED]) }, 'en');
+        await act(async () => { photoButton(1, 1)!.click(); });
+        expect(viewed()).toBe(KEYED);
+    });
+
+    it("in the pseudo-locale the photo's button and the viewer's words all came through t()", async () => {
+        await open(OFFER);
+        const label = pseudoLocalise('Photo {n} of {count}').replace('{n}', '1').replace('{count}', '2');
+        await act(async () => { host.querySelector<HTMLElement>(`button[aria-label="${label}"]`)!.click(); });
+        expect(viewer()).not.toBeNull();
+        expect(host.querySelector(`[data-modal] button[aria-label="${pseudoLocalise('Close photo')}"]`)).not.toBeNull();
+        expect(bypassing(), 'the photo, open whole').toEqual([]);
     });
 });
 

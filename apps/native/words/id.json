@@ -960,9 +960,7 @@
   "Withdrawing...": "Menarik...",
   "Withdraw Request": "Tarik Permintaan",
   "Accept this Offer?": "Terima Penawaran ini?",
-  "Offer to Fulfill?": "Tawarkan untuk Memenuhi?",
   "🔒 Trust Wallet Protocol": "🔒 Protokol Dompet Jaminan",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Transaksi ini terlindungi dan disimpan dalam jaminan aman. Pembayar telah mengalokasikan kredit. Setelah selesai, Anda akan menerima kredit bersih dipotong biaya 1,5% {owned} untuk mendanai Pool Bersama.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Dengan melanjutkan, Anda mengalokasikan {credits} kredit ke Dompet Jaminan sementara. Setelah selesai, penyedia menerima kredit bersih dipotong biaya 1,5% {owned} untuk mendanai Pool Bersama.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Dengan melanjutkan, Anda mengalokasikan kredit resmi Anda ke Dompet Jaminan sementara. Setelah selesai, penyedia menerima kredit bersih dipotong biaya 1,5% {owned} untuk mendanai Pool Bersama.",
   "TRUST COMMITMENT (HOURS)": "KOMITMEN JAMINAN (JAM)",
@@ -975,7 +973,6 @@
   "Set up profile": "Atur profil",
   "⏳ Pending Confirmation": "⏳ Menunggu Konfirmasi",
   "🤝 Accept Offer": "🤝 Terima Penawaran",
-  "✋ Offer to Fulfill": "✋ Tawarkan untuk Memenuhi",
   "✋ Fulfillment Requests ({n})": "✋ Permintaan Pemenuhan ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "other": "★ {average} ({n} ulasan)"

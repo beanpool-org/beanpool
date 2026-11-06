@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useState } from 'react';
-import { FIRST_TRADE_WORDS as W } from '@beanpool/core';
+import { FIRST_TRADE_WORDS as W, NEEDS_COUNT_WORDS as N } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { GATED_LOOK, gatedProps, guardGated } from '../../lib/gated-control';
 import { buildAdminHeaders, getTfaSessionToken, resolveNodeApiUrl, passwordField } from '../../lib/node-client';
@@ -14,14 +14,21 @@ import { t as say, tn } from '../../lib/fresh-proof';
  * in a known community (an owner moves them); and who opened the exceptions, when. The exceptions themselves open on an
  * admin's phone, where the names list is: this page never shows a balance of one member, and there is no export. A node
  * older than the panel answers 404, and nothing is shown. How far new members get reads as its own part, for owners and
- * admins, in counts and medians (engine/time-to-first-trade.ts); a node older than that part sends none, and it isn't shown.
+ * admins, in counts and medians (engine/time-to-first-trade.ts); a node older than that part sends none, and it isn't shown. The
+ * Needs asked this month and answered within a week read beside it (engine/needs-this-month.ts): counts only, the answered figure
+ * in steps and held back under a few; a node older than that sends none, and it isn't shown.
  *
  * Operator manual text: packages/beanpool-guide/operators/people/running-a-known-community.md.
  */
 
-type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: number; membersInDebit: number; commonsPot: number; tradesThisMonth: number; newMembers?: NewMembers | null };
+type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: number; membersInDebit: number; commonsPot: number; tradesThisMonth: number; newMembers?: NewMembers | null; needs?: NeedsThisMonth | null };
 export type FirstTradeWindow = { joined: number; firstListing: number; firstTrade: number | null; daysToFirstListing: number | null; daysFromListingToTrade: number | null };
 export type NewMembers = { beans: boolean; anyTrades: boolean; minGroup: number; last90Days: FirstTradeWindow; allTime: FirstTradeWindow };
+/**
+ * Needs asked this month, and how many of them someone other than the asker put in a request on within a week of the Need
+ * going up (the first request is the first answer). `answeredWithinWeek` null: held back, or no deals here; never read as 0.
+ */
+export type NeedsThisMonth = { deals: boolean; minGroup: number; posted: number; answeredWithinWeek: number | null };
 type Lines = { debtLinePct: number; quietDays: number };
 type LogLine = {
     id: string; actorCallsign: string | null; actor: string; action?: string; subjectCallsign?: string | null;
@@ -77,6 +84,13 @@ export function readNewMembers(v: unknown): NewMembers | null {
     return { beans: o.beans, anyTrades: o.anyTrades === true, minGroup: num(o.minGroup) ? o.minGroup! : 5, last90Days, allTime };
 }
 
+/** The month's Needs, or null on a node older than it. An answered figure that isn't a number reads as held back, never as 0. */
+export function readNeeds(v: unknown): NeedsThisMonth | null {
+    const o = v as Partial<NeedsThisMonth> | null | undefined;
+    if (!o || !num(o.posted) || typeof o.deals !== 'boolean') return null;
+    return { deals: o.deals, minGroup: num(o.minGroup) ? o.minGroup! : 5, posted: o.posted!, answeredWithinWeek: numOrNull(o.answeredWithinWeek) };
+}
+
 function readRule(v: unknown): Rule | null {
     const r = v as Partial<Rule> | null | undefined;
     if (!r || typeof r.started !== 'boolean') return null;
@@ -97,6 +111,7 @@ export function readHealth(v: unknown): Health | null {
             beansInCirculation: num(t.beansInCirculation) ? t.beansInCirculation! : 0, sumOfCredit: t.sumOfCredit!, sumOfDebt: t.sumOfDebt!,
             membersInDebit: t.membersInDebit!, commonsPot: num(t.commonsPot) ? t.commonsPot! : 0, tradesThisMonth: num(t.tradesThisMonth) ? t.tradesThisMonth! : 0,
             newMembers: readNewMembers(t.newMembers),
+            needs: readNeeds(t.needs),
         },
         settings: { debtLinePct: s.debtLinePct!, quietDays: s.quietDays! },
         known: o.known === true,
@@ -124,6 +139,32 @@ export function firstTradeRows(w: FirstTradeWindow, n: NewMembers): Array<[strin
         [say(W.listingToTrade), !n.anyTrades ? noTrades : waited(w.daysFromListingToTrade)],
     );
     return rows;
+}
+
+/** The Needs block's rows. With no deals there is no answered row at all, so no zero can read as "nobody helps". */
+export function needsRows(n: NeedsThisMonth): Array<[string, string]> {
+    const rows: Array<[string, string]> = [[say(N.posted), n.posted.toLocaleString('en')]];
+    // 0 only where nothing was asked at all (the node never sends a 0 for a figure it holds back).
+    if (n.deals) rows.push([say(N.answered), n.answeredWithinWeek === null ? say(W.heldBack) : n.answeredWithinWeek === 0 ? '0' : say(W.atLeast, { n: n.answeredWithinWeek })]);
+    return rows;
+}
+
+function NeedsSection({ data }: { data: NeedsThisMonth }) {
+    return (
+        <div data-testid="needs-this-month" className="space-y-2">
+            <h4 className="text-sm font-bold text-white m-0 break-words">{say(N.title)}</h4>
+            <dl className="grid gap-2 sm:grid-cols-2 m-0">
+                {needsRows(data).map(([label, value]) => (
+                    <div key={label} className="rounded-xl border border-nature-800 bg-nature-950 p-3 min-w-0">
+                        <dt className="text-xs text-nature-400 break-words">{label}</dt>
+                        <dd className="m-0 text-sm font-bold text-white break-words">{value}</dd>
+                    </div>
+                ))}
+            </dl>
+            {data.deals && <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(N.definition)}</p>}
+            {data.deals && <p className="text-xs text-nature-400 m-0 leading-relaxed break-words">{say(N.steps, { n: data.minGroup })}</p>}
+        </div>
+    );
 }
 
 function FirstTradeSection({ data }: { data: NewMembers }) {
@@ -275,6 +316,7 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
             </dl>
 
             {t.newMembers && <FirstTradeSection data={t.newMembers} />}
+            {t.needs && <NeedsSection data={t.needs} />}
 
             <div className="space-y-2">
                 <h4 className="text-sm font-bold text-white m-0 break-words">When admins may see a member&apos;s balance</h4>

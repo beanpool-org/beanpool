@@ -69,6 +69,8 @@ vi.mock('../modal-safe-area', () => ({ pageSheetTopInset: () => 0 }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => null }));
 vi.mock('../../components/showcase/LocalCommunityMark', () => ({ LocalCommunityMark: () => null }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
+// The page draws the photo viewer (a Modal with a close icon) only while a photo is open; the icon library cannot load outside a device.
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('../../components/EventCard', () => ({ EVENT_ACCENT: '#0a7' }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
 vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));

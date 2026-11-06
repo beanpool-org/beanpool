@@ -1106,9 +1106,7 @@
   "Withdrawing...": "Отзыв...",
   "Withdraw Request": "Отозвать запрос",
   "Accept this Offer?": "Принять это Предложение?",
-  "Offer to Fulfill?": "Предложить выполнение?",
   "🔒 Trust Wallet Protocol": "🔒 Протокол доверительного кошелька",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Сделка защищена и находится на удержании. Плательщик уже зарезервировал кредиты. По завершении вы получите кредиты за вычетом комиссии 1,5% {owned} в Фонд общих проектов.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Продолжая, вы резервируете {credits} кредитов во временном Доверительном кошельке. По завершении исполнитель получит кредиты за вычетом комиссии 1,5% {owned} в Фонд общих проектов.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Продолжая, вы резервируете авторизованные кредиты во временном Доверительном кошельке. По завершении исполнитель получит кредиты за вычетом комиссии 1,5% {owned} в Фонд общих проектов.",
   "TRUST COMMITMENT (HOURS)": "ОБЯЗАТЕЛЬСТВО В СДЕЛКЕ (ЧАСЫ)",
@@ -1121,7 +1119,6 @@
   "Set up profile": "Настроить профиль",
   "⏳ Pending Confirmation": "⏳ Ожидает подтверждения",
   "🤝 Accept Offer": "🤝 Принять Предложение",
-  "✋ Offer to Fulfill": "✋ Предложить выполнение",
   "✋ Fulfillment Requests ({n})": "✋ Запросы на выполнение ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} отзыв)",

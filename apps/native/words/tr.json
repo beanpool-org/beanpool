@@ -1009,9 +1009,7 @@
   "Withdrawing...": "Geri çekiliyor...",
   "Withdraw Request": "Talebi Geri Çek",
   "Accept this Offer?": "Bu Teklif kabul edilsin mi?",
-  "Offer to Fulfill?": "Karşılamayı teklif et?",
   "🔒 Trust Wallet Protocol": "🔒 Emanet Cüzdanı Protokolü",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Bu işlem korunur ve emanette tutulur. Ödeyen kişi kredileri taahhüt etti. Tamamlandığında, Ortak Alan Havuzunu finanse etmek için %1.5 işlem ücreti {owned} düşülmüş olarak kredilerini alacaksın.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Devam ederek, geçici bir Emanet Cüzdanına {credits} kredi taahhüt edersin. Tamamlandığında, sağlayıcı Ortak Alan Havuzunu finanse etmek için %1.5 işlem ücreti {owned} düşülmüş olarak kredileri alır.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Devam ederek, yetkilendirdiğin kredileri geçici bir Emanet Cüzdanına taahhüt edersin. Tamamlandığında, sağlayıcı Ortak Alan Havuzunu finanse etmek için %1.5 işlem ücreti {owned} düşülmüş olarak kredileri alır.",
   "TRUST COMMITMENT (HOURS)": "EMANET TAAHHÜDÜ (SAAT)",
@@ -1024,7 +1022,6 @@
   "Set up profile": "Profil oluştur",
   "⏳ Pending Confirmation": "⏳ Onay Bekleniyor",
   "🤝 Accept Offer": "🤝 Teklifi Kabul Et",
-  "✋ Offer to Fulfill": "✋ Karşılamayı Teklif Et",
   "✋ Fulfillment Requests ({n})": "✋ Karşılama Talepleri ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} değerlendirme)",

@@ -464,7 +464,7 @@ async function globalMember(browser, root, dark) {
         check(/Free, a swap, or ask/.test(inReturn) && /In a local community this is a price in Beans/.test(inReturn), 'listing: In return, with the price line');
         const deal = page.getByTestId('local-community-action').filter({ hasText: 'Request · Beans held safely' });
         check(await deal.count() === 1, 'listing: the deal action reads "Request · Beans held safely" with the pill');
-        check(await page.getByRole('button', { name: /Accept Offer|Offer to Fulfill/ }).count() === 0, 'listing: no live Accept button');
+        check(await page.getByRole('button', { name: /Accept Offer|I can do this/ }).count() === 0, 'listing: no live Accept button');
         await deal.click();
         await page.getByTestId('local-community-sheet').waitFor();
         await noSideScroll(page, 'listing with the sheet');

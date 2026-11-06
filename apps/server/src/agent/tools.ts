@@ -141,6 +141,7 @@ const FENCED_OR_NULL = {
 };
 const ARR = { type: 'array' };
 const FIRST_TRADE_WINDOW = OBJ({ joined: NUM, firstListing: NUM, firstTrade: NUM_OR_NULL, daysToFirstListing: NUM_OR_NULL, daysFromListingToTrade: NUM_OR_NULL });
+const NEEDS_THIS_MONTH = OBJ({ deals: BOOL, minGroup: NUM, posted: NUM, answeredWithinWeek: NUM_OR_NULL });
 const HEALTH_PROPS: Record<string, JsonSchema> = {
     diskUsedPercent: NUM_OR_NULL, memory: OBJ({ systemUsedPercent: NUM, processMb: NUM }), uncleanStop: BOOL, crashLoop: BOOL,
     watchdog: OBJ({ present: BOOL, healthy: BOOL }), tlsFallback: BOOL, standbyIncident: { type: ['boolean', 'null'] },
@@ -431,13 +432,17 @@ export const AGENT_TOOLS: AgentTool[] = [
             + `90 days and all time): how many joined and made a first listing, how many completed a first trade (at least this many, in steps of ${FIRST_TRADE_MIN_GROUP}), `
             + 'and the median days from joining to a first listing and from a first listing to a first trade. '
             + `A null there means held back: under ${FIRST_TRADE_MIN_GROUP} people in that group, or under ${FIRST_TRADE_MIN_GROUP} between the two windows, so it can hide a large number: say it is held back, never read it as 0 or as a small number. `
-            + 'beans false means this community has no Beans, so no trades to measure; anyTrades false means no trade has been finished here yet',
+            + 'beans false means this community has no Beans, so no trades to measure; anyTrades false means no trade has been finished here yet. '
+            + 'needs is this month (since the first, in UTC): posted is how many Needs members asked, exact; answeredWithinWeek is how many of those someone other than the asker put in a request on within a week of the Need going up '
+            + `(at least this many, in steps of ${FIRST_TRADE_MIN_GROUP}), and null means held back (under ${FIRST_TRADE_MIN_GROUP}) or, with deals false, that this community has no deals: say it is held back, never read it as 0 or as a small number. `
+            + 'A Need still in its first week with no request yet counts as posted only',
         never: "any member's balance, per-member figures, any member's dates, names or keys, or the list of members in debit",
         inputSchema: NO_ARGS,
         outputSchema: OBJ({
             beansInCirculation: NUM, sumOfCredit: NUM, sumOfDebt: NUM, membersInDebit: NUM, accounts: NUM, commonsPot: NUM,
             tradesThisMonth: NUM, newMembers7Days: NUM, newMembers30Days: NUM, posts: NUM,
             newMembers: OBJ({ beans: BOOL, anyTrades: BOOL, minGroup: NUM, last90Days: FIRST_TRADE_WINDOW, allTime: FIRST_TRADE_WINDOW }),
+            needs: NEEDS_THIS_MONTH,
         }),
         run: () => {
             const t = communityTotals();
@@ -449,6 +454,7 @@ export const AGENT_TOOLS: AgentTool[] = [
                     newMembers7Days: newMembersSince(7), newMembers30Days: newMembersSince(30),
                     posts: communityCountsCached().postCount,
                     newMembers: t.newMembers,
+                    needs: t.needs,
                 },
             };
         },

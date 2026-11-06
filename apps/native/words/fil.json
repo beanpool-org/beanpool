@@ -1008,9 +1008,7 @@
   "Withdrawing...": "Binabawi...",
   "Withdraw Request": "Bawiin ang Kahilingan",
   "Accept this Offer?": "Tatanggapin ang Alok na ito?",
-  "Offer to Fulfill?": "Mag-alok na Tuparin?",
   "🔒 Trust Wallet Protocol": "🔒 Protokol ng Trust Wallet",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Protektado ang transaksyong ito at hawak sa tiwala. Inilaan na ng nagbabayad ang kredito. Sa pagtatapos, matatanggap mo ang netong kredito bawas ang 1.5% fee {owned} para pondohan ang Commons Pool.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Sa pagpapatuloy, naglalaan ka ng {credits} kredito sa pansamantalang Trust Wallet. Sa pagtatapos, matatanggap ng nagbigay ang kredito bawas ang 1.5% fee {owned} para pondohan ang Commons Pool.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Sa pagpapatuloy, naglalaan ka ng awtorisadong kredito sa pansamantalang Trust Wallet. Sa pagtatapos, matatanggap ng nagbigay ang kredito bawas ang 1.5% fee {owned} para sa Commons Pool.",
   "TRUST COMMITMENT (HOURS)": "KOMITMENT SA TIWALA (MGA ORAS)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "I-set up ang profile",
   "⏳ Pending Confirmation": "⏳ Nakabinbing Kumpirmasyon",
   "🤝 Accept Offer": "🤝 Tanggapin ang Alok",
-  "✋ Offer to Fulfill": "✋ Mag-alok na Tuparin",
   "✋ Fulfillment Requests ({n})": "✋ Mga Kahilingan sa Pagtupad ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} review)",

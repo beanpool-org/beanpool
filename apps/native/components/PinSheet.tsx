@@ -55,6 +55,7 @@ export function PinSheet({ visible, postId, onClose, onPinned }: PinSheetProps) 
                     style={StyleSheet.absoluteFill}
                     accessibilityRole="button"
                     accessibilityLabel={t('Close')}
+                    accessibilityState={{ disabled: submitting }}
                     onPress={submitting ? undefined : onClose}
                     disabled={submitting}
                 />
@@ -74,6 +75,8 @@ export function PinSheet({ visible, postId, onClose, onPinned }: PinSheetProps) 
                                     style={styles.optionRow}
                                     accessibilityRole="button"
                                     accessibilityLabel={c.label}
+                                    accessibilityState={{ disabled: submitting }}
+                                    disabled={submitting}
                                     onPress={() => handlePin(c.days)}
                                     testID={`pin-choice-${c.days}`}
                                 >
@@ -87,6 +90,7 @@ export function PinSheet({ visible, postId, onClose, onPinned }: PinSheetProps) 
                         style={styles.cancelBtn}
                         accessibilityRole="button"
                         accessibilityLabel={t('Cancel')}
+                        accessibilityState={{ disabled: submitting }}
                         onPress={submitting ? undefined : onClose}
                         disabled={submitting}
                         testID="pin-sheet-cancel"

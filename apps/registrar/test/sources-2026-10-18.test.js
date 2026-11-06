@@ -332,6 +332,94 @@ test('probation: a new name is live and the directory waits, until 3 ok sweeps a
     } finally { w.restore(); }
 });
 
+test('probation: a verified key skips probation when claiming a new name (rename, design §6 item 1, slice S5)', async () => {
+    const w = await sourceWorld();
+    try {
+        const key = await makeKey(), unverifiedKey = await makeKey(), blockedKey = await makeKey();
+        const fromA = { ip: '203.0.113.51', cf: { asn: 64501, asOrganization: 'Broadband', country: 'AU' } };
+        const fromB = { ip: '203.0.113.52', cf: { asn: 64501, asOrganization: 'Broadband', country: 'AU' } };
+        const fromC = { ip: '203.0.113.53', cf: { asn: 64501, asOrganization: 'Broadband', country: 'AU' } };
+
+        // 1. Initial claim: on probation.
+        const c1 = await claimFrom(w, fromA, key, { name: 'firsttown', community_name: 'First Town' });
+        assert.deepEqual([c1.body.status, c1.body.probation], ['live', true]);
+        assert.equal(row(w, 'firsttown').verified_at, null);
+
+        // 2. An unverified key claiming multiple names is on probation each time.
+        const u1 = await claimFrom(w, fromB, unverifiedKey, { name: 'unverified-1' });
+        const u2 = await claimFrom(w, fromB, unverifiedKey, { name: 'unverified-2' });
+        assert.equal(u1.body.probation, true);
+        assert.equal(u2.body.probation, true);
+
+        // 3. firsttown completes probation and becomes verified.
+        w.sqlite.prepare("UPDATE name_allocations SET verified_at = 1 WHERE name = 'firsttown'").run();
+
+        // 4. Renaming / claiming a new name now skips probation.
+        const c3 = await claimFrom(w, fromA, key, { name: 'renamedtown', community_name: 'Renamed Town' });
+        assert.equal(c3.body.status, 'live');
+        assert.equal(c3.body.probation, undefined, 'probation skipped for a key holding a verified name');
+        assert.ok(row(w, 'renamedtown').verified_at > 0, 'verified_at set at claim time');
+
+        // /status reflects no probation for the renamed name.
+        const st = await w.status(key, '?name=renamedtown');
+        assert.equal(st.body.status, 'live');
+        assert.equal(st.body.probation, undefined);
+
+        // 5. If firsttown is released, but still within the release cooloff hold, another claim also skips probation.
+        assert.equal((await w.release(key, { name: 'firsttown' })).status, 200);
+        const c4 = await claimFrom(w, fromA, key, { name: 'afterrelease', community_name: 'After Release' });
+        assert.equal(c4.body.status, 'live');
+        assert.equal(c4.body.probation, undefined, 'probation skipped while holding a verified release');
+
+        // 6. A key with a blocked name does NOT skip probation even if it had a verified row.
+        await claimFrom(w, fromC, blockedKey, { name: 'blockedtown' });
+        w.sqlite.prepare("UPDATE name_allocations SET verified_at = 1 WHERE name = 'blockedtown'").run();
+        assert.equal((await w.admin('blockedtown', 'block')).body.status, 'blocked');
+        const cBlocked = await claimFrom(w, fromC, blockedKey, { name: 'blockedother' });
+        assert.deepEqual([cBlocked.body.status, cBlocked.body.probation], ['live', true], 'a blocked key is not trusted to skip probation');
+    } finally { w.restore(); }
+});
+
+test('status: echoes connecting address as seen_from (design §4, slice S5)', async () => {
+    const w = await sourceWorld();
+    try {
+        const key = await makeKey(), stranger = await makeKey();
+        await claimFrom(w, FROM.home, key, { name: 'seentown' });
+
+        // Standard request with cf-connecting-ip.
+        const req1 = await w.signed('GET', '/api/registrar/status', key);
+        req1.headers.set('cf-connecting-ip', '198.51.100.9');
+        const res1 = await worker.fetch(req1, w.env);
+        const body1 = await res1.json();
+        assert.equal(res1.status, 200);
+        assert.equal(body1.seen_from, '198.51.100.9', 'status echoes cf-connecting-ip');
+
+        // IPv4-mapped IPv6 address is normalized to IPv4.
+        const req2 = await w.signed('GET', '/api/registrar/status', key);
+        req2.headers.set('cf-connecting-ip', '::ffff:203.0.113.42');
+        const res2 = await worker.fetch(req2, w.env);
+        const body2 = await res2.json();
+        assert.equal(res2.status, 200);
+        assert.equal(body2.seen_from, '203.0.113.42', 'IPv4-mapped IPv6 address normalized');
+
+        // Request without cf-connecting-ip header leaves seen_from undefined.
+        const req3 = await w.signed('GET', '/api/registrar/status', key);
+        const res3 = await worker.fetch(req3, w.env);
+        const body3 = await res3.json();
+        assert.equal(res3.status, 200);
+        assert.equal(body3.seen_from, undefined, 'no seen_from without header');
+
+        // Stranger with no name: status none also carries seen_from.
+        const req4 = await w.signed('GET', '/api/registrar/status', stranger);
+        req4.headers.set('cf-connecting-ip', '198.51.100.55');
+        const res4 = await worker.fetch(req4, w.env);
+        const body4 = await res4.json();
+        assert.equal(res4.status, 200);
+        assert.equal(body4.status, 'none');
+        assert.equal(body4.seen_from, '198.51.100.55', 'status none carries seen_from');
+    } finally { w.restore(); }
+});
+
 test('"Hold all new names": an auto claim waits for approval, names held now are untouched; it lets go by itself after 24 h', async () => {
     const w = await sourceWorld();
     try {

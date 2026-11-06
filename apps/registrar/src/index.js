@@ -783,6 +783,7 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
     // already counted; one past the hold isn't (it was free to anyone), so it counts as a new name does.
     const limit = claimLimit(env, s);
     const since = now - releaseCooloffS(env);
+    const verifiedKey = s.schema ? await db.holdsVerifiedName(env, pubkey, since, name) : false;
     const counted = sameKey && holdsName(env, existing, now);
     if (!counted) {
         const held = await db.countHeldBy(env, pubkey, since);
@@ -814,8 +815,13 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
         // The same key's own tunnel may be reused (ensure checks it); another key's never is.
         tunnel_id: sameKey ? existing.tunnel_id : null, dns_record_id: sameKey ? existing.dns_record_id : null,
         // Migration 0011's columns, where the database has them: why it is held, and a new key's tenure on probation (its
-        // own release taken back keeps the verification it had).
-        ...(s.schema ? { held_reason: held, ...(sameKey ? {} : { verified_at: null, ok_sweeps: null }) } : {}),
+        // own release taken back keeps the verification it had; a key that already holds a verified name skips probation).
+        ...(s.schema ? {
+            held_reason: held,
+            ...(sameKey
+                ? (existing.verified_at ? {} : (verifiedKey ? { verified_at: now, ok_sweeps: null } : {}))
+                : { verified_at: verifiedKey ? now : null, ok_sweeps: null }),
+        } : {}),
     };
     // Another claim by the same key may have landed between the count and this write: counted again once the name is
     // won, and over the limit, this claim gives it back before it reaches Cloudflare (so racing claims may all be
@@ -890,7 +896,10 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
             return json({ ...out, status: 'paused', reason, since: now, attest: g.verdict, why: g.why });
         }
         if (g.attest) out.attest = g.attest;
-    } else if (!(await db.updateIfUnchanged(env, name, a, { ...made, status: 'live', ...decided }, { withIds: true }))) {
+    } else if (!(await db.updateIfUnchanged(env, name, a, {
+        ...made, status: 'live', ...decided,
+        ...(s.schema && a.verified_at ? { verified_at: a.verified_at, ok_sweeps: a.ok_sweeps ?? null } : {}),
+    }, { withIds: true }))) {
         return missed();
     }
     const token = await tunnelTokenOrNothing(env, { ...a, ...made });
@@ -966,6 +975,15 @@ export function sourceAddress(raw) {
     const groups = halves.length === 2 ? [...head, ...Array(8 - head.length - tail.length).fill('0'), ...tail] : head;
     if (groups.length !== 8 || !groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
     return `${groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(':')}::/64`;
+}
+// The connecting IP as seen by the edge, for /status's seen_from (design §4, slice S5).
+export function seenFromAddress(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    const first = raw.split(',')[0].trim();
+    if (!/^[0-9a-fA-F:.]+$/.test(first)) return null;
+    const v4 = first.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
+    if (v4) return v4[1];
+    return first;
 }
 async function sourceOf(request, env) {
     const cfp = request.cf || {};
@@ -1207,10 +1225,12 @@ async function handleStatus(request, env) {
     // Any state: answering 'none' for a name the node still owns is what made nodes wipe their saved address
     // (2026-09-24 incident).
     const a = named && named.node_pubkey === pubkey ? named : await db.getOwnAllocation(env, pubkey);
-    if (!a) return json({ status: 'none' });
+    const seen_from = seenFromAddress(request.headers.get('cf-connecting-ip'));
+    if (!a) return json({ status: 'none', ...(seen_from ? { seen_from } : {}) });
     const out = {
         status: a.status, name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact,
         reason: await reasonOf(env, a), since: sinceOf(a),
+        ...(seen_from ? { seen_from } : {}),
     };
     // Until when this key may take its release back: never one the admin holds from it too ('admin-held-all').
     if (a.status === 'released' && !freedAtOnce(a) && !heldFromAll(a)) out.held_until = (a.released_at || 0) + releaseCooloffS(env);
@@ -1461,7 +1481,13 @@ async function adminResume(env, a, was, now, actor) {
 async function adminGoLive(env, a, event, detail, extra = {}) {
     let ids;
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e, { admin: true }); }
-    const live = { ...recorded(ids, a), ...LIVE, ...extra, ...(a.held_reason ? { held_reason: null } : {}) };
+    const s = await settings.read(env);
+    const verified = a.verified_at || (s.schema && await db.holdsVerifiedName(env, a.node_pubkey, nowS() - releaseCooloffS(env), a.name) ? nowS() : null);
+    const live = {
+        ...recorded(ids, a), ...LIVE, ...extra,
+        ...(a.held_reason ? { held_reason: null } : {}),
+        ...(s.schema && verified && !a.verified_at ? { verified_at: verified, ok_sweeps: null } : {}),
+    };
     if (!(await db.updateIfUnchanged(env, a.name, a, live, { withIds: true }))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);
     return json({ status: 'live', name: a.name, changed: ids.changed });

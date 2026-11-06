@@ -123,7 +123,7 @@ const serverSide = () => ({ tunnel: getTunnelStatus(), dockerSocket: dockerSocke
  */
 const ADDRESS_FIELDS = [
     'status', 'name', 'hostname', 'mode', 'reason', 'since', 'warning', 'held_until', 'heldUntil',
-    'communityName', 'community_name', 'contact',
+    'communityName', 'community_name', 'contact', 'seen_from',
 ] as const;
 
 /**

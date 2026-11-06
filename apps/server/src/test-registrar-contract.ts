@@ -446,6 +446,24 @@ async function run() {
         assert(repointed.status === 200 && repointedBody.name === plainBody.name,
             'a captured /status?name= resent with another name gets the key\'s first row, as with no name asked', { repointed: repointedBody.name, plain: plainBody.name });
 
+        // /status echoes cf-connecting-ip as seen_from (design §4, slice S5).
+        const withIp = await registrar.index.default.fetch(new Request('https://beanpool.org/api/registrar/status', {
+            headers: { ...(await node.signRequest('GET', '/api/registrar/status', '', 'v2')), 'cf-connecting-ip': '198.51.100.22' },
+        }), world.env);
+        const withIpBody = await withIp.json();
+        assert(withIp.status === 200 && withIpBody.seen_from === '198.51.100.22', 'status carries seen_from echoing cf-connecting-ip', withIpBody);
+
+        // A key that holds a verified name skips probation on a rename (design §6 item 1, slice S5).
+        world.sqlite.prepare("UPDATE name_allocations SET verified_at = 1 WHERE name = 'contract-v2'").run();
+        const renameClaim = await registrar.index.default.fetch(new Request('https://beanpool.org/api/registrar/claim', {
+            method: 'POST', body: JSON.stringify({ name: 'contract-renamed', mode: 'tunnel' }),
+            headers: await nodeV2.signRequest('POST', '/api/registrar/claim', JSON.stringify({ name: 'contract-renamed', mode: 'tunnel' }), 'v2'),
+        }), world.env);
+        const renameBody = await renameClaim.json();
+        assert(renameClaim.status === 200 && renameBody.status === 'live' && renameBody.probation === undefined,
+            'a key holding a verified name skips probation on a new claim', renameBody);
+        assert(world.row('contract-renamed').verified_at > 0, 'verified_at set at claim time for a verified key');
+
         // A Worker deployed without migration 0006 (no request_nonces): /health leaves v2 out, and a node sending v2 gets a
         // 401 naming v1 (not a 500), signs the same call again under v1 and works. PR #1410 note 2.
         world = newWorld();

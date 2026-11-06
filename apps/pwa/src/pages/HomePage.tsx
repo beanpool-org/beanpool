@@ -936,7 +936,7 @@ function ChatBody({
         // Not answered yet (just picked, or this browser's kept answer is from before): the name it was picked by, and when it shows.
         return (
             <div data-testid="home-chat-waiting">
-                {name && <p className="m-0 mb-1 text-[15px] font-bold text-text-primary break-words line-clamp-2">{name}</p>}
+                {name && <p className="m-0 mb-1 text-[0.9375rem] font-bold text-text-primary break-words line-clamp-2">{name}</p>}
                 <p className="m-0 text-sm text-text-primary break-words">{t(LIB_LINES.searchOffline)}</p>
             </div>
         );
@@ -954,7 +954,7 @@ function ChatBody({
             label={body.muted ? t('{line}, muted', { line: said }) : said}>
             <span className="min-w-0 flex-1 block">
                 <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
-                    <span data-testid="home-chat-name" className="min-w-0 flex-1 basis-[10rem] text-[15px] font-bold text-text-primary break-words line-clamp-2">
+                    <span data-testid="home-chat-name" className="min-w-0 flex-1 basis-[10rem] text-[0.9375rem] font-bold text-text-primary break-words line-clamp-2">
                         {name}{body.muted && <span aria-hidden="true" data-testid="home-chat-muted"> 🔕</span>}
                     </span>
                     {status && (

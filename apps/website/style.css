@@ -1236,6 +1236,8 @@ a.logo { min-height: 44px; }
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 1.25rem;
 }
+/* Home leads the grid across its whole row, so the other eight keep their even 4 x 2, 3 + 3 + 2 and 2 x 4 (no card alone). */
+#features .features-grid > .feature-card:first-child { grid-column: 1 / -1; }
 .feature-card {
     border-radius: var(--radius-lg);
     padding: 1.75rem;

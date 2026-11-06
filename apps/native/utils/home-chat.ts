@@ -20,6 +20,8 @@ import type { HomeCardInstance } from '@beanpool/core';
 import { chatAuthorWords, chatLineWords } from './chat-line-words';
 import { tombstoneWords } from './chat-actions';
 import type { NeedsYouTarget } from './needs-you';
+import { chatEmoji, type YourChat } from './your-groups';
+import type { getConversations } from './db';
 
 /** The card's own words (shown through t() where they are drawn). */
 export const CHAT_CARD_WORDS = {
@@ -68,11 +70,16 @@ function readLine(raw: unknown): HomeChatLine | null {
  * body is never another chat's.
  */
 export function chatCardFor(answer: { cards?: unknown } | null | undefined, inst: Pick<HomeCardInstance, 'id' | 'settings'>): HomeChatCard | null {
-    if (!homeChatPicked(readChatSettings(inst.settings))) return null;
+    const pick = readChatSettings(inst.settings);
+    if (!homeChatPicked(pick)) return null;
     const raw = isObj(answer?.cards) ? (answer!.cards as Record<string, unknown>)[inst.id] : undefined;
     if (!isObj(raw)) return null;
     if (typeof raw.gone === 'string') return GONE.has(raw.gone) ? { gone: raw.gone as 'left' | 'hidden' | 'request' } : null;
     if (!(HOME_CHAT_KINDS as readonly unknown[]).includes(raw.kind) || !Array.isArray(raw.lines)) return null;
+    // The phone's own pick says what the chat is, never the node: a body of another kind is no answer (fail closed, as the
+    // DM screen judges a chat by what this phone knows, db.ts getMessages). Else a node could answer a pinned DM as an
+    // event's chat and have a readable line drawn in the other person's name, or a locked group as an enterprise's.
+    if (raw.kind !== pick.kind) return null;
     return {
         kind: raw.kind as HomeChatKind,
         name: typeof raw.name === 'string' ? raw.name : null,
@@ -174,9 +181,10 @@ export function chatCardView(
 ): ChatCardView {
     const pick = chatPickOf(inst);
     if (!pick) return { state: 'pick' };
-    if (!card) return { state: 'waiting', name: pick.name || t('A chat') };
+    // A body of another kind than the pick's is no answer (chatCardFor): its lines are never judged by the node's word.
+    if (!card || (!('gone' in card) && card.kind !== pick.kind)) return { state: 'waiting', name: pick.name || t('A chat') };
     if ('gone' in card) return { state: 'gone' };
-    const lines = card.lines.map(l => chatLineView(l, card.kind, me, opened)).filter((l): l is ChatCardLine => l !== null);
+    const lines = card.lines.map(l => chatLineView(l, pick.kind, me, opened)).filter((l): l is ChatCardLine => l !== null);
     return {
         state: 'chat',
         name: card.name || pick.name || t('A chat'),
@@ -199,26 +207,53 @@ export function chatCardTarget(pick: HomeChatSettings): Extract<NeedsYouTarget, 
 export interface ChatChoice { conversationId: string; kind: HomeChatKind; name: string; emoji: string; at: string | null }
 
 /**
+ * One of the phone's own chats as db.ts getConversations builds it: the fields the settings list reads, every one
+ * required, so a renamed field fails the type check instead of dropping every DM (review of #2943, finding 1).
+ */
+export type PhoneChatRow = Pick<Awaited<ReturnType<typeof getConversations>>[number], 'id' | 'type' | 'peer' | 'rawTimestamp' | 'request'>;
+
+/** A chat the phone keeps as a DM: getConversations' `type` (a row with none is a DM there too). */
+const isPhoneDm = (c: PhoneChatRow) => c.type === 'dm' || c.type == null;
+
+/**
  * The settings list: the member's group-like chats first (🥖🎯📅, a group's emoji), then people, each part newest first;
- * never a DM request still waiting, one with no id or one whose id is longer than a card keeps. `pinnedElsewhere`: the
- * chats other chat cards hold, which say "On Home" and can't be picked again.
+ * never a DM request still waiting, one with no id or one whose id is longer than a card keeps. `dms`: the phone's own
+ * chats as getConversations builds them (`peer`: the name Talk shows; `rawTimestamp`: the ISO time, as `timestamp` is a
+ * clock string). A chat this phone keeps as a DM is listed as that person, never as a group the node lists under the same
+ * id, so the pick's kind is the phone's own and the card judges its lines as a DM's.
  */
 export function chatChoices(
     groups: readonly { conversationId: string; kind: string; name: string; emoji: string; lastActivityAt?: string | null }[],
-    dms: readonly { id: string; convType?: string | null; request?: unknown; otherCallsign?: string | null; timestamp?: string | null }[],
+    dms: readonly PhoneChatRow[],
 ): ChatChoice[] {
     const ok = (id: unknown): id is string => typeof id === 'string' && id.length > 0 && id.length <= 64;
     const newest = (a: ChatChoice, b: ChatChoice) => (b.at ?? '').localeCompare(a.at ?? '');
+    const people = new Set(dms.filter(isPhoneDm).map(c => c.id));
     const g = groups
-        .filter(c => ok(c.conversationId) && (c.kind === 'group' || c.kind === 'enterprise' || c.kind === 'event'))
+        .filter(c => ok(c.conversationId) && !people.has(c.conversationId) && (c.kind === 'group' || c.kind === 'enterprise' || c.kind === 'event'))
         .map(c => ({ conversationId: c.conversationId, kind: c.kind as HomeChatKind, name: c.name.trim().slice(0, 60), emoji: c.emoji, at: c.lastActivityAt ?? null }))
         .sort(newest);
-    const seen = new Set(g.map(c => c.conversationId));
     const p = dms
-        .filter(c => ok(c.id) && (c.convType === 'dm' || c.convType == null) && !c.request && !seen.has(c.id) && !!c.otherCallsign)
-        .map(c => ({ conversationId: c.id, kind: 'dm' as const, name: String(c.otherCallsign).trim().slice(0, 60), emoji: '👤', at: c.timestamp ?? null }))
+        .filter(c => ok(c.id) && isPhoneDm(c) && !c.request)
+        .map(c => ({ conversationId: c.id, kind: 'dm' as const, name: String(c.peer ?? '').trim().slice(0, 60), emoji: '👤', at: typeof c.rawTimestamp === 'string' ? c.rawTimestamp : null }))
+        .filter(c => c.name.length > 0)
         .sort(newest);
     return [...g, ...p];
+}
+
+/**
+ * The settings list from its two reads, as the sheet shows it (index.tsx reads them once as the sheet opens): the node's
+ * list of the member's group-like chats (db.ts fetchYourGroups) and the phone's own chats (getConversations), null for a
+ * read that failed. Either failed (offline, the node down): the list isn't whole, so the sheet says "Couldn't load your
+ * chats. Try again.", never "No chats yet." to a member who has chats, nor a list with their groups silently left out.
+ */
+export function chatPickList(
+    groups: readonly Pick<YourChat, 'conversationId' | 'kind' | 'name' | 'category' | 'lifecycle' | 'lastActivityAt'>[] | null,
+    dms: readonly PhoneChatRow[] | null,
+): { rows: ChatChoice[] | null; failed: boolean } {
+    if (!groups || !dms) return { rows: null, failed: true };
+    const g = groups.map(c => ({ conversationId: c.conversationId, kind: c.kind, name: c.name, emoji: chatEmoji(c.kind, c.category, c.lifecycle), lastActivityAt: c.lastActivityAt }));
+    return { rows: chatChoices(g, dms), failed: false };
 }
 
 /** The rows a filter keeps: any whose name holds the words, any case. */

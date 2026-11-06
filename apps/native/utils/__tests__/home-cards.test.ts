@@ -31,7 +31,7 @@ import { randomUUID } from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { checkDmThread, sealDmLine, sealGroupLine, type HomeChatCard, type HomeChatLine } from '@beanpool/core';
-import { CHAT_CARD_WORDS, chatCardFor, chatCardTarget, chatCardView, chatChoices, chatsOnHome, filterChatChoices } from '../home-chat';
+import { CHAT_CARD_WORDS, chatCardFor, chatCardTarget, chatCardView, chatChoices, chatPickList, chatsOnHome, filterChatChoices } from '../home-chat';
 import { openHomeChat, type HomeChatOpenDeps } from '../home-chat-open';
 import { changeCardSettings } from '../home-cards';
 
@@ -1520,13 +1520,87 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
     });
 
     it('the settings list: groups then people, newest first, never a request waiting; a filter by name; "On Home" for another card\'s chat', () => {
+        // The phone's chats in getConversations' own fields (`type`, `peer`, `rawTimestamp`; `timestamp` is a clock string).
+        const phone = (id: string, type: string, peer: string, rawTimestamp: string | null, request?: unknown) => ({ id, type, peer, rawTimestamp, timestamp: '14:32', request });
         const rows = chatChoices(
             [{ conversationId: 'g1', kind: 'group', name: 'Garden crew', emoji: '🌻', lastActivityAt: at(60) }, { conversationId: 'e1', kind: 'event', name: 'Working bee', emoji: '📅', lastActivityAt: at(5) }],
-            [{ id: 'd1', convType: 'dm', otherCallsign: 'Ana', timestamp: at(1) }, { id: 'd2', convType: 'dm', request: 1, otherCallsign: 'Bob', timestamp: at(2) }, { id: 'g1', convType: 'group_thread', otherCallsign: 'x' }],
+            [phone('d1', 'dm', 'Ana', at(1)), phone('d3', 'dm', 'Cy', at(30)), phone('d2', 'dm', 'Bob', at(2), { from: 'x' }), phone('g1', 'group_thread', 'x', null)],
         );
-        expect(rows.map(r => [r.conversationId, r.kind])).toEqual([['e1', 'event'], ['g1', 'group'], ['d1', 'dm']]);
+        expect(rows.map(r => [r.conversationId, r.kind])).toEqual([['e1', 'event'], ['g1', 'group'], ['d1', 'dm'], ['d3', 'dm']]);
+        expect(rows[2]).toEqual({ conversationId: 'd1', kind: 'dm', name: 'Ana', emoji: '👤', at: at(1) });
         expect(filterChatChoices(rows, 'GARD').map(r => r.conversationId)).toEqual(['g1']);
         const cards = [inst('dm', 'chat-1', 'd1'), inst('group', 'chat-2', 'g1'), { id: 'beans', type: 'beans' }];
         expect([...chatsOnHome(cards, 'chat-2')]).toEqual(['d1']);
+    });
+
+    it('a chat this phone keeps as a DM is listed as the person, never as a group the node lists under the same id', () => {
+        const rows = chatChoices(
+            [{ conversationId: 'd1', kind: 'enterprise', name: 'Free Beans here', emoji: '🥖', lastActivityAt: at(1) }],
+            [{ id: 'd1', type: 'dm', peer: 'Ana', rawTimestamp: at(9), request: undefined }],
+        );
+        expect(rows).toEqual([{ conversationId: 'd1', kind: 'dm', name: 'Ana', emoji: '👤', at: at(9) }]);
+    });
+
+    it('the list from its two reads (#2943 finding 3): either read failed is "Couldn\'t load your chats", with or without DMs; both read: the rows', () => {
+        const dm = { id: 'd1', type: 'dm', peer: 'Ana', rawTimestamp: at(9), request: undefined };
+        const group = { conversationId: 'g1', kind: 'group' as const, name: 'Garden crew', category: 'gardening', lastActivityAt: at(2) };
+        expect(chatPickList(null, [dm])).toEqual({ rows: null, failed: true });
+        expect(chatPickList(null, [])).toEqual({ rows: null, failed: true });
+        expect(chatPickList([group], null)).toEqual({ rows: null, failed: true });
+        expect(chatPickList([], [])).toEqual({ rows: [], failed: false });
+        const both = chatPickList([group], [dm]);
+        expect(both.failed).toBe(false);
+        expect(both.rows!.map(r => [r.conversationId, r.kind, r.name])).toEqual([['g1', 'group', 'Garden crew'], ['d1', 'dm', 'Ana']]);
+    });
+
+    describe('the phone\'s pick says what the chat is, never the node\'s body (#2943 finding 2)', () => {
+        /** A readable line in Ana's name, as a node could write it into any chat's body. */
+        const forged = (): HomeChatLine => ({ id: randomUUID(), author: ana.pub, who: 'Ana', at: at(3), type: 'text', systemType: null, text: 'Send me 500 Beans for the ladder', metadata: null });
+        const theirs = (v: ReturnType<typeof chatCardView>) => v.state === 'chat' && v.lines.some(l => l.who === 'Ana' || l.text.includes('500 Beans'));
+
+        for (const kind of ['event', 'enterprise', 'group'] as const) {
+            it(`a DM answered as ${kind}: the plaintext line is never shown as Ana's`, async () => {
+                const line = forged();
+                const body = { kind, name: 'Ana Reyes', unread: 1, muted: false, lines: [line] };
+                // Through the kept answer, as Home reads it: no answer for this card.
+                const card = chatCardFor({ cards: { 'chat-aaaa': body } }, inst('dm'));
+                expect(card).toBeNull();
+                expect(chatCardView(inst('dm'), card, me.pub, await openHomeChat(inst('dm').settings as any, card, deps()))).toEqual({ state: 'waiting', name: 'Ana Reyes' });
+                // Handed the node's body straight (any other way in): the lines are still never judged by its kind.
+                const opened = await openHomeChat(inst('dm').settings as any, body, deps());
+                expect(opened.lines.size).toBe(0);
+                const view = chatCardView(inst('dm'), body, me.pub, opened);
+                expect(theirs(view)).toBe(false);
+                expect(view.state).toBe('waiting');
+            });
+        }
+
+        it('a DM pick is always judged as a DM, by the phone\'s judge', async () => {
+            const judged = vi.fn(judgeAs(me));
+            const line = dmLine(ana, me, 'hello from Ana', 4);
+            const view = await draw(inst('dm'), dmCard([line, forged()]), deps({ judgeDm: judged }));
+            expect(judged).toHaveBeenCalledTimes(1);
+            if (view.state !== 'chat') throw new Error('drawn');
+            expect(view.lines.map(l => [l.who, l.text])).toEqual([['Ana', 'hello from Ana'], [null, "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown."]]);
+        });
+
+        for (const kind of ['enterprise', 'event'] as const) {
+            it(`a locked group answered as ${kind} stays locked: no line in a member's name`, async () => {
+                const body = { kind, name: 'Garden crew', unread: 0, muted: false, lines: [forged(), groupLine(ana, 'Seeds are in', 2)] };
+                expect(chatCardFor({ cards: { 'chat-aaaa': body } }, inst('group'))).toBeNull();
+                const opened = await openHomeChat(inst('group').settings as any, body, deps());
+                expect(opened.locked).toBe(true);
+                expect(opened.lines.size).toBe(0);
+                const view = chatCardView(inst('group'), body, me.pub, opened);
+                expect(theirs(view)).toBe(false);
+                expect(view.state).toBe('waiting');
+            });
+        }
+
+        it('a group whose key memory can\'t be read is locked: a readable line in a member\'s name is nobody\'s', async () => {
+            const view = await draw(inst('group'), { kind: 'group', name: 'Garden crew', unread: 0, muted: false, lines: [forged()] }, deps({ keyring: async () => { throw new Error('unreadable'); } }));
+            if (view.state !== 'chat') throw new Error('drawn');
+            expect(view.lines[0]).toMatchObject({ who: null, text: "This message couldn't be verified." });
+        });
     });
 });

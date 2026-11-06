@@ -50,7 +50,8 @@ async function openDm(pick: HomeChatSettings, lines: readonly HomeChatLine[], de
 async function openGroup(pick: HomeChatSettings, lines: readonly HomeChatLine[], deps: HomeChatOpenDeps): Promise<OpenedChat> {
     const out = new Map<string, OpenedChatLine>();
     let ring: Awaited<ReturnType<HomeChatOpenDeps['keyring']>>;
-    try { ring = await deps.keyring(pick.conversationId); } catch { return { lines: out }; }
+    // Its key memory unreadable: nothing opens, and the chat is locked, as seenLocked() fails closed below.
+    try { ring = await deps.keyring(pick.conversationId); } catch { return { lines: out, locked: true }; }
     // Read from what this phone keeps (no request): a group it has held keys of is locked here whatever the node says.
     const locked = await ring.seenLocked().catch(() => true);
     // The card only reads the verdicts this phone has: it adds none (the chat screen keeps them).
@@ -77,18 +78,21 @@ async function openGroup(pick: HomeChatSettings, lines: readonly HomeChatLine[],
 }
 
 /**
- * What the phone makes of a chat card's lines, in memory. An event's or an enterprise's chat is readable by design: its
- * lines need no opening. Never throws: a line it can't open waits.
+ * What the phone makes of a chat card's lines, in memory. The phone's own pick says what the chat is: a DM pick is always
+ * judged as a DM (db.ts judgeHomeChatDmLines), a group pick by the group's rule, and a body the node sent as another kind
+ * is no answer (fail closed, as the DM screen judges a chat by what this phone knows: db.ts getMessages). An event's or an
+ * enterprise's chat is readable by design: its lines need no opening. Never throws: a line it can't open waits.
  */
 export async function openHomeChat(pick: HomeChatSettings, card: HomeChatCard | null, deps: HomeChatOpenDeps): Promise<OpenedChat> {
     if (!card || 'gone' in card) return { lines: new Map() };
-    if (card.kind === 'dm') return openDm(pick, card.lines, deps);
-    if (card.kind === 'group') return openGroup(pick, card.lines, deps);
+    if (card.kind !== pick.kind) return pick.kind === 'group' ? { lines: new Map(), locked: true } : { lines: new Map() };
+    if (pick.kind === 'dm') return openDm(pick, card.lines, deps);
+    if (pick.kind === 'group') return openGroup(pick, card.lines, deps);
     return { lines: new Map() };
 }
 
 /** A print of what a card asks to open, so the screen opens it again only when its lines change. */
 export function homeChatOpenKey(pick: HomeChatSettings, card: HomeChatCard | null): string {
-    if (!card || 'gone' in card) return `${pick.conversationId}|-`;
-    return `${pick.conversationId}|${card.kind}|${card.lines.map(l => `${l.id}@${l.at}:${l.sealed ? l.sealed.ciphertext.length : '-'}`).join(',')}`;
+    if (!card || 'gone' in card) return `${pick.conversationId}|${pick.kind}|-`;
+    return `${pick.conversationId}|${pick.kind}|${card.kind}|${card.lines.map(l => `${l.id}@${l.at}:${l.sealed ? l.sealed.ciphertext.length : '-'}`).join(',')}`;
 }

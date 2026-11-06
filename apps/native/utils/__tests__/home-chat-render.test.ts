@@ -31,7 +31,22 @@ vi.mock('react-native', () => {
     };
 });
 const pushed = vi.hoisted(() => [] as unknown[]);
-vi.mock('expo-router', () => ({ router: { push: (h: unknown) => pushed.push(h) }, useFocusEffect: () => {} }));
+/** The screen's focus, as react-navigation keeps it: Home at the front, or left for another tab. */
+const nav = vi.hoisted(() => ({ focused: true, subs: new Set<() => void>() }));
+const setFocused = async (on: boolean) => { await act(async () => { nav.focused = on; nav.subs.forEach(s => s()); }); await act(async () => { await Promise.resolve(); }); };
+// useFocusEffect as react-navigation runs it: on a focused screen the callback runs again whenever it changes, and its
+// cleanup runs when the screen is left.
+vi.mock('expo-router', async () => {
+    const React = await import('react');
+    return {
+        router: { push: (h: unknown) => pushed.push(h) },
+        useFocusEffect: (cb: () => void | (() => void)) => {
+            const [focused, setF] = React.useState(nav.focused);
+            React.useEffect(() => { const s = () => setF(nav.focused); nav.subs.add(s); return () => { nav.subs.delete(s); }; }, []);
+            React.useEffect(() => { if (!focused) return; const c = cb(); return typeof c === 'function' ? c : undefined; }, [cb, focused]);
+        },
+    };
+});
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('../../components/useModalKeyboardLift', () => ({ useModalKeyboardLift: () => ({ maxHeight: 500, lift: 0 }) }));
 vi.mock('../../components/home/HomeParts', async () => {
@@ -50,6 +65,7 @@ import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { darkColors, lightColors, type AppColors } from '../../constants/colors';
 import type { HomeChatCard } from '@beanpool/core';
 import type { HomeChatOpenDeps } from '../home-chat-open';
+import { chatPickList } from '../home-chat';
 
 let root: Root; let host: HTMLDivElement;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); pushed.length = 0; });
@@ -126,6 +142,27 @@ describe('the card, drawn (light and dark)', () => {
         expect(onPick).toHaveBeenCalledTimes(1);
     });
 
+    it('opens its lines once per change, not once per Home render (#2943 finding 4); again when Home comes back to the front', async () => {
+        let opens = 0;
+        const counted: HomeChatOpenDeps = { judgeDm: async (c, l) => { opens += 1; return judge({ l1: 'Who has a ladder?' })(c, l); }, keyring: async () => { throw new Error('no'); } };
+        await drawCard(card, counted);
+        expect(opens).toBe(1);
+        // Home builds the card afresh on every render (chatCardFor): the same lines in a new object open nothing again.
+        for (let i = 0; i < 5; i++) await drawCard(structuredClone(card), counted);
+        expect(opens).toBe(1);
+        expect(byId('home-chat-line-chat-abcd-0')!.textContent).toBe('Ana, 2h ago: Who has a ladder?');
+        // New lines: one open.
+        const more: HomeChatCard = { ...card, lines: [...card.lines, { id: 'l4', author: ANA, who: 'Ana', at: at(5), type: 'text', systemType: null, sealed }] };
+        await drawCard(more, counted);
+        await drawCard(structuredClone(more), counted);
+        expect(opens).toBe(2);
+        // Home left for Talk and back: one open (a key opened there meanwhile now reads the lines).
+        await setFocused(false);
+        expect(opens).toBe(2);
+        await setFocused(true);
+        expect(opens).toBe(3);
+    });
+
     it('an empty chat says so', async () => {
         await drawCard({ kind: 'dm', name: 'Ana Reyes', unread: 0, muted: true, lines: [] }, deps({}));
         expect(byId('home-chat-name-chat-abcd')!.textContent).toBe('Ana Reyes 🔕');
@@ -176,5 +213,20 @@ describe('the settings list', () => {
             }) as any);
         });
         expect(byId('card-settings-chats-note')!.textContent).toBe("Couldn't load your chats. Try again.");
+    });
+
+    it('the node can\'t be reached (#2943 finding 3): "Couldn\'t load your chats", never "No chats yet." nor the DMs alone as the whole list', async () => {
+        const dm = { id: 'dm-1', type: 'dm', peer: 'Ana', rawTimestamp: at(5), request: undefined };
+        for (const phoneChats of [[dm], []]) {
+            await act(async () => {
+                root.render(createElement(CardSettingsSheet, {
+                    visible: true, type: 'chat', mode: 'add', colors: lightColors, onDone: () => {}, onClose: () => {},
+                    chats: { ...chatPickList(null, phoneChats), onHome: new Set<string>() },
+                }) as any);
+            });
+            expect(byId('card-settings-chats-note')!.textContent, `${phoneChats.length} DMs`).toBe("Couldn't load your chats. Try again.");
+            expect(host.textContent).not.toContain('No chats yet.');
+            expect(byId('card-settings-chat-dm-1')).toBeNull();
+        }
     });
 });

@@ -45,14 +45,27 @@ export function ChatBody({ inst, card, me, colors, deps, onPick, onRemove, now }
     const [opened, setOpened] = useState<{ key: string; chat: OpenedChat } | null>(null);
     const key = pick ? homeChatOpenKey(pick, card) : null;
     const turn = useRef(0);
+    // Home builds `card` (and `inst`) afresh on every render: they are read through refs, so the lines open again only
+    // when `key` says they changed, never on a render that changed nothing (review of #2943, finding 4: each open of a DM
+    // reads SecureStore and SQLite and runs the crypto).
+    const latest = useRef({ pick, card });
+    latest.current = { pick, card };
     const open = useCallback(() => {
-        if (!pick || !key) return;
+        const { pick: p, card: c } = latest.current;
+        if (!p || !key) return;
         const mine = ++turn.current;
-        void openHomeChat(pick, card, deps).then(chat => { if (turn.current === mine) setOpened({ key, chat }); });
-        // `pick` is read through `key` (its chat id), so a new object with the same chat opens nothing again.
-    }, [key, card, deps]);
+        void openHomeChat(p, c, deps).then(chat => { if (turn.current === mine) setOpened({ key, chat }); });
+    }, [key, deps]);
     useEffect(() => { open(); }, [open]);
-    useFocusEffect(open);
+    // Back at the front after Home was left: open again (a key opened in Talk meanwhile now reads the group's lines). Not
+    // on the first focus, which the effect above has already opened, and not when `open` changes (that effect's job).
+    const openNow = useRef(open);
+    openNow.current = open;
+    const left = useRef(false);
+    useFocusEffect(useCallback(() => {
+        if (left.current) { left.current = false; openNow.current(); }
+        return () => { left.current = true; };
+    }, []));
     // Nothing drawn from another chat's opening: a stale result for other lines is no result.
     const chat = opened && opened.key === key ? opened.chat : undefined;
     const view = chatCardView(inst, card, me, chat);

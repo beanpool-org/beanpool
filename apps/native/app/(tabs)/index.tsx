@@ -71,9 +71,8 @@ import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
 import { fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, judgeHomeChatDmLines } from '../../utils/db';
 import { ChatBody } from '../../components/home/ChatBody';
-import { chatCardFor, chatChoices, chatsOnHome, type ChatChoice } from '../../utils/home-chat';
+import { chatCardFor, chatPickList, chatsOnHome, type ChatChoice } from '../../utils/home-chat';
 import type { HomeChatOpenDeps } from '../../utils/home-chat-open';
-import { chatEmoji } from '../../utils/your-groups';
 import { composeTargetFor } from '../../utils/compose-options';
 import { askedPushOn, inviteAskNoticeHere, toolHomeCardType, readToolsSettings, shapeFeaturesOf } from '@beanpool/core';
 import { toolOfHomeCard } from '../../tools/index';
@@ -819,15 +818,10 @@ export default function HomeScreen() {
         void (async () => {
             const [groups, dms] = await Promise.all([
                 fetchYourGroups().then(r => r.items).catch(() => null),
-                me ? getConversations(me).catch(() => null) : Promise.resolve(null),
+                me ? getConversations(me).catch(() => null) : Promise.resolve([]),
             ]);
-            if (!live) return;
-            if (!groups && !dms) { setChatRows({ rows: null, failed: true }); return; }
-            const rows = chatChoices(
-                (groups ?? []).map(g => ({ conversationId: g.conversationId, kind: g.kind, name: g.name, emoji: chatEmoji(g.kind, g.category, g.lifecycle), lastActivityAt: g.lastActivityAt })),
-                (dms ?? []) as { id: string; convType?: string | null; request?: unknown; otherCallsign?: string | null; timestamp?: string | null }[],
-            );
-            setChatRows({ rows, failed: false });
+            // getConversations' own rows, unchanged (home-chat.ts PhoneChatRow); a read that failed: "Couldn't load your chats."
+            if (live) setChatRows(chatPickList(groups, dms));
         })();
         return () => { live = false; };
     }, [settingsFor]);

@@ -62,6 +62,11 @@ import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names
 import { exceptionsFailureText, HEALTH_COPY } from '../community-health';
 import type { BeanPoolIdentity } from '../identity';
 
+/** The names list's own code since S1 (#2936): the phone's adapter and the flows it moved into core, so a source check guards both. */
+const namesListSource = () => [path.join(__dirname, '../names-list.ts'),
+    ...['flows', 'debts', 'health', 'invite'].map((m) => path.join(__dirname, `../../../../packages/beanpool-core/src/names-list-${m}.ts`))]
+    .map((f) => fs.readFileSync(f, 'utf8')).join('\n');
+
 const COMMUNITY = 'https://mullum.beanpool.org';
 const CID = 'a1b2c3d4e5f60718';
 const PLANTED = ['Zebedee Quillfeather', 'Lives by the old cannery', 'Ottoline Brackenbury'];
@@ -1031,7 +1036,7 @@ describe('D. Lost phones, re-keys, dead ends', () => {
 
     it('D8 the refusals are exactly five; no "old key" state is left in the app', () => {
         expect([...NAMES_REFUSAL_REASONS]).toEqual(['other_community', 'untrusted_maker', 'missing_record', 'different_history', 'rolled_back']);
-        const src = fs.readFileSync(path.join(__dirname, '../names-list.ts'), 'utf8') + fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        const src = namesListSource() + fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
         for (const gone of ['old_key', 'firstTrust', 'keyChanged', 'salvage', 'reEncrypt', 'makeNewKeyOnThisPhone', 're-encrypt', 'waitingAdmins']) expect(src).not.toContain(gone);
     });
 });
@@ -3620,7 +3625,7 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
         expect(screen.match(/btn\(COPY\.startAfresh, startAfresh, 'danger'\)/g)).toHaveLength(1);
         expect(screen).toContain("{copyRefused ? <View style={styles.buttonRow}>{btn(COPY.startAfresh, startAfresh, 'danger')}</View> : null}");
         expect(screen).not.toContain('copy_other_address');
-        expect(fs.readFileSync(path.join(__dirname, '../names-list.ts'), 'utf8')).not.toContain('copy_other_address');
+        expect(namesListSource()).not.toContain('copy_other_address');
     });
 
     it('Send the keys again after a check: the copy is saved before the share, so the node\'s copy covers it and a wiped phone restores', async () => {

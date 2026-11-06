@@ -74,6 +74,8 @@ You can give part of your credit line to another member. If you hold credit line
 - **After your first trade:** you can give credit once you have completed your first trade in the market, the same rule as sending Beans.
 - **Up to the community's setting:** a gift is at most 100 Beans, or less if an owner set it lower. A setting of 0 switches giving off.
 - **It is theirs for good:** the credit line moves to the recipient permanently. It never makes them a voucher. You cannot give credit to yourself, an enterprise, or a paused or frozen member.
+- **Never back to the voucher:** credit that started as someone's vouch can't go to that voucher, even after it has passed through other members. If only part of yours can, the app says how much.
+- **Within the community's most:** a gift can't take the recipient's credit line past the most your community allows.
 
 ## Spending paused
 

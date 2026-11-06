@@ -1,8 +1,15 @@
 // The busy page itself: one self-contained HTML document, in the visitor's language when it is one of the website's 25.
 //
-// Self-contained: the styles are inline, there is no script, no font file, no image and no icon file, and the response's
-// Content-Security-Policy (src/index.js) forbids loading anything, so a visitor's browser makes no request for this page
-// beyond the page itself (the empty data: icon stops the browser asking the struggling node for /favicon.ico).
+// It says the global community is very busy and sends the visitor on to beanpool.org (Cloudflare Pages, so it stays up
+// whatever global does), in their language: a "Go now" link, a smaller "Try global again" link to the page they asked for,
+// and after REDIRECT_AFTER_S seconds a redirect. The redirect is one small inline script (location.replace, so Back does
+// not return to this page) and, for a browser with scripts off, a <meta http-equiv="refresh"> inside <noscript>, so the
+// two never both fire. The target is another host, so it cannot loop back here.
+//
+// Self-contained: the styles and that one script are inline, there is no font file, no image and no icon file, and the
+// response's Content-Security-Policy (src/index.js) forbids loading anything except that script (by its hash), so a
+// visitor's browser makes no request for this page beyond the page itself (the empty data: icon stops the browser asking
+// the struggling node for /favicon.ico).
 //
 // The look is BeanPool's: the colours are roles from the brand library (packages/beanpool-core/src/brand-colours.ts),
 // each named in the comment after it; test/busy-worker.test.js fails when one drifts from the library or a pair of words
@@ -54,10 +61,27 @@ export function pickLanguage(header) {
     return 'en';
 }
 
-/** The website's page for this language: English at the site's root, the others under /<lang>/ (every one exists). */
-export function siteLinks(lang) {
-    const base = lang === 'en' ? SITE : `${SITE}/${lang}`;
-    return { start: `${base}/start`, find: `${base}/#find-or-start` };
+/** Seconds the page waits before it takes the visitor to beanpool.org. */
+export const REDIRECT_AFTER_S = 5;
+
+/** The website's front page for this language: English at the site's root, the others under /<lang>/ (every one exists). */
+export function siteTarget(lang) {
+    return lang === 'en' ? `${SITE}/` : `${SITE}/${lang}/`;
+}
+
+/**
+ * The address "Try global again" goes to: the page the visitor asked for, so it reloads that very page. The fragment is
+ * dropped (a server never sees it); an address that is not http(s), or is very long, falls back to the front page.
+ */
+export function retryHref(requestUrl) {
+    try {
+        const url = new URL(requestUrl);
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') return '/';
+        url.hash = '';
+        return url.href.length <= 2048 ? url.href : '/';
+    } catch {
+        return '/';
+    }
 }
 
 function escapeHtml(text) {
@@ -136,21 +160,28 @@ p { margin: 0 0 1rem; }
     text-align: center;
     text-decoration: none;
 }
-.ways .start { background: var(--cta); color: var(--on-cta); }
-.ways .start:hover { background: var(--cta-hover); }
-.ways .find { border: 2px solid var(--second); color: var(--second); }
+.ways .go { background: var(--cta); color: var(--on-cta); }
+.ways .go:hover { background: var(--cta-hover); }
+.ways .again { font-size: 0.875rem; font-weight: 400; color: var(--second); text-decoration: underline; }
 .ways a:focus-visible { outline: 3px solid var(--heading); outline-offset: 2px; }
 .apps { background: var(--note-tint); color: var(--note-ink); padding: 0.75rem 1rem; border-radius: 0.75rem; }
 .draft { margin: 0; font-size: 0.875rem; color: var(--muted); }
 `;
 
-/** The busy page in the visitor's language: `{ html, lang }`. */
-export function busyPage(acceptLanguage) {
+/**
+ * The busy page in the visitor's language. `requestUrl` is the address they asked for ("Try global again" goes back to it).
+ * Returns `{ html, lang, target, script }`: `script` is the page's one inline script, exactly as it appears in `html`, so
+ * the response can allow it by its hash (src/index.js).
+ */
+export function busyPage(acceptLanguage, requestUrl) {
     const lang = pickLanguage(acceptLanguage);
     const w = WORDS[lang];
-    const links = siteLinks(lang);
+    const target = siteTarget(lang);
+    const retry = retryHref(requestUrl ?? '/');
     const dir = RTL_LANGUAGES.includes(lang) ? 'rtl' : 'ltr';
     const draft = w.machine ? `\n<p class="draft">${escapeHtml(w.machine)}</p>` : '';
+    // The target is one of 25 fixed addresses, so it needs no more care than JSON.stringify gives it.
+    const script = `setTimeout(function(){location.replace(${JSON.stringify(target)})},${REDIRECT_AFTER_S * 1000});`;
     const html = `<!DOCTYPE html>
 <html lang="${lang}" dir="${dir}">
 <head>
@@ -158,6 +189,7 @@ export function busyPage(acceptLanguage) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex">
+<noscript><meta http-equiv="refresh" content="${REDIRECT_AFTER_S};url=${target}"></noscript>
 <link rel="icon" href="data:,">
 <title>${escapeHtml(w.heading)} · BeanPool</title>
 <style>${STYLE}</style>
@@ -168,13 +200,14 @@ export function busyPage(acceptLanguage) {
 <h1>${escapeHtml(w.heading)}</h1>
 <p>${escapeHtml(w.body)}</p>
 <div class="ways">
-<a class="start" href="${links.start}">${escapeHtml(w.start)}</a>
-<a class="find" href="${links.find}">${escapeHtml(w.find)}</a>
+<a class="go" href="${target}">${escapeHtml(w.go)}</a>
+<a class="again" href="${escapeHtml(retry)}">${escapeHtml(w.retry)}</a>
 </div>
 <p class="apps">${escapeHtml(w.apps)}</p>${draft}
 </main>
+<script>${script}</script>
 </body>
 </html>
 `;
-    return { html, lang };
+    return { html, lang, target, script };
 }

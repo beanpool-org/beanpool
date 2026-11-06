@@ -7,12 +7,14 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import worker, { handle, isPageRequest, hasOwnCookie, ORIGIN_TIMEOUT_MS, RETRY_AFTER_S } from '../src/index.js';
-import { busyPage, pickLanguage, siteLinks, LANGUAGES, RTL_LANGUAGES, STYLE } from '../src/busy-page.js';
+import { busyPage, pickLanguage, siteTarget, retryHref, REDIRECT_AFTER_S, LANGUAGES, RTL_LANGUAGES, STYLE } from '../src/busy-page.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APP = path.resolve(HERE, '..');
@@ -70,6 +72,46 @@ function assertBusy(res) {
     assert.equal(res.headers.get('cache-control'), 'no-store');
     assert.match(res.headers.get('content-type'), /^text\/html; charset=utf-8$/);
     assert.equal(res.headers.get('x-beanpool-busy'), '1');
+}
+
+/** The busy page a visitor with this Accept-Language gets for this address (BUSY_FORCE: no origin involved). */
+async function busyFor(acceptLanguage, url = URL_) {
+    const headers = acceptLanguage === undefined ? {} : { 'accept-language': acceptLanguage };
+    const res = await handle(pageRequest(headers, { url }), { BUSY_FORCE: '1' });
+    assertBusy(res);
+    return { res, html: await res.text() };
+}
+
+/** The parts of the redirect in a page: the "Go now" link, the no-script refresh, the script, the "Try global again" link. */
+function redirectParts(html) {
+    const unescape = (text) => text.replace(/&amp;/g, '&');
+    const go = html.match(/<a class="go" href="([^"]*)">/)?.[1];
+    const refresh = html.match(/<noscript><meta http-equiv="refresh" content="(\d+);url=([^"]*)"><\/noscript>/);
+    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+    const again = html.match(/<a class="again" href="([^"]*)">/)?.[1];
+    return {
+        go,
+        refreshSeconds: refresh ? Number(refresh[1]) : undefined,
+        refreshTarget: refresh?.[2],
+        scripts,
+        script: scripts[0]?.[2],
+        again: again === undefined ? undefined : unescape(again),
+    };
+}
+
+/** Runs the page's script in an empty context that has only setTimeout and location.replace: what it calls, and when. */
+function runScript(script) {
+    const timers = [];
+    const replaced = [];
+    const context = vm.createContext({
+        setTimeout: (fn, ms) => {
+            timers.push({ fn, ms });
+            return timers.length;
+        },
+        location: { replace: (to) => replaced.push(to) },
+    });
+    vm.runInContext(script, context);
+    return { timers, replaced };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -287,23 +329,48 @@ test("the Worker's fetch entry is handle()", async () => {
 // ---------------------------------------------------------------------------------------------------------------------
 // The page: self-contained, small screens, BeanPool's colours, the visitor's language.
 
-test('the page makes no request of its own: no script, no stylesheet, no font, no image, and a policy that forbids them', async () => {
-    const res = await handle(pageRequest(), { BUSY_FORCE: '1' });
-    const html = await res.text();
-    assert.doesNotMatch(html, /<script/i);
+test('the page makes no request of its own: one inline script, no stylesheet, font or image, and a policy that forbids all else', async () => {
+    const { res, html } = await busyFor(undefined);
     assert.doesNotMatch(html, /<img|<iframe|<object|<embed|<video|<audio|<source|<form/i);
-    assert.doesNotMatch(html, /\ssrc\s*=/i);
+    assert.doesNotMatch(html, /\ssrc\s*=/i, 'no script file, no image');
     assert.doesNotMatch(html, /url\(|@import|@font-face/i);
     const links = [...html.matchAll(/<link\b[^>]*>/gi)].map((m) => m[0]);
     assert.deepEqual(links, ['<link rel="icon" href="data:,">'], 'the only <link> is the empty icon');
-    // Every href is a link a visitor may follow to beanpool.org, or the empty icon: nothing loads by itself.
-    for (const [, href] of html.matchAll(/href="([^"]*)"/g)) {
-        assert.ok(href === 'data:,' || href.startsWith('https://beanpool.org/'), href);
-    }
+    // The only script is the redirect: inline, no attributes, so it cannot name a file.
+    const { scripts } = redirectParts(html);
+    assert.equal(scripts.length, 1);
+    assert.equal(scripts[0][1], '', 'the script has no attributes (no src)');
+    // Every href is a link a visitor may follow (beanpool.org, or this very page again), or the empty icon: nothing loads by itself.
+    const allowed = new Set(['data:,', 'https://beanpool.org/', URL_]);
+    for (const [, href] of html.matchAll(/href="([^"]*)"/g)) assert.ok(allowed.has(href), href);
+    assert.equal([...html.matchAll(/href="/g)].length, 3, 'the icon, Go now, Try global again');
+    // The policy: nothing from anywhere, but the page's own style, its empty icon and its one script (by hash).
     const csp = res.headers.get('content-security-policy');
     assert.match(csp, /default-src 'none'/);
     assert.doesNotMatch(csp, /https?:|\*/);
+    assert.doesNotMatch(csp, /unsafe-eval|script-src[^;]*unsafe-inline/);
     assert.ok(Buffer.byteLength(html) < 8 * 1024, `small: ${Buffer.byteLength(html)} bytes`);
+});
+
+test('every language fits the 8 KB the page promises', () => {
+    for (const lang of LANGUAGES) {
+        const { html } = busyPage(lang, 'https://global.beanpool.org/');
+        assert.ok(Buffer.byteLength(html) < 8 * 1024, `${lang}: ${Buffer.byteLength(html)} bytes`);
+    }
+});
+
+test("the policy allows the page's one script by its hash, and the hash is that script's", async () => {
+    for (const lang of ['en', 'fr', 'zh-Hant', 'ar']) {
+        const { res, html } = await busyFor(lang);
+        const { script } = redirectParts(html);
+        const hash = crypto.createHash('sha256').update(script).digest('base64');
+        const directives = Object.fromEntries(res.headers.get('content-security-policy').split('; ').map((d) => [d.split(' ')[0], d.split(' ').slice(1).join(' ')]));
+        assert.equal(directives['script-src'], `'sha256-${hash}'`, lang);
+        assert.equal(directives['default-src'], "'none'");
+        assert.equal(directives['style-src'], "'unsafe-inline'");
+        assert.equal(directives['img-src'], 'data:');
+        assert.equal(directives['connect-src'], undefined, 'default-src none covers fetches, sockets and the rest');
+    }
 });
 
 test('the page fits 320 px at 130 % text: a viewport, no fixed widths, words that wrap', () => {
@@ -406,7 +473,7 @@ test("words.json speaks the website's 25 languages, each with every sentence, th
     const site = websiteLanguages();
     assert.equal(site.length, 25);
     assert.deepEqual([...LANGUAGES].sort(), [...site].sort());
-    const KEYS = ['heading', 'body', 'start', 'find', 'apps'];
+    const KEYS = ['heading', 'body', 'go', 'retry', 'apps'];
     assert.deepEqual(Object.keys(WORDS.en).sort(), [...KEYS].sort(), 'English is the source and carries no draft label');
     for (const lang of LANGUAGES) {
         for (const key of KEYS) assert.ok(typeof WORDS[lang][key] === 'string' && WORDS[lang][key].trim() !== '', `${lang}.${key}`);
@@ -416,6 +483,8 @@ test("words.json speaks the website's 25 languages, each with every sentence, th
             // Each draft names BeanPool in the apps sentence, as the English does.
             assert.match(WORDS[lang].apps, /BeanPool/, lang);
         }
+        // Every language's line says where the visitor is being taken, and names BeanPool as the English does.
+        assert.ok(WORDS[lang].body.includes('beanpool.org') && WORDS[lang].body.includes('BeanPool'), `${lang}: body names beanpool.org`);
         const { html } = busyPage(lang);
         assert.match(html, new RegExp(`<html lang="${lang}" dir="${RTL_LANGUAGES.includes(lang) ? 'rtl' : 'ltr'}">`));
         assert.ok(html.includes(WORDS[lang].heading));
@@ -424,17 +493,123 @@ test("words.json speaks the website's 25 languages, each with every sentence, th
     }
 });
 
-test('the links go to the start page and the communities map, in the visitor\'s language, and each page exists on the site', () => {
-    assert.deepEqual(siteLinks('en'), { start: 'https://beanpool.org/start', find: 'https://beanpool.org/#find-or-start' });
-    assert.deepEqual(siteLinks('fr'), { start: 'https://beanpool.org/fr/start', find: 'https://beanpool.org/fr/#find-or-start' });
-    for (const lang of LANGUAGES) {
-        const dir = path.join(ROOT, 'apps/website', lang === 'en' ? '' : lang);
-        assert.ok(fs.existsSync(path.join(dir, 'start.html')), `${lang}: start.html`);
-        assert.match(fs.readFileSync(path.join(dir, 'index.html'), 'utf8'), /id="find-or-start"/, `${lang}: the map's anchor`);
-        const { html } = busyPage(lang);
-        const links = siteLinks(lang);
-        assert.ok(html.includes(`href="${links.start}"`) && html.includes(`href="${links.find}"`), lang);
+const TARGETS = [
+    // [Accept-Language, where the redirect goes]
+    [undefined, 'https://beanpool.org/'],
+    ['en', 'https://beanpool.org/'],
+    ['en-AU,en;q=0.9', 'https://beanpool.org/'],
+    ['xx-YY, qq', 'https://beanpool.org/'],
+    ['*', 'https://beanpool.org/'],
+    ['pt-BR', 'https://beanpool.org/pt/'],
+    ['pt-BR,pt;q=0.9,en;q=0.8', 'https://beanpool.org/pt/'],
+    ['zh-TW', 'https://beanpool.org/zh-Hant/'],
+    ['zh-HK,zh;q=0.9', 'https://beanpool.org/zh-Hant/'],
+    ['zh-CN', 'https://beanpool.org/zh-Hans/'],
+    ['fr', 'https://beanpool.org/fr/'],
+    ['fr-CA,fr;q=0.9,en;q=0.8', 'https://beanpool.org/fr/'],
+    ['tl-PH', 'https://beanpool.org/fil/'],
+    ['ar-EG', 'https://beanpool.org/ar/'],
+    ['en;q=0.1, ja', 'https://beanpool.org/ja/'],
+];
+
+test("the redirect goes to beanpool.org's front page in the visitor's language: pt-BR -> /pt/, zh-TW -> /zh-Hant/, fr -> /fr/, English and unknown -> /", async () => {
+    for (const [header, want] of TARGETS) {
+        assert.equal(siteTarget(pickLanguage(header)), want, String(header));
+        const { html } = await busyFor(header);
+        const parts = redirectParts(html);
+        assert.equal(parts.go, want, `${header}: the Go now link`);
+        assert.equal(parts.refreshTarget, want, `${header}: the no-script refresh`);
+        assert.ok(parts.script.includes(JSON.stringify(want)), `${header}: the script`);
     }
+});
+
+test('the meta refresh and the script carry the same target and the same 5 s, in every language', () => {
+    assert.equal(REDIRECT_AFTER_S, 5);
+    for (const lang of LANGUAGES) {
+        const page = busyPage(lang, URL_);
+        const parts = redirectParts(page.html);
+        assert.equal(parts.go, page.target, lang);
+        assert.equal(parts.refreshTarget, page.target, lang);
+        assert.equal(parts.refreshSeconds, 5, lang);
+        assert.equal(parts.script, page.script, `${lang}: the script returned is the script in the page`);
+        // The script, run with nothing but setTimeout and location.replace: it waits 5 s, then replaces with the target, once.
+        const run = runScript(parts.script);
+        assert.equal(run.timers.length, 1, lang);
+        assert.equal(run.timers[0].ms, 5000, lang);
+        assert.deepEqual(run.replaced, [], `${lang}: it waits first`);
+        run.timers[0].fn();
+        assert.deepEqual(run.replaced, [page.target], lang);
+    }
+});
+
+test('the meta refresh is the fallback for a browser with scripts off: it sits in <noscript>, so a browser with scripts never has both', async () => {
+    const { html } = await busyFor('de');
+    assert.match(html, /<head>[\s\S]*<noscript><meta http-equiv="refresh" content="5;url=https:\/\/beanpool\.org\/de\/"><\/noscript>[\s\S]*<\/head>/);
+    assert.equal([...html.matchAll(/http-equiv/gi)].length, 1, 'one refresh, nowhere outside <noscript>');
+    // Replace, not assign: Back from beanpool.org does not return to a page that would send the visitor on again.
+    const { script } = redirectParts(html);
+    assert.match(script, /location\.replace\(/);
+    assert.doesNotMatch(script, /location\.(?:href|assign)|window\.open|<|&/);
+});
+
+test('no redirect loop: every target is another host, outside the route the Worker is on, and its page exists on the site', () => {
+    const toml = fs.readFileSync(path.join(APP, 'wrangler.toml'), 'utf8');
+    const route = toml.match(/^pattern = "([^"]+)"$/m)[1];
+    assert.equal(route, 'global.beanpool.org/*');
+    const routeHost = route.split('/')[0];
+    const seen = new Set();
+    for (const lang of LANGUAGES) {
+        const target = siteTarget(lang);
+        const url = new URL(target);
+        assert.equal(url.protocol, 'https:', lang);
+        assert.equal(url.host, 'beanpool.org', lang);
+        assert.notEqual(url.host, routeHost, lang);
+        assert.equal(url.search + url.hash, '', lang);
+        assert.equal(url.pathname, lang === 'en' ? '/' : `/${lang}/`, lang);
+        // The folder the live site serves that address from: apps/website/<lang>/index.html (English at the root).
+        const dir = path.join(ROOT, 'apps/website', lang === 'en' ? '' : lang);
+        assert.ok(fs.existsSync(path.join(dir, 'index.html')), `${lang}: ${target} has no ${path.relative(ROOT, dir)}/index.html`);
+        seen.add(target);
+    }
+    assert.equal(seen.size, 25, 'one target per language');
+    assert.equal(siteTarget('en'), 'https://beanpool.org/');
+    assert.equal(siteTarget('fr'), 'https://beanpool.org/fr/');
+});
+
+test('"Try global again" links to the very address the visitor asked for', async () => {
+    const asked = [
+        'https://global.beanpool.org/',
+        'https://global.beanpool.org/market/post?id=7&tab=a',
+        'https://global.beanpool.org/some/deep/page.html?x=1&y=2&z=%E2%9C%93',
+        'http://global.beanpool.org/',
+    ];
+    for (const url of asked) {
+        const { html } = await busyFor('fr', url);
+        assert.equal(redirectParts(html).again, new Request(url).url, url);
+    }
+    // Through the origin-failed path too; a fragment (which a server never sees) is dropped.
+    const res = await handle(pageRequest({}, { url: 'https://global.beanpool.org/a?b=1&c=2#frag' }), {}, { fetchImpl: origin(522), timeoutMs: SHORT });
+    assertBusy(res);
+    assert.equal(redirectParts(await res.text()).again, 'https://global.beanpool.org/a?b=1&c=2');
+    // The attribute is escaped (& is &amp; in the markup), so the address cannot break out of it.
+    assert.ok((await busyFor('en', 'https://global.beanpool.org/p?b=1&c=2')).html.includes('href="https://global.beanpool.org/p?b=1&amp;c=2"'));
+});
+
+test('an address cannot put markup or a script in the page, and an odd one falls back to the front page', async () => {
+    const hostile = 'https://global.beanpool.org/"><script>alert(1)</script>?q=\'"><img src=x onerror=alert(1)>';
+    const { html } = await busyFor('en', hostile);
+    assert.equal([...html.matchAll(/<script/gi)].length, 1, "still only the page's own script");
+    assert.doesNotMatch(html, /<img/i);
+    // The address is only ever an attribute's value: the URL parser has already percent-encoded its quotes and angle
+    // brackets, so what is left (a harmless "onerror=" as text in a query) cannot open or close a tag.
+    const again = redirectParts(html).again;
+    assert.equal(again, new Request(hostile).url);
+    assert.doesNotMatch(again, /["<>']/);
+    for (const odd of ['javascript:alert(1)', 'data:text/html,<p>x</p>', 'not a url', '', undefined, `https://global.beanpool.org/${'a'.repeat(3000)}`]) {
+        assert.equal(retryHref(odd), '/', String(odd).slice(0, 40));
+    }
+    assert.equal(retryHref('https://global.beanpool.org/x?y=1#z'), 'https://global.beanpool.org/x?y=1');
+    assert.ok(busyPage('en').html.includes('<a class="again" href="/">'), 'no address given: the front page');
 });
 
 test("Accept-Language picks the visitor's best language of ours, English when none fits", () => {
@@ -470,14 +645,24 @@ test('the busy response carries the language it chose', async () => {
     const html = await res.text();
     assert.match(html, /<html lang="ar" dir="rtl">/);
     assert.ok(html.includes(WORDS.ar.heading));
-    assert.ok(html.includes('https://beanpool.org/ar/start'));
+    assert.equal(redirectParts(html).go, 'https://beanpool.org/ar/');
+    assert.equal(redirectParts(html).refreshTarget, 'https://beanpool.org/ar/');
 });
 
 test('the English page says what the brief asks, in plain words', () => {
-    const { html } = busyPage(undefined);
-    for (const words of ['The global community is very busy right now', 'try again in a few minutes', 'Start your own community', 'Find one near you', 'BeanPool app', 'keeps working']) {
+    const { html } = busyPage(undefined, URL_);
+    for (const words of [
+        'The global community is very busy right now.',
+        'Taking you to beanpool.org, where you can read about BeanPool and get the app.',
+        '>Go now</a>',
+        '>Try global again</a>',
+        'Already using the BeanPool app? It keeps working as usual.',
+    ]) {
         assert.ok(html.includes(words), words);
     }
+    // "Go now" is the page's main action and comes first; "Try global again" is the smaller one.
+    assert.ok(html.indexOf('>Go now</a>') < html.indexOf('>Try global again</a>'));
+    assert.match(STYLE, /\.ways \.again \{[^}]*font-size: 0\.875rem/);
 });
 
 test('never the two words the project bans (resilien…, surviv…), in any file here', () => {

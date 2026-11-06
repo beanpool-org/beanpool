@@ -36,7 +36,7 @@ vi.mock('expo-secure-store', () => ({
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 /** On: the phone's copy of its pin is over the 1 MiB cap (makeNamesCopy throws, as core does for a pin that big). */
 const copyTooBig = vi.hoisted(() => ({ on: false }));
-vi.mock('@beanpool/core', async (importOriginal) => {
+vi.mock('../../../../packages/beanpool-core/dist/names-list-trust.js', async (importOriginal) => {
     const core = await importOriginal<typeof import('@beanpool/core')>();
     return { ...core, makeNamesCopy: (...a: Parameters<typeof core.makeNamesCopy>) => { if (copyTooBig.on) throw new Error('too big'); return core.makeNamesCopy(...a); } };
 });
@@ -3399,7 +3399,7 @@ describe('§8 21. Two phones, one key: the higher-seq copy is merged, never roll
         const call = (f: (...a: unknown[]) => unknown) => { try { return String(f('X', 'X', 'X')); } catch { return String(f(['X'], ['X'], ['X'])); } };
         const said = Object.values(NAMES_COPY).flatMap((v) => (typeof v === 'string' ? [v] : typeof v === 'function' ? [call(v as (...a: unknown[]) => unknown)] : []));
         for (const w of said) expect(w).not.toMatch(/Use one phone|this one removed|another device checked|has since left/);
-        for (const file of ['utils/names-list.ts', 'components/key-lines.ts', 'app/names-list.tsx']) {
+        for (const file of ['../../packages/beanpool-core/src/names-list-flows.ts', 'components/key-lines.ts', 'app/names-list.tsx']) {
             expect(fs.readFileSync(path.join(__dirname, '../..', file), 'utf8')).not.toMatch(/Use one phone|on a key history it has since left/);
         }
         for (const file of fs.readdirSync(path.join(__dirname, '../../words'))) {

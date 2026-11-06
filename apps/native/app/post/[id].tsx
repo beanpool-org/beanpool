@@ -30,6 +30,7 @@ import { askForPostPhoto } from '../../utils/post-photo';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { AuthorCard } from '../../components/AuthorCard';
 import { PhotoCarousel } from '../../components/PhotoCarousel';
+import { ChatPhotoViewer } from '../../components/chat/ChatPhoto';
 import { CategoryTile } from '../../components/CategoryTile';
 import { CardChip, useCardShell } from '../../components/market-card-shell';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
@@ -572,6 +573,8 @@ export default function PostDetailModal() {
     // The photo frame is 4:3 of the column (the screen less the page's 16 a side); the carousel needs the number.
     const { width: screenWidth, fontScale } = useWindowDimensions();
     const photoHeight = Math.round((screenWidth - 32) * SHELL.photo.grid.aspectHeight / SHELL.photo.grid.aspectWidth);
+    // The photo a tap opened whole (the frame crops to 4:3): its own URL, the same ~800 px photo, in the chat's full-screen viewer.
+    const [viewerUri, setViewerUri] = useState<string | null>(null);
     // The note under IN RETURN, once the member has asked for the whole of it ("More").
     const [termsNoteOpen, setTermsNoteOpen] = useState(false);
     // Where the take-up sits in the page, for the scroll that brings its confirmation into view.
@@ -2282,7 +2285,7 @@ export default function PostDetailModal() {
                   */}
                 {photos.length > 0 ? (
                     <View style={styles.photoFrame} testID="post-photo-frame">
-                        <PhotoCarousel photos={photos} height={photoHeight} borderRadius={SHELL.radius} />
+                        <PhotoCarousel photos={photos} height={photoHeight} borderRadius={SHELL.radius} onOpen={(_i, uri) => setViewerUri(uri)} />
                     </View>
                 ) : (
                     <View style={styles.tileBanner} testID="post-tile-banner">
@@ -2641,6 +2644,8 @@ export default function PostDetailModal() {
                     </Pressable>
                 </View>
             )}
+            {/* The photo whole, over the page, until tapped or closed. Drawn only while open: it is a Modal, and most visits never open it. */}
+            {!!viewerUri && <ChatPhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} />}
             {showPinSheet && (
                 <PinSheet
                     visible

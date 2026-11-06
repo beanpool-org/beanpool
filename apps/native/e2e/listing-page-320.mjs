@@ -15,6 +15,10 @@
  *   offer           an Offer with Beans (30 B / Hr): the price box, Accept Offer
  *   own             the author's own Offer: Pause, Edit, Delete where the take-up goes
  *   deal            a deal under way: the member took the Offer up, the Beans held, Release, Message, Cancel
+ *   photo-whole     the apples with a PORTRAIT photo (3:4), which the 4:3 frame crops: a tap on it shows the same photo whole
+ *                   (slice DP4; DESIGN-detail-pages-fable.md §2.6). Fails unless the full-screen viewer draws the frame's own URL
+ *                   with `contain` (the frame's is `cover`), fills the 320 x 569 screen, has a Close of 48dp inside it, and both
+ *                   Close and a tap anywhere else put the page back. Shots: -photo-cropped (the page) and -photo-whole (the viewer).
  *
  * Each case, each scheme, fails on: the page scrolling sideways; text past the edge or cut; a button under 47.5dp; text under
  * 4.5:1 (3:1 large); and where there is a take-up (apples, offer), its top past 500dp or its bottom past the 569dp screen
@@ -24,6 +28,7 @@
  * (not committed): the page one 569dp screen at a time; the first is what a member sees on opening it.
  *
  *   node apps/native/e2e/listing-page-320.mjs --shots <dir>
+ *   node apps/native/e2e/listing-page-320.mjs --shots <dir> --phone    (390 x 844, 1× text: the photo-whole case alone)
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -36,9 +41,11 @@ import { chromium } from 'playwright';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NATIVE = path.resolve(HERE, '..');
 const ROOT = path.resolve(NATIVE, '../..');
-const SCALE = 1.3;
-const WIDTH = 320;
-const SCREEN = 569; // 320 x 16:9, the floor's whole screen
+// --phone: a normal phone (390 x 844, text at 1×) and only the photo-whole case; the other cases' numbers are the floor's.
+const PHONE = process.argv.includes('--phone');
+const SCALE = PHONE ? 1 : 1.3;
+const WIDTH = PHONE ? 390 : 320;
+const SCREEN = PHONE ? 844 : 569; // the floor: 320 x 16:9, the whole screen
 // The stop (DESIGN-detail-pages-frame-fable.md §2): the take-up's top at or above 500dp, its bottom on the 569dp screen.
 const STOP = 500;
 const TALL = 1500; // the whole page in one shot: the real phone scrolls it
@@ -139,6 +146,8 @@ const OVERRIDES = {
         useNavigation: `() => ({ addListener: () => () => {}, isFocused: () => true })`,
     },
     'expo-image': { Image: `({ source, style }) => React.createElement(RN.Image, { source, style, resizeMode: 'cover' })` },
+    // Draws nothing but the photo viewer's Close (a glyph, at the icon's own size: the stub's Text scales by the font scale, an icon does not).
+    '@expo/vector-icons': { MaterialCommunityIcons: `({ name, size, color }) => name === 'close' ? React.createElement(RN.Text, { style: { color, fontSize: size / ${SCALE} } }, '✕') : null` },
     'react-native-safe-area-context': {
         useSafeAreaInsets: `() => ({ top: 24, bottom: 0, left: 0, right: 0 })`,
         SafeAreaView: `({ children, style }) => React.createElement(RN.View, { style }, children)`,
@@ -229,6 +238,8 @@ const c = q.get('case') || 'apples';
 globalThis.__identity = { publicKey: ME, privateKey: '8'.repeat(64), callsign: 'Wren' };
 // A 4:3 photo, drawn, from the harness's own server: no network.
 const PHOTO = location.origin + '/apples.svg';
+// photo-whole: a portrait photo, which the 4:3 frame crops to its middle band (TOP and BOTTOM are cut there, whole in the viewer).
+const PORTRAIT = location.origin + '/portrait.svg';
 const DAY = 86400000;
 const LOCAL = { profile: 'local', checkedAt: new Date().toISOString(), features: { beans: true, escrow: true, invites: true, knocks: true, door: 'members', enterprises: true } };
 // The worldwide community as Marty's shot has it: Beans off and shown as a local community's (the showcase), deals on.
@@ -236,7 +247,7 @@ const GLOBAL = { profile: 'global', checkedAt: new Date().toISOString(), feature
 const apples = {
     id: 'p-apples', type: 'need', status: 'active', title: 'Apples needed', description: 'Looking for fresh apples', category: 'food',
     author_pubkey: MARTY, author_callsign: 'Marty', credits: 0, price_type: 'fixed', repeatable: 1, audience_scope: 'public',
-    photos: c === 'apples-nophoto' ? '[]' : JSON.stringify([PHOTO]), created_at: new Date(Date.now() - 3 * DAY).toISOString(),
+    photos: c === 'apples-nophoto' ? '[]' : JSON.stringify([c === 'photo-whole' ? PORTRAIT : PHOTO]), created_at: new Date(Date.now() - 3 * DAY).toISOString(),
 };
 const offer = {
     id: 'p-pots', type: 'offer', status: 'active', title: 'Pottery lessons on the wheel', description: 'Six weeks on the wheel, clay and glazes included. Bring an apron.',
@@ -281,6 +292,7 @@ const result = await build({
 });
 const bundle = result.outputFiles[0].text;
 const PHOTO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#9cb38a"/><rect y="420" width="800" height="180" fill="#b58b5a"/><g fill="#c0392b"><circle cx="250" cy="380" r="70"/><circle cx="400" cy="400" r="70"/><circle cx="550" cy="380" r="70"/><circle cx="325" cy="300" r="70"/><circle cx="475" cy="300" r="70"/></g><circle cx="680" cy="110" r="60" fill="#f6d365"/></svg>';
+const PORTRAIT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#9cb38a"/><rect y="560" width="600" height="240" fill="#b58b5a"/><g fill="#c0392b"><circle cx="180" cy="520" r="70"/><circle cx="320" cy="540" r="70"/><circle cx="440" cy="500" r="70"/><circle cx="250" cy="430" r="70"/><circle cx="380" cy="430" r="70"/></g><circle cx="490" cy="150" r="60" fill="#f6d365"/><rect x="6" y="6" width="588" height="788" fill="none" stroke="#2c3e8f" stroke-width="12"/><text x="300" y="80" font-size="56" font-family="sans-serif" font-weight="700" text-anchor="middle" fill="#1f2d1f">TOP</text><text x="300" y="760" font-size="56" font-family="sans-serif" font-weight="700" text-anchor="middle" fill="#1f2d1f">BOTTOM</text></svg>';
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=${WIDTH}">
 <style>html,body,#root{margin:0;height:100%} body{font-family:sans-serif}</style></head>
 <body><div id="root"></div><script type="module" src="/app.js"></script></body></html>`;
@@ -288,6 +300,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 const server = http.createServer((req, res) => {
     if (req.url === '/app.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); res.end(bundle); return; }
     if (req.url === '/apples.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml' }); res.end(PHOTO_SVG); return; }
+    if (req.url === '/portrait.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml' }); res.end(PORTRAIT_SVG); return; }
     res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(html);
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -363,8 +376,59 @@ try {
         console.log(`${found.length ? '✗' : '✓'} ${label}${found.length ? `: ${found.length} problem(s)` : ''}`);
     };
 
+    // The photo opens whole (slice DP4): the frame crops (`cover`); a tap on the photo shows the SAME photo, uncropped (`contain`), on the
+    // whole screen, with a Close a thumb reaches; Close and a tap anywhere else both put the page back. The page is shot first, cropped.
+    const paintOf = (selector) => page.evaluate((sel) => {
+        const root = document.querySelector(sel);
+        if (!root) return null;
+        for (const e of [root, ...root.querySelectorAll('*')]) {
+            const cs = getComputedStyle(e);
+            if (cs.backgroundImage && cs.backgroundImage !== 'none') return { url: cs.backgroundImage.replace(/^url\(["']?|["']?\)$/g, ''), size: cs.backgroundSize };
+        }
+        return null;
+    }, selector);
+    const opensWhole = async (tag, scheme) => {
+        await page.setViewportSize({ width: WIDTH, height: SCREEN }); // a phone's screen: the viewer fills it
+        try {
+            const button = page.locator('[aria-label="Photo 1 of 1"]');
+            await button.scrollIntoViewIfNeeded();
+            const framed = await paintOf('[aria-label="Photo 1 of 1"]');
+            if (!framed || framed.size !== 'cover') problems.push(`${tag}: the frame does not crop (background-size ${framed?.size ?? 'none'}), so this case shows nothing`);
+            if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `phone-listing-${scheme}-photo-cropped.png`), clip: { x: 0, y: 0, width: WIDTH, height: SCREEN } });
+            const open = async () => {
+                await button.click();
+                await page.locator('[aria-label="Full-size photo"]').waitFor({ timeout: 5000 });
+                await page.waitForTimeout(500); // the fade
+            };
+            const gone = () => page.locator('[aria-label="Full-size photo"]').waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false);
+            await open();
+            const shown = await paintOf('[aria-label="Full-size photo"]');
+            if (!shown || !framed || shown.url !== framed.url) problems.push(`${tag}: the viewer draws ${shown?.url ?? 'nothing'}, not the frame's own ${framed?.url ?? 'photo'}`);
+            if (!shown || shown.size !== 'contain') problems.push(`${tag}: the viewer's photo is background-size ${shown?.size ?? 'none'}, not contain (whole)`);
+            const box = await page.evaluate(() => {
+                const rect = (sel) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } : null; };
+                return { viewer: rect('[aria-label="Full-size photo"]'), close: rect('[aria-label="Close photo"]') };
+            });
+            const v = box.viewer;
+            if (!v || Math.abs(v.left) > 0.5 || Math.abs(v.top) > 0.5 || Math.abs(v.width - WIDTH) > 0.5 || Math.abs(v.height - SCREEN) > 0.5) problems.push(`${tag}: the viewer is ${v ? `${Math.round(v.width)} x ${Math.round(v.height)} at ${Math.round(v.left)},${Math.round(v.top)}` : 'not drawn'}, not the whole ${WIDTH} x ${SCREEN} screen`);
+            const x = box.close;
+            if (!x || x.width < 47.5 || x.height < 47.5) problems.push(`${tag}: Close is ${x ? `${Math.round(x.width)} x ${Math.round(x.height)}` : 'not drawn'}, under 48dp`);
+            else if (x.right > WIDTH + 0.5 || x.top < -0.5 || x.bottom > SCREEN + 0.5) problems.push(`${tag}: Close is past the screen's edge (${Math.round(x.left)}–${Math.round(x.right)}, ${Math.round(x.top)}–${Math.round(x.bottom)})`);
+            await measure(`${tag} · open whole`);
+            if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `phone-listing-${scheme}-photo-whole.png`), clip: { x: 0, y: 0, width: WIDTH, height: SCREEN } });
+            rows.push(`${tag}: the viewer ${v ? `${Math.round(v.width)} x ${Math.round(v.height)}` : '—'} (${shown?.size ?? '—'}), Close ${x ? `${Math.round(x.width)} x ${Math.round(x.height)} at ${Math.round(x.left)}–${Math.round(x.right)} dp` : '—'}; the frame is ${framed?.size ?? '—'}`);
+            await page.locator('[aria-label="Close photo"]').click();
+            if (!(await gone())) problems.push(`${tag}: Close left the viewer open`);
+            await open();
+            await page.mouse.click(WIDTH / 2, SCREEN / 2); // anywhere on the photo, away from Close
+            if (!(await gone())) problems.push(`${tag}: a tap on the open photo left the viewer open`);
+        } finally {
+            await page.setViewportSize({ width: WIDTH, height: TALL });
+        }
+    };
+
     for (const scheme of ['light', 'dark']) {
-        for (const c of ['apples', 'apples-nophoto', 'apples-more', 'offer', 'own', 'deal']) {
+        for (const c of PHONE ? ['photo-whole'] : ['apples', 'apples-nophoto', 'apples-more', 'offer', 'own', 'deal', 'photo-whole']) {
             const tag = `${scheme} · ${c}`;
             await page.goto(`${base}/?scheme=${scheme}&case=${c}`);
             await page.locator('[data-testid="post-chip-row"]').waitFor({ timeout: 15000 }).catch(async (e) => {
@@ -417,6 +481,7 @@ try {
                     await page.screenshot({ path: path.join(SHOTS, `${name}-${i + 1}.png`), clip: { x: 0, y, width: WIDTH, height: Math.min(SCREEN, TALL - y) } });
                 }
             }
+            if (c === 'photo-whole') await opensWhole(tag, scheme);
         }
     }
     for (const e of errors) problems.push(`page error: ${e}`);

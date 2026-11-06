@@ -11,7 +11,7 @@
  * member who is no owner or admin there makes none either, and is told who does, in plain words.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     buildOfflineInviteCode, generateInvite, getCommunityCard, getMyInvites, getInviteTree, getMyVouching, getVouchersBlock,
     request, type CommunityInfo, type InviteCode, type MyVouching, type VoucherSummary,
@@ -137,24 +137,33 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
     const [selectedVoucherPubkey, setSelectedVoucherPubkey] = useState<string | null>(null);
     const [showMakeVoucherNotice, setShowMakeVoucherNotice] = useState(false);
 
+    // An answer that lands after the page has gone sets nothing (a test's torn-down window once turned main red, 6 Nov).
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
+
     const loadMyVouching = useCallback(async () => {
         if (isPreview) return;
+        let data: Awaited<ReturnType<typeof getMyVouching>> | null;
         try {
-            const data = await getMyVouching();
-            setMyVouching(data);
+            data = await getMyVouching();
         } catch {
-            setMyVouching(null);
+            data = null;
         }
+        if (mounted.current) setMyVouching(data);
     }, [isPreview]);
 
     const loadVouchersBlock = useCallback(async () => {
         if (isPreview) return;
+        let data: VoucherSummary[] | null;
         try {
-            const data = await getVouchersBlock();
-            setVouchersData(data?.vouchers ?? null);
+            data = (await getVouchersBlock())?.vouchers ?? null;
         } catch {
-            setVouchersData(null);
+            data = null;
         }
+        if (mounted.current) setVouchersData(data);
     }, [isPreview]);
 
     useEffect(() => {

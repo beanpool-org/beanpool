@@ -2376,6 +2376,10 @@ body.has-read-in-banner {
     font-weight: 600;
     text-decoration: underline;
 }
+/* The machine-translation label is one line: no extra space under it from a page's own paragraph margin. */
+.website-machine-banner { padding: 0.5rem 1rem; margin-bottom: 1rem; }
+.website-machine-banner p,
+.legal-content .website-machine-banner p { margin: 0; }
 
 /* RTL layout adjustments (ar, fa, ur) */
 body[dir="rtl"] {

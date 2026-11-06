@@ -296,3 +296,61 @@ export function createDeferredSync(deps: DeferredSyncDeps): DeferredSync {
         },
     };
 }
+
+// ===================== LISTING DOORBELLS AND HOME'S TURN =====================
+
+/**
+ * A new listing by someone else that the node sent to every phone near it: public (said by the payload itself, as
+ * `livePostChange` has it, since "unknown" must not read as "public"), `new_post`, and neither written by this member nor
+ * taken by them. An offer or need of this kind the apps write into what they hold (`livePostChange`) and ring nothing;
+ * the rest (an event, a poll, any other kind) still rings, and every open phone near it then read its chats and its
+ * groups as well as the listings, in the same few seconds (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md
+ * §5, §8 fix 2).
+ *
+ * Nothing in the chats list, the unread count or "your groups" is changed by such a listing: those come from messages,
+ * memberships and the member's own RSVPs, hosting and keeping, and the member does none of that by someone else's new
+ * public post appearing. (An event an enterprise they keep puts up, and the chat it makes, are the one thing that
+ * reaches them: their next read, the 120 s backstop or opening Chats, brings it.) The listing's own readers (Home, the
+ * market, the map) still ring. False when the member's key is not known: the listing might be theirs.
+ */
+export function isOthersListingDoorbell(event: unknown, selfKey: string | null | undefined): boolean {
+    if (!selfKey || !isObject(event) || event.type !== 'new_post' || !isObject(event.post)) return false;
+    const post = event.post;
+    if (post.audienceScope !== 'public') return false;
+    if (typeof post.authorPublicKey !== 'string' || !post.authorPublicKey || post.authorPublicKey === selfKey) return false;
+    return post.acceptedBy !== selfKey;
+}
+
+/**
+ * Whether a live-feed event reached a crowd of open phones at the same moment, for the screen that re-reads on it: a
+ * listing by someone else (isOthersListingDoorbell), a vote cast on a decision (sent to every socket), or a wide
+ * doorbell (isWideDoorbell). A change of the member's own, or one only a few people get (a deal's step, an invitation, a
+ * private group), is no crowd and is read as soon as before.
+ */
+export function isCrowdDoorbell(event: unknown, selfKey: string | null | undefined): boolean {
+    if (isOthersListingDoorbell(event, selfKey)) return true;
+    if (!isObject(event)) return false;
+    return event.type === 'decision_vote_cast' || isWideDoorbell(event, selfKey);
+}
+
+/** Home reads this long after the last bell about the member themself, and at the soonest after a crowd's. */
+export const HOME_BELL_SETTLE_MS = 3_000;
+/** A crowd's bell is read at the latest this long after it rang (crowdBellDelayMs). */
+export const HOME_BELL_CROWD_MAX_MS = 15_000;
+
+/**
+ * Home's wait after a crowd's doorbell: a uniformly random HOME_BELL_SETTLE_MS to HOME_BELL_CROWD_MAX_MS, drawn by each
+ * device for itself. Every nearby phone read Home exactly 3 s after the same listing, so the node built about a hundred
+ * Homes back to back and held its loop for that long (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §5).
+ * The reads and their answers are the same; only the moment differs.
+ */
+export function crowdBellDelayMs(random: () => number = Math.random): number {
+    const r = random();
+    const unit = Number.isFinite(r) ? Math.min(1, Math.max(0, r)) : 0;
+    return Math.min(HOME_BELL_CROWD_MAX_MS, HOME_BELL_SETTLE_MS + Math.floor(unit * (HOME_BELL_CROWD_MAX_MS - HOME_BELL_SETTLE_MS + 1)));
+}
+
+/** How long Home waits after this event: a crowd's random turn (crowdBellDelayMs), or HOME_BELL_SETTLE_MS for the rest. */
+export function homeBellDelayMs(event: unknown, selfKey: string | null | undefined, random: () => number = Math.random): number {
+    return isCrowdDoorbell(event, selfKey) ? crowdBellDelayMs(random) : HOME_BELL_SETTLE_MS;
+}

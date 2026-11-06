@@ -25,6 +25,12 @@ import {
     wideSyncDelayMs,
     isWideDoorbell,
     createDeferredSync,
+    isOthersListingDoorbell,
+    isCrowdDoorbell,
+    crowdBellDelayMs,
+    homeBellDelayMs,
+    HOME_BELL_SETTLE_MS,
+    HOME_BELL_CROWD_MAX_MS,
 } from '../live-updates.js';
 
 // The shape the node's `new_post` / `post_updated` broadcasts carry to a member socket: `publicBroadcastPost` of a
@@ -449,5 +455,95 @@ describe('wide doorbells (capacity REPORT bottleneck 2)', () => {
         h.d.ask();
         h.advance(300_000);
         expect(h.run).toHaveBeenCalledTimes(1);
+    });
+});
+
+// The listing doorbell: a new listing by someone else must not send every nearby phone to read its chats and its groups
+// (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §8 fix 2), and Home's wait after a crowd's bell is a
+// random turn, not the same 3 s on every phone.
+describe('isOthersListingDoorbell: a new public listing by someone else', () => {
+    const ME = 'm'.repeat(64);
+    const event = (extra: Record<string, unknown> = {}) => ({ type: 'new_post', post: offer({ type: 'event', ...extra }) });
+
+    it.each([['an event', 'event'], ['a poll', 'poll'], ['an offer', 'offer'], ['a need', 'need']])('%s by someone else is one', (_n, type) => {
+        expect(isOthersListingDoorbell({ type: 'new_post', post: offer({ type }) }, ME)).toBe(true);
+    });
+
+    it('the member\'s own listing, or one they took, is not (it is theirs: their chats and groups may change)', () => {
+        expect(isOthersListingDoorbell(event({ authorPublicKey: ME }), ME)).toBe(false);
+        expect(isOthersListingDoorbell(event({ acceptedBy: ME }), ME)).toBe(false);
+    });
+
+    it('a group or direct listing is not (it reached its recipients only), nor one that does not say it is public', () => {
+        expect(isOthersListingDoorbell(event({ audienceScope: 'group' }), ME)).toBe(false);
+        expect(isOthersListingDoorbell(event({ audienceScope: 'direct' }), ME)).toBe(false);
+        expect(isOthersListingDoorbell(event({ audienceScope: undefined }), ME)).toBe(false);
+    });
+
+    it('only a creation is: an update or a removal can change a chat the member is in, so they read as before', () => {
+        expect(isOthersListingDoorbell({ type: 'post_updated', post: offer() }, ME)).toBe(false);
+        expect(isOthersListingDoorbell({ type: 'post_removed', id: 'post-1', audienceScope: 'public' }, ME)).toBe(false);
+    });
+
+    it('a chat, a group, a trade or a bare doorbell is not, and nothing is when the member is not known', () => {
+        for (const type of ['new_message', 'group_member_invited', 'transaction_completed', 'profile_updated']) {
+            expect(isOthersListingDoorbell({ type }, ME)).toBe(false);
+        }
+        expect(isOthersListingDoorbell({ type: 'new_post' }, ME)).toBe(false);
+        expect(isOthersListingDoorbell({ type: 'new_post', post: 'x' }, ME)).toBe(false);
+        expect(isOthersListingDoorbell(null, ME)).toBe(false);
+        expect(isOthersListingDoorbell(event(), null)).toBe(false);
+        expect(isOthersListingDoorbell(event(), undefined)).toBe(false);
+    });
+});
+
+describe('isCrowdDoorbell and crowdBellDelayMs: Home\'s turn after a bell that reached a crowd', () => {
+    const ME = 'm'.repeat(64);
+
+    it('a listing by someone else, a decision vote and a wide doorbell are a crowd', () => {
+        expect(isCrowdDoorbell({ type: 'new_post', post: offer({ type: 'event' }) }, ME)).toBe(true);
+        expect(isCrowdDoorbell({ type: 'decision_vote_cast' }, ME)).toBe(true);
+        expect(isCrowdDoorbell({ type: 'system_announcement' }, ME)).toBe(true);
+        expect(isCrowdDoorbell({ type: 'profile_updated', publicKey: 'x'.repeat(64) }, ME)).toBe(true);
+        expect(isCrowdDoorbell({ type: 'group_updated', group: { joinPolicy: 'open' } }, ME)).toBe(true);
+    });
+
+    it('the member\'s own post, their own card, a private group and a deal\'s step are not: they read in 3 s as before', () => {
+        expect(isCrowdDoorbell({ type: 'new_post', post: offer({ authorPublicKey: ME }) }, ME)).toBe(false);
+        expect(isCrowdDoorbell({ type: 'profile_updated', publicKey: ME }, ME)).toBe(false);
+        expect(isCrowdDoorbell({ type: 'group_updated', group: { joinPolicy: 'invite' } }, ME)).toBe(false);
+        expect(isCrowdDoorbell({ type: 'transaction_completed' }, ME)).toBe(false);
+        expect(isCrowdDoorbell({ type: 'new_post', post: offer({ audienceScope: 'group' }) }, ME)).toBe(false);
+    });
+
+    it('the delay is a whole number of ms from 3 s to 15 s, the ends included, whatever the random source says', () => {
+        expect(crowdBellDelayMs(() => 0)).toBe(HOME_BELL_SETTLE_MS);
+        expect(crowdBellDelayMs(() => 0.9999999)).toBe(HOME_BELL_CROWD_MAX_MS);
+        expect(crowdBellDelayMs(() => 1)).toBe(HOME_BELL_CROWD_MAX_MS);
+        expect(crowdBellDelayMs(() => 0.5)).toBe(9_000);
+        expect(crowdBellDelayMs(() => -3)).toBe(HOME_BELL_SETTLE_MS);
+        expect(crowdBellDelayMs(() => 7)).toBe(HOME_BELL_CROWD_MAX_MS);
+        expect(crowdBellDelayMs(() => NaN)).toBe(HOME_BELL_SETTLE_MS);
+        expect(HOME_BELL_SETTLE_MS).toBe(3_000);
+        expect(HOME_BELL_CROWD_MAX_MS).toBe(15_000);
+    });
+
+    it('with the real random source the delays are spread over the whole window, never outside it', () => {
+        const seen = new Set<number>();
+        for (let i = 0; i < 2_000; i++) {
+            const d = crowdBellDelayMs();
+            expect(Number.isInteger(d)).toBe(true);
+            expect(d).toBeGreaterThanOrEqual(3_000);
+            expect(d).toBeLessThanOrEqual(15_000);
+            seen.add(Math.floor(d / 1_000));
+        }
+        // 2,000 draws over twelve whole seconds: every second of the window shows up (a flat 3 s would show one).
+        expect(seen.size).toBeGreaterThanOrEqual(12);
+    });
+
+    it('homeBellDelayMs: a crowd waits its random turn, anything else 3 s', () => {
+        expect(homeBellDelayMs({ type: 'new_post', post: offer() }, ME, () => 0.5)).toBe(9_000);
+        expect(homeBellDelayMs({ type: 'new_post', post: offer({ authorPublicKey: ME }) }, ME, () => 0.5)).toBe(3_000);
+        expect(homeBellDelayMs({ type: 'transaction_completed' }, ME, () => 0.5)).toBe(3_000);
     });
 });

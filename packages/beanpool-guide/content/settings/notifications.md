@@ -10,7 +10,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 
 - Open **Settings**. Under **App Settings**, tap **Notification Preferences**.
 - Switch each kind on or off:
-- **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in. Also when your community opens a vote on removing a member that you can vote on.
+- **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in. Also when your community opens a vote on removing a member that you can vote on and, where a jury decides that vote instead, when you are drawn for the jury, and the reminders a juror gets.
 - **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.
 - **When a neighbour asks for something I'm into:** when someone in your community posts a Need in a category you starred on **What are you into?** on **Home**, at most once a day. It is on until you switch it off. It comes with your **Marketplace Activity** alerts, so it stops if you switch those off too. Only communities that send it show this switch: the global community doesn't.
 - **Held in Trust & System:** beans held, released or in question.
@@ -31,7 +31,11 @@ An alert on your phone says only what kind of news it is, for example:
 - "Someone in your community asked for something you're into." It never says who asked or what for: tap it to open the Need.
 - "An event you're going to starts soon."
 - "Your community has a notice for you."
-- "Your community opened a vote on removing a member." It never says who the vote is about.
+- "Your community opened a vote on removing a member." It never says who the vote is about. Where a jury decides, only the jurors are alerted, with "You were drawn for a jury in your community." instead; everyone else gets no alert.
+- "You were drawn for a jury in your community. Open BeanPool within three days to serve or step aside." When less than two days of the vote are left, it says so: "You were drawn for a jury in your community, and its vote closes in less than two days."
+- "A jury you were drawn for is waiting for your answer." A reminder, two days after you were drawn, if you haven't answered.
+- "A jury you're on closes in about a day." A reminder, when about a day of the vote is left, if you haven't voted.
+- "The member your jury is deciding about has answered the case."
 - "Someone asked to join your community."
 - "A community answered your request."
 

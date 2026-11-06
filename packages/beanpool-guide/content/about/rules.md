@@ -19,7 +19,7 @@ About a member:
 - Suspend a member, or lift a suspension.
 - Freeze a member's credit, or unfreeze it.
 - Remove a lead keeper from an enterprise, or a leader from a project.
-- Remove a member from the community, or reinstate them. Nobody proposes a removal: that vote opens when an admin suspends the member (see "Emergency suspension").
+- Remove a member from the community, or reinstate them. Nobody proposes a removal: that vote opens when an admin suspends the member (see "Emergency suspension"). In a large community a jury of members drawn at random decides it (see "A jury in a large community").
 
 About the Commons:
 
@@ -38,7 +38,7 @@ Any active member whose credit is not frozen, and who has traded in the market. 
 
 Any active member who joined **before** the Decision opened. A member whose credit the admins froze still votes: a freeze is about Beans, not about having a say. People who join during a vote cannot vote on it. Enterprise accounts cannot vote.
 
-Nobody votes on a Decision to remove them, and they are not counted in its turnout. A member an admin has suspended still votes on every other Decision while the community votes on removing them, and is counted in their turnout, so suspending someone cannot change a vote (see "Emergency suspension").
+Nobody votes on a Decision to remove them, and they are not counted in its turnout. Where a jury decides a removal, only the jury votes on it (see "A jury in a large community"). A member an admin has suspended still votes on every other Decision while the community votes on removing them, and is counted in their turnout, so suspending someone cannot change a vote (see "Emergency suspension").
 
 ## How votes count
 
@@ -62,7 +62,7 @@ Every Decision runs for exactly 7 days. Voting opens at once. When the 7 days ar
 A vote only counts if enough people take part.
 
 - Enough people means 30% of the members who could vote and were active in the last 30 days. It is never fewer than 3 people.
-- For removing a member it is 25%.
+- For removing a member, where everyone decides it, it is 25%. Where a jury decides it, enough of the jury must vote (see "A jury in a large community").
 - "Active" means your app sent your community's server something in those 30 days: a post, a trade, a vote, a message. On the phone, just opening the app usually counts too, because it signs in for alerts each time it starts.
 - Turnout counts people, not the weight of their votes.
 
@@ -71,7 +71,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 ## How much Yes is needed
 
 - Most Decisions: 60% Yes.
-- Removing a member: 66% Yes, and at least 3 Yes votes, whatever the share. Two neighbours can't remove a third.
+- Removing a member: 66% Yes, and at least 3 Yes votes, whatever the share. Two neighbours can't remove a third. Where a jury decides it, two-thirds of the votes cast, and at least 6 Yes from a jury of 12, or 9 from a jury of 18.
 - Undoing something (lifting a suspension, unfreezing credit, reinstating a member): more than half.
 - A tie always fails.
 
@@ -84,9 +84,9 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 
 ## Removing a member
 
-- In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. Two things still do without that vote: where too few members can vote, an owner may decide it (see "A small community"); and, for now, an owner can remove a member together with everyone they invited, and everyone those people invited.
+- In a community that votes, a member is removed only by the community's vote, taken by everyone who can vote or, in a large community, by a jury. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. Two things still do without that vote: where too few members can vote, an owner may decide it (see "A small community"); and, for now, an owner can remove a member together with everyone they invited, and everyone those people invited.
 - If a removal passes, the member is suspended and their credit frozen at once.
-- After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
+- After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal. A Decision to reinstate is an ordinary one, proposed by a member and decided by everyone who can vote, whoever decided the removal.
 - A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.
 - When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.
 - The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote someone proposes cannot take that away; the app says so if you try. Nor does the vote that opens when one of them is suspended (see below). An owner can take an admin's role away first, and after that they are a member like any other.
@@ -97,13 +97,31 @@ An admin can suspend a member at once, for example to stop harm. They must give 
 
 - At the same moment, a 7-day Decision opens on removing them: "Remove …?". An admin acting on a report can suspend the same way, and the same Decision opens.
 - While it lasts, the member's listings are off the Market and the map, and they can't invite anyone or answer a request to join. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat), and finish or cancel deals they already have. It all comes back when the suspension ends.
-- It is decided as any removal is: 25% turnout, 66% Yes and at least 3 Yes votes. The suspended member cannot vote on it, and still votes on every other Decision.
+- It is decided as any removal is: by everyone who can vote (25% turnout, 66% Yes and at least 3 Yes votes), or, in a large community, by a jury (see "A jury in a large community"). The suspended member cannot vote on it, and still votes on every other Decision.
 - If it passes, they stay suspended for the 7 days of a removal's wait, and are then removed (see "Removing a member").
 - If it does not pass, or too few people vote, the suspension lifts when the vote closes. Where too few members can vote at all, an owner may decide it (see "A small community").
 - An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.
-- An admin can suspend another admin. No vote removes an owner or admin, so whatever the vote decides, the suspension ends when it closes, and they keep their role.
+- An admin can suspend another admin. No vote removes an owner or admin, so whatever the vote decides, the jury's or everyone's, the suspension ends when it closes, and they keep their role.
 
 On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.
+
+## A jury in a large community
+
+In a big community, putting every removal to everyone asks the same people case after case, and lets a campaign reach all of them. So once enough members could serve, a removal is decided by a **jury**: a few members drawn at random, each asked about one case. Everyone else reads the case.
+
+- **When a jury decides.** It depends on the rule your community has, and "How this community works" shows it. The default, **Automatic**, uses a jury once at least 100 members could serve on one, and has everyone vote until then. The owners can choose **Everyone** instead, or **A jury**, which needs at least 36 members who could serve (below that, everyone decides). It is settled when the member is suspended and kept on the vote, so a rule changed, or a community growing past 100, changes nothing about a vote that is already open. If a whole jury can't be seated, everyone decides.
+- **Who could serve.** A member who could vote when the vote opened (see "Who can vote"), and who joined at least 30 days before the start of the day the vote opened, so that people invited just before can't fill it. Nothing else is asked: not how active you are, not your trading, not your credit, so a member whose credit the admins froze can serve. Enterprise accounts can't, nor can the member the vote is about. The admin or owner who suspended the member is on the list too, and is passed over when the jury is drawn.
+- **The draw.** The jury is **12 members**, or **18** once at least 1,000 members could serve. Nobody chooses the members by name: not the admin who suspended the member, not the member, not the owners. The members who could serve are put in an order by a fixed calculation (a SHA-256 hash) on the list, the day and the key of the member the vote is about, and the first in that order are the jury. No random number is chosen, so anyone who runs the same calculation gets the same jury. That includes the admin who suspends: the calculation uses only facts anyone can read and the day of the suspension, so the admin can work out in advance who a given day would seat. The admin does choose the day, but only one try a day, and each is on the record.
+- **Passed over.** Some members are passed over, and the next in the order takes the seat. They are the admin or owner who suspended the member, and anyone with a link to the member that the member couldn't have made alone: someone who blocked them, who reported them in the last 90 days, who invited them or was invited by them, who started a chat with them, who completed a deal with them in the last 90 days (bought from them, answered one of their listings or lent them something), or who has a deal open on one of their listings that they asked for. Nobody is told who was passed over or why, a juror included.
+- **Serve or step aside.** Each juror is told by an alert on their phone, if their **Direct Messages** alerts are on, and finds the case in **Commons**, under **Decide**, where **Serve** and **Step aside** wait. They have 72 hours to answer: **Serve**, and then vote, or **Step aside**, which asks for no reason and tells nobody why. Voting is an answer too. Once you have voted you can't step aside, but you can change your vote until it closes. A juror who doesn't answer in 72 hours, or who leaves, is removed or is suspended after being drawn, loses the seat, and the next member in the order is drawn in their place. A juror who hasn't answered is reminded after 48 hours, and every juror who hasn't voted is reminded on the vote's sixth day. Nothing extends the 7 days: a juror drawn with less than two days left is told so.
+- **Who votes.** Only the jurors. Everyone else can read the case and the member's answer, and sees "Only the jury votes on this." The member can answer the case as before, and the jurors are told when they first do.
+- **How many must vote.** At least 9 of a jury of 12 (13 of 18) must vote, or nothing is decided. Removing then takes two-thirds of the votes cast and at least 6 Yes (9 of 18). A tie fails. If too few jurors vote, the suspension lifts when the vote closes, as with any removal too few voted on. An owner can't decide a jury's vote in its place.
+- **While it is open,** the card says "A jury of 12 members, drawn at random, decides by 5 Nov." and counts the jurors who have voted, like "7 of 12 jurors have voted". It never shows how many said Yes or No until the vote closes, to anyone, an admin included. A juror is told only about their own seat; nobody else on the jury is named.
+- **When it closes,** the card says how it ended: "The jury voted to remove Dave (9 of 12).", "The jury kept Dave.", or "7 of 12 jurors voted, too few to decide. Dave is back." The totals show, and so do two lists of names: **Voted** and **Didn't serve**. The lists never say how anyone voted, and never why someone didn't serve: they may have stepped aside, not answered in time, left, or been passed over for a link to the member. A name on the second list says nothing about which. If it passed, the member stays suspended for the 7 days of a removal's wait, and is then removed (see "Removing a member").
+- **Check the draw.** On the vote, anyone can tap **Check the draw**. Your app takes the list of members who could serve, which your community's server gives to every member, works out its fingerprint (a hash) and compares it with the one the server recorded when the vote opened. It says that the draw checks out, or that the list the server gave doesn't match its own record. Once the vote has closed it also works the draw out and checks that the names listed under **Voted** and **Didn't serve** are the first ones it picks. The apps check the list; they don't show it.
+- **What the check can't do.** Whoever runs your community's server can change what it stores, and a server that rewrote the list, its record and the jury together would pass the check. The check catches a list or a jury that doesn't match the draw, not a server's owners who are set on cheating. And because the calculation is public, someone who runs it themselves can work out who is probably on a jury, before the vote opens or while it is open, though not who was passed over. A juror who is pressed can step aside before they vote, and no one can see how they voted.
+
+The rest of a fair vote is the same (see below): the member is told at once and can reply, the vote names who brought the case, a false case can be hidden, and the cool-down and the limit on repeat suspensions apply. Where a jury decides, the alert that a vote has opened goes to the jurors, saying they were drawn, and to the member, not to everyone.
 
 ## A small community
 
@@ -125,7 +143,7 @@ On the global community there is no vote. The suspension lasts 7 days and then l
 - **A second suspension within 30 days is an owner's.** In those 30 days only an owner can suspend the member again, and with a new reason. The vote then says "Second pause in 30 days", and how the last vote ended.
 - **No third suspension in 90 days.** A third suspension of the same member within 90 days of the first is refused to everyone. If there is more to decide, a member proposes a Decision.
 - **The owners hear of every suspension,** without being told who it was or why: the vote shows that to everyone who can vote.
-- **Everyone who can vote is told.** When the vote opens, each member who can vote on it gets an alert on their phone, if their **Direct Messages** alerts are on. The alert never says who the vote is about.
+- **Everyone who can vote is told.** When the vote opens, each member who can vote on it gets an alert on their phone, if their **Direct Messages** alerts are on. The alert never says who the vote is about. Where a jury decides, only the jurors get an alert, saying they were drawn.
 
 ## What admins can and cannot do
 

@@ -1011,6 +1011,8 @@ export interface ChatOpeners {
     identity: { publicKey: string; privateKey: string } | null;
     /** The epoch key of a group's chat, if this page already opened it (Talk opened that chat in this page's life). */
     groupKey?: (groupId: string, epoch: number) => Uint8Array | undefined;
+    /** Whether this page has seen the group's chat locked (group-chat-keys `seenLockedInMemory`): no read either. */
+    groupLocked?: (groupId: string) => boolean;
 }
 
 type ChatWithLines = Extract<HomeChatCard, { lines: HomeChatLine[] }>;
@@ -1064,6 +1066,9 @@ function dmLinesShown(card: ChatWithLines, conversationId: string, me: ChatOpene
 function groupLinesShown(card: ChatWithLines, conversationId: string, open: ChatOpeners): ChatLineShown[] {
     const me = open.identity?.publicKey;
     const groupId = conversationId.toLowerCase();
+    // A group's chat is locked here when this page has seen it so, or when any of its lines is sealed: there a readable line
+    // in a member's name is nobody's (Talk's groupLineShown), never their words. An event's or enterprise's chat is readable.
+    const locked = card.kind === 'group' && (!!open.groupLocked?.(groupId) || card.lines.some(l => !!l.sealed && isSealedGroupLine({ nonce: l.sealed.nonce, type: l.type })));
     const out: ChatLineShown[] = [];
     for (const l of card.lines) {
         if (l.type === 'removed') {
@@ -1085,6 +1090,8 @@ function groupLinesShown(card: ChatWithLines, conversationId: string, open: Chat
         } else if (!isReadable(l)) {
             // Sealed some other way, or too long to carry (`🔒 Message`, no bytes).
             out.push(nobodys(l, t(CHAT_CARD_WORDS.locked)));
+        } else if (locked) {
+            out.push(nobodys(l, chatLineWords(GROUP_LINE_UNVERIFIED_TEXT)));
         } else {
             const mine = !!me && l.author === me;
             out.push({ id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(l.text ?? '') });

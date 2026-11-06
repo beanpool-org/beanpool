@@ -657,6 +657,19 @@ describe('the chat card', () => {
         expect(shown(a, i, ana, () => other)!.map(l => [l.who, l.text])).toEqual(lines.map(() => [null, "This message couldn't be verified."]));
     });
 
+    it("a locked group's readable line in a member's name is nobody's; in a group never seen locked it is their words", () => {
+        const plain = { id: 'p1', author: ben.publicKey, who: 'Ben', at: at(5), type: 'text', systemType: null, text: 'readable words', metadata: null };
+        const a = { cards: { 'chat-1': { kind: 'group', name: 'Garden crew', unread: 0, muted: false, lines: [plain] } } };
+        const i = inst('group', 'g-1');
+        expect(shown(a, i)!.map(l => [l.who, l.text])).toEqual([['Ben', 'readable words']]);
+        const seenLocked = chatLinesShown(chatCardFor(a as never, i)!, 'g-1', { identity: ana, groupLocked: (g) => g === 'g-1' });
+        expect(seenLocked.map(l => [l.who, l.text])).toEqual([[null, "This message couldn't be verified."]]);
+        // Beside a sealed line the chat is locked whatever this page has seen.
+        const sealed = { id: 's1', author: ben.publicKey, who: 'Ben', at: at(4), type: 'text', systemType: null, sealed: { ciphertext: 'AAAA', nonce: 'group-xc20p-v1:AAAA', metadata: '{"epoch":1}' } };
+        const both = shown({ cards: { 'chat-1': { kind: 'group', name: 'G', unread: 0, muted: false, lines: [plain, sealed] } } }, i)!;
+        expect(both.map(l => [l.who, l.text])).toEqual([[null, "This message couldn't be verified."], [null, t(CHAT_CARD_WORDS.lockedOpen)]]);
+    });
+
     it("an event's or enterprise's chat: readable lines as words, a photo, a convenor's removal in Talk's words", () => {
         const lines = [
             { id: 'e1', author: ben.publicKey, who: 'Ben', at: at(9), type: 'text', systemType: null, text: 'See you at 6', metadata: null },

@@ -924,6 +924,8 @@ function ChatBody({
                 <p className="m-0 mb-2 text-sm text-text-primary break-words">{t(CHAT_CARD_WORDS.gone)}</p>
                 {onRemove && (
                     <button type="button" data-testid="home-chat-remove" onClick={onRemove}
+                        // Named as the phone names it: the chat it was picked by, the member's own words, in quotes.
+                        aria-label={t('Remove {card} from Home', { card: picked.name ? t('"{words}"', { words: picked.name }) : t('A chat') })}
                         className="min-w-[44px] min-h-[44px] px-4 rounded-xl border border-border-primary bg-transparent text-sm font-bold text-text-primary cursor-pointer hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                         {t('Remove')}
                     </button>
@@ -945,6 +947,7 @@ function ChatBody({
         identity: identity ? { publicKey: identity.publicKey, privateKey: identity.privateKey } : null,
         // A key already open in this page (Talk opened the group's chat): no read, no wrap opened here.
         groupKey: identity ? (groupId, epoch) => groupKeyring(groupKeysNet, identity, groupId, indexedDbGroupLockStore).openedKey(epoch) : undefined,
+        groupLocked: identity ? (groupId) => groupKeyring(groupKeysNet, identity, groupId, indexedDbGroupLockStore).seenLockedInMemory() : undefined,
     };
     const lines = chatLinesShown(body, picked.conversationId, open).map(l => ({ id: l.id, text: chatLineText(l) }));
     const status = body.unread > 0 ? tn(body.unread, '{n} new', '{n} new') : null;

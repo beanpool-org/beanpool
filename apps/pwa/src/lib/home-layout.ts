@@ -21,6 +21,7 @@
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards, t, word,
+    newInstanceId, readChatSettings,
     knockStillAnswerable, reorderIds,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
@@ -365,7 +366,13 @@ export function changeCardSettings(layout: HomeLayoutV2 | null, id: string, sett
     const reader = i < 0 ? undefined : homeCardType(list[i].type)?.readSettings;
     if (!reader) return null;
     const cards = [...list];
-    cards[i] = { ...cards[i], settings: reader(settings) };
+    const next = reader(settings);
+    // A chat card picked again for another chat takes a new id in the same place (DESIGN-home-chosen-chat-fable.md §2, the
+    // phone's rule): the node's answer is keyed by the card's id and names no chat, so a kept answer for the old id is never
+    // drawn as the new chat's lines, offline or before the node answers.
+    const repicked = list[i].type === 'chat' && readChatSettings(list[i].settings).conversationId !== (next as { conversationId?: unknown }).conversationId;
+    const newId = repicked ? newInstanceId('chat', new Set(list.map(c => c.id))) : list[i].id;
+    cards[i] = { ...cards[i], id: newId, settings: next };
     return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: iso(editAt(layout, now)) };
 }
 

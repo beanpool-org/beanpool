@@ -318,6 +318,21 @@ describe('"I can do this" on a Need (cold start N4)', () => {
         expect(sentence()).toBe("You'd do it for 60 Beans. Kofi agrees, you do it, Kofi confirms, and the Beans are yours.");
         await typeHours('');
         expect(sentence()).toBeNull();
+        // 0 hours is no usable quantity either: never "for free" on a priced Need, and Confirm does nothing (as the web).
+        for (const zero of ['0', '0.0']) {
+            await typeHours(zero);
+            expect(sentence()).toBeNull();
+            expect(host.textContent).not.toContain('for free');
+            const before = net.calls.length;
+            await press('Confirm');
+            expect(net.calls.length).toBe(before);
+            expect(alerts.said).toEqual([]);
+        }
+        await typeHours('2');
+        expect(sentence()).toBe("You'd do it for 40 Beans. Kofi agrees, you do it, Kofi confirms, and the Beans are yours.");
+        const before = net.calls.length;
+        await press('Confirm');
+        expect(net.calls.length).toBeGreaterThan(before);
     });
 
     it('a free Need says it is free; a Need with no name says the person who asked', async () => {

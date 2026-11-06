@@ -1055,7 +1055,8 @@ export default function PostDetailModal() {
     // week or month is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
     // never an amount that isn't one. The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
     const needQuantity = post.price_type !== 'fixed' ? parseAmount(acceptHours, undefined, ANY_DECIMALS) : null;
-    const needTotal = needQuantity === null ? Number(post.credits) : needQuantity.ok ? Number(post.credits) * needQuantity.value : null;
+    // A quantity of 0 is no usable quantity (as the web's acceptHoursValue > 0): it would read "for free" on a priced Need.
+    const needTotal = needQuantity === null ? Number(post.credits) : needQuantity.ok && needQuantity.value > 0 ? Number(post.credits) * needQuantity.value : null;
     const needAnswerWords = !isOffer && needTotal !== null ? needAnswerLine(needTotal, post.author_callsign) : null;
     // Every deal on it the reader stands on (DESIGN-deals-fable §3.2, slice S4), by core's one rule, as on the web: its own
     // people (its author, or a keeper of the enterprise that wrote it) see a row for each deal under way, the one a door
@@ -2069,7 +2070,7 @@ export default function PostDetailModal() {
                                     <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => setShowAcceptConfirm(false)} disabled={accepting}>
                                         <Text style={styles.cancelActionBtnText}>{t('Cancel')}</Text>
                                     </Pressable>
-                                    <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !acceptHours)} onPress={async () => {
+                                    <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !(needQuantity?.ok && needQuantity.value > 0))} onPress={async () => {
                                         if (accepting) return;
                                         if (!identity || !post.id) return;
                                         // Hours in the language's decimal mark (core parseAmount): fr "2,5" is 2.5, never sent as no hours.

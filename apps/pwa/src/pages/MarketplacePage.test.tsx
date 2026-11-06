@@ -1261,8 +1261,16 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             const hours = screen.getByRole('textbox');
             fireEvent.change(hours, { target: { value: '3' } });
             expect(screen.getByText("You'd do it for 60 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.")).toBeInTheDocument();
-            fireEvent.change(hours, { target: { value: '' } });
-            expect(screen.queryByText(/You'd do it for/)).not.toBeInTheDocument();
+            // The sentence's box goes with it: no empty bordered box where the sentence was (as the phone).
+            const sentenceBox = () => screen.queryByText(/You'd do it for/)?.closest('div.rounded-lg') ?? null;
+            const boxClass = sentenceBox()!.className;
+            const boxes = () => Array.from(document.querySelectorAll('div')).filter((d) => d.className === boxClass).length;
+            expect(boxes()).toBe(1);
+            for (const none of ['', '0']) {
+                fireEvent.change(hours, { target: { value: none } });
+                expect(screen.queryByText(/You'd do it for/)).not.toBeInTheDocument();
+                expect(boxes()).toBe(0);
+            }
         });
 
         it('a free Need says it is free, and never "0 Beans" or Beans that will not come', async () => {

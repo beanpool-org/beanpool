@@ -40,6 +40,7 @@ import { communitySwitched } from '../../utils/community-switch';
 import Constants from 'expo-constants';
 import appConfig from '../../app.json';
 import { palette } from '../../constants/colors';
+import { Spacing } from '../../constants/responsive';
 import { useTheme, useStyles } from '../ThemeContext';
 import { THEME_PREFERENCE_OPTIONS } from '../../utils/theme-preference';
 import { APP_LOCK_NEEDS_SCREEN_LOCK, authenticateUser, getAppLockEnabled, getScreenLock, setAppLockEnabled } from '../../utils/LocalAuth';
@@ -216,6 +217,10 @@ export default function SettingsScreen() {
         menuIcon: { fontSize: 18 },
         menuText: { fontSize: 15, fontWeight: '600', color: colors.text.body },
         menuSub: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
+        // The text column of a row that ends in a switch (every `toggle` row): it takes the room the switch leaves and its
+        // words wrap (never shrink or cut), and a gap keeps even a long line, a longer language or large text from running
+        // right up to the switch.
+        menuTextBesideSwitch: { flex: 1, marginRight: Spacing.md },
         menuChevron: { fontSize: 22, color: colors.border.strong, fontWeight: '300', marginLeft: 8 },
 
         // ─── Toggle ───
@@ -2113,7 +2118,7 @@ export default function SettingsScreen() {
                     {/* Background pattern: the doodle wallpaper, or a plain colour. Per device. */}
                     <View style={styles.menuBtn}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🎨</Text></View>
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.menuTextBesideSwitch}>
                             <Text style={styles.menuText}>{t("Background pattern")}</Text>
                             <Text style={styles.menuSub}>{t("Doodles behind the app, or a plain background")}</Text>
                         </View>
@@ -2131,7 +2136,7 @@ export default function SettingsScreen() {
                     {/* App Lock Switch */}
                     <View style={styles.menuBtn}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.menuTextBesideSwitch}>
                             <Text style={styles.menuText}>{t("App Lock")}</Text>
                             <Text style={styles.menuSub}>{t("Asks for your phone's screen lock when BeanPool opens")}</Text>
                         </View>
@@ -2175,7 +2180,7 @@ export default function SettingsScreen() {
                     </Pressable>
                     <View style={styles.menuBtn}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📍</Text></View>
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.menuTextBesideSwitch}>
                             <Text style={styles.menuText}>{t("Location")}</Text>
                             <Text style={styles.menuSub}>{locationEnabled ? t('Enabled — used for nearby posts & map') : t('Disabled — tap to enable')}</Text>
                         </View>
@@ -2208,7 +2213,7 @@ export default function SettingsScreen() {
                     {/* Holiday Mode — pause your presence; hides your offers, stops new requests */}
                     <View style={[styles.menuBtn, styles.menuBtnLast]}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🌴</Text></View>
-                        <View style={{ flex: 1 }}>
+                        <View style={styles.menuTextBesideSwitch}>
                             <Text style={styles.menuText}>{t("Holiday Mode")}</Text>
                             <Text style={styles.menuSub}>{holidayMode ? t("You're away — offers hidden, no new requests") : t('Going away? Hide your offers and pause requests')}</Text>
                         </View>
@@ -2275,7 +2280,7 @@ export default function SettingsScreen() {
                     {showAsConnection !== null && (
                         <View style={styles.menuBtn}>
                             <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🤝</Text></View>
-                            <View style={{ flex: 1 }}>
+                            <View style={styles.menuTextBesideSwitch}>
                                 <Text style={styles.menuText}>{t("Show me as a connection in common")}</Text>
                                 <Text style={styles.menuSub}>{t("When you and two people are friends both ways, each can see your name on the other's profile")}</Text>
                             </View>
@@ -2663,7 +2668,7 @@ export default function SettingsScreen() {
                         <View style={styles.menuGroup}>
                             <View style={styles.menuBtn}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
-                                <View style={{ flex: 1 }}>
+                                <View style={styles.menuTextBesideSwitch}>
                                     <Text style={styles.menuText}>{t("Direct Messages")}</Text>
                                     <Text style={styles.menuSub}>{t("Get notified when someone messages you")}</Text>
                                 </View>
@@ -2676,7 +2681,7 @@ export default function SettingsScreen() {
                             </View>
                             <View style={styles.menuBtn}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📬</Text></View>
-                                <View style={{ flex: 1 }}>
+                                <View style={styles.menuTextBesideSwitch}>
                                     <Text style={styles.menuText}>{t("Marketplace Activity")}</Text>
                                     <Text style={styles.menuSub}>{t("Requests, approvals & rejections")}</Text>
                                 </View>
@@ -2690,7 +2695,7 @@ export default function SettingsScreen() {
                             {askedPushOn(nodeProfile?.features) && (
                                 <View style={styles.menuBtn} testID="settings-notify-asked">
                                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🙋</Text></View>
-                                    <View style={{ flex: 1 }}>
+                                    <View style={styles.menuTextBesideSwitch}>
                                         <Text style={styles.menuText}>{t(ASKED_PUSH_WORDS.switchName)}</Text>
                                         <Text style={styles.menuSub}>{t(ASKED_PUSH_WORDS.switchLine)}</Text>
                                     </View>
@@ -2704,7 +2709,7 @@ export default function SettingsScreen() {
                             )}
                             <View style={knockSwitch ? styles.menuBtn : [styles.menuBtn, styles.menuBtnLast]}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
-                                <View style={{ flex: 1 }}>
+                                <View style={styles.menuTextBesideSwitch}>
                                     <Text style={styles.menuText}>{t("Held in Trust & System")}</Text>
                                     <Text style={styles.menuSub}>{t("Credits held in trust, released, or disputed")}</Text>
                                 </View>
@@ -2718,7 +2723,7 @@ export default function SettingsScreen() {
                             {knockSwitch && (
                                 <View style={[styles.menuBtn, styles.menuBtnLast]}>
                                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚪</Text></View>
-                                    <View style={{ flex: 1 }}>
+                                    <View style={styles.menuTextBesideSwitch}>
                                         <Text style={styles.menuText}>{t("Requests to join")}</Text>
                                         <Text style={styles.menuSub}>{t("When someone asks to join your community")}</Text>
                                     </View>

@@ -116,7 +116,7 @@ if (!isExpoGo) {
                 }
                 const show = decision.kind === 'show';
                 const pushBadge = show && !await keepsOtherCommunities(AsyncStorage);
-                return { shouldShowAlert: show, shouldPlaySound: show, shouldSetBadge: pushBadge, shouldShowBanner: show, shouldShowList: show };
+                return { shouldPlaySound: show, shouldSetBadge: pushBadge, shouldShowBanner: show, shouldShowList: show };
             },
         });
     } catch (e) {

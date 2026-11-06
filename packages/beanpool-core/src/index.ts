@@ -19,6 +19,11 @@ export * from './keeper-crypto.js';
 export * from './copy-communities.js';
 export * from './names-list-crypto.js';
 export * from './names-list-trust.js';
+// The names list's flows, health, bound invites and debts, shared by the phone and the web app (DESIGN-names-list-web-fable.md S1).
+export * from './names-list-flows.js';
+export * from './names-list-health.js';
+export * from './names-list-invite.js';
+export * from './names-list-debts.js';
 export * from './sealed-envelope.js';
 export * from './recovery-self-check.js';
 export * from './protocol.js';

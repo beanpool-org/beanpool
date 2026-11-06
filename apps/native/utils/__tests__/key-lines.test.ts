@@ -144,7 +144,7 @@ describe('key-lines.ts: the whole sentences it knows', () => {
         // The ones read from the sources above are still written there.
         for (const line of WHOLE.filter((l) => !knownKeyLines().includes(l))) expect(keyLineWords(line), line).toBe(line);
         // The names list's inline refusals are still written in names-list.ts.
-        for (const line of NAMES_LIST_INLINE) expect(writtenIn('utils/names-list.ts', line), line).toBe(true);
+        for (const line of NAMES_LIST_INLINE) expect(writtenIn('../../packages/beanpool-core/src/names-list-flows.ts', line), line).toBe(true);
     });
 
     it('the node\'s refusal of a removed member\'s bring-back is the sentence both apps translate: it arrives in English', () => {

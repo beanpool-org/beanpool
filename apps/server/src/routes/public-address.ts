@@ -130,11 +130,17 @@ const ADDRESS_FIELDS = [
  * The tunnel token is an owner's: an owner signed in with their key, or the admin password, which counts as one. Whoever
  * holds it can run a second connector for this node's name and be handed a share of its visitors, owners' Manage
  * sign-ins among them. An admin is told only that there is one (`tunnelTokenOwnerOnly`).
+ *
+ * The connecting address seen by the registrar (`seen_from`, design §4 & §5) is an owner's too, so an owner can compare
+ * it with their own A record, while keeping origin IP information undisclosed to non-owner admins on tunnel nodes.
  */
 function addressFields(ctx: any, answer: any): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     if (!answer || typeof answer !== 'object') return out;
     for (const k of ADDRESS_FIELDS) if (answer[k] !== undefined) out[k] = answer[k];
+    if (typeof answer.seen_from === 'string' && answer.seen_from && ctx.state?.adminRole === 'owner') {
+        out.seen_from = answer.seen_from;
+    }
     if (typeof answer.tunnelToken === 'string' && answer.tunnelToken) {
         if (ctx.state?.adminRole === 'owner') out.tunnelToken = answer.tunnelToken;
         else out.tunnelTokenOwnerOnly = true;

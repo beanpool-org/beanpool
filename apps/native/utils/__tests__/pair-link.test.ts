@@ -341,9 +341,10 @@ describe('a refused server: join it on this phone first, through its own door, t
     it('the refusal words: the way through at the phone\'s own server; "join" only for global; never "join {host}" or the 12 words', () => {
         const refusal = slice(pair(), 'function targetRefusal(', '\n    }\n');
         expect(refusal).toContain('const global = refusalJoin(target) !== null;');
-        // With a community of its own on the phone.
-        expect(refusal).toContain("? t('This code is from {host}, a server your phone doesn\\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.', { host: target.scannedHost, own: target.appHost })");
-        expect(refusal).toContain(": t('This code is from {host}, a server your phone doesn\\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.', { host: target.scannedHost, own: target.appHost });");
+        // With a community of its own on the phone: the design's words, the same for global's code and any other (global's also has
+        // the "Join the global community" button below, from refusalJoin).
+        expect(refusal).toContain("return t(\"This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first (Home card).\", { codeHost: target.scannedHost, currentHost: target.appHost });");
+        expect(refusal).not.toContain('Open BeanPool at {own}');
         // Without one.
         expect(refusal).toContain("? t('This code is from {host}, a server your phone doesn\\'t use. Nothing was sent. Join the global community on this phone first, then scan again.', { host: target.scannedHost })");
         expect(refusal).toContain(": t('This code is from {host}, a server your phone doesn\\'t use. Nothing was sent.', { host: target.scannedHost });");

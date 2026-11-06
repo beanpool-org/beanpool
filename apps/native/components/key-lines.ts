@@ -211,7 +211,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
 /** Placeholders read back as a number (and given to t() as one, so the language writes its digits). */
 const NUMBER_PLACES = new Set(['n', 'm', 'count', 'seconds', 'hours']);
 /** Placeholders read back as one unbroken token: a status, a code, an address. */
-const TOKEN_PLACES = new Set(['status', 'code', 'host', 'other_host', 'address', 'this_address']);
+const TOKEN_PLACES = new Set(['status', 'code', 'host', 'other_host', 'address', 'this_address', 'codeHost', 'currentHost']);
 /** What a lower layer writes when it has no name: read back inside a sentence, it would be English in another language. */
 const NO_NAME = new Set(['an admin', 'this person', 'this member', 'the entry', 'this entry', 'this community', 'your community', 'This sign-in', 'Your sign-in']);
 
@@ -235,7 +235,7 @@ const FILLED: readonly WordKey[] = [
     word('{host} did not answer ({status}).'),
     word('Could not reach {host}.'),
     // utils/settings-signin.ts.
-    word('That code is for {host}, but this app is signed in to {other_host}. You can only sign in to the Settings of the community this app belongs to.'),
+    word('This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first (Home card).'),
     word('The node did not answer ({status}).'),
     word("You are not an owner, admin or moderator of {name}, so you can't open its Settings."),
     // utils/rekey-redeem.ts RekeyHeldError: an earlier re-key this phone still holds.

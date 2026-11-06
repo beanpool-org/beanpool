@@ -1,0 +1,19 @@
+# The busy page for global.beanpool.org — Cloudflare Worker (fetch only). README.md has what it does and when.
+# Deploy only with scripts/deploy.sh, at the surge trigger (DESIGN-multicore-node-fable.md §6, T5): it is ours alone
+# (Cloudflare), never something a self-hosted node needs.
+
+name = "beanpool-busy-page"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = false
+
+# The switches (README "Switches"). Both off: a page request gets the busy page only when the origin fails or takes
+# more than 5 s. scripts/deploy.sh --force / --off deploy with one of them on.
+[vars]
+BUSY_FORCE = "0"
+BUSY_OFF = "0"
+
+# Every request to global passes through this Worker; only a browser's page request is ever answered by it.
+[[routes]]
+pattern = "global.beanpool.org/*"
+zone_name = "beanpool.org"

@@ -1,0 +1,16 @@
+{
+  "name": "@beanpool/busy-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker in front of global.beanpool.org that shows visitors a busy page when the node cannot answer; members' apps pass straight through.",
+  "scripts": {
+    "build": "node -e \"console.log('busy-worker build ok')\"",
+    "test": "node --test test/busy-worker.test.js",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "devDependencies": {
+    "@beanpool/core": "workspace:*",
+    "wrangler": "^3"
+  }
+}

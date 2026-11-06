@@ -1,0 +1,202 @@
+{
+  "_about": "The busy page's words (apps/busy-worker, README 'Words'). English is the source; every other language is a machine draft, shown with its 'machine' label until a person checks it. Keys: heading (also the tab title), body, start (link to beanpool.org/start), find (link to the communities map), apps (members' apps keep working), machine (the draft's label; absent in English). Plain, calm words; never the two words the project bans (scripts/words/GLOSSARY.csv).",
+  "en": {
+    "heading": "The global community is very busy right now",
+    "body": "Lots of people are arriving at the same time. Please try again in a few minutes.",
+    "start": "Start your own community",
+    "find": "Find one near you",
+    "apps": "Already using the BeanPool app? It keeps working as usual."
+  },
+  "es": {
+    "heading": "La comunidad global está muy ocupada en este momento",
+    "body": "Mucha gente está llegando al mismo tiempo. Vuelve a intentarlo en unos minutos.",
+    "start": "Crea tu propia comunidad",
+    "find": "Encuentra una cerca de ti",
+    "apps": "¿Ya usas la app de BeanPool? Sigue funcionando como siempre.",
+    "machine": "Traducción automática"
+  },
+  "pt": {
+    "heading": "A comunidade global está muito movimentada neste momento",
+    "body": "Muitas pessoas estão chegando ao mesmo tempo. Tente novamente em alguns minutos.",
+    "start": "Crie a sua própria comunidade",
+    "find": "Encontre uma perto de você",
+    "apps": "Já usa o app BeanPool? Ele continua funcionando normalmente.",
+    "machine": "Tradução automática"
+  },
+  "hi": {
+    "heading": "ग्लोबल समुदाय पर अभी बहुत भीड़ है",
+    "body": "बहुत से लोग एक साथ आ रहे हैं। कृपया कुछ मिनट बाद फिर से कोशिश करें।",
+    "start": "अपना खुद का समुदाय शुरू करें",
+    "find": "अपने पास का कोई समुदाय खोजें",
+    "apps": "क्या आप पहले से BeanPool ऐप इस्तेमाल करते हैं? वह हमेशा की तरह काम करता रहेगा।",
+    "machine": "मशीन अनुवाद"
+  },
+  "bn": {
+    "heading": "গ্লোবাল কমিউনিটিতে এখন খুব ভিড়",
+    "body": "অনেক মানুষ একসাথে আসছেন। কয়েক মিনিট পরে আবার চেষ্টা করুন।",
+    "start": "নিজের কমিউনিটি শুরু করুন",
+    "find": "কাছাকাছি একটি খুঁজুন",
+    "apps": "আগে থেকেই BeanPool অ্যাপ ব্যবহার করছেন? সেটি আগের মতোই কাজ করবে।",
+    "machine": "মেশিন অনুবাদ"
+  },
+  "fr": {
+    "heading": "La communauté mondiale est très sollicitée en ce moment",
+    "body": "Beaucoup de personnes arrivent en même temps. Réessayez dans quelques minutes.",
+    "start": "Créez votre propre communauté",
+    "find": "Trouvez-en une près de chez vous",
+    "apps": "Vous utilisez déjà l'application BeanPool ? Elle continue de fonctionner normalement.",
+    "machine": "Traduction automatique"
+  },
+  "ar": {
+    "heading": "المجتمع العالمي مزدحم جدًا الآن",
+    "body": "يصل كثير من الناس في الوقت نفسه. يُرجى المحاولة مرة أخرى بعد بضع دقائق.",
+    "start": "أنشئ مجتمعك الخاص",
+    "find": "ابحث عن مجتمع قريب منك",
+    "apps": "هل تستخدم تطبيق BeanPool بالفعل؟ سيواصل العمل كالمعتاد.",
+    "machine": "ترجمة آلية"
+  },
+  "id": {
+    "heading": "Komunitas global sedang sangat ramai saat ini",
+    "body": "Banyak orang datang bersamaan. Silakan coba lagi dalam beberapa menit.",
+    "start": "Mulai komunitas Anda sendiri",
+    "find": "Temukan yang dekat dengan Anda",
+    "apps": "Sudah memakai aplikasi BeanPool? Aplikasi tetap berjalan seperti biasa.",
+    "machine": "Terjemahan mesin"
+  },
+  "ru": {
+    "heading": "Глобальное сообщество сейчас очень загружено",
+    "body": "Сейчас одновременно приходит очень много людей. Попробуйте снова через несколько минут.",
+    "start": "Создайте своё сообщество",
+    "find": "Найдите сообщество рядом с вами",
+    "apps": "Уже пользуетесь приложением BeanPool? Оно продолжает работать как обычно.",
+    "machine": "Машинный перевод"
+  },
+  "zh-Hans": {
+    "heading": "全球社区现在非常繁忙",
+    "body": "很多人正在同时到来。请过几分钟再试。",
+    "start": "创建你自己的社区",
+    "find": "查找你附近的社区",
+    "apps": "已经在用 BeanPool 应用？它会照常运行。",
+    "machine": "机器翻译"
+  },
+  "zh-Hant": {
+    "heading": "全球社群現在非常繁忙",
+    "body": "很多人正在同時到來。請過幾分鐘再試。",
+    "start": "建立你自己的社群",
+    "find": "尋找你附近的社群",
+    "apps": "已經在用 BeanPool 應用程式？它會照常運作。",
+    "machine": "機器翻譯"
+  },
+  "it": {
+    "heading": "La comunità globale è molto affollata in questo momento",
+    "body": "Molte persone stanno arrivando contemporaneamente. Riprova tra qualche minuto.",
+    "start": "Crea la tua comunità",
+    "find": "Trovane una vicino a te",
+    "apps": "Usi già l'app BeanPool? Continua a funzionare come sempre.",
+    "machine": "Traduzione automatica"
+  },
+  "de": {
+    "heading": "Die globale Gemeinschaft ist gerade sehr ausgelastet",
+    "body": "Gerade kommen sehr viele Menschen gleichzeitig. Bitte versuche es in ein paar Minuten noch einmal.",
+    "start": "Gründe deine eigene Gemeinschaft",
+    "find": "Finde eine in deiner Nähe",
+    "apps": "Du nutzt schon die BeanPool-App? Sie funktioniert weiter wie gewohnt.",
+    "machine": "Maschinelle Übersetzung"
+  },
+  "tr": {
+    "heading": "Küresel topluluk şu anda çok yoğun",
+    "body": "Aynı anda çok sayıda kişi geliyor. Lütfen birkaç dakika sonra yeniden deneyin.",
+    "start": "Kendi topluluğunuzu kurun",
+    "find": "Yakınınızda bir topluluk bulun",
+    "apps": "BeanPool uygulamasını zaten kullanıyor musunuz? Her zamanki gibi çalışmaya devam eder.",
+    "machine": "Makine çevirisi"
+  },
+  "sw": {
+    "heading": "Jumuiya ya kimataifa ina shughuli nyingi sana sasa hivi",
+    "body": "Watu wengi wanafika kwa wakati mmoja. Tafadhali jaribu tena baada ya dakika chache.",
+    "start": "Anzisha jumuiya yako mwenyewe",
+    "find": "Tafuta moja karibu nawe",
+    "apps": "Tayari unatumia programu ya BeanPool? Inaendelea kufanya kazi kama kawaida.",
+    "machine": "Tafsiri ya mashine"
+  },
+  "ml": {
+    "heading": "ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയിൽ ഇപ്പോൾ വലിയ തിരക്കാണ്",
+    "body": "ഒരേ സമയം ധാരാളം ആളുകൾ എത്തുന്നുണ്ട്. കുറച്ച് മിനിറ്റുകൾക്ക് ശേഷം വീണ്ടും ശ്രമിക്കുക.",
+    "start": "നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റി തുടങ്ങൂ",
+    "find": "നിങ്ങളുടെ അടുത്തുള്ള ഒന്ന് കണ്ടെത്തൂ",
+    "apps": "ഇതിനകം BeanPool ആപ്പ് ഉപയോഗിക്കുന്നുണ്ടോ? അത് പതിവുപോലെ പ്രവർത്തിക്കും.",
+    "machine": "മെഷീൻ വിവർത്തനം"
+  },
+  "ta": {
+    "heading": "உலகளாவிய சமூகம் இப்போது மிகவும் பரபரப்பாக உள்ளது",
+    "body": "ஒரே நேரத்தில் பலர் வருகிறார்கள். சில நிமிடங்களில் மீண்டும் முயற்சிக்கவும்.",
+    "start": "உங்கள் சொந்த சமூகத்தைத் தொடங்குங்கள்",
+    "find": "உங்களுக்கு அருகில் ஒன்றைக் கண்டறியுங்கள்",
+    "apps": "ஏற்கனவே BeanPool செயலியைப் பயன்படுத்துகிறீர்களா? அது வழக்கம் போல் வேலை செய்யும்.",
+    "machine": "இயந்திர மொழிபெயர்ப்பு"
+  },
+  "uk": {
+    "heading": "Глобальна спільнота зараз дуже завантажена",
+    "body": "Зараз одночасно приходить дуже багато людей. Спробуйте ще раз за кілька хвилин.",
+    "start": "Створіть власну спільноту",
+    "find": "Знайдіть спільноту поруч із вами",
+    "apps": "Уже користуєтеся застосунком BeanPool? Він і далі працює як звичайно.",
+    "machine": "Машинний переклад"
+  },
+  "ur": {
+    "heading": "گلوبل کمیونٹی پر اس وقت بہت زیادہ رش ہے",
+    "body": "بہت سے لوگ ایک ہی وقت میں آ رہے ہیں۔ براہ کرم چند منٹ بعد دوبارہ کوشش کریں۔",
+    "start": "اپنی کمیونٹی شروع کریں",
+    "find": "اپنے قریب کوئی کمیونٹی تلاش کریں",
+    "apps": "کیا آپ پہلے سے BeanPool ایپ استعمال کر رہے ہیں؟ وہ معمول کے مطابق کام کرتی رہے گی۔",
+    "machine": "مشینی ترجمہ"
+  },
+  "fa": {
+    "heading": "جامعهٔ جهانی همین حالا بسیار شلوغ است",
+    "body": "افراد زیادی هم‌زمان در حال ورود هستند. لطفاً چند دقیقهٔ دیگر دوباره امتحان کنید.",
+    "start": "جامعهٔ خودتان را راه بیندازید",
+    "find": "یک جامعه نزدیک خودتان پیدا کنید",
+    "apps": "از قبل از برنامهٔ BeanPool استفاده می‌کنید؟ مثل همیشه کار می‌کند.",
+    "machine": "ترجمهٔ ماشینی"
+  },
+  "vi": {
+    "heading": "Cộng đồng toàn cầu đang rất đông lúc này",
+    "body": "Rất nhiều người đang đến cùng một lúc. Vui lòng thử lại sau vài phút.",
+    "start": "Bắt đầu cộng đồng của riêng bạn",
+    "find": "Tìm một cộng đồng gần bạn",
+    "apps": "Bạn đã dùng ứng dụng BeanPool? Ứng dụng vẫn hoạt động bình thường.",
+    "machine": "Bản dịch máy"
+  },
+  "el": {
+    "heading": "Η παγκόσμια κοινότητα έχει πολύ μεγάλη κίνηση αυτή τη στιγμή",
+    "body": "Πολλοί άνθρωποι φτάνουν ταυτόχρονα. Δοκιμάστε ξανά σε λίγα λεπτά.",
+    "start": "Ξεκινήστε τη δική σας κοινότητα",
+    "find": "Βρείτε μία κοντά σας",
+    "apps": "Χρησιμοποιείτε ήδη την εφαρμογή BeanPool; Συνεχίζει να λειτουργεί κανονικά.",
+    "machine": "Αυτόματη μετάφραση"
+  },
+  "fil": {
+    "heading": "Napakaabala ng pandaigdigang komunidad ngayon",
+    "body": "Maraming tao ang dumarating nang sabay-sabay. Pakisubukang muli pagkalipas ng ilang minuto.",
+    "start": "Magsimula ng sarili mong komunidad",
+    "find": "Maghanap ng isa na malapit sa iyo",
+    "apps": "Gumagamit ka na ba ng BeanPool app? Patuloy itong gagana gaya ng dati.",
+    "machine": "Pagsasalin ng makina"
+  },
+  "ja": {
+    "heading": "グローバルコミュニティは現在とても混み合っています",
+    "body": "多くの人が同時にアクセスしています。数分後にもう一度お試しください。",
+    "start": "自分のコミュニティを始める",
+    "find": "近くのコミュニティを探す",
+    "apps": "すでに BeanPool アプリをお使いですか？ アプリはいつもどおり使えます。",
+    "machine": "機械翻訳"
+  },
+  "ko": {
+    "heading": "지금 글로벌 커뮤니티가 매우 붐비고 있습니다",
+    "body": "많은 분들이 동시에 접속하고 있습니다. 몇 분 후에 다시 시도해 주세요.",
+    "start": "나만의 커뮤니티 시작하기",
+    "find": "가까운 커뮤니티 찾기",
+    "apps": "이미 BeanPool 앱을 사용 중이신가요? 앱은 평소처럼 작동합니다.",
+    "machine": "기계 번역"
+  }
+}

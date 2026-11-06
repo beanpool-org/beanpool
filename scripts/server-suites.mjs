@@ -130,6 +130,7 @@ export const SUITES = [
     'test-home-chat-card',
     'test-home-asked-card',
     'test-home-asked-card-global',
+    'test-asked-push',
     'test-knock',
     'test-knock-ceiling',
     'test-knock-notices',

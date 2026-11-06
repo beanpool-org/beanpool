@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { askedPushOn } from '@beanpool/core';
 
 const store = new Map<string, string>();
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -113,6 +114,14 @@ describe('readNodeProfile', () => {
         expect(shareOutsideOn(readNodeProfile({ profile: 'local', features: {} })!.features)).toBe(false);
         expect(shareOutsideOn(readNodeProfile({ profile: 'local', features: { shareOutside: 'yes' } })!.features)).toBe(false);
         expect(shareOutsideOn(null)).toBe(false);
+    });
+
+    it('keeps askedPush, which a local community with Beans on reports: it tells members when a neighbour asks (cold start N3)', () => {
+        const local = readNodeProfile({ profile: 'local', features: { askedPush: true } })!;
+        expect(local.features).toEqual({ askedPush: true });
+        expect(askedPushOn(local.features)).toBe(true);
+        expect(askedPushOn(readNodeProfile({ profile: 'local', features: {} })!.features)).toBe(false);
+        expect(askedPushOn(readNodeProfile({ profile: 'local', features: { askedPush: 'yes' } })!.features)).toBe(false);
     });
 
     it('is null for an answer that is not an info answer', () => {

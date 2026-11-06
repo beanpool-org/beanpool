@@ -728,6 +728,19 @@ describe('tailoring: the "…" menu, Arrange, interests', () => {
         expect(marketOrder()).toEqual(['p2', 'p3', 'p1']);
         expect(JSON.parse(mem.store.get('bp_fav_categories')!)).toEqual(['food', 'labour']);
     });
+
+    it("What are you into? says we'll tell you when a neighbour asks only where the community says askedPush (cold start N3)", async () => {
+        const note = () => document.querySelector('[data-testid="home-interests-note"]')?.textContent;
+        node.answer = { ...localMember(), features: { ...localMember().features, askedPush: true } as HomeAnswer['features'] };
+        await render();
+        expect(note()).toBe("Tap a few. What you star comes first here and in the Market, and we'll tell you when a neighbour asks for it.");
+    });
+
+    it('a community that says nothing of it (global, Beans off, a node from before N3): the note promises no push', async () => {
+        const note = () => document.querySelector('[data-testid="home-interests-note"]')?.textContent;
+        await render();
+        expect(note()).toBe('Tap a few. What you star comes first here and in the Market.');
+    });
 });
 
 describe('the cached answer, the 304, and states that never block', () => {

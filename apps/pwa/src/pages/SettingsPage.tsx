@@ -3,7 +3,7 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { AREA_STEP_WORDS, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, t, tn } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, AREA_STEP_WORDS, askedPushOn, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, shapeFeaturesOf, t, tn } from '@beanpool/core';
 import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
@@ -339,6 +339,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
     const [notifKnocks, setNotifKnocks] = useState(false);
+    // "When a neighbour asks for something I'm into" (cold start N3): on until the member turns it off, and shown only where
+    // the community sends that push (core askedPushOn).
+    const [notifAsked, setNotifAsked] = useState(true);
     // Whether "Requests to join" means anything to this member (core knockSwitchShown): their node role, as the node says
     // it. Not known yet (or no answer): the switch waits.
     const [nodeRole, setNodeRole] = useState<unknown>(undefined);
@@ -363,6 +366,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 setNotifMarketplace(prefs.notify_marketplace !== 'false' && prefs.notify_marketplace !== false);
                 setNotifEscrow(prefs.notify_escrow !== 'false' && prefs.notify_escrow !== false);
                 setNotifKnocks(prefs.notify_knocks === 'true' || prefs.notify_knocks === true);
+                setNotifAsked(prefs.notify_asked !== 'false' && prefs.notify_asked !== false);
                 setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
             }
         } catch (e) {
@@ -398,16 +402,18 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         }
     };
 
-    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow' | 'knocks') => {
+    const handleToggleNotif = async (key: 'chat' | 'marketplace' | 'escrow' | 'knocks' | 'asked') => {
         const nextChat = key === 'chat' ? !notifChat : notifChat;
         const nextMkt = key === 'marketplace' ? !notifMarketplace : notifMarketplace;
         const nextEscrow = key === 'escrow' ? !notifEscrow : notifEscrow;
         const nextKnocks = key === 'knocks' ? !notifKnocks : notifKnocks;
+        const nextAsked = key === 'asked' ? !notifAsked : notifAsked;
 
         if (key === 'chat') setNotifChat(nextChat);
         if (key === 'marketplace') setNotifMarketplace(nextMkt);
         if (key === 'escrow') setNotifEscrow(nextEscrow);
         if (key === 'knocks') setNotifKnocks(nextKnocks);
+        if (key === 'asked') setNotifAsked(nextAsked);
 
         try {
             await updateNotificationPreferences(identity.publicKey, {
@@ -415,6 +421,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 notify_marketplace: nextMkt,
                 notify_escrow: nextEscrow,
                 notify_knocks: nextKnocks,
+                // Only to a community that takes it (core askedPushOn): one from before it refuses the whole save.
+                ...(askedPushOn(communityInfo?.features) ? { notify_asked: nextAsked } : {}),
             });
         } catch (e) {
             console.warn('[NotifPrefs] Save failed:', e);
@@ -1740,6 +1748,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         label={t('Marketplace Activity Notifications')}
                                     />
                                 </div>
+
+                                {askedPushOn(communityInfo?.features) && (
+                                    <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800" data-testid="settings-notify-asked">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-bold text-nature-900 dark:text-white">{t(ASKED_PUSH_WORDS.switchName)}</div>
+                                            <div className="text-xs text-nature-500 dark:text-nature-400">{t(ASKED_PUSH_WORDS.switchLine)}</div>
+                                        </div>
+                                        <ToggleSwitch
+                                            checked={notifAsked}
+                                            onChange={() => handleToggleNotif('asked')}
+                                            label={t(ASKED_PUSH_WORDS.switchName)}
+                                        />
+                                    </div>
+                                )}
 
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div>

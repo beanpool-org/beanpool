@@ -82,7 +82,7 @@ import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide, loadBundledGuide } from '../lib/guide';
 import type { Guide } from '@beanpool/core';
-import { copyPriceLine, eventCopyOf, shapeFeaturesOf } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, askedPushOn, copyPriceLine, eventCopyOf, shapeFeaturesOf } from '@beanpool/core';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -2792,7 +2792,11 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                 return (
                     <HomeCard key={id} {...common}>
                         <div ref={interestsCardRef}>
-                            <p className="m-0 mb-2 text-sm text-nature-700 dark:text-nature-200">{t('Tap what you like: those come first on Home and in the Market. Nothing is hidden.')}</p>
+                            {/* Where the community tells a member when a neighbour asks for something they starred (core askedPushOn, cold
+                                start N3), the note says so, as the phone's does; nowhere else. */}
+                            <p className="m-0 mb-2 text-sm text-nature-700 dark:text-nature-200" data-testid="home-interests-note">{askedPushOn(answer?.features)
+                                ? t(ASKED_PUSH_WORDS.interestsNote)
+                                : t('Tap what you like: those come first on Home and in the Market. Nothing is hidden.')}</p>
                             <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Things you like')}>
                                 {MARKETPLACE_CATEGORIES.map(cat => {
                                     const on = myInterests.includes(cat.id);

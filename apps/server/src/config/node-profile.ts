@@ -52,6 +52,7 @@
  */
 import { db } from '../db/db.js';
 import { prepared, MAX_POST_PHOTOS } from '@beanpool/engine';
+import { askedPushSent } from '@beanpool/core';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { isPrivatePreview, privatePreviewAtBoot } from './private-preview.js';
 
@@ -372,6 +373,11 @@ export interface NodeFeatures {
      *  under Shared outside. Absent (the global community, a community that turned it off, a server from before it): the
      *  apps offer only the members' link, as before. */
     shareOutside?: true;
+    /** Present, and true, only where this community tells a member when a neighbour posts a Need in a category they
+     *  starred (`market.asked`, engine/asked-push.ts; core askedPushSent: a local community with Beans on). The apps say
+     *  so on the What are you into? card and show its switch (`notify_asked`) in Settings → Notifications only here: a
+     *  server from before it sends no such push and refuses the key. */
+    askedPush?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -614,6 +620,7 @@ export function getNodeFeatures(): NodeFeatures {
         ...(s.openMembership ? { openMembership: true as const } : {}),
         ...(s.dmRequests ? { dmRequests: true as const } : {}),
         ...(s.shareOutside ? { shareOutside: true as const } : {}),
+        ...(askedPushSent(getNodeProfile(), s.beans) ? { askedPush: true as const } : {}),
     };
     // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite. Nor does a
     // post go outside: the preview shows visitors nothing.

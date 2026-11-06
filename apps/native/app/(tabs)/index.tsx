@@ -71,7 +71,7 @@ import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
 import { getMarketplaceTransactions, getUnreadByConversation } from '../../utils/db';
 import { composeTargetFor } from '../../utils/compose-options';
-import { inviteAskNoticeHere, toolHomeCardType, readToolsSettings, shapeFeaturesOf } from '@beanpool/core';
+import { askedPushOn, inviteAskNoticeHere, toolHomeCardType, readToolsSettings, shapeFeaturesOf } from '@beanpool/core';
 import { toolOfHomeCard } from '../../tools/index';
 import { ToolHomeBody } from '../../tools/frame';
 import { YourToolsBody } from '../../components/home/YourToolsBody';
@@ -1233,7 +1233,7 @@ export default function HomeScreen() {
                     />,
                 );
             }
-            case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);
+            case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} askedPush={askedPushOn(answer?.features)} />);
             case 'tips': return tipsView ? frame(
                 <TipsBody
                     view={tipsView}

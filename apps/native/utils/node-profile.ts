@@ -121,6 +121,12 @@ export interface NodeFeatures {
      * only the members' link, as before.
      */
     shareOutside?: boolean;
+    /**
+     * The community tells a member when a neighbour posts a Need in a category they starred (`market.asked`, cold start N3;
+     * core askedPushOn). The What are you into? card says so and Settings → Notifications shows its switch only then: a
+     * node that doesn't say (the worldwide one, Beans off, a node from before it) sends no such push and takes no switch.
+     */
+    askedPush?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -135,6 +141,7 @@ const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyLi
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
     'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'inviteAsks', 'openMembership', 'dmRequests', 'shareOutside',
+    'askedPush',
 ];
 
 export interface NodeProfile {

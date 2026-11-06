@@ -93,9 +93,11 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // showcase (DESIGN-global-showcase-fable.md W1): reported on the lobby only, so a local node's features are unchanged. Message
 // requests (DESIGN-message-a-friend-fable.md §4): on the lobby only, reported only while on (test-dm-requests). Sharing a post
 // outside (front doors S6): on for a local community, off on the lobby, whose listings a visitor reads already; reported only
-// while on (test-peek-ticket). The PR that builds one of these changes its line here, with the test that proves it.
+// while on (test-peek-ticket). The push when a neighbour asks for something a member starred (cold start N3): a local
+// community with Beans on, reported only there (test-asked-push). The PR that builds one of these changes its line here,
+// with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, door: 'members' },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, shareOutside: true, askedPush: true, door: 'members' },
     global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, pins: true, inviteAsks: false, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, dmRequests: true, door: 'open' },
 };
 

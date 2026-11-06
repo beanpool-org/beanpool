@@ -4,6 +4,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import {
     PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_MARKER, PUSH_NOTICE_TITLE, isPushNoticeId, isPushNoticeKind,
     knockSwitchShown, pushCommunityTag, pushNoticeBytes, pushNoticeWords, verifyPushNotice, type PushNoticeData, type PushNoticeKind,
+    ASKED_PUSH_WORDS, askedPushOn, askedPushSent,
 } from '../push-notice.js';
 import { wordsFor } from '../words.js';
 
@@ -71,6 +72,27 @@ describe('the kinds', () => {
         expect(pushNoticeWords('community.knock')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'Someone asked to join your community.' });
 
         expect(isPushNoticeKind('community.knock-answer')).toBe(false);
+    });
+
+    it("a neighbour's Need is a kind of its own, landing on the Market, that names nobody and no listing (cold start N3)", () => {
+        expect(isPushNoticeKind('market.asked')).toBe(true);
+        expect(PUSH_NOTICE_KINDS['market.asked'].tab).toBe('market');
+        expect(pushNoticeWords('market.asked')).toEqual({ title: PUSH_NOTICE_TITLE, body: "Someone in your community asked for something you're into." });
+    });
+
+    it('a community sends market.asked only where it is local with Beans on, and an app believes only the features it was told', () => {
+        expect(askedPushSent('local', true)).toBe(true);
+        expect(askedPushSent('global', true)).toBe(false);
+        expect(askedPushSent('local', false)).toBe(false);
+        expect(askedPushSent(undefined, true)).toBe(false);
+        expect(askedPushOn({ askedPush: true })).toBe(true);
+        // A server from before N3 says nothing: no switch, no promise on the card.
+        expect(askedPushOn({})).toBe(false);
+        expect(askedPushOn(null)).toBe(false);
+        expect(askedPushOn({ askedPush: 'true' })).toBe(false);
+        // The card's sentence says what the push does, and the switch is a whole sentence for a screen reader too.
+        expect(ASKED_PUSH_WORDS.interestsNote).toMatch(/tell you when a neighbour asks/);
+        expect(ASKED_PUSH_WORDS.switchLine).toMatch(/once a day/);
     });
 
     it('the "Requests to join" switch shows only where it changes something', () => {

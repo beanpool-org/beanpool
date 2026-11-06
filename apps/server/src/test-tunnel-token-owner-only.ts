@@ -117,6 +117,7 @@ async function main() {
     const answer = () => ({
         status: regStatus, name: regName || null, hostname: regName ? `${regName}.beanpool.org` : null,
         tunnelToken: regStatus === 'live' ? TUNNEL_TOKEN : null, apiSecret: EXTRA_SECRET,
+        seen_from: '198.51.100.77',
     });
     const registrar = http.createServer((req, res) => {
         let bodyText = '';
@@ -183,6 +184,7 @@ async function main() {
         assert(ownerClaim.status === 200 && ownerClaim.body?.hostname === 'tokvale.beanpool.org' && ownerClaim.body?.status === 'live',
             `the owner's claim succeeds (${ownerClaim.status} ${ownerClaim.text.slice(0, 160)})`);
         assert(ownerClaim.body?.tunnelToken === TUNNEL_TOKEN, 'the owner\'s claim answer carries the token');
+        assert(ownerClaim.body?.seen_from === '198.51.100.77', 'the owner\'s claim answer carries seen_from');
         assert(!ownerClaim.text.includes(EXTRA_SECRET), 'the claim answer carries nothing the registrar sent beyond the named fields');
         assert((getNodeConfig() as any).publicAddress?.tunnelToken === TUNNEL_TOKEN, 'the node config holds the token');
         assert(tunnelConnectorForTests().wantedToken === TUNNEL_TOKEN, 'the tunnel inside this server runs on it');
@@ -194,16 +196,19 @@ async function main() {
         assert(!leaks(adminStatus.text), `the token is nowhere in the admin's answer`);
         assert(!adminStatus.text.includes(EXTRA_SECRET), 'nor anything the registrar sent beyond the named fields');
         assert(adminStatus.body?.tunnelTokenOwnerOnly === true, 'the answer says there is a token only an owner can see');
+        assert(adminStatus.body?.seen_from === undefined, 'nor seen_from, which is withheld from an admin');
         assert(typeof adminStatus.body?.tunnel?.state === 'string', 'the tunnel\'s state is still shown to the admin');
 
         const ownerStatus = await call('GET', STATUS, undefined, asOwner);
         assert(ownerStatus.status === 200 && ownerStatus.body?.tunnelToken === TUNNEL_TOKEN, `an owner by key reads the token (${ownerStatus.status})`);
+        assert(ownerStatus.body?.seen_from === '198.51.100.77', 'an owner by key reads seen_from');
         assert(!ownerStatus.text.includes(EXTRA_SECRET) && !('tunnelTokenOwnerOnly' in (ownerStatus.body || {})), 'and only the named fields');
         const pwAlone = await call('GET', STATUS, undefined, password);
         assert(pwAlone.status === 403 && pwAlone.body?.code === 'password_needs_2fa' && !leaks(pwAlone.text),
             `step 7c: the admin password alone (2FA off) is refused as needing 2FA, with no token (${pwAlone.status} ${pwAlone.body?.code})`);
         const pwStatus = await withPassword('GET', STATUS);
         assert(pwStatus.status === 200 && pwStatus.body?.tunnelToken === TUNNEL_TOKEN, `the admin password (an owner) reads the token (${pwStatus.status})`);
+        assert(pwStatus.body?.seen_from === '198.51.100.77', 'the admin password (an owner) reads seen_from');
         assert(tunnelConnectorForTests().wantedToken === TUNNEL_TOKEN && (getNodeConfig() as any).publicAddress?.tunnelToken === TUNNEL_TOKEN,
             'after every read the tunnel still runs on the token in the node config');
 

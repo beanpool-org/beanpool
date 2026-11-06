@@ -1271,6 +1271,11 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
                 expect(screen.queryByText(/You'd do it for/)).not.toBeInTheDocument();
                 expect(boxes()).toBe(0);
             }
+            // An ambiguous quantity keeps its box: the refusal words say how to type it, and no amount is said.
+            fireEvent.change(hours, { target: { value: '1.2.3' } });
+            expect(screen.getByText(/Type one decimal mark at most/)).toBeInTheDocument();
+            expect(boxes()).toBe(1);
+            expect(screen.queryByText(/You'd do it for/)).not.toBeInTheDocument();
         });
 
         it('a free Need says it is free, and never "0 Beans" or Beans that will not come', async () => {

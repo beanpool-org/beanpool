@@ -2512,8 +2512,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     </div>
                                 )}
 
-                                {/* A Need with no usable quantity yet has no sentence: no empty box either (as the phone). */}
-                                {!(selectedPost.type === 'need' && selectedPost.priceType !== 'fixed' && !(acceptHoursValue > 0)) && (
+                                {/* A Need with no usable quantity yet has no sentence: no empty box either (as the phone). An ambiguous
+                                    quantity still shows its refusal words in the box. */}
+                                {!(selectedPost.type === 'need' && selectedPost.priceType !== 'fixed' && !(acceptHoursValue > 0)
+                                    && (acceptHoursRead.ok || !isAmbiguousAmount(acceptHoursRead.refusal))) && (
                                 <div className="text-center mb-4 text-xs font-medium text-nature-700 dark:text-nature-300 bg-white dark:bg-nature-900 py-3 px-2 rounded-lg border border-nature-100 dark:border-nature-800">
                                     {(() => {
                                         if (selectedPost.priceType !== 'fixed' && !acceptHoursRead.ok && isAmbiguousAmount(acceptHoursRead.refusal)) return amountRefusalWords(acceptHoursRead.refusal);

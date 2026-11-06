@@ -920,7 +920,10 @@ of the design's answers on 2026-10-29; on 2026-11-03 he narrowed who stands asid
 - **Secrecy.** While open: "7 of 12 jurors have voted", never the split, to members and admins alike; a juror is told only their
   own seat. After close: the totals, and two lists, **Voted** and **Didn't serve**, never how, never why. The server stores each vote
   with the voter's account, so whoever reads a copy of its files can see it. Because the pool is served to every member and the
-  calculation is public, a member who runs it can work out who is probably on a jury while the vote is open: the secrecy is soft.
+  calculation is public, a member who runs it can work out who is probably on a jury while the vote is open: the secrecy is soft. The same holds
+  before it opens: the pausing admin can work out who a given day would seat and chooses the day (design §10, "Admin grinding the
+  day": one draw a day, on the record, limited by the cool-down and the cap on repeat pauses), so the rules page says the admin does
+  not pick members by name, never that the admin cannot know.
 - **Check the draw** (both apps; `checkServedJury`): the app hashes the pool the node serves and compares it with the hash the vote
   recorded, and once the vote closes checks that the jurors listed are the head of the draw. It catches a list or a jury that does
   not match; a server whose owners rewrite the record, the list and the jury together passes it. The apps do not show the pool.

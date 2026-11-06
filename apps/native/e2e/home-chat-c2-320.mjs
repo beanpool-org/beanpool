@@ -81,6 +81,8 @@ const WORDS = { d1: 'Who has a ladder I could borrow for the weekend? Mine broke
 const deps = {
     judgeDm: async (_c, lines) => new Map(lines.map((l) => [l.id, { text: WORDS[l.id], format: 3, after: null, mark: null }])),
     keyring: async (id) => ({ groupId: id, openedKey: () => undefined, signerSeen: () => undefined, successions: new Map(), seenLocked: async () => true, memo: { has: () => false, add: noop } }),
+    // The phone's own DM knowledge (#2947): none of these chats is a DM it knows, so the group card opens as a group.
+    knownDm: async () => false,
 };
 const dm = { id: 'chat-dm01', type: 'chat', settings: { conversationId: 'dm-1', kind: 'dm', name: 'Ana Castellanos-Whitfield' } };
 const grp = { id: 'chat-gr01', type: 'chat', settings: { conversationId: 'g-1', kind: 'group', name: 'Brunswick Heads garden crew' } };

@@ -22,7 +22,8 @@ You need to have posted an Offer of your own first. If you have not, the app off
 
 ## Helping with someone's Need
 
-- Open the Need and tap **Offer to Fulfill**, then **Confirm**.
+- Open the Need and tap **I can do this**. Under it the app says in one sentence what you would be paid and what happens next, such as: **You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.** A Need with nothing to pay says **You'd do it for free** instead. If it is priced by the hour, day, week or month, say how many first, and the amount follows. Then tap **Confirm**.
+- Your request shows the market fee: **You have requested to earn 20 credits (19.70 net after 1.5% transaction fee)**. The fee goes to your community's Commons, and comes off when you are paid.
 - The person who posted it decides. Until then you can tap **Withdraw Request**. If they do not answer in 7 days, the request ends by itself and you are both told.
 - They see your request under **Fulfillment Requests**, and can **Message** you, **Deny** it or **Approve & Commit**.
 - When they approve, their beans are held. Unless the post is Repeatable, anyone else who offered sees their request marked declined.

@@ -1008,9 +1008,7 @@
   "Withdrawing...": "واپس لیا جا رہا ہے...",
   "Withdraw Request": "درخواست واپس لیں",
   "Accept this Offer?": "کیا یہ پیشکش قبول کرنی ہے؟",
-  "Offer to Fulfill?": "پورا کرنے کی پیشکش کریں؟",
   "🔒 Trust Wallet Protocol": "🔒 ٹرسٹ والیٹ پروٹوکول",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "یہ سودا محفوظ ہے اور امانت میں رکھا گیا ہے۔ ادائیگی کنندہ نے کریڈٹس جمع کر دیے ہیں۔ مکمل ہونے پر، آپ کو 1.5% فیس {owned} منہا کر کے کریڈٹس ملیں گے۔",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "آگے بڑھنے سے، آپ عارضی ٹرسٹ والیٹ میں {credits} کریڈٹس جمع کرواتے ہیں۔ مکمل ہونے پر، فراہم کنندہ کو فیس {owned} منہا کر کے کریڈٹس ملتے ہیں۔",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "آگے بڑھنے سے، آپ مجاز کریڈٹس عارضی ٹرسٹ والیٹ میں جمع کرواتے ہیں۔ مکمل ہونے پر، فراہم کنندہ کو فیس {owned} منہا کر کے کریڈٹس ملتے ہیں۔",
   "TRUST COMMITMENT (HOURS)": "امانت کی وابستگی (گھنٹے)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "پروفائل بنائیں",
   "⏳ Pending Confirmation": "⏳ تصدیق باقی ہے",
   "🤝 Accept Offer": "🤝 پیشکش قبول کریں",
-  "✋ Offer to Fulfill": "✋ پورا کرنے کی پیشکش کریں",
   "✋ Fulfillment Requests ({n})": "✋ پورا کرنے کی درخواستیں ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} جائزہ)",

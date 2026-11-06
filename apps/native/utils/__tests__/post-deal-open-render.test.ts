@@ -260,18 +260,19 @@ describe('a deal already under way on the listing (deal_open)', () => {
 
     it('an offer to help with a recurring Need already being helped with: the same, and the deal shows for the one paid', async () => {
         await open(STALL, () => dealOpen('tx-stall'));
-        await press('✋ Offer to Fulfill');
+        await press('✋ I can do this');
         await press('Confirm');
 
         expect(net.calls).toContain('db.requestMarketplacePost');
         expect(alerts.said).toEqual(['Already under way', DEAL_OPEN_WORDS]);
         expect(sync.asked).toBe(1);
-        expect(host.textContent).not.toContain('Offer to Fulfill?');
+        // The confirmation is closed: its sentence is gone (the button, "✋ I can do this", is still the way in).
+        expect(host.textContent).not.toContain("You'd do it for");
 
         await syncLands(STALL_DEAL);
         expect(host.textContent).toContain('⏳ Pending Release by Kofi');
         expect(host.textContent).toContain('❌ Cancel Trust Hold');
-        expect(host.textContent).not.toContain('✋ Offer to Fulfill');
+        expect(host.textContent).not.toContain('✋ I can do this');
     });
 
     it('any other refusal is as it was: the node\'s words under Error, no sync, the confirmation left open', async () => {
@@ -281,5 +282,62 @@ describe('a deal already under way on the listing (deal_open)', () => {
         expect(alerts.said).toEqual(['Error', 'Insufficient balance to accept this offer']);
         expect(sync.asked).toBe(0);
         expect(host.textContent).toContain('Accept this Offer?');
+    });
+});
+
+/**
+ * "I can do this" on a Need (cold start N4): the confirmation says the plain thing, with the deal's own amount and the name the
+ * Need shows. The 1.5% fee is not on it; it is on the deal, the helper's request card.
+ */
+describe('"I can do this" on a Need (cold start N4)', () => {
+    const untouched = () => new Error('the node was not asked');
+    const sentence = () => host.querySelector('[data-testid="need-answer-line"]')?.textContent ?? null;
+    const typeHours = async (value: string) => {
+        const input = host.querySelector('input[placeholder="Hours"]') as HTMLInputElement;
+        expect(input).toBeTruthy();
+        await act(async () => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    };
+
+    it('a priced Need: the heading, the amount, the name and the steps, and neither the fee nor the Trust Wallet box', async () => {
+        await open(STALL, untouched);
+        await press('✋ I can do this');
+        expect(host.textContent).toContain('I can do this');
+        expect(sentence()).toBe("You'd do it for 20 Beans. Kofi agrees, you do it, Kofi confirms, and the Beans are yours.");
+        expect(host.textContent).not.toMatch(/Offer to Fulfill|1\.5%|Trust Wallet Protocol|Commons Pool/);
+        expect(Array.from(host.querySelectorAll('button')).map((b) => b.textContent)).toEqual(expect.arrayContaining(['Cancel', 'Confirm']));
+    });
+
+    it('priced by the hour: the total follows the hours typed, and no usable hours means no sentence rather than a wrong amount', async () => {
+        await open({ ...STALL, price_type: 'hourly' }, untouched);
+        await press('✋ I can do this');
+        expect(sentence()).toBe("You'd do it for 20 Beans. Kofi agrees, you do it, Kofi confirms, and the Beans are yours.");
+        await typeHours('3');
+        expect(sentence()).toBe("You'd do it for 60 Beans. Kofi agrees, you do it, Kofi confirms, and the Beans are yours.");
+        await typeHours('');
+        expect(sentence()).toBeNull();
+    });
+
+    it('a free Need says it is free; a Need with no name says the person who asked', async () => {
+        await open({ ...STALL, credits: 0 }, untouched);
+        await press('✋ I can do this');
+        expect(sentence()).toBe("You'd do it for free. Kofi agrees, you do it, and Kofi confirms.");
+        expect(host.textContent).not.toMatch(/0 Beans|0 credits/);
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open({ ...STALL, author_callsign: '' }, untouched);
+        await press('✋ I can do this');
+        expect(sentence()).toBe("You'd do it for 20 Beans. The person who asked agrees, you do it, they confirm, and the Beans are yours.");
+    });
+
+    it('an Offer keeps its own confirmation, Trust Wallet box and all', async () => {
+        await open(COURSE, untouched);
+        await press('🤝 Accept Offer');
+        expect(host.textContent).toContain('Accept this Offer?');
+        expect(host.textContent).toContain('🔒 Trust Wallet Protocol');
+        expect(sentence()).toBeNull();
+        expect(host.textContent).not.toContain('I can do this');
     });
 });

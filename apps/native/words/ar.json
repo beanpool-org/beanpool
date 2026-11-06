@@ -1204,9 +1204,7 @@
   "Withdrawing...": "جارٍ السحب...",
   "Withdraw Request": "سحب الطلب",
   "Accept this Offer?": "قبول هذا العرض؟",
-  "Offer to Fulfill?": "عرض لتلبية هذا الطلب؟",
   "🔒 Trust Wallet Protocol": "🔒 بروتوكول محفظة الضمان",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "هذه المعاملة محمية ومحفوظة في الضمان. قام الدافع بتخصيص الرصيد بالفعل. عند الإكمال، ستتلقى الرصيد صافياً بعد خصم رسوم 1.5% {owned} لدعم الصندوق المشترك.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "بالمتابعة، أنت تخصص {credits} رصيدًا في محفظة ضمان مؤقتة. عند الإكمال، يتلقى مقدّم الخدمة الرصيد صافيًا بعد خصم رسوم 1.5% {owned} لدعم الصندوق المشترك.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "بالمتابعة، أنت تخصص رصيدك المعتمد في محفظة ضمان مؤقتة. عند الإكمال، يتلقى مقدّم الخدمة الرصيد صافيًا بعد خصم رسوم 1.5% {owned} لدعم الصندوق المشترك.",
   "TRUST COMMITMENT (HOURS)": "التزام الضمان (ساعات)",
@@ -1219,7 +1217,6 @@
   "Set up profile": "إعداد الملف الشخصي",
   "⏳ Pending Confirmation": "⏳ بانتظار التأكيد",
   "🤝 Accept Offer": "🤝 قبول العرض",
-  "✋ Offer to Fulfill": "✋ عرض للتلبية",
   "✋ Fulfillment Requests ({n})": "✋ طلبات التلبية ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "zero": "★ {average} ({n} تقييم)",

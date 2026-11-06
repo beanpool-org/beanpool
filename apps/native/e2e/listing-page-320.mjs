@@ -9,7 +9,7 @@
  *
  * Cases:
  *   apples          Marty's apples: a Need on the worldwide community, Beans off (IN RETURN, the long note, the local
- *                   community's line), Offer to Fulfill for a member who is not Marty; a photo
+ *                   community's line), I can do this for a member who is not Marty; a photo
  *   apples-nophoto  the same with no photo: the category's tile, 3:1
  *   apples-more     the apples with the note opened ("More"): the take-up pushed down, still on the first screen
  *   offer           an Offer with Beans (30 B / Hr): the price box, Accept Offer

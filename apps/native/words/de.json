@@ -1009,9 +1009,7 @@
   "Withdrawing...": "Wird zurückgezogen...",
   "Withdraw Request": "Anfrage zurückziehen",
   "Accept this Offer?": "Dieses Angebot annehmen?",
-  "Offer to Fulfill?": "Erfüllung anbieten?",
   "🔒 Trust Wallet Protocol": "🔒 Treuhand-Protokoll",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Diese Transaktion ist geschützt und wird treuhänderisch verwahrt. Der Zahlende hat das Guthaben bereits hinterlegt. Nach Abschluss erhältst du das Guthaben abzüglich 1.5% Gebühr {owned} für den Gemeinschaftspool.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Wenn du fortfährst, hinterlegst du {credits} Guthaben auf einem temporären Treuhandkonto. Nach Abschluss erhält der Anbieter das Guthaben abzüglich 1.5% Gebühr {owned} für den Gemeinschaftspool.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Wenn du fortfährst, hinterlegst du dein autorisiertes Guthaben auf einem temporären Treuhandkonto. Nach Abschluss erhält der Anbieter das Guthaben abzüglich 1.5% Gebühr {owned} für den Gemeinschaftspool.",
   "TRUST COMMITMENT (HOURS)": "TREUHAND-VERPFLICHTUNG (STUNDEN)",
@@ -1024,7 +1022,6 @@
   "Set up profile": "Profil einrichten",
   "⏳ Pending Confirmation": "⏳ Bestätigung ausstehend",
   "🤝 Accept Offer": "🤝 Angebot annehmen",
-  "✋ Offer to Fulfill": "✋ Erfüllung anbieten",
   "✋ Fulfillment Requests ({n})": "✋ Erfüllungsanfragen ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} Bewertung)",

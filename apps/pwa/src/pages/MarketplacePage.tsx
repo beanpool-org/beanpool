@@ -33,7 +33,7 @@ import {
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill, marketOrder, daySections,
     editedTagsOver, FREE_TAGS_MAX, freeTagsOf, normalizeCategory, postTagsOf, searchTagsFor, storedFreeTags, storedPostTags,
     tagIndex, freshBanner, recordFreshBannerDismissal, PINS_MAX, pinLive, upperCase,
-    MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed,
+    MARKET_SEEN_KEY, NEW_SINCE_LINE, newestListed, newSinceIndex, parseSeenListed, NEED_ANSWER_WORDS, needAnswerLine,
 } from '@beanpool/core';
 import type { ComposerDraft } from '../tools/builder';
 import { TagPicker } from '../components/TagPicker';
@@ -2445,9 +2445,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <p className="text-sm font-semibold text-nature-800 dark:text-nature-200 mb-1">
                                             {isLoan ? listingDealLines.askedToBorrow(selectedPost.authorCallsign) : listingDealLines.offeredToHelp(selectedPost.authorCallsign)}
                                         </p>
-                                        <p className="text-xs text-nature-600 dark:text-nature-400 mb-4">
+                                        <p className={`text-xs text-nature-600 dark:text-nature-400 ${!isLoan && myRequest.credits > 0 ? 'mb-1' : 'mb-4'}`}>
                                             {isLoan ? t('Nothing is held until the lender says yes.') : t('The author is reviewing your offer to fulfill this need.')}
                                         </p>
+                                        {/* The 1.5% fee, now that "I can do this" says the plain thing: it is stated here on the deal, as the phone's request
+                                            card says it, and again on the Payee's line once the deal is agreed (cold start N4). */}
+                                        {!isLoan && myRequest.credits > 0 && (
+                                            <p className="text-xs text-nature-600 dark:text-nature-400 mb-4">
+                                                <Sentence
+                                                    text={t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: myRequest.credits, net: formatNumber(Math.round(myRequest.credits * 0.985 * 100) / 100, 2) })}
+                                                    parts={{ owned: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{t('(100% community owned)')}</span> }}
+                                                />
+                                            </p>
+                                        )}
                                         <button
                                             onClick={async () => {
                                                 if (!identity) return;
@@ -2480,7 +2490,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             return showAcceptConfirm ? (
                             <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2">
                                 <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm">
-                                    {isLoan ? t('Ask to borrow this?') : selectedPost.type === 'offer' ? t('Accept this Offer?') : t('Offer to Fulfill this Need?')}
+                                    {isLoan ? t('Ask to borrow this?') : selectedPost.type === 'offer' ? t('Accept this Offer?') : t(NEED_ANSWER_WORDS.title)}
                                 </p>
 
                                 {selectedPost.priceType !== 'fixed' && (
@@ -2510,6 +2520,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         // A loan is free by its price, not by the days typed so far: a fee per day with no days yet is
                                         // not free (as the phone's post/[id].tsx).
                                         if (isLoan && !selectedPost.credits) return t('Free to borrow. Nothing is held: the lender says yes first.');
+                                        // A Need says the plain thing (cold start N4): what they'd be paid and who has to agree, with the deal's own
+                                        // total and the name the Need shows. No usable quantity yet: no sentence, and never an amount that isn't one.
+                                        // The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
+                                        if (selectedPost.type === 'need') {
+                                            if (selectedPost.priceType !== 'fixed' && !(acceptHoursValue > 0)) return null;
+                                            return needAnswerLine(tot, selectedPost.authorCallsign);
+                                        }
                                         if (!isLoan && tot === 0) return t('This is a free listing (0 B). No credits transferred.');
 
                                         const duration = selectedPost.priceType !== 'fixed' ? estimateLength(selectedPost.priceType, hrs) : null;
@@ -2537,29 +2554,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 </span>
                                             );
                                         }
-                                        if (selectedPost.type === 'offer') {
-                                            const net = Math.round(tot * 0.985 * 100) / 100;
-                                            return (
-                                                <span>
-                                                    <Sentence
-                                                        text={duration
-                                                            ? t('By proceeding, you commit {total} B ({duration}) to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, duration, net: formatNumber(net, 2) })
-                                                            : t('By proceeding, you commit {total} B to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, net: formatNumber(net, 2) })}
-                                                        parts={{ owned }}
-                                                    />
-                                                </span>
-                                            );
-                                        } else {
-                                            const net = Math.round(tot * 0.985 * 100) / 100;
-                                            return (
-                                                <span>
-                                                    <Sentence
-                                                        text={t('You will receive {net} B (after 1.5% transaction fee {owned} is deducted to fund the Commons Pool) when the job is completed.', { net: formatNumber(net, 2) })}
-                                                        parts={{ owned }}
-                                                    />
-                                                </span>
-                                            );
-                                        }
+                                        // An Offer (a loan and a Need returned above).
+                                        const net = Math.round(tot * 0.985 * 100) / 100;
+                                        return (
+                                            <span>
+                                                <Sentence
+                                                    text={duration
+                                                        ? t('By proceeding, you commit {total} B ({duration}) to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, duration, net: formatNumber(net, 2) })
+                                                        : t('By proceeding, you commit {total} B to a Trust Wallet. When finalized, the provider will receive {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).', { total: tot, net: formatNumber(net, 2) })}
+                                                    parts={{ owned }}
+                                                />
+                                            </span>
+                                        );
                                     })()}
                                 </div>
                                 
@@ -2812,7 +2818,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         : selectedPost.type === 'offer' ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                                 }`}
                             >
-                                 {accepting ? t('Processing...') : (isLoan ? t('📦 Ask to borrow') : selectedPost.type === 'offer' ? t('🤝 Accept Offer') : t('✋ Offer to Fulfill'))}
+                                 {accepting ? t('Processing...') : (isLoan ? t('📦 Ask to borrow') : selectedPost.type === 'offer' ? t('🤝 Accept Offer') : t(NEED_ANSWER_WORDS.button))}
                             </button>
                         );
                         })()}

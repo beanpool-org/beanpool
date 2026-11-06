@@ -90,11 +90,11 @@ const MEASURE_PAGE = () => {
     const bottom = (el) => (el ? Math.round((el.getBoundingClientRect().bottom + window.scrollY) * 10) / 10 : null);
     const action = detail.querySelector('[data-testid="listing-action"]');
     const first = action ? Array.from(action.querySelectorAll('button, a')).find((b) => b.getBoundingClientRect().height > 0) : null;
-    // The take-up (Accept Offer, Offer to Fulfill, Ask to borrow, or the local community's action where deals live there): the
+    // The take-up (Accept Offer, I can do this, Ask to borrow, or the local community's action where deals live there): the
     // stop's own subject. With none (a deal under way, the author's own), the stop is the action block's top, as the event
     // harness takes the answer block's where there is no Going (event-card-shots.mjs).
     const takeUp = action ? (action.querySelector('[data-testid="local-community-action"]')
-        || Array.from(action.querySelectorAll('button')).find((b) => /Accept Offer|Offer to Fulfill|Ask to borrow/.test(b.textContent || ''))) : null;
+        || Array.from(action.querySelectorAll('button')).find((b) => /Accept Offer|I can do this|Ask to borrow/.test(b.textContent || ''))) : null;
     const actionRect = action ? action.getBoundingClientRect() : null;
     const picture = detail.querySelector('[data-testid="listing-photos"]') || detail.querySelector('[data-testid="listing-tile-banner"]');
     const body = detail.querySelector('[data-testid="listing-body"]');

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CommunityHealthPanel, firstTradeRows, logWho, readHealth, readNewMembers } from './CommunityHealthPanel';
+import { CommunityHealthPanel, firstTradeRows, logWho, needsRows, readHealth, readNeeds, readNewMembers } from './CommunityHealthPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
 
@@ -38,6 +38,8 @@ function mockNode(read: { ok: boolean; status?: number; body: unknown } = { ok: 
 
 const WINDOW = { joined: 42, firstListing: 19, firstTrade: 10, daysToFirstListing: 3, daysFromListingToTrade: 12 };
 const NEW_MEMBERS = { beans: true, anyTrades: true, minGroup: 5, last90Days: { ...WINDOW, joined: 12, firstListing: 7, firstTrade: 5, daysToFirstListing: 0, daysFromListingToTrade: 1 }, allTime: WINDOW };
+const NEEDS = { deals: true, minGroup: 5, posted: 12, answeredWithinWeek: 10 };
+const withNeeds = (needs: unknown) => ({ ok: true, body: { ...HEALTH, totals: { ...HEALTH.totals, newMembers: NEW_MEMBERS, needs } } });
 const withNew = (newMembers: unknown) => ({ ok: true, body: { ...HEALTH, totals: { ...HEALTH.totals, newMembers } } });
 
 describe('CommunityHealthPanel', () => {
@@ -195,6 +197,58 @@ describe('CommunityHealthPanel', () => {
         expect(all).toHaveTextContent('Typical time from a first listing to a first tradeNo trades yet');
         expect(all.textContent).not.toMatch(/Too few|At least/);
         expect(screen.queryByTestId('first-trade-no-beans')).toBeNull();
+    });
+
+    // Cold start N4: "Needs this month: posted, answered within a week", beside the first-trade block (engine/needs-this-month.ts).
+    it('shows the Needs asked this month and how many were answered within a week, with what answered means', async () => {
+        mockNode(withNeeds(NEEDS));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        expect(await screen.findByRole('heading', { name: 'Needs this month' })).toBeInTheDocument();
+        const block = screen.getByTestId('needs-this-month');
+        expect(block).toHaveTextContent('Needs posted12');
+        expect(block).toHaveTextContent('Answered within a weekAt least 10');
+        expect(block).toHaveTextContent('A Need is answered when someone other than the person who asked puts in a request on it, whatever came of the request.');
+        expect(block).toHaveTextContent('A Need still in its first week with no answer yet counts as posted only.');
+        expect(block).toHaveTextContent('Answers go up in steps of 5, and a figure under 5 is held back, so the number never points at one person.');
+        // Beside the first-trade block, not instead of it; counts only.
+        expect(screen.getByTestId('first-trade')).toBeInTheDocument();
+        expect(block.textContent).not.toMatch(/[0-9a-f]{32}/);
+    });
+
+    it('a Needs figure the node holds back says so and is never a 0; a month with no Needs reads 0', async () => {
+        mockNode(withNeeds({ ...NEEDS, posted: 3, answeredWithinWeek: null }));
+        const first = render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const held = await screen.findByTestId('needs-this-month');
+        expect(held).toHaveTextContent('Needs posted3');
+        expect(held).toHaveTextContent('Answered within a weekHeld back');
+        expect(held.textContent).not.toMatch(/At least|week0/);
+        first.unmount();
+        mockNode(withNeeds({ ...NEEDS, posted: 0, answeredWithinWeek: 0 }));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const none = await screen.findByTestId('needs-this-month');
+        expect(none).toHaveTextContent('Needs posted0');
+        expect(none).toHaveTextContent('Answered within a week0');
+    });
+
+    it('with no deals here it shows only the Needs asked, and says nothing of answers', async () => {
+        mockNode(withNeeds({ deals: false, minGroup: 5, posted: 9, answeredWithinWeek: null }));
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const block = await screen.findByTestId('needs-this-month');
+        expect(block).toHaveTextContent('Needs posted9');
+        expect(block).not.toHaveTextContent('Answered');
+        expect(block).not.toHaveTextContent('steps of');
+    });
+
+    it('reads a whole Needs answer only; a node older than it shows the panel without the block', async () => {
+        expect(readNeeds(NEEDS)).toEqual(NEEDS);
+        expect(readNeeds({ ...NEEDS, answeredWithinWeek: 'many' })).toMatchObject({ answeredWithinWeek: null });
+        expect(readNeeds({ posted: 4 })).toBeNull();
+        expect(readNeeds(null)).toBeNull();
+        expect(new Map(needsRows({ deals: true, minGroup: 5, posted: 6, answeredWithinWeek: 5 })).get('Answered within a week')).toBe('At least 5');
+        mockNode();
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        await screen.findByTestId('community-health-panel');
+        expect(screen.queryByTestId('needs-this-month')).toBeNull();
     });
 
     it('a node older than the measure shows the panel without it, and Trades this month stays', async () => {

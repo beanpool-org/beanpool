@@ -49,7 +49,7 @@ import { readsOwn } from '../../utils/reads-own';
 import { pollsInformal, showcaseMode } from '../../utils/node-profile';
 import { PollCard } from '../../components/PollCard';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE } from '@beanpool/core';
+import { eventCopyOf, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, editedTagsOver, FREE_TAGS_MAX, listingFreeTags, postTagsOf, storedFreeTags, storedPostTags, MARKET_CARD_SHELL as SHELL, MARKET_CARD_TYPE, NEED_ANSWER_WORDS, needAnswerLine } from '@beanpool/core';
 import { TagPicker } from '../../components/TagPicker';
 import { PostTagChips } from '../../components/PostTagChips';
 import { Sentence } from '../../components/Sentence';
@@ -307,6 +307,7 @@ export default function PostDetailModal() {
             shadowOpacity: SHELL.shadow.opacity, shadowRadius: SHELL.shadow.blur, elevation: SHELL.shadow.elevation,
         },
         confirmBoxTitle: { color: colors.text.body, fontSize: 15, fontWeight: '800', textAlign: 'center', marginBottom: 12 },
+        needAnswerLine: { color: colors.text.body, fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 16 },
         confirmBoxLabel: { color: colors.text.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
         confirmBoxInput: { backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 16, paddingVertical: 14, color: colors.text.body, fontSize: 16, fontWeight: '600', textAlign: 'center', marginBottom: 8 },
         cancelActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
@@ -1050,6 +1051,12 @@ export default function PostDetailModal() {
     const emoji = categoryEmoji(post.category);
     const cardAuthor = post.author_callsign || post.author_pubkey?.slice(0, 6) || t('Unknown');
     const priceLabel = isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
+    // "I can do this" on a Need (cold start N4): the plain sentence under it, with the deal's own total (a price by the hour, day,
+    // week or month is the price times the quantity typed) and the name the Need shows. No usable quantity yet: no sentence, and
+    // never an amount that isn't one. The 1.5% fee is on the deal itself (the request card and the Payee's line), not here.
+    const needQuantity = post.price_type !== 'fixed' ? parseAmount(acceptHours, undefined, ANY_DECIMALS) : null;
+    const needTotal = needQuantity === null ? Number(post.credits) : needQuantity.ok ? Number(post.credits) * needQuantity.value : null;
+    const needAnswerWords = !isOffer && needTotal !== null ? needAnswerLine(needTotal, post.author_callsign) : null;
     // Every deal on it the reader stands on (DESIGN-deals-fable §3.2, slice S4), by core's one rule, as on the web: its own
     // people (its author, or a keeper of the enterprise that wrote it) see a row for each deal under way, the one a door
     // named first; anyone else sees their own deal, or nothing of anyone else's.
@@ -2028,18 +2035,17 @@ export default function PostDetailModal() {
                     <View style={styles.otherPostActions} testID="post-take-up-area" onLayout={(e) => { takeUpTop.current = e.nativeEvent.layout.y; }}>
                         {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm ? (
                             <View style={styles.confirmBox}>
-                                <Text style={styles.confirmBoxTitle}>{isLoan ? t('Ask to borrow this?') : isOffer ? t('Accept this Offer?') : t('Offer to Fulfill?')}</Text>
-                                
+                                <Text style={styles.confirmBoxTitle}>{isLoan ? t('Ask to borrow this?') : isOffer ? t('Accept this Offer?') : t(NEED_ANSWER_WORDS.title)}</Text>
+
+                                {isOffer ? (
                                 <View style={{ backgroundColor: colors.feedback.warning.bg, padding: 12, borderRadius: 8, borderColor: colors.feedback.warning.border, borderWidth: 1, marginBottom: 16 }}>
                                     <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>{t('🔒 Trust Wallet Protocol')}</Text>
                                     <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 12, lineHeight: 18 }}>
                                         <Sentence
-                                            text={!isOffer
-                                                ? t('This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.')
-                                                : isLoan
-                                                    ? (post.credits
-                                                        ? t('Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.')
-                                                        : t('Free to borrow. Nothing is held: the lender says yes first.'))
+                                            text={isLoan
+                                                ? (post.credits
+                                                    ? t('Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.')
+                                                    : t('Free to borrow. Nothing is held: the lender says yes first.'))
                                                 : post.price_type === 'fixed'
                                                     ? t('By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.', { credits: post.credits })
                                                     : t('By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.')}
@@ -2047,6 +2053,11 @@ export default function PostDetailModal() {
                                         />
                                     </Text>
                                 </View>
+                                ) : needAnswerWords !== null && (
+                                    // A Need says the plain thing (cold start N4): what they'd be paid and who has to agree. The 1.5% fee is on the
+                                    // deal itself, the request card and the Payee's line, not here.
+                                    <Text testID="need-answer-line" style={styles.needAnswerLine}>{needAnswerWords}</Text>
+                                )}
                                 {post.price_type !== 'fixed' && (
                                     <View style={{ marginBottom: 12 }}>
                                         <Text style={styles.confirmBoxLabel}>{t('TRUST COMMITMENT (HOURS)')}</Text>
@@ -2143,7 +2154,7 @@ export default function PostDetailModal() {
                                 }
                             }}>
                                 <Text style={styles.acceptBtnText}>
-                                    {accepting ? t('Processing...') : (post.status === 'pending' ? t('⏳ Pending Confirmation') : (isLoan ? t('📦 Ask to borrow') : isOffer ? t('🤝 Accept Offer') : t('✋ Offer to Fulfill')))}
+                                    {accepting ? t('Processing...') : (post.status === 'pending' ? t('⏳ Pending Confirmation') : (isLoan ? t('📦 Ask to borrow') : isOffer ? t('🤝 Accept Offer') : t(NEED_ANSWER_WORDS.button)))}
                                 </Text>
                             </Pressable>
                         )}

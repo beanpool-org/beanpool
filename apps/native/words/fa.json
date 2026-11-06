@@ -1009,9 +1009,7 @@
   "Withdrawing...": "در حال پس گرفتن...",
   "Withdraw Request": "پس گرفتن درخواست",
   "Accept this Offer?": "این پیشنهاد پذیرفته شود؟",
-  "Offer to Fulfill?": "پیشنهاد برای انجام این نیاز؟",
   "🔒 Trust Wallet Protocol": "🔒 پروتکل کیف پول امانت",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "این معامله محافظت‌شده و در امانت نگهداری می‌شود. پرداخت‌کننده اعتبار را متعهد شده است. پس از تکمیل، اعتبار را خالص پس از کسر ۱.۵٪ کارمزد {owned} دریافت می‌کنید تا به صندوق مشترک کمک شود.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "با ادامه دادن، {credits} اعتبار به کیف پول موقت امانت اختصاص می‌دهید. پس از تکمیل، ارائه‌دهنده اعتبار را خالص پس از ۱.۵٪ کارمزد {owned} برای صندوق مشترک دریافت می‌کند.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "با ادامه دادن، اعتبار مجاز خود را به کیف پول موقت امانت اختصاص می‌دهید. پس از تکمیل، ارائه‌دهنده اعتبار را خالص پس از ۱.۵٪ کارمزد {owned} برای صندوق مشترک دریافت می‌کند.",
   "TRUST COMMITMENT (HOURS)": "تعهد امانت (ساعت)",
@@ -1024,7 +1022,6 @@
   "Set up profile": "تنظیم پروفایل",
   "⏳ Pending Confirmation": "⏳ در انتظار تأیید",
   "🤝 Accept Offer": "🤝 پذیرش پیشنهاد",
-  "✋ Offer to Fulfill": "✋ پیشنهاد برای انجام",
   "✋ Fulfillment Requests ({n})": "✋ درخواست‌های انجام ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} نظر)",

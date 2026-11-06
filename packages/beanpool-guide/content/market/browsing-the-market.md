@@ -77,7 +77,7 @@ Tap a post to open it. There is no separate VIEW button; tapping anywhere on the
 - Tap their name to see their profile, reviews and trust.
 - **Report Post** if it is a scam, offensive, misleading, or puts a child at risk (**Child safety**).
 - **Block User** to hide their posts and chats on your phone. It also tells your admins. See "Blocking someone".
-- Your deal on it, if you have one: what is held, whose step it is, and the buttons for it, in place of **Accept Offer** or **Offer to Fulfill**. On your own post, every deal under way on it. See "A deal, step by step".
+- Your deal on it, if you have one: what is held, whose step it is, and the buttons for it, in place of **Accept Offer** or **I can do this**. On your own post, every deal under way on it. See "A deal, step by step".
 - **Taken up by someone else for now.** if someone else has taken it up and it is not one that stays open.
 
 In the web app the buttons on a post are **💬 Message** and **🚩 Report**. Block someone from their profile.

@@ -467,7 +467,7 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
             push: '❌ Request Declined: a helper whose offer Kofi declined',
             post: { type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, repeatable: 0 },
             tx: { id: 'tx-r', status: 'rejected', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, credits: 20 },
-            takeUp: '✋ Offer to Fulfill', said: 'That request was declined.',
+            takeUp: '✋ I can do this', said: 'That request was declined.',
         },
         {
             push: '🚫 Deal Cancelled: a taker whose one-off Offer deal was cancelled',
@@ -491,7 +491,7 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
             push: '⚖️ Escrow Dispute Resolved, released: a helper on a repeatable Need',
             post: { type: 'need', title: 'Weekly weeding', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, repeatable: 1 },
             tx: { id: 'tx-y', status: 'completed', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, credits: 20, completedAt: '2026-10-27T10:00:00.000Z' },
-            takeUp: '✋ Offer to Fulfill', said: 'That deal is done.',
+            takeUp: '✋ I can do this', said: 'That deal is done.',
         },
     ];
     for (const k of kinds) {
@@ -562,7 +562,7 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
         await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, status: 'pending', accepted_by: ME.publicKey }), { txId: 'tx-a' });
         expect(host.textContent).toContain("You're helping with this · 20 Beans held for you");
         expect(host.textContent).toContain('❌ Cancel Trust Hold');
-        expect(buttons().some((b) => b.includes('✋ Offer to Fulfill'))).toBe(false);
+        expect(buttons().some((b) => b.includes('✋ I can do this'))).toBe(false);
         expect(over()).toBeNull();
     });
 
@@ -752,7 +752,7 @@ describe('DP3: the listing page in the event page\'s order, at 320 × 569 and 1.
     const takeUp = (abs: ReturnType<typeof screen>) => { const b = abs(byId('post-take-up')!); return { top: b.top, bottom: b.top + b.height }; };
 
     for (const [theme, colors] of [['light', lightColors], ['dark', darkColors]] as const) {
-        it(`Marty's apples (${theme}): the chips, the title, IN RETURN, Offer to Fulfill, the photo, Message and Share, then POSTED BY`, async () => {
+        it(`Marty's apples (${theme}): the chips, the title, IN RETURN, I can do this, the photo, Message and Share, then POSTED BY`, async () => {
             look.theme = theme;
             onGlobalBeansOff();
             await open(APPLES());
@@ -773,7 +773,7 @@ describe('DP3: the listing page in the event page\'s order, at 320 × 569 and 1.
 
             // The order: chips → title → the terms box → the take-up → the photo → Message, Share → description → POSTED BY → Report.
             const take = byId('post-take-up')!;
-            expect(take.textContent).toBe('✋ Offer to Fulfill');
+            expect(take.textContent).toBe('✋ I can do this');
             const message = byId('post-message')!;
             const share = host.querySelector('[data-testid="share-open-button"]')!;
             const posted = spanWith('POSTED BY')!;

@@ -1195,7 +1195,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
     }
     const noTakeUp = () => {
         expect(screen.queryByRole('button', { name: /Accept Offer/ })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Offer to Fulfill/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /I can do this/ })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Ask to borrow/ })).not.toBeInTheDocument();
     };
 
@@ -1238,6 +1238,67 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(await screen.findByText('You offered to help · waiting on Kofi')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Cancel Offer' })).toBeInTheDocument();
         noTakeUp();
+    });
+
+    // Cold start N4: "I can do this" on a Need says the plain thing; the 1.5% fee is stated on the deal (the request card below, the Payee's line).
+    describe('"I can do this" on a Need (cold start N4)', () => {
+        const SAM = { authorPublicKey: 'sam-pk', authorCallsign: 'Sam' };
+        const tapIt = async () => { fireEvent.click(await screen.findByRole('button', { name: '✋ I can do this' })); return screen.findByText('I can do this'); };
+
+        it('a priced Need: the heading, the amount and the name, who agrees and when the Beans are yours, and no fee line', async () => {
+            await open(listing({ title: 'Dig a bed', type: 'need', credits: 40, ...SAM }), []);
+            expect(await tapIt()).toBeInTheDocument();
+            expect(screen.getByText("You'd do it for 40 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.")).toBeInTheDocument();
+            expect(screen.queryByText(/Offer to Fulfill/)).not.toBeInTheDocument();
+            expect(screen.queryByText(/1\.5%|transaction fee|Commons Pool/)).not.toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
+        });
+
+        it('priced by the hour: the total follows the hours typed, and no usable hours means no sentence rather than a wrong amount', async () => {
+            await open(listing({ title: 'Dig a bed', type: 'need', credits: 20, priceType: 'hourly', ...SAM }), []);
+            await tapIt();
+            expect(screen.getByText("You'd do it for 20 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.")).toBeInTheDocument();
+            const hours = screen.getByRole('textbox');
+            fireEvent.change(hours, { target: { value: '3' } });
+            expect(screen.getByText("You'd do it for 60 Beans. Sam agrees, you do it, Sam confirms, and the Beans are yours.")).toBeInTheDocument();
+            fireEvent.change(hours, { target: { value: '' } });
+            expect(screen.queryByText(/You'd do it for/)).not.toBeInTheDocument();
+        });
+
+        it('a free Need says it is free, and never "0 Beans" or Beans that will not come', async () => {
+            await open(listing({ title: 'Carry chairs', type: 'need', credits: 0, ...SAM }), []);
+            await tapIt();
+            expect(screen.getByText("You'd do it for free. Sam agrees, you do it, and Sam confirms.")).toBeInTheDocument();
+            expect(screen.queryByText(/0 Beans|0 B\b|free listing/)).not.toBeInTheDocument();
+        });
+
+        it('a Need with no name on it says the person who asked, not a made-up name', async () => {
+            await open(listing({ title: 'Dig a bed', type: 'need', credits: 40, authorPublicKey: 'sam-pk', authorCallsign: '' }), []);
+            await tapIt();
+            expect(screen.getByText("You'd do it for 40 Beans. The person who asked agrees, you do it, they confirm, and the Beans are yours.")).toBeInTheDocument();
+        });
+
+        it('an Offer keeps its own words', async () => {
+            await open(listing({ title: 'Lawn mower', credits: 45 }), []);
+            fireEvent.click(await screen.findByRole('button', { name: /Accept Offer/ }));
+            expect(await screen.findByText('Accept this Offer?')).toBeInTheDocument();
+            expect(screen.getByText(/By proceeding, you commit 45 B/)).toBeInTheDocument();
+            expect(screen.queryByText(/I can do this|You'd do it for/)).not.toBeInTheDocument();
+        });
+
+        it('the helper whose request is waiting reads the fee on the deal: the Beans, the 1.5% and what is theirs net', async () => {
+            await open(listing({ title: 'Dig a bed', type: 'need', repeatable: true, credits: 20, ...SAM }),
+                [deal({ status: 'requested', credits: 20, buyerPublicKey: 'sam-pk', buyerCallsign: 'Sam', sellerPublicKey: ME })]);
+            const card = (await screen.findByText('Offer Pending Approval')).parentElement!;
+            expect(card).toHaveTextContent('You have requested to earn 20 credits (19.70 net after 1.5% transaction fee) (100% community owned) for fulfilling this need.');
+        });
+
+        it('a free request has no fee line to read', async () => {
+            await open(listing({ title: 'Carry chairs', type: 'need', repeatable: true, credits: 0, ...SAM }),
+                [deal({ status: 'requested', credits: 0, buyerPublicKey: 'sam-pk', buyerCallsign: 'Sam', sellerPublicKey: ME })]);
+            const card = (await screen.findByText('Offer Pending Approval')).parentElement!;
+            expect(card).not.toHaveTextContent(/1\.5%|transaction fee/);
+        });
     });
 
     it('lendable Offer, asked: "You asked to borrow it · nothing is held until Damo says yes" and Withdraw', async () => {
@@ -1600,7 +1661,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             entDeals = [deal({ id: 'tx-f', buyerPublicKey: ENT, sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
             await open(farmNeed, []);
             expect(screen.queryByTestId('deals-under-way')).not.toBeInTheDocument();
-            expect(await screen.findByRole('button', { name: /Offer to Fulfill/ })).toBeInTheDocument();
+            expect(await screen.findByRole('button', { name: /I can do this/ })).toBeInTheDocument();
             expect(entReads()).toEqual([]);
         });
     }
@@ -1685,9 +1746,9 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             }
         });
 
-        it('a Need: Offer to Fulfill comes before the photo, Posted by and Share too', async () => {
+        it('a Need: I can do this comes before the photo, Posted by and Share too', async () => {
             await open(listing({ type: 'need', title: 'Apples needed' }), []);
-            const takeUp = screen.getByRole('button', { name: /Offer to Fulfill/ });
+            const takeUp = screen.getByRole('button', { name: /I can do this/ });
             expect(after(takeUp, screen.getByRole('button', { name: /View enlarged photo 1 of 1/ }))).toBe(true);
             expect(after(takeUp, screen.getByText('Posted by'))).toBe(true);
             expect(after(takeUp, screen.getByTestId('share-button'))).toBe(true);

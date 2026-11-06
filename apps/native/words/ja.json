@@ -959,9 +959,7 @@
   "Withdrawing...": "取り下げ中...",
   "Withdraw Request": "申請を取り下げる",
   "Accept this Offer?": "この提案を受けますか？",
-  "Offer to Fulfill?": "このお願いに応えますか？",
   "🔒 Trust Wallet Protocol": "🔒 トラストウォレット規約",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "この取引は保護され、エスクローに預託されています。支払者はすでにクレジットを預けています。完了すると、コモンズプール手数料1.5%{owned}を差し引いたクレジットを受け取ります。",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "進むと、一時的なトラストウォレットに{credits}クレジットを預託します。完了時、提供者はコモンズプール手数料1.5%{owned}を差し引いたクレジットを受け取ります。",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "進むと、承認されたクレジットを一時的なトラストウォレットに預託します。完了時、提供者はコモンズプール手数料1.5%{owned}を差し引いたクレジットを受け取ります。",
   "TRUST COMMITMENT (HOURS)": "預託コミットメント（時間）",
@@ -974,7 +972,6 @@
   "Set up profile": "プロフィールを設定",
   "⏳ Pending Confirmation": "⏳ 確認待ち",
   "🤝 Accept Offer": "🤝 提案を受ける",
-  "✋ Offer to Fulfill": "✋ お願いに応える",
   "✋ Fulfillment Requests ({n})": "✋ 引き受け希望（{n}件）",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "other": "★ {average}（レビュー{n}件）"

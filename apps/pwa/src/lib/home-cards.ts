@@ -34,8 +34,8 @@ import { checkDmThread, dmLineShownText, encodePlaintext, type DmLineView, type 
 import { dmKeyContext } from './dm-lock';
 import { openLine } from './group-chat-crypto';
 import { groupTombstoneText } from './group-chat-lines';
-import { groupLineView, isSealedGroupLine, GROUP_LINE_UNVERIFIED_TEXT } from './group-line-display';
-import { chatLineWords } from './chat-line-words';
+import { groupLineView, isSealedGroupLine, GROUP_LINE_FORMER_MEMBER, GROUP_LINE_UNVERIFIED_TEXT } from './group-line-display';
+import { chatAuthorWords, chatLineWords } from './chat-line-words';
 export { tierWords };
 export type { HomeLayoutV2 };
 
@@ -1011,9 +1011,16 @@ export interface ChatOpeners {
     identity: { publicKey: string; privateKey: string } | null;
     /** The epoch key of a group's chat, if this page already opened it (Talk opened that chat in this page's life). */
     groupKey?: (groupId: string, epoch: number) => Uint8Array | undefined;
-    /** Whether this page has seen the group's chat locked (group-chat-keys `seenLockedInMemory`): no read either. */
-    groupLocked?: (groupId: string) => boolean;
+    /**
+     * Whether this browser holds the group's chat locked: its kept record (group-hold `lockedGroupsOrNull`, this browser's
+     * IndexedDB, as Talk reads it; unreadable counts as locked) or what this page has seen (`seenLockedInMemory`). Both are
+     * local: the node is never asked. `undefined` while the kept record hasn't been read yet.
+     */
+    groupLocked?: (groupId: string) => boolean | undefined;
 }
+
+/** A line the card can't place yet (the kept lock record not read): nobody's, as a chat draws a line it hasn't opened. */
+export const CHAT_LINE_PENDING = '…';
 
 type ChatWithLines = Extract<HomeChatCard, { lines: HomeChatLine[] }>;
 /** A line the node stores readable (it sends its metadata, null or not); a too-long sealed one comes as `🔒 Message` with none. */
@@ -1061,14 +1068,20 @@ function dmLinesShown(card: ChatWithLines, conversationId: string, me: ChatOpene
  * A group's, an event's or an enterprise's chat lines: a readable line as its words (a photo as `📷 Photo`), a removed one
  * by who removed it (Talk's words), the node's own as its words. A locked group's sealed line opens only under an epoch
  * key already in this page's memory, by the display rule (group-line-display.ts: the key that opens it is its author,
- * "You" for mine); without one `🔒 Message · open to read`; one that doesn't open, Talk's "couldn't be verified".
+ * "You" for mine, any other key "A former member"; an edit is tried as one); without one `🔒 Message · open to read`;
+ * one that doesn't open, Talk's "couldn't be verified".
  */
 function groupLinesShown(card: ChatWithLines, conversationId: string, open: ChatOpeners): ChatLineShown[] {
     const me = open.identity?.publicKey;
     const groupId = conversationId.toLowerCase();
-    // A group's chat is locked here when this page has seen it so, or when any of its lines is sealed: there a readable line
-    // in a member's name is nobody's (Talk's groupLineShown), never their words. An event's or enterprise's chat is readable.
-    const locked = card.kind === 'group' && (!!open.groupLocked?.(groupId) || card.lines.some(l => !!l.sealed && isSealedGroupLine({ nonce: l.sealed.nonce, type: l.type })));
+    // A group's chat is locked here when this browser holds it so (its kept record, or what this page has seen), or when
+    // any of its lines is sealed: there a readable line in a member's name is nobody's (Talk's groupLineShown), never their
+    // words. Until the kept record is read such a line is "…", nobody's, as the phone's card draws a line it hasn't judged:
+    // never the node's words in a member's name, and never a warning that goes a moment later. An event's or enterprise's
+    // chat is readable.
+    const held = card.kind === 'group' ? open.groupLocked?.(groupId) : false;
+    const locked = card.kind === 'group' && (held === true || card.lines.some(l => !!l.sealed && isSealedGroupLine({ nonce: l.sealed.nonce, type: l.type })));
+    const pending = card.kind === 'group' && !locked && !!open.groupLocked && held === undefined;
     const out: ChatLineShown[] = [];
     for (const l of card.lines) {
         if (l.type === 'removed') {
@@ -1076,22 +1089,32 @@ function groupLinesShown(card: ChatWithLines, conversationId: string, open: Chat
         } else if (isNodeLine(l)) {
             out.push(nobodys(l, cut(chatLineWords(l.text ?? ''))));
         } else if (l.sealed && isSealedGroupLine({ nonce: l.sealed.nonce, type: l.type })) {
-            // The node left out the lines from before this member's first epoch (fromEpochOf): none here is hidden for that.
-            const v = groupLineView({ id: l.id, authorPubkey: l.author, authorCallsign: l.who, ciphertext: l.sealed.ciphertext, nonce: l.sealed.nonce, metadata: l.sealed.metadata, type: l.type }, {
-                groupId, fromEpoch: 1, keyFor: (e) => open.groupKey?.(groupId, e), open: openLine, roster: [],
+            const sealed = l.sealed;
+            const served = (editedAt: string | null) => ({
+                id: l.id, authorPubkey: l.author, authorCallsign: l.who, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: sealed.metadata, editedAt, type: l.type,
             });
+            // The node left out the lines from before this member's first epoch (fromEpochOf): none here is hidden for that.
+            const ctx = { groupId, fromEpoch: 1, keyFor: (e: number) => open.groupKey?.(groupId, e), open: openLine, roster: [] };
+            // The card carries no edit mark: a line that doesn't open as written is tried as an edit (sealed as part 'edit'),
+            // as the phone's card does, so a held key never shows an edited line as "couldn't be verified".
+            let v = groupLineView(served(null), ctx);
+            if (v.unverified) v = groupLineView(served(l.at), ctx);
             if (v.hidden) continue;
             if (v.waitingKey) { out.push(nobodys(l, t(CHAT_CARD_WORDS.lockedOpen))); continue; }
-            if (v.unverified) { out.push(nobodys(l, chatLineWords(GROUP_LINE_UNVERIFIED_TEXT))); continue; }
+            if (v.unverified || !v.signer) { out.push(nobodys(l, chatLineWords(GROUP_LINE_UNVERIFIED_TEXT))); continue; }
             const mine = !!me && v.signer === me;
-            // Named by the key that opened it: mine, or the node's name for the author when that key is the author's.
-            const who = mine ? t(CHAT_CARD_WORDS.you) : v.signer === l.author ? l.who : null;
+            // Named by the key that opened it: mine; the node's name for the author when that key is the author's; any other
+            // key (metadata.sender, a line from before a key change) by the display rule, which with no roster here is
+            // "A former member", as Talk and the phone name it. Opened words are never drawn with no name.
+            const who = mine ? t(CHAT_CARD_WORDS.you) : v.signer === l.author ? l.who : chatAuthorWords(v.name ?? GROUP_LINE_FORMER_MEMBER);
             out.push({ id: l.id, who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(v.text) });
         } else if (!isReadable(l)) {
             // Sealed some other way, or too long to carry (`🔒 Message`, no bytes).
             out.push(nobodys(l, t(CHAT_CARD_WORDS.locked)));
         } else if (locked) {
             out.push(nobodys(l, chatLineWords(GROUP_LINE_UNVERIFIED_TEXT)));
+        } else if (pending) {
+            out.push(nobodys(l, CHAT_LINE_PENDING));
         } else {
             const mine = !!me && l.author === me;
             out.push({ id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(l.text ?? '') });

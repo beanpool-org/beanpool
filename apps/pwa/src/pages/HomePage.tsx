@@ -50,6 +50,7 @@ import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKno
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
+import { groupIdKey, lockedGroupsOrNull } from '../lib/group-hold';
 import { readChatSettings, homeChatPicked } from '@beanpool/core';
 import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
@@ -890,6 +891,25 @@ async function loadChatRows(publicKey: string): Promise<ChatPickRow[]> {
 }
 
 /**
+ * The groups this browser holds locked for this identity: its kept record (lib/group-hold.ts lockedGroupsOrNull, this
+ * browser's IndexedDB, as Talk reads it), read once per identity. Local: the node is never asked, so the card's "no read"
+ * rule stands. `undefined` until it has read; `null` when it can't be read (then every group is locked here).
+ */
+function useKeptLockedGroups(identityPub: string | null): ReadonlySet<string> | null | undefined {
+    const [kept, setKept] = useState<{ pub: string; groups: ReadonlySet<string> | null } | null>(null);
+    useEffect(() => {
+        if (!identityPub) return;
+        let live = true;
+        lockedGroupsOrNull(identityPub).then(
+            (groups) => { if (live) setKept({ pub: identityPub, groups }); },
+            () => { if (live) setKept({ pub: identityPub, groups: null }); },
+        );
+        return () => { live = false; };
+    }, [identityPub]);
+    return kept && kept.pub === identityPub ? kept.groups : undefined;
+}
+
+/**
  * A chosen chat (scratch/fable-design/DESIGN-home-chosen-chat-fable.md §2, slice C3): the chat's name, its unread count
  * (hidden at 0), 🔕 when muted, and its last lines, oldest first, opened in this browser (lib/home-cards.ts
  * chatLinesShown: a DM with the member's own key context, a locked group's line only under a key already in this page's
@@ -912,6 +932,8 @@ function ChatBody({
     onPick?: () => void;
 }) {
     const picked = readChatSettings(card.settings);
+    // Only a group's chat can be held locked: a DM's or an event's card reads no record.
+    const keptLocked = useKeptLockedGroups(identity && 'kind' in picked && picked.kind === 'group' ? identity.publicKey : null);
     if (!homeChatPicked(picked)) {
         return onPick
             ? <HomeLine onClick={onPick} testId="home-chat-pick"><span className="min-w-0 break-words font-semibold">{t(CHAT_CARD_WORDS.pick)}</span></HomeLine>
@@ -947,7 +969,12 @@ function ChatBody({
         identity: identity ? { publicKey: identity.publicKey, privateKey: identity.privateKey } : null,
         // A key already open in this page (Talk opened the group's chat): no read, no wrap opened here.
         groupKey: identity ? (groupId, epoch) => groupKeyring(groupKeysNet, identity, groupId, indexedDbGroupLockStore).openedKey(epoch) : undefined,
-        groupLocked: identity ? (groupId) => groupKeyring(groupKeysNet, identity, groupId, indexedDbGroupLockStore).seenLockedInMemory() : undefined,
+        // Locked here: what this page has seen, else this browser's kept record (unreadable counts as locked; not read yet, undefined).
+        groupLocked: identity ? (groupId) => {
+            if (groupKeyring(groupKeysNet, identity, groupId, indexedDbGroupLockStore).seenLockedInMemory()) return true;
+            if (keptLocked === undefined) return undefined;
+            return keptLocked === null || keptLocked.has(groupIdKey(groupId));
+        } : undefined,
     };
     const lines = chatLinesShown(body, picked.conversationId, open).map(l => ({ id: l.id, text: chatLineText(l) }));
     const status = body.unread > 0 ? tn(body.unread, '{n} new', '{n} new') : null;
@@ -1213,6 +1240,8 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
     const [shapeModalOpen, setShapeModalOpen] = useState(false);
     // A card's Settings… (from its "…", or Arrange's word on a card with nothing to show).
     const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
+    // A chat card picked again takes a new id in the same place (home-layout changeCardSettings): its settings' close finds it by that.
+    const settingsMovedTo = useRef<{ from: string; to: string } | null>(null);
     // The node refused the version-2 layout (a node from before the frame): Arrange says the cards stay here (§2.3).
     const [notOnAccount, setNotOnAccount] = useState(false);
     const [fewerOpen, setFewerOpen] = useState(false);
@@ -3415,13 +3444,22 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                         onSubmit={(next) => {
                             const { id, type } = settingsFor;
                             setSettingsFor(null);
+                            settingsMovedTo.current = null;
                             // Sun and moon's place is worked out here: no read.
-                            changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: type !== 'sky' });
+                            changeLayout((l) => {
+                                const changed = changeCardSettings(l, id, next, Date.now());
+                                // A chat picked again for another chat has a new id in the same place: focus goes to that card.
+                                const at = l ? l.cards.findIndex(c => c.id === id) : -1;
+                                const to = at >= 0 ? changed?.cards[at]?.id : undefined;
+                                if (to && to !== id) settingsMovedTo.current = { from: id, to };
+                                return changed;
+                            }, { reread: type !== 'sky' });
                         }}
                         onClose={() => setSettingsFor(null)}
                         // Its opener was a menu's Settings…, gone with the menu: the card's "…", or its word in Arrange.
                         returnFocus={() => {
-                            const id = settingsFor.id;
+                            const moved = settingsMovedTo.current;
+                            const id = moved && moved.from === settingsFor.id ? moved.to : settingsFor.id;
                             return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-arrange-settings-${id}"]`)
                                 ?? pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`)
                                 ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-add"], [data-testid="home-add-open"]');

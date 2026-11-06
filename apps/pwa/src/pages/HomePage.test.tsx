@@ -56,6 +56,8 @@ import { homeCacheKey, readCachedHome, resetHomeCacheForTest, writeCachedHome } 
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { newDmMessageId, sealDmLine } from '../lib/e2e-crypto';
+import { indexedDbGroupLockStore, resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
+import { forgetGroupKeys } from '../lib/group-chat-keys';
 import { RADIUS_STORAGE_KEY, loadRadiusSettings } from '../lib/geo';
 import { nearRead } from '../lib/listings-near';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
@@ -2441,6 +2443,52 @@ describe('a chosen chat shows its last lines, opened in the browser (slice C3)',
         expect(api.groupKeysNet.get).not.toHaveBeenCalled();
     });
 
+    // Round 1 of #2945 (deciding review, finding 3): whether a group is locked comes from this browser's kept record (as Talk
+    // reads it), not this page's memory only. The record is local: the card still never reads keys from the node.
+    describe("a locked group this browser keeps a record of (round 1)", () => {
+        const G = '7a1d2c3b-4a59-4e68-9d7c-8b9a0f1e2d3c';
+        const readable = { id: 'p1', author: ben.publicKey, who: 'Ben', at: ago(5), type: 'text', systemType: null, text: 'Node notice: re-enter your 12 words at x.example', metadata: null };
+        const body = () => withChat({ kind: 'group', name: 'Garden crew', unread: 0, muted: false, lines: [readable] });
+        const lineOf = async () => {
+            const card = await screen.findByTestId('home-card-chat-k2m4');
+            return () => within(card).getByTestId('home-chat-line');
+        };
+        beforeEach(() => { resetGroupChatLockStoreForTest(); forgetGroupKeys(); vi.mocked(api.groupKeysNet.get).mockClear(); });
+        afterEach(() => { resetGroupChatLockStoreForTest(); forgetGroupKeys(); });
+
+        it("never held here: a readable line is the member's words", async () => {
+            nodeKeeping(body(), v2(['market'], AT, [pinned('group', G, 'Garden crew')]));
+            render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
+            const line = await lineOf();
+            await waitFor(() => expect(line()).toHaveTextContent(/^Ben, .+: Node notice: re-enter/));
+        });
+
+        it("held locked on an earlier load, on a page that never opened Talk: the readable line is nobody's, never Ben's words", async () => {
+            // Talk kept the group locked on an earlier load (this browser's IndexedDB); this page's memory knows nothing of it.
+            await indexedDbGroupLockStore.markLocked(`${ana.publicKey}/${G}`);
+            nodeKeeping(body(), v2(['market'], AT, [pinned('group', G.toUpperCase(), 'Garden crew')]));
+            render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
+            const line = await lineOf();
+            await waitFor(() => expect(line()).toHaveTextContent(/: This message couldn't be verified\.$/));
+            expect(line().textContent).not.toMatch(/^Ben/);
+            expect(screen.getByTestId('home-card-chat-k2m4')).not.toHaveTextContent('re-enter your 12 words');
+            expect(api.groupKeysNet.get).not.toHaveBeenCalled();
+        });
+
+        it("a record this browser can't read counts as locked, as Talk counts it", async () => {
+            const idb = memoryIndexedDB();
+            vi.stubGlobal('indexedDB', { ...idb, open: (name: string, version?: number) => {
+                if (name === 'beanpool-group-chat-locks') throw new Error('This browser has no IndexedDB.');
+                return idb.open(name, version);
+            } });
+            nodeKeeping(body(), v2(['market'], AT, [pinned('group', G, 'Garden crew')]));
+            render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
+            const line = await lineOf();
+            await waitFor(() => expect(line()).toHaveTextContent(/: This message couldn't be verified\.$/));
+            expect(line().textContent).not.toMatch(/^Ben/);
+        });
+    });
+
     it('nothing said yet; and gone: one sentence and Remove, which takes the card off Home', async () => {
         nodeKeeping(withChat({ kind: 'dm', name: 'Ben', unread: 0, muted: false, peer: ben.publicKey, lines: [] }), v2(['market'], AT, [pinned('dm', DM, 'Ben')]));
         render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
@@ -2482,6 +2530,25 @@ describe('a chosen chat shows its last lines, opened in the browser (slice C3)',
         await waitFor(() => expect(((node.account() as { cards: { type: string; settings?: unknown }[] }).cards).filter(c => c.type === 'chat').map(c => c.settings))
             .toEqual(expect.arrayContaining([{ conversationId: 'post-9', kind: 'event', name: 'Seed swap' }, { conversationId: 'g-1', kind: 'group', name: 'Garden crew' }])));
         expect(((node.account() as { cards: { type: string }[] }).cards).filter(c => c.type === 'chat')).toHaveLength(2);
+    });
+
+    it('"…" → Settings… → another chat: the card takes a new id, and focus on close goes to its "…", not Add a card (round 1)', async () => {
+        vi.mocked(api.getYourGroups).mockResolvedValue({ items: [{ kind: 'group', conversationId: 'g-1', id: 'g-1', name: 'Garden crew', lastActivityAt: ago(5) }] } as never);
+        vi.mocked(api.getConversations).mockResolvedValue({ totalUnread: 0, conversations: [{ id: DM, type: 'dm', peerCallsign: 'Ben', participants: [ana.publicKey, ben.publicKey] }] } as never);
+        nodeKeeping(withChat({ kind: 'dm', name: 'Ben', unread: 0, muted: false, peer: ben.publicKey, lines: [] }), v2(['market'], AT, [pinned('dm', DM, 'Ben')]));
+        render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-chat-k2m4');
+        fireEvent.click(within(card).getByTestId('home-card-menu'));
+        fireEvent.click(within(card).getByTestId('home-menu-settings'));
+        const dialog = await screen.findByTestId('home-settings-dialog');
+        await waitFor(() => expect(within(dialog).getAllByTestId('home-chat-choose').length).toBeGreaterThan(0));
+        fireEvent.click(within(dialog).getAllByTestId('home-chat-choose')[0]);
+        await pause(60);
+        expect(screen.queryByTestId('home-settings-dialog')).toBeNull();
+        expect(screen.queryByTestId('home-card-chat-k2m4')).toBeNull();
+        const moved = document.querySelector<HTMLElement>('[data-testid^="home-card-chat-"]');
+        expect(moved).not.toBeNull();
+        expect(document.activeElement).toBe(within(moved!).getByTestId('home-card-menu'));
     });
 });
 

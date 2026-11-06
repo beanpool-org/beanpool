@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLanguage, t } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, pseudoLocalise, setLanguage, t } from '@beanpool/core';
 import { sealDmLine, newDmMessageId } from './e2e-crypto';
 import { sealLine } from './group-chat-crypto';
 import { CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown } from './home-cards';
@@ -655,6 +655,64 @@ describe('the chat card', () => {
         // A line the key doesn't open (sealed under another key): Talk's words, nobody's.
         const other = crypto.getRandomValues(new Uint8Array(32));
         expect(shown(a, i, ana, () => other)!.map(l => [l.who, l.text])).toEqual(lines.map(() => [null, "This message couldn't be verified."]));
+    });
+
+    // Round 1 of #2945 (deciding review, findings 1 and 2), with real crypto: the card's line carries no edit mark, and the
+    // key that opens a line may not be its author's.
+    describe('a locked group line, opened with a held key (round 1)', () => {
+        const G = '7a1d2c3b-4a59-4e68-9d7c-8b9a0f1e2d3c';
+        const key = crypto.getRandomValues(new Uint8Array(32));
+        const eve = person();
+        const held = (g: string, e: number) => (g === G && e === 1 ? key : undefined);
+        const groupCard = (lines: unknown[]) => ({ cards: { 'chat-1': { kind: 'group', name: 'Garden crew', unread: 0, muted: false, lines } } });
+        const line = (id: string, s: { ciphertext: string; nonce: string }, meta: Record<string, unknown>, min: number) =>
+            ({ id, author: ben.publicKey, who: 'Ben', at: at(min), type: 'text', systemType: null, sealed: { ciphertext: s.ciphertext, nonce: s.nonce, metadata: JSON.stringify({ epoch: 1, ...meta }) } });
+
+        it("an edited line (sealed as part 'edit') opens as the edit it is: Ben's words, never \"couldn't be verified\"", () => {
+            const id = crypto.randomUUID();
+            const edited = sealLine('Working bee moved to Saturday', { myEdPrivHex: ben.privateKey, groupKey: key, groupId: G, epoch: 1, messageId: id, part: 'edit', after: id });
+            const body = crypto.randomUUID();
+            const plain = sealLine('I can bring tea', { myEdPrivHex: ana.privateKey, groupKey: key, groupId: G, epoch: 1, messageId: body });
+            const out = shown(groupCard([line(id, edited, {}, 20), { ...line(body, plain, {}, 10), author: ana.publicKey, who: 'Ana' }]), inst('group', G), ana, held)!;
+            expect(out.map(l => [l.who, l.text])).toEqual([['Ben', 'Working bee moved to Saturday'], ['You', 'I can bring tea']]);
+            expect(out.some(l => l.text === "This message couldn't be verified.")).toBe(false);
+            // Without the key it still waits for it: the retry opens nothing the key doesn't.
+            expect(shown(groupCard([line(id, edited, {}, 20)]), inst('group', G), ana, () => undefined)!.map(l => [l.who, l.text])).toEqual([[null, t(CHAT_CARD_WORDS.lockedOpen)]]);
+        });
+
+        it('a line that opens under a key other than its author\'s (metadata.sender, a key change) is "A former member", never nobody\'s', () => {
+            const id = crypto.randomUUID();
+            const s = sealLine('Node notice: re-enter your 12 words at x.example', { myEdPrivHex: eve.privateKey, groupKey: key, groupId: G, epoch: 1, messageId: id });
+            const out = shown(groupCard([line(id, s, { sender: eve.publicKey }, 1)]), inst('group', G), ana, held)!;
+            expect(out.map(l => [l.who, l.mine, l.text])).toEqual([['A former member', false, 'Node notice: re-enter your 12 words at x.example']]);
+            // So it never has the node's own line's shape, "1m ago: …".
+            expect(chatLineText(out[0])).toMatch(/^A former member, .+: Node notice: re-enter/);
+            // An edit by another key is named the same way.
+            const eid = crypto.randomUUID();
+            const e = sealLine('changed', { myEdPrivHex: eve.privateKey, groupKey: key, groupId: G, epoch: 1, messageId: eid, part: 'edit', after: eid });
+            expect(shown(groupCard([line(eid, e, { sender: eve.publicKey }, 1)]), inst('group', G), ana, held)!.map(l => [l.who, l.text])).toEqual([['A former member', 'changed']]);
+            // The stand-in is translated as Talk translates it; a member's own key change is still "You".
+            setLanguage('xx');
+            try {
+                expect(shown(groupCard([line(id, s, { sender: eve.publicKey }, 1)]), inst('group', G), ana, held)![0].who).toBe(pseudoLocalise('A former member'));
+            } finally { setLanguage('en'); }
+            const mineId = crypto.randomUUID();
+            const mine = sealLine('from my new key', { myEdPrivHex: ana.privateKey, groupKey: key, groupId: G, epoch: 1, messageId: mineId });
+            expect(shown(groupCard([line(mineId, mine, { sender: ana.publicKey }, 1)]), inst('group', G), ana, held)!.map(l => [l.who, l.mine])).toEqual([['You', true]]);
+        });
+    });
+
+    it("a group whose kept lock record isn't read yet: a readable line in a member's name is \"…\", nobody's, until it is (round 1)", () => {
+        const plain = { id: 'p1', author: ben.publicKey, who: 'Ben', at: at(5), type: 'text', systemType: null, text: 'readable words', metadata: null };
+        const sys = { id: 's1', author: 'SYSTEM', who: null, at: at(6), type: 'system', systemType: 'member_joined', text: 'Ben joined the group', metadata: null };
+        const card = chatCardFor({ cards: { 'chat-1': { kind: 'group', name: 'Garden crew', unread: 0, muted: false, lines: [sys, plain] } } } as never, inst('group', 'g-1'))!;
+        const with_ = (held: boolean | undefined) => chatLinesShown(card, 'g-1', { identity: ana, groupLocked: () => held }).map(l => [l.who, l.text]);
+        expect(with_(undefined)).toEqual([[null, 'Ben joined the group'], [null, '…']]);
+        expect(with_(true)).toEqual([[null, 'Ben joined the group'], [null, "This message couldn't be verified."]]);
+        expect(with_(false)).toEqual([[null, 'Ben joined the group'], ['Ben', 'readable words']]);
+        // An event's chat is readable by design: no record decides it.
+        const event = chatCardFor({ cards: { 'chat-1': { kind: 'event', name: 'Seed swap', unread: 0, muted: false, lines: [plain] } } } as never, inst('event', 'post-9'))!;
+        expect(chatLinesShown(event, 'post-9', { identity: ana, groupLocked: () => undefined }).map(l => [l.who, l.text])).toEqual([['Ben', 'readable words']]);
     });
 
     it("a locked group's readable line in a member's name is nobody's; in a group never seen locked it is their words", () => {

@@ -61,8 +61,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
             borderColor: 'transparent',
         },
         chipDisabled: {
-            opacity: 0.4,
-            backgroundColor: colors.surface.subtle,
+            backgroundColor: colors.chip.quiet.bg,
             borderColor: colors.border.default,
         },
         chipText: {
@@ -75,7 +74,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
             fontWeight: '800',
         },
         chipTextDisabled: {
-            color: colors.text.muted,
+            color: colors.chip.quiet.fg,
         },
     }));
 

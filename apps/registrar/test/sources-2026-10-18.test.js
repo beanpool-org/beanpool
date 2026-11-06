@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import worker, { attestSweep, sourceAddress } from '../src/index.js';
-import { world, makeKey, attestsAs, nowS } from './harness.js';
+import * as db from '../src/db.js';
+import { world, makeKey, attestsAs, nowS, toHex } from './harness.js';
 import { dailyLine } from '../src/watch.js';
 
 const KEY = 'a-test-source-key-not-a-real-one';
@@ -329,6 +330,444 @@ test('probation: a new name is live and the directory waits, until 3 ok sweeps a
         const burst = told(w, 'New communities%');
         assert.equal(burst.length, 1, JSON.stringify(told(w, 'New communit%')));
         assert.match(burst[0].title, /4 verified/);
+    } finally { w.restore(); }
+});
+
+test('probation: a verified key skips probation when claiming a new name (rename, design §6 item 1, slice S5)', async () => {
+    const w = await sourceWorld();
+    try {
+        const key = await makeKey(), unverifiedKey = await makeKey(), blockedKey = await makeKey();
+        const fromA = { ip: '203.0.113.51', cf: { asn: 64501, asOrganization: 'Broadband', country: 'AU' } };
+        const fromB = { ip: '203.0.113.52', cf: { asn: 64501, asOrganization: 'Broadband', country: 'AU' } };
+        const fromC = { ip: '203.0.113.53', cf: { asn: 64501, asOrganization: 'Broadband', country: 'AU' } };
+
+        // 1. Initial claim: on probation.
+        const c1 = await claimFrom(w, fromA, key, { name: 'firsttown', community_name: 'First Town' });
+        assert.deepEqual([c1.body.status, c1.body.probation], ['live', true]);
+        assert.equal(row(w, 'firsttown').verified_at, null);
+
+        // 2. An unverified key claiming multiple names is on probation each time.
+        const u1 = await claimFrom(w, fromB, unverifiedKey, { name: 'unverified-1' });
+        const u2 = await claimFrom(w, fromB, unverifiedKey, { name: 'unverified-2' });
+        assert.equal(u1.body.probation, true);
+        assert.equal(u2.body.probation, true);
+
+        // 3. firsttown completes probation and becomes verified.
+        w.sqlite.prepare("UPDATE name_allocations SET verified_at = 1 WHERE name = 'firsttown'").run();
+
+        // 4. Renaming / claiming a new name now skips probation.
+        const c3 = await claimFrom(w, fromA, key, { name: 'renamedtown', community_name: 'Renamed Town' });
+        assert.equal(c3.body.status, 'live');
+        assert.equal(c3.body.probation, undefined, 'probation skipped for a key holding a verified name');
+        assert.ok(row(w, 'renamedtown').verified_at > 0, 'verified_at set at claim time');
+
+        // /status reflects no probation for the renamed name.
+        const st = await w.status(key, '?name=renamedtown');
+        assert.equal(st.body.status, 'live');
+        assert.equal(st.body.probation, undefined);
+
+        // 5. If firsttown is released, but still within the release cooloff hold, another claim also skips probation.
+        // renamedtown goes too, so no live verified name is left: only the release inside its hold can skip it (round 1,
+        // finding 3: with renamedtown still live this passed with the released branch deleted from holdsVerifiedName).
+        assert.equal((await w.release(key, { name: 'firsttown' })).status, 200);
+        assert.equal((await w.release(key, { name: 'renamedtown' })).status, 200);
+        assert.equal(w.sqlite.prepare("SELECT COUNT(*) AS n FROM name_allocations WHERE node_pubkey = ? AND status = 'live'").get(key.pubHex).n, 0, 'no live name left');
+        const c4 = await claimFrom(w, fromA, key, { name: 'afterrelease', community_name: 'After Release' });
+        assert.equal(c4.body.status, 'live');
+        assert.equal(c4.body.probation, undefined, 'probation skipped while holding a verified release');
+
+        // 6. A key with a blocked name does NOT skip probation even if it had a verified row.
+        await claimFrom(w, fromC, blockedKey, { name: 'blockedtown' });
+        w.sqlite.prepare("UPDATE name_allocations SET verified_at = 1 WHERE name = 'blockedtown'").run();
+        assert.equal((await w.admin('blockedtown', 'block')).body.status, 'blocked');
+        const cBlocked = await claimFrom(w, fromC, blockedKey, { name: 'blockedother' });
+        assert.deepEqual([cBlocked.body.status, cBlocked.body.probation], ['live', true], 'a blocked key is not trusted to skip probation');
+    } finally { w.restore(); }
+});
+
+// Round 1 of #2933's review. One connecting address per claim pair: the source limit (3 an hour) holds nothing here.
+const s5From = (i) => ({ ip: `203.0.113.${100 + i}`, cf: { asn: 64501, asOrganization: 'Broadband', country: 'AU' } });
+const onProbationNow = (w, name) => row(w, name).verified_at === null;
+
+test('S5: a name the sweep paused (impostor, content-swap, unverified) is not a verified name, nor is its release by its key', async () => {
+    const w = await sourceWorld();
+    try {
+        for (const [i, reason] of ['impostor', 'content-swap', 'unverified'].entries()) {
+            const key = await makeKey(), from = s5From(i);
+            assert.equal((await claimFrom(w, from, key, { name: `p${i}-first` })).body.probation, true);
+            // Verified once, then paused by the sweep (or a take-back's failed re-attest), as applyVerdict writes it.
+            w.sqlite.prepare("UPDATE name_allocations SET verified_at = 1, status = 'paused', pause_reason = ?, paused_at = ? WHERE name = ?")
+                .run(reason, nowS() - 60, `p${i}-first`);
+            const next = await claimFrom(w, from, key, { name: `p${i}-next` });
+            assert.deepEqual([next.body.status, next.body.probation], ['live', true], `${reason}: probation`);
+            assert.ok(onProbationNow(w, `p${i}-next`), `${reason}: verified_at stays NULL, so the directory waits`);
+            // Its key releases the paused name: still inside the hold, but not a clean release, so it counts no more.
+            assert.equal((await w.release(key, { name: `p${i}-first` })).status, 200);
+            assert.equal(row(w, `p${i}-first`).status, 'released');
+            assert.ok(row(w, `p${i}-first`).paused_at > 0, `${reason}: the release keeps the pause's paused_at`);
+            const after = await claimFrom(w, s5From(10 + i), key, { name: `p${i}-after` });
+            assert.deepEqual([after.body.status, after.body.probation], ['live', true], `${reason}: releasing the paused name does not clear it`);
+            assert.ok(onProbationNow(w, `p${i}-after`));
+        }
+    } finally { w.restore(); }
+});
+
+test('S5: a clean release counts inside its hold and not past it; the releases holdsVerifiedName excludes each keep probation', async () => {
+    const w = await sourceWorld();
+    try {
+        // Its owner's release of a live, verified name, and no live name left: the next claim skips probation…
+        const owner = await makeKey();
+        await claimFrom(w, s5From(20), owner, { name: 'onlytown' });
+        await w.verify('onlytown');
+        assert.equal((await w.release(owner, { name: 'onlytown' })).status, 200);
+        assert.equal(row(w, 'onlytown').paused_at, null, 'a live name is released with no paused_at');
+        const inHold = await claimFrom(w, s5From(20), owner, { name: 'onlytown-next' });
+        assert.deepEqual([inHold.body.status, inHold.body.probation], ['live', undefined], 'inside the hold: skipped');
+        assert.ok(row(w, 'onlytown-next').verified_at > 0);
+        // …and past the hold it does not (another key, the same release, a day past RELEASE_COOLOFF_S).
+        const late = await makeKey();
+        await claimFrom(w, s5From(21), late, { name: 'latetown' });
+        await w.verify('latetown');
+        assert.equal((await w.release(late, { name: 'latetown' })).status, 200);
+        w.sqlite.prepare("UPDATE name_allocations SET released_at = ? WHERE name = 'latetown'").run(nowS() - 31 * 86400);
+        const past = await claimFrom(w, s5From(21), late, { name: 'latetown-next' });
+        assert.deepEqual([past.body.status, past.body.probation], ['live', true], 'past the hold: probation');
+
+        // The admin's "free now" ('admin'): the name was freed for someone new, so it never vouches for its old key.
+        const freed = await makeKey();
+        await claimFrom(w, s5From(22), freed, { name: 'freedtown' });
+        await w.verify('freedtown');
+        assert.equal((await w.admin('freedtown', 'release', { free_now: true })).body.status, 'released');
+        assert.equal(row(w, 'freedtown').pause_reason, 'admin');
+        const afterFreed = await claimFrom(w, s5From(22), freed, { name: 'freedtown-next' });
+        assert.deepEqual([afterFreed.body.status, afterFreed.body.probation], ['live', true], "'admin' release: probation");
+
+        // A gated claim withdrawn by its key ('withdrawn'): never that key's name.
+        const gated = await makeKey();
+        await admin(w, 'settings', { hold: true });
+        assert.equal((await claimFrom(w, s5From(23), gated, { name: 'gatedtown' })).body.status, 'pending');
+        w.sqlite.prepare("UPDATE name_allocations SET verified_at = 1 WHERE name = 'gatedtown'").run();
+        assert.equal((await w.release(gated, { name: 'gatedtown' })).status, 200);
+        assert.equal(row(w, 'gatedtown').pause_reason, 'withdrawn');
+        await admin(w, 'settings', { hold: false });
+        const afterWithdrawn = await claimFrom(w, s5From(23), gated, { name: 'gatedtown-next' });
+        assert.deepEqual([afterWithdrawn.body.status, afterWithdrawn.body.probation], ['live', true], "'withdrawn' release: probation");
+
+        // The admin's release of a name it had paused ('admin-held-all'): the key the admin stopped.
+        const stopped = await makeKey();
+        await claimFrom(w, s5From(24), stopped, { name: 'stoppedtown' });
+        await w.verify('stoppedtown');
+        assert.equal((await w.admin('stoppedtown', 'pause')).body.status, 'paused');
+        assert.equal((await w.admin('stoppedtown', 'release')).body.status, 'released');
+        assert.equal(row(w, 'stoppedtown').pause_reason, 'admin-held-all');
+        const afterStopped = await claimFrom(w, s5From(24), stopped, { name: 'stoppedtown-next' });
+        assert.deepEqual([afterStopped.body.status, afterStopped.body.probation], ['live', true], "'admin-held-all' release: probation");
+    } finally { w.restore(); }
+});
+
+test('S5: a name the admin paused counts for nothing, and stops its key\'s other verified names counting too', async () => {
+    const w = await sourceWorld();
+    try {
+        const key = await makeKey();
+        await claimFrom(w, s5From(30), key, { name: 'pausedbyadmin' });
+        await claimFrom(w, s5From(30), key, { name: 'stillverified' });
+        await w.verify('pausedbyadmin');
+        await w.verify('stillverified');
+        assert.equal((await w.admin('pausedbyadmin', 'pause')).body.status, 'paused');
+        const next = await claimFrom(w, s5From(31), key, { name: 'pausedbyadmin-next' });
+        assert.deepEqual([next.body.status, next.body.probation], ['live', true], 'a key the admin paused is not trusted to skip probation');
+        assert.ok(onProbationNow(w, 'pausedbyadmin-next'));
+    } finally { w.restore(); }
+});
+
+test('S5: the same key taking back its own unverified release, while it holds a verified name, skips probation', async () => {
+    const w = await sourceWorld();
+    try {
+        const key = await makeKey();
+        await claimFrom(w, s5From(40), key, { name: 'backtown' });
+        await claimFrom(w, s5From(40), key, { name: 'verifiedtown' });
+        await w.verify('verifiedtown');
+        assert.equal(row(w, 'backtown').verified_at, null);
+        assert.equal((await w.release(key, { name: 'backtown' })).status, 200);
+        w.nodes['backtown.beanpool.org'] = attestsAs(key);
+        const back = await claimFrom(w, s5From(41), key, { name: 'backtown' });
+        assert.deepEqual([back.body.status, back.body.probation], ['live', undefined], JSON.stringify(back.body));
+        assert.ok(row(w, 'backtown').verified_at > 0, 'the take-back is verified: its key holds a verified name');
+    } finally { w.restore(); }
+});
+
+test('S5: an approve skips probation for a key that holds a verified name, keeps it for one that does not, and a settings read that fails makes nothing', async () => {
+    const w = await sourceWorld();
+    try {
+        const trusted = await makeKey(), fresh = await makeKey(), failing = await makeKey();
+        for (const [i, k, n] of [[50, trusted, 'trusted'], [51, fresh, 'fresh'], [52, failing, 'failing']]) {
+            assert.equal((await claimFrom(w, s5From(i), k, { name: `${n}-first` })).body.probation, true);
+        }
+        // Held for approval while its key is still on probation: the pending row is written with verified_at NULL.
+        await admin(w, 'settings', { hold: true });
+        for (const [i, k, n] of [[50, trusted, 'trusted'], [51, fresh, 'fresh'], [52, failing, 'failing']]) {
+            assert.equal((await claimFrom(w, s5From(i), k, { name: `${n}-held` })).body.status, 'pending');
+            assert.equal(row(w, `${n}-held`).verified_at, null);
+        }
+        // Then the first names end their probation (not fresh's), and the admin approves.
+        await w.verify('trusted-first');
+        await w.verify('failing-first');
+        assert.equal((await w.admin('trusted-held', 'approve')).body.status, 'live');
+        assert.ok(row(w, 'trusted-held').verified_at > 0, 'approved for a key holding a verified name: no probation');
+        assert.equal((await w.admin('fresh-held', 'approve')).body.status, 'live');
+        assert.equal(row(w, 'fresh-held').verified_at, null, 'approved for a key without one: still on probation');
+
+        // A D1 failure reading the settings, on an approve: answered 5xx before anything is made at Cloudflare.
+        const tunnels = liveTunnels(w), records = w.cf.dns.size;
+        w.failSettingsRead();
+        const r = await w.admin('failing-held', 'approve');
+        assert.ok(r.status >= 500, `5xx, not ${r.status} ${JSON.stringify(r.body)}`);
+        assert.deepEqual([row(w, 'failing-held').status, row(w, 'failing-held').tunnel_id, row(w, 'failing-held').dns_record_id], ['pending', null, null]);
+        assert.equal(liveTunnels(w), tunnels, 'no tunnel made');
+        assert.equal(w.cf.dns.size, records, 'no DNS record made');
+        // Asked again, it goes live, verified.
+        assert.equal((await w.admin('failing-held', 'approve')).body.status, 'live');
+        assert.ok(row(w, 'failing-held').verified_at > 0);
+    } finally { w.restore(); }
+});
+
+// Round 2 of #2933's review: whether a new tenure skips probation is decided by the request that puts it live, from the
+// key's names then, never carried from its claim. A held or gated claim waits for the admin as long as it waits (pending
+// claims never expire, and the admin's list doesn't say a claim would skip probation), and an auto claim whose
+// provisioning failed waits for its next claim, the admin's "Finish now" or the sweep. Every test below fails on e51a0010.
+// `statusOf`: /status for `name`, as a node from after #1576's review asks it (?name= signed in x-bp-signature-query).
+async function statusOf(w, key, name) {
+    const path = '/api/registrar/status', search = `?name=${name}`, ts = String(nowS());
+    const sign = async (p) => toHex(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey,
+        new TextEncoder().encode(`beanpool-registrar-request/v1\nGET\n${p}\n${ts}\n`)));
+    const headers = { 'x-bp-pubkey': key.pubHex, 'x-bp-timestamp': ts, 'x-bp-signature': await sign(path), 'x-bp-signature-query': await sign(`${path}${search}`) };
+    return (await worker.fetch(new Request(`https://beanpool.org${path}${search}`, { headers }), w.env)).json();
+}
+// Two verified names answering as their own nodes, so a sweep is applied (judgeSweep) and what it judges is the name
+// under test.
+async function healthyNeighbours(w, from) {
+    for (const [i, n] of ['north', 'south'].entries()) {
+        const k = await makeKey();
+        assert.equal((await claimFrom(w, s5From(from + i), k, { name: `${n}-${from}` })).body.status, 'live');
+        await w.verify(`${n}-${from}`);
+        w.nodes[`${n}-${from}.beanpool.org`] = attestsAs(k);
+    }
+}
+
+test('S5 round 2: a held claim is decided at its approve: the key\'s verified name blocked, paused by the admin, or paused by the sweep as an impostor since the claim keeps it on probation', async () => {
+    const w = await sourceWorld();
+    try {
+        await healthyNeighbours(w, 60);
+        const stops = {
+            block: async (n) => assert.equal((await w.admin(n, 'block')).body.status, 'blocked'),
+            pause: async (n) => assert.equal((await w.admin(n, 'pause')).body.status, 'paused'),
+            // The real sweep: its node answers under another key, ATTEST_FAIL_LIMIT (2) applied sweeps in a row.
+            impostor: async (n) => {
+                w.nodes[`${n}.beanpool.org`] = attestsAs(await makeKey());
+                for (let i = 0; i < 2; i++) await attestSweep(w.env);
+                assert.deepEqual([row(w, n).status, row(w, n).pause_reason], ['paused', 'impostor']);
+            },
+            // Nothing happens to it: the approve skips probation, as the claim would have.
+            none: async () => {},
+        };
+        const keys = {};
+        for (const [i, how] of Object.keys(stops).entries()) {
+            keys[how] = await makeKey();
+            await claimFrom(w, s5From(70 + i), keys[how], { name: `${how}-x` });
+            await w.verify(`${how}-x`);
+            w.nodes[`${how}-x.beanpool.org`] = attestsAs(keys[how]);
+        }
+        // "Hold all new names" on: each key claims another name while its first is live and verified.
+        await admin(w, 'settings', { hold: true });
+        for (const [i, how] of Object.keys(stops).entries()) {
+            assert.equal((await claimFrom(w, s5From(70 + i), keys[how], { name: `${how}-y` })).body.status, 'pending');
+            assert.equal(row(w, `${how}-y`).verified_at, null, `${how}: a held claim is not verified at the claim; the approve decides`);
+        }
+        await admin(w, 'settings', { hold: false });
+        for (const [how, stop] of Object.entries(stops)) {
+            await stop(`${how}-x`);
+            assert.equal((await w.admin(`${how}-y`, 'approve')).body.status, 'live', how);
+            const st = await statusOf(w, keys[how], `${how}-y`);
+            assert.equal(st.status, 'live', `${how}: ${JSON.stringify(st)}`);
+            if (how === 'none') {
+                assert.ok(row(w, `${how}-y`).verified_at > 0, 'nothing changed: the approve skips probation');
+                assert.equal(st.probation, undefined);
+            } else {
+                assert.equal(row(w, `${how}-y`).verified_at, null, `${how} since the claim: the approve keeps it on probation`);
+                assert.equal(st.probation, true, `${how}: /status says probation, so its directory listing waits`);
+            }
+        }
+    } finally { w.restore(); }
+});
+
+test('S5 round 2: a held claim is decided at its approve: the key\'s verified name paused by the sweep (content swap, failed re-attest), or released since the claim so it no longer counts, keeps it on probation', async () => {
+    const w = await sourceWorld();
+    try {
+        const stops = {
+            // As applyVerdict and a failed re-attest write them (the sweep's own content-swap run takes 12 sweeps).
+            'content-swap': (n) => w.sqlite.prepare("UPDATE name_allocations SET status = 'paused', pause_reason = 'content-swap', paused_at = ? WHERE name = ?").run(nowS(), n),
+            unverified: (n) => w.sqlite.prepare("UPDATE name_allocations SET status = 'paused', pause_reason = 'unverified', paused_at = ? WHERE name = ?").run(nowS(), n),
+            // The admin's "free now": the name is free for someone new and vouches for its old key no more.
+            'free-now': async (n) => assert.equal((await w.admin(n, 'release', { free_now: true })).body.status, 'released'),
+            // Its owner's clean release, its hold over by the approve.
+            'hold-over': async (n, key) => {
+                assert.equal((await w.release(key, { name: n })).status, 200);
+                w.sqlite.prepare('UPDATE name_allocations SET released_at = ? WHERE name = ?').run(nowS() - 31 * 86400, n);
+            },
+        };
+        const keys = {};
+        for (const [i, how] of Object.keys(stops).entries()) {
+            keys[how] = await makeKey();
+            await claimFrom(w, s5From(80 + i), keys[how], { name: `${how}-x` });
+            await w.verify(`${how}-x`);
+        }
+        await admin(w, 'settings', { hold: true });
+        for (const [i, how] of Object.keys(stops).entries()) {
+            assert.equal((await claimFrom(w, s5From(80 + i), keys[how], { name: `${how}-y` })).body.status, 'pending');
+        }
+        await admin(w, 'settings', { hold: false });
+        for (const [how, stop] of Object.entries(stops)) {
+            await stop(`${how}-x`, keys[how]);
+            assert.equal((await w.admin(`${how}-y`, 'approve')).body.status, 'live', how);
+            assert.equal(row(w, `${how}-y`).verified_at, null, `${how} since the claim: on probation`);
+            assert.equal((await statusOf(w, keys[how], `${how}-y`)).probation, true, how);
+        }
+    } finally { w.restore(); }
+});
+
+test('S5 round 2: an auto claim whose provisioning failed is decided when it goes live (its next claim, "Finish now"; the sweep\'s finish is on probation), and its release never counts', async () => {
+    // A claim of `name` whose Cloudflare refused its tunnel: pending, the key's, nothing made, not verified.
+    const failed = async (w, from, key, name) => {
+        w.cf.fail.createTunnel = true;
+        const r = await claimFrom(w, s5From(from), key, { name });
+        w.cf.fail.createTunnel = false;
+        assert.equal(r.status, 502, JSON.stringify(r.body));
+        assert.deepEqual([row(w, name).status, row(w, name).verified_at], ['pending', null], `${name}: not verified while it is not live`);
+    };
+    const verifiedKey = async (w, from, name) => {
+        const key = await makeKey();
+        await claimFrom(w, s5From(from), key, { name });
+        await w.verify(name);
+        return key;
+    };
+    const w = await sourceWorld();
+    try {
+        // Its next claim finishes it: verified if its key's name still is…
+        const kept = await verifiedKey(w, 90, 'kept-x');
+        await failed(w, 90, kept, 'kept-y');
+        // Decided before its ensure(): a D1 failure reading it answers 5xx with nothing made at Cloudflare.
+        const tunnels = liveTunnels(w), records = w.cf.dns.size;
+        w.failSettingsRead();
+        const cut = await claimFrom(w, s5From(90), kept, { name: 'kept-y' });
+        assert.ok(cut.status >= 500, `5xx, not ${cut.status} ${JSON.stringify(cut.body)}`);
+        assert.deepEqual([row(w, 'kept-y').status, row(w, 'kept-y').tunnel_id, row(w, 'kept-y').dns_record_id], ['pending', null, null]);
+        assert.deepEqual([liveTunnels(w), w.cf.dns.size], [tunnels, records], 'no tunnel and no DNS record made');
+        const again = await claimFrom(w, s5From(90), kept, { name: 'kept-y' });
+        assert.deepEqual([again.body.status, again.body.probation], ['live', undefined], JSON.stringify(again.body));
+        assert.ok(row(w, 'kept-y').verified_at > 0, 'finished by its next claim: decided then, verified');
+        // …and on probation if the admin blocked it meanwhile.
+        const blocked = await verifiedKey(w, 91, 'blocked-x');
+        await failed(w, 91, blocked, 'blocked-y');
+        assert.equal((await w.admin('blocked-x', 'block')).body.status, 'blocked');
+        const after = await claimFrom(w, s5From(91), blocked, { name: 'blocked-y' });
+        assert.deepEqual([after.body.status, after.body.probation], ['live', true], JSON.stringify(after.body));
+        assert.equal(row(w, 'blocked-y').verified_at, null);
+
+        // The admin's "Finish now" (an approve of a pending auto name) decides then too.
+        const finish = await verifiedKey(w, 92, 'finish-x');
+        await failed(w, 92, finish, 'finish-y');
+        assert.equal((await w.admin('finish-x', 'pause')).body.status, 'paused');
+        assert.equal((await w.admin('finish-y', 'approve')).body.status, 'live');
+        assert.equal(row(w, 'finish-y').verified_at, null, '"Finish now" after an admin pause: on probation');
+
+        // Its owner's release of it: a name that never went live, so never a clean release of a verified name.
+        const rel = await verifiedKey(w, 93, 'rel-x');
+        await failed(w, 93, rel, 'rel-y');
+        assert.equal((await w.release(rel, { name: 'rel-y' })).status, 200);
+        assert.deepEqual([row(w, 'rel-y').status, row(w, 'rel-y').verified_at], ['released', null]);
+        assert.equal((await w.admin('rel-x', 'release', { free_now: true })).body.status, 'released');
+        const next = await claimFrom(w, s5From(94), rel, { name: 'rel-z' });
+        assert.deepEqual([next.body.status, next.body.probation], ['live', true], 'a release of a name never live vouches for nothing');
+    } finally { w.restore(); }
+
+    // The sweep finishes an orphan (a pending auto claim two minutes old) on probation, whatever its key holds: it reads
+    // nothing more than its D1 budget keeps (ORPHAN_D1), so it never carries a skip from the claim it never checked.
+    const s = await sourceWorld();
+    try {
+        await healthyNeighbours(s, 95);
+        const fine = await verifiedKey(s, 97, 'fine-x'), stopped = await verifiedKey(s, 98, 'stopped-x');
+        s.nodes['fine-x.beanpool.org'] = attestsAs(fine);
+        await failed(s, 97, fine, 'fine-y');
+        await failed(s, 98, stopped, 'stopped-y');
+        assert.equal((await s.admin('stopped-x', 'pause')).body.status, 'paused');
+        s.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 300 WHERE name IN ('fine-y', 'stopped-y')").run();
+        await attestSweep(s.env);
+        assert.deepEqual([row(s, 'stopped-y').status, row(s, 'stopped-y').verified_at], ['live', null], 'the admin paused its key\'s name: on probation');
+        assert.deepEqual([row(s, 'fine-y').status, row(s, 'fine-y').verified_at], ['live', null], 'finished by the sweep: on probation');
+    } finally { s.restore(); }
+});
+
+test('S5 round 2: a take-back its re-attest did not route is not verified until it goes live, and then only if its key still holds a verified name', async () => {
+    const w = await sourceWorld();
+    try {
+        const key = await makeKey();
+        await claimFrom(w, s5From(110), key, { name: 'tb-back' });
+        await claimFrom(w, s5From(110), key, { name: 'tb-verified' });
+        await w.verify('tb-verified');
+        // A tunnel Cloudflare won't delete (at the release, nor at the take-back) is kept, so the take-back is not on a
+        // fresh tunnel and routes only after a re-attest (routeIfOnlyOwner); nothing answers as its node: paused, unverified.
+        w.cf.fail.deleteTunnel = true;
+        assert.equal((await w.release(key, { name: 'tb-back' })).status, 200);
+        const back = await claimFrom(w, s5From(111), key, { name: 'tb-back' });
+        w.cf.fail.deleteTunnel = false;
+        assert.deepEqual([back.body.status, back.body.reason], ['paused', 'unverified'], JSON.stringify(back.body));
+        assert.equal(row(w, 'tb-back').verified_at, null, 'not routed: not verified');
+        // The admin blocks its key's verified name; then its node answers, and its heal routes it: on probation.
+        assert.equal((await w.admin('tb-verified', 'block')).body.status, 'blocked');
+        w.nodes['tb-back.beanpool.org'] = attestsAs(key);
+        const healed = await claimFrom(w, s5From(111), key, { name: 'tb-back' });
+        assert.deepEqual([healed.body.status, healed.body.probation], ['live', true], JSON.stringify(healed.body));
+        assert.equal(row(w, 'tb-back').verified_at, null);
+    } finally { w.restore(); }
+});
+
+test('status: echoes connecting address as seen_from (design §4, slice S5)', async () => {
+    const w = await sourceWorld();
+    try {
+        const key = await makeKey(), stranger = await makeKey();
+        await claimFrom(w, FROM.home, key, { name: 'seentown' });
+
+        // Standard request with cf-connecting-ip.
+        const req1 = await w.signed('GET', '/api/registrar/status', key);
+        req1.headers.set('cf-connecting-ip', '198.51.100.9');
+        const res1 = await worker.fetch(req1, w.env);
+        const body1 = await res1.json();
+        assert.equal(res1.status, 200);
+        assert.equal(body1.seen_from, '198.51.100.9', 'status echoes cf-connecting-ip');
+
+        // IPv4-mapped IPv6 address is normalized to IPv4.
+        const req2 = await w.signed('GET', '/api/registrar/status', key);
+        req2.headers.set('cf-connecting-ip', '::ffff:203.0.113.42');
+        const res2 = await worker.fetch(req2, w.env);
+        const body2 = await res2.json();
+        assert.equal(res2.status, 200);
+        assert.equal(body2.seen_from, '203.0.113.42', 'IPv4-mapped IPv6 address normalized');
+
+        // Request without cf-connecting-ip header leaves seen_from undefined.
+        const req3 = await w.signed('GET', '/api/registrar/status', key);
+        const res3 = await worker.fetch(req3, w.env);
+        const body3 = await res3.json();
+        assert.equal(res3.status, 200);
+        assert.equal(body3.seen_from, undefined, 'no seen_from without header');
+
+        // Stranger with no name: status none also carries seen_from.
+        const req4 = await w.signed('GET', '/api/registrar/status', stranger);
+        req4.headers.set('cf-connecting-ip', '198.51.100.55');
+        const res4 = await worker.fetch(req4, w.env);
+        const body4 = await res4.json();
+        assert.equal(res4.status, 200);
+        assert.equal(body4.status, 'none');
+        assert.equal(body4.seen_from, '198.51.100.55', 'status none carries seen_from');
     } finally { w.restore(); }
 });
 
@@ -716,6 +1155,26 @@ test('on a database without migration 0011 (no held_reason) the sweep still fini
         w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'oldorphan'").run();
         await attestSweep(w.env);
         assert.equal(row(w, 'oldorphan').status, 'live');
+    } finally { w.restore(); }
+});
+
+test('insertAllocation: falls back cleanly without migration 0011 columns (held_reason, verified_at)', async () => {
+    const w = await world({ migrations: ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql', '0009_watch.sql', '0010_reserve_our_hosts.sql'] });
+    try {
+        const key = await makeKey();
+        await db.insertAllocation(w.env, {
+            name: 'unmigrated-alloc',
+            node_pubkey: key.pubHex,
+            hostname: 'unmigrated-alloc.beanpool.org',
+            mode: 'tunnel',
+            status: 'pending',
+            requested_at: nowS(),
+            held_reason: 'manual',
+            verified_at: nowS(),
+        });
+        const res = row(w, 'unmigrated-alloc');
+        assert.equal(res.name, 'unmigrated-alloc');
+        assert.equal(res.status, 'pending');
     } finally { w.restore(); }
 });
 

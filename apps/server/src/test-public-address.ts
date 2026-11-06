@@ -187,6 +187,7 @@ async function run() {
                     name: registrarName,
                     hostname: registrarName ? `${registrarName}.beanpool.org` : null,
                     tunnelToken: registrarStatus === 'live' ? registrarToken : null,
+                    seen_from: '203.0.113.195',
                 }));
                 return;
             }
@@ -380,6 +381,7 @@ async function run() {
         assert(statusBody.status === 'live', 'Status reports status: live');
         assert(statusBody.hostname === 'mullum-test.beanpool.org', 'Status reports active hostname');
         assert(statusBody.pubkey === pubkey, 'Status reports node public key');
+        assert(statusBody.seen_from === '203.0.113.195', 'Status passes seen_from to the owner');
         assert(statusBody.nameServiceNote === undefined, 'and, the registrar having answered, no line about the name service');
 
         // --- Test 5b: the registrar unreachable, with a .beanpool.org name stored (#2143 item 1) ---

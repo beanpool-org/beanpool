@@ -405,6 +405,124 @@ describe('PublicProfilePage Vouching (§9)', () => {
         await waitFor(() => expect(screen.getByTestId('profile-vouch-refusal')).toHaveTextContent('You’ve already vouched for @sam.'));
         expect(screen.queryByTestId('profile-vouch-raise-confirm')).toBeNull();
         expect(screen.getByTestId('profile-vouch').textContent).not.toMatch(/\b25\b.*before|already vouched 25/);
+        expect(screen.getByTestId('invite-vouch-50')).not.toBeChecked();
         expect(vouchForMember).toHaveBeenCalledTimes(1);
+    });
+
+    it('at 100 (the most a vouch can be) the person’s card hides Raise vouch', async () => {
+        vi.mocked(getMyVouching).mockResolvedValueOnce({
+            voucher: true,
+            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
+            presets: [25, 50, 75, 100],
+            vouchMax: 100,
+            budgetMax: 2000,
+            vouchedBy: [],
+            history: [
+                {
+                    kind: 'hold',
+                    amount: -100,
+                    actor: IDENTITY.publicKey,
+                    actorCallsign: 'ana',
+                    at: '2026-11-01T00:00:00.000Z',
+                    for: 'profile',
+                    person: { memberPubkey: TARGET_PK, callsign: 'sam' },
+                },
+            ],
+        });
+
+        render(
+            <PublicProfilePage
+                identity={IDENTITY}
+                pubkey={TARGET_PK}
+                onBack={() => {}}
+                onMessage={() => {}}
+                onNavigateTab={() => {}}
+                onNavigatePost={() => {}}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByText('sam')).toBeInTheDocument());
+        expect(screen.queryByTestId('profile-vouch')).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Raise vouch for @sam' })).not.toBeInTheDocument();
+        expect(screen.queryByTestId('profile-vouch-submit')).not.toBeInTheDocument();
+    });
+
+    it('after an over_max refusal the refused preset is no longer selected', async () => {
+        const error: any = new Error('Your vouches for @sam can’t go past 100 Beans.');
+        error.code = 'over_max';
+        error.prior = 75;
+        vi.mocked(vouchForMember).mockRejectedValueOnce(error);
+
+        render(
+            <PublicProfilePage
+                identity={IDENTITY}
+                pubkey={TARGET_PK}
+                onBack={() => {}}
+                onMessage={() => {}}
+                onNavigateTab={() => {}}
+                onNavigatePost={() => {}}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('invite-vouch-50'));
+        expect(screen.getByTestId('invite-vouch-50')).toBeChecked();
+        fireEvent.click(screen.getByTestId('profile-vouch-submit'));
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch-refusal')).toHaveTextContent('Your vouches for @sam can’t go past 100 Beans.'));
+        // Refused preset goes back to null (not checked)
+        expect(screen.getByTestId('invite-vouch-50')).not.toBeChecked();
+        expect(screen.getByTestId('invite-vouch-50')).toBeDisabled();
+        expect(screen.getByTestId('profile-vouch-submit')).toBeDisabled();
+    });
+
+    it('when raised to 100, success is shown and Raise vouch is no longer offered', async () => {
+        vi.mocked(getMyVouching).mockResolvedValueOnce({
+            voucher: true,
+            budget: { left: 550, held: 100, heldInvites: 1, vouched: 350, peopleVouched: 4, level: 1000 },
+            presets: [25, 50, 75, 100],
+            vouchMax: 100,
+            budgetMax: 2000,
+            vouchedBy: [],
+            history: [
+                {
+                    kind: 'hold',
+                    amount: -75,
+                    actor: IDENTITY.publicKey,
+                    actorCallsign: 'ana',
+                    at: '2026-11-01T00:00:00.000Z',
+                    for: 'profile',
+                    person: { memberPubkey: TARGET_PK, callsign: 'sam' },
+                },
+            ],
+        });
+        vi.mocked(vouchForMember).mockResolvedValueOnce({
+            id: 'gift-100',
+            memberPubkey: TARGET_PK,
+            amount: 25,
+            total: 100,
+            budget: { left: 525, held: 100, heldInvites: 1, vouched: 375, peopleVouched: 4, level: 1000 },
+        });
+
+        render(
+            <PublicProfilePage
+                identity={IDENTITY}
+                pubkey={TARGET_PK}
+                onBack={() => {}}
+                onMessage={() => {}}
+                onNavigateTab={() => {}}
+                onNavigatePost={() => {}}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('invite-vouch-25'));
+        fireEvent.click(screen.getByTestId('profile-vouch-submit'));
+
+        await waitFor(() => expect(screen.getByTestId('profile-vouch-success')).toHaveTextContent('Raised vouch for @sam to 100 Beans.'));
+        // Card is at max: no heading or submit button offering to raise further
+        expect(screen.queryByRole('heading', { name: 'Raise vouch for @sam' })).not.toBeInTheDocument();
+        expect(screen.queryByTestId('profile-vouch-submit')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('invite-vouch-25')).not.toBeInTheDocument();
     });
 });

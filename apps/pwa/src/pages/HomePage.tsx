@@ -50,7 +50,7 @@ import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKno
 import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
-import { readChatSettings, homeChatPicked, type HomeChatSettings } from '@beanpool/core';
+import { readChatSettings, homeChatPicked } from '@beanpool/core';
 import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
 import { onConversationRead } from '../lib/conversation-read';

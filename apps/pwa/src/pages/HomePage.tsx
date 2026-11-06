@@ -47,7 +47,11 @@ import {
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
-import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
+import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
+import { groupKeyring } from '../lib/group-chat-keys';
+import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
+import { readChatSettings, homeChatPicked, type HomeChatSettings } from '@beanpool/core';
+import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
 import { onConversationRead } from '../lib/conversation-read';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
@@ -59,6 +63,7 @@ import {
     askedFacts, dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, homeEventWhere, isHomeCardId,
     joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, promiseLine, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
     pinnedFirst, starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
+    CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown, type ChatOpeners,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type HomeNeedItem, type NeedsItem, type StepLine,
     type HomeFind,
 } from '../lib/home-cards';
@@ -859,6 +864,112 @@ function DecideBody({
             })()}
             <HomeMore onClick={() => onNavigate('projects')} label={t('Decide')}>{t('Decide ›')}</HomeMore>
         </div>
+    );
+}
+
+/**
+ * The chats a chat card can pin, read once as its settings open (§2): the member's groups', events' and enterprises' chats
+ * (GET /api/your-groups), most recent first, then their direct chats (the conversations list, most recent first), never a
+ * request still waiting for their answer (the node answers that one `gone`). A failed read throws: the list says so.
+ */
+async function loadChatRows(publicKey: string): Promise<ChatPickRow[]> {
+    const [groups, convs] = await Promise.all([getYourGroups(), getConversations(publicKey)]);
+    const kinds = new Set(['group', 'enterprise', 'event']);
+    const chats: ChatPickRow[] = (groups.items ?? [])
+        .filter((g) => kinds.has(g.kind) && typeof g.conversationId === 'string' && g.conversationId)
+        .sort((x, y) => (y.lastActivityAt || '').localeCompare(x.lastActivityAt || ''))
+        .map((g) => ({ conversationId: g.conversationId, kind: g.kind, name: g.name || t('Someone'), at: g.lastActivityAt ?? null }));
+    const seen = new Set(chats.map((c) => c.conversationId));
+    for (const c of convs.conversations ?? []) {
+        if (c.type !== 'dm' || seen.has(c.id)) continue;
+        if (c.request && c.request.state !== 'accepted' && c.request.from !== publicKey) continue;
+        seen.add(c.id);
+        chats.push({ conversationId: c.id, kind: 'dm', name: c.peerCallsign || t('Someone'), at: null });
+    }
+    return chats;
+}
+
+/**
+ * A chosen chat (scratch/fable-design/DESIGN-home-chosen-chat-fable.md §2, slice C3): the chat's name, its unread count
+ * (hidden at 0), 🔕 when muted, and its last lines, oldest first, opened in this browser (lib/home-cards.ts
+ * chatLinesShown: a DM with the member's own key context, a locked group's line only under a key already in this page's
+ * memory, never a read). A tap opens the chat. `gone`: one sentence and Remove; the frame never drops a card by itself.
+ * Nothing opened is kept: the words live in this render only, never in the Home cache.
+ */
+function ChatBody({
+    card,
+    a,
+    identity,
+    onNavigate,
+    onRemove,
+    onPick,
+}: {
+    card: HomeCardInstance;
+    a: HomeAnswer;
+    identity: BeanPoolIdentity | null;
+    onNavigate: (page: string, id: string) => void;
+    onRemove?: () => void;
+    onPick?: () => void;
+}) {
+    const picked = readChatSettings(card.settings);
+    if (!homeChatPicked(picked)) {
+        return onPick
+            ? <HomeLine onClick={onPick} testId="home-chat-pick"><span className="min-w-0 break-words font-semibold">{t(CHAT_CARD_WORDS.pick)}</span></HomeLine>
+            : <p data-testid="home-chat-pick" className="m-0 text-sm text-text-primary break-words">{t(CHAT_CARD_WORDS.pick)}</p>;
+    }
+    const body = chatCardFor(a, card);
+    if (body && 'gone' in body) {
+        return (
+            <div data-testid="home-chat-gone">
+                <p className="m-0 mb-2 text-sm text-text-primary break-words">{t(CHAT_CARD_WORDS.gone)}</p>
+                {onRemove && (
+                    <button type="button" data-testid="home-chat-remove" onClick={onRemove}
+                        className="min-w-[44px] min-h-[44px] px-4 rounded-xl border border-border-primary bg-transparent text-sm font-bold text-text-primary cursor-pointer hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                        {t('Remove')}
+                    </button>
+                )}
+            </div>
+        );
+    }
+    const name = (body?.name ?? '') || picked.name;
+    if (!body) {
+        // Not answered yet (just picked, or this browser's kept answer is from before): the name it was picked by, and when it shows.
+        return (
+            <div data-testid="home-chat-waiting">
+                {name && <p className="m-0 mb-1 text-[15px] font-bold text-text-primary break-words line-clamp-2">{name}</p>}
+                <p className="m-0 text-sm text-text-primary break-words">{t(LIB_LINES.searchOffline)}</p>
+            </div>
+        );
+    }
+    const open: ChatOpeners = {
+        identity: identity ? { publicKey: identity.publicKey, privateKey: identity.privateKey } : null,
+        // A key already open in this page (Talk opened the group's chat): no read, no wrap opened here.
+        groupKey: identity ? (groupId, epoch) => groupKeyring(groupKeysNet, identity, groupId, indexedDbGroupLockStore).openedKey(epoch) : undefined,
+    };
+    const lines = chatLinesShown(body, picked.conversationId, open).map(l => ({ id: l.id, text: chatLineText(l) }));
+    const status = body.unread > 0 ? tn(body.unread, '{n} new', '{n} new') : null;
+    const said = [name, status, ...(lines.length ? lines.map(l => l.text) : [t(CHAT_CARD_WORDS.empty)])].filter(Boolean).join('. ');
+    return (
+        <HomeLine onClick={() => onNavigate('messages', picked.conversationId)} testId="home-chat-open"
+            label={body.muted ? t('{line}, muted', { line: said }) : said}>
+            <span className="min-w-0 flex-1 block">
+                <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 min-w-0">
+                    <span data-testid="home-chat-name" className="min-w-0 flex-1 basis-[10rem] text-[15px] font-bold text-text-primary break-words line-clamp-2">
+                        {name}{body.muted && <span aria-hidden="true" data-testid="home-chat-muted"> 🔕</span>}
+                    </span>
+                    {status && (
+                        <span data-testid="home-chat-unread" className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-bg-hover text-text-secondary border border-border-primary">
+                            {status}
+                        </span>
+                    )}
+                </span>
+                {lines.length === 0
+                    ? <span data-testid="home-chat-empty" className="block mt-1 text-sm text-text-secondary break-words">{t(CHAT_CARD_WORDS.empty)}</span>
+                    : lines.map(l => (
+                        <span key={l.id} data-testid="home-chat-line" className="block mt-1 text-sm text-text-secondary break-words line-clamp-2">{l.text}</span>
+                    ))}
+            </span>
+        </HomeLine>
     );
 }
 
@@ -3027,6 +3138,14 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                         />
                     </HomeCard>
                 );
+            case 'chat':
+                return (
+                    <HomeCard key={card.id} {...common}>
+                        <ChatBody card={card} a={a} identity={visitor ? null : identity} onNavigate={onNavigate}
+                            onRemove={isVisitor || !canRemoveCard(card.type, pins) ? undefined : () => removeFromHome(card.id)}
+                            onPick={isVisitor ? undefined : () => setSettingsFor(card)} />
+                    </HomeCard>
+                );
             case 'sky': {
                 // Sun and moon (CARD-FRAME §4): one line worked out here, nothing to open, no request of its own. A screen
                 // reader hears it in words, never the picture.
@@ -3068,6 +3187,15 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
 
     // A saved search's distance needs a point the node measures from: the member's area, or the place this browser shared.
     const hasPoint = !!point || !!a.me?.area;
+    // A chosen chat's list (DESIGN-home-chosen-chat-fable.md §2): read once as its settings open, never by the card.
+    const chatPick = publicKey && !isVisitor ? {
+        pinned: (shownLayout(a, layout, { tourOver })?.cards ?? []).flatMap((c) => {
+            if (c.type !== 'chat') return [];
+            const s = readChatSettings(c.settings);
+            return homeChatPicked(s) ? [s.conversationId] : [];
+        }),
+        load: () => loadChatRows(publicKey),
+    } : undefined;
     const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
     // The fewer-cards note and the one-time hint go under the first card, the row's full width. Side by side that holds
     // only when the first card is a full row itself: with nothing waiting there is no Needs you, and a full-row note after
@@ -3240,7 +3368,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                     </div>
                 )}
                 {picker && (
-                    <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
+                    <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint} chats={chatPick}
                         // Arrange's tile while it is open, else the community card's Add a card.
                         returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-arrange-add"], [data-testid="home-add-open"]')} />
                 )}
@@ -3280,6 +3408,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                         mode="save"
                         initial={settingsFor.settings}
                         hasPoint={hasPoint}
+                        chats={chatPick}
                         onSubmit={(next) => {
                             const { id, type } = settingsFor;
                             setSettingsFor(null);

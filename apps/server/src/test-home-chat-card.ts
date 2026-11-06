@@ -148,6 +148,7 @@ async function main(): Promise<void> {
     assert(full.status === 200 && card?.kind === 'dm' && card?.name === 'ChatBen' && card?.muted === false && Array.isArray(card?.lines),
         `Ana's pinned chat: a direct one, named for Ben, not muted (${show(card)})`);
     assert((homeCardBuilds.chat ?? 0) === before + 1, `built once, as asked (${before} → ${homeCardBuilds.chat})`);
+    assert(card?.peer === ben.pk, `it names Ben by his key (peer), what the web builds the chat's key context from (${show(card?.peer)})`);
     const lines: any[] = card?.lines ?? [];
     assert(JSON.stringify(lines.map(l => l.id)) === JSON.stringify(sent.slice(1)), `its last 3 lines, oldest first (${show(lines.map(l => l.id))})`);
     const untouched = lines.length === 3 && lines.every(l => {
@@ -251,6 +252,7 @@ async function main(): Promise<void> {
     setLayout(ben, [pin('chat-ben1', group.id, 'group'), pin('chat-ben2', dmId, 'dm')]);
     const inGroup = await cardOf(ben, 'chat-ben1');
     assert(inGroup?.kind === 'group' && inGroup?.name === 'ChatSentinel garden crew', `Ben, in the group, has its chat (${show(inGroup)})`);
+    assert(inGroup && !('peer' in inGroup), `a group's chat names no peer: only a direct chat has one other person (${show(inGroup)})`);
     db.prepare("UPDATE group_members SET status = 'removed' WHERE group_id = ? AND member_pubkey = ?").run(group.id, ben.pk);
     const left = await cardOf(ben, 'chat-ben1');
     assert(JSON.stringify(left) === '{"gone":"left"}', `removed from it: { gone: 'left' } (${show(left)})`);

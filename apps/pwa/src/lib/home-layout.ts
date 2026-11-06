@@ -42,7 +42,7 @@ const FIXED: ReadonlySet<string> = new Set([FIXED_FIRST, FIXED_LAST]);
  * this build has a web half for (tools/cards.ts): Home's default branch draws it from the tool's manifest.
  */
 export const HOME_DRAWN: ReadonlySet<string> = new Set([
-    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'search', 'decide', 'groups',
+    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'search', 'decide', 'groups', 'chat',
     'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
     ...drawnToolCardTypes(),
 ]);

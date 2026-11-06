@@ -37,6 +37,7 @@ import { usePinRole } from '../utils/use-pin-role';
 import { PinSheet } from './PinSheet';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
+import { ChatPhotoViewer } from './chat/ChatPhoto';
 import { PostTagChips } from './PostTagChips';
 import { CategoryTile } from './CategoryTile';
 import { CardChip, useCardShell } from './market-card-shell';
@@ -85,6 +86,8 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
     const { identity } = useIdentity();
     // The photo frame's height, once laid out: 4:3 of the column's width (the carousel needs a number).
     const [photoHeight, setPhotoHeight] = useState(0);
+    // The photo a tap opened whole (the frame crops to 4:3): its own URL, the same ~800 px photo, in the chat's full-screen viewer.
+    const [viewerUri, setViewerUri] = useState<string | null>(null);
 
     // The node's reader view for this member; null until it arrives (or when offline).
     const [view, setView] = useState<any | null>(null);
@@ -523,7 +526,7 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                   */}
                 {shownPhotos.length > 0 ? (
                     <View style={styles.photoFrame} testID="event-photo-frame" onLayout={(e) => setPhotoHeight(Math.round(e.nativeEvent.layout.height))}>
-                        {photoHeight > 0 && <PhotoCarousel photos={shownPhotos} height={photoHeight} borderRadius={SHELL.radius} />}
+                        {photoHeight > 0 && <PhotoCarousel photos={shownPhotos} height={photoHeight} borderRadius={SHELL.radius} onOpen={(_i, uri) => setViewerUri(uri)} />}
                     </View>
                 ) : (
                     <View style={styles.tileBanner} testID="event-tile-banner">
@@ -686,6 +689,8 @@ export function EventDetail({ post, openMembership = false, onLocalCommunity = f
                 onClose={() => setEditOf(null)}
                 onSaved={() => { load(); DeviceEventEmitter.emit('sync_data_updated'); }}
             />
+            {/* The photo whole, over the page, until tapped or closed. Drawn only while open: it is a Modal, and most visits never open it. */}
+            {!!viewerUri && <ChatPhotoViewer uri={viewerUri} onClose={() => setViewerUri(null)} />}
             {/* Drawn only while open: the sheet is a Modal, and most screens never open it. */}
             {showPinSheet && (
                 <PinSheet

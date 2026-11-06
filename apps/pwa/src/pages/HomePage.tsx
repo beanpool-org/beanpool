@@ -3449,7 +3449,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
                             changeLayout((l) => {
                                 const changed = changeCardSettings(l, id, next, Date.now());
                                 // A chat picked again for another chat has a new id in the same place: focus goes to that card.
-                                const at = l ? l.cards.findIndex(c => c.id === id) : -1;
+                                const at = listOf(l).findIndex(c => c.id === id);
                                 const to = at >= 0 ? changed?.cards[at]?.id : undefined;
                                 if (to && to !== id) settingsMovedTo.current = { from: id, to };
                                 return changed;

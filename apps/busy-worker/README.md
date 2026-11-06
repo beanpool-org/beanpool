@@ -72,6 +72,12 @@ Two Worker variables, both `"0"` in `wrangler.toml`:
 | `BUSY_OFF=1` | Everything passes straight through, as if the Worker were not there (it still runs, and still counts as a request). |
 
 `BUSY_OFF` wins when both are set. `1` or `true` turns one on; anything else is off.
+
+**`BUSY_FORCE` also turns away members who use the web app on global.** In a browser a member's page load is a GET with
+`Accept: text/html`, no cookie and no signature (the web app has no service worker and the node sets no cookie), so the Worker
+cannot tell it from a visitor's, and the page's "It keeps working as usual" is true only for the phone apps. So force it only
+when global is failing anyway. The automatic mode (no switch) shows the page only when the origin answers 5xx or times out,
+when the web app could not have loaded either.
 `scripts/busy-page-deploy.sh --force` / `--off` deploy with one on; a plain deploy sets both off. In the dashboard they are under
 Workers → `beanpool-busy-page` → Settings → Variables (a change there takes effect in seconds, no deploy).
 
@@ -121,8 +127,9 @@ A deploy is the director's at the trigger (T5: origin 5xx or timeouts at Cloudfl
 **Rehearsal (a quiet hour):** deploy with the switches off, then
 
 ```sh
-curl -sI -H 'accept: text/html' https://global.beanpool.org/ | grep -i -E '^HTTP|x-beanpool-busy'   # the node's 200, no x-beanpool-busy
-curl -sI https://global.beanpool.org/api/version | grep -i '^HTTP'                                  # the API, as before
+# GET, not curl -I: a HEAD is not a page request and always passes through, so it would prove nothing.
+curl -s -o /dev/null -D - -H 'accept: text/html' https://global.beanpool.org/ | grep -i -E '^HTTP|x-beanpool-busy'   # the node's 200, no x-beanpool-busy
+curl -s -o /dev/null -D - https://global.beanpool.org/api/version | grep -i '^HTTP'                                  # the API, as before
 ```
 
 and open the web app and the phone app on global: both as before. Then `--force` for a minute: the first `curl`

@@ -196,7 +196,10 @@ async function main(): Promise<void> {
     assert(sent.length === 2 && sent.every(m => m.title === 'BeanPool' && m.body === SENTENCE),
         `what goes to Expo is the fixed title and sentence, one per phone (${show(sent.map(m => [m.title, m.body]))})`);
     const wire = JSON.stringify(sent);
-    assert(!/Ana|Short St|bed dug|garden|Private description|40/.test(wire) && !wire.includes(first) && !wire.includes(ana.pubKeyHex),
+    // The price by value, never as a bare "40" in the wire: a random notice id or a timestamp can hold those digits (#2937).
+    const leaves = (v: unknown): unknown[] => v && typeof v === 'object' ? Object.values(v as object).flatMap(leaves) : [v];
+    const priced = sent.flatMap(leaves).some(v => v === 40 || v === '40' || (typeof v === 'string' && /\b40\s*(Beans|Ʀ)/.test(v)));
+    assert(!/Ana|Short St|bed dug|garden|Private description/.test(wire) && !priced && !wire.includes(first) && !wire.includes(ana.pubKeyHex),
         `and it carries no name, no title, no category, no price, no post id and no key (${wire.slice(0, 300)})`);
     const details = db.prepare("SELECT recipient, data, title, body FROM push_notices WHERE kind = 'market.asked' AND recipient = ?").get(gil.pubKeyHex) as any;
     assert(!!details && JSON.parse(details.data).postId === first && JSON.parse(details.data).screen === 'post'

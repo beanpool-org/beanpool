@@ -70,6 +70,8 @@ vi.mock('../db', () => ({
 }));
 vi.mock('../haptics', () => ({ hapticTick: () => {} }));
 vi.mock('../../components/PhotoCarousel', () => ({ PhotoCarousel: () => null }));
+// The page draws the photo viewer (a Modal with a close icon) only while a photo is open; the icon library cannot load outside a device.
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('../../components/EventCard', () => ({ EVENT_ACCENT: '#0a7' }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
 vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));

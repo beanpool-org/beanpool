@@ -19,6 +19,10 @@
  *   nophoto-nodates  the same with no photo
  *   member-open      the member case with the next dates opened: all six (nophoto-open: the same with no photo)
  *   host-open        the host's case opened: each date with Cancel this date and Change this date only
+ *   photo-whole      the member case with a PORTRAIT photo (3:4), which the 4:3 frame crops: a tap on it shows the same photo whole
+ *                    (slice DP4; DESIGN-detail-pages-fable.md §2.6). Fails unless the full-screen viewer draws the frame's own URL
+ *                    with `contain` (the frame's is `cover`), fills the 320 x 569 screen, has a Close of 48dp inside it, and both
+ *                    Close and a tap anywhere else put the page back. Shots: -photo-cropped (the page) and -photo-whole (the viewer).
  *
  * Each case, each scheme, fails on: the page scrolling sideways; text past the edge or cut; a button under 47.5dp; text under
  * 4.5:1 (3:1 large); in a state a member arrives in, the answer row's top past 500dp, or the answer's bottom (Going's; the
@@ -28,6 +32,7 @@
  * (not committed): the page one 569dp screen at a time, the first is what a member sees on opening it.
  *
  *   node apps/native/e2e/event-page-320.mjs --shots <dir>
+ *   node apps/native/e2e/event-page-320.mjs --shots <dir> --phone    (390 x 844, 1× text: the photo-whole case alone)
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -40,9 +45,11 @@ import { chromium } from 'playwright';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NATIVE = path.resolve(HERE, '..');
 const ROOT = path.resolve(NATIVE, '../..');
-const SCALE = 1.3;
-const WIDTH = 320;
-const SCREEN = 569; // 320 x 16:9, the floor's whole screen
+// --phone: a normal phone (390 x 844, text at 1×) and only the photo-whole case; the other cases' numbers are the floor's.
+const PHONE = process.argv.includes('--phone');
+const SCALE = PHONE ? 1 : 1.3;
+const WIDTH = PHONE ? 390 : 320;
+const SCREEN = PHONE ? 844 : 569; // the floor: 320 x 16:9, the whole screen
 // The stop (DESIGN-detail-pages-frame-fable.md §2): in every state a member arrives in, the answer row's top at or above 500dp.
 const STOP = 500;
 // The list a member opened themselves is exempt from 500 but keeps the answer's top on the first screen
@@ -129,6 +136,8 @@ const OVERRIDES = {
         useNavigation: `() => ({ addListener: () => () => {}, isFocused: () => true })`,
     },
     'expo-image': { Image: `({ source, style }) => React.createElement(RN.Image, { source, style, resizeMode: 'cover' })` },
+    // Draws nothing but the photo viewer's Close (a glyph, at the icon's own size: the stub's Text scales by the font scale, an icon does not).
+    '@expo/vector-icons': { MaterialCommunityIcons: `({ name, size, color }) => name === 'close' ? React.createElement(RN.Text, { style: { color, fontSize: size / ${SCALE} } }, '✕') : null` },
     'react-native-safe-area-context': {
         useSafeAreaInsets: `() => ({ top: 24, bottom: 0, left: 0, right: 0 })`,
         SafeAreaView: `({ children, style }) => React.createElement(RN.View, { style }, children)`,
@@ -219,6 +228,8 @@ const hosting = c === 'host' || c === 'host-open';
 globalThis.__identity = { publicKey: hosting ? HOST : ME, privateKey: '8'.repeat(64), callsign: hosting ? 'Damo' : 'Wren' };
 // A 4:3 photo of a market, drawn, from the harness's own server: no network.
 const PHOTO = location.origin + '/market.svg';
+// photo-whole: a portrait photo, which the 4:3 frame crops to its middle band (TOP and BOTTOM are cut there, whole in the viewer).
+const PORTRAIT = location.origin + '/portrait.svg';
 const DAY = 86400000;
 // The third Saturday from now, at 8:00 to 14:00 Mullumbimby time, as the market runs.
 const start = new Date(Date.now() + 9 * DAY); start.setUTCHours(22, 0, 0, 0);
@@ -229,7 +240,7 @@ const base = {
     eventStartAt: start.toISOString(), eventEndAt: new Date(start.getTime() + 6 * 3600000).toISOString(), eventTz: 'Australia/Sydney',
     eventRepeat: { freq: 'monthly', interval: 1, byDay: 'SA', pos: 3 },
     eventPlaceName: 'Summers Park', lat: -28.5537, lng: 153.4994,
-    photos: c.startsWith('nophoto') ? [] : [PHOTO], goingCount: 0, interestedCount: 0, tags: ['food'],
+    photos: c.startsWith('nophoto') ? [] : [c === 'photo-whole' ? PORTRAIT : PHOTO], goingCount: 0, interestedCount: 0, tags: ['food'],
 };
 // What the node adds on a by-id read of a repeating event (packages/beanpool-engine/src/posts.ts, EVENT_NEXT_DATES = 6): the
 // next six dates, the event's own date first (the one its when line shows), then the third Saturday of each month after it.
@@ -277,6 +288,7 @@ const result = await build({
 });
 const bundle = result.outputFiles[0].text;
 const PHOTO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#7a9e7e"/><rect y="380" width="800" height="220" fill="#c9a66b"/><g fill="#f2efe6"><path d="M80 380 l90 -120 90 120z"/><path d="M300 380 l90 -120 90 120z"/><path d="M520 380 l90 -120 90 120z"/></g><circle cx="680" cy="110" r="60" fill="#f6d365"/></svg>';
+const PORTRAIT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800"><rect width="600" height="800" fill="#7a9e7e"/><rect y="520" width="600" height="280" fill="#c9a66b"/><g fill="#f2efe6"><path d="M60 520 l110 -150 110 150z"/><path d="M320 520 l110 -150 110 150z"/></g><circle cx="490" cy="150" r="60" fill="#f6d365"/><rect x="6" y="6" width="588" height="788" fill="none" stroke="#c0392b" stroke-width="12"/><text x="300" y="80" font-size="56" font-family="sans-serif" font-weight="700" text-anchor="middle" fill="#1f2d1f">TOP</text><text x="300" y="760" font-size="56" font-family="sans-serif" font-weight="700" text-anchor="middle" fill="#1f2d1f">BOTTOM</text></svg>';
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=${WIDTH}">
 <style>html,body,#root{margin:0;height:100%} body{font-family:sans-serif}</style></head>
 <body><div id="root"></div><script type="module" src="/app.js"></script></body></html>`;
@@ -284,6 +296,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 const server = http.createServer((req, res) => {
     if (req.url === '/app.js') { res.writeHead(200, { 'Content-Type': 'text/javascript' }); res.end(bundle); return; }
     if (req.url === '/market.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml' }); res.end(PHOTO_SVG); return; }
+    if (req.url === '/portrait.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml' }); res.end(PORTRAIT_SVG); return; }
     res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(html);
 });
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -356,8 +369,59 @@ try {
         console.log(`${found.length ? '✗' : '✓'} ${label}${found.length ? `: ${found.length} problem(s)` : ''}`);
     };
 
+    // The photo opens whole (slice DP4): the frame crops (`cover`); a tap on the photo shows the SAME photo, uncropped (`contain`), on the
+    // whole screen, with a Close a thumb reaches; Close and a tap anywhere else both put the page back. The page is shot first, cropped.
+    const paintOf = (selector) => page.evaluate((sel) => {
+        const root = document.querySelector(sel);
+        if (!root) return null;
+        for (const e of [root, ...root.querySelectorAll('*')]) {
+            const cs = getComputedStyle(e);
+            if (cs.backgroundImage && cs.backgroundImage !== 'none') return { url: cs.backgroundImage.replace(/^url\(["']?|["']?\)$/g, ''), size: cs.backgroundSize };
+        }
+        return null;
+    }, selector);
+    const opensWhole = async (tag, scheme) => {
+        await page.setViewportSize({ width: WIDTH, height: SCREEN }); // a phone's screen: the viewer fills it
+        try {
+            const button = page.locator('[aria-label="Photo 1 of 1"]');
+            await button.scrollIntoViewIfNeeded();
+            const framed = await paintOf('[aria-label="Photo 1 of 1"]');
+            if (!framed || framed.size !== 'cover') problems.push(`${tag}: the frame does not crop (background-size ${framed?.size ?? 'none'}), so this case shows nothing`);
+            if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `phone-event-${scheme}-photo-cropped.png`), clip: { x: 0, y: 0, width: WIDTH, height: SCREEN } });
+            const open = async () => {
+                await button.click();
+                await page.locator('[aria-label="Full-size photo"]').waitFor({ timeout: 5000 });
+                await page.waitForTimeout(500); // the fade
+            };
+            const gone = () => page.locator('[aria-label="Full-size photo"]').waitFor({ state: 'detached', timeout: 3000 }).then(() => true, () => false);
+            await open();
+            const shown = await paintOf('[aria-label="Full-size photo"]');
+            if (!shown || !framed || shown.url !== framed.url) problems.push(`${tag}: the viewer draws ${shown?.url ?? 'nothing'}, not the frame's own ${framed?.url ?? 'photo'}`);
+            if (!shown || shown.size !== 'contain') problems.push(`${tag}: the viewer's photo is background-size ${shown?.size ?? 'none'}, not contain (whole)`);
+            const box = await page.evaluate(() => {
+                const rect = (sel) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height } : null; };
+                return { viewer: rect('[aria-label="Full-size photo"]'), close: rect('[aria-label="Close photo"]') };
+            });
+            const v = box.viewer;
+            if (!v || Math.abs(v.left) > 0.5 || Math.abs(v.top) > 0.5 || Math.abs(v.width - WIDTH) > 0.5 || Math.abs(v.height - SCREEN) > 0.5) problems.push(`${tag}: the viewer is ${v ? `${Math.round(v.width)} x ${Math.round(v.height)} at ${Math.round(v.left)},${Math.round(v.top)}` : 'not drawn'}, not the whole ${WIDTH} x ${SCREEN} screen`);
+            const x = box.close;
+            if (!x || x.width < 47.5 || x.height < 47.5) problems.push(`${tag}: Close is ${x ? `${Math.round(x.width)} x ${Math.round(x.height)}` : 'not drawn'}, under 48dp`);
+            else if (x.right > WIDTH + 0.5 || x.top < -0.5 || x.bottom > SCREEN + 0.5) problems.push(`${tag}: Close is past the screen's edge (${Math.round(x.left)}–${Math.round(x.right)}, ${Math.round(x.top)}–${Math.round(x.bottom)})`);
+            await measure(`${tag} · open whole`);
+            if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `phone-event-${scheme}-photo-whole.png`), clip: { x: 0, y: 0, width: WIDTH, height: SCREEN } });
+            rows.push(`${tag}: the viewer ${v ? `${Math.round(v.width)} x ${Math.round(v.height)}` : '—'} (${shown?.size ?? '—'}), Close ${x ? `${Math.round(x.width)} x ${Math.round(x.height)} at ${Math.round(x.left)}–${Math.round(x.right)} dp` : '—'}; the frame is ${framed?.size ?? '—'}`);
+            await page.locator('[aria-label="Close photo"]').click();
+            if (!(await gone())) problems.push(`${tag}: Close left the viewer open`);
+            await open();
+            await page.mouse.click(WIDTH / 2, SCREEN / 2); // anywhere on the photo, away from Close
+            if (!(await gone())) problems.push(`${tag}: a tap on the open photo left the viewer open`);
+        } finally {
+            await page.setViewportSize({ width: WIDTH, height: TALL });
+        }
+    };
+
     for (const scheme of ['light', 'dark']) {
-        for (const c of ['member', 'going', 'host', 'copy', 'nophoto', 'member-nodates', 'nophoto-nodates', 'member-open', 'nophoto-open', 'host-open']) {
+        for (const c of PHONE ? ['photo-whole'] : ['member', 'going', 'host', 'copy', 'nophoto', 'member-nodates', 'nophoto-nodates', 'member-open', 'nophoto-open', 'host-open', 'photo-whole']) {
             const tag = `${scheme} · ${c}`;
             await page.goto(`${base}/?scheme=${scheme}&case=${c}`);
             await page.locator('[data-testid="event-chip-row"]').waitFor();
@@ -407,6 +471,7 @@ try {
                     await page.screenshot({ path: path.join(SHOTS, `${name}-${i + 1}.png`), clip: { x: 0, y, width: WIDTH, height: Math.min(SCREEN, TALL - y) } });
                 }
             }
+            if (c === 'photo-whole') await opensWhole(tag, scheme);
         }
     }
     for (const e of errors) problems.push(`page error: ${e}`);

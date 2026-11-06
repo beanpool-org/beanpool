@@ -5,6 +5,9 @@
  * entry's id signed inside it. The node never strands the joiner over the binding: where it can't confirm (the entry
  * was confirmed since, or deleted; the maker is no longer an admin), the joiner is a member unconfirmed, and the admins
  * see why.
+ *
+ * Shared by the phone and the web app (DESIGN-names-list-web-fable.md S1: moved out of the phone's
+ * apps/native/utils/names-invite.ts, unchanged).
  */
 
 import { inviteAndShareLink } from './invite-and-share.js';

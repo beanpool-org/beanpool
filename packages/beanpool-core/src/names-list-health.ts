@@ -1,6 +1,7 @@
 /**
- * Community health on an admin's phone (community modes slice 6; apps/server engine/community-health.ts). The node
- * answers the exceptions by member key and names-list entry id, never a name: the name is overlaid here, from the
+ * Community health on an admin's device, shared by the phone and the web app (DESIGN-names-list-web-fable.md S1: moved
+ * out of the phone's apps/native/utils/community-health.ts, unchanged; community modes slice 6; apps/server
+ * engine/community-health.ts). The node answers the exceptions by member key and names-list entry id, never a name: the name is overlaid here, from the
  * names list this phone has opened and decrypted. Every opening of the exceptions is in a log every admin can read.
  * The screen also shows the community's totals and, as a list of its own, every look at trades and alerts (#1608), as
  * packages/beanpool-guide/content/settings/what-the-admins-can-see.md promises.

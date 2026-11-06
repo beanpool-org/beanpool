@@ -526,6 +526,19 @@ describe('HeaderControls needs-you alert icons', () => {
         }
     });
 
+    // Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §8 fix 2): a new listing by
+    // someone else changes nothing in "your groups" or this row, so the run it asks for (lib/sync-coordinator SyncScope
+    // 'listings') leaves this listener out; a group or a chat bell still runs it.
+    it('listens to sync activity as a chats reader, so a run asked for only by new listings leaves it out', async () => {
+        const options: Array<unknown> = [];
+        vi.spyOn(sync, 'onSyncActivity').mockImplementation(((_cb: unknown, o?: unknown) => { options.push(o); return () => {}; }) as typeof sync.onSyncActivity);
+        vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: 'W/"home-1"', answer: makeHomeAnswer([]) as any });
+        render(<HeaderRow title="Chat" activeTab="messages" />);
+        await act(async () => { await Promise.resolve(); });
+        expect(options.length).toBeGreaterThan(0);
+        for (const o of options) expect(o).toEqual({ chats: true });
+    });
+
     it('wide screens: shows icons in sidebar with rounded-lg styling, and hidden header sends no duplicate read', async () => {
         const inviteItem: NeedsItem = {
             kind: 'invite',

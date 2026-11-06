@@ -226,6 +226,18 @@ describe('a tab in the background', () => {
         expect(row.textContent).toContain('4');
     });
 
+    // Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §8 fix 2): a new listing by
+    // someone else moves no number, so the run it asks for (lib/sync-coordinator SyncScope 'listings') leaves this listener out.
+    it('is registered as a chats reader: only the listeners that say so move the number, the rest of a doorbell\'s run does not', async () => {
+        await inTheBackgroundWith(0);
+        unreadIs(4);
+        const calls = vi.mocked(onSyncActivity).mock.calls as unknown as Array<[() => unknown, { chats?: boolean } | undefined]>;
+        await act(async () => { await Promise.allSettled(calls.filter(([, o]) => !o?.chats).map(([cb]) => cb())); });
+        expect(document.title).toBe('BeanPool');
+        await act(async () => { await Promise.allSettled(calls.filter(([, o]) => o?.chats).map(([cb]) => cb())); });
+        expect(document.title).toBe('(4) BeanPool');
+    });
+
     it('asks for the number and no more: no deals, no list', async () => {
         await inTheBackgroundWith(1);
         unreadIs(2);

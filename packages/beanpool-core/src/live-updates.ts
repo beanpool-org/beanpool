@@ -325,11 +325,12 @@ export function isOthersListingDoorbell(event: unknown, selfKey: string | null |
  * Whether a live-feed event reached a crowd of open phones at the same moment, for the screen that re-reads on it: a
  * listing by someone else (isOthersListingDoorbell), a vote cast on a decision (sent to every socket), or a wide
  * doorbell (isWideDoorbell). A change of the member's own, or one only a few people get (a deal's step, an invitation, a
- * private group), is no crowd and is read as soon as before.
+ * private group), is no crowd and is read as soon as before. An announcement is no crowd for Home either: it is a notice
+ * the member is shown at once, and the Notices card on Home follows it, 3 s on, as it always has.
  */
 export function isCrowdDoorbell(event: unknown, selfKey: string | null | undefined): boolean {
     if (isOthersListingDoorbell(event, selfKey)) return true;
-    if (!isObject(event)) return false;
+    if (!isObject(event) || event.type === 'system_announcement') return false;
     return event.type === 'decision_vote_cast' || isWideDoorbell(event, selfKey);
 }
 

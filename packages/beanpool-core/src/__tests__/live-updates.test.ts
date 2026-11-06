@@ -504,9 +504,13 @@ describe('isCrowdDoorbell and crowdBellDelayMs: Home\'s turn after a bell that r
     it('a listing by someone else, a decision vote and a wide doorbell are a crowd', () => {
         expect(isCrowdDoorbell({ type: 'new_post', post: offer({ type: 'event' }) }, ME)).toBe(true);
         expect(isCrowdDoorbell({ type: 'decision_vote_cast' }, ME)).toBe(true);
-        expect(isCrowdDoorbell({ type: 'system_announcement' }, ME)).toBe(true);
         expect(isCrowdDoorbell({ type: 'profile_updated', publicKey: 'x'.repeat(64) }, ME)).toBe(true);
         expect(isCrowdDoorbell({ type: 'group_updated', group: { joinPolicy: 'open' } }, ME)).toBe(true);
+    });
+
+    it('a notice is not: the alert shows it at once and the Notices card on Home follows 3 s on, as before', () => {
+        expect(isCrowdDoorbell({ type: 'system_announcement' }, ME)).toBe(false);
+        expect(homeBellDelayMs({ type: 'system_announcement' }, ME, () => 0.5)).toBe(3_000);
     });
 
     it('the member\'s own post, their own card, a private group and a deal\'s step are not: they read in 3 s as before', () => {

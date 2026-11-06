@@ -218,6 +218,20 @@ describe('MessagesPage Stage 5: Chat Over Push & Backstop Polling', () => {
         }));
     });
 
+    // Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §8 fix 2): the conversation list
+    // and the open conversation read on every sync run, and a new listing by someone else changes neither. Each says so
+    // (`chats`), so the run asked for only by such a listing (lib/sync-coordinator SyncScope) leaves them out.
+    it('every sync listener it registers is a chats reader: the conversation list and the open conversation', async () => {
+        const { onSyncActivity } = await import('../lib/sync');
+        vi.mocked(onSyncActivity).mockClear();
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        await waitFor(() => expect(screen.getByText('Hello Alice!')).toBeInTheDocument());
+        const registered = vi.mocked(onSyncActivity).mock.calls as unknown as Array<[() => unknown, { chats?: boolean } | undefined]>;
+        // The list's, and the open conversation's: two.
+        expect(registered.length).toBeGreaterThanOrEqual(2);
+        for (const [, options] of registered) expect(options).toEqual({ chats: true });
+    });
+
     it('1. an arriving message appears without waiting for the backstop', async () => {
         render(
             <MessagesPage

@@ -2,8 +2,10 @@
 //
 // A Cloudflare Worker on the route global.beanpool.org/*. Cloudflare's Free plan has no custom 5xx page, so when the
 // global node is too busy to answer, a visitor's browser would wait on a spinner and then show Cloudflare's error page.
-// This Worker answers a small page instead: the global community is very busy, try again in a few minutes, start your
-// own community or find one near you, and an app already installed keeps working.
+// This Worker answers a small page instead: the global community is very busy, and the visitor is taken on to beanpool.org
+// (Cloudflare Pages, so it stays up whatever global does) in their language after 5 s, with a "Go now" link, a smaller "Try
+// global again" link, and the note that an app already installed keeps working. The redirect is the page's own, so the
+// status stays 503 and nothing here changes how a request is decided.
 //
 // It changes nothing for the members' apps. Only a browser asking for a page is ever answered here: a GET whose Accept
 // names text/html, with no Upgrade, no Authorization, no signature header and no cookie of ours. Every other request
@@ -83,9 +85,17 @@ export function isOriginFailure(status) {
     return status >= 500 && status <= 599;
 }
 
-/** The busy page as a Response: 503, Retry-After, never stored, and a policy that lets it load nothing from anywhere. */
-export function busyResponse(request) {
-    const { html, lang } = busyPage(request.headers.get('accept-language'));
+/** The Content-Security-Policy value allowing exactly one inline script: the one whose text is `script`, by its SHA-256. */
+export async function pageCsp(script) {
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(script)));
+    const hash = btoa(String.fromCharCode(...digest));
+    // The page's own <style>, that one script, and its empty data: icon; nothing else loads, from anywhere.
+    return `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+}
+
+/** The busy page as a Response: 503, Retry-After, never stored, and a policy that lets it load nothing but its own script. */
+export async function busyResponse(request) {
+    const { html, lang, script } = busyPage(request.headers.get('accept-language'), request.url);
     return new Response(html, {
         status: 503,
         headers: {
@@ -93,8 +103,7 @@ export function busyResponse(request) {
             'content-language': lang,
             'retry-after': String(RETRY_AFTER_S),
             'cache-control': 'no-store',
-            // The page's own <style> and its empty data: icon, nothing else.
-            'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            'content-security-policy': await pageCsp(script),
             'x-content-type-options': 'nosniff',
             'referrer-policy': 'no-referrer',
             'x-robots-tag': 'noindex',

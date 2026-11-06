@@ -2,12 +2,18 @@
 
 A Cloudflare Worker on the route `global.beanpool.org/*` (BUSY-PAGE; Fable `DESIGN-multicore-node-fable.md` §6, step T5;
 Marty's yes on 7 Nov 2026). When the global node is too busy to answer, a visitor's browser shows a short, calm page
-instead of a spinner and then Cloudflare's error page:
+instead of a spinner and then Cloudflare's error page, and sends them on to beanpool.org, which is served by Cloudflare
+Pages and so stays up whatever global does:
 
-> **The global community is very busy right now**
-> Lots of people are arriving at the same time. Please try again in a few minutes.
-> [Start your own community](https://beanpool.org/start) · [Find one near you](https://beanpool.org/#find-or-start)
+> **The global community is very busy right now.**
+> Taking you to beanpool.org, where you can read about BeanPool and get the app.
+> [Go now](https://beanpool.org/) · Try global again
 > Already using the BeanPool app? It keeps working as usual.
+
+After 5 seconds the page takes the visitor to beanpool.org's front page **in their language** (`https://beanpool.org/<lang>/`,
+English at `https://beanpool.org/`). "Go now" goes there at once; the smaller "Try global again" asks global for the same
+address again. (BUSY-PAGE-REDIRECT, Marty, 7 Nov 2026: say global is busy and send visitors to beanpool.org, rather than
+"come back soon".)
 
 It is ours alone. It runs on Cloudflare in front of our global node; no self-hosted node needs it, and nothing in the
 node knows it exists.
@@ -41,9 +47,18 @@ the origin's, unchanged.
 
 ### The page
 
-- One HTML document under 8 KB: inline styles, no script, no font, no image, an empty `data:` icon (so the browser does
-  not ask the struggling node for `/favicon.ico`), and a `Content-Security-Policy` of `default-src 'none'` that lets it
-  load nothing from anywhere.
+- One HTML document under 8 KB: inline styles, **one small inline script** (the redirect), no font, no image, an empty
+  `data:` icon (so the browser does not ask the struggling node for `/favicon.ico`), and a `Content-Security-Policy` of
+  `default-src 'none'` that lets it load nothing from anywhere. The policy allows that one script by its SHA-256
+  (`script-src 'sha256-…'`, worked out for each page by `pageCsp()` in `src/index.js`), so no other script can run.
+- **The redirect** is `setTimeout(() => location.replace(target), 5000)`. `replace`, not `assign`, so the Back button does not
+  return a visitor to a page that would send them on again. For a browser with scripts off, the same target is a
+  `<meta http-equiv="refresh" content="5;url=…">` inside `<noscript>` in the head, so a browser that runs scripts never has
+  both. The target is another host (`beanpool.org`, never the route `global.beanpool.org/*`), so it cannot loop back to the
+  Worker. The status stays `503`, `Retry-After`, `no-store`: only the page changed.
+- **Try global again** links to the address the visitor asked for (the request's own URL, escaped in the attribute, its
+  fragment dropped; an address that is not `http(s)` or is over 2,048 characters falls back to `/`), so it reloads that very
+  page.
 - BeanPool's colours, from the brand library (`packages/beanpool-core/src/brand-colours.ts`): dark by default as
   beanpool.org is, light when the device is set to light. Each colour names its role; the test fails if one drifts or a
   pair of words reads under 4.5:1.
@@ -52,12 +67,14 @@ the origin's, unchanged.
 
 ### Words
 
-`src/words.json` holds the page's five lines in the website's 25 languages, chosen from the visitor's
-`Accept-Language` (q-values honoured; `zh-TW`/`zh-HK`/`zh-Hant` → 繁體中文, other `zh` → 简体中文, `tl` → Filipino; English
-when none fits). Arabic, Persian and Urdu are drawn right to left. English is the source; **every other language is a
-machine draft and the page says so** in its own language until a person checks it (then drop that language's
-`machine` key and the test's draft rule for it). The links go to the same language's pages on beanpool.org, which
-exist for all 25.
+`src/words.json` holds the page's five lines (`heading`, `body`, `go`, `retry`, `apps`) in the website's 25 languages, chosen
+from the visitor's `Accept-Language` (q-values honoured; `zh-TW`/`zh-HK`/`zh-Hant` → 繁體中文, other `zh` → 简体中文, `tl` →
+Filipino; English when none fits). The same pick chooses the redirect's target: `pt-BR` → `https://beanpool.org/pt/`,
+`zh-TW` → `/zh-Hant/`, `fr` → `/fr/`, English and anything unknown → `https://beanpool.org/`. Each target is the front page
+of that language's folder on the site (`apps/website/<lang>/index.html`), which exists for all 24 others; the test checks
+it. Arabic, Persian and Urdu are drawn right to left. English is the source; **every other language is a machine draft and
+the page says so** in its own language until a person checks it (then drop that language's `machine` key and the test's
+draft rule for it).
 
 These words are outside the words index (they do not go through `t()`): the PR that adds or changes them names
 `apps/busy-worker/src/words.json` in its "Words outside the index" line.
@@ -68,15 +85,16 @@ Two Worker variables, both `"0"` in `wrangler.toml`:
 
 | Variable | Effect |
 |---|---|
-| `BUSY_FORCE=1` | Every page request gets the busy page without asking the origin (the node is down, or you want it off the front door). Non-page requests still pass through. |
+| `BUSY_FORCE=1` | Every page request gets the busy page without asking the origin (the node is down, or you want it off the front door), and that page takes the visitor to beanpool.org after 5 s. Non-page requests still pass through. |
 | `BUSY_OFF=1` | Everything passes straight through, as if the Worker were not there (it still runs, and still counts as a request). |
 
 `BUSY_OFF` wins when both are set. `1` or `true` turns one on; anything else is off.
 
 **`BUSY_FORCE` also turns away members who use the web app on global.** In a browser a member's page load is a GET with
 `Accept: text/html`, no cookie and no signature (the web app has no service worker and the node sets no cookie), so the Worker
-cannot tell it from a visitor's, and the page's "It keeps working as usual" is true only for the phone apps. So force it only
-when global is failing anyway. The automatic mode (no switch) shows the page when the origin answers 5xx, errors, or takes
+cannot tell it from a visitor's, and the page's "It keeps working as usual" is true only for the phone apps. Since the page
+now sends a visitor on to beanpool.org after 5 s, a web-app member is taken off global too, and "Try global again" is how
+they come back. So force it only when global is failing anyway. The automatic mode (no switch) shows the page when the origin answers 5xx, errors, or takes
 more than 5 s to start answering a page. That last case includes a node that is slow but alive: web-app members then get the
 busy page while the phone apps, which wait with no such timeout, still get through.
 `scripts/busy-page-deploy.sh --force` / `--off` deploy with one on; a plain deploy sets both off. In the dashboard they are under
@@ -96,10 +114,16 @@ Workers → `beanpool-busy-page` → Settings → Variables (a change there take
    node's log should still show many addresses, not one Cloudflare address), and remove the Worker at once if not.
 3. **Web-app members look like visitors.** A page load of the web app on global is a plain GET for HTML (no service worker,
    no cookie), so `BUSY_FORCE` turns web members away too, and the automatic mode does whenever the page takes over 5 s:
-   on a slow but working node, web members see the busy page while phone members carry on. The page's "keeps working as
-   usual" is about the phone apps. Accept that, or keep the route off until the trigger and take it off as soon as the
-   node recovers.
+   on a slow but working node, web members see the busy page, and are sent on to beanpool.org after 5 s, while phone
+   members carry on. The page's "keeps working as usual" is about the phone apps. Accept that, or keep the route off until
+   the trigger and take it off as soon as the node recovers.
 4. **The node is unaware.** Nothing here changes the node, its `.env`, or any self-hoster's default.
+5. **The redirect.** The busy page sends visitors to `beanpool.org` (static files on Cloudflare Pages), so global's load
+   does not follow them there, and nothing on the node is asked for. It does mean that while the Worker is on the route,
+   visitors who hit a busy node land on the public site after 5 s, in their language: check at the rehearsal that
+   `https://beanpool.org/` and a language folder (for example `/fr/`) answer. The page's script runs only while the
+   policy's `script-src` hash is its own SHA-256 (the test pins the two together); if they ever differed the browser
+   would block the script and the visitor would stay on the page with the "Go now" link.
 
 ## The token
 
@@ -139,8 +163,9 @@ curl -s -o /dev/null -D - https://global.beanpool.org/api/version | grep -i '^HT
 ```
 
 and open the web app and the phone app on global: both as before. Then `--force` for a minute: the first `curl`
-answers `503` with `x-beanpool-busy: 1` and a browser shows the page (try a phone at 320 px, light and dark); the API
-`curl` and the apps are unchanged. Then a plain deploy (or `--remove`), and check point 2 above in the node's log.
+answers `503` with `x-beanpool-busy: 1` and a browser shows the page (try a phone at 320 px, light and dark) and, after 5 s,
+lands on beanpool.org in the browser's language ("Go now" goes at once; "Try global again" asks global for the same page
+again); the API `curl` and the apps are unchanged. Then a plain deploy (or `--remove`), and check point 2 above in the node's log.
 
 ## Tests
 

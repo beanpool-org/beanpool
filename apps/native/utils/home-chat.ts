@@ -214,6 +214,14 @@ export type PhoneChatRow = Pick<Awaited<ReturnType<typeof getConversations>>[num
 
 /** A chat the phone keeps as a DM: getConversations' `type` (a row with none is a DM there too). */
 const isPhoneDm = (c: PhoneChatRow) => c.type === 'dm' || c.type == null;
+/** A DM that is still a request (waiting, ignored or lapsed). One that began as a request and was accepted keeps
+ *  `{ state: 'accepted' }` for good (the node's test-dm-requests), and is a chat like any other. Unreadable is no request,
+ *  as db's isRequestFor reads it. */
+const isOpenRequest = (request: unknown): boolean => {
+    let r: unknown = request;
+    if (typeof r === 'string') { try { r = JSON.parse(r); } catch { return false; } }
+    return !!r && typeof r === 'object' && (r as { state?: unknown }).state !== 'accepted';
+};
 
 /**
  * The settings list: the member's group-like chats first (🥖🎯📅, a group's emoji), then people, each part newest first;
@@ -234,7 +242,7 @@ export function chatChoices(
         .map(c => ({ conversationId: c.conversationId, kind: c.kind as HomeChatKind, name: c.name.trim().slice(0, 60), emoji: c.emoji, at: c.lastActivityAt ?? null }))
         .sort(newest);
     const p = dms
-        .filter(c => ok(c.id) && isPhoneDm(c) && !c.request)
+        .filter(c => ok(c.id) && isPhoneDm(c) && !isOpenRequest(c.request))
         .map(c => ({ conversationId: c.id, kind: 'dm' as const, name: String(c.peer ?? '').trim().slice(0, 60), emoji: '👤', at: typeof c.rawTimestamp === 'string' ? c.rawTimestamp : null }))
         .filter(c => c.name.length > 0)
         .sort(newest);

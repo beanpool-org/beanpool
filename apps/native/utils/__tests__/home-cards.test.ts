@@ -1533,6 +1533,19 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
         expect([...chatsOnHome(cards, 'chat-2')]).toEqual(['d1']);
     });
 
+    it('a DM that began as a request and was accepted is a chat like any other (#2943 round-1 review); one still open is not', () => {
+        const dm = (id: string, peer: string, request: unknown) => ({ id, type: 'dm', peer, rawTimestamp: at(1), timestamp: '14:32', request });
+        const rows = chatChoices([], [
+            dm('a1', 'Ana', { from: 'them', to: 'me', state: 'accepted' }),          // they asked, I accepted
+            dm('a2', 'Bob', { from: 'me', to: 'them', state: 'accepted' }),          // I asked, they accepted
+            dm('a3', 'Cy', JSON.stringify({ from: 'them', state: 'accepted' })),     // as stored, a JSON string
+            dm('w1', 'Dee', { from: 'them', state: 'pending' }),                     // still waiting
+            dm('w2', 'Eve', { from: 'them', state: 'ignored' }),
+            dm('w3', 'Fay', { from: 'them' }),                                       // no state: not accepted
+        ]);
+        expect(rows.map(r => r.name).sort()).toEqual(['Ana', 'Bob', 'Cy']);
+    });
+
     it('a chat this phone keeps as a DM is listed as the person, never as a group the node lists under the same id', () => {
         const rows = chatChoices(
             [{ conversationId: 'd1', kind: 'enterprise', name: 'Free Beans here', emoji: '🥖', lastActivityAt: at(1) }],

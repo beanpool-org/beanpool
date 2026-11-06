@@ -73,7 +73,7 @@ async function main(): Promise<void> {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
-    const { homeListingReads, forgetHomeListings } = await import('./routes/home-listings.js');
+    const { homeListingReads, forgetHomeListings, keptListingCount } = await import('./routes/home-listings.js');
     const { bumpPostsVersion } = await import('./engine/versions.js');
     const engine = await import('@beanpool/engine');
     await initTls();
@@ -160,6 +160,16 @@ async function main(): Promise<void> {
         const cOwn = await fresh(plainC);
         assert(!isDeepStrictEqual(cOwn.market, c.market) || cOwn.market.every((r: any, i: number) => r.distanceKm === c.market[i].distanceKm),
             'and a member\'s own area is a read of its own');
+
+        // What is held: one read per place read since the listings last moved, all of them gone once they move.
+        forgetHomeListings();
+        await home(plainA);
+        await home(null);
+        await home(plainC); // their own area, another place than plainA's
+        const held = keptListingCount();
+        bumpPostsVersion();
+        await home(plainB);
+        assert(held === 3 && keptListingCount() === 1, `reads of listings that have since moved are not held on to (${held} kept, then ${keptListingCount()})`);
     }
 
     console.log('── 2. A member never sees another\'s private card ──');

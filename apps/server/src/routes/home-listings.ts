@@ -24,6 +24,12 @@
  * clock (a copy's door that stops being shown), a kept read is never older than KEPT_MAX_MS. The key holds everything
  * else the read is made of: who it is for (a visitor, a member), the point exactly as given, and the switches that order or
  * place it.
+ *
+ * ## Memory
+ *
+ * When the listings move, every kept read goes at once (none could be given again); one past KEPT_MAX_MS goes at the next
+ * read; and at most KEPT_MAX_ENTRIES are held, the oldest going first. In the launch mix (a new listing every 5 s) that is a
+ * few dozen reads of about 40 listings each.
  */
 import { getMembersVersion, getPostsVersion } from '../engine/versions.js';
 import { directoryStamp } from '../engine/directory-cache.js';
@@ -32,11 +38,18 @@ import { db } from '../db/db.js';
 
 /** A kept read is read again after this long whatever else holds (the module's header). */
 export const KEPT_MAX_MS = 10_000;
-/** The most reads kept: one per point and kind of reader; the oldest goes first. */
-export const KEPT_MAX_ENTRIES = 512;
+/**
+ * The most reads kept at once: one per point and kind of reader, each at most a Market card's pool (about 40 listings), so
+ * a few megabytes at most. Only reads of the listings as they are now are kept (a new version drops them all), and none
+ * older than KEPT_MAX_MS.
+ */
+export const KEPT_MAX_ENTRIES = 256;
 
-interface Kept<T> { stamp: string; at: number; value: T }
+interface Kept<T> { at: number; value: T }
+/** In the order they were made, so the oldest is first: what goes when the cap or the age is reached. */
 const kept = new Map<string, Kept<unknown>>();
+/** The listings' stamp every kept read was made at (stampNow). */
+let keptStamp = '';
 
 /** Reads made and reads given from what was kept, counted for the suite. */
 export const homeListingReads = { made: 0, kept: 0 };
@@ -44,7 +57,13 @@ export const homeListingReads = { made: 0, kept: 0 };
 /** Everything kept goes (the suite, between worlds). */
 export function forgetHomeListings(): void {
     kept.clear();
+    keptStamp = '';
     peerAuthors = null;
+}
+
+/** How many reads are kept now (the suite). */
+export function keptListingCount(): number {
+    return kept.size;
 }
 
 function stampNow(): string {
@@ -57,18 +76,29 @@ function stampNow(): string {
  */
 export function keptListingRead<T>(key: string, read: () => T, now = Date.now()): T {
     const stamp = stampNow();
+    // The listings moved: no read kept can be given again, so none is held on to.
+    if (stamp !== keptStamp) {
+        kept.clear();
+        keptStamp = stamp;
+    }
+    // The oldest first: those past their age go (a clock set back makes every one too old).
+    for (const [k, v] of kept) {
+        if (now - v.at >= 0 && now - v.at < KEPT_MAX_MS) break;
+        kept.delete(k);
+    }
     const hit = kept.get(key);
-    if (hit && hit.stamp === stamp && now - hit.at >= 0 && now - hit.at < KEPT_MAX_MS) {
+    if (hit && now - hit.at >= 0 && now - hit.at < KEPT_MAX_MS) {
         homeListingReads.kept++;
-        // Most recently used last, so the oldest is the first to go.
-        kept.delete(key);
-        kept.set(key, hit);
         return hit.value as T;
     }
+    const versions = `${getPostsVersion()}:${getMembersVersion()}`;
     const value = read();
     homeListingReads.made++;
+    // A write while it was read (none happens: a listing read only reads) would leave this read older than its stamp: it is
+    // kept only if the versions are still the ones it was asked at.
+    if (`${getPostsVersion()}:${getMembersVersion()}` !== versions) return value;
     kept.delete(key);
-    kept.set(key, { stamp, at: now, value });
+    kept.set(key, { at: now, value });
     while (kept.size > KEPT_MAX_ENTRIES) {
         const oldest = kept.keys().next().value;
         if (oldest === undefined) break;

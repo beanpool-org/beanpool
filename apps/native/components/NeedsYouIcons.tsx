@@ -16,7 +16,7 @@ import {
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
-import { t } from '@beanpool/core';
+import { isOthersListingDoorbell, t } from '@beanpool/core';
 import { HOME_HEADER_WAIT_MS, forgetHomeForHeader, homeForHeader, homePath, onHomeRead } from '../utils/home-store';
 import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
 
@@ -247,6 +247,9 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
             // One of the member's own group invitations made, taken up, declined or withdrawn: Home's answer is from
             // before it, so the next read is the header's own (GET /api/your-groups lists what is still open).
             if (isOwnInviteChange(data, me)) forgetHomeForHeader();
+            // A new listing by someone else changes none of what this row shows (core isOthersListingDoorbell): Home's own
+            // read of it, a random 3 to 15 s on, is what the row draws from when it is fresh; the 120 s poll is the rest.
+            if (isOthersListingDoorbell(data, me)) return;
             if (settleTimer) clearTimeout(settleTimer);
             settleTimer = setTimeout(poke, WS_SETTLE_MS);
         });

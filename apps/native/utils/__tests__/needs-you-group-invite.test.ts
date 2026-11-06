@@ -250,4 +250,47 @@ describe('the header (components/NeedsYouIcons.tsx)', () => {
         await ws({ type: 'group_member_invited', groupId: GARDEN, member: { memberPubkey: ME, status: 'invited' } });
         expect(freshHomeForHeader(NODE, ME)).toBeNull();
     });
+    // Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §8 fix 2): a new listing by
+    // someone else rang every nearby phone's your-groups read. Nothing in "your groups" or this row changes with it.
+    describe('a doorbell, 3 s on', () => {
+        const groupReads = () => vi.mocked(db.signedGet).mock.calls.filter(([p]) => String(p) === '/api/your-groups').length;
+        const listing = (author: string, extra: Record<string, unknown> = {}) => ({
+            type: 'new_post', post: { id: 'post-9', type: 'event', authorPublicKey: author, updatedAt: '2026-10-24T09:00:00.000Z', audienceScope: 'public', ...extra },
+        });
+        // The header's own read has a 15 s gap between reads; the clock moves a minute on so a bell's read is not held by it.
+        const ringAndWait = async (data: unknown) => {
+            await act(async () => { bus.listeners.get('ws_activity')?.forEach(fn => fn(data)); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(4_000); });
+        };
+        afterEach(() => { vi.useRealTimers(); });
+
+        it('a new event, need or offer by someone else reads no groups, however many ring', async () => {
+            await renderHeader();
+            const before = groupReads();
+            expect(before).toBeGreaterThan(0);
+            vi.useFakeTimers({ now: Date.now() + 60_000, toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+            for (const type of ['event', 'need', 'offer', 'poll']) await ringAndWait(listing('d'.repeat(64), { type }));
+            expect(groupReads()).toBe(before);
+        });
+
+        it('a group bell, a chat bell, an update to a listing and the member\'s own listing still read them', async () => {
+            await renderHeader();
+            let n = groupReads();
+            vi.useFakeTimers({ now: Date.now() + 60_000, toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+            const bells = [
+                { type: 'group_member_invited', groupId: CHOIR, member: { memberPubkey: 'c'.repeat(64), status: 'invited' } },
+                { type: 'new_message' },
+                { type: 'post_updated', post: listing('d'.repeat(64)).post },
+                listing(ME),
+                listing('d'.repeat(64), { audienceScope: 'group' }),
+            ];
+            for (const bell of bells) {
+                // 16 s on from the last read: the header's gap is over.
+                await act(async () => { await vi.advanceTimersByTimeAsync(16_000); });
+                await ringAndWait(bell);
+                n += 1;
+                expect(groupReads()).toBe(n);
+            }
+        });
+    });
 });

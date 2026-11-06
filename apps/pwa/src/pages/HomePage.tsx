@@ -52,7 +52,7 @@ import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import { groupIdKey, lockedGroupsOrNull } from '../lib/group-hold';
 import { isKnownDmConversation } from '../lib/dm-guard';
-import { readChatSettings, homeChatPicked } from '@beanpool/core';
+import { readChatSettings, homeChatPicked, createHomeBellSettle, HOME_BELL_SETTLE_MS } from '@beanpool/core';
 import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
 import { onConversationRead } from '../lib/conversation-read';
@@ -121,8 +121,12 @@ import {
     FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_CIRCLE_WORDS, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, placeWatchLimitLine, type AddressResult, type AddressSearchWords,
 } from '@beanpool/core';
 
-/** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
-export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
+/**
+ * A doorbell about the member themself is re-read this long after the last one, so a burst of changes is one read (§5.2).
+ * One that reached every tab near a listing at once waits this tab's own random 3 to 15 s instead (@beanpool/core
+ * createHomeBellSettle), so a hundred tabs do not ask in the same second.
+ */
+export const HOME_DOORBELL_DEBOUNCE_MS = HOME_BELL_SETTLE_MS;
 
 /** Find your community's town links ("or type your town", "change", "Cancel"): the link and accent roles, light and dark. */
 /** The find card's buttons, as its Share my area. */
@@ -1792,23 +1796,25 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
 
     // Doorbells, the tab coming back, and the safety poll.
     useEffect(() => {
-        let timer: ReturnType<typeof setTimeout> | null = null;
+        const settle = createHomeBellSettle({ run: () => { void fetchHomeRef.current('doorbell'); }, settleMs: HOME_DOORBELL_DEBOUNCE_MS });
         let stale = false;
         let openedAt = 0;
-        const ring = () => {
+        // `crowd`: the bell reached every tab near it at once, so this tab waits its own random turn (createHomeBellSettle).
+        const ring = (crowd: boolean) => {
             if (document.hidden) { stale = true; return; }
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(() => { timer = null; void fetchHomeRef.current('doorbell'); }, HOME_DOORBELL_DEBOUNCE_MS);
+            settle.ring(crowd);
         };
         const offOpen = onSocketOpen(() => { openedAt = Date.now(); });
-        const offSync = onSyncActivity(() => {
+        const offSync = onSyncActivity((run) => {
             // The socket's own catch-up as it opens, just after Home was read: nothing has happened yet.
             if (Date.now() - openedAt < 2_000 && openedAt - lastStart.current < SOCKET_OPEN_QUIET_MS && lastStart.current > 0) return;
-            ring();
+            // A run asked for only by new listings by someone else (lib/sync-coordinator SyncScope) is a crowd's.
+            ring(run?.scope === 'listings');
         });
-        const offLive = onLivePostChange(() => ring());
-        // A new notice (an announcement, a moderation notice): "From your community" comes with the alert (§5.2).
-        const offNotice = onSystemAnnouncement(() => ring());
+        // A listing by someone else, written into the lists ahead of any read (lib/live-posts): a crowd's too.
+        const offLive = onLivePostChange(() => ring(true));
+        // A new notice (an announcement, a moderation notice): "From your community" comes with the alert (§5.2), 3 s on.
+        const offNotice = onSystemAnnouncement(() => ring(false));
         // The member put a notice away (the alert, or Home's own Mark as read): the card goes now, not at the next poll.
         const onSeen = () => { void fetchHomeRef.current('doorbell'); };
         window.addEventListener(NOTICES_SEEN_EVENT, onSeen);
@@ -1824,7 +1830,7 @@ export function HomePage({ identity, visitor, onNavigate, onComposer, onSeeWords
         document.addEventListener('visibilitychange', onVisibility);
         const poll = setInterval(() => { if (!document.hidden) void fetchHomeRef.current('poll'); }, withJitter(HOME_SAFETY_POLL_MS));
         return () => {
-            if (timer) clearTimeout(timer);
+            settle.cancel();
             offOpen();
             offSync();
             offLive();

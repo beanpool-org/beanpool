@@ -865,12 +865,13 @@ export function App() {
         // completion makes that check meaningless and lets the cursor move past data that
         // never arrived.
         // Coalesces with visibilitychange / reconnect sync if already in-flight or polled within 2000ms.
+        // `chats`: a run asked for only by new listings by someone else leaves it out (lib/sync-coordinator SyncScope).
         const unsubscribe = onSyncActivity(() => {
             if (pollPromise) return pollPromise;
             if (document.hidden) return readCountHidden();
             if (Date.now() - lastPollTime < POLL_FLOOR_MS) return;
             return pollUnread();
-        });
+        }, { chats: true });
 
         // After a conversation's unread lines are marked read on the server:
         // App's count refreshes immediately. Must read after the mark has landed (the event only fires

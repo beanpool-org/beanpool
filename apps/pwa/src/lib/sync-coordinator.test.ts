@@ -392,4 +392,162 @@ describe('PWA Sync Coordinator', () => {
             expect(listener).not.toHaveBeenCalled();
         });
     });
+
+    // Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §5, §8 fix 2): a new listing by
+    // someone else ran every view's refresh on every open tab near it, the chats, the unread count and the groups among them.
+    // It changes none of those, so the run it asks for leaves out the listeners registered with `chats`.
+    describe('a new listing by someone else asks for a run of the listing views only', () => {
+        const ME = 'e'.repeat(64);
+        const OTHER = 'f'.repeat(64);
+        const listing = (author: string, extra: Record<string, unknown> = {}) => ({
+            type: 'new_post',
+            post: { id: 'post-1', type: 'event', authorPublicKey: author, updatedAt: '2026-11-07T01:00:00.000Z', audienceScope: 'public', ...extra },
+        });
+
+        /** A member's socket open, with a listing view and a chats view listening, and the opening sync drained. */
+        async function open() {
+            asMember();
+            const views = vi.fn();
+            const chats = vi.fn();
+            onSyncActivity(views);
+            onSyncActivity(chats, { chats: true });
+            connectToAnchor('ws://localhost:9000/ws');
+            const socket = await waitForWs();
+            socket.onopen();
+            await vi.advanceTimersByTimeAsync(150);
+            views.mockClear();
+            chats.mockClear();
+            const ring = async (data: unknown, ms = 150) => {
+                socket.onmessage({ data: JSON.stringify(data) });
+                await vi.advanceTimersByTimeAsync(ms);
+            };
+            return { views, chats, ring };
+        }
+
+        it.each(['event', 'poll'])('a new %s by someone else runs the listing views and leaves the chats views out', async (type) => {
+            const { views, chats, ring } = await open();
+            await ring(listing(OTHER, { type }));
+            expect(views).toHaveBeenCalledTimes(1);
+            expect(views).toHaveBeenCalledWith({ scope: 'listings' });
+            expect(chats).not.toHaveBeenCalled();
+        });
+
+        // Not new: an offer or need the node sent whole is written into the lists the views hold (lib/live-posts) and asks for no run.
+        it.each(['offer', 'need'])('a new %s by someone else asks for no run at all, as before', async (type) => {
+            const { views, chats, ring } = await open();
+            await ring(listing(OTHER, { type }), 3_000);
+            expect(views).not.toHaveBeenCalled();
+            expect(chats).not.toHaveBeenCalled();
+        });
+
+        it('a burst of them is one run, still without the chats views', async () => {
+            const { views, chats, ring } = await open();
+            for (let i = 0; i < 10; i++) await ring(listing(OTHER, { id: `post-${i}` }), 0);
+            await vi.advanceTimersByTimeAsync(500);
+            expect(views).toHaveBeenCalledTimes(1);
+            expect(chats).not.toHaveBeenCalled();
+        });
+
+        it('the member\'s own listing, a chat line, an update to a listing and a trade run everything, as before', async () => {
+            const { views, chats, ring } = await open();
+            for (const data of [
+                listing(ME),
+                listing(OTHER, { acceptedBy: ME }),
+                { type: 'new_message', conversationId: 'c1', id: 'm1' },
+                { type: 'post_updated', post: listing(OTHER).post },
+                { type: 'transaction_completed' },
+                { type: 'new_post' },
+            ]) {
+                views.mockClear();
+                chats.mockClear();
+                await ring(data, 2_500);
+                expect(views).toHaveBeenCalledTimes(1);
+                expect(views).toHaveBeenCalledWith({ scope: 'all' });
+                expect(chats).toHaveBeenCalledTimes(1);
+            }
+        });
+
+        it('a chat line in the same window makes it a run of everything', async () => {
+            const { views, chats, ring } = await open();
+            await ring(listing(OTHER), 0);
+            await ring({ type: 'new_message', conversationId: 'c1', id: 'm1' }, 500);
+            expect(views).toHaveBeenCalledTimes(1);
+            expect(views).toHaveBeenCalledWith({ scope: 'all' });
+            expect(chats).toHaveBeenCalledTimes(1);
+        });
+
+        it('a listing during a run of everything gets a trailing run of the listing views only, and a chat line during one gets everything', async () => {
+            asMember();
+            const gate: { release: (() => void) | null } = { release: null };
+            const views = vi.fn(() => new Promise<void>((resolve) => { gate.release = resolve; }));
+            const chats = vi.fn();
+            onSyncActivity(views);
+            onSyncActivity(chats, { chats: true });
+            connectToAnchor('ws://localhost:9000/ws');
+            const socket = await waitForWs();
+            socket.onopen();
+            await vi.advanceTimersByTimeAsync(150);          // the opening run starts and waits on `views`
+            expect(views).toHaveBeenCalledTimes(1);
+            const first = chats.mock.calls.length;
+            socket.onmessage({ data: JSON.stringify(listing(OTHER)) });
+            await vi.advanceTimersByTimeAsync(10);
+            gate.release!();
+            await vi.advanceTimersByTimeAsync(2_500);        // the 2 s cooldown, then the trailing run
+            expect(views).toHaveBeenCalledTimes(2);
+            expect(views).toHaveBeenLastCalledWith({ scope: 'listings' });
+            gate.release?.();
+            expect(chats.mock.calls.length).toBe(first);     // the opening run's, none for the listing
+        });
+
+        // Found in the self-check: the sync a wide doorbell still owes (an open group made, someone else's card) is dropped when a
+        // run started after it, because that run read everything changed before it. A listings run left the chats views out, so
+        // it must not stand in for it.
+        it('a run of the listing views only does not stand in for the full sync a wide doorbell still owes', async () => {
+            vi.spyOn(Math, 'random').mockReturnValue(0.5);          // the owed sync waits 150 s
+            const { chats, ring } = await open();
+            await ring({ type: 'profile_updated', publicKey: OTHER }, 0);
+            await ring(listing(OTHER), 500);
+            expect(chats).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(chats).toHaveBeenCalledTimes(1);
+        });
+
+        it('a run of everything still stands in for it, as before', async () => {
+            vi.spyOn(Math, 'random').mockReturnValue(0.5);
+            const { chats, ring } = await open();
+            await ring({ type: 'profile_updated', publicKey: OTHER }, 0);
+            await ring({ type: 'new_message', conversationId: 'c1', id: 'm1' }, 500);
+            expect(chats).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(chats).toHaveBeenCalledTimes(1);
+        });
+
+        it('the delta cursor moves for a run of everything and not for a run of the listing views only', async () => {
+            const { ring } = await open();
+            saveSyncCursor(1_000);
+            await ring(listing(OTHER), 500);
+            expect(getSyncCursor()).toBe(1_000);
+            await ring({ type: 'new_message', conversationId: 'c1', id: 'm1' }, 500);
+            expect(getSyncCursor()).toBeGreaterThan(1_000);
+        });
+
+        it('asked straight: requestSync(\'listings\') skips the chats listeners; requestSync() and an \'all\' joined to it do not', async () => {
+            const views = vi.fn();
+            const chats = vi.fn();
+            registerSyncActivityListener(views);
+            registerSyncActivityListener(chats, { chats: true });
+            const a = requestSync('listings');
+            await vi.advanceTimersByTimeAsync(200);
+            await a;
+            expect(views).toHaveBeenCalledTimes(1);
+            expect(chats).not.toHaveBeenCalled();
+            const b = requestSync('listings');
+            const c = requestSync();
+            await vi.advanceTimersByTimeAsync(200);
+            await Promise.all([b, c]);
+            expect(views).toHaveBeenCalledTimes(2);
+            expect(views).toHaveBeenLastCalledWith({ scope: 'all' });
+            expect(chats).toHaveBeenCalledTimes(1);
+        });
+    });
 });

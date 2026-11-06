@@ -99,6 +99,12 @@ let host: HTMLElement | null = null;
 
 const reads = () => vi.mocked(syncMessages).mock.calls.length;
 const ring = () => act(() => { rn.listeners.get('ws_activity')?.forEach(fn => fn({ type: 'new_message' })); });
+const ringWith = (data: unknown) => act(() => { rn.listeners.get('ws_activity')?.forEach(fn => fn(data)); });
+// What the node sends a member socket for a new public listing (publicBroadcastPost): by `author`, of `type`.
+const listing = (author: string, type = 'event', extra: Record<string, unknown> = {}) => ({
+    type: 'new_post',
+    post: { id: 'post-1', type, authorPublicKey: author, updatedAt: '2026-10-28T06:00:00.000Z', audienceScope: 'public', ...extra },
+});
 const after = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 const appGoes = (state: string) => act(() => { rn.appState.current = state; rn.appStateListeners.forEach(fn => fn(state)); });
 
@@ -235,5 +241,59 @@ describe('the tabs\' unread doorbell, with the socket alive', () => {
         root = null;
         await after(20_000);
         expect(reads()).toBe(2);
+    });
+});
+
+// Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §5, §8 fix 2): a new listing by
+// someone else rang every nearby phone's chats read. It changes no chat and no unread count, so it reads nothing here.
+describe('the tabs\' unread doorbell, for a listing', () => {
+    it('a new event by someone else reads no messages, however many ring and however long ago the last read was', async () => {
+        await after(12_000);
+        expect(reads()).toBe(1);
+        for (let i = 0; i < 5; i++) { await ringWith(listing('pk-other', 'event')); await after(11_000); }
+        expect(reads()).toBe(1);
+    });
+
+    it('nor does a new need, poll or offer by someone else (an app that cannot write it ahead rings the bell for it)', async () => {
+        await after(12_000);
+        for (const type of ['need', 'poll', 'offer']) { await ringWith(listing('pk-other', type)); await after(11_000); }
+        expect(reads()).toBe(1);
+    });
+
+    it('a listing bell does not hold off or cancel a chat bell: the chat bell reads, over 10 s from the last read', async () => {
+        await after(12_000);
+        await ringWith(listing('pk-other'));
+        await ring();                 // a new_message
+        expect(reads()).toBe(2);
+    });
+
+    it('a chat bell still reads (new_message), and so does every bell that is not a new listing by someone else', async () => {
+        await after(12_000);
+        await ring();
+        expect(reads()).toBe(2);
+        await after(11_000);
+        await ringWith({ type: 'group_member_invited', member: { memberPubkey: 'pk-me' } });
+        expect(reads()).toBe(3);
+        await after(11_000);
+        await ringWith({ type: 'transaction_completed' });
+        expect(reads()).toBe(4);
+        await after(11_000);
+        await ringWith({ type: 'post_updated', post: { id: 'post-1', type: 'event', authorPublicKey: 'pk-other', updatedAt: '2026-10-28T06:00:00.000Z', audienceScope: 'public' } });
+        expect(reads()).toBe(5);
+    });
+
+    it('the member\'s own new listing, one they took, a group listing and a bell with no listing in it read as before', async () => {
+        await after(12_000);
+        await ringWith(listing('pk-me'));
+        expect(reads()).toBe(2);
+        await after(11_000);
+        await ringWith(listing('pk-other', 'event', { acceptedBy: 'pk-me' }));
+        expect(reads()).toBe(3);
+        await after(11_000);
+        await ringWith(listing('pk-other', 'event', { audienceScope: 'group' }));
+        expect(reads()).toBe(4);
+        await after(11_000);
+        await ringWith({ type: 'new_post' });
+        expect(reads()).toBe(5);
     });
 });

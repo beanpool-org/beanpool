@@ -5,7 +5,7 @@
  * Stores latest state in localStorage for offline read-only access.
  */
 
-import { createDeferredSync, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
+import { createDeferredSync, isOthersListingDoorbell, isWideDoorbell, livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
 import { routeLivePostChange } from './live-posts';
@@ -21,6 +21,8 @@ import {
     computeUpdatedAfter,
     SYNC_CURSOR_KEY,
     lastSyncStartedAt,
+    type SyncActivityCallback,
+    type SyncListenerOptions,
 } from './sync-coordinator';
 
 export {
@@ -330,6 +332,15 @@ function establishConnection(wsUrl: string, originalUrl: string): void {
                     deferredSync.ask();
                     return;
                 }
+                // A new listing by someone else (an event, a poll: an offer or need is written ahead above) changes no
+                // chat, unread count or group, so the run it asks for leaves the views that read those out
+                // (@beanpool/core isOthersListingDoorbell; `onSyncActivity`'s `chats`). Anything else is read in full.
+                if (isOthersListingDoorbell(data, memberPubkey)) {
+                    requestSync('listings').catch(err => {
+                        console.warn('[WS Sync] Listing sync error:', err);
+                    });
+                    return;
+                }
                 requestSync().catch(err => {
                     console.warn('[WS Sync] Broadcast sync error:', err);
                 });
@@ -533,10 +544,13 @@ export function getSyncState(): SyncState {
 /**
  * Subscribe to WebSocket "activity" — routed through the sync coordinator.
  * Fires during coordinated sync runs (e.g. on reconnect and on non-chat broadcasts)
- * to let open views refresh in a debounced, single-flight manner.
+ * to let open views refresh in a debounced, single-flight manner. The callback is told which
+ * run it is in (`scope`). A view that reads the member's chats, their unread count or their
+ * groups says so with `{ chats: true }` and sits out a run asked for only by new listings by
+ * someone else, which changes none of those.
  */
-export function onSyncActivity(cb: () => void | Promise<void>): () => void {
-    return registerSyncActivityListener(cb);
+export function onSyncActivity(cb: SyncActivityCallback, options?: SyncListenerOptions): () => void {
+    return registerSyncActivityListener(cb, options);
 }
 
 /**

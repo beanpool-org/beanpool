@@ -650,7 +650,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     useEffect(() => {
         loadConversations();
-        const unsubscribe = onSyncActivity(() => loadConversations());
+        const unsubscribe = onSyncActivity(() => loadConversations(), { chats: true });
         const unsubBlocklist = onBlocklistUpdated(() => {
             setBlocklistVersion(v => v + 1);
             loadConversations();
@@ -749,7 +749,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const unsubscribe = onSyncActivity(() => {
                 if (document.hidden) return;
                 return read();
-            });
+            }, { chats: true });
             return () => {
                 stopPolling();
                 document.removeEventListener('visibilitychange', handleVisibilityChange);

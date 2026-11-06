@@ -17,7 +17,7 @@ import {
     askedFacts, communitiesListed, decideOnNode, timeAgoInWords, withPin,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeNeedItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { ARRANGE_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { ARRANGE_WORDS, ASKED_PUSH_WORDS, HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, copyFromLine, copyPriceLine, eventCopyOf, formatCount, inviteAskNoticeHere, readSearchSettings, t, tipText, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -92,11 +92,15 @@ export function StepsBody({ lines, note, colors, onStep }: {
     );
 }
 
-export function InterestsBody({ interests, colors, onToggle }: { interests: readonly string[]; colors: AppColors; onToggle: (id: string) => void }) {
+/**
+ * What are you into? `askedPush`: the community tells a member when a neighbour asks for something they starred (core
+ * askedPushOn, cold start N3), and the note says so there and nowhere else.
+ */
+export function InterestsBody({ interests, colors, onToggle, askedPush = false }: { interests: readonly string[]; colors: AppColors; onToggle: (id: string) => void; askedPush?: boolean }) {
     const s = homeStyles(colors);
     return (
         <>
-            <Text style={s.note}>{t('Tap a few. What you star comes first here and in the Market.')}</Text>
+            <Text style={s.note} testID="home-interests-note">{askedPush ? t(ASKED_PUSH_WORDS.interestsNote) : t('Tap a few. What you star comes first here and in the Market.')}</Text>
             <FabAware id="interests:chips" style={s.chips}>
                 {POST_CATEGORIES.map(c => {
                     const on = interests.includes(c.id);

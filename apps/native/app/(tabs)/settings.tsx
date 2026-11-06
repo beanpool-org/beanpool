@@ -66,7 +66,7 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult } from '@beanpool/core';
+import { ASKED_PUSH_WORDS, FEEDBACK_LIVE, askedPushOn, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -651,6 +651,9 @@ export default function SettingsScreen() {
     const [notifMarketplace, setNotifMarketplace] = useState(true);
     const [notifEscrow, setNotifEscrow] = useState(true);
     const [notifKnocks, setNotifKnocks] = useState(false);
+    // "When a neighbour asks for something I'm into" (cold start N3): on until the member turns it off, and shown only where
+    // the community sends that push (core askedPushOn): elsewhere there is nothing for it to switch.
+    const [notifAsked, setNotifAsked] = useState(true);
     // "Requests to join" only where it changes something (core knockSwitchShown): not for an owner or admin, who is always
     // told, nor on a Known community, whose members are never told. Asked as the screen opens; a node that gave no answer
     // (offline, a timeout, a 5xx) is a role not known yet, so the switch waits (askNodeRole, never fetchMyNodeRole's "no role").
@@ -2156,6 +2159,7 @@ export default function SettingsScreen() {
                                     setEventReminders(parseReminderOffsets(prefs[REMINDER_PREF_KEY]) ?? DEFAULT_REMINDER_OFFSETS);
                                     setNotifEscrow(prefs.notify_escrow !== 'false');
                                     setNotifKnocks(prefs.notify_knocks === 'true');
+                                    setNotifAsked(prefs.notify_asked !== 'false');
                                 }
                                 if (identity.privateKey) setKnockSwitch(knockSwitchShown(nodeProfile?.features, (await askNodeRole(url, identity))?.role));
                             }
@@ -2683,6 +2687,21 @@ export default function SettingsScreen() {
                                     <View style={[styles.toggleThumb, notifMarketplace && styles.toggleThumbOn]} />
                                 </Pressable>
                             </View>
+                            {askedPushOn(nodeProfile?.features) && (
+                                <View style={styles.menuBtn} testID="settings-notify-asked">
+                                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🙋</Text></View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.menuText}>{t(ASKED_PUSH_WORDS.switchName)}</Text>
+                                        <Text style={styles.menuSub}>{t(ASKED_PUSH_WORDS.switchLine)}</Text>
+                                    </View>
+                                    <Pressable style={[styles.toggle, notifAsked && styles.toggleOn]} accessibilityRole="button" accessibilityLabel={t(ASKED_PUSH_WORDS.switchName)} accessibilityState={{ checked: notifAsked }} testID="settings-notify-asked-toggle" onPress={async () => {
+                                        const next = !notifAsked; setNotifAsked(next);
+                                        try { if (identity?.publicKey) { await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { notify_asked: next } }); } } catch (e) { console.warn('[Prefs]', e); }
+                                    }}>
+                                        <View style={[styles.toggleThumb, notifAsked && styles.toggleThumbOn]} />
+                                    </Pressable>
+                                </View>
+                            )}
                             <View style={knockSwitch ? styles.menuBtn : [styles.menuBtn, styles.menuBtnLast]}>
                                 <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔒</Text></View>
                                 <View style={{ flex: 1 }}>

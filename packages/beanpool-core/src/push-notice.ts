@@ -77,8 +77,8 @@ export function askedPushSent(profile: unknown, beans: unknown): boolean {
  * Both apps read it: the What are you into? card says so only here ({@link ASKED_PUSH_WORDS}.interestsNote), and Settings →
  * Notifications shows its switch only here.
  */
-export function askedPushOn(features: { askedPush?: unknown } | null | undefined): boolean {
-    return features?.askedPush === true;
+export function askedPushOn(features: object | null | undefined): boolean {
+    return (features as { askedPush?: unknown } | null | undefined)?.askedPush === true;
 }
 
 /** The words both apps show for the `market.asked` push (design §2.1): the card's sentence and the Settings switch. */

@@ -7,6 +7,7 @@
 //   - no English-only link where a translated page exists;
 //   - legal banner mechanism works with the extracted English date, and NO legal translations are shipped in this slice;
 //   - outdated translation detection renders "This page is newer in English." banner with link to English;
+//   - every translated page carries one "Machine translation. Read the English original →" line (in its own language) linking to its English page;
 //   - main.js WORDS object adapts strings by document.documentElement.lang;
 //   - main.js on English pages shows one-line "Read this in <language>" when navigator.language matches and no choice cookie is set, without redirecting;
 //   - layout at 320px in ar has no horizontal overflow (scrollWidth <= 320) in headless Chromium;
@@ -33,6 +34,7 @@ import {
     LEGAL_PAGES,
     ALL_PAGES,
     CHOOSE_LANGUAGE_WORDS,
+    MACHINE_WORDS,
     getLanguageLinks,
     checkWebsite,
     pageContentHash,
@@ -300,6 +302,49 @@ test('outdated translation displays "This page is newer in English." banner link
     const heroContainerIdx = renderedIndex.indexOf('hero-container');
     const indexBannerIdx = renderedIndex.indexOf('website-stale-banner');
     assert.ok(indexBannerIdx > heroContainerIdx, 'stale banner is inside hero-container, not before it');
+});
+
+test('every translated page says "Machine translation" once and links to its English original; --check flags a page without it', () => {
+    // English: the line the house rule asks for, word for word
+    assert.equal(`${MACHINE_WORDS.en.note} ${MACHINE_WORDS.en.link}`, 'Machine translation. Read the English original →');
+
+    for (const lang of GUIDE_LANGS) {
+        const words = MACHINE_WORDS[lang];
+        assert.ok(words && words.note.trim() && words.link.trim(), `${lang} has a machine-translation line`);
+        assert.notEqual(`${words.note} ${words.link}`, `${MACHINE_WORDS.en.note} ${MACHINE_WORDS.en.link}`, `${lang}'s line is translated, not the English`);
+        for (const page of TRANSLATED_PAGES) {
+            const generated = fs.readFileSync(path.join(WEBSITE_DIR, lang, page), 'utf8');
+            assert.equal((generated.match(/class="website-machine-banner"/g) || []).length, 1, `${lang}/${page} carries the label exactly once`);
+            assert.ok(generated.includes(`<div class="website-machine-banner"><p>${words.note} <a href="../${page}">${words.link}</a></p></div>`),
+                `${lang}/${page} labels itself and links to ../${page}`);
+        }
+    }
+
+    // English pages are the original: no label
+    for (const page of ALL_PAGES) {
+        assert.ok(!fs.readFileSync(path.join(WEBSITE_DIR, page), 'utf8').includes('website-machine-banner'), `English ${page} carries no label`);
+    }
+
+    // A stale page has both lines, the machine label above the stale one; rendering twice never doubles either
+    const english = fs.readFileSync(path.join(WEBSITE_DIR, 'rules.html'), 'utf8');
+    const stale = `<!-- source-hash: 0000000000000000 -->\n${english}`;
+    const once = renderTranslatedPage('de', 'rules.html', stale, english);
+    assert.ok(once.indexOf('website-machine-banner') > 0 && once.indexOf('website-machine-banner') < once.indexOf('website-stale-banner'),
+        'the machine label sits above the stale banner');
+    const twice = renderTranslatedPage('de', 'rules.html', `<!-- source-hash: 0000000000000000 -->\n${once}`, english);
+    assert.equal((twice.match(/class="website-machine-banner"/g) || []).length, 1, 'a second render keeps one label');
+    assert.equal((twice.match(/class="website-stale-banner"/g) || []).length, 1, 'a second render keeps one stale banner');
+
+    // A generated page without the label fails the check (fail-first)
+    const file = path.join(WEBSITE_DIR, 'fr', 'help.html');
+    const original = fs.readFileSync(file, 'utf8');
+    try {
+        fs.writeFileSync(file, original.replace(/\s*<div class="website-machine-banner">[\s\S]*?<\/div>/, ''), 'utf8');
+        assert.ok(checkWebsite().some(e => e.includes('fr/help.html is missing the machine-translation label')),
+            'checkWebsite fails when a translated page has no machine-translation label');
+    } finally {
+        fs.writeFileSync(file, original, 'utf8');
+    }
 });
 
 test('pageContentHash ignores asset queries and script injections, but changes on text edits', () => {

@@ -13,6 +13,7 @@
  * - Language row in the footer with all 25 languages in their own native names.
  * - RTL direction (`dir="rtl"` on <body>) for Arabic, Persian and Urdu.
  * - Outdated translation detection ("This page is newer in English." banner linking to English).
+ * - A "Machine translation. Read the English original →" line on every translated page (MACHINE_WORDS), above the stale banner.
  * - Legal pages banner mechanism ("This is a translation to help you read it. The English version, dated <date>, is the one that applies.")
  *   with no legal translations shipped in this slice.
  * - Relative link rewrites: links to translated pages remain in <lang>/, links to untranslated pages (like legal) link to English.
@@ -167,6 +168,40 @@ export const STALE_WORDS = Object.freeze({
     fil: { note: 'Mas bago ang pahinang ito sa Ingles.', link: 'Basahin ang kasalukuyang bersyon sa Ingles →' },
     ja: { note: 'このページは英語版の方が新しいです。', link: '現在の英語版を読む →' },
     ko: { note: '이 페이지는 영어로 된 최신 버전이 있습니다.', link: '현재 영어 버전 읽기 →' },
+});
+
+/**
+ * The label every translated page carries (house rule: a machine translation says so; cold review d5, 7 Nov 2026).
+ * English: "Machine translation. Read the English original →". These 24 lines are themselves MACHINE DRAFTS, not yet read by a
+ * speaker of each language; a volunteer or a funded pass replaces them. Right-to-left languages (ar, fa, ur) end the link with ←,
+ * as the stale-page words above do.
+ */
+export const MACHINE_WORDS = Object.freeze({
+    en: { note: 'Machine translation.', link: 'Read the English original →' },
+    es: { note: 'Traducción automática.', link: 'Leer el original en inglés →' },
+    pt: { note: 'Tradução automática.', link: 'Ler o original em inglês →' },
+    hi: { note: 'मशीनी अनुवाद।', link: 'अंग्रेज़ी मूल पढ़ें →' },
+    bn: { note: 'যান্ত্রিক অনুবাদ।', link: 'ইংরেজি মূল পড়ুন →' },
+    fr: { note: 'Traduction automatique.', link: "Lire l'original en anglais →" },
+    ar: { note: 'ترجمة آلية.', link: 'اقرأ الأصل الإنجليزي ←' },
+    id: { note: 'Terjemahan mesin.', link: 'Baca aslinya dalam bahasa Inggris →' },
+    ru: { note: 'Машинный перевод.', link: 'Читать оригинал на английском →' },
+    'zh-Hans': { note: '机器翻译。', link: '阅读英文原文 →' },
+    'zh-Hant': { note: '機器翻譯。', link: '閱讀英文原文 →' },
+    it: { note: 'Traduzione automatica.', link: "Leggi l'originale in inglese →" },
+    de: { note: 'Maschinelle Übersetzung.', link: 'Englisches Original lesen →' },
+    tr: { note: 'Makine çevirisi.', link: 'İngilizce aslını okuyun →' },
+    sw: { note: 'Tafsiri ya mashine.', link: 'Soma asili la Kiingereza →' },
+    ml: { note: 'മെഷീൻ വിവർത്തനം.', link: 'ഇംഗ്ലീഷ് മൂലം വായിക്കുക →' },
+    ta: { note: 'இயந்திர மொழிபெயர்ப்பு.', link: 'ஆங்கில மூலத்தைப் படிக்கவும் →' },
+    uk: { note: 'Машинний переклад.', link: 'Читати оригінал англійською →' },
+    ur: { note: 'مشینی ترجمہ۔', link: 'انگریزی اصل پڑھیں ←' },
+    fa: { note: 'ترجمهٔ ماشینی.', link: 'اصل انگلیسی را بخوانید ←' },
+    vi: { note: 'Bản dịch máy.', link: 'Đọc bản gốc tiếng Anh →' },
+    el: { note: 'Αυτόματη μετάφραση.', link: 'Διαβάστε το αγγλικό πρωτότυπο →' },
+    fil: { note: 'Salin ng makina.', link: 'Basahin ang orihinal sa Ingles →' },
+    ja: { note: '機械翻訳です。', link: '英語の原文を読む →' },
+    ko: { note: '기계 번역입니다.', link: '영어 원문 읽기 →' },
 });
 
 /** Legal banner words per language: "This is a translation to help you read it. The English version, dated <date>, is the one that applies." */
@@ -567,6 +602,7 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
     // 7. Inject banner if stale ("newer in English") or if legal page
     out = out.replace(/\s*<div\s+class="website-stale-banner"[\s\S]*?<\/div>/gi, '');
     out = out.replace(/\s*<div\s+class="website-legal-banner"[\s\S]*?<\/div>/gi, '');
+    out = out.replace(/\s*<div\s+class="website-machine-banner"[\s\S]*?<\/div>/gi, '');
 
     const enHref = `../${page}`;
 
@@ -581,6 +617,11 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
         const banner = `    <div class="website-legal-banner"><p>${bannerText} <a href="${enHref}">English (${date})</a></p></div>`;
         out = injectBanner(out, banner);
     }
+
+    // 7b. Every translated page says it is a machine translation and links to its English original. Injected last, so it
+    // sits above the stale or legal banner.
+    const machine = MACHINE_WORDS[lang] || MACHINE_WORDS.en;
+    out = injectBanner(out, `    <div class="website-machine-banner"><p>${machine.note} <a href="${enHref}">${machine.link}</a></p></div>`);
 
     // 8. Ensure main.js is loaded on pages with navigation (except global.html and status.html)
     if (PAGES_WITH_MAIN_JS.includes(page) && !out.includes('main.js')) {
@@ -861,6 +902,11 @@ export function checkWebsite() {
 
             if (actualHtml !== expectedHtml) {
                 errors.push(`apps/website/${lang}/${page} is out of sync with content/; run 'node scripts/website-build.mjs'`);
+            }
+
+            // Every translated page carries the machine-translation label, linking to its English original
+            if (!actualHtml.includes(`<div class="website-machine-banner"><p>${(MACHINE_WORDS[lang] || MACHINE_WORDS.en).note} <a href="../${page}">`)) {
+                errors.push(`apps/website/${lang}/${page} is missing the machine-translation label linking to ../${page}`);
             }
 
             // Verify <html lang="...">

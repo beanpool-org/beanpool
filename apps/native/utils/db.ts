@@ -6742,6 +6742,28 @@ async function sealForGroupConversation(conversationId: string, text: string, li
     return { ...sealed, metadata: { epoch: sealedUnder.epoch } };
 }
 
+/**
+ * Home's "A chat" card (scratch/fable-design/DESIGN-home-chosen-chat-fable.md §1, slice C2): a pinned DM's sealed lines as
+ * the node carried them (core HomeChatLine `sealed`), judged exactly as this chat's own screen judges its rows
+ * (getMessages): under the key context this phone holds for the conversation (getDmKeyContext 'open': its pin, or the
+ * rows' one other key; nothing is written from a read) by core's checkDmThread, the one opener. A line that doesn't open
+ * is nobody's. Null when this phone holds no context for it (no row for the chat yet, or its pins can't be read): then
+ * nothing opens and the card says the line is locked. The views go back to the caller's memory only: nothing here writes
+ * to SQLite, to a file or to any cache, and nothing is fetched.
+ */
+export async function judgeHomeChatDmLines(
+    conversationId: string,
+    lines: ReadonlyArray<{ id: string; author: string; type: string; sealed: { ciphertext: string; nonce: string; metadata: string | null } }>,
+): Promise<Map<string, ReturnType<typeof checkDmThread> extends Map<string, infer V> ? V : never> | null> {
+    let ctx: PinnedDmKeyContext | null = null;
+    try { ctx = await getDmKeyContext(conversationId, 'open'); } catch { ctx = null; }
+    if (!ctx) return null;
+    return checkDmThread(
+        lines.map(l => ({ id: l.id, authorPubkey: l.author, ciphertext: l.sealed.ciphertext, nonce: l.sealed.nonce, type: l.type, metadata: l.sealed.metadata })),
+        ctx, conversationId, ctx.formerPeers,
+    );
+}
+
 export async function getMessages(conversationId: string, opts?: { limit?: number }) {
     const database = await getDb();
     // With a limit, return only the NEWEST `limit` messages (WhatsApp-style history

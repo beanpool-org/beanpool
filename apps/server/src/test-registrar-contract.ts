@@ -40,7 +40,7 @@ import type { RouteDeps } from './routes/types.js';
 type NodeClient = typeof node;
 type Tags = { request: string; attest: string };
 type Env = Record<string, unknown>;
-type Row = Record<string, unknown> & { name: string; hostname: string; node_pubkey: string };
+type Row = Record<string, unknown> & { name: string; hostname: string; node_pubkey: string; verified_at?: number | null };
 interface Worker {
     sign: {
         PROTOCOLS: Record<string, Tags>;
@@ -462,7 +462,7 @@ async function run() {
         const renameBody = await renameClaim.json();
         assert(renameClaim.status === 200 && renameBody.status === 'live' && renameBody.probation === undefined,
             'a key holding a verified name skips probation on a new claim', renameBody);
-        assert(world.row('contract-renamed').verified_at > 0, 'verified_at set at claim time for a verified key');
+        assert(Number(world.row('contract-renamed')?.verified_at) > 0, 'verified_at set at claim time for a verified key');
 
         // A Worker deployed without migration 0006 (no request_nonces): /health leaves v2 out, and a node sending v2 gets a
         // 401 naming v1 (not a 500), signs the same call again under v1 and works. PR #1410 note 2.

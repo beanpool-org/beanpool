@@ -1008,9 +1008,7 @@
   "Withdrawing...": "Inaondoa...",
   "Withdraw Request": "Ondoa Ombi",
   "Accept this Offer?": "Kubali Ofa hii?",
-  "Offer to Fulfill?": "Jitolee Kutimiza?",
   "🔒 Trust Wallet Protocol": "🔒 Itifaki ya Mkoba wa Amana",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Muamala huu unalindwa na kuwekwa kwa amana. Mlipaji tayari ameweka mikopo. Baada ya kukamilika, utapokea mikopo ukiondoa ada ya muamala ya 1.5% {owned} ili kufadhili Hazina ya Pamoja.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Kwa kuendelea, unaweka {credits} mikopo kwenye Mkoba wa Amana wa muda. Baada ya kukamilika, mtoaji hupokea mikopo ukiondoa ada ya muamala ya 1.5% {owned} ili kufadhili Hazina ya Pamoja.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Kwa kuendelea, unaweka mikopo yako iliyoidhinishwa kwenye Mkoba wa Amana wa muda. Baada ya kukamilika, mtoaji hupokea mikopo ukiondoa ada ya muamala ya 1.5% {owned} ili kufadhili Hazina ya Pamoja.",
   "TRUST COMMITMENT (HOURS)": "AHADI YA AMANA (MASAA)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "Weka wasifu",
   "⏳ Pending Confirmation": "⏳ Inasubiri Uthibitisho",
   "🤝 Accept Offer": "🤝 Kubali Ofa",
-  "✋ Offer to Fulfill": "✋ Jitolee Kutimiza",
   "✋ Fulfillment Requests ({n})": "✋ Maombi ya Kutimiza ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} (tathmini {n})",

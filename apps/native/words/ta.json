@@ -1010,9 +1010,7 @@
   "Withdrawing...": "திரும்பப் பெறுகிறது...",
   "Withdraw Request": "கோரிக்கையைத் திரும்பப் பெறு",
   "Accept this Offer?": "இந்த சலுகையை ஏற்கவா?",
-  "Offer to Fulfill?": "நிறைவேற்ற முன்வருகிறீர்களா?",
   "🔒 Trust Wallet Protocol": "🔒 பொறுப்புடைமைப் பணப்பை நெறிமுறை",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "இந்த பரிவர்த்தனை பாதுகாக்கப்பட்டு பொறுப்பில் வைக்கப்பட்டுள்ளது. செலுத்துபவர் ஏற்கனவே வரவுகளை ஒதுக்கியுள்ளார். முடிந்ததும், பொதுத் தொகுப்புக்கு 1.5% கட்டணம் {owned} போக வரவுகளைப் பெறுவீர்கள்.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "தொடர்வதன் மூலம், தற்காலிக பொறுப்புடைமைப் பணப்பைக்கு {credits} வரவுகளை ஒதுக்குகிறீர்கள். முடிந்ததும், வழங்குநர் பொதுத் தொகுப்புக்கு 1.5% கட்டணம் {owned} போக வரவுகளைப் பெறுவார்.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "தொடர்வதன் மூலம், உங்கள் அங்கீகரிக்கப்பட்ட வரவுகளை தற்காலிக பொறுப்புடைமைப் பணப்பைக்கு ஒதுக்குகிறீர்கள். முடிந்ததும், வழங்குநர் பொதுத் தொகுப்புக்கு 1.5% கட்டணம் {owned} போக வரவுகளைப் பெறுவார்.",
   "TRUST COMMITMENT (HOURS)": "பொறுப்புடைமை ஒதுக்கீடு (மணிநேரம்)",
@@ -1025,7 +1023,6 @@
   "Set up profile": "சுயவிவரத்தை அமை",
   "⏳ Pending Confirmation": "⏳ உறுதிப்படுத்தல் நிலுவையில் உள்ளது",
   "🤝 Accept Offer": "🤝 சலுகையை ஏற்றுக்கொள்",
-  "✋ Offer to Fulfill": "✋ நிறைவேற்ற முன்வாருங்கள்",
   "✋ Fulfillment Requests ({n})": "✋ நிறைவேற்றல் கோரிக்கைகள் ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} மதிப்பாய்வு)",

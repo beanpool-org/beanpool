@@ -1106,9 +1106,7 @@
   "Withdrawing...": "Відкликання...",
   "Withdraw Request": "Відкликати запит",
   "Accept this Offer?": "Прийняти цю Пропозицію?",
-  "Offer to Fulfill?": "Запропонувати допомогу?",
   "🔒 Trust Wallet Protocol": "🔒 Протокол Трастового гаманця",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Цей обмін захищено й розміщено в трасті. Платник уже зарезервував бали. Після завершення ви отримаєте бали за вирахуванням 1.5% комісії {owned} для наповнення Спільного фонду.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Продовжуючи, ви резервуєте {credits} балів у тимчасовому Трастовому гаманці. Після завершення виконавець отримує бали за вирахуванням 1.5% комісії {owned} для Спільного фонду.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Продовжуючи, ви резервуєте дозволені бали в тимчасовому Трастовому гаманці. Після завершення виконавець отримує бали за вирахуванням 1.5% комісії {owned} для Спільного фонду.",
   "TRUST COMMITMENT (HOURS)": "ТРАСТОВЕ ЗОБОВ'ЯЗАННЯ (ГОДИНИ)",
@@ -1121,7 +1119,6 @@
   "Set up profile": "Налаштувати профіль",
   "⏳ Pending Confirmation": "⏳ Очікує на підтвердження",
   "🤝 Accept Offer": "🤝 Прийняти пропозицію",
-  "✋ Offer to Fulfill": "✋ Запропонувати виконання",
   "✋ Fulfillment Requests ({n})": "✋ Запити на виконання ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} відгук)",

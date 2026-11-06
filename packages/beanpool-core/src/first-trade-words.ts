@@ -25,3 +25,15 @@ export const FIRST_TRADE_WORDS = {
     beansOff: word('This community has no Beans, so there are no trades to measure.'),
     days: wordn('{n} day', '{n} days'),
 } as const;
+
+/**
+ * Words for "Needs this month", the block beside it on the same panel (cold start N4; apps/server engine/needs-this-month.ts).
+ * A figure the node holds back reads `W.heldBack`, as in the rows above, never as 0.
+ */
+export const NEEDS_COUNT_WORDS = {
+    title: word('Needs this month'),
+    posted: word('Needs posted'),
+    answered: word('Answered within a week'),
+    definition: word('A Need is answered when someone other than the person who asked puts in a request on it, whatever came of the request. A Need still in its first week with no answer yet counts as posted only.'),
+    steps: word('Answers go up in steps of {n}, and a figure under {n} is held back, so the number never points at one person.'),
+} as const;

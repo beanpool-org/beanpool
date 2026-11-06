@@ -283,6 +283,19 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
         expect(bypassing()).toEqual([]);
     });
 
+    it("another member's Need: \"I can do this\" and its sentence, the amount and the name through t(), the fee left to the deal (cold start N4)", async () => {
+        const ASKED = { ...NEED, id: 'p-need-asked', author_pubkey: KOFI.pubkey, author_callsign: KOFI.callsign, price_type: 'fixed', credits: 20 };
+        await open(ASKED);
+        expect(host.textContent).toContain(pseudoLocalise('✋ I can do this'));
+        await press('✋ I can do this');
+        expect(host.textContent).toContain(pseudoLocalise('I can do this'));
+        const line = host.querySelector('[data-testid="need-answer-line"]')?.textContent ?? '';
+        expect(line).toBe(pseudoLocalise("You'd do it for {price}. {name} agrees, you do it, {name} confirms, and the Beans are yours.")
+            .replace('{price}', pseudoLocalise('{n} Beans').replace('{n}', '20')).split('{name}').join(KOFI.callsign));
+        expect(host.textContent).not.toContain(pseudoLocalise('🔒 Trust Wallet Protocol'));
+        expect(bypassing(), 'the confirmation').toEqual([]);
+    });
+
     it('a lendable Offer is asked for, never taken in one step (Free and priced); then the borrower waits for the yes', async () => {
         const LENT = { ...OFFER, id: 'p-lent', credits: 0, lendable: 1, audience_scope: 'public', target_group_id: null, cash_also_needed: 0 };
         await open(LENT);

@@ -1008,9 +1008,7 @@
   "Withdrawing...": "Retrait en cours...",
   "Withdraw Request": "Retirer la demande",
   "Accept this Offer?": "Accepter cette Offre ?",
-  "Offer to Fulfill?": "Proposer vos services ?",
   "🔒 Trust Wallet Protocol": "🔒 Protocole du portefeuille de confiance",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Cette transaction est protégée et conservée en fiducie. Le payeur a déjà engagé les crédits. Une fois terminée, vous recevrez les crédits nets déduits des frais de 1,5 % {owned} pour financer le Fonds des Communs.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "En continuant, vous engagez {credits} crédits dans un Portefeuille de confiance temporaire. Une fois terminée, le prestataire reçoit les crédits nets déduits des frais de 1,5 % {owned} pour financer le Fonds des Communs.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "En continuant, vous engagez vos crédits autorisés dans un Portefeuille de confiance temporaire. Une fois terminée, le prestataire reçoit les crédits nets déduits des frais de 1,5 % {owned} pour financer le Fonds des Communs.",
   "TRUST COMMITMENT (HOURS)": "ENGAGEMENT EN FIDUCIE (HEURES)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "Configurer le profil",
   "⏳ Pending Confirmation": "⏳ En attente de confirmation",
   "🤝 Accept Offer": "🤝 Accepter l'Offre",
-  "✋ Offer to Fulfill": "✋ Proposer vos services",
   "✋ Fulfillment Requests ({n})": "✋ Demandes d'exécution ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} avis)",

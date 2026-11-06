@@ -1008,9 +1008,7 @@
   "Withdrawing...": "Retirando...",
   "Withdraw Request": "Retirar solicitud",
   "Accept this Offer?": "¿Aceptar esta Oferta?",
-  "Offer to Fulfill?": "¿Ofrecerse a cumplir?",
   "🔒 Trust Wallet Protocol": "🔒 Protocolo de billetera de custodia",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Esta transacción está protegida y en custodia. El pagador ya ha comprometido los créditos. Al completarse, recibirás los créditos netos descontando la comisión del 1.5% {owned} para el Fondo común.",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Al continuar, comprometes {credits} créditos a una Billetera de custodia temporal. Al completarse, el proveedor recibe los créditos netos descontando la comisión del 1.5% {owned} para el Fondo común.",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Al continuar, comprometes tus créditos autorizados a una Billetera de custodia temporal. Al completarse, el proveedor recibe los créditos netos descontando la comisión del 1.5% {owned} para el Fondo común.",
   "TRUST COMMITMENT (HOURS)": "COMPROMISO DE CUSTODIA (HORAS)",
@@ -1023,7 +1021,6 @@
   "Set up profile": "Configurar perfil",
   "⏳ Pending Confirmation": "⏳ Pendiente de confirmación",
   "🤝 Accept Offer": "🤝 Aceptar Oferta",
-  "✋ Offer to Fulfill": "✋ Ofrecerse a cumplir",
   "✋ Fulfillment Requests ({n})": "✋ Solicitudes de cumplimiento ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} reseña)",

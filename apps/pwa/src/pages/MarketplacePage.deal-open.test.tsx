@@ -199,19 +199,20 @@ describe('a deal already under way on the listing (deal_open)', () => {
             transactions={[]} onRefreshTransactions={onRefreshTransactions} />);
         await screen.findByRole('heading', { name: /Help at the market stall/ });
         await settle();
-        fireEvent.click(screen.getByText('✋ Offer to Fulfill'));
+        fireEvent.click(screen.getByText('✋ I can do this'));
         fireEvent.click(await screen.findByText('Confirm'));
 
         await waitFor(() => expect(said).toEqual([DEAL_OPEN_WORDS]));
         expect(ask).toHaveBeenCalledWith('need-stall', ME, undefined);
         expect(onRefreshTransactions).toHaveBeenCalled();
-        expect(screen.queryByText('Offer to Fulfill this Need?')).toBeNull();
+        // The confirmation is closed: its heading is gone (the button, "✋ I can do this", is another text).
+        expect(screen.queryByText('I can do this')).toBeNull();
 
         view.rerender(<MarketplacePage identity={identity} isMember={true} openPostId="need-stall" onPostOpened={onPostOpened}
             transactions={[deal({ id: 'tx-stall', postId: 'need-stall', postTitle: 'Help at the market stall', buyerPublicKey: 'ada-pk', buyerCallsign: 'Ada', sellerPublicKey: ME, sellerCallsign: 'Mia', credits: 20 })]}
             onRefreshTransactions={onRefreshTransactions} />);
         await settle();
-        expect(screen.queryByText('✋ Offer to Fulfill')).toBeNull();
+        expect(screen.queryByText('✋ I can do this')).toBeNull();
     });
 
     it('in the member\'s language: the words are the page\'s own, through t()', async () => {

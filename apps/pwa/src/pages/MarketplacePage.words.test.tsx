@@ -218,22 +218,22 @@ describe('the Market in the pseudo-locale', () => {
         const view = render(<MarketplacePage identity={identity} isMember={true} openPostId="need-1" onPostOpened={() => {}} />);
         await screen.findByRole('heading', { name: /Lift to town/ });
         await settle();
-        fireEvent.click(screen.getByText(xx('✋ Offer to Fulfill')));
-        expect(await screen.findByText(xx('Offer to Fulfill this Need?'))).toBeInTheDocument();
+        fireEvent.click(screen.getByText(xx('✋ I can do this')));
+        expect(await screen.findByText(xx('I can do this'))).toBeInTheDocument();
         allThroughT(10);
         view.unmount();
 
         render(<MarketplacePage identity={identity} isMember={true} openPostId="need-free" onPostOpened={() => {}} />);
         await screen.findByRole('heading', { name: /Lift to town/ });
         await settle();
-        fireEvent.click(screen.getByText(xx('✋ Offer to Fulfill')));
-        expect(await screen.findByText(xx('This is a free listing (0 B). No credits transferred.'))).toBeInTheDocument();
+        fireEvent.click(screen.getByText(xx('✋ I can do this')));
+        expect(await screen.findByText(xx("You'd do it for free. {name} agrees, you do it, and {name} confirms.").split('{name}').join('Ada'))).toBeInTheDocument();
         allThroughT(10);
 
         // The profile gate's card is drawn by the list (as it has been): it shows once the listing is left.
         fireEvent.click(screen.getByText(xx('Cancel')));
         vi.mocked(getProfileStatus).mockResolvedValue({ complete: false, missingName: true, missingAvatar: true });
-        fireEvent.click(screen.getByText(xx('✋ Offer to Fulfill')));
+        fireEvent.click(screen.getByText(xx('✋ I can do this')));
         await waitFor(() => expect(getProfileStatus).toHaveBeenCalledTimes(3));
         await settle();
         fireEvent.click(screen.getByText(xx('Back to Market')));
@@ -593,7 +593,7 @@ describe('the Market in English', () => {
             vi.mocked(getProfileStatus).mockResolvedValue(status);
             const view = render(<MarketplacePage identity={identity} isMember={true} openPostId="need-1" onPostOpened={() => {}} />);
             await screen.findByRole('heading', { name: /Lift to town/ });
-            fireEvent.click(screen.getByText('✋ Offer to Fulfill'));
+            fireEvent.click(screen.getByText('✋ I can do this'));
             await settle();
             fireEvent.click(screen.getByText('Back to Market'));
             expect((await screen.findByTestId('profile-gate-stub')).textContent)

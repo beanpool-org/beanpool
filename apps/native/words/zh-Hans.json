@@ -959,9 +959,7 @@
   "Withdrawing...": "正在撤回...",
   "Withdraw Request": "撤回申请",
   "Accept this Offer?": "接受此提供？",
-  "Offer to Fulfill?": "提议满足此需求？",
   "🔒 Trust Wallet Protocol": "🔒 信任钱包协议",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "此交易受到托管保护。付款方已预存信用额度。完成后，你将收到扣除 1.5% 交易费{owned}后的信用额度，费用用于资助公共资金池。",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "继续操作即表示你将 {credits} 信用额度预存至临时信任钱包中。完成后，提供方将收到扣除 1.5% 交易费{owned}后的信用额度，费用用于资助公共资金池。",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "继续操作即表示你将授权的信用额度预存至临时信任钱包中。完成后，提供方将收到扣除 1.5% 交易费{owned}后的信用额度，费用用于资助公共资金池。",
   "TRUST COMMITMENT (HOURS)": "信任预存（小时）",
@@ -974,7 +972,6 @@
   "Set up profile": "设置个人资料",
   "⏳ Pending Confirmation": "⏳ 等待确认",
   "🤝 Accept Offer": "🤝 接受提供",
-  "✋ Offer to Fulfill": "✋ 申请提供帮助",
   "✋ Fulfillment Requests ({n})": "✋ 申请帮助人数（{n}）",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "other": "★ {average}（{n} 条评价）"

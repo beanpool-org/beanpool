@@ -27,6 +27,7 @@ import { confirmationDialOn, isConfirmed, knownFloor } from '@beanpool/engine';
 import { getBalance, getCommonsBalance, getMember, isVisitorKey } from '../state-engine.js';
 import { listDebts } from './names-debts.js';
 import { firstTradeFunnel } from './time-to-first-trade.js';
+import { needsThisMonth } from './needs-this-month.js';
 import { stepBack } from './names-list.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
@@ -165,8 +166,9 @@ export function setHealthSettings(actor: string, body: { debtLinePct?: unknown; 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * The community's totals: public by rule. Members and enterprises; the Commons pot on its own line. `newMembers` is not
- * public, and goes only where this does, to owners and admins: how far new members get (engine/time-to-first-trade.ts).
+ * The community's totals: public by rule. Members and enterprises; the Commons pot on its own line. `newMembers` and `needs`
+ * are not public, and go only where this does, to owners and admins: how far new members get (engine/time-to-first-trade.ts)
+ * and how many Needs were asked this month and answered within a week (engine/needs-this-month.ts).
  */
 export function communityTotals(now = new Date()) {
     const t = db.prepare(`SELECT
@@ -190,6 +192,7 @@ export function communityTotals(now = new Date()) {
         tradesThisMonth: trades.n,
         monthStart,
         newMembers: firstTradeFunnel(now),
+        needs: needsThisMonth(now),
     };
 }
 

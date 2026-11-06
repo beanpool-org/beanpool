@@ -9,12 +9,16 @@
  *
  * Cases:
  *   apples          Marty's apples: a Need on the worldwide community, Beans off (IN RETURN, the long note, the local
- *                   community's line), Offer to Fulfill for a member who is not Marty; a photo
+ *                   community's line), I can do this for a member who is not Marty; a photo
  *   apples-nophoto  the same with no photo: the category's tile, 3:1
  *   apples-more     the apples with the note opened ("More"): the take-up pushed down, still on the first screen
  *   offer           an Offer with Beans (30 B / Hr): the price box, Accept Offer
  *   own             the author's own Offer: Pause, Edit, Delete where the take-up goes
  *   deal            a deal under way: the member took the Offer up, the Beans held, Release, Message, Cancel
+ *   need-open       (cold start N4) another member's Need, "I can do this" tapped: the confirmation's one sentence (the amount,
+ *                   the name, who agrees), no fee line, no Trust Wallet box
+ *   need-hours-open the same priced by the hour, 3 hours typed: the total follows (60 Beans)
+ *   need-free-open  a free Need: "You'd do it for free", never "0 Beans"
  *   photo-whole     the apples with a PORTRAIT photo (3:4), which the 4:3 frame crops: a tap on it shows the same photo whole
  *                   (slice DP4; DESIGN-detail-pages-fable.md §2.6). Fails unless the full-screen viewer draws the frame's own URL
  *                   with `contain` (the frame's is `cover`), fills the 320 x 569 screen, has a Close of 48dp inside it, and both
@@ -234,6 +238,7 @@ globalThis.__theme = { theme: scheme, colors };
 const ME = '9'.repeat(64);
 const MARTY = '7'.repeat(64);
 const DAMO = '6'.repeat(64);
+const KOFI = '5'.repeat(64);
 const c = q.get('case') || 'apples';
 globalThis.__identity = { publicKey: ME, privateKey: '8'.repeat(64), callsign: 'Wren' };
 // A 4:3 photo, drawn, from the harness's own server: no network.
@@ -254,10 +259,19 @@ const offer = {
     category: 'education', author_pubkey: DAMO, author_callsign: 'Damo', credits: 30, price_type: 'hourly', repeatable: 1, audience_scope: 'public',
     photos: JSON.stringify([PHOTO]), created_at: new Date(Date.now() - 2 * DAY).toISOString(),
 };
+// Cold start N4: another member's Need on a community with Beans, the take-up tapped (the case's own -open ending).
+const fence = {
+    id: 'p-fence', type: 'need', status: 'active', title: 'Help mending the fence', description: 'Saturday morning, tools provided.', category: 'labour',
+    author_pubkey: KOFI, author_callsign: 'Kofi', credits: 40, price_type: 'fixed', repeatable: 1, audience_scope: 'public',
+    photos: JSON.stringify([PHOTO]), created_at: new Date(Date.now() - 2 * DAY).toISOString(),
+};
 let post = apples;
 let profile = GLOBAL;
 if (c === 'offer') { post = offer; profile = LOCAL; }
 if (c === 'own') { post = { ...offer, author_pubkey: ME, author_callsign: 'Wren' }; profile = LOCAL; }
+if (c === 'need-open') { post = fence; profile = LOCAL; }
+if (c === 'need-hours-open') { post = { ...fence, id: 'p-bed', title: 'Dig a vegetable bed', price_type: 'hourly', credits: 20 }; profile = LOCAL; }
+if (c === 'need-free-open') { post = { ...fence, id: 'p-chairs', title: 'Carry chairs to the hall', credits: 0 }; profile = LOCAL; }
 if (c === 'deal') {
     // A one-off Offer the member took up two days ago: the Beans held for Damo until the member releases them.
     post = { ...offer, id: 'p-ladder', title: 'Ladder and a hand to clean the gutters', repeatable: 0, credits: 45, price_type: 'fixed', status: 'pending', accepted_by: ME, pending_transaction_id: 'tx-1' };
@@ -428,7 +442,7 @@ try {
     };
 
     for (const scheme of ['light', 'dark']) {
-        for (const c of PHONE ? ['photo-whole'] : ['apples', 'apples-nophoto', 'apples-more', 'offer', 'own', 'deal', 'photo-whole']) {
+        for (const c of PHONE ? ['photo-whole'] : ['apples', 'apples-nophoto', 'apples-more', 'offer', 'own', 'deal', 'need-open', 'need-hours-open', 'need-free-open', 'photo-whole']) {
             const tag = `${scheme} · ${c}`;
             await page.goto(`${base}/?scheme=${scheme}&case=${c}`);
             await page.locator('[data-testid="post-chip-row"]').waitFor({ timeout: 15000 }).catch(async (e) => {
@@ -441,6 +455,28 @@ try {
             if (c === 'apples-more') {
                 await page.locator('[data-testid="no-beans-terms-more"]').click();
                 await page.locator('[data-testid="no-beans-terms-more"]').waitFor({ state: 'detached' });
+            }
+            // Cold start N4: "I can do this" tapped; the confirmation says one plain sentence and nothing of the fee.
+            if (c.endsWith('-open')) {
+                const want = {
+                    'need-open': "You'd do it for 40 Beans. Kofi agrees, you do it, Kofi confirms, and the Beans are yours.",
+                    'need-hours-open': "You'd do it for 60 Beans. Kofi agrees, you do it, Kofi confirms, and the Beans are yours.",
+                    'need-free-open': "You'd do it for free. Kofi agrees, you do it, and Kofi confirms.",
+                }[c];
+                if ((await page.locator('[data-testid="post-take-up"]').innerText()).trim() !== '✋ I can do this') problems.push(`${tag}: the take-up does not read "✋ I can do this"`);
+                await page.locator('[data-testid="post-take-up"]').click();
+                await page.locator('[data-testid="need-answer-line"]').waitFor({ timeout: 5000 });
+                if (c === 'need-hours-open') {
+                    await page.locator('input').first().fill('3');
+                    await page.waitForTimeout(200);
+                }
+                const said = (await page.locator('[data-testid="need-answer-line"]').innerText()).replace(/\s+/g, ' ').trim();
+                if (said !== want) problems.push(`${tag}: the sentence reads "${said}", not "${want}"`);
+                const body = await page.evaluate(() => document.body.innerText);
+                if (/1\.5%|Trust Wallet|Commons Pool|Offer to Fulfill/.test(body)) problems.push(`${tag}: the first screen still carries the fee, the Trust Wallet box or the old words`);
+                if (!body.includes('I can do this')) problems.push(`${tag}: the confirmation is not headed "I can do this"`);
+                await page.locator('[data-testid="need-answer-line"]').scrollIntoViewIfNeeded();
+                await page.waitForTimeout(200);
             }
             await measure(tag);
             // Where the take-up (or the case's first action) starts and ends, from the screen's top; the photo's top.

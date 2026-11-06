@@ -1010,9 +1010,7 @@
   "Withdrawing...": "वापस ले रहे हैं...",
   "Withdraw Request": "अनुरोध वापस लें",
   "Accept this Offer?": "यह प्रस्ताव स्वीकार करें?",
-  "Offer to Fulfill?": "पूरा करने की पेशकश करें?",
   "🔒 Trust Wallet Protocol": "🔒 ट्रस्ट वॉलेट प्रोटोकॉल",
-  "This transaction is protected and held in trust. The payer has already committed the credits. Upon completion, you will receive the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "यह लेनदेन सुरक्षित है और ट्रस्ट में रखा गया है। भुगतानकर्ता पहले ही क्रेडिट समर्पित कर चुका है। पूरा होने पर, आपको कॉमन्स पूल के लिए 1.5% लेनदेन शुल्क {owned} घटाकर शुद्ध क्रेडिट प्राप्त होंगे।",
   "By proceeding, you commit {credits} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "आगे बढ़कर, आप एक अस्थायी ट्रस्ट वॉलेट में {credits} क्रेडिट समर्पित करते हैं। कार्य पूरा होने पर, प्रदाता को कॉमन्स पूल के लिए 1.5% लेनदेन शुल्क {owned} घटाकर शुद्ध क्रेडिट प्राप्त होंगे।",
   "By proceeding, you commit your authorized credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee {owned} to fund the Commons Pool.": "आगे बढ़कर, आप अपने अधिकृत क्रेडिट एक अस्थायी ट्रस्ट वॉलेट में समर्पित करते हैं। कार्य पूरा होने पर, प्रदाता को कॉमन्स पूल के लिए 1.5% लेनदेन शुल्क {owned} घटाकर शुद्ध क्रेडिट प्राप्त होंगे।",
   "TRUST COMMITMENT (HOURS)": "ट्रस्ट प्रतिबद्धता (घंटे)",
@@ -1025,7 +1023,6 @@
   "Set up profile": "प्रोफ़ाइल सेट करें",
   "⏳ Pending Confirmation": "⏳ पुष्टि लंबित",
   "🤝 Accept Offer": "🤝 प्रस्ताव स्वीकार करें",
-  "✋ Offer to Fulfill": "✋ पूरा करने की पेशकश करें",
   "✋ Fulfillment Requests ({n})": "✋ पूर्ति अनुरोध ({n})",
   "★ {average} ({n} reviews)|★ {average} ({n} reviews)": {
     "one": "★ {average} ({n} समीक्षा)",

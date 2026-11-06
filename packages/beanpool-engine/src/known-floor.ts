@@ -53,7 +53,12 @@ export function configureKnownFloorBeans(beans: (() => boolean) | null): void {
  * member's. Never on a node without Beans (the global profile), whatever its row says.
  */
 export function confirmationDialOn(db: Db): boolean {
-    return confirmationDialFrom(configValue(db, CONFIRMATION_DIAL_KEY));
+    // The same answer as confirmationDialFrom(row), asked in the other order: a node without Beans reads off whatever its row
+    // says, so its row is not read (the global node's trust profile asks this for every listing of a page; 1.5% of the
+    // launch mix's busy time was this one read, scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §7). A node
+    // with Beans reads its row each time, as it always did: a write by anyone is the next read's.
+    if (beansOn !== null && !beansOn()) return false;
+    return confirmationDialSetFrom(configValue(db, CONFIRMATION_DIAL_KEY));
 }
 
 /** The cap the owner has saved: the stored value within [CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX], else the default. */

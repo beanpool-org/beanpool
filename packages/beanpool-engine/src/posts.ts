@@ -25,7 +25,7 @@ import { isGroupConvenor } from './groups.js';
 import { PINS_MAX, avatarUrlOf, lendBackAroundOf, pollIsSealed, shopPhotoUrlOf, tierForCredit, wordsFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
-import { prepared } from './statements.js';
+import { prepared, preparedShape } from './statements.js';
 import { readRepeatRule, readRepeatSkips, restorableBefore, upcoming, type EventRepeatRule } from './event-series.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
@@ -722,7 +722,7 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
     for (let i = 0; i < ids.length; i += chunkSize) {
         const chunk = ids.slice(i, i + chunkSize);
         const placeholders = chunk.map(() => '?').join(',');
-        const rows = db.prepare(queryBuilder(placeholders)).all(...chunk) as T[];
+        const rows = preparedShape(db, queryBuilder(placeholders)).all(...chunk) as T[];
         results.push(...rows);
     }
     return results;
@@ -1561,7 +1561,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             sql += " LIMIT ? OFFSET ?";
             params.push(limit, skip);
         }
-        return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
+        return preparedShape(db, sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
     };
 
     // The one pass with a bound (PostFilter.measureAtMost): the matching posts (in the radius's box, if it has one) are
@@ -1601,7 +1601,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             sql += " LIMIT ? OFFSET ?";
             params.push(limit, skip);
         }
-        return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
+        return preparedShape(db, sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
     };
 
     let ranked: Array<{ id: string; distance_km: number | null }> | undefined;
@@ -2330,7 +2330,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     } else if (pins.length > 0) {
         rows = postRowsWithPins(pins, where, params, filter!, near
             ? (w, p, f, pinned) => rowsNear(db, pinned ? { lat: near.lat, lng: near.lng } : near, w, p, f)
-            : (w, p, f) => db.prepare(`${postRowSelect(f)}
+            : (w, p, f) => preparedShape(db, `${postRowSelect(f)}
         WHERE 1=1${w}${recentOrder(f)}${f.limit ? ' LIMIT ? OFFSET ?' : ''}`).all(...p, ...(f.limit ? [f.limit, f.offset || 0] : [])) as any[]);
     } else if (near) {
         rows = rowsNear(db, near, where, params, filter!);
@@ -2351,7 +2351,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 query += " LIMIT ? OFFSET ?";
                 params.push(filter.limit, filter.offset || 0);
             }
-            rows = db.prepare(query).all(...params) as any[];
+            rows = preparedShape(db, query).all(...params) as any[];
         }
     }
     const postIds = rows.map(r => r.id);

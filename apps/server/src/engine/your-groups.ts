@@ -8,7 +8,7 @@
 // invite-only group they are not in never appears — the #828 rule holds without a separate filter.
 
 import { db } from '../db/db.js';
-import { COUNTS_AS_UNREAD_SQL, isEventHost } from '@beanpool/engine';
+import { COUNTS_AS_UNREAD_SQL, isEventHost, preparedShape } from '@beanpool/engine';
 import { ensureGroupThread, syncGroupThreadMembership, GROUP_CHAT_WIPED_TEXT, GROUP_THREAD_REMOVED_TEXT } from './group-thread.js';
 import {
     ensureEnterpriseThread, isKeeperOfEnterprise, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly,
@@ -130,7 +130,7 @@ function previewText(row: any, removedText: string, authorDeleteText: string | n
 }
 
 function lastMessageOf(conversationId: string, removedText: string, authorDeleteText: string | null): YourChatLastMessage | null {
-    const r = db.prepare(`
+    const r = preparedShape(db, `
         SELECT m.id, m.author_pubkey, m.type, m.system_type, m.ciphertext, m.nonce, m.metadata, m.timestamp, memb.callsign
         FROM messages m LEFT JOIN members memb ON memb.public_key = m.author_pubkey
         WHERE m.conversation_id = ?
@@ -152,13 +152,13 @@ function lastMessageOf(conversationId: string, removedText: string, authorDelete
 
 function readCursor(kind: YourChatKind, conversationId: string, pubkey: string): { lastReadAt: string | null; since: string | null } | null {
     if (kind === 'enterprise') return getKeeperReadCursor(conversationId, pubkey);
-    const r = db.prepare('SELECT last_read_at, updated_at FROM conversation_participants WHERE conversation_id = ? AND public_key = ?')
+    const r = preparedShape(db, 'SELECT last_read_at, updated_at FROM conversation_participants WHERE conversation_id = ? AND public_key = ?')
         .get(conversationId, pubkey) as any;
     return r ? { lastReadAt: r.last_read_at ?? null, since: r.updated_at ?? null } : null;
 }
 
 function unreadCountOf(conversationId: string, pubkey: string, lastReadAt: string | null): number {
-    const r = db.prepare(`
+    const r = preparedShape(db, `
         SELECT COUNT(*) AS c FROM messages m
         WHERE m.conversation_id = ? AND m.author_pubkey != ?
           AND (? IS NULL OR m.timestamp > ?)
@@ -192,7 +192,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     };
 
     // Commons groups: active membership only.
-    const groups = db.prepare(`
+    const groups = preparedShape(db, `
         SELECT g.id, g.name, g.category, g.join_policy, g.avatar_ref, g.kind AS group_kind, gm.role, gc.closed_at
         FROM group_members gm JOIN groups g ON g.id = gm.group_id
         LEFT JOIN group_closures gc ON gc.group_id = g.id
@@ -211,7 +211,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     }
 
     // Enterprises the member keeps (a keeper whose operator capability is live), not hidden ones.
-    const enterprises = db.prepare(`
+    const enterprises = preparedShape(db, `
         SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_ref, e.status, e.joined_at, e.lifecycle
         FROM treasury_operators o JOIN members e ON e.public_key = o.treasury_pubkey
         WHERE o.member_pubkey = ? AND COALESCE(e.is_treasury, 0) = 1
@@ -230,7 +230,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
     }
 
     // Events the member hosts or is Going to, while their chat is still readable (30 days after the end).
-    const events = db.prepare(`
+    const events = preparedShape(db, `
         SELECT c.id FROM conversation_participants cp JOIN conversations c ON c.id = cp.conversation_id
         WHERE cp.public_key = ? AND c.type = 'event_thread'
     `).all(pubkey) as any[];

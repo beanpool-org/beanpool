@@ -5,6 +5,7 @@
 import type Database from 'better-sqlite3';
 import { avatarUrlOf, groupPictureUrlOf } from '@beanpool/core';
 import { authorsOnly, postPhotoUrl, type OffListingPhotoShown } from './photo-url.js';
+import { preparedShape } from './statements.js';
 
 type Db = Database.Database;
 
@@ -93,14 +94,14 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
     for (let i = 0; i < ids.length; i += chunkSize) {
         const chunk = ids.slice(i, i + chunkSize);
         const placeholders = chunk.map(() => '?').join(',');
-        const rows = db.prepare(queryBuilder(placeholders)).all(...chunk) as T[];
+        const rows = preparedShape(db, queryBuilder(placeholders)).all(...chunk) as T[];
         results.push(...rows);
     }
     return results;
 }
 
 export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: OffListingPhotoShown = authorsOnly(pubkey)): Conversation[] {
-    const rows = db.prepare(`
+    const rows = preparedShape(db, `
         SELECT c.*,
         CASE WHEN c.post_id IS NOT NULL AND p.id IS NULL THEN '(deleted post)' ELSE p.title END as post_title,
         COALESCE(

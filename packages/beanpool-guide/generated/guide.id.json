@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 7,
+  "version": 8,
   "language": "id",
-  "hash": "123955b10937810b7a8a33231daaef3c6f4b27b98e926dbc3c1cec3ad1402025",
+  "hash": "4d292b7040b62e87cc820be75aa98f69c92a76d430872db27fcaeee96bc544be",
   "sections": [
     {
       "id": "about",
@@ -790,6 +790,25 @@
       "blocks": [
         {
           "type": "h2",
+          "text": "Pasar dalam satu urutan"
+        },
+        {
+          "type": "p",
+          "text": "Di ponsel, Anda mendapatkannya dengan aplikasi yang sudah diperbarui; di peramban web, saat server komunitas Anda diperbarui."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Terbaru dulu, sama di ponsel dan web.** Pasar menampilkan postingan dari yang terbaru di bawah **Hari ini**, **Kemarin**, **Minggu Ini**, dan **Listing Terdahulu**, menurut hari setiap postingan ditayangkan. Judul **Acara mendatang**, **Jajak Pendapat**, dan **Terdekat dulu** sudah tidak ada.",
+            "**Acara kembali sekali.** Sehari sebelum dimulai, acara ditampilkan lagi di bawah **Hari ini**. Jajak pendapat melakukan hal yang sama sehari sebelum ditutup. Setelah itu, keduanya tenggelam seperti postingan lain.",
+            "**Dua tempat sehari.** Postingan ketiga seseorang dalam sehari, dan yang sesudahnya, muncul setelah postingan semua orang lain pada hari itu.",
+            "**Mengedit postingan tidak menaikkannya.** Agar terlihat lagi, posting lagi.",
+            "**Di komunitas global**, Pasar menampilkan yang terbaru dalam jarak 250 km dari wilayahmu, setiap postingan dengan seberapa jauh jaraknya. Sebuah baris di atas daftar menyatakannya. Ponsel tidak lagi memerlukan lokasimu untuk ini. Di web app, hal yang sama berlaku untuk **Jarak** yang kamu pilih.",
+            "**Tidak berubah:** postingan yang disematkan pemilik tetap di atas, **Acara** tetap menampilkan yang paling cepat dimulai lebih dulu, dan pencarian menemukan yang paling cocok dengan kata-katamu. Lihat \"Menjelajahi pasar\"."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "Komunitas global di dekatmu"
         },
         {
@@ -804,7 +823,7 @@
             "**Wilayahmu.** Di web app, bergabung ke komunitas global memiliki satu langkah tambahan setelah foto: **Kira-kira kamu di mana?** Di ponsel, langkah ini ditanyakan saat kamu bergabung menggunakan akun yang sudah kamu miliki; akun ponsel baru dapat mengaturnya nanti di Pengaturan, di bawah **Wilayahmu**. Pada langkah tersebut, ketuk **Pakai lokasiku**, **Ketik nama kota atau daerah**, atau **Lewati dulu**. Wilayah disimpan dalam radius sekitar 10 km, bukan lokasi tepatmu. Ubah atau hapus ini di Pengaturan, di bawah **Wilayahmu**. Lihat \"Wilayahmu\".",
             "**Tanpa wilayah, tidak masalah.** Tanpa mengatur wilayah, kamu melihat postingan terbaru dari mana saja, dan sebuah baris di atas Pasar menyatakannya. Di ponsel, ketuk baris tersebut untuk mengatur wilayahmu.",
             "**Postingan baru di dekatmu.** Postingan baru masuk begitu dipasang. Postingan yang jauh tidak lagi dikirim ke ponselmu.",
-            "**Di web app**, Pasar dan Peta dimulai dari wilayahmu, atau dari lokasi yang kamu pilih dengan **Jarak**: yang terdekat muncul pertama, masing-masing dengan jaraknya. Lihat \"Menemukan hal di dekatmu\".",
+            "**Di web app**, Pasar dan Peta dimulai dari wilayahmu, atau dari lokasi yang kamu pilih dengan **Jarak**: masing-masing dengan jaraknya. Peta menampilkan yang terdekat dulu. Pasar menampilkan yang terbaru dulu, seperti yang dikatakan \"Pasar dalam satu urutan\", di atas. Lihat \"Menemukan hal di dekatmu\".",
             "**Jajak pendapat** tidak memiliki lokasi tersendiri, sehingga masing-masing ditampilkan di wilayah anggota yang membuatnya.",
             "**Ketik nama kotamu.** Di komunitas global, **Cari komunitasmu** di Beranda tidak lagi membutuhkan lokasimu: ketuk **atau ketik nama kotamu** dan pilih kotamu. Hanya titik perkiraan yang disimpan. Lihat \"Menemukan komunitas di dekatmu\".",
             "**Memasang tanpa harga.** Di komunitas global, formulir postingan tidak meminta harga, karena Kacang berada di komunitas lokal. Di web app, **Pasang Penawaran** dan **Pasang Permintaan** kini dapat digunakan tanpa harga. Komunitas lokal tetap meminta harga."
@@ -1817,9 +1836,9 @@
         {
           "type": "ul",
           "items": [
-            "**Iklan diarsipkan 90 hari setelah terakhir kali diubah.** Iklan tersebut dihapus dari Pasar dan Peta, dan foto-fotonya dihapus. Mengeditnya, menjedanya, atau menayangkannya kembali semuanya dihitung sebagai perubahan: membukanya dengan **Edit Post** dan mengetuk **Simpan** akan menyimpannya selama 90 hari ke depan. Ketika salah satu iklanmu diarsipkan, kamu akan mendapatkan pemberitahuan bersama peringatan **Aktivitas Pasar**. Kamu dapat mempostingnya kembali kapan saja.",
+            "**Iklan diarsipkan 90 hari setelah terakhir kali diubah.** Iklan tersebut dihapus dari Pasar dan Peta, dan foto-fotonya dihapus. Mengeditnya, menjedanya, atau menayangkannya kembali semuanya dihitung sebagai perubahan: membukanya dengan **Edit Post** dan mengetuk **Simpan** akan menyimpannya selama 90 hari ke depan. Semua ini tidak menaikkannya di Pasar, yang menampilkan postingan dari yang terbaru. Ketika salah satu iklanmu diarsipkan, kamu akan mendapatkan pemberitahuan bersama peringatan **Aktivitas Pasar**. Kamu dapat mempostingnya kembali kapan saja.",
             "**Hingga 5 foto per iklan.**",
-            "**Ponselmu menyimpan 500 iklan terdekat**, dalam radius 250 km dari wilayahmu. Ponsel juga menyimpan iklan milikmu sendiri, dan iklan apa pun yang memiliki kesepakatan atau percakapan denganmu. Pencarian Pasar tetap menemukan iklan dari mana saja. Lihat \"Wilayahmu\".",
+            "**Ponselmu menyimpan 500 iklan terdekat**, dalam radius 250 km dari wilayahmu. Ponsel juga menyimpan iklan milikmu sendiri, dan iklan apa pun yang memiliki kesepakatan atau percakapan denganmu. Pasar menampilkan yang berjarak dalam 250 km dari wilayahmu mulai dari yang terbaru, dan setiap kartu menyebutkan seberapa jauh jaraknya. Pencarian Pasar tetap menemukan iklan dari mana saja. Lihat \"Wilayahmu\".",
             "**Kamu dapat memantau hingga 3 tempat** dengan **Beri tahu saya jika ada yang dimulai di sini**. Untuk memantau tempat lain, berhentilah memantau salah satunya. Lihat \"Finding a community near you\"."
           ]
         },
@@ -2840,7 +2859,7 @@
           "type": "ul",
           "items": [
             "**Bergabung dengan undangan:** tombol langkah pertama berbunyi **Buat Identitas & Gabung →**. Jika seseorang di sini sudah memiliki nama yang kamu pilih, kamu mendapatkannya dengan tambahan angka. **← Kembali** pada **Fotomu** menampilkan namamu saja, dengan **Lanjut →**: ubah (hingga 20 karakter) atau pertahankan, pada akun yang sama. Jika seseorang sudah memiliki nama baru tersebut, halaman memberi tahu demikian dan menyarankan nama lain.",
-            "**Tab-tab:** web app memiliki **Beranda**, **Pasar**, **Peta**, **Sarana Bersama**, **Obrolan**, **Orang**, dan **Buku kas**. Apa yang disebut aplikasi ponsel sebagai **Obrolan** (Talk) adalah **Obrolan** (Chat) di web, dan **Orang** memiliki tab tersendiri.",
+            "**Tab-tab:** web app memiliki **Beranda**, **Pasar**, **Peta**, **Sarana Bersama**, **Obrolan**, **Orang**, dan **Buku kas**. Kedua aplikasi menyebut tab ini **Obrolan**, dan di web **Orang** memiliki tab tersendiri.",
             "**Pengaturan dan profilmu:** tombol-tombol kecil di kanan atas: profilmu, tanda **?**, lalu Pengaturan. Pada layar lebar tombol-tombol ini berada di bagian bawah menu di sebelah kiri.",
             "**Memposting Penawaran atau Permintaan:** gunakan **Postingan Baru** pada halaman **Peta**.",
             "**Tampilan:** pilihannya bernama **Sama seperti perangkat**, bukan \"Sama seperti ponsel\".",
@@ -2943,19 +2962,26 @@
         },
         {
           "type": "p",
-          "text": "Ketuk **Pasar** di baris tab. Kamu akan melihat apa yang ditawarkan dan dicari oleh orang-orang di komunitasmu, diurutkan dari yang terbaru, dikelompokkan berdasarkan hari postingan tersebut dibuat."
+          "text": "Ketuk **Pasar** di baris tab. Kamu akan melihat apa yang ditawarkan dan dicari oleh orang-orang di komunitasmu, diurutkan dari yang terbaru, di bawah **Hari ini**, **Kemarin**, **Minggu Ini**, dan **Listing Terdahulu**, menurut hari setiap postingan ditayangkan. Ponsel dan web app menampilkannya dengan cara yang sama."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Acara kembali sekali.** Sehari sebelum dimulai, acara ditampilkan lagi di bawah **Hari ini**, di antara postingan baru hari itu, lalu tenggelam seperti postingan lain. Acara mingguan kembali sekali seminggu.",
+            "**Jajak pendapat juga kembali sekali**, sehari sebelum ditutup.",
+            "**Tak seorang pun mengambil lebih dari dua tempat sehari.** Postingan ketiga seseorang dalam sehari, dan yang sesudahnya, muncul setelah postingan semua orang lain pada hari itu.",
+            "**Mengedit postingan tidak menaikkannya.** Menjedanya, atau sebuah jawaban atasnya, juga tidak. Agar terlihat lagi, posting lagi.",
+            "**Satu baris menunjukkan di mana Anda berhenti.** **Baru sejak terakhir kali Anda melihat** berada di atas postingan pertama yang sudah terdaftar saat Anda terakhir meninggalkan Pasar di ponsel atau peramban ini; baris ini tidak muncul pada kunjungan pertama, saat tidak ada yang lebih baru, atau saat Anda mencari atau memfilter, dan kisi di ponsel tidak menampilkannya.",
+            "**Postingan yang disematkan pemilik** berada paling atas, di bawah **Disematkan**, berapa pun umurnya."
+          ]
         },
         {
           "type": "p",
-          "text": "Di ponsel, acara ditampilkan terlebih dahulu. Jika kamu sudah mengizinkan aplikasi menggunakan lokasimu, tampilan daftar dan ringkas akan menampilkan listing dari yang paling dekat sebagai gantinya, di bawah **Terdekat dulu**, dengan jajak pendapat di bawah **Jajak Pendapat**. **Untuk Anda** mempertahankan urutannya sendiri. Tarik daftar ke bawah untuk menyegarkannya."
+          "text": "Dalam tampilan daftar dan ringkas, kamu melihat judul hari. Tampilan kisi menunjukkan urutan yang sama tanpa judul itu. Di ponsel, Pasar terbuka sebagai daftar; di web app, sebagai kartu. **Untuk Anda** mempertahankan urutannya sendiri. Di bawah **Acara**, yang paling cepat dimulai muncul pertama, dengan **Hari ini**, **Akhir pekan ini**, dan **7 hari ke depan**. Pencarian menampilkan postingan yang paling cocok dengan kata-katamu. Di ponsel, tarik daftar ke bawah untuk menyegarkannya."
         },
         {
           "type": "p",
-          "text": "Di web app Pasar terbuka dalam bentuk kartu. Dalam tampilan daftar dan ringkas, acara berada di bawah hari postingan tersebut dibuat. Di komunitas lokal web app tidak mengurutkan yang terdekat terlebih dahulu."
-        },
-        {
-          "type": "p",
-          "text": "Di komunitas global, web app menampilkan listing di dekatmu terlebih dahulu: yang terdekat di dalam **Jarak** milikmu, atau dalam radius 250 km dari wilayahmu (perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau di **Pengaturan**), masing-masing dengan seberapa jauh jaraknya. Sebuah baris di atas daftar memberi tahu pilihan mana yang sedang aktif. Di dekat wilayahmu ada tombol **Tampilkan di mana saja** untuk melihat yang terbaru dari mana saja. Dengan filter **Jarak**, buka **Jarak** dan ketuk **Atur Ulang** untuk kembali ke wilayahmu, lalu ketuk **Tampilkan di mana saja**. Di ponsel, komunitas global menyimpan listing yang paling dekat dengan wilayahmu, jadi itulah yang ditampilkan di Pasar. Lihat \"Menemukan hal di dekatmu\"."
+          "text": "Di komunitas global, Pasar menampilkan yang terbaru dalam jarak 250 km dari wilayahmu (perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau di **Pengaturan**), setiap postingan dengan seberapa jauh jaraknya. Sebuah baris di atas daftar menyatakannya: **Terbaru dalam jarak 250 km dari wilayahmu.** Sama di ponsel dan di web app, dan di ponsel tidak perlu kamu mengizinkan aplikasi menggunakan lokasimu. Dengan **Jarak**, kedua aplikasi menampilkan yang terbaru di dalamnya. Di web app, barisnya lalu berbunyi **Terbaru dalam jarak 5 km dari tempat yang kamu pilih.**, dan setiap postingan menampilkan seberapa jauh jaraknya. Di web app, di dekat wilayahmu baris itu memiliki tombol **Tampilkan di mana saja** untuk melihat yang terbaru dari mana saja. Dengan filter **Jarak**, buka **Jarak** dan ketuk **Atur Ulang** untuk kembali ke wilayahmu, lalu ketuk **Tampilkan di mana saja**. Jika kurang dari delapan yang ada di dekatmu, yang terbaru dari tempat lain muncul di bawahnya, di bawah **Terbaru dari tempat lain**, di ponsel dan di web app. Ini tidak terjadi saat kamu memilih **Jarak**, mengetik pencarian, atau melihat **Acara**. Lihat \"Menemukan hal di dekatmu\"."
         },
         {
           "type": "p",
@@ -3768,8 +3794,8 @@
       "slug": "near-you",
       "title": "Menemukan hal di dekatmu",
       "summary": "Tampilkan hanya kiriman dalam jarak tertentu darimu, atau dari tempat mana pun yang kamu pilih.",
-      "sourceHash": "2db25a661f8751ec",
-      "source-hash": "2db25a661f8751ec",
+      "sourceHash": "f519dd5b8dbe3492",
+      "source-hash": "f519dd5b8dbe3492",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3824,8 +3850,8 @@
         {
           "type": "ul",
           "items": [
-            "Dengan **Jarak** yang dipilih di Pasar, keduanya menampilkan iklan terdekat di dalamnya, diurutkan dari yang terdekat. Peta menampilkan hingga 200 pin.",
-            "Tanpa filter jarak, keduanya menampilkan iklan terdekat dalam radius 250 km dari wilayahmu: perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau nanti di **Pengaturan**, di bawah **Wilayahmu**. Baris di atas daftar Pasar bertuliskan **Terdekat dari area Anda terlebih dahulu, dalam 250 km.** Ketuk **Tampilkan di mana saja** untuk melihat yang terbaru dari mana saja, dan **Dekat area Anda** untuk kembali.",
+            "Dengan **Jarak** yang dipilih di Pasar, keduanya menampilkan iklan di dalamnya. Pasar menampilkannya dari yang terbaru, masing-masing dengan seberapa jauh jaraknya, di bawah baris yang bertuliskan **Terbaru dalam jarak 5 km dari tempat yang kamu pilih.** (dengan jarakmu). Peta menampilkan yang terdekat, hingga 200 pin.",
+            "Tanpa filter jarak, keduanya menampilkan iklan terdekat dalam radius 250 km dari wilayahmu: perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau nanti di **Pengaturan**, di bawah **Wilayahmu**. Pasar menampilkannya dari yang terbaru, di bawah baris yang bertuliskan **Terbaru dalam jarak 250 km dari wilayahmu.** Peta menampilkan yang terdekat dulu. Ketuk **Tampilkan di mana saja** untuk melihat yang terbaru dari mana saja, dan **Dekat area Anda** untuk kembali.",
             "Tanpa keduanya, kamu melihat yang terbaru dari mana saja, dan **Lihat apa yang ada di dekat Anda** membuka pemilih jarak. Baris di atas daftar Pasar memberi tahu pilihan mana yang sedang kamu lihat. Jika menggunakan **Jarak**, baris ini tidak memiliki tombol: buka **Jarak** dan ketuk **Atur ulang**. Kamu kemudian kembali ke dekat wilayahmu, atau, jika belum mengatur wilayah, kamu melihat yang terbaru dari mana saja.",
             "Setiap iklan menunjukkan seberapa jauh jaraknya, seperti **📍 12 km**. Iklanmu sendiri selalu ada di Peta, dan di Pasar dekat wilayahmu, di mana pun lokasinya. Dengan filter **Jarak**, Pasar hanya menampilkan apa yang berada di dalamnya, termasuk milikmu.",
             "Saat daftar berada di dekatmu, postingan tanpa lokasi tidak disertakan. Jajak pendapat dari seseorang yang belum mengatur wilayahnya adalah salah satunya. Untuk melihatnya, atur ulang **Jarak** jika kamu memilihnya, lalu ketuk **Tampilkan di mana saja**.",
@@ -3843,7 +3869,7 @@
         },
         {
           "type": "p",
-          "text": "Ponsel menyimpan iklan yang paling dekat dengan wilayahmu: hingga 500, dalam jarak 250 km. Ponsel juga menyimpan iklan milikmu sendiri, dan setiap iklan yang kamu miliki kesepakatan, obrolan, atau jawaban di dalamnya. Pasar dan Peta menampilkan apa yang disimpan ponsel. Tanpa mengatur wilayah, ponsel menyimpan iklan terbaru sebagai gantinya, dan baris di atas Pasar memberi tahu demikian. Lihat \"Wilayahmu\"."
+          "text": "Ponsel menyimpan iklan yang paling dekat dengan wilayahmu: hingga 500, dalam jarak 250 km. Ponsel juga menyimpan iklan milikmu sendiri, dan setiap iklan yang kamu miliki kesepakatan, obrolan, atau jawaban di dalamnya. Pasar dan Peta menampilkan apa yang disimpan ponsel. Pasar menampilkannya dari yang terbaru, masing-masing dengan seberapa jauh jaraknya, di bawah baris yang sama, **Terbaru dalam jarak 250 km dari wilayahmu.** Ini tidak memerlukan kamu mengizinkan aplikasi menggunakan lokasimu. Tanpa mengatur wilayah, ponsel menyimpan iklan terbaru sebagai gantinya, dan baris di atas Pasar memberi tahu demikian. Lihat \"Wilayahmu\"."
         },
         {
           "type": "h2",
@@ -5356,7 +5382,7 @@
         },
         {
           "type": "p",
-          "text": "Jajak pendapat ada di Pasar. Ketuk **Jajak Pendapat** di baris atas untuk hanya melihat jajak pendapat."
+          "text": "Jajak pendapat ada di Pasar. Ketuk **Jajak Pendapat** di baris atas untuk hanya melihat jajak pendapat. Jajak pendapat ditampilkan lagi sekali, di bawah **Hari ini**, sehari sebelum ditutup."
         },
         {
           "type": "ul",
@@ -5416,7 +5442,8 @@
         {
           "type": "ul",
           "items": [
-            "Di **Pasar**, ketuk **Acara**. Pilih **Hari ini**, **Akhir pekan ini**, atau **7 hari ke depan**.",
+            "Di **Pasar**, ketuk **Acara**. Yang paling cepat dimulai muncul pertama. Pilih **Hari ini**, **Akhir pekan ini**, atau **7 hari ke depan**.",
+            "Di **Pasar**, di bawah **Semua**, acara ditampilkan lagi sekali, di bawah **Hari ini**, sehari sebelum dimulai, lalu tenggelam seperti postingan lain. Acara mingguan kembali sekali seminggu.",
             "Di **Peta**, acara berupa pin berwarna ungu. Di ponsel, ketuk **Acara** untuk hanya melihat pin acara. Di web app, pin selalu ada di sana, dan tombol tanggal menyaringnya."
           ]
         },
@@ -6201,8 +6228,8 @@
       "slug": "trust-badges",
       "title": "Lencana percaya",
       "summary": "Pendatang Baru, Warga, Pengelola, dan Tetua. Artinya, dan mengapa lencana tidak membuka hak istimewa.",
-      "sourceHash": "a6cc3bb74fc395bb",
-      "source-hash": "a6cc3bb74fc395bb",
+      "sourceHash": "9cb2cc1e373c7763",
+      "source-hash": "9cb2cc1e373c7763",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6234,7 +6261,7 @@
         },
         {
           "type": "p",
-          "text": "Kepercayaan berasal dari jaminan saat kamu bergabung, dari transaksi yang telah selesai, dan dari kepercayaan yang diberikan oleh admin. Di komunitas yang mengonfirmasi anggotanya, menjadi anggota terkonfirmasi memberimu batas kredit yang lebih tinggi, bukan lencana yang lebih tinggi: lencanamu hanya menghitung apa yang telah kamu lakukan, jadi lencana tersebut tidak pernah menunjukkan bahwa kamu telah dikonfirmasi."
+          "text": "Kepercayaan berasal dari transaksi yang telah selesai dan dari kepercayaan yang diberikan oleh admin. Di komunitas yang mengonfirmasi anggotanya, status terkonfirmasi memberimu batas kredit yang lebih tinggi, bukan lencana yang lebih tinggi: lencanamu hanya menghitung apa yang telah kamu lakukan, sehingga tidak pernah menunjukkan bahwa kamu terkonfirmasi."
         },
         {
           "type": "h2",
@@ -6530,7 +6557,7 @@
         },
         {
           "type": "p",
-          "text": "Di komunitas global, wilayahmu adalah perkiraan tempat kamu berada: radius sekitar 10 km dari suatu kota atau titik, tidak pernah lokasi tepatmu. Komunitas global menggunakannya untuk menunjukkan apa yang ditawarkan di dekatmu: 500 listing terdekat dalam radius 250 km darinya. Lihat \"Lebih dari satu komunitas\"."
+          "text": "Di komunitas global, wilayahmu adalah perkiraan tempat kamu berada: radius sekitar 10 km dari suatu kota atau titik, tidak pernah lokasi tepatmu. Komunitas global menggunakannya untuk menunjukkan apa yang ditawarkan di dekatmu: 500 listing terdekat dalam radius 250 km darinya. Pasar kemudian menampilkannya dari yang terbaru, masing-masing dengan seberapa jauh jaraknya. Lihat \"Lebih dari satu komunitas\"."
         },
         {
           "type": "p",

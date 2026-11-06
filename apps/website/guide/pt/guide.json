@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 7,
+  "version": 8,
   "language": "pt",
-  "hash": "6d040182cabf10342952feeabf86a0aa22a375598deec27ff8272b5d64a6006b",
+  "hash": "949190d023d1646b3f18d6eaf7aa1c1e214fd090c2589357b7161e1cd1333626",
   "sections": [
     {
       "id": "about",
@@ -59,7 +59,7 @@
     },
     {
       "id": "talk",
-      "title": "Conversas",
+      "title": "Bate-papo",
       "summary": "Mensagens, grupos e chats, pessoas e amigos, conversas de eventos, silenciar, menções e chave alterada.",
       "slugs": [
         "messages",
@@ -790,6 +790,25 @@
       "blocks": [
         {
           "type": "h2",
+          "text": "O Mercado em uma só ordem"
+        },
+        {
+          "type": "p",
+          "text": "No telefone você recebe isso com um app atualizado; no navegador web, quando o servidor da sua comunidade é atualizado."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Os mais recentes primeiro, igual no celular e na web.** O Mercado lista as publicações das mais recentes para as mais antigas, sob **Hoje**, **Ontem**, **Esta semana** e **Anúncios anteriores**, pelo dia em que cada uma foi publicada. Os títulos **Próximos eventos**, **Enquetes** e **Mais próximos primeiro** deixaram de existir.",
+            "**Um evento volta uma vez.** No dia anterior ao início, o evento é listado de novo em **Hoje**. Uma enquete faz o mesmo no dia anterior ao encerramento. Depois, eles descem como qualquer outra publicação.",
+            "**Dois lugares por dia.** A terceira publicação de uma pessoa no dia, e as seguintes, vêm depois das publicações de todas as outras pessoas naquele dia.",
+            "**Editar uma publicação não a faz subir.** Para ser vista de novo, publique de novo.",
+            "**Na comunidade global**, o Mercado mostra os mais recentes em até 250 km da sua região, cada publicação com a que distância está. Uma linha acima da lista informa isso. O celular não precisa mais da sua localização para isso. No aplicativo web, o mesmo vale para uma **Distância** que você escolher.",
+            "**Não mudou:** as publicações que um proprietário fixou continuam no topo, **Eventos** ainda lista primeiro os que acontecem antes, e uma busca encontra o que melhor corresponde às suas palavras. Consulte \"Explorar o Mercado\"."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "A comunidade global, perto de você"
         },
         {
@@ -804,7 +823,7 @@
             "**Sua região.** No aplicativo web, entrar na comunidade global tem mais uma etapa após a sua foto: **Mais ou menos onde você está?** No celular, isso é perguntado quando você entra com uma conta que já possui; uma nova conta no celular define isso mais tarde em Configurações, em **Sua região**. Nessa etapa, toque em **Usar minha localização**, **Digite uma cidade ou bairro** ou **Pular por enquanto**. A localização é mantida com uma precisão de cerca de 10 km, nunca o ponto exato. Altere ou limpe isso em Configurações, em **Sua região**. Consulte \"Sua região\".",
             "**Sem região, sem problema.** Sem ela, você vê os anúncios mais recentes de todos os lugares, e uma linha acima do Mercado avisa isso. No celular, toque nela para definir sua região.",
             "**Novos anúncios perto de você.** Eles chegam assim que são publicados. Os distantes não chegam mais ao seu celular.",
-            "**No aplicativo web**, o Mercado e o Mapa começam a partir da sua região ou de um local que você escolher com **Distância**: os mais próximos primeiro, cada anúncio indicando a que distância está. Consulte \"Encontrar coisas por perto\".",
+            "**No aplicativo web**, o Mercado e o Mapa começam a partir da sua região ou de um local que você escolher com **Distância**: cada anúncio indicando a que distância está. O Mapa mostra os mais próximos primeiro. O Mercado lista os mais recentes primeiro, como diz \"O Mercado em uma só ordem\", acima. Consulte \"Encontrar coisas por perto\".",
             "**Enquetes** não têm um local próprio, então cada uma é exibida na região do membro que a criou.",
             "**Digite sua cidade.** Na comunidade global, **Encontre sua comunidade** no Início não precisa mais da sua localização: toque em **ou digite sua cidade** e escolha sua cidade. Apenas um ponto aproximado é guardado. Consulte \"Achar uma comunidade próxima\".",
             "**Publicar sem preço.** Na comunidade global, o formulário de publicação não pede preço, porque os feijões vivem em comunidades locais. No aplicativo web, **Publicar Oferta** e **Publicar Pedido** agora funcionam sem preço. Uma comunidade local ainda pede um preço."
@@ -918,12 +937,12 @@
         {
           "type": "ul",
           "items": [
-            "**Todo grupo tem uma conversa.** A aba Conversas agora tem três botões: **Mensagens**, **Grupos** e **Pessoas**. **Grupos** lista seus grupos, os empreendimentos que você administra e os eventos aos quais vai comparecer, cada um com sua mensagem mais recente e contagem de não lidas.",
-            "**Uma única forma de começar um grupo.** **Novo grupo** em Conversas e **+** em Bens comuns abrem o mesmo formulário, com **Círculo social** escolhido para você. Depois de criar, você cai na conversa do grupo, que pergunta quem você deseja convidar.",
+            "**Todo grupo tem uma conversa.** A aba Bate-papo agora tem três botões: **Mensagens**, **Grupos** e **Pessoas**. **Grupos** lista seus grupos, os empreendimentos que você administra e os eventos aos quais vai comparecer, cada um com sua mensagem mais recente e contagem de não lidas.",
+            "**Uma única forma de começar um grupo.** **Novo grupo** em Bate-papo e **+** em Bens comuns abrem o mesmo formulário, com **Círculo social** escolhido para você. Depois de criar, você cai na conversa do grupo, que pergunta quem você deseja convidar.",
             "**Convites.** Coordenadores podem convidar pessoas pelo menu da conversa. Um convite mostra quem o enviou, e **Entrar no grupo** leva você direto para a conversa.",
             "**Silenciar uma conversa**: Por 8 horas, Por uma semana ou Para sempre. Em um grupo, @menções continuam passando.",
             "**Um cabeçalho para cada conversa**: o nome do grupo, empreendimento ou evento no topo. Toque nele para ver o grupo, empreendimento ou evento.",
-            "As antigas conversas de grupo em Conversas foram removidas, junto com suas mensagens.",
+            "As antigas conversas de grupo em Bate-papo foram removidas, junto com suas mensagens.",
             "Todo grupo agora tem um **coordenador principal** — quem o criou, para começar. Qualquer coordenador continua cuidando de membros e publicações, mas apenas o principal pode remover ou rebaixar um coordenador, e ninguém pode remover o principal. O principal pode transferir a liderança para outra pessoa. Se o principal ficar inativo por 30 dias, o grupo pode escolher um novo, na tela do grupo acima da lista de membros. Consulte \"Regras e decisões\".",
             "**Votações em um grupo.** Os membros de um grupo podem votar nas questões do próprio grupo, como um novo coordenador ou um novo coordenador principal: abra o grupo e veja em **Decisões**.",
             "**Escolher um novo líder para um grupo inativo.** Apenas pessoas que estavam no grupo antes de o líder ficar inativo podem votar. Pessoas que entraram ou foram nomeadas coordenadoras depois disso não têm direito a voto, garantindo que contas novas não possam assumir um grupo cujo líder tenha ficado inativo."
@@ -1524,7 +1543,7 @@
         },
         {
           "type": "p",
-          "text": "As pessoas podem pedir para entrar na sua comunidade a partir da comunidade global. Toque em **Conversas**, depois em **Pessoas**, e então em **Convites**: os pedidos são listados sob **Quer entrar**, com o nome, a mensagem e o local de origem de quem pede. Os pedidos são respondidos no aplicativo para celular: o aplicativo web não os lista."
+          "text": "As pessoas podem pedir para entrar na sua comunidade a partir da comunidade global. Toque em **Bate-papo**, depois em **Pessoas**, e então em **Convites**: os pedidos são listados sob **Quer entrar**, com o nome, a mensagem e o local de origem de quem pede. Os pedidos são respondidos no aplicativo para celular: o aplicativo web não os lista."
         },
         {
           "type": "ul",
@@ -1804,9 +1823,9 @@
         {
           "type": "ul",
           "items": [
-            "**Um anúncio é arquivado 90 dias após sua última alteração.** Ele sai do Mercado e do Mapa, e suas fotos são excluídas. Editar o anúncio, pausá-lo ou colocá-lo de volta contam como uma alteração: abri-lo com **Editar anúncio** e tocar em **Salvar** o mantém por mais 90 dias. Quando um dos seus anúncios for arquivado, você receberá uma notificação com os seus alertas de **Atividade no mercado**. Você pode publicá-lo novamente a qualquer momento.",
+            "**Um anúncio é arquivado 90 dias após sua última alteração.** Ele sai do Mercado e do Mapa, e suas fotos são excluídas. Editar o anúncio, pausá-lo ou colocá-lo de volta contam como uma alteração: abri-lo com **Editar anúncio** e tocar em **Salvar** o mantém por mais 90 dias. Nada disso o faz subir no Mercado, que lista as publicações das mais recentes para as mais antigas. Quando um dos seus anúncios for arquivado, você receberá uma notificação com os seus alertas de **Atividade no mercado**. Você pode publicá-lo novamente a qualquer momento.",
             "**Até 5 fotos por anúncio.**",
-            "**Seu celular mantém os 500 anúncios mais próximos**, em um raio de 250 km da sua região. Ele também guarda os seus próprios anúncios e qualquer um no qual você tenha um acordo ou conversa em andamento. A busca do Mercado continua encontrando anúncios de todos os lugares. Consulte \"Sua área\".",
+            "**Seu celular mantém os 500 anúncios mais próximos**, em um raio de 250 km da sua região. Ele também guarda os seus próprios anúncios e qualquer um no qual você tenha um acordo ou conversa em andamento. O Mercado lista os que estão a até 250 km da sua região, dos mais recentes para os mais antigos, e cada cartão diz a que distância está. A busca do Mercado continua encontrando anúncios de todos os lugares. Consulte \"Sua área\".",
             "**Você pode acompanhar até 3 locais** com **Avise-me quando uma começar aqui**. Para acompanhar outro, pare de acompanhar um dos anteriores. Consulte \"Encontrar uma comunidade próxima\"."
           ]
         },
@@ -2212,8 +2231,8 @@
           "items": [
             "**Um aperto de mãos:** um acordo aguarda você. Alguém espera que você aceite uma solicitação, ou um acordo do qual você participa ainda não foi concluído. Se houver apenas um, o toque abre esse acordo. Se houver mais, abre **Meus acordos**.",
             "**Uma urna eleitoral:** uma votação na qual você ainda não votou. O toque abre **Bens comuns**, em **Decidir**. Se a primeira votação for em um grupo ou uma votação de custódios em um empreendimento, o toque abre esse grupo ou empreendimento. Uma votação na qual você ainda não pode votar não conta aqui, por exemplo, uma que exige concluir uma troca primeiro.",
-            "**Um balão de fala:** uma mensagem não lida de uma pessoa. Se for de uma única pessoa, o toque abre essa conversa. Se for de várias pessoas, abre **Conversas**, em **Mensagens**, mostrando apenas as não lidas.",
-            "**Um grupo de pessoas:** novas mensagens nos seus grupos, conversas de empreendimentos ou de eventos. Conversas que você silenciou permanecem discretas aqui. O toque abre a conversa, ou **Conversas**, em **Grupos**, se houver várias.",
+            "**Um balão de fala:** uma mensagem não lida de uma pessoa. Se for de uma única pessoa, o toque abre essa conversa. Se for de várias pessoas, abre **Bate-papo**, em **Mensagens**, mostrando apenas as não lidas.",
+            "**Um grupo de pessoas:** novas mensagens nos seus grupos, conversas de empreendimentos ou de eventos. Conversas que você silenciou permanecem discretas aqui. O toque abre a conversa, ou **Bate-papo**, em **Grupos**, se houver várias.",
             "**Um escudo:** apenas para quem ajuda a administrar sua comunidade. Aparece enquanto houver trabalho administrativo pendente, como uma denúncia a revisar ou uma negociação travada que precisa de mediação. O toque solicita o bloqueio de tela do celular e abre as configurações da comunidade nessa tarefa. Se as configurações da sua comunidade exigirem um código de login, ele também será solicitado."
           ]
         },
@@ -2301,7 +2320,7 @@
         },
         {
           "type": "p",
-          "text": "Abaixo da barra superior ficam as abas: **Início**, **Mercado**, **Mapa**, **Conversas**, **Bens comuns** e **Registro**. O nome de cada aba fica acima do seu ícone. No celular, uma comunidade local sem Feijões não exibe **Bens comuns** nem **Registro**. A comunidade global mostra ambos, com exemplos de uma comunidade local. Consulte \"Os Feijões e a comunidade global\"."
+          "text": "Abaixo da barra superior ficam as abas: **Início**, **Mercado**, **Mapa**, **Bate-papo**, **Bens comuns** e **Registro**. O nome de cada aba fica acima do seu ícone. No celular, uma comunidade local sem Feijões não exibe **Bens comuns** nem **Registro**. A comunidade global mostra ambos, com exemplos de uma comunidade local. Consulte \"Os Feijões e a comunidade global\"."
         },
         {
           "type": "p",
@@ -2352,7 +2371,7 @@
           "items": [
             "**Sua comunidade:** o nome dela (o endereço dela no aplicativo web) e se o servidor dela pode ser alcançado agora. No celular, abaixo disso, **SUAS COMUNIDADES**: toque em uma para alternar para ela, ou toque em **Adicionar uma comunidade**. A **Comunidade global** é sempre uma das linhas, com uma segunda linha que diz se você é membro, se pode entrar nela ou o motivo pelo qual ela não pode ser usada agora. Consulte \"Mais de uma comunidade\".",
             "**Guias:** como o BeanPool funciona, as regras e como as decisões são tomadas, além de perguntas frequentes.",
-            "**Como usar o app:** uma página curta para cada tarefa, agrupadas da mesma forma que o aplicativo: Primeiros passos, Mercado, Mapa, Conversas, Pulso, Bens comuns, Registro e Configurações e segurança.",
+            "**Como usar o app:** uma página curta para cada tarefa, agrupadas da mesma forma que o aplicativo: Primeiros passos, Mercado, Mapa, Bate-papo, Pulso, Bens comuns, Registro e Configurações e segurança.",
             "**O projeto BeanPool:** o que há de novo nesta versão e um link para o site beanpool.org (no celular, com um botão **Compartilhar** para enviar a um amigo)."
           ]
         },
@@ -2827,7 +2846,7 @@
           "type": "ul",
           "items": [
             "**Entrar com um convite:** o botão da primeira etapa diz **Criar identidade e entrar →**. Se alguém aqui já tiver o nome escolhido, você o receberá com um número adicionado. **← Voltar** em **Sua foto** exibe seu nome sozinho, com **Próximo →**: altere-o (até 20 caracteres) ou mantenha-o, na mesma conta. Se alguém já tiver o novo nome, a página avisa e sugere outros.",
-            "**Abas:** o aplicativo web tem **Início**, **Mercado**, **Mapa**, **Bens comuns**, **Bate-papo**, **Pessoas** e **Registro**. O que o aplicativo para celular chama de **Conversas** é **Bate-papo** na web, e **Pessoas** tem sua própria aba.",
+            "**Abas:** o aplicativo web tem **Início**, **Mercado**, **Mapa**, **Bens comuns**, **Bate-papo**, **Pessoas** e **Registro**. Os dois aplicativos chamam esta aba de **Bate-papo**, e na web **Pessoas** tem sua própria aba.",
             "**Configurações e seu perfil:** os pequenos botões no canto superior direito: seu perfil, o **?** e depois as Configurações. Em uma tela ampla, eles ficam na parte inferior do menu à esquerda.",
             "**Publicar uma Oferta ou um Pedido:** use **Nova publicação** na página do **Mapa**.",
             "**Aparência:** a opção chama-se **Igual ao dispositivo** em vez de \"Igual ao telefone\".",
@@ -2930,19 +2949,26 @@
         },
         {
           "type": "p",
-          "text": "Toque em **Mercado** na barra de abas. Você verá o que as pessoas da sua comunidade estão oferecendo e buscando, do mais recente ao mais antigo, agrupado pelo dia em que foi publicado."
+          "text": "Toque em **Mercado** na barra de abas. Você verá o que as pessoas da sua comunidade estão oferecendo e buscando, do mais recente ao mais antigo, sob **Hoje**, **Ontem**, **Esta semana** e **Anúncios anteriores**, pelo dia em que cada um foi publicado. O celular e o aplicativo web o listam da mesma forma."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Um evento volta uma vez.** No dia anterior ao início, o evento é listado de novo em **Hoje**, entre as publicações novas do dia, e depois desce como qualquer outra. Um evento semanal volta uma vez por semana.",
+            "**Uma enquete também volta uma vez**, no dia anterior ao encerramento.",
+            "**Ninguém ocupa mais de dois lugares por dia.** A terceira publicação de uma pessoa no dia, e as seguintes, vêm depois das publicações de todas as outras pessoas naquele dia.",
+            "**Editar uma publicação não a faz subir.** Pausá-la, ou uma resposta a ela, também não. Para ser vista de novo, publique de novo.",
+            "**Uma linha mostra onde você parou.** **Novidades desde a última vez que você olhou** fica acima da primeira publicação que já estava listada quando você saiu do Mercado pela última vez neste telefone ou neste navegador; ela não aparece na primeira vez, quando nada é mais novo, nem enquanto você busca ou filtra, e a grade do telefone não a mostra.",
+            "**Uma publicação que um proprietário fixou** fica bem no topo, sob **Fixado**, qualquer que seja a sua idade."
+          ]
         },
         {
           "type": "p",
-          "text": "No celular, os eventos aparecem primeiro. Se você já autorizou o aplicativo a usar sua localização, as exibições em lista e compacta mostram os anúncios ordenados pelos mais próximos primeiro, sob **Mais próximos primeiro**, com as enquetes sob **Enquetes**. **Para Você** mantém sua própria ordem. Puxe a lista para baixo para atualizá-la."
+          "text": "Nas exibições em lista e compacta, você vê os títulos dos dias. A grade mostra a mesma ordem, sem eles. No celular, o Mercado abre em forma de lista; no aplicativo web, em forma de cartões. **Para Você** mantém sua própria ordem. Sob **Eventos**, o que acontece antes vem primeiro, com **Hoje**, **Este fim de semana** e **Próximos 7 dias**. Uma busca mostra as publicações que melhor correspondem às suas palavras. No celular, puxe a lista para baixo para atualizá-la."
         },
         {
           "type": "p",
-          "text": "No aplicativo web, o Mercado abre em forma de cartões. Nas exibições em lista e compacta, os eventos ficam posicionados sob o dia em que foram publicados. Em uma comunidade local, o aplicativo web não ordena pelos mais próximos primeiro."
-        },
-        {
-          "type": "p",
-          "text": "Na comunidade global, o aplicativo web mostra primeiro os anúncios perto de você: os mais próximos dentro da sua **Distância**, ou dentro de 250 km da sua região (a localização aproximada informada quando você entra, ou em **Configurações**), cada um com a distância correspondente. Uma linha acima da lista indica qual visualização está ativa. Perto da sua região, há o botão **Mostrar de qualquer lugar** para ver os mais recentes de todos os lugares. Com uma **Distância** definida, abra **Distância** e toque em **Redefinir** para voltar à sua região, depois toque em **Mostrar de qualquer lugar**. No celular, a comunidade global mantém os anúncios mais próximos da sua região, de modo que são eles que o Mercado exibe. Consulte \"Encontrar coisas por perto\"."
+          "text": "Na comunidade global, o Mercado mostra os mais recentes em até 250 km da sua região (a localização aproximada informada quando você entra, ou em **Configurações**), cada publicação com a que distância está. Uma linha acima da lista informa isso: **Mais recentes em até 250 km da sua área.** É igual no celular e no aplicativo web, e no celular não é preciso permitir que o aplicativo use sua localização. Com uma **Distância**, os dois aplicativos mostram os mais recentes dentro dela. No aplicativo web, a linha passa a dizer **Mais recentes em até 5 km do lugar que você escolheu.**, e cada publicação mostra a que distância está. No aplicativo web, perto da sua região, a linha tem o botão **Mostrar de qualquer lugar** para ver os mais recentes de todos os lugares. Com uma **Distância** definida, abra **Distância** e toque em **Redefinir** para voltar à sua região, depois toque em **Mostrar de qualquer lugar**. Quando houver menos de oito perto de você, os mais recentes de outros lugares aparecem logo abaixo, sob **Os mais recentes de outros lugares**, no celular e no aplicativo web. Isso não acontece quando você escolheu uma **Distância**, digitou uma busca ou está vendo **Eventos**. Consulte \"Encontrar coisas por perto\"."
         },
         {
           "type": "p",
@@ -3755,8 +3781,8 @@
       "slug": "near-you",
       "title": "Encontrar coisas por perto",
       "summary": "Mostrar apenas anúncios a uma certa distância de você ou de qualquer lugar que escolher.",
-      "sourceHash": "2db25a661f8751ec",
-      "source-hash": "2db25a661f8751ec",
+      "sourceHash": "f519dd5b8dbe3492",
+      "source-hash": "f519dd5b8dbe3492",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3811,8 +3837,8 @@
         {
           "type": "ul",
           "items": [
-            "Com uma **Distância** selecionada no Mercado, ambos mostram os anúncios mais próximos dentro desse raio, do mais próximo ao mais distante. O Mapa exibe até 200 marcadores.",
-            "Sem selecionar uma distância, mostram os anúncios mais próximos em um raio de 250 km da sua região: a localização aproximada informada à comunidade quando você entra, ou posteriormente em **Configurações**, sob **Sua região**. Uma linha acima da lista do Mercado informa: **Mais próximos da sua área primeiro, dentro de 250 km.** Toque em **Mostrar de qualquer lugar** para ver os mais recentes de todos os lugares, e em **Perto da sua área** para retornar.",
+            "Com uma **Distância** selecionada no Mercado, ambos mostram os anúncios dentro desse raio. O Mercado os lista dos mais recentes para os mais antigos, cada um com a que distância está, sob uma linha que diz **Mais recentes em até 5 km do lugar que você escolheu.** (com a sua distância). O Mapa mostra os mais próximos, até 200 marcadores.",
+            "Sem selecionar uma distância, mostram os anúncios mais próximos em um raio de 250 km da sua região: a localização aproximada informada à comunidade quando você entra, ou posteriormente em **Configurações**, sob **Sua região**. O Mercado os lista dos mais recentes para os mais antigos, sob uma linha que diz **Mais recentes em até 250 km da sua área.** O Mapa mostra os mais próximos primeiro. Toque em **Mostrar de qualquer lugar** para ver os mais recentes de todos os lugares, e em **Perto da sua área** para retornar.",
             "Sem nenhum dos dois definidos, você vê os mais recentes de qualquer lugar, e **Veja o que está perto de você** abre o seletor de distância. Uma linha acima da lista do Mercado informa qual visualização está ativa. Ao usar uma **Distância**, a linha não possui botão: abra **Distância** e toque em **Redefinir**. Você voltará a ver o que está perto da sua região ou, se nenhuma região estiver configurada, os mais recentes de qualquer lugar.",
             "Cada anúncio indica a que distância se encontra, como **📍 12 km**. Seus próprios anúncios estão sempre no Mapa e no Mercado perto da sua região, onde quer que estejam. Com uma **Distância** definida, o Mercado mostra apenas o que estiver dentro dela, incluindo os seus.",
             "Enquanto a lista estiver configurada para perto de você, publicações sem localização são omitidas. Uma enquete de alguém que não definiu sua região é uma delas. Para vê-las, redefina a **Distância** se tiver escolhido uma, e toque em **Mostrar de qualquer lugar**.",
@@ -3830,7 +3856,7 @@
         },
         {
           "type": "p",
-          "text": "O celular mantém os anúncios mais próximos da sua região: até 500, em um raio de 250 km. Ele também guarda seus próprios anúncios e qualquer um com o qual você tenha uma negociação, uma conversa ou uma resposta. O Mercado e o Mapa mostram o que o celular armazena. Sem nenhuma região configurada, ele armazena os anúncios mais recentes, e uma linha acima do Mercado avisa sobre isso. Consulte \"Sua região\"."
+          "text": "O celular mantém os anúncios mais próximos da sua região: até 500, em um raio de 250 km. Ele também guarda seus próprios anúncios e qualquer um com o qual você tenha uma negociação, uma conversa ou uma resposta. O Mercado e o Mapa mostram o que o celular armazena. O Mercado os lista dos mais recentes para os mais antigos, cada um com a que distância está, sob a mesma linha, **Mais recentes em até 250 km da sua área.** Ele não precisa que você permita ao aplicativo usar sua localização. Sem nenhuma região configurada, ele armazena os anúncios mais recentes, e uma linha acima do Mercado avisa sobre isso. Consulte \"Sua região\"."
         },
         {
           "type": "h2",
@@ -3866,11 +3892,11 @@
         },
         {
           "type": "p",
-          "text": "**Conversas** tem três botões no topo: **Mensagens**, **Grupos** e **Pessoas**."
+          "text": "**Bate-papo** tem três botões no topo: **Mensagens**, **Grupos** e **Pessoas**."
         },
         {
           "type": "p",
-          "text": "Toque em **Conversas** na barra de abas e depois em **Mensagens**. Suas conversas com pessoas estão listadas lá. Acordos que precisam da sua atenção ficam no topo, sob **Ação necessária**."
+          "text": "Toque em **Bate-papo** na barra de abas e depois em **Mensagens**. Suas conversas com pessoas estão listadas lá. Acordos que precisam da sua atenção ficam no topo, sob **Ação necessária**."
         },
         {
           "type": "p",
@@ -3881,7 +3907,7 @@
           "items": [
             "Busque com **Buscar conversas, publicações, parceiros...**.",
             "O botão de filtro ordena por **Recentes** ou **Não lidas** (e, onde sua comunidade usa feijões, pelos feijões em cada acordo, do maior para o menor ou vice-versa) e pode mostrar **Apenas não lidas** ou **Apenas amigos**.",
-            "No celular, os botões de busca e de filtro deslizam para fora da tela conforme você rola para baixo. Role um pouco para cima e eles retornam. Toque em **Conversas** novamente para ir direto ao topo."
+            "No celular, os botões de busca e de filtro deslizam para fora da tela conforme você rola para baixo. Role um pouco para cima e eles retornam. Toque em **Bate-papo** novamente para ir direto ao topo."
           ]
         },
         {
@@ -3896,8 +3922,8 @@
           "type": "ul",
           "items": [
             "A partir de um perfil: abra o perfil da pessoa e toque em **Mensagem**. Você também pode adicioná-la aos amigos ali.",
-            "A partir de **Conversas**: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela.",
-            "A partir da lista de membros: **Conversas**, depois **Pessoas**, e toque em 💬 ao lado do nome de um membro em **Comunidade** ou **Amigos**.",
+            "A partir de **Bate-papo**: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela.",
+            "A partir da lista de membros: **Bate-papo**, depois **Pessoas**, e toque em 💬 ao lado do nome de um membro em **Comunidade** ou **Amigos**.",
             "A partir de uma publicação: toque em **Mensagem** e no nome da pessoa."
           ]
         },
@@ -4048,7 +4074,7 @@
         },
         {
           "type": "p",
-          "text": "Toque em **Conversas** e depois em **Grupos**. Todos os grupos dos quais você participa estão listados lá, com a mensagem mais recente primeiro, acompanhados dos projetos que você lidera ou nos quais trabalha (🎯), dos empreendimentos de que é custódio (🥖) e dos eventos que organiza ou aos quais vai comparecer (📅). A conversa de um empreendimento é a sua discussão pública: qualquer membro da sua comunidade pode lê-la. Veja \"Mensagens\". Cada item exibe a mensagem mais recente e quantas você ainda não leu. Em uma conversa criptografada, a linha exibe quem escreveu por último e **🔒 Mensagem**, não as palavras."
+          "text": "Toque em **Bate-papo** e depois em **Grupos**. Todos os grupos dos quais você participa estão listados lá, com a mensagem mais recente primeiro, acompanhados dos projetos que você lidera ou nos quais trabalha (🎯), dos empreendimentos de que é custódio (🥖) e dos eventos que organiza ou aos quais vai comparecer (📅). A conversa de um empreendimento é a sua discussão pública: qualquer membro da sua comunidade pode lê-la. Veja \"Mensagens\". Cada item exibe a mensagem mais recente e quantas você ainda não leu. Em uma conversa criptografada, a linha exibe quem escreveu por último e **🔒 Mensagem**, não as palavras."
         },
         {
           "type": "ul",
@@ -4069,7 +4095,7 @@
         {
           "type": "ul",
           "items": [
-            "No celular, em **Conversas**, sob **Grupos**, toque em **Novo grupo**. Ou em **Bens comuns**, sob **Grupos**, toque no botão redondo **+**. Ambos abrem o mesmo formulário **Criar grupo**. (No chip **Projetos** ou **Empreendimentos**, o **+** inicia um projeto ou empreendimento em vez disso.)",
+            "No celular, em **Bate-papo**, sob **Grupos**, toque em **Novo grupo**. Ou em **Bens comuns**, sob **Grupos**, toque no botão redondo **+**. Ambos abrem o mesmo formulário **Criar grupo**. (No chip **Projetos** ou **Empreendimentos**, o **+** inicia um projeto ou empreendimento em vez disso.)",
             "No app web, abra **Bens comuns**, depois **Grupos** e toque em **+ Criar grupo**. Você permanece em **Bens comuns** depois. Para convidar pessoas, abra o grupo e toque em **Convidar pessoas**. Você também pode abrir **Bate-papo**, tocar em **Grupos** e depois em **Novo grupo**: isso leva você diretamente para a conversa do novo grupo.",
             "Dê um **Nome do grupo**, de até 60 caracteres, e, se desejar, um **Objetivo / Descrição**, de até 300: para que serve o grupo e a quem se destina.",
             "Escolha uma **Categoria**: **Círculo social**, **Geral**, **Grupo de trabalho** ou **Guilda**. No celular, **Círculo social** já vem selecionado para você. No app web, **Grupo de trabalho** é o selecionado.",
@@ -4102,7 +4128,7 @@
         },
         {
           "type": "p",
-          "text": "Mais tarde, um coordenador pode convidar pessoas a partir do menu **⋮** da conversa, em **Convidar pessoas**. No app web, o coordenador abre o grupo e toca em **Convidar pessoas**, marca as pessoas e toca no botão na parte inferior da mesma forma. Cada pessoa convidada vê o grupo em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular (no celular, em uma comunidade sem a aba **Bens comuns**, em **Encontrar grupos** em **Conversas**). O app web ainda não marca convites: lá, a pessoa abre o grupo e toca em **Aceitar convite**. Quando a pessoa entra, a conversa avisa."
+          "text": "Mais tarde, um coordenador pode convidar pessoas a partir do menu **⋮** da conversa, em **Convidar pessoas**. No app web, o coordenador abre o grupo e toca em **Convidar pessoas**, marca as pessoas e toca no botão na parte inferior da mesma forma. Cada pessoa convidada vê o grupo em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular (no celular, em uma comunidade sem a aba **Bens comuns**, em **Encontrar grupos** em **Bate-papo**). O app web ainda não marca convites: lá, a pessoa abre o grupo e toca em **Aceitar convite**. Quando a pessoa entra, a conversa avisa."
         },
         {
           "type": "h2",
@@ -4227,7 +4253,7 @@
         },
         {
           "type": "p",
-          "text": "No celular, uma comunidade local sem feijões não tem a aba **Bens comuns**. Lá, toque em **Conversas**, depois em **Grupos** e em **Encontrar grupos**: isso abre a mesma lista. Antes de você estar em qualquer grupo, o link exibido é **Encontrar um grupo para entrar**. A comunidade global possui a aba **Bens comuns**: os grupos dela ficam lá, abaixo de um exemplo de comunidade local (veja \"Feijões e a comunidade global\")."
+          "text": "No celular, uma comunidade local sem feijões não tem a aba **Bens comuns**. Lá, toque em **Bate-papo**, depois em **Grupos** e em **Encontrar grupos**: isso abre a mesma lista. Antes de você estar em qualquer grupo, o link exibido é **Encontrar um grupo para entrar**. A comunidade global possui a aba **Bens comuns**: os grupos dela ficam lá, abaixo de um exemplo de comunidade local (veja \"Feijões e a comunidade global\")."
         },
         {
           "type": "p",
@@ -4243,7 +4269,7 @@
         },
         {
           "type": "p",
-          "text": "Um grupo para o qual você foi convidado aparece em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular. No celular, em uma comunidade sem a aba **Bens comuns**, ele fica sob **Encontrar grupos** em **Conversas**. Toque nele para ver o convite: quem convidou você, o que é o grupo, quem participa (para um grupo apenas por convite, quantas pessoas) e quem pode ler a conversa dele. No celular:"
+          "text": "Um grupo para o qual você foi convidado aparece em **Bens comuns**, sob **Grupos**, marcado como **CONVIDADO** no app de celular. No celular, em uma comunidade sem a aba **Bens comuns**, ele fica sob **Encontrar grupos** em **Bate-papo**. Toque nele para ver o convite: quem convidou você, o que é o grupo, quem participa (para um grupo apenas por convite, quantas pessoas) e quem pode ler a conversa dele. No celular:"
         },
         {
           "type": "ul",
@@ -4432,7 +4458,7 @@
         },
         {
           "type": "p",
-          "text": "Toque em **Conversas** e depois em **Pessoas**. No app web, toque em **Pessoas** na linha de abas. Existem três botões:"
+          "text": "Toque em **Bate-papo** e depois em **Pessoas**. No app web, toque em **Pessoas** na linha de abas. Existem três botões:"
         },
         {
           "type": "ul",
@@ -4524,7 +4550,7 @@
           "type": "ul",
           "items": [
             "Abra o evento e toque em **Abrir conversa do evento**.",
-            "Ou encontre-o em **Conversas**, sob **Grupos**, marcado como 📅 **Evento**. No app web, ele fica na aba **Bate-papo**, junto com suas outras conversas."
+            "Ou encontre-o em **Bate-papo**, sob **Grupos**, marcado como 📅 **Evento**. No app web, ele fica na aba **Bate-papo**, junto com suas outras conversas."
           ]
         },
         {
@@ -4602,7 +4628,7 @@
             "Interrompe os alertas dessa conversa. Na conversa de um grupo, alguém que @mencione você ainda conseguirá alertar você. Veja \"Menções\".",
             "A conversa de um empreendimento não envia alertas, então não há alertas para interromper. Silenciá-la apenas a mantém fora dos números descritos abaixo.",
             "A conversa ainda exibe as novas mensagens.",
-            "Em **Conversas**, sob **Grupos**, uma conversa silenciada exibe um sino riscado. O número de mensagens não lidas fica em cinza e não é somado ao número exibido na aba **Grupos**.",
+            "Em **Bate-papo**, sob **Grupos**, uma conversa silenciada exibe um sino riscado. O número de mensagens não lidas fica em cinza e não é somado ao número exibido na aba **Grupos**.",
             "Na conversa de um grupo ou empreendimento, a barra superior também não mostra avisos sobre ela. Uma conversa silenciada com uma pessoa ainda conta lá.",
             "O silenciamento permanece quando você sai da conversa. Ao abrir novamente a conversa de um grupo ou empreendimento, o topo exibe **silenciado**."
           ]
@@ -4730,7 +4756,7 @@
         },
         {
           "type": "p",
-          "text": "A partir desse momento, suas mensagens irão para a nova chave. O aviso e a etiqueta de **chave alterada** na conversa em **Conversas** desaparecem, e suas mensagens anteriores continuam legíveis."
+          "text": "A partir desse momento, suas mensagens irão para a nova chave. O aviso e a etiqueta de **chave alterada** na conversa em **Bate-papo** desaparecem, e suas mensagens anteriores continuam legíveis."
         },
         {
           "type": "p",
@@ -4786,7 +4812,7 @@
         },
         {
           "type": "p",
-          "text": "Duas coisas podem mudar após uma redefinição, e o aviso destaca isso antes de você confirmar: uma conversa que estava pausada por troca de chave pode se abrir com a nova chave, e uma conversa privada que havia sumido de Conversas pode retornar como uma conversa em grupo legível pela comunidade. Confira o código de chave, ou quem participa da conversa, antes de enviar."
+          "text": "Duas coisas podem mudar após uma redefinição, e o aviso destaca isso antes de você confirmar: uma conversa que estava pausada por troca de chave pode se abrir com a nova chave, e uma conversa privada que havia sumido de Bate-papo pode retornar como uma conversa em grupo legível pela comunidade. Confira o código de chave, ou quem participa da conversa, antes de enviar."
         },
         {
           "type": "p",
@@ -5343,7 +5369,7 @@
         },
         {
           "type": "p",
-          "text": "As enquetes ficam no Mercado. Toque em **Enquetes** na linha superior para ver apenas enquetes."
+          "text": "As enquetes ficam no Mercado. Toque em **Enquetes** na linha superior para ver apenas enquetes. Uma enquete é listada de novo uma vez, em **Hoje**, no dia anterior ao encerramento."
         },
         {
           "type": "ul",
@@ -5403,7 +5429,8 @@
         {
           "type": "ul",
           "items": [
-            "No **Mercado**, toque em **Eventos**. Escolha **Hoje**, **Este fim de semana** ou **Próximos 7 dias**.",
+            "No **Mercado**, toque em **Eventos**. O que acontece antes vem primeiro. Escolha **Hoje**, **Este fim de semana** ou **Próximos 7 dias**.",
+            "No **Mercado**, em **Tudo**, um evento é listado de novo uma vez, em **Hoje**, no dia anterior ao início, e depois desce como qualquer outra publicação. Um evento semanal volta uma vez por semana.",
             "No **Mapa**, os eventos são marcadores roxos. No celular, toque em **Eventos** para ver apenas eles. No aplicativo web eles estão sempre presentes, e os seletores de data os refinam."
           ]
         },
@@ -6188,8 +6215,8 @@
       "slug": "trust-badges",
       "title": "Emblemas",
       "summary": "Recém-chegado, Morador, Guardião e Ancião. O que significam e por que não desbloqueiam nada.",
-      "sourceHash": "a6cc3bb74fc395bb",
-      "source-hash": "a6cc3bb74fc395bb",
+      "sourceHash": "9cb2cc1e373c7763",
+      "source-hash": "9cb2cc1e373c7763",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6221,7 +6248,7 @@
         },
         {
           "type": "p",
-          "text": "A confiança vem de um aval ao entrar, de trocas concluídas e da confiança concedida por um administrador. Em uma comunidade que confirma seus membros, ser confirmado proporciona a você um limite de crédito maior, não um emblema superior: seu emblema conta apenas o que você realizou, portanto nunca mostra que você foi confirmado."
+          "text": "A confiança vem de trocas concluídas e de confiança concedida por um administrador. Em uma comunidade que confirma seus membros, ser confirmado concede um limite de crédito maior, não uma insígnia superior: sua insígnia reflete apenas o que você realizou, nunca indicando que você é confirmado."
         },
         {
           "type": "h2",
@@ -6517,7 +6544,7 @@
         },
         {
           "type": "p",
-          "text": "Na comunidade global, sua área é aproximadamente onde você está: cerca de 10 km ao redor de uma cidade ou local, nunca seu ponto exato. A comunidade global a utiliza para mostrar o que está sendo oferecido perto de você: os 500 anúncios mais próximos dentro de um raio de 250 km. Veja \"Mais de uma comunidade\"."
+          "text": "Na comunidade global, sua área é aproximadamente onde você está: cerca de 10 km ao redor de uma cidade ou local, nunca seu ponto exato. A comunidade global a utiliza para mostrar o que está sendo oferecido perto de você: os 500 anúncios mais próximos dentro de um raio de 250 km. O Mercado os lista, então, dos mais recentes para os mais antigos, cada um com a que distância está. Veja \"Mais de uma comunidade\"."
         },
         {
           "type": "p",

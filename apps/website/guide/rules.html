@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rules and how decisions work — BeanPool members' guide</title>
-    <meta name="description" content="Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers, and convenors and lead convenors.">
+    <meta name="description" content="Voting, turnout, secret ballots, who may vote, suspension, removing a member, small communities, keepers, and convenors and lead convenors.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.5">
@@ -54,7 +54,7 @@
     <main class="legal-content glass-panel guide">
         <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#about">About BeanPool</a></p>
         <h1>Rules and how decisions work</h1>
-        <p class="lede">Voting, turnout, secret ballots, who may vote, suspension, removing a member, keepers, and convenors and lead convenors.</p>
+        <p class="lede">Voting, turnout, secret ballots, who may vote, suspension, removing a member, small communities, keepers, and convenors and lead convenors.</p>
         <h2>Two ways to ask the community</h2>
         <ul>
             <li>A <strong>Poll</strong> is a question in the feed, like &quot;Market on Sunday?&quot;. It shows what people think. It never changes anything by itself.</li>
@@ -66,7 +66,6 @@
         <ul>
             <li>Suspend a member, or lift a suspension.</li>
             <li>Freeze a member's credit, or unfreeze it.</li>
-            <li>Give a member the right to vouch for newcomers, or take it away.</li>
             <li>Remove a lead keeper from an enterprise, or a leader from a project.</li>
             <li>Remove a member from the community, or reinstate them. Nobody proposes a removal: that vote opens when an admin suspends the member (see &quot;Emergency suspension&quot;).</li>
         </ul>
@@ -79,9 +78,9 @@
         </ul>
         <p>A grant can be for no more than the Commons holds now plus what came into it in the last 30 days. A bigger one is refused when you start it.</p>
         <h2>Who can start a Decision</h2>
-        <p>Any active member whose credit is not frozen, and who has traded in the market. A trust badge or a vouch is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.</p>
+        <p>Any active member whose credit is not frozen, and who has traded in the market. A trust badge is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.</p>
         <h2>Who can vote</h2>
-        <p>Any active member whose credit is not frozen, and who joined <strong>before</strong> the Decision opened. People who join during a vote cannot vote on it. Enterprise accounts cannot vote.</p>
+        <p>Any active member who joined <strong>before</strong> the Decision opened. A member whose credit the admins froze still votes: a freeze is about Beans, not about having a say. People who join during a vote cannot vote on it. Enterprise accounts cannot vote.</p>
         <p>Nobody votes on a Decision to remove them, and they are not counted in its turnout. A member an admin has suspended still votes on every other Decision while the community votes on removing them, and is counted in their turnout, so suspending someone cannot change a vote (see &quot;Emergency suspension&quot;).</p>
         <h2>How votes count</h2>
         <ul>
@@ -107,7 +106,7 @@
         <h2>How much Yes is needed</h2>
         <ul>
             <li>Most Decisions: 60% Yes.</li>
-            <li>Removing a member: 66% Yes.</li>
+            <li>Removing a member: 66% Yes, and at least 3 Yes votes, whatever the share. Two neighbours can't remove a third.</li>
             <li>Undoing something (lifting a suspension, unfreezing credit, reinstating a member): more than half.</li>
             <li>A tie always fails.</li>
         </ul>
@@ -120,7 +119,7 @@
         </ul>
         <h2>Removing a member</h2>
         <ul>
-            <li>In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. For now one thing still does without a vote: an owner can remove a member together with everyone they invited, and everyone those people invited.</li>
+            <li>In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. Two things still do without that vote: where too few members can vote, an owner may decide it (see &quot;A small community&quot;); and, for now, an owner can remove a member together with everyone they invited, and everyone those people invited.</li>
             <li>If a removal passes, the member is suspended and their credit frozen at once.</li>
             <li>After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.</li>
             <li>A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.</li>
@@ -132,13 +131,21 @@
         <ul>
             <li>At the same moment, a 7-day Decision opens on removing them: &quot;Remove …?&quot;. An admin acting on a report can suspend the same way, and the same Decision opens.</li>
             <li>While it lasts, the member's listings are off the Market and the map, and they can't invite anyone or answer a request to join. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat), and finish or cancel deals they already have. It all comes back when the suspension ends.</li>
-            <li>It is decided as any removal is: 25% turnout and 66% Yes. The suspended member cannot vote on it, and still votes on every other Decision.</li>
+            <li>It is decided as any removal is: 25% turnout, 66% Yes and at least 3 Yes votes. The suspended member cannot vote on it, and still votes on every other Decision.</li>
             <li>If it passes, they stay suspended for the 7 days of a removal's wait, and are then removed (see &quot;Removing a member&quot;).</li>
-            <li>If it does not pass, or too few people vote, the suspension lifts when the vote closes.</li>
+            <li>If it does not pass, or too few people vote, the suspension lifts when the vote closes. Where too few members can vote at all, an owner may decide it (see &quot;A small community&quot;).</li>
             <li>An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.</li>
             <li>An admin can suspend another admin. No vote removes an owner or admin, so whatever the vote decides, the suspension ends when it closes, and they keep their role.</li>
         </ul>
         <p>On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.</p>
+        <h2>A small community</h2>
+        <ul>
+            <li><strong>At least 3 Yes votes.</strong> Removing a member needs at least 3 Yes votes, however few vote No. In a community of 7 active members, 3 of the 6 others must say Yes; in a family of four, all three others.</li>
+            <li><strong>Too few to vote.</strong> When fewer than 3 members, not counting the one suspended, can vote, the vote can never reach its turnout. It still runs its 7 days, and it says &quot;Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes.&quot;</li>
+            <li><strong>The owner decides.</strong> While that vote is open, an owner of your community's server, never an admin, may decide it, with a reason members read beside the case. The member is told, and can reply to it. If an admin hides the case as shown to be false, the owner's reason is hidden with it, and an owner can't decide a vote whose case is already hidden.</li>
+            <li><strong>When it closes,</strong> if still fewer than 3 members could vote, the owner's decision is carried out: the member stays suspended for the 7 days of a removal's wait, and is then removed. The vote says &quot;Decided by the owner: too few members to vote&quot;. An admin can still stop it in those 7 days, with a reason everyone can read.</li>
+            <li>If more members could vote by then, they decide, not the owner. If no owner decided, the suspension lifts when the vote closes, as with any vote too few people voted on. The owners hear of every decision an owner makes this way.</li>
+        </ul>
         <h2>A fair vote on removing a member</h2>
         <ul>
             <li><strong>The member is told at once.</strong> When the vote on removing you opens, BeanPool tells you on your phone, and the web app tells you the next time you open it.</li>
@@ -147,7 +154,10 @@
             <li><strong>A false case can be hidden.</strong> When a case is shown to be false, an admin can hide it. Members then read the admin's reason in its place. Hiding a case doesn't stop the vote: an admin stops it by halting it, which lifts the suspension.</li>
             <li><strong>A reply that harms someone can be taken down.</strong> If a reply gives someone's address or phone number, or threatens them, an owner or admin can take it down, with a reason. The reply is deleted, and members read the reason in its place. The member is told, and can't write another reply on that vote. The vote carries on.</li>
             <li><strong>A false accusation can be reported.</strong> The member the vote is about can tap <strong>Report this case as false</strong>. The report goes to the admins and owners, and names whoever brought the case.</li>
-            <li><strong>No second case for a while.</strong> After a vote on removing someone ends without removing them, whoever brought it can't suspend that member again for 90 days. Another admin can.</li>
+            <li><strong>No second case for a while.</strong> After a vote on removing someone ends without removing them, whoever brought it can't suspend that member again for 90 days. Another admin can, after the first 30 days.</li>
+            <li><strong>A second suspension within 30 days is an owner's.</strong> In those 30 days only an owner can suspend the member again, and with a new reason. The vote then says &quot;Second pause in 30 days&quot;, and how the last vote ended.</li>
+            <li><strong>No third suspension in 90 days.</strong> A third suspension of the same member within 90 days of the first is refused to everyone. If there is more to decide, a member proposes a Decision.</li>
+            <li><strong>The owners hear of every suspension,</strong> without being told who it was or why: the vote shows that to everyone who can vote.</li>
             <li><strong>Everyone who can vote is told.</strong> When the vote opens, each member who can vote on it gets an alert on their phone, if their <strong>Direct Messages</strong> alerts are on. The alert never says who the vote is about.</li>
         </ul>
         <h2>What admins can and cannot do</h2>
@@ -156,18 +166,18 @@
             <li>An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.</li>
             <li>If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.</li>
             <li>An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.</li>
-            <li>An admin cannot remove a member without the community's vote. Where the people who run the server have switched community votes off, the admins remove members themselves.</li>
-            <li>Admins can give members the right to vouch for newcomers.</li>
+            <li>An admin cannot remove a member without the community's vote. Where too few members can vote, an owner may decide it (see &quot;A small community&quot;). Where the people who run the server have switched community votes off, the admins remove members themselves.</li>
+            <li>Owners and credit-committee admins can make a confirmed member a voucher on the names list.</li>
             <li>Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.</li>
             <li>Admins sort out stuck trades, but never one they are part of.</li>
         </ul>
         <h2>Polls</h2>
         <ul>
             <li>Any active member whose credit is not frozen can start a Poll with 2 to 4 answers. It runs for 3, 7 or 14 days.</li>
-            <li>You can have one open Poll at a time. Your community can have 5 open Polls at once.</li>
+            <li>You can have one open Poll at a time. You can start one Poll for the whole community a week, counted from when you started your last, even if you closed or took it down. A Poll for one of your groups does not count towards that week. Your community can have 5 open Polls at once.</li>
             <li>A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.</li>
-            <li>Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.</li>
-            <li>A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an <strong>open vote</strong> instead, so members see who chose what. That choice is made when the Poll starts, and can't be changed after the Poll is posted.</li>
+            <li>A member whose credit is frozen can still answer a Poll. You can change your answer until the Poll closes. The person who started it can close it early.</li>
+            <li>A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an <strong>open vote</strong> instead, so members see who chose what. That choice is made when the Poll starts, and can't be changed in the app after the Poll is posted. An owner's AI assistant can change it on a Poll it made, only until the first vote.</li>
             <li>On the global community, a closed anonymous Poll also says how many of its votes came from new or 12-word accounts, if any did. Every vote still counts.</li>
         </ul>
         <h2>Enterprises and keepers</h2>
@@ -184,7 +194,7 @@
             <li><strong>Votes among the keepers:</strong> in an enterprise with two or more keepers, any keeper can propose paying Beans out of the enterprise's own account (never more than it holds, never to themselves, and to a keeper only out of what it has earned, with the 1.5% trade fee), removing a keeper, or, in an enterprise but not a project, making another keeper the lead. The keepers at the time it opens vote; more than half must vote; 60% Yes to pay out or remove, more than half to choose a lead. It runs 7 days or ends sooner once the answer can't change, and is carried out by itself. Only the keepers see it. While it is open it shows how many have voted; Yes and No show once it closes. Nobody sees who voted how, but in a very small group the result and who has voted can show it. These votes never touch the Commons or anyone's standing in the community: those are community Decisions. A vote can't remove the lead (vote for a new lead instead), the only keeper, or a keeper whose pledge covers a debt. A keeper can't propose their own removal; they step down instead.</li>
             <li><strong>If the lead leaves or is removed,</strong> the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.</li>
             <li><strong>Winding up:</strong> the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. Nothing finishes a wind-up by itself: after the 7 days, the lead keeper, the only keeper or a community admin has to finish closing it, and it can't be finished while a trade is still open. When it closes, any beans left go to the Commons.</li>
-            <li><strong>Cancelling a project:</strong> before a project reaches its goal, its leader or a community admin can cancel it, and every pledge goes back to the person who made it. If it has no leader, its only collaborator can cancel it; with two or more and no leader, only a community admin can. Once you stop helping run a project, because you stepped down or were removed, you can't cancel it, even if you started it.</li>
+            <li><strong>Cancelling a project:</strong> before a project reaches its goal, its leader or a community admin can cancel it, and every pledge goes back to the person who made it. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them. If it has no leader, its only collaborator can cancel it; with two or more and no leader, only a community admin can. Once you stop helping run a project, because you stepped down or were removed, you can't cancel it, even if you started it.</li>
         </ul>
         <h2>Groups and convenors</h2>
         <p>A group is run by its convenors, and one of them is its <strong>lead convenor</strong>. Whoever creates a group is its first lead convenor.</p>
@@ -202,7 +212,8 @@
             <li><strong>A rogue lead convenor</strong> can be removed by a community Decision. This is coming in a later update.</li>
         </ul>
         <h2>Vouching</h2>
-        <p>Only admins, and members chosen by an admin or by a community Decision, can vouch for newcomers. A vouch gives the newcomer a small credit line to start with: 25, 50 or 100 beans. Trust badges never give this right.</p>
+        <p>Owners and admins are vouchers by role, and an owner or credit-committee admin can make a confirmed member a voucher on the names list. Each voucher receives a budget (100 to 2,000 Beans, with a community default of 1,000 Beans).</p>
+        <p>Vouchers can vouch for newcomers on an invite, or for members already inside from their profile, choosing from presets of 25, 50, 75 or 100 Beans from their budget. Each voucher can vouch for a person once (raisable up to 100 Beans total), at most 3 vouchers can vouch for one person (up to 300 Beans total), and a voucher cannot vouch for someone who is below zero now. Trust badges never give this right.</p>
         <h2 class="guide-related">Related</h2>
         <ul class="guide-list">
             <li><a href="decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
@@ -212,7 +223,7 @@
             <li><a href="groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.</span></a></li>
             <li><a href="people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 162.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 163.</p>
     </main>
 </body>
 </html>

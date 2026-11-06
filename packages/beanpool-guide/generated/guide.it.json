@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 7,
+  "version": 8,
   "language": "it",
-  "hash": "aec185cb024619db6c60e1742ac583dda012abd101bbf51623336efe898f9ea0",
+  "hash": "2a172942b05d27eef76ece656b0bb586509455919871d0758491ea761cd3bd94",
   "sections": [
     {
       "id": "about",
@@ -790,6 +790,25 @@
       "blocks": [
         {
           "type": "h2",
+          "text": "Il Mercato in un solo ordine"
+        },
+        {
+          "type": "p",
+          "text": "Sul telefono lo ottieni con un'app aggiornata; in un browser web, quando il server della tua comunità viene aggiornato."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**I più recenti per primi, uguale sul telefono e sul web.** Il Mercato elenca i post dai più recenti, sotto **Oggi**, **Ieri**, **Questa settimana** e **Annunci precedenti**, in base al giorno in cui ciascuno è stato pubblicato. I titoli **Prossimi eventi**, **Sondaggi** e **Prima i più vicini** non ci sono più.",
+            "**Un evento torna una volta.** Il giorno prima che inizi, un evento viene elencato di nuovo sotto **Oggi**. Un sondaggio fa lo stesso il giorno prima che si chiuda. Poi scendono come qualsiasi altro post.",
+            "**Due posti al giorno.** Il terzo post di una persona in un giorno, e quelli successivi, vengono dopo quelli di tutti gli altri di quel giorno.",
+            "**Modificare un post non lo fa salire.** Per essere visto di nuovo, pubblica di nuovo.",
+            "**Nella comunità globale**, il Mercato mostra i più recenti entro 250 km dalla tua zona, ciascun post con la distanza a cui si trova. Una riga sopra l'elenco lo indica. Il telefono non ha più bisogno della tua posizione per questo. Nell'app web lo stesso vale per una **Distanza** che scegli.",
+            "**Non cambia:** i post fissati da un proprietario restano in cima, **Eventi** elenca ancora per primo il più vicino nel tempo, e una ricerca trova ciò che corrisponde meglio alle tue parole. Vedi \"Esplorare il mercato\"."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "La comunità globale, vicino a te"
         },
         {
@@ -804,7 +823,7 @@
             "**La tua zona.** Nell'app web, l'adesione alla comunità globale prevede un passaggio in più dopo la foto: **Più o meno dove sei?** Sul telefono viene chiesto quando accedi con un account che possiedi già; un nuovo account su telefono la imposta in un secondo momento nelle Impostazioni, sotto **La tua zona**. In quel passaggio, tocca **Usa la mia posizione**, **Scrivi una città o un quartiere** oppure **Salta per ora**. La posizione viene limitata a circa 10 km, mai al tuo punto esatto. Puoi modificarla o cancellarla nelle Impostazioni, sotto **La tua zona**. Vedi \"La tua zona\".",
             "**Nessuna zona impostata? Nessun problema.** Senza una zona vedrai gli annunci più recenti da ogni luogo, e una riga sopra il Mercato lo ricorderà. Sul telefono, toccala per impostare la tua zona.",
             "**Nuovi annunci vicino a te.** Compaiono non appena vengono pubblicati. Quelli lontani non raggiungono più il tuo telefono.",
-            "**Nell'app web**, il Mercato e la Mappa partono dalla tua zona, oppure da un luogo scelto con **Distanza**: i più vicini per primi, con la distanza indicata su ciascun annuncio. Vedi \"Trovare cose vicino a te\".",
+            "**Nell'app web**, il Mercato e la Mappa partono dalla tua zona, oppure da un luogo scelto con **Distanza**: con la distanza indicata su ciascun annuncio. La Mappa mostra i più vicini per primi. Il Mercato elenca i più recenti per primi, come dice \"Il Mercato in un solo ordine\", qui sopra. Vedi \"Trovare cose vicino a te\".",
             "**I sondaggi** non hanno un luogo specifico, quindi ognuno viene mostrato nella zona del membro che lo ha creato.",
             "**Scrivi la tua città.** Nella comunità globale, **Trova la tua comunità** nella Home non richiede più la tua posizione: tocca **o inserisci il tuo comune** e seleziona la tua città. Viene salvato solo un punto approssimativo. Vedi \"Trovare una comunità vicina\".",
             "**Pubblicare senza prezzo.** Nella comunità globale il modulo per pubblicare non chiede un prezzo, perché i fagioli appartengono alle comunità locali. Nell'app web, **Pubblica Offerta** e **Pubblica Richiesta** funzionano ora senza indicare un prezzo. Una comunità locale richiede comunque un prezzo."
@@ -1817,9 +1836,9 @@
         {
           "type": "ul",
           "items": [
-            "**Un annuncio viene archiviato 90 giorni dopo la sua ultima modifica.** Viene rimosso dal Mercato e dalla Mappa, e le relative foto vengono eliminate. Modificarlo, metterlo in pausa o ripubblicarlo contano tutti come una modifica: aprirlo con **Modifica annuncio** e toccare **Salva** lo mantiene attivo per altri 90 giorni. Quando uno dei tuoi annunci viene archiviato, ricevi una notifica insieme ai tuoi avvisi di **Attività del marketplace**. Puoi pubblicarlo di nuovo in qualsiasi momento.",
+            "**Un annuncio viene archiviato 90 giorni dopo la sua ultima modifica.** Viene rimosso dal Mercato e dalla Mappa, e le relative foto vengono eliminate. Modificarlo, metterlo in pausa o ripubblicarlo contano tutti come una modifica: aprirlo con **Modifica annuncio** e toccare **Salva** lo mantiene attivo per altri 90 giorni. Niente di tutto questo lo fa salire nel Mercato, che elenca i post dai più recenti. Quando uno dei tuoi annunci viene archiviato, ricevi una notifica insieme ai tuoi avvisi di **Attività del marketplace**. Puoi pubblicarlo di nuovo in qualsiasi momento.",
             "**Fino a 5 foto per annuncio.**",
-            "**Il tuo telefono conserva i 500 annunci più vicini**, entro 250 km dalla tua zona. Conserva anche i tuoi annunci e qualsiasi annuncio per cui hai un accordo o una conversazione. La ricerca del Mercato trova comunque annunci da ogni parte del mondo. Vedi \"La tua zona\".",
+            "**Il tuo telefono conserva i 500 annunci più vicini**, entro 250 km dalla tua zona. Conserva anche i tuoi annunci e qualsiasi annuncio per cui hai un accordo o una conversazione. Il Mercato elenca per primi i più recenti tra quelli entro 250 km dalla tua zona, e ogni scheda indica a che distanza si trova. La ricerca del Mercato trova comunque annunci da ogni parte del mondo. Vedi \"La tua zona\".",
             "**Puoi seguire fino a 3 luoghi** con **Avvisami quando ne nasce una qui**. Per seguirne un altro, smetti di seguirne uno. Vedi \"Trovare una comunità vicina\"."
           ]
         },
@@ -2840,7 +2859,7 @@
           "type": "ul",
           "items": [
             "**Iscriversi con un invito:** il pulsante del primo passaggio dice **Crea l'identità e unisciti →**. Se qualcuno qui ha già il nome scelto, lo ricevi con un numero aggiunto. **← Indietro** su **La tua foto** mostra solo il tuo nome, con **Avanti →**: modificalo (fino a 20 caratteri) o mantienilo, sullo stesso account. Se qualcuno possiede già il nuovo nome, la pagina lo segnala e ne suggerisce altri.",
-            "**Schede:** l'app web ha **Inizio**, **Mercato**, **Mappa**, **Beni comuni**, **Chat**, **Persone** e **Mastro**. Ciò che l'app per telefono chiama **Chat** è **Chat** sul web, e **Persone** ha una propria scheda.",
+            "**Schede:** l'app web ha **Inizio**, **Mercato**, **Mappa**, **Beni comuni**, **Chat**, **Persone** e **Mastro**. Entrambe le app chiamano questa scheda **Chat**, e sul web **Persone** ha una propria scheda.",
             "**Impostazioni e il tuo profilo:** i piccoli pulsanti in alto a destra: il tuo profilo, il **?**, poi Impostazioni. Su uno schermo ampio si trovano in fondo al menu sulla sinistra.",
             "**Pubblicare un'Offerta o una Richiesta:** usa **Nuovo annuncio** sulla pagina della **Mappa**.",
             "**Aspetto:** l'opzione si chiama **Come il dispositivo** anziché \"Come il telefono\".",
@@ -2943,19 +2962,26 @@
         },
         {
           "type": "p",
-          "text": "Tocca **Mercato** nella riga delle schede. Vedi cosa offrono e cercano le persone nella tua comunità, dai post più recenti, raggruppati per giorno di pubblicazione."
+          "text": "Tocca **Mercato** nella riga delle schede. Vedi cosa offrono e cercano le persone nella tua comunità, dai post più recenti, sotto **Oggi**, **Ieri**, **Questa settimana** e **Annunci precedenti**, in base al giorno in cui ciascuno è stato pubblicato. Il telefono e l'app web lo elencano allo stesso modo."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Un evento torna una volta.** Il giorno prima che inizi, un evento viene elencato di nuovo sotto **Oggi**, tra i nuovi post di quel giorno, e poi scende come qualsiasi altro. Un evento settimanale torna una volta a settimana.",
+            "**Anche un sondaggio torna una volta**, il giorno prima che si chiuda.",
+            "**Nessuno occupa più di due posti al giorno.** Il terzo post di una persona in un giorno, e quelli successivi, vengono dopo quelli di tutti gli altri di quel giorno.",
+            "**Modificare un post non lo fa salire.** Neppure metterlo in pausa, né una risposta. Per essere visto di nuovo, pubblica di nuovo.",
+            "**Una riga mostra dove ti sei fermato.** **Novità dall'ultima volta che hai guardato** sta sopra il primo post che era già elencato l'ultima volta che hai lasciato il Mercato su questo telefono o in questo browser; non c'è la prima volta, quando nulla è più recente, né mentre cerchi o filtri, e la griglia del telefono non la mostra.",
+            "**Un post fissato da un proprietario** sta in cima, sotto **Fissato**, a prescindere da quanto sia vecchio."
+          ]
         },
         {
           "type": "p",
-          "text": "Sul telefono, gli eventi vengono per primi. Se hai già consentito all'app l'uso della tua posizione, le visualizzazioni a elenco e compatta mostrano invece gli annunci a partire dai più vicini, sotto **Prima i più vicini**, con i sondaggi sotto **Sondaggi**. **Per Te** mantiene il proprio ordine. Trascina l'elenco verso il basso per aggiornarlo."
+          "text": "Nelle visualizzazioni a elenco e compatta vedi i titoli dei giorni. La griglia mostra lo stesso ordine senza. Sul telefono il Mercato si apre come elenco; nell'app web, a schede. **Per Te** mantiene il proprio ordine. Sotto **Eventi** viene per primo il più vicino nel tempo, con **Oggi**, **Questo fine settimana** e **Prossimi 7 giorni**. Una ricerca mostra i post che corrispondono meglio alle tue parole. Sul telefono, trascina l'elenco verso il basso per aggiornarlo."
         },
         {
           "type": "p",
-          "text": "Nell'app web il Mercato si apre a schede. Nelle visualizzazioni a elenco e compatta, gli eventi si trovano sotto il giorno in cui sono stati pubblicati. In una comunità locale l'app web non mette prima i più vicini."
-        },
-        {
-          "type": "p",
-          "text": "Sulla comunità globale, l'app web mostra prima gli annunci vicino a te: i più vicini all'interno della tua **Distanza**, o entro 250 km dalla tua zona (la località approssimativa fornita alla comunità quando ti unisci, o in **Impostazioni**), ciascuno con l'indicazione della distanza. Una riga sopra l'elenco indica quale criterio è attivo. Vicino alla tua zona trovi **Mostra ovunque** per i più recenti da ogni luogo. Con una **Distanza**, apri **Distanza** e tocca **Reimposta** per tornare alla tua zona, poi tocca **Mostra ovunque**. Sul telefono, la comunità globale conserva gli annunci più vicini alla tua zona, e quelli sono ciò che il Mercato mostra. Vedi \"Trovare cose vicino a te\"."
+          "text": "Sulla comunità globale, il Mercato mostra i più recenti entro 250 km dalla tua zona (la località approssimativa fornita alla comunità quando ti unisci, o in **Impostazioni**), ciascun post con la distanza a cui si trova. Una riga sopra l'elenco lo indica: **Il più recente entro 250 km dalla tua zona.** È uguale sul telefono e nell'app web, e sul telefono non serve che tu consenta all'app di usare la tua posizione. Con una **Distanza**, entrambe le app mostrano i più recenti entro quella distanza. Nell'app web la riga dice allora **Il più recente entro 5 km dal luogo che hai scelto.** e ogni post mostra a che distanza si trova. Nell'app web, vicino alla tua zona la riga ha **Mostra ovunque** per i più recenti da ogni luogo. Con una **Distanza**, apri **Distanza** e tocca **Reimposta** per tornare alla tua zona, poi tocca **Mostra ovunque**. Vedi \"Trovare cose vicino a te\"."
         },
         {
           "type": "p",
@@ -3768,8 +3794,8 @@
       "slug": "near-you",
       "title": "Trovare cose vicino a te",
       "summary": "Mostra solo gli annunci entro una certa distanza da te o da qualsiasi punto tu scelga.",
-      "sourceHash": "2db25a661f8751ec",
-      "source-hash": "2db25a661f8751ec",
+      "sourceHash": "f519dd5b8dbe3492",
+      "source-hash": "f519dd5b8dbe3492",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3824,8 +3850,8 @@
         {
           "type": "ul",
           "items": [
-            "Con una **Distanza** impostata nel Mercato, entrambi mostrano gli annunci più vicini all'interno di essa, dai più vicini. La Mappa mostra fino a 200 pin.",
-            "Senza di essa, mostrano gli annunci più vicini entro 250 km dalla tua zona: la località approssimativa fornita alla comunità quando ti unisci, o in seguito in **Impostazioni**, sotto **La tua zona**. Una riga sopra l'elenco del Mercato indica **Prima i più vicini alla tua zona, entro 250 km.** Tocca **Mostra ovunque** per i più recenti da ogni luogo, e **Vicino alla tua zona** per tornare indietro.",
+            "Con una **Distanza** impostata nel Mercato, entrambi mostrano gli annunci al suo interno. Il Mercato li elenca dai più recenti, ciascuno con la distanza a cui si trova, sotto una riga che dice **Il più recente entro 5 km dal luogo che hai scelto.** (con la tua distanza). La Mappa mostra i più vicini, fino a 200 pin.",
+            "Senza di essa, mostrano gli annunci più vicini entro 250 km dalla tua zona: la località approssimativa fornita alla comunità quando ti unisci, o in seguito in **Impostazioni**, sotto **La tua zona**. Il Mercato li elenca dai più recenti, sotto una riga che dice **Il più recente entro 250 km dalla tua zona.** La Mappa mostra prima i più vicini. Tocca **Mostra ovunque** per i più recenti da ogni luogo, e **Vicino alla tua zona** per tornare indietro.",
             "Senza nessuna delle due, vedi i più recenti da ogni luogo, e **Vedi cosa c'è vicino a te** apre il selettore di distanza. Una riga sopra l'elenco del Mercato indica quale di queste viste stai consultando. Con una **Distanza** non ha pulsanti: apri **Distanza** e tocca **Reimposta**. Torni così vicino alla tua zona, o, senza alcuna zona impostata, vedi i più recenti da ogni luogo.",
             "Ogni annuncio mostra a quale distanza si trova, come **📍 12 km**. I tuoi annunci personali sono sempre presenti sulla Mappa e nel Mercato vicino alla tua zona, ovunque si trovino. Con una **Distanza**, il Mercato mostra solo ciò che rientra in essa, compresi i tuoi.",
             "Quando l'elenco è impostato vicino a te, i post privi di posizione vengono omessi. Un sondaggio pubblicato da chi non ha impostato la propria zona è uno di questi. Per vederli, reimposta la **Distanza** se ne avevi scelta una, poi tocca **Mostra ovunque**.",
@@ -3843,7 +3869,7 @@
         },
         {
           "type": "p",
-          "text": "Il telefono conserva gli annunci più vicini alla tua zona: fino a 500, entro 250 km. Conserva anche i tuoi annunci personali e qualsiasi annuncio in cui hai un accordo, una chat o una risposta. Il Mercato e la Mappa mostrano ciò che il telefono conserva. Senza alcuna zona impostata, conserva invece gli annunci più recenti, e una riga sopra il Mercato lo segnala. Vedi \"La tua zona\"."
+          "text": "Il telefono conserva gli annunci più vicini alla tua zona: fino a 500, entro 250 km. Conserva anche i tuoi annunci personali e qualsiasi annuncio in cui hai un accordo, una chat o una risposta. Il Mercato e la Mappa mostrano ciò che il telefono conserva. Il Mercato lo elenca dai più recenti, ciascuno con la distanza a cui si trova, sotto la stessa riga, **Il più recente entro 250 km dalla tua zona.** Non serve che tu consenta all'app di usare la tua posizione. Senza alcuna zona impostata, conserva invece gli annunci più recenti, e una riga sopra il Mercato lo segnala. Vedi \"La tua zona\"."
         },
         {
           "type": "h2",
@@ -5356,7 +5382,7 @@
         },
         {
           "type": "p",
-          "text": "I sondaggi si trovano nel Mercato. Tocca **Sondaggi** nella riga in alto per vedere solo i sondaggi."
+          "text": "I sondaggi si trovano nel Mercato. Tocca **Sondaggi** nella riga in alto per vedere solo i sondaggi. Un sondaggio viene elencato di nuovo una volta, sotto **Oggi**, il giorno prima che si chiuda."
         },
         {
           "type": "ul",
@@ -5416,7 +5442,8 @@
         {
           "type": "ul",
           "items": [
-            "Nel **Mercato**, tocca **Eventi**. Scegli **Oggi**, **Questo fine settimana** o **Prossimi 7 giorni**.",
+            "Nel **Mercato**, tocca **Eventi**. Il più vicino nel tempo viene per primo. Scegli **Oggi**, **Questo fine settimana** o **Prossimi 7 giorni**.",
+            "Nel **Mercato**, sotto **Tutti**, un evento viene elencato di nuovo una volta, sotto **Oggi**, il giorno prima che inizi, e poi scende come qualsiasi altro post. Un evento settimanale torna una volta a settimana.",
             "Sulla **Mappa**, gli eventi sono contrassegnati da pin viola. Sul telefono, tocca **Eventi** per vedere solo quelli. Nell'app web sono sempre visibili, e i filtri delle date permettono di restringerli."
           ]
         },
@@ -6201,8 +6228,8 @@
       "slug": "trust-badges",
       "title": "Badge di fiducia",
       "summary": "Nuovo arrivato, Residente, Custode e Saggio. Cosa significano e perché non sbloccano privilegi.",
-      "sourceHash": "a6cc3bb74fc395bb",
-      "source-hash": "a6cc3bb74fc395bb",
+      "sourceHash": "9cb2cc1e373c7763",
+      "source-hash": "9cb2cc1e373c7763",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6234,7 +6261,7 @@
         },
         {
           "type": "p",
-          "text": "La fiducia deriva da una garanzia al momento dell'ingresso, dagli scambi completati e dalla fiducia concessa da un amministratore. In una comunità che conferma i propri membri, essere confermati assegna un limite di credito più alto, non un badge più alto: il tuo badge conta solo ciò che hai fatto, quindi non mostra mai che sei confermato."
+          "text": "La fiducia deriva dagli scambi completati e dalla fiducia concessa da un amministratore. In una comunità che conferma i propri membri, essere confermati garantisce un limite di credito più elevato, non un badge superiore: il badge conta solo ciò che hai fatto, quindi non indica mai la conferma dell'identità."
         },
         {
           "type": "h2",
@@ -6530,7 +6557,7 @@
         },
         {
           "type": "p",
-          "text": "Nella comunità globale, la tua zona indica approssimativamente dove ti trovi: circa 10 km attorno a un comune o a un punto, mai la tua posizione esatta. La comunità globale la usa per mostrarti cosa viene offerto vicino a te: i 500 annunci più vicini entro 250 km da essa. Vedi \"Più di una comunità\"."
+          "text": "Nella comunità globale, la tua zona indica approssimativamente dove ti trovi: circa 10 km attorno a un comune o a un punto, mai la tua posizione esatta. La comunità globale la usa per mostrarti cosa viene offerto vicino a te: i 500 annunci più vicini entro 250 km da essa. Il Mercato li elenca poi dai più recenti, ciascuno con la distanza a cui si trova. Vedi \"Più di una comunità\"."
         },
         {
           "type": "p",

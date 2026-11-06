@@ -79,6 +79,7 @@
             <li>&quot;A community answered your request.&quot;</li>
         </ul>
         <p>It never says who it is from, which listing, how many beans, or what your community's announcement says. Alerts pass through Apple's, Google's and Expo's servers on their way to your phone, and anyone can read a lock screen, so the rest stays with your community. Open BeanPool to see it.</p>
+        <p>On a phone that can't get alerts from a community, BeanPool tells you itself: &quot;You have new messages in Castlemaine.&quot; That line comes from BeanPool on your phone, not through those servers. It names the community, so anyone who can read your lock screen can read that name, and it says nothing else. It stays quiet where an alert would: for a chat you've muted, with <strong>Direct Messages</strong> off, and for an event's chat. While BeanPool is closed, your phone checks for new messages about every 15 minutes at best. If you leave messages unread in the community you are currently using, your phone will tell you about them again after each time you open the app.</p>
         <p>BeanPool never asks for your 12 words or a password in an alert.</p>
         <h2>When you tap an alert</h2>
         <p>Each alert carries your community's signature, made for you alone. BeanPool checks it before doing anything:</p>
@@ -91,8 +92,10 @@
         <p>An alert from a community you've removed from this phone does nothing either.</p>
         <p>If your community's server hasn't been updated yet, its alerts carry no signature. BeanPool shows them in general words (&quot;There is news from your community.&quot;) and, when you tap one, opens where you left off.</p>
         <h2>Numbers on your other communities</h2>
-        <p>On the phone, tap the bean at the top left. Under <strong>Your communities</strong>, a small number beside a community shows how many alerts it has sent you since you last had it open. The number goes as soon as you switch to that community. The community you're in never shows one.</p>
-        <p>Your phone counts these itself, from alerts it has checked: those that arrive while BeanPool is open, those still waiting on your phone when you open BeanPool, and those you tap. It never asks your other communities anything to work them out. An alert you cleared from your phone before opening BeanPool isn't counted.</p>
+        <p>On the phone, tap the bean at the top left. Under <strong>Your communities</strong>, a small number beside a community shows how many unread messages wait there, as far as your phone has heard. The number goes as soon as you switch to that community. The community you're in never shows one.</p>
+        <p>Your phone asks each of your other communities how many messages wait for you: at most every 5 minutes while BeanPool is open, and about every 15 minutes at best when it isn't. It asks no more than six at a time, and takes turns if you have more. Each question goes to that community alone, signed by you, and tells it nothing about your other communities. Message requests aren't counted. A community that can't be reached keeps the number it had, and between questions an alert your phone has checked can raise it.</p>
+        <p>The number on BeanPool's icon adds your communities together. While BeanPool isn't open, your phone asks the community you're in as well, in the same way and among the same six, so that community's messages are on the icon too. If it can't be reached, the icon stays as it was.</p>
+        <p>When you allow notifications, BeanPool sends your phone's notification token to every community you keep, signed by your account key. To stop alerts and unread message checks for a community, tap the bean at the top left to open the BeanPool sheet, press and hold that community, and switch off <strong>Alerts from this community</strong>.</p>
         <h2>Notices when BeanPool checks in</h2>
         <p>Every so often your phone lets BeanPool check in with your community in the background. If your community kept a notice for you that you haven't seen, such as what happened to one of your posts, BeanPool shows it on your phone in full, once.</p>
         <p>This needs nothing but your community's server, so it still works if alerts don't. It comes later than an alert would: your phone decides when, from about 15 minutes to a few hours.</p>
@@ -116,7 +119,7 @@
             <li><a href="the-top-bar.html"><strong>The top bar</strong><span>The bean, the small icons that show when something needs you, and the buttons at the top right.</span></a></li>
             <li><a href="communities.html"><strong>More than one community</strong><span>Belong to several communities with one account, switch between them, follow your community to a new address, and see what the global community shows you.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 162.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 163.</p>
     </main>
 </body>
 </html>

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 7,
+  "version": 8,
   "language": "vi",
-  "hash": "b190b257d660eeaeae1deb6b8acb173aaf0abb8d24d1bbb479cae3922345a668",
+  "hash": "1e5938a4f66ea73f1178ac02c77d27674dfd97d565f1ce0939ca0d9135d8e1fc",
   "sections": [
     {
       "id": "about",
@@ -790,6 +790,25 @@
       "blocks": [
         {
           "type": "h2",
+          "text": "Chợ theo một thứ tự"
+        },
+        {
+          "type": "p",
+          "text": "Trên điện thoại, bạn có điều này khi dùng ứng dụng đã cập nhật; trên trình duyệt web, khi máy chủ cộng đồng của bạn được cập nhật."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Mới nhất trước, giống nhau trên điện thoại và web.** Chợ liệt kê các bài đăng mới nhất trước, dưới **Hôm nay**, **Hôm qua**, **Tuần này** và **Các bài đăng cũ hơn**, theo ngày mỗi bài được đăng. Các tiêu đề **Sự kiện sắp tới**, **Thăm dò** và **Gần nhất trước** không còn nữa.",
+            "**Một sự kiện quay lại một lần.** Vào ngày trước khi bắt đầu, sự kiện được liệt kê lại dưới **Hôm nay**. Một cuộc thăm dò cũng vậy vào ngày trước khi kết thúc. Sau đó chúng chìm xuống như mọi bài đăng khác.",
+            "**Hai chỗ mỗi ngày.** Bài đăng thứ ba của một người trong ngày, và các bài sau đó, xếp sau bài của tất cả những người khác trong ngày đó.",
+            "**Chỉnh sửa một bài đăng không đẩy nó lên.** Muốn được thấy lại, hãy đăng lại.",
+            "**Trên cộng đồng toàn cầu**, Chợ hiển thị những bài mới nhất trong vòng 250 km quanh khu vực của bạn, mỗi bài kèm khoảng cách bao xa. Một dòng phía trên danh sách cho biết điều đó. Điện thoại không còn cần vị trí của bạn cho việc này. Trong ứng dụng web, điều tương tự áp dụng cho **Khoảng cách** bạn chọn.",
+            "**Không thay đổi:** các bài đăng mà chủ sở hữu đã ghim vẫn ở trên cùng, **Sự kiện** vẫn liệt kê sự kiện sớm nhất trước, và tìm kiếm tìm ra những gì khớp nhất với từ của bạn. Xem \"Xem qua chợ\"."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "Cộng đồng toàn cầu, ở gần bạn"
         },
         {
@@ -804,7 +823,7 @@
             "**Khu vực của bạn.** Trong ứng dụng web, việc tham gia cộng đồng toàn cầu có thêm một bước sau bước ảnh của bạn: **Bạn đang ở khoảng đâu?** Trên điện thoại, câu hỏi này được đưa ra khi bạn tham gia bằng tài khoản bạn đã có; tài khoản mới trên điện thoại sẽ thiết lập mục này sau trong Cài đặt, dưới mục **Khu vực của bạn**. Trong bước đó, hãy nhấn **Dùng vị trí của tôi**, **Nhập tên thị trấn hoặc khu phố**, hoặc **Bỏ qua lúc này**. Khu vực chỉ được lưu ở mức khoảng 10 km, không bao giờ là vị trí chính xác của bạn. Hãy thay đổi hoặc xóa mục này trong Cài đặt, dưới mục **Khu vực của bạn**. Xem \"Khu vực bạn\".",
             "**Không có khu vực, không sao cả.** Nếu không có, bạn sẽ thấy các tin đăng mới nhất từ khắp mọi nơi, và một dòng phía trên Chợ sẽ thông báo điều đó. Trên điện thoại, hãy nhấn vào đó để đặt khu vực của bạn.",
             "**Tin đăng mới gần bạn.** Các tin xuất hiện ngay khi được đăng. Những tin ở xa sẽ không còn gửi đến điện thoại của bạn nữa.",
-            "**Trong ứng dụng web**, Chợ và Bản đồ bắt đầu từ khu vực của bạn, hoặc từ một địa điểm bạn chọn bằng **Khoảng cách**: tin gần nhất hiển thị trước, mỗi tin kèm khoảng cách bao xa. Xem \"Tìm kiếm thứ ở gần bạn\".",
+            "**Trong ứng dụng web**, Chợ và Bản đồ bắt đầu từ khu vực của bạn, hoặc từ một địa điểm bạn chọn bằng **Khoảng cách**: mỗi tin kèm khoảng cách bao xa. Bản đồ hiển thị tin gần nhất trước. Chợ liệt kê tin mới nhất trước, như \"Chợ theo một thứ tự\" ở trên đã nói. Xem \"Tìm kiếm thứ ở gần bạn\".",
             "**Các cuộc thăm dò** không có địa điểm riêng, vì vậy mỗi cuộc thăm dò được hiển thị tại khu vực của thành viên đã tạo ra nó.",
             "**Nhập thị trấn của bạn.** Trên cộng đồng toàn cầu, **Tìm cộng đồng của bạn** trên Trang chủ không còn cần vị trí của bạn nữa: hãy nhấn **hoặc nhập tên thị trấn của bạn** và chọn thị trấn của bạn. Chỉ một điểm ước chừng được lưu giữ. Xem \"Tìm một cộng đồng gần bạn\".",
             "**Đăng bài không cần giá.** Trên cộng đồng toàn cầu, biểu mẫu đăng bài không hỏi giá, vì đậu chỉ tồn tại trong các cộng đồng địa phương. Trong ứng dụng web, **Đăng lời đề nghị** và **Đăng nhu cầu** giờ đây hoạt động mà không cần giá. Một cộng đồng địa phương vẫn yêu cầu giá."
@@ -1537,7 +1556,7 @@
         },
         {
           "type": "p",
-          "text": "Mọi người có thể xin gia nhập cộng đồng của bạn từ cộng đồng toàn cầu. Nhấn **Trò chuyện**, sau đó chọn **Mọi người**, rồi chọn **Invites**: các yêu cầu được liệt kê dưới mục **Wants to join**, kèm theo tên, lời nhắn và nơi họ đến. Các yêu cầu được trả lời trong ứng dụng điện thoại: ứng dụng web không liệt kê chúng."
+          "text": "Mọi người có thể xin gia nhập cộng đồng của bạn từ cộng đồng toàn cầu. Nhấn **Chat**, sau đó chọn **Mọi người**, rồi chọn **Invites**: các yêu cầu được liệt kê dưới mục **Wants to join**, kèm theo tên, lời nhắn và nơi họ đến. Các yêu cầu được trả lời trong ứng dụng điện thoại: ứng dụng web không liệt kê chúng."
         },
         {
           "type": "ul",
@@ -1817,9 +1836,9 @@
         {
           "type": "ul",
           "items": [
-            "**Tin đăng được lưu trữ sau 90 ngày kể từ lần thay đổi cuối cùng.** Tin đăng sẽ rời khỏi Chợ và Bản đồ, và ảnh của tin đăng sẽ bị xóa. Việc chỉnh sửa, tạm dừng hoặc đăng lại tin đều được tính là một lần thay đổi: mở tin đăng bằng **Edit Post** và nhấn **Lưu** sẽ giữ tin đăng thêm 90 ngày nữa. Khi một tin đăng của bạn được chuyển vào lưu trữ, bạn sẽ nhận được thông báo cùng các cảnh báo trong mục **Hoạt động thị trường**. Bạn có thể đăng lại tin bất cứ lúc nào.",
+            "**Tin đăng được lưu trữ sau 90 ngày kể từ lần thay đổi cuối cùng.** Tin đăng sẽ rời khỏi Chợ và Bản đồ, và ảnh của tin đăng sẽ bị xóa. Việc chỉnh sửa, tạm dừng hoặc đăng lại tin đều được tính là một lần thay đổi: mở tin đăng bằng **Edit Post** và nhấn **Lưu** sẽ giữ tin đăng thêm 90 ngày nữa. Không điều nào trong số này đẩy tin lên đầu Chợ, nơi liệt kê các bài đăng mới nhất trước. Khi một tin đăng của bạn được chuyển vào lưu trữ, bạn sẽ nhận được thông báo cùng các cảnh báo trong mục **Hoạt động thị trường**. Bạn có thể đăng lại tin bất cứ lúc nào.",
             "**Tối đa 5 ảnh cho mỗi tin đăng.**",
-            "**Điện thoại của bạn lưu giữ 500 tin đăng gần nhất**, trong vòng 250 km tính từ khu vực của bạn. Điện thoại cũng lưu giữ các tin đăng của chính bạn, cùng bất kỳ tin đăng nào bạn đang có giao dịch hoặc cuộc trò chuyện liên quan. Tính năng tìm kiếm của Chợ vẫn tìm thấy các tin đăng từ khắp mọi nơi. Xem \"Khu vực bạn\".",
+            "**Điện thoại của bạn lưu giữ 500 tin đăng gần nhất**, trong vòng 250 km tính từ khu vực của bạn. Điện thoại cũng lưu giữ các tin đăng của chính bạn, cùng bất kỳ tin đăng nào bạn đang có giao dịch hoặc cuộc trò chuyện liên quan. Chợ liệt kê những tin trong vòng 250 km quanh khu vực của bạn theo thứ tự mới nhất trước, mỗi thẻ cho biết khoảng cách bao xa. Tính năng tìm kiếm của Chợ vẫn tìm thấy các tin đăng từ khắp mọi nơi. Xem \"Khu vực bạn\".",
             "**Bạn có thể theo dõi tối đa 3 địa điểm** bằng tính năng **Báo cho tôi khi có cộng đồng ở đây**. Để theo dõi địa điểm khác, hãy ngừng theo dõi một địa điểm. Xem \"Tìm một cộng đồng gần bạn\"."
           ]
         },
@@ -2225,8 +2244,8 @@
           "items": [
             "**Bắt tay:** một thỏa thuận đang chờ bạn. Ai đó đang chờ bạn chấp nhận yêu cầu của họ, hoặc một thỏa thuận bạn tham gia vẫn chưa hoàn tất. Nếu có một việc, nhấn vào sẽ mở thỏa thuận đó. Nếu có nhiều việc hơn, nhấn vào sẽ mở **Giao dịch của tôi**.",
             "**Hòm phiếu:** một cuộc bỏ phiếu bạn chưa tham gia. Nhấn vào sẽ mở **Chung**, tại mục **Quyết định**. Nếu cuộc bỏ phiếu đầu tiên nằm trong một nhóm hoặc cuộc bỏ phiếu của người quản lý trong một doanh nghiệp, nhấn vào sẽ mở nhóm hoặc doanh nghiệp đó thay thế. Một cuộc bỏ phiếu mà bạn chưa thể tham gia sẽ không được tính ở đây, ví dụ một cuộc bỏ phiếu yêu cầu bạn phải hoàn tất một giao dịch trước.",
-            "**Bong bóng trò chuyện:** một tin nhắn chưa đọc từ một người. Nếu từ một người, nhấn vào sẽ mở cuộc trò chuyện đó. Nếu từ nhiều người, nhấn vào sẽ mở **Trò chuyện**, tại mục **Tin nhắn**, chỉ hiển thị những tin chưa đọc.",
-            "**Nhóm người:** các dòng tin nhắn mới trong nhóm của bạn, cuộc trò chuyện doanh nghiệp hoặc trò chuyện sự kiện. Các đoạn chat bạn đã tắt thông báo sẽ giữ yên lặng ở đây. Nhấn vào sẽ mở đoạn chat, hoặc mở **Trò chuyện**, tại mục **Nhóm**, nếu có nhiều đoạn chat.",
+            "**Bong bóng trò chuyện:** một tin nhắn chưa đọc từ một người. Nếu từ một người, nhấn vào sẽ mở cuộc trò chuyện đó. Nếu từ nhiều người, nhấn vào sẽ mở **Chat**, tại mục **Tin nhắn**, chỉ hiển thị những tin chưa đọc.",
+            "**Nhóm người:** các dòng tin nhắn mới trong nhóm của bạn, cuộc trò chuyện doanh nghiệp hoặc trò chuyện sự kiện. Các đoạn chat bạn đã tắt thông báo sẽ giữ yên lặng ở đây. Nhấn vào sẽ mở đoạn chat, hoặc mở **Chat**, tại mục **Nhóm**, nếu có nhiều đoạn chat.",
             "**Chiếc khiên:** chỉ dành cho những người tham gia vận hành cộng đồng của bạn. Biểu tượng hiển thị khi có công việc quản trị đang chờ, chẳng hạn như báo cáo cần xem xét hoặc một giao dịch bị đình trệ cần phân xử. Nhấn vào sẽ yêu cầu mở khóa màn hình điện thoại của bạn, sau đó mở phần cài đặt của cộng đồng tại công việc đó. Nếu cài đặt cộng đồng của bạn sử dụng mã đăng nhập, ứng dụng cũng sẽ yêu cầu nhập mã đó."
           ]
         },
@@ -2314,7 +2333,7 @@
         },
         {
           "type": "p",
-          "text": "Bên dưới thanh trên cùng là các tab: **Trang chủ**, **Chợ**, **Bản đồ**, **Trò chuyện**, **Chung** và **Sổ cái**. Tên của mỗi tab nằm phía trên biểu tượng của tab đó. Trên điện thoại, một cộng đồng địa phương không sử dụng Đậu sẽ không hiển thị tab **Chung** hoặc **Sổ cái**. Cộng đồng toàn cầu hiển thị cả hai, với các ví dụ mẫu từ một cộng đồng địa phương. Xem \"Đậu và cộng đồng toàn cầu\"."
+          "text": "Bên dưới thanh trên cùng là các tab: **Trang chủ**, **Chợ**, **Bản đồ**, **Chat**, **Chung** và **Sổ cái**. Tên của mỗi tab nằm phía trên biểu tượng của tab đó. Trên điện thoại, một cộng đồng địa phương không sử dụng Đậu sẽ không hiển thị tab **Chung** hoặc **Sổ cái**. Cộng đồng toàn cầu hiển thị cả hai, với các ví dụ mẫu từ một cộng đồng địa phương. Xem \"Đậu và cộng đồng toàn cầu\"."
         },
         {
           "type": "p",
@@ -2365,7 +2384,7 @@
           "items": [
             "**Cộng đồng của bạn:** tên của cộng đồng (địa chỉ của cộng đồng trong ứng dụng web), và trạng thái máy chủ của nó có thể kết nối được lúc này hay không. Trên điện thoại, bên dưới mục đó là **Cộng đồng của bạn**: nhấn vào một cộng đồng để chuyển sang cộng đồng đó, hoặc nhấn **Thêm một cộng đồng**. **Cộng đồng toàn cầu** luôn là một trong các hàng, với dòng thứ hai cho biết bạn đã là thành viên, có thể tham gia, hoặc lý do tại sao hiện chưa thể sử dụng. Xem \"Nhiều hơn một cộng đồng\".",
             "**Hướng dẫn:** cách BeanPool hoạt động, các quy tắc và cách đưa ra quyết định, cùng các câu hỏi thường gặp.",
-            "**Cách sử dụng ứng dụng:** một trang ngắn cho mỗi tác vụ, được phân nhóm theo cấu trúc của ứng dụng: Bắt đầu, Chợ, Bản đồ, Trò chuyện, Nhịp đập, Commons, Sổ cái và Cài đặt & an toàn.",
+            "**Cách sử dụng ứng dụng:** một trang ngắn cho mỗi tác vụ, được phân nhóm theo cấu trúc của ứng dụng: Bắt đầu, Chợ, Bản đồ, Chat, Nhịp đập, Commons, Sổ cái và Cài đặt & an toàn.",
             "**Dự án BeanPool:** những điểm mới trong phiên bản này, và liên kết đến trang web beanpool.org (trên điện thoại có thêm nút **Chia sẻ** để gửi cho bạn bè)."
           ]
         },
@@ -2840,7 +2859,7 @@
           "type": "ul",
           "items": [
             "**Tham gia bằng lời mời:** nút của bước đầu tiên ghi **Tạo danh tính & Tham gia →**. Nếu ai đó ở đây đã có tên bạn chọn, bạn sẽ nhận được tên đó kèm theo một con số. Nút **← Quay lại** trên bước **Ảnh của bạn** hiển thị riêng tên của bạn, cùng nút **Tiếp →**: hãy đổi tên (tối đa 20 ký tự) hoặc giữ nguyên, trên cùng một tài khoản. Nếu ai đó đã có tên mới, trang sẽ thông báo và gợi ý những tên khác.",
-            "**Các tab:** ứng dụng web có các tab **Trang chủ**, **Chợ**, **Bản đồ**, **Chung**, **Trò chuyện**, **Mọi người** và **Sổ cái**. Những gì ứng dụng điện thoại gọi là **Trò chuyện** thì trên web gọi là **Trò chuyện**, và mục **Mọi người** có tab riêng.",
+            "**Các tab:** ứng dụng web có các tab **Trang chủ**, **Chợ**, **Bản đồ**, **Chung**, **Chat**, **Mọi người** và **Sổ cái**. Cả hai ứng dụng đều gọi tab này là **Chat**, và trên web mục **Mọi người** có tab riêng.",
             "**Cài đặt và hồ sơ của bạn:** các nút nhỏ ở trên cùng bên phải: hồ sơ của bạn, dấu **?**, sau đó là Cài đặt. Trên màn hình rộng, chúng nằm ở cuối menu bên trái.",
             "**Đăng Lời đề nghị hoặc Nhu cầu:** sử dụng nút **Bài đăng mới** trên trang **Bản đồ**.",
             "**Giao diện:** tùy chọn được gọi là **Giống như thiết bị** thay vì \"Giống như điện thoại\".",
@@ -2943,19 +2962,26 @@
         },
         {
           "type": "p",
-          "text": "Nhấn **Chợ** trong hàng các tab. Bạn sẽ thấy những gì mọi người trong cộng đồng của bạn đang chia sẻ và tìm kiếm, bài đăng mới nhất xếp trước, được nhóm theo ngày đăng."
+          "text": "Nhấn **Chợ** trong hàng các tab. Bạn sẽ thấy những gì mọi người trong cộng đồng của bạn đang chia sẻ và tìm kiếm, bài đăng mới nhất xếp trước, dưới **Hôm nay**, **Hôm qua**, **Tuần này** và **Các bài đăng cũ hơn**, theo ngày mỗi bài được đăng. Điện thoại và ứng dụng web liệt kê theo cùng một cách."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Một sự kiện quay lại một lần.** Vào ngày trước khi bắt đầu, sự kiện được liệt kê lại dưới **Hôm nay**, giữa các bài đăng mới của ngày đó, rồi chìm xuống như mọi bài khác. Một sự kiện hằng tuần quay lại mỗi tuần một lần.",
+            "**Một cuộc thăm dò cũng quay lại một lần**, vào ngày trước khi kết thúc.",
+            "**Không ai chiếm quá hai chỗ mỗi ngày.** Bài đăng thứ ba của một người trong ngày, và các bài sau đó, xếp sau bài của tất cả những người khác trong ngày đó.",
+            "**Chỉnh sửa một bài đăng không đẩy nó lên.** Tạm dừng nó, hay một câu trả lời cho nó, cũng không. Muốn được thấy lại, hãy đăng lại.",
+            "**Một dòng cho biết bạn đã dừng ở đâu.** **Mới kể từ lần xem trước của bạn** nằm phía trên bài đăng đầu tiên đã được đăng khi bạn rời Chợ lần gần nhất trên điện thoại này hoặc trong trình duyệt này; dòng này không có ở lần đầu, khi không có gì mới hơn, hay khi bạn đang tìm kiếm hoặc lọc, và lưới trên điện thoại cũng không vẽ nó.",
+            "**Bài đăng mà chủ sở hữu đã ghim** nằm trên cùng, dưới **Đã ghim**, dù cũ đến đâu."
+          ]
         },
         {
           "type": "p",
-          "text": "Trên điện thoại, các sự kiện hiển thị đầu tiên. Nếu bạn đã cho phép ứng dụng sử dụng vị trí của bạn, chế độ xem danh sách và thu gọn sẽ hiển thị các tin đăng ở gần nhất trước, dưới mục **Gần nhất trước**, với các cuộc thăm dò dưới mục **Thăm dò**. Tab **★ Dành cho bạn** giữ thứ tự riêng của nó. Kéo danh sách xuống để làm mới."
+          "text": "Ở chế độ xem danh sách và thu gọn, bạn thấy các tiêu đề ngày. Chế độ lưới cho thấy cùng thứ tự đó mà không có chúng. Trên điện thoại, Chợ mở ra dưới dạng danh sách; trong ứng dụng web, dưới dạng các thẻ. Tab **★ Dành cho bạn** giữ thứ tự riêng của nó. Dưới **Sự kiện**, sự kiện sớm nhất hiển thị trước, cùng với **Hôm nay**, **Cuối tuần này** và **7 ngày tới**. Tìm kiếm hiển thị các bài đăng khớp nhất với từ của bạn. Trên điện thoại, kéo danh sách xuống để làm mới."
         },
         {
           "type": "p",
-          "text": "Trong ứng dụng web, Chợ mở ra dưới dạng các thẻ. Ở chế độ xem danh sách và thu gọn, các sự kiện nằm dưới ngày chúng được đăng. Trên một cộng đồng địa phương, ứng dụng web không đặt các tin ở gần nhất lên đầu."
-        },
-        {
-          "type": "p",
-          "text": "Trên cộng đồng toàn cầu, ứng dụng web hiển thị các tin đăng ở gần bạn trước: những tin gần nhất trong phạm vi **Khoảng cách** của bạn, hoặc trong phạm vi 250 km tính từ khu vực của bạn (vị trí gần đúng bạn cung cấp cho cộng đồng khi tham gia, hoặc trong **Cài đặt**), mỗi tin đều có khoảng cách cụ thể. Một dòng phía trên danh sách cho biết bạn đang xem chế độ nào. Ở chế độ gần khu vực của bạn, nó có nút **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi. Khi đã chọn **Khoảng cách**, hãy mở **Khoảng cách** và nhấn **Đặt lại** để quay lại khu vực của bạn, sau đó nhấn **Hiện tất cả mọi nơi**. Trên điện thoại, cộng đồng toàn cầu lưu các tin đăng gần khu vực của bạn nhất, vì vậy đó là những gì Chợ hiển thị. Xem \"Tìm kiếm thứ ở gần bạn\"."
+          "text": "Trên cộng đồng toàn cầu, Chợ hiển thị những bài mới nhất trong vòng 250 km quanh khu vực của bạn (vị trí gần đúng bạn cung cấp cho cộng đồng khi tham gia, hoặc trong **Cài đặt**), mỗi bài kèm khoảng cách bao xa. Một dòng phía trên danh sách cho biết điều đó: **Mới nhất trong vòng 250 km quanh khu vực của bạn.** Điều này giống nhau trên điện thoại và trong ứng dụng web, và trên điện thoại không cần bạn cho phép ứng dụng sử dụng vị trí của bạn. Với **Khoảng cách**, cả hai ứng dụng hiển thị những bài mới nhất trong khoảng đó. Trong ứng dụng web, dòng này khi ấy ghi **Mới nhất trong vòng 5 km quanh nơi bạn đã chọn.**, và mỗi bài kèm khoảng cách bao xa. Trong ứng dụng web, ở chế độ gần khu vực của bạn, dòng này có nút **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi. Khi đã chọn **Khoảng cách**, hãy mở **Khoảng cách** và nhấn **Đặt lại** để quay lại khu vực của bạn, sau đó nhấn **Hiện tất cả mọi nơi**. Khi có ít hơn tám tin ở gần bạn, những tin mới nhất từ nơi khác xuất hiện bên dưới, dưới mục **Mới nhất từ nơi khác**, trên điện thoại và trong ứng dụng web. Chúng không xuất hiện khi bạn đã chọn **Khoảng cách**, đã gõ tìm kiếm, hoặc đang xem **Sự kiện**. Xem \"Tìm kiếm thứ ở gần bạn\"."
         },
         {
           "type": "p",
@@ -3768,8 +3794,8 @@
       "slug": "near-you",
       "title": "Tìm kiếm thứ ở gần bạn",
       "summary": "Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.",
-      "sourceHash": "2db25a661f8751ec",
-      "source-hash": "2db25a661f8751ec",
+      "sourceHash": "f519dd5b8dbe3492",
+      "source-hash": "f519dd5b8dbe3492",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3824,8 +3850,8 @@
         {
           "type": "ul",
           "items": [
-            "Khi đã chọn một **Khoảng cách** trên Chợ, cả hai màn hình sẽ hiển thị các tin đăng gần nhất trong phạm vi đó, gần nhất xếp trước. Bản đồ hiển thị tối đa 200 ghim.",
-            "Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong **Cài đặt**, dưới mục **Khu vực bạn**. Một dòng chữ phía trên danh sách của Chợ ghi **Gần khu vực của bạn nhất trước, trong phạm vi 250 km.** Nhấn **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi, và nhấn **Gần khu vực của bạn** để quay lại.",
+            "Khi đã chọn một **Khoảng cách** trên Chợ, cả hai màn hình sẽ hiển thị các tin đăng trong phạm vi đó. Chợ liệt kê chúng mới nhất trước, mỗi tin kèm khoảng cách bao xa, dưới một dòng ghi **Mới nhất trong vòng 5 km quanh nơi bạn đã chọn.** (kèm khoảng cách của bạn). Bản đồ hiển thị những tin gần nhất, tối đa 200 ghim.",
+            "Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong **Cài đặt**, dưới mục **Khu vực bạn**. Chợ liệt kê chúng mới nhất trước, dưới một dòng ghi **Mới nhất trong vòng 250 km quanh khu vực của bạn.** Bản đồ hiển thị tin gần nhất trước. Nhấn **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi, và nhấn **Gần khu vực của bạn** để quay lại.",
             "Khi không có thiết lập nào ở trên, bạn sẽ thấy những bài đăng mới nhất từ mọi nơi, và mục **Xem những gì gần bạn** sẽ mở bộ chọn khoảng cách. Một dòng phía trên danh sách của Chợ cho biết bạn đang xem theo chế độ nào. Khi đã chọn **Khoảng cách**, dòng này không có nút: hãy mở **Khoảng cách** và nhấn **Đặt lại**. Khi đó bạn sẽ quay lại chế độ gần khu vực của bạn, hoặc nếu chưa thiết lập khu vực, bạn sẽ thấy bài đăng mới nhất từ mọi nơi.",
             "Mỗi tin đăng hiển thị khoảng cách xa bao nhiêu, chẳng hạn như **📍 12 km**. Các tin đăng của chính bạn luôn luôn xuất hiện trên Bản đồ, và trên Chợ ở chế độ gần khu vực của bạn, dù chúng ở bất cứ đâu. Khi đã chọn **Khoảng cách**, Chợ chỉ hiển thị những tin nằm trong khoảng cách đó, bao gồm cả tin của bạn.",
             "Trong khi danh sách đang hiển thị các mục ở gần bạn, các bài đăng không có vị trí sẽ bị bỏ qua. Một cuộc thăm dò từ người chưa thiết lập khu vực của họ là một trong số đó. Để xem chúng, hãy đặt lại **Khoảng cách** nếu bạn đã chọn, sau đó nhấn **Hiện tất cả mọi nơi**.",
@@ -3843,7 +3869,7 @@
         },
         {
           "type": "p",
-          "text": "Điện thoại lưu các tin đăng ở gần khu vực của bạn nhất: tối đa 500 tin, trong phạm vi 250 km. Điện thoại cũng lưu các tin đăng của chính bạn, cùng bất kỳ tin nào bạn có giao dịch, cuộc trò chuyện hoặc câu trả lời. Tab Chợ và Bản đồ hiển thị những gì điện thoại lưu giữ. Nếu không thiết lập khu vực, điện thoại sẽ lưu các tin đăng mới nhất thay thế, và một dòng phía trên Chợ sẽ thông báo điều đó. Xem \"Khu vực bạn\"."
+          "text": "Điện thoại lưu các tin đăng ở gần khu vực của bạn nhất: tối đa 500 tin, trong phạm vi 250 km. Điện thoại cũng lưu các tin đăng của chính bạn, cùng bất kỳ tin nào bạn có giao dịch, cuộc trò chuyện hoặc câu trả lời. Tab Chợ và Bản đồ hiển thị những gì điện thoại lưu giữ. Chợ liệt kê chúng mới nhất trước, mỗi tin kèm khoảng cách bao xa, dưới cùng một dòng, **Mới nhất trong vòng 250 km quanh khu vực của bạn.** Việc này không cần bạn cho phép ứng dụng sử dụng vị trí của bạn. Nếu không thiết lập khu vực, điện thoại sẽ lưu các tin đăng mới nhất thay thế, và một dòng phía trên Chợ sẽ thông báo điều đó. Xem \"Khu vực bạn\"."
         },
         {
           "type": "h2",
@@ -3879,11 +3905,11 @@
         },
         {
           "type": "p",
-          "text": "**Trò chuyện** có ba nút ở trên cùng: **Tin nhắn**, **Nhóm** và **Mọi người**."
+          "text": "**Chat** có ba nút ở trên cùng: **Tin nhắn**, **Nhóm** và **Mọi người**."
         },
         {
           "type": "p",
-          "text": "Nhấn vào **Trò chuyện** trong hàng thẻ, sau đó chọn **Tin nhắn**. Các cuộc trò chuyện của bạn với mọi người được liệt kê ở đó. Các giao dịch cần bạn xử lý nằm ở trên cùng, trong phần **Cần hành động**."
+          "text": "Nhấn vào **Chat** trong hàng thẻ, sau đó chọn **Tin nhắn**. Các cuộc trò chuyện của bạn với mọi người được liệt kê ở đó. Các giao dịch cần bạn xử lý nằm ở trên cùng, trong phần **Cần hành động**."
         },
         {
           "type": "p",
@@ -3894,7 +3920,7 @@
           "items": [
             "Tìm kiếm bằng **Tìm cuộc trò chuyện, bài đăng, đối tác...**.",
             "Nút bộ lọc sắp xếp theo **Gần đây** hoặc **Chưa đọc** (và ở nơi cộng đồng của bạn sử dụng Đậu, theo số Đậu trong mỗi giao dịch, cao nhất hoặc thấp nhất trước), đồng thời có thể hiển thị **Chỉ tin chưa đọc** hoặc **Chỉ bạn bè**.",
-            "Trên điện thoại, nút tìm kiếm và bộ lọc sẽ trượt biến mất khi bạn cuộn xuống. Cuộn lên một chút và chúng sẽ quay trở lại. Nhấn vào **Trò chuyện** lần nữa để nhảy lên đầu trang."
+            "Trên điện thoại, nút tìm kiếm và bộ lọc sẽ trượt biến mất khi bạn cuộn xuống. Cuộn lên một chút và chúng sẽ quay trở lại. Nhấn vào **Chat** lần nữa để nhảy lên đầu trang."
           ]
         },
         {
@@ -3909,8 +3935,8 @@
           "type": "ul",
           "items": [
             "Từ một hồ sơ: mở hồ sơ của họ và nhấn **Nhắn tin**. Bạn cũng có thể kết bạn với họ tại đó.",
-            "Từ **Trò chuyện**: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ.",
-            "Từ danh sách thành viên: **Trò chuyện**, sau đó chọn **Mọi người**, và nhấn 💬 bên cạnh tên một thành viên trong **Cộng đồng** hoặc **Bạn bè**.",
+            "Từ **Chat**: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ.",
+            "Từ danh sách thành viên: **Chat**, sau đó chọn **Mọi người**, và nhấn 💬 bên cạnh tên một thành viên trong **Cộng đồng** hoặc **Bạn bè**.",
             "Từ một bài đăng: nhấn vào **Nhắn tin** và tên của người đó."
           ]
         },
@@ -4061,7 +4087,7 @@
         },
         {
           "type": "p",
-          "text": "Nhấn **Trò chuyện**, sau đó chọn **Nhóm**. Mọi nhóm bạn tham gia đều được liệt kê ở đó, tin nhắn mới nhất xếp trước, cùng các dự án bạn phụ trách hoặc cộng tác (🎯), các doanh nghiệp bạn quản lý (🥖) và các sự kiện bạn tổ chức hoặc sẽ tham gia (📅). Cuộc trò chuyện của một doanh nghiệp là cuộc thảo luận công khai: bất kỳ thành viên nào trong cộng đồng của bạn đều có thể đọc. Xem \"Tin nhắn\". Mỗi nhóm hiển thị tin nhắn mới nhất và số lượng tin nhắn bạn chưa đọc. Trong một cuộc trò chuyện được mã hóa, hàng hiển thị người đã viết tin nhắn cuối cùng và **🔒 Tin nhắn**, chứ không phải nội dung chữ."
+          "text": "Nhấn **Chat**, sau đó chọn **Nhóm**. Mọi nhóm bạn tham gia đều được liệt kê ở đó, tin nhắn mới nhất xếp trước, cùng các dự án bạn phụ trách hoặc cộng tác (🎯), các doanh nghiệp bạn quản lý (🥖) và các sự kiện bạn tổ chức hoặc sẽ tham gia (📅). Cuộc trò chuyện của một doanh nghiệp là cuộc thảo luận công khai: bất kỳ thành viên nào trong cộng đồng của bạn đều có thể đọc. Xem \"Tin nhắn\". Mỗi nhóm hiển thị tin nhắn mới nhất và số lượng tin nhắn bạn chưa đọc. Trong một cuộc trò chuyện được mã hóa, hàng hiển thị người đã viết tin nhắn cuối cùng và **🔒 Tin nhắn**, chứ không phải nội dung chữ."
         },
         {
           "type": "ul",
@@ -4082,8 +4108,8 @@
         {
           "type": "ul",
           "items": [
-            "Trên điện thoại, trong **Trò chuyện**, dưới mục **Nhóm**, nhấn **Nhóm mới**. Hoặc trong **Chung**, dưới mục **Nhóm**, nhấn nút tròn **+**. Cả hai đều mở cùng một biểu mẫu **Tạo nhóm**. (Trên thẻ phân loại **Dự án** hoặc **Doanh nghiệp**, nút **+** sẽ bắt đầu một dự án hoặc doanh nghiệp thay thế.)",
-            "Trong ứng dụng web, mở **Chung**, sau đó chọn **Nhóm**, và nhấn **+ Tạo nhóm**. Bạn sẽ ở lại trang **Chung** sau đó. Để mời mọi người, hãy mở nhóm và nhấn **Mời mọi người**. Bạn cũng có thể mở **Trò chuyện**, nhấn **Nhóm**, sau đó chọn **Nhóm mới**: thao tác đó sẽ đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.",
+            "Trên điện thoại, trong **Chat**, dưới mục **Nhóm**, nhấn **Nhóm mới**. Hoặc trong **Chung**, dưới mục **Nhóm**, nhấn nút tròn **+**. Cả hai đều mở cùng một biểu mẫu **Tạo nhóm**. (Trên thẻ phân loại **Dự án** hoặc **Doanh nghiệp**, nút **+** sẽ bắt đầu một dự án hoặc doanh nghiệp thay thế.)",
+            "Trong ứng dụng web, mở **Chung**, sau đó chọn **Nhóm**, và nhấn **+ Tạo nhóm**. Bạn sẽ ở lại trang **Chung** sau đó. Để mời mọi người, hãy mở nhóm và nhấn **Mời mọi người**. Bạn cũng có thể mở **Chat**, nhấn **Nhóm**, sau đó chọn **Nhóm mới**: thao tác đó sẽ đưa bạn thẳng vào cuộc trò chuyện của nhóm mới.",
             "Đặt **Tên nhóm**, tối đa 60 ký tự, và nếu muốn, nhập **Mục đích / Mô tả**, tối đa 300 ký tự: nhóm dùng để làm gì và dành cho ai.",
             "Chọn một **Danh mục**: **Nhóm giao lưu**, **Chung**, **Nhóm làm việc** hoặc **Hội nghề**. Trên điện thoại, **Nhóm giao lưu** được chọn sẵn cho bạn. Trong ứng dụng web, **Nhóm làm việc** được chọn sẵn.",
             "Chọn một **Chính sách tham gia**: **Mở**, **Yêu cầu tham gia** hoặc **Chỉ theo lời mời**.",
@@ -4115,7 +4141,7 @@
         },
         {
           "type": "p",
-          "text": "Sau đó, một điều hành viên có thể mời mọi người từ menu **⋮** của cuộc trò chuyện, chọn **Mời mọi người**. Trong ứng dụng web, một điều hành viên mở nhóm và nhấn **Mời mọi người**, tích chọn mọi người và nhấn nút ở dưới cùng theo cách tương tự. Mỗi người bạn mời sẽ thấy nhóm trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại (trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Trò chuyện**). Ứng dụng web chưa đánh dấu lời mời: ở đó, họ mở nhóm và nhấn **Chấp nhận lời mời**. Khi họ tham gia, cuộc trò chuyện sẽ thông báo điều đó."
+          "text": "Sau đó, một điều hành viên có thể mời mọi người từ menu **⋮** của cuộc trò chuyện, chọn **Mời mọi người**. Trong ứng dụng web, một điều hành viên mở nhóm và nhấn **Mời mọi người**, tích chọn mọi người và nhấn nút ở dưới cùng theo cách tương tự. Mỗi người bạn mời sẽ thấy nhóm trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại (trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Chat**). Ứng dụng web chưa đánh dấu lời mời: ở đó, họ mở nhóm và nhấn **Chấp nhận lời mời**. Khi họ tham gia, cuộc trò chuyện sẽ thông báo điều đó."
         },
         {
           "type": "h2",
@@ -4147,7 +4173,7 @@
         },
         {
           "type": "p",
-          "text": "Trong ứng dụng web, các cuộc trò chuyện nhóm của bạn nằm trong mục **Trò chuyện**, được đánh dấu 👥. Bạn có thể đọc và viết ở đó, được mã hóa đầu cuối như trên điện thoại: trả lời, bày tỏ cảm xúc, chỉnh sửa trong vòng 15 phút và tìm kiếm trong cuộc trò chuyện. Việc tắt thông báo, **Xóa** và **Gỡ** chỉ có trên điện thoại. Trong ứng dụng web, hãy nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện để mở nhóm; một điều hành viên có thể mời mọi người từ đó. Cuộc trò chuyện của một doanh nghiệp không được mã hóa: xem \"Tin nhắn\"."
+          "text": "Trong ứng dụng web, các cuộc trò chuyện nhóm của bạn nằm trong mục **Chat**, được đánh dấu 👥. Bạn có thể đọc và viết ở đó, được mã hóa đầu cuối như trên điện thoại: trả lời, bày tỏ cảm xúc, chỉnh sửa trong vòng 15 phút và tìm kiếm trong cuộc trò chuyện. Việc tắt thông báo, **Xóa** và **Gỡ** chỉ có trên điện thoại. Trong ứng dụng web, hãy nhấn vào tên nhóm ở trên cùng của cuộc trò chuyện để mở nhóm; một điều hành viên có thể mời mọi người từ đó. Cuộc trò chuyện của một doanh nghiệp không được mã hóa: xem \"Tin nhắn\"."
         },
         {
           "type": "h2",
@@ -4240,7 +4266,7 @@
         },
         {
           "type": "p",
-          "text": "Trên điện thoại, một cộng đồng địa phương không có Đậu sẽ không có tab **Chung**. Ở đó, hãy nhấn **Trò chuyện**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Cộng đồng toàn cầu có tab **Chung**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem \"Đậu và cộng đồng toàn cầu\")."
+          "text": "Trên điện thoại, một cộng đồng địa phương không có Đậu sẽ không có tab **Chung**. Ở đó, hãy nhấn **Chat**, sau đó chọn **Nhóm**, rồi chọn **Tìm nhóm**: thao tác này mở cùng danh sách đó. Trước khi bạn ở trong bất kỳ nhóm nào, liên kết sẽ là **Tìm một nhóm để tham gia**. Cộng đồng toàn cầu có tab **Chung**: các nhóm của nó nằm ở đó, bên dưới một ví dụ từ một cộng đồng địa phương (xem \"Đậu và cộng đồng toàn cầu\")."
         },
         {
           "type": "p",
@@ -4256,7 +4282,7 @@
         },
         {
           "type": "p",
-          "text": "Một nhóm bạn được mời tham gia hiển thị trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại. Trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Trò chuyện**. Nhấn vào nhóm để xem lời mời: ai đã mời bạn, nhóm là gì, ai ở trong nhóm (đối với nhóm chỉ theo lời mời, có bao nhiêu người), và ai có thể đọc cuộc trò chuyện của nhóm. Trên điện thoại:"
+          "text": "Một nhóm bạn được mời tham gia hiển thị trong **Chung**, dưới mục **Nhóm**, được đánh dấu **ĐÃ MỜI** trong ứng dụng điện thoại. Trên điện thoại, trong cộng đồng không có tab **Chung**, mục này nằm dưới **Tìm nhóm** trong **Chat**. Nhấn vào nhóm để xem lời mời: ai đã mời bạn, nhóm là gì, ai ở trong nhóm (đối với nhóm chỉ theo lời mời, có bao nhiêu người), và ai có thể đọc cuộc trò chuyện của nhóm. Trên điện thoại:"
         },
         {
           "type": "ul",
@@ -4445,7 +4471,7 @@
         },
         {
           "type": "p",
-          "text": "Nhấn vào **Trò chuyện**, sau đó chọn **Mọi người**. Trong ứng dụng web, hãy nhấn vào **Mọi người** trong hàng thẻ. Có ba nút:"
+          "text": "Nhấn vào **Chat**, sau đó chọn **Mọi người**. Trong ứng dụng web, hãy nhấn vào **Mọi người** trong hàng thẻ. Có ba nút:"
         },
         {
           "type": "ul",
@@ -4537,7 +4563,7 @@
           "type": "ul",
           "items": [
             "Mở sự kiện và nhấn **Mở trò chuyện sự kiện**.",
-            "Hoặc tìm sự kiện trong mục **Trò chuyện**, dưới phần **Nhóm**, được đánh dấu 📅 **Sự kiện**. Trong ứng dụng web, mục này nằm trong tab **Trò chuyện**, cùng với các cuộc trò chuyện khác của bạn."
+            "Hoặc tìm sự kiện trong mục **Chat**, dưới phần **Nhóm**, được đánh dấu 📅 **Sự kiện**. Trong ứng dụng web, mục này nằm trong tab **Chat**, cùng với các cuộc trò chuyện khác của bạn."
           ]
         },
         {
@@ -4615,7 +4641,7 @@
             "Nó dừng các cảnh báo của cuộc trò chuyện đó. Trong đoạn chat của một nhóm, ai đó @nhắc đến bạn vẫn có thể liên lạc được với bạn. Xem \"Nhắc đến (@tên)\".",
             "Cuộc trò chuyện của một doanh nghiệp không gửi cảnh báo nào, vì vậy không có cảnh báo nào để dừng lại. Việc tắt thông báo cuộc trò chuyện đó sẽ giúp nó không bị tính vào các con số bên dưới.",
             "Cuộc trò chuyện vẫn hiển thị các tin nhắn mới.",
-            "Trong phần **Trò chuyện**, mục **Nhóm**, một cuộc trò chuyện bị tắt tiếng sẽ hiển thị hình chiếc chuông có dấu gạch ngang qua. Số lượng tin chưa đọc của nó có màu xám, và không được cộng vào con số trên mục **Nhóm**.",
+            "Trong phần **Chat**, mục **Nhóm**, một cuộc trò chuyện bị tắt tiếng sẽ hiển thị hình chiếc chuông có dấu gạch ngang qua. Số lượng tin chưa đọc của nó có màu xám, và không được cộng vào con số trên mục **Nhóm**.",
             "Trong đoạn chat của một nhóm hoặc của một doanh nghiệp, thanh trên cùng cũng sẽ không hiển thị thông báo về nó. Một cuộc trò chuyện bị tắt tiếng với một người vẫn được tính ở đó.",
             "Trạng thái tắt thông báo vẫn được duy trì khi bạn rời khỏi cuộc trò chuyện. Khi bạn mở lại đoạn chat của một nhóm hoặc của một doanh nghiệp, phía trên cùng sẽ hiển thị **đã tắt tiếng**."
           ]
@@ -4743,7 +4769,7 @@
         },
         {
           "type": "p",
-          "text": "Kể từ thời điểm đó, các tin nhắn của bạn sẽ được gửi tới khóa mới. Biểu ngữ và thẻ **khóa đã đổi** trên cuộc trò chuyện trong mục **Trò chuyện** sẽ biến mất, và các tin nhắn trước đây của bạn vẫn đọc được."
+          "text": "Kể từ thời điểm đó, các tin nhắn của bạn sẽ được gửi tới khóa mới. Biểu ngữ và thẻ **khóa đã đổi** trên cuộc trò chuyện trong mục **Chat** sẽ biến mất, và các tin nhắn trước đây của bạn vẫn đọc được."
         },
         {
           "type": "p",
@@ -4799,7 +4825,7 @@
         },
         {
           "type": "p",
-          "text": "Hai điều có thể thay đổi sau khi đặt lại, và lời cảnh báo sẽ nêu rõ điều đó trước khi bạn xác nhận: một cuộc trò chuyện bị tạm dừng vì khóa của nó đã thay đổi có thể mở ra với khóa mới, và một cuộc trò chuyện riêng tư từng biến mất khỏi Trò chuyện có thể quay trở lại dưới dạng một cuộc trò chuyện nhóm mà cộng đồng có thể đọc được. Hãy kiểm tra mã khóa, hoặc kiểm tra ai có mặt trong cuộc trò chuyện, trước khi bạn gửi tin nhắn."
+          "text": "Hai điều có thể thay đổi sau khi đặt lại, và lời cảnh báo sẽ nêu rõ điều đó trước khi bạn xác nhận: một cuộc trò chuyện bị tạm dừng vì khóa của nó đã thay đổi có thể mở ra với khóa mới, và một cuộc trò chuyện riêng tư từng biến mất khỏi Chat có thể quay trở lại dưới dạng một cuộc trò chuyện nhóm mà cộng đồng có thể đọc được. Hãy kiểm tra mã khóa, hoặc kiểm tra ai có mặt trong cuộc trò chuyện, trước khi bạn gửi tin nhắn."
         },
         {
           "type": "p",
@@ -5356,7 +5382,7 @@
         },
         {
           "type": "p",
-          "text": "Các cuộc thăm dò nằm trong Chợ. Nhấn **Thăm dò** ở hàng trên cùng để chỉ xem các cuộc thăm dò."
+          "text": "Các cuộc thăm dò nằm trong Chợ. Nhấn **Thăm dò** ở hàng trên cùng để chỉ xem các cuộc thăm dò. Một cuộc thăm dò được liệt kê lại một lần, dưới **Hôm nay**, vào ngày trước khi kết thúc."
         },
         {
           "type": "ul",
@@ -5416,7 +5442,8 @@
         {
           "type": "ul",
           "items": [
-            "Trên **Chợ**, nhấn **Sự kiện**. Chọn **Hôm nay**, **Cuối tuần này** hoặc **7 ngày tới**.",
+            "Trên **Chợ**, nhấn **Sự kiện**. Sự kiện sớm nhất hiển thị trước. Chọn **Hôm nay**, **Cuối tuần này** hoặc **7 ngày tới**.",
+            "Trên **Chợ**, dưới **Tất cả**, một sự kiện được liệt kê lại một lần, dưới **Hôm nay**, vào ngày trước khi bắt đầu, rồi chìm xuống như mọi bài đăng khác. Một sự kiện hằng tuần quay lại mỗi tuần một lần.",
             "Trên **Bản đồ**, các sự kiện là những ghim màu tím. Trên điện thoại, nhấn **Sự kiện** để chỉ xem các sự kiện. Trong ứng dụng web, các sự kiện luôn hiển thị ở đó, và các thẻ chọn ngày sẽ giúp thu hẹp phạm vi tìm kiếm."
           ]
         },
@@ -6201,8 +6228,8 @@
       "slug": "trust-badges",
       "title": "Huy hiệu tin cậy",
       "summary": "Người mới, Cư dân, Quản lý và Trưởng bối. Ý nghĩa của chúng và lý do chúng không mở khóa quyền hạn nào.",
-      "sourceHash": "a6cc3bb74fc395bb",
-      "source-hash": "a6cc3bb74fc395bb",
+      "sourceHash": "9cb2cc1e373c7763",
+      "source-hash": "9cb2cc1e373c7763",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6234,7 +6261,7 @@
         },
         {
           "type": "p",
-          "text": "Điểm tin cậy đến từ sự bảo lãnh khi bạn tham gia, từ các giao dịch đã hoàn tất, và từ sự tin cậy do quản trị viên cấp. Trong một cộng đồng có xác nhận thành viên, việc được xác nhận mang lại cho bạn hạn mức tín dụng cao hơn chứ không phải huy hiệu cao hơn: huy hiệu của bạn chỉ tính những gì bạn đã làm, vì vậy nó không bao giờ hiển thị rằng bạn đã được xác nhận."
+          "text": "Độ tin cậy đến từ các giao dịch đã hoàn thành và sự tin cậy do quản trị viên cấp. Trong cộng đồng xác minh thành viên, việc được xác minh mang lại hạn mức tín dụng cao hơn chứ không phải huy hiệu cao hơn: huy hiệu chỉ tính những gì bạn đã làm và không bao giờ thể hiện rằng bạn đã được xác minh."
         },
         {
           "type": "h2",
@@ -6530,7 +6557,7 @@
         },
         {
           "type": "p",
-          "text": "Trên cộng đồng toàn cầu, khu vực của bạn là vị trí ước chừng nơi bạn đang ở: khoảng 10 km xung quanh một thị trấn hoặc một địa điểm, không bao giờ là vị trí chính xác của bạn. Cộng đồng toàn cầu sử dụng thông tin này để hiển thị cho bạn những gì đang được cung cấp ở gần bạn: 500 tin đăng gần nhất trong phạm vi 250 km xung quanh khu vực đó. Xem \"Nhiều hơn một cộng đồng\"."
+          "text": "Trên cộng đồng toàn cầu, khu vực của bạn là vị trí ước chừng nơi bạn đang ở: khoảng 10 km xung quanh một thị trấn hoặc một địa điểm, không bao giờ là vị trí chính xác của bạn. Cộng đồng toàn cầu sử dụng thông tin này để hiển thị cho bạn những gì đang được cung cấp ở gần bạn: 500 tin đăng gần nhất trong phạm vi 250 km xung quanh khu vực đó. Sau đó Chợ liệt kê chúng mới nhất trước, mỗi tin kèm khoảng cách bao xa. Xem \"Nhiều hơn một cộng đồng\"."
         },
         {
           "type": "p",

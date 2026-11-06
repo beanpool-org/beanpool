@@ -247,7 +247,7 @@ services:
       # lookup of each open connection's address while one is written (on a
       # direct-mode server those are members' addresses). The server takes the
       # addresses themselves out of each report (apps/server/src/process-handlers.ts).
-      - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception --report-exclude-env --report-exclude-network
+      - NODE_OPTIONS=--max-old-space-size=${NODE_HEAP_MB:-512} --report-on-signal --report-directory=/data --report-uncaught-exception --report-exclude-env --report-exclude-network
     # No Docker socket, and no cloudflared service: the tunnel for a <name>.beanpool.org address runs INSIDE this container,
     # started and restarted by the server itself (apps/server/src/services/tunnel-connector.ts). Anything that can use
     # /var/run/docker.sock controls the whole machine, so it is never mounted here.

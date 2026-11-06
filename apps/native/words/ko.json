@@ -106,7 +106,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "이 코드를 안전하게 읽을 수 없어 아무것도 전송되지 않았어요. 다른 기기에서 새 코드를 만들어 스캔하세요.",
   "OK": "확인",
   "Connect to your community first.": "먼저 커뮤니티에 연결해 주세요.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요(사용 중인 서버: {own}). 아무것도 전송되지 않았어요. 다른 기기에서 {own}의 BeanPool을 열어 그곳의 코드를 스캔하거나, 먼저 이 휴대폰에서 글로벌 커뮤니티에 가입한 뒤 다시 스캔하세요.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요. 아무것도 전송되지 않았어요. 먼저 이 휴대폰에서 글로벌 커뮤니티에 가입한 뒤 다시 스캔하세요.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "이 코드는 휴대폰이 사용하지 않는 서버({host})의 코드예요. 아무것도 전송되지 않았어요.",
   "Confirm it is you to send your account to another device.": "다른 기기로 계정을 전송하려면 본인임을 확인해 주세요.",

@@ -106,7 +106,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Este código não pode ser lido com segurança, por isso nada foi enviado: gere um novo código no outro aparelho e escaneie esse.",
   "OK": "OK",
   "Connect to your community first.": "Conecte-se à sua comunidade primeiro.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Este código é de {host}, um servidor que seu celular não usa: ele usa {own}. Nada foi enviado. Abra o BeanPool em {own} no outro aparelho e escaneie o código lá, ou entre primeiro na comunidade global neste celular e depois escaneie de novo.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Este código é de {host}, um servidor que seu celular não usa. Nada foi enviado. Entre primeiro na comunidade global neste celular e depois escaneie de novo.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Este código é de {host}, um servidor que seu celular não usa. Nada foi enviado.",
   "Confirm it is you to send your account to another device.": "Confirme que é você para enviar sua conta para outro aparelho.",

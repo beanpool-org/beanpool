@@ -107,7 +107,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Bu kod güvenli bir şekilde okunamıyor, bu nedenle hiçbir şey gönderilmedi: diğer cihazda yeni bir kod oluşturun ve onu tarayın.",
   "OK": "Tamam",
   "Connect to your community first.": "Önce topluluğunuza bağlanın.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Bu kod telefonunuzun kullanmadığı bir sunucu olan {host} sunucusundan geldi: telefonunuz {own} kullanıyor. Hiçbir şey gönderilmedi. Diğer cihazda BeanPool'u {own} adresinde açıp kodu orada tarayın veya önce bu telefonda küresel topluluğa katılın, sonra yeniden tarayın.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Bu kod telefonunuzun kullanmadığı {host} sunucusundan geldi. Hiçbir şey gönderilmedi. Önce bu telefonda küresel topluluğa katılın, sonra yeniden tarayın.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Bu kod telefonunuzun kullanmadığı {host} sunucusundan geldi. Hiçbir şey gönderilmedi.",
   "Confirm it is you to send your account to another device.": "Hesabınızı başka bir cihaza göndermek için siz olduğunuzu onaylayın.",

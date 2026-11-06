@@ -107,7 +107,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "इस कोड को सुरक्षित रूप से नहीं पढ़ा जा सका, इसलिए कुछ भी नहीं भेजा गया: दूसरी डिवाइस पर एक नया कोड बनाएँ और उसे स्कैन करें।",
   "OK": "ठीक है",
   "Connect to your community first.": "पहले अपने समुदाय से जुड़ें।",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "यह कोड {host} का है, एक ऐसा सर्वर जिसका उपयोग आपका फ़ोन नहीं करता: यह {own} का उपयोग करता है। कुछ भी नहीं भेजा गया। दूसरी डिवाइस पर {own} पर BeanPool खोलें और वहाँ कोड स्कैन करें, या पहले इस फ़ोन पर वैश्विक समुदाय से जुड़ें, फिर दोबारा स्कैन करें।",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "यह कोड {host} का है, एक ऐसा सर्वर जिसका उपयोग आपका फ़ोन नहीं करता। कुछ भी नहीं भेजा गया। पहले इस फ़ोन पर वैश्विक समुदाय से जुड़ें, फिर दोबारा स्कैन करें।",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "यह कोड {host} का है, एक ऐसा सर्वर जिसका उपयोग आपका फ़ोन नहीं करता। कुछ भी नहीं भेजा गया।",
   "Confirm it is you to send your account to another device.": "अपने खाते को किसी अन्य डिवाइस पर भेजने के लिए पुष्टि करें कि यह आप ही हैं।",

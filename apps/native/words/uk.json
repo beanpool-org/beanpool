@@ -106,7 +106,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Цей код не вдалося безпечно прочитати, тому нічого не відправлено: створіть новий код на іншому пристрої та відскануйте його.",
   "OK": "OK",
   "Connect to your community first.": "Спочатку підключіться до своєї спільноти.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Цей код із сервера {host}, який ваш телефон не використовує: він використовує {own}. Нічого не надіслано. Відкрийте BeanPool на {own} на іншому пристрої та відскануйте код там або спершу приєднайтеся до глобальної спільноти на цьому телефоні, а тоді відскануйте знову.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Цей код із сервера {host}, який ваш телефон не використовує. Нічого не надіслано. Спершу приєднайтеся до глобальної спільноти на цьому телефоні, а тоді відскануйте знову.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Цей код із сервера {host}, який ваш телефон не використовує. Нічого не надіслано.",
   "Confirm it is you to send your account to another device.": "Підтвердьте, що це ви, щоб надіслати свій акаунт на інший пристрій.",

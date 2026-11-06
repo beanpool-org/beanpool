@@ -106,7 +106,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Hindi mabasa nang ligtas ang code na ito, kaya walang ipinadala: gumawa ng bagong code sa kabilang device at i-scan iyon.",
   "OK": "OK",
   "Connect to your community first.": "Kumonekta muna sa iyong komunidad.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo: ginagamit nito ang {own}. Walang ipinadala. Buksan ang BeanPool sa {own} sa kabilang device at i-scan doon ang code, o sumali muna sa pandaigdigang komunidad sa teleponong ito, saka mag-scan ulit.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo. Walang ipinadala. Sumali muna sa pandaigdigang komunidad sa teleponong ito, saka mag-scan ulit.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Ang code na ito ay mula sa {host}, isang server na hindi ginagamit ng telepono mo. Walang ipinadala.",
   "Confirm it is you to send your account to another device.": "Kumpirmahing ikaw ito para maipadala ang account mo sa ibang device.",

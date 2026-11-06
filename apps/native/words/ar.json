@@ -106,7 +106,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "لا يمكن قراءة هذا الرمز بأمان، لذا لم يُرسل شيء: أنشئ رمزًا جديدًا على الجهاز الآخر وامسحه ضوئيًا.",
   "OK": "حسنًا",
   "Connect to your community first.": "اتصل بمجتمعك أولًا.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "هذا الرمز من {host}، وهو خادم لا يستخدمه هاتفك: هاتفك يستخدم {own}. لم يُرسل شيء. افتح BeanPool على {own} في الجهاز الآخر وامسح الرمز هناك، أو انضم إلى المجتمع العالمي على هذا الهاتف أولاً، ثم امسح مرة أخرى.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "هذا الرمز من {host}، وهو خادم لا يستخدمه هاتفك. لم يُرسل شيء. انضم إلى المجتمع العالمي على هذا الهاتف أولاً، ثم امسح مرة أخرى.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "هذا الرمز من {host}، وهو خادم لا يستخدمه هاتفك. لم يُرسل شيء.",
   "Confirm it is you to send your account to another device.": "أكّد هويتك لإرسال حسابك إلى جهاز آخر.",

@@ -106,7 +106,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "ഈ കോഡ് സുരക്ഷിതമായി വായിക്കാൻ കഴിഞ്ഞില്ല, അതിനാൽ ഒന്നും അയച്ചില്ല: മറ്റേ ഉപകരണത്തിൽ ഒരു പുതിയ കോഡ് ഉണ്ടാക്കി അത് സ്കാൻ ചെയ്യുക.",
   "OK": "ശരി",
   "Connect to your community first.": "ആദ്യം നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുമായി ബന്ധിപ്പിക്കുക.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്: ഫോൺ {own} ആണ് ഉപയോഗിക്കുന്നത്. ഒന്നും അയച്ചില്ല. മറ്റേ ഉപകരണത്തിൽ {own}ൽ BeanPool തുറന്ന് അവിടെയുള്ള കോഡ് സ്കാൻ ചെയ്യുക, അല്ലെങ്കിൽ ആദ്യം ഈ ഫോണിൽ ആഗോള കമ്മ്യൂണിറ്റിയിൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്. ഒന്നും അയച്ചില്ല. ആദ്യം ഈ ഫോണിൽ ആഗോള കമ്മ്യൂണിറ്റിയിൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "ഈ കോഡ് നിങ്ങളുടെ ഫോൺ ഉപയോഗിക്കാത്ത സെർവറായ {host}ൽ നിന്നുള്ളതാണ്. ഒന്നും അയച്ചില്ല.",
   "Confirm it is you to send your account to another device.": "മറ്റൊരു ഉപകരണത്തിലേക്ക് നിങ്ങളുടെ അക്കൗണ്ട് അയക്കാൻ നിങ്ങളാണെന്ന് സ്ഥിരീകരിക്കുക.",

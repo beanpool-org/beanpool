@@ -1544,13 +1544,14 @@ function backupConditions(): Condition[] {
         : { key: 'backups.offbox', active: false, detail: 'Off-box backups are arriving again.' };
     let locked = true;
     try { locked = backupLockState().locked; } catch { /* unknown: no nudge */ }
-    const liveName = liveRegistrarName();
+    // Whether a .beanpool.org name is live decides the words; the name itself never goes into an alert (the Backups card names it).
+    const hasLiveName = liveRegistrarName() !== null;
     const none: Condition = status.destinations.length === 0 && !locked
         ? {
             key: 'backups.none',
             active: true,
-            detail: liveName
-                ? `No backup leaves this server, and backups are not locked to a recovery code. This community's address, ${liveName}, belongs to this server's key. Without a locked backup a lost server loses the key, and only the BeanPool project can give the name back, by hand. Make a recovery code: then every backup carries the key.`
+            detail: hasLiveName
+                ? "No backup leaves this server, and backups are not locked to a recovery code. This community's address belongs to this server's own key. Without a locked backup a lost server loses the key, and only the BeanPool project can give the name back, by hand. Make a recovery code in Settings → Backups: then every backup carries the key."
                 : 'No backup leaves this server, and backups are not locked to a recovery code. Open Settings → Backups.',
         }
         : { key: 'backups.none', active: false, detail: 'Backups are set up.' };

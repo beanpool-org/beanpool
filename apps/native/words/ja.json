@@ -106,7 +106,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "このコードを安全に読み取れなかったため、何も送信されませんでした。もう一方の端末で新しいコードを生成し、それをスキャンしてください。",
   "OK": "OK",
   "Connect to your community first.": "まずコミュニティに接続してください。",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "このコードは、この端末が使用していないサーバー（{host}）のものです（使用中: {own}）。何も送信されませんでした。もう一方の端末で{own}のBeanPoolを開いてそこでコードをスキャンするか、先にこの端末でグローバルコミュニティに参加してから、もう一度スキャンしてください。",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "このコードは、この端末が使用していないサーバー（{host}）のものです。何も送信されませんでした。先にこの端末でグローバルコミュニティに参加してから、もう一度スキャンしてください。",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "このコードは、この端末が使用していないサーバー（{host}）のものです。何も送信されませんでした。",
   "Confirm it is you to send your account to another device.": "別端末にアカウントを送信するために、本人確認を行ってください。",

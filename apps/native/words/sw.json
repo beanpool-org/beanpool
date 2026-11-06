@@ -106,7 +106,6 @@
   "This code can't be read safely, so nothing was sent: make a new code on the other device and scan that one.": "Msimbo huu hauwezi kusomwa kwa usalama, kwa hivyo hakuna kilichotumwa: tengeneza msimbo mpya kwenye kifaa kingine na uchanganue huo.",
   "OK": "Sawa",
   "Connect to your community first.": "Unganisha na jumuiya yako kwanza.",
-  "This code is from {host}, a server your phone doesn't use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.": "Msimbo huu unatoka {host}, seva ambayo simu yako haitumii: inatumia {own}. Hakuna kilichotumwa. Fungua BeanPool kwenye {own} katika kifaa kingine na uchanganue msimbo huko, au kwanza jiunge na jumuiya ya kimataifa kwenye simu hii, kisha uchanganue tena.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent. Join the global community on this phone first, then scan again.": "Msimbo huu unatoka {host}, seva ambayo simu yako haitumii. Hakuna kilichotumwa. Kwanza jiunge na jumuiya ya kimataifa kwenye simu hii, kisha uchanganue tena.",
   "This code is from {host}, a server your phone doesn't use. Nothing was sent.": "Msimbo huu unatoka {host}, seva ambayo simu yako haitumii. Hakuna kilichotumwa.",
   "Confirm it is you to send your account to another device.": "Thibitisha kuwa ni wewe ili kutuma akaunti yako kwenye kifaa kingine.",

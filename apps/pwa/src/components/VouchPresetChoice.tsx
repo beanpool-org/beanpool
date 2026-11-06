@@ -64,7 +64,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
                     return (
                         <label
                             key={String(amount)}
-                            className={`relative flex-auto min-w-[52px] ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
+                            className={`relative flex-auto min-w-[52px] ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                             title={disabled ? why : undefined}
                         >
                             <input
@@ -83,7 +83,7 @@ export function VouchPresetChoice({ value, onChange, budgetLeft, budgetTotal, pr
                                     checked
                                         ? 'border-transparent bg-bp-commit-fill text-bp-commit-on'
                                         : disabled
-                                            ? 'border-nature-200 dark:border-nature-800 bg-nature-100 dark:bg-nature-900 text-nature-400 dark:text-nature-400'
+                                            ? 'border-nature-200 dark:border-nature-800 bg-bp-chip-quiet-tint text-bp-chip-quiet-ink'
                                             : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-950 dark:text-white hover:border-nature-300 dark:hover:border-nature-600'
                                 } peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500`}
                             >

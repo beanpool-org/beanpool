@@ -219,8 +219,9 @@ export default function SettingsScreen() {
         menuSub: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
         // The text column of a row that ends in a switch (every `toggle` row): it takes the room the switch leaves and its
         // words wrap (never shrink or cut), and a gap keeps even a long line, a longer language or large text from running
-        // right up to the switch.
-        menuTextBesideSwitch: { flex: 1, marginRight: Spacing.md },
+        // right up to the switch. `sm`, not `md`: at 320 dp with 1.3x text the column is about 106 dp wide beside the icon and
+        // the 50 dp switch, and a 12 dp gap broke "Marketplace" into "Market / place" (measured on a 320 dp emulator).
+        menuTextBesideSwitch: { flex: 1, marginRight: Spacing.sm },
         menuChevron: { fontSize: 22, color: colors.border.strong, fontWeight: '300', marginLeft: 8 },
 
         // ─── Toggle ───

@@ -8,7 +8,7 @@
  * padded ~35 %).
  *
  * What it proves: for EVERY switch row on the Settings menu and on Settings → Notifications (a `toggle`: 50 x 28), the
- * text column before it ends at least Spacing.md (12) short of the switch, the switch keeps its 50 dp, and no line of the
+ * text column before it ends at least Spacing.sm (8) short of the switch, the switch keeps its 50 dp, and no line of the
  * column is cut to a number of lines (the words wrap). What it does not prove: pixels of words. Yoga here measures a Text by
  * a character-count rule (yoga-dom-layout.ts), so a text-heavy height is an estimate; the gap is a box, which Yoga gives
  * exactly. A control measures the same rows with the column's old style (`flex: 1` and nothing else), to show the check
@@ -305,7 +305,7 @@ describe.each(LANGUAGES)('Settings in %s: the words beside a switch leave a gap 
             const rows = measure(width, fontScale);
             expect(rows.length, 'switch rows drawn on the menu').toBe(MENU_SWITCHES);
             for (const r of rows) {
-                expect(r.gap, `${r.name}: room between its words and its switch`).toBeGreaterThanOrEqual(Spacing.md);
+                expect(r.gap, `${r.name}: room between its words and its switch`).toBeGreaterThanOrEqual(Spacing.sm);
                 expect(r.switchWidth, `${r.name}: the switch keeps its width`).toBe(TOGGLE.width);
                 expect(r.columnWidth, `${r.name}: the words have room`).toBeGreaterThan(60);
                 expect(r.cutToLines, `${r.name}: the words wrap, never cut`).toBe(false);
@@ -319,7 +319,7 @@ describe.each(LANGUAGES)('Settings in %s: the words beside a switch leave a gap 
             // This is a screen of its own (the menu's rows are gone): all that is drawn is the five.
             expect(rows.length, 'switch rows drawn on Notifications').toBe(NOTIFICATION_SWITCHES);
             for (const r of rows) {
-                expect(r.gap, `${r.name}: room between its words and its switch`).toBeGreaterThanOrEqual(Spacing.md);
+                expect(r.gap, `${r.name}: room between its words and its switch`).toBeGreaterThanOrEqual(Spacing.sm);
                 expect(r.switchWidth, `${r.name}: the switch keeps its width`).toBe(TOGGLE.width);
                 expect(r.columnWidth, `${r.name}: the words have room`).toBeGreaterThan(60);
                 expect(r.cutToLines, `${r.name}: the words wrap, never cut`).toBe(false);

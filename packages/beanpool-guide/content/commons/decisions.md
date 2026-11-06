@@ -29,13 +29,22 @@ A vote on removing a member also shows who brought the case (the admin who suspe
 
 If the vote is about you, the card says you can't vote on it, and offers **Reply to this case** while it is open, and **Report this case as false**.
 
+### When a jury decides
+
+In a large community a vote on removing a member is decided by a jury of members drawn at random, not by everyone (see "Rules and how decisions work"). You can tell from the card: "A jury of 12 members, drawn at random, decides by 5 Nov."
+
+- **Everyone** can read the case and the member's answer, and see how many jurors have voted, like "7 of 12 jurors have voted". The Yes and No stay hidden until the vote closes. If you weren't drawn, the card says "Only the jury votes on this." and has no vote buttons.
+- **If you were drawn,** your phone tells you, and the card says "You were drawn for this jury." Tap **Serve** and then vote, or **Step aside**, within 72 hours. Nobody is told why you stepped aside. If you don't answer, your seat goes to the next member drawn. Once you have voted you stay on the jury, and can change your vote until it closes.
+- **Check the draw** is on the card for everyone. It tells you that the draw checks out, or that the list the server gave doesn't match its own record.
+- **After it closes,** the card says how it ended, like "The jury kept Dave.", and lists who voted and who didn't serve, never how anyone voted or why someone didn't serve.
+
 ## Voting
 
 - Tap **Vote YES** or **Vote NO**. On the phone, the app says **Vote Recorded**. In the web app, the card updates.
 - The card then says what you voted, like "You voted Yes".
 - To change your mind before it closes, tap the other button, such as **Change to No**.
 
-Every Decision is a **secret ballot**. Members see the totals, never who voted how. Your own vote is shown only to you.
+Every Decision is a **secret ballot**. Members see the totals, never who voted how. Your own vote is shown only to you. On a vote a jury decides, the totals show only once it has closed.
 
 ## Decisions about the Commons' beans
 
@@ -45,7 +54,7 @@ If you have not completed a trade yet, you cannot vote on these. You can still v
 
 ## Results
 
-Tap **Decisions History**. Choose **All**, **Executed**, **Failed** or **Void**. Each shows the final turnout and tally, and what happened, for example that too few people voted.
+Tap **Decisions History**. Choose **All**, **Executed**, **Failed** or **Void**. Each shows the final turnout and tally, and what happened, for example that too few people voted. A removal a jury decided also shows who voted and who didn't serve.
 
 ## More
 

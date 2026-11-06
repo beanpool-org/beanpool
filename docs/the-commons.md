@@ -879,11 +879,54 @@ is a question of civic safety and community boundaries, so every active member g
 refuses to serve them** — it does not erase them, and they may still exist on other nodes. The copy
 should say that plainly rather than imply a power the system does not have.
 
-**Thresholds — removal is the highest bar in the system.** Expulsion needs a **two-thirds (66%)
+**Thresholds — removal is the highest bar in the system.** Where everyone decides it (below), expulsion needs a **two-thirds (66%)
 supermajority** on a 25% quorum, not the 60% that other Decisions use: banishing a neighbour should
 require broad alignment, not a 51% factional win. **Reinstatement needs only a simple majority** on
 the standard 20% quorum. Without a reinstatement path every removal is permanent by inertia, and the
 first unjust one poisons the mechanism for good.
+
+**Who decides: everyone, or a jury (2026-10/11; `scratch/fable-design/DESIGN-removal-jury-fable.md`, built in slices J1–J3).**
+Past a certain size, putting every removal to everyone asks the same members case after case and lets a campaign reach all of them,
+so a community's rule **Who decides a removal** (`apps/server/src/config/removal-decider.ts`) says who votes. Marty accepted all ten
+of the design's answers on 2026-10-29; on 2026-11-03 he narrowed who stands aside (below). What the code does:
+
+- **The rule.** `automatic` (the default): a jury once at least 100 members could serve, everyone until then. `everyone`: always
+  everyone. `jury`: a jury from 36 who could serve (the lock `pool_too_small` holds it back below that, and a pause made then is
+  decided by everyone). It is settled at the pause, from that moment's pool, and recorded on the vote (`params.decider`), so a vote
+  already open keeps the rule it opened under. A pool that cannot seat a whole jury once members are passed over is decided by everyone.
+- **Who may serve** (`removalJuryPool`): a member who could vote at the pause (active, or paused and held by nothing but this vote),
+  not an enterprise or a visitor, not the subject, who **joined at least 30 days before 00:00 UTC of the day**. No activity, trade or
+  standing test: removal stays one member, one vote. A member whose credit an admin froze is in (a freeze is private and any admin's,
+  and leaving them out would let an admin pick a jury); so is the pausing admin, passed over at the draw instead. *The design said
+  the pool is the one "at 00:00 UTC"; the code fixes only the 30-day cutoff at midnight and reads a member's status at the moment of
+  the pause. The pool is then kept, so what was drawn from can be checked whatever happens after.*
+- **Size and pass rule** (`juryRuleFor`, `juryPasses`): 12 jurors while fewer than 1,000 could serve (9 must vote, at least 6 Yes), 18
+  from 1,000 (13 must vote, at least 9 Yes); two-thirds of the votes cast; a tie fails. Too few votes is a missed quorum: the pause
+  lifts. An owner cannot decide a jury's vote: that path is for a pool too small to reach a vote's quorum, which a jury never is.
+- **The draw** (`juryDraw`, `@beanpool/core`): `rosterHash` = SHA-256 of the sorted keys joined by newlines; `seed` = SHA-256 of
+  `beanpool-jury-v1`, the subject's key, `rosterHash` and the date (UTC), each on its own line; a key's rank = SHA-256 of the seed and
+  the key. The pool in ascending rank is the order; the jury is seated from its head, passing over any who stands aside. No random
+  number, no nonce. A changed rule is a new domain word, never an edit.
+- **Who stands aside, privately** (`juryConflictsOf`; Marty, 3 Nov, "only conflicts they can't fake"): the pausing admin, and a
+  member who blocked or (in 90 days) reported the subject, invited them or was invited by them, opened a chat with them, completed
+  a deal with them in 90 days (bought from them, answered a listing of theirs, or lent to them), or has a deal open on a listing of
+  theirs that they asked for. Never the subject's own acts, so they cannot pick their jury. A member passed over reads exactly what a
+  member not drawn reads, and after close is listed beside those who stepped aside, with no reason. A long list on a well-connected
+  member is a weak signal; the rules page says the list never gives a reason.
+- **Seats** (slice J2b): a juror answers **Serve** (then votes) or **Step aside** within 72 hours, a vote being an answer too; none in
+  72 hours is `silent`; a juror who leaves, is removed or is suspended after being drawn is `left`; each seat is refilled from the same
+  order. Reminders at 48 hours and on the sixth day; a seat taken with under two days left is told so; nothing extends the 7 days.
+  The 48 and 72 hours leave out any time formal Decisions were off on that server.
+- **Secrecy.** While open: "7 of 12 jurors have voted", never the split, to members and admins alike; a juror is told only their
+  own seat. After close: the totals, and two lists, **Voted** and **Didn't serve**, never how, never why. The server stores each vote
+  with the voter's account, so whoever reads a copy of its files can see it. Because the pool is served to every member and the
+  calculation is public, a member who runs it can work out who is probably on a jury while the vote is open: the secrecy is soft.
+- **Check the draw** (both apps; `checkServedJury`): the app hashes the pool the node serves and compares it with the hash the vote
+  recorded, and once the vote closes checks that the jurors listed are the head of the draw. It catches a list or a jury that does
+  not match; a server whose owners rewrite the record, the list and the jury together passes it. The apps do not show the pool.
+- **Where the code differs from, or has not yet reached, the design.** Reinstatement is an ordinary Decision decided by everyone
+  (design §7 had it follow the removal rule). A whole invite branch can be put to one vote with one jury (J2c, server only; the
+  manager has no button and the apps do not draw a branch's vote yet; **Prune Branch** still removes a branch outright).
 
 **And the node admin cannot be voted out — say so plainly.** They hold the SSH keys, the container,
 the SQLite file and the DNS. A vote that flips an `is_admin` bit is undone with one shell command,
@@ -1380,6 +1423,7 @@ Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
 | Member re-keying across federation | **local atomic transfer; known limitation: peer nodes retain old key** — peer villages do not receive automated key rotation events; trades with other villages will need manual re-linking until cross-node key gossip is built (§10, PR #825) |
 | Enterprise map pins | **public, exactly like marketplace post pins** — anyone who opens the node's map sees them; the map routes stay on the public read list. Findability is the point; the picker says so plainly and keeps **Approximate** (~100 m) beside the warning to protect a home. A wound-up enterprise's location is cleared and never served (Marty, 2026-09-17, §2.2) |
 | Working-style archetypes | **a preference, never a label** — no public archetype labels anywhere, no per-type breakdown of a group or enterprise, and archetypes gate nothing (2026-09-17, §9.5) |
+| Who decides a removal | **a jury from 100 members who could serve, everyone until then; an owner can choose Everyone or A jury (from 36).** A jury of 12 (18 from 1,000) drawn by a public hash of the subject's key, the pool and the day; stands aside only for conflicts the subject can't fake; Serve or Step aside in 72 hours; 9 of 12 must vote, two-thirds Yes and at least 6 (Marty, 2026-10-29 "accept all ten"; narrowed 2026-11-03, §3.8) |
 | Enterprise limit with an opening line | **the bigger of the line or the pledges, never both**; only earned pledges clear the line; nothing clawed back, a line a known pledge cleared before is not restored (2026-10-21, §6 Slice 4) |
 
 ---

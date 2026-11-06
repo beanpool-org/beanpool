@@ -481,7 +481,7 @@ test('the English page says what the brief asks, in plain words', () => {
 });
 
 test('never the two words the project bans (resilien…, surviv…), in any file here', () => {
-    const files = ['src/words.json', 'src/busy-page.js', 'src/index.js', 'README.md', 'wrangler.toml', 'scripts/deploy.sh'];
+    const files = ['src/words.json', 'src/busy-page.js', 'src/index.js', 'README.md', 'wrangler.toml', 'scripts/busy-page-deploy.sh'];
     for (const file of files) {
         const text = fs.readFileSync(path.join(APP, file), 'utf8');
         assert.doesNotMatch(text, /resilien|surviv/i, file);

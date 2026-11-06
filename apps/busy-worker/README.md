@@ -72,7 +72,7 @@ Two Worker variables, both `"0"` in `wrangler.toml`:
 | `BUSY_OFF=1` | Everything passes straight through, as if the Worker were not there (it still runs, and still counts as a request). |
 
 `BUSY_OFF` wins when both are set. `1` or `true` turns one on; anything else is off.
-`scripts/deploy.sh --force` / `--off` deploy with one on; a plain deploy sets both off. In the dashboard they are under
+`scripts/busy-page-deploy.sh --force` / `--off` deploy with one on; a plain deploy sets both off. In the dashboard they are under
 Workers → `beanpool-busy-page` → Settings → Variables (a change there takes effect in seconds, no deploy).
 
 ## Before it goes live: read these
@@ -91,7 +91,7 @@ Workers → `beanpool-busy-page` → Settings → Variables (a change there take
 
 ## The token
 
-`scripts/deploy.sh` reads `CLOUDFLARE_WORKERS_TOKEN` from the environment and hands it to wrangler alone (as
+`scripts/busy-page-deploy.sh` reads `CLOUDFLARE_WORKERS_TOKEN` from the environment and hands it to wrangler alone (as
 `CLOUDFLARE_API_TOKEN`); it never prints it. A custom token (Cloudflare dashboard → My Profile → API Tokens), the
 BeanPool account only:
 
@@ -109,11 +109,11 @@ From `apps/busy-worker`, after `pnpm install --frozen-lockfile` at the repo root
 
 ```sh
 pnpm test                          # the tests, no network
-bash scripts/deploy.sh --dry-run   # bundles it and shows what would upload; no token, contacts nothing
-bash scripts/deploy.sh             # live: on the route, both switches off
-bash scripts/deploy.sh --force     # live: busy page for every page request
-bash scripts/deploy.sh --off       # live: everything passes through
-bash scripts/deploy.sh --remove    # deletes the Worker and its route: global is as it was
+bash scripts/busy-page-deploy.sh --dry-run   # bundles it and shows what would upload; no token, contacts nothing
+bash scripts/busy-page-deploy.sh             # live: on the route, both switches off
+bash scripts/busy-page-deploy.sh --force     # live: busy page for every page request
+bash scripts/busy-page-deploy.sh --off       # live: everything passes through
+bash scripts/busy-page-deploy.sh --remove    # deletes the Worker and its route: global is as it was
 ```
 
 A deploy is the director's at the trigger (T5: origin 5xx or timeouts at Cloudflare), never a lane's.

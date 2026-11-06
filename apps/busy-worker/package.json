@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node -e \"console.log('busy-worker build ok')\"",
     "test": "node --test test/busy-worker.test.js",
-    "deploy": "bash scripts/deploy.sh"
+    "deploy": "bash scripts/busy-page-deploy.sh"
   },
   "devDependencies": {
     "@beanpool/core": "workspace:*",

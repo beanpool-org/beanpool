@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deploys the busy page Worker (apps/busy-worker) onto global.beanpool.org/*, or takes it away. README.md, "Deploy".
 #
-#   bash scripts/deploy.sh --dry-run   bundle it and show what would upload; needs no token, contacts nothing
-#   bash scripts/deploy.sh             deploy, both switches off: the busy page only when the origin fails or is slow
-#   bash scripts/deploy.sh --force     deploy with BUSY_FORCE=1: every page request gets the busy page
-#   bash scripts/deploy.sh --off       deploy with BUSY_OFF=1: everything passes straight through
-#   bash scripts/deploy.sh --remove    delete the Worker, and with it its route: global is as it was before
+#   bash scripts/busy-page-deploy.sh --dry-run   bundle it and show what would upload; needs no token, contacts nothing
+#   bash scripts/busy-page-deploy.sh             deploy, both switches off: the busy page only when the origin fails or is slow
+#   bash scripts/busy-page-deploy.sh --force     deploy with BUSY_FORCE=1: every page request gets the busy page
+#   bash scripts/busy-page-deploy.sh --off       deploy with BUSY_OFF=1: everything passes straight through
+#   bash scripts/busy-page-deploy.sh --remove    delete the Worker, and with it its route: global is as it was before
 #
 # The token comes from the environment as CLOUDFLARE_WORKERS_TOKEN and goes to wrangler alone, as CLOUDFLARE_API_TOKEN.
 # It is never printed. Its scopes (README "The token"): Account · Workers Scripts · Edit, Account · Account Settings ·
@@ -31,13 +31,10 @@ esac
 # Wrangler's usage reports go to Cloudflare; this script sends none.
 export WRANGLER_SEND_METRICS=false
 
+# The workspace's own wrangler (the repo hoists packages to its root node_modules, .npmrc node-linker=hoisted), never a
+# download: --no-install fails instead of fetching one.
 wrangler() {
-    if [ -x node_modules/.bin/wrangler ]; then
-        node_modules/.bin/wrangler "$@"
-    else
-        echo "wrangler is not installed here: run pnpm install --frozen-lockfile at the repo root" >&2
-        exit 1
-    fi
+    npx --no-install wrangler "$@"
 }
 
 if [ "$mode" = "--dry-run" ]; then
@@ -53,7 +50,7 @@ if [ -z "${CLOUDFLARE_WORKERS_TOKEN:-}" ]; then
     echo "CLOUDFLARE_WORKERS_TOKEN is not set (README \"The token\" has its scopes)" >&2
     exit 1
 fi
-export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_WORKERS_TOKEN"
+export CLOUDFLARE_API_TOKEN="${CLOUDFLARE_WORKERS_TOKEN}"
 unset CLOUDFLARE_WORKERS_TOKEN
 # The BeanPool account (public: apps/registrar's deploy names it too). Saves wrangler a lookup the token cannot do.
 export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-151a28c4fd1e6ee09768f4226be76b4d}"

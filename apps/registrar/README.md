@@ -254,9 +254,14 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
   'admin-held') still inside the hold. A paused name never counts, whoever paused it: the sweep's `impostor` and
   `content-swap`, a failed re-attest's `unverified`, and the release of a paused name (it keeps its `paused_at`) count
   for nothing. A key the admin stopped (a name blocked or paused by the admin, or an 'admin-held-all' release still in
-  its hold) never skips it, and neither do the admin's "free now" release and a withdrawn claim. Such a claim, or an
-  approve of a held one, is written verified (`verified_at` = now) and answered with no `probation`. Until
-  then its node is told `probation: true` by `/status` (and the claim and
+  its hold) never skips it, and neither do the admin's "free now" release and a withdrawn claim. It is decided by the
+  request that makes the name live, from the key's names then, and written by that write (`verified_at` = now; its
+  answer has no `probation`): a claim that goes live at once, the approve of a held or gated claim (asked again at the
+  approve: a key whose name was blocked or paused meanwhile, or released so that it no longer counts, stays on
+  probation), and the key's next claim or the admin's "Finish now" for an auto claim whose provisioning failed. A name
+  not live yet is never verified, so its release vouches for nothing. The sweep's finish of such a claim, and a
+  take-back its re-attest did not route at once, go live on probation (the take-back unless it was verified before its
+  release). Until then its node is told `probation: true` by `/status` (and the claim and
   heal answers) and its directory listing waits, and the "New community" alert waits: it is sent at verification —
   one message for every name a sweep verifies — never at the claim, so a bot's burst never rings the phone once a
   name. Any answer but its own node's in an applied sweep starts the count again; a suspended sweep neither counts nor

@@ -128,6 +128,22 @@ const awaitingApproval = async (env, a) => a.status === 'pending' && (!!a.held_r
 // Only NULL is probation: a row read from a database without the column (undefined) is never held back by it.
 const onProbation = (a) => !!a && a.verified_at === null;
 
+// Does a new tenure `a` skip probation as it goes live (slice S5: a rename keeps its community on the map)? Only if its key
+// holds a verified name now (db.holdsVerifiedName). Decided by the request that makes it live, from the state then, and
+// written only by that write: never carried from its claim (round 2 of #2933's review). A claim held for the admin, or a
+// gated one, waits as long as it waits (pending claims never expire, and the admin's list doesn't say it would skip), and
+// meanwhile the key's name may be blocked, paused (by the admin or the sweep) or released; so may an auto claim's whose
+// provisioning failed, until its next claim or the admin's "Finish now" finishes it (the sweep's finish reads nothing
+// more, and goes live on probation: finishOrphan). Read before that request's ensure(): a D1 failure reading it answers
+// 5xx with nothing made at Cloudflare, rather than leave a tunnel and a DNS record no row records. A row already verified
+// (its own release taken back) keeps what it has. `s`: the settings as read (their `schema`: migration 0011's columns),
+// or none to read them. Answers the fields to write as it goes live.
+async function probationSkip(env, a, now, s = null) {
+    if (a.verified_at || !(s ?? await settings.read(env)).schema) return {};
+    const verified = await db.holdsVerifiedName(env, a.node_pubkey, now - releaseCooloffS(env), a.name);
+    return verified ? { verified_at: now, ok_sweeps: null } : {};
+}
+
 // Why a row is in its state, as its node is told: a pause's or release's reason, and for a pending row whether it waits
 // for the admin ('awaiting-approval') or is an auto name still being made ('provisioning': the node asks again, never
 // waits for an approval nobody will give — scratch/global-node/DESIGN-registrar-trust-fable.md §5).
@@ -656,9 +672,10 @@ const LIVE = { status: 'live', pause_reason: null, paused_at: null, attest_fails
 // record may be a newer decision's or request's (a resume gone live on it), and the caller undoes instead — and
 // returns { live: false, verdict, why, dns_record_id } for the caller to record. A record Cloudflare refused to delete
 // is also owed: the row stays paused, which neither the sweep's attest nor its upkeep looks at, so nothing else would
-// ever take it down, and it would keep routing whoever failed the re-attest.
-async function routeIfOnlyOwner(env, res, ids, now) {
-    const goLive = async (fields, out) => ((await db.updateIfUnchanged(env, res.name, res, fields, { withIds: true })) ? out : { missed: true });
+// ever take it down, and it would keep routing whoever failed the re-attest. `extra`: written with it only if it goes
+// live (a take-back's probation skip, slice S5).
+async function routeIfOnlyOwner(env, res, ids, now, extra = {}) {
+    const goLive = async (fields, out) => ((await db.updateIfUnchanged(env, res.name, res, { ...fields, ...extra }, { withIds: true })) ? out : { missed: true });
     if (res.mode === 'tunnel' && ids.changed.includes('tunnel')) return goLive(LIVE, { live: true });
     const r = await classify(env, res);
     if (r.verdict === 'ok') return goLive({ ...LIVE, last_attest_at: now, last_ok_at: now }, { live: true, attest: 'ok' });
@@ -683,9 +700,11 @@ async function heal(env, cur, b, now, tries = 3) {
     const a = { ...cur, ...fields };
     // The address this heal routes to: the body's, or the one the row already has.
     if (a.mode === 'direct' && !a.public_ip) return badField(DIRECT_NEEDS_IP);
+    // A pending row finished here goes live with what probationSkip decides now (below); any other keeps its own.
+    let skip = {};
     const reply = (extra) => ({
         name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact, ...extra,
-        ...(extra.status === 'live' && onProbation(cur) ? { probation: true } : {}),
+        ...(extra.status === 'live' && onProbation({ ...cur, ...skip }) ? { probation: true } : {}),
     });
     // Every write holds only while the row is as read (`cur`), then as this heal last wrote it (`res`), ids and target
     // and all; if it changed, the heal is undone.
@@ -721,6 +740,8 @@ async function heal(env, cur, b, now, tries = 3) {
             if (!(await db.isUnchanged(env, cur.name, cur, { withIds: true }))) return missed();
             return refuseOutside(env, cur.name, cur.node_pubkey, found);
         }
+        // Its claim decided nothing of probation (it never went live): this request does, now, before its ensure().
+        skip = await probationSkip(env, cur, now);
     }
 
     try { ids = await ensure(env, a, cur); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
@@ -740,7 +761,7 @@ async function heal(env, cur, b, now, tries = 3) {
 
     if (cur.status === 'pending') {
         // An auto name whose first provisioning failed: this is that claim, finished.
-        if (!(await db.updateIfUnchanged(env, cur.name, res, { ...LIVE, decided_at: now, decided_by: 'auto' }, { withIds: true }))) return missed();
+        if (!(await db.updateIfUnchanged(env, cur.name, res, { ...LIVE, decided_at: now, decided_by: 'auto', ...skip }, { withIds: true }))) return missed();
         await logEvent(env, cur.name, 'healed', `pending (provisioning had failed) → live: ${ids.changed.join(', ') || 'nothing'} made`);
         return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
     }
@@ -783,7 +804,9 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
     // already counted; one past the hold isn't (it was free to anyone), so it counts as a new name does.
     const limit = claimLimit(env, s);
     const since = now - releaseCooloffS(env);
-    const verifiedKey = s.schema ? await db.holdsVerifiedName(env, pubkey, since, name) : false;
+    // Whether it skips probation, read now (before ensure(), as probationSkip says) but only for a claim that may go live in
+    // this request; written only by the write that makes it live. A held or gated claim is decided at its approve.
+    const skip = approved ? await probationSkip(env, { name, node_pubkey: pubkey, verified_at: sameKey ? existing.verified_at : null }, now, s) : {};
     const counted = sameKey && holdsName(env, existing, now);
     if (!counted) {
         const held = await db.countHeldBy(env, pubkey, since);
@@ -815,13 +838,9 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
         // The same key's own tunnel may be reused (ensure checks it); another key's never is.
         tunnel_id: sameKey ? existing.tunnel_id : null, dns_record_id: sameKey ? existing.dns_record_id : null,
         // Migration 0011's columns, where the database has them: why it is held, and a new key's tenure on probation (its
-        // own release taken back keeps the verification it had; a key that already holds a verified name skips probation).
-        ...(s.schema ? {
-            held_reason: held,
-            ...(sameKey
-                ? (existing.verified_at ? {} : (verifiedKey ? { verified_at: now, ok_sweeps: null } : {}))
-                : { verified_at: verifiedKey ? now : null, ok_sweeps: null }),
-        } : {}),
+        // own release taken back keeps the verification it had). Not live yet, so not verified yet: `skip` is written
+        // with the write that makes it live, below.
+        ...(s.schema ? { held_reason: held, ...(sameKey ? {} : { verified_at: null, ok_sweeps: null }) } : {}),
     };
     // Another claim by the same key may have landed between the count and this write: counted again once the name is
     // won, and over the limit, this claim gives it back before it reaches Cloudflare (so racing claims may all be
@@ -882,25 +901,25 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     const made = recorded(ids, a);
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
-    // A new tenure is on probation (its "New community" alert and its directory listing wait for it), unless its key holds a
-    // verified name (verifiedKey above: slice S5).
-    if (onProbation({ verified_at: a.verified_at !== undefined ? a.verified_at : existing?.verified_at })) out.probation = true;
+    // A new tenure is on probation (its "New community" alert and its directory listing wait for it), unless it was verified
+    // (its own release taken back) or its key holds a verified name (`skip` above, written only as it goes live: slice S5).
+    const unverified = onProbation({ verified_at: a.verified_at !== undefined ? a.verified_at : existing?.verified_at });
+    if (unverified && !skip.verified_at) out.probation = true;
     if (takeBack) {
         if (!(await db.updateIfUnchanged(env, name, a, made, { withIds: true }))) return missed();
         const res = { ...a, ...made };
-        const g = await routeIfOnlyOwner(env, res, ids, now);
+        const g = await routeIfOnlyOwner(env, res, ids, now, skip);
         if (g.missed) return missed();
         if (!g.live) {
             const reason = g.verdict === 'impostor' ? 'impostor' : 'unverified';
             if (!(await db.updateIfUnchanged(env, name, res, { pause_reason: reason, dns_record_id: g.dns_record_id }, { withIds: true }))) return missed();
             await logEvent(env, name, 'paused', `taken back, but not routed: edge re-attest ${g.verdict} (${g.why}); name kept for ${key16(pubkey)}, whose heal re-attests`);
-            return json({ ...out, status: 'paused', reason, since: now, attest: g.verdict, why: g.why });
+            // Not routed, so not verified: `skip` went with the write that would have made it live. Its heal routes it as
+            // it is, on probation if it was on it.
+            return json({ ...out, ...(unverified ? { probation: true } : {}), status: 'paused', reason, since: now, attest: g.verdict, why: g.why });
         }
         if (g.attest) out.attest = g.attest;
-    } else if (!(await db.updateIfUnchanged(env, name, a, {
-        ...made, status: 'live', ...decided,
-        ...(s.schema && a.verified_at ? { verified_at: a.verified_at, ok_sweeps: a.ok_sweeps ?? null } : {}),
-    }, { withIds: true }))) {
+    } else if (!(await db.updateIfUnchanged(env, name, a, { ...made, status: 'live', ...decided, ...skip }, { withIds: true }))) {
         return missed();
     }
     const token = await tunnelTokenOrNothing(env, { ...a, ...made });
@@ -1481,20 +1500,14 @@ async function adminResume(env, a, was, now, actor) {
 }
 
 // Approve: a pending claim goes live at once, as any new claim does (its tunnel is made now).
-// Whether it skips probation (its key holds a verified name: slice S5) is decided first, as takeName decides it before
-// its ensure(): a D1 failure reading it answers 5xx with nothing made at Cloudflare, rather than leave a tunnel and a DNS
-// record no row records.
+// Whether it skips probation is decided now, from the key's names now, and first (probationSkip): a claim held for days
+// whose key's name was blocked or paused meanwhile goes live on probation.
 async function adminGoLive(env, a, event, detail, extra = {}) {
     const now = nowS();
-    const verifiedNow = !a.verified_at && (await settings.read(env)).schema
-        && await db.holdsVerifiedName(env, a.node_pubkey, now - releaseCooloffS(env), a.name);
+    const skip = await probationSkip(env, a, now);
     let ids;
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e, { admin: true }); }
-    const live = {
-        ...recorded(ids, a), ...LIVE, ...extra,
-        ...(a.held_reason ? { held_reason: null } : {}),
-        ...(verifiedNow ? { verified_at: now, ok_sweeps: null } : {}),
-    };
+    const live = { ...recorded(ids, a), ...LIVE, ...extra, ...(a.held_reason ? { held_reason: null } : {}), ...skip };
     if (!(await db.updateIfUnchanged(env, a.name, a, live, { withIds: true }))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);
     return json({ status: 'live', name: a.name, changed: ids.changed });
@@ -2327,7 +2340,9 @@ async function finishOrphan(env, a, now) {
     }
     console.warn('[ORPHAN_FINISHED]', a.name, `pending → live: ${ids.changed.join(', ') || 'nothing'} made by the sweep`);
     await logEvent(env, a.name, 'healed', `finished by the sweep (its claim's answer never reached its node): pending → live, ${ids.changed.join(', ') || 'nothing'} made`);
-    // Its "New community" alert waits for its probation to end (applyVerdict).
+    // Its "New community" alert waits for its probation to end (applyVerdict). It goes live on probation: its claim decided
+    // nothing of it (it never went live), and whether its key holds a verified name is one more D1 query than ORPHAN_D1
+    // keeps (slice S5's round 2) — a wait for the sweeps that verify it, never a skip nobody checked.
 }
 
 // Does Cloudflare route the live `row` as it says: the record it records, pointing at its target, and its tunnel?

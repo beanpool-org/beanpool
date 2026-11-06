@@ -304,3 +304,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `ChangesLog` component in `apps/manager/src/components/modules/ChangesLog.tsx` was untested.
 **Learning:** `ShapeLogLine` requires `id: string` and string literal union `kept: 'community_settings_log' | 'known_floor_log'`. Testing verified empty log fallback text, actor resolution, core settings formatting (`core.lock`, `core.unlock`, advice lines), setting change transitions, and the `limit` display cap.
 **Action:** Continue identifying untested UI components or helper modules across `apps/manager/src/components/modules/`.
+
+## 2026-11-06 - [manager tests] voucher-words helper functions unit tests
+**Gap:** `voucherActorWords`, `formatHistoryDate`, `historyLineWords`, and `voucherPanelHeader` in `apps/manager/src/lib/voucher-words.ts` lacked a direct unit test suite.
+**Learning:** Testing `voucher-words.ts` directly verifies actor description translations (`node:claim`, `claim:*`, `server:*`, `migration:*`, null/empty/64-hex key fallback to "someone who has left"), UTC date formatting, history line descriptions across all kinds (`grant`, `top_up`, `lower`, `hold`, `return` with reason codes, `stop`), and panel header line formatting.
+**Action:** Identify remaining untested helper utilities or UI components in `apps/manager/` for direct unit test coverage.

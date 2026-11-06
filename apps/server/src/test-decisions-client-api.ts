@@ -269,6 +269,37 @@ async function runSuite() {
     });
     assert(resShortDesc.status === 400, 'Propose with description < 10 chars fails with 400');
     assert(resShortDesc.body.error.includes('description must be at least 10 characters'), 'Error cites description requirement');
+
+    // 1d-0b. Reliability: Non-string description or non-string/whitespace title returns 400 instead of crashing with 500
+    const resNumDesc = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
+        actor: alice,
+        body: {
+            authorPubkey: alice,
+            title: 'Valid Title Here',
+            description: 12345 as any,
+            touches: 'pool',
+            effect: 'grant_enterprise',
+            subject: enterprise,
+            params: { amount: 80 },
+        },
+    });
+    assert(resNumDesc.status === 400, 'Propose with non-string description fails with 400 Bad Request');
+    assert(resNumDesc.body.error.includes('description must be at least 10 characters'), 'Error cites description requirement for non-string');
+
+    const resWhitespaceTitle = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
+        actor: alice,
+        body: {
+            authorPubkey: alice,
+            title: '   ',
+            description: 'A sufficiently long description for testing',
+            touches: 'pool',
+            effect: 'grant_enterprise',
+            subject: enterprise,
+            params: { amount: 80 },
+        },
+    });
+    assert(resWhitespaceTitle.status === 400, 'Propose with whitespace-only title fails with 400 Bad Request');
+    assert(resWhitespaceTitle.body.error.includes('title, touches, and effect are required'), 'Error cites required fields for whitespace title');
     // 1d. Successful propose with no bond charged. The Commons can pay the 80 it asks for: a grant is capped when
     // proposed (grant cap, 2026-09-27), and this fresh node's Commons would otherwise hold nothing.
     setCommonsBalance(100);

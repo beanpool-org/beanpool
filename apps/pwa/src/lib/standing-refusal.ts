@@ -9,7 +9,7 @@
  * for account_closed, "Your account in this community was closed." through t()), NEVER "Offline" or "Having trouble connecting".
  * "Offline" is kept strictly for when there was no answer from the node at all.
  */
-import { t } from '@beanpool/core';
+import { isBusyStatus, t } from '@beanpool/core';
 import type { SyncMode } from '../components/SyncChip';
 
 export const PRIVATE_PREVIEW = 'private_preview';
@@ -83,6 +83,8 @@ export interface SyncStatusState {
     isMember: boolean | null;
     mode: SyncMode;
     sentence?: string | null;
+    /** Whether the live socket was connected at its last change: proof the node is answering when a probe is refused 5xx. */
+    wsConnected?: boolean;
 }
 
 export const INITIAL_SYNC_STATUS_STATE: SyncStatusState = {
@@ -102,6 +104,7 @@ export type SyncStatusAction =
  * - Each standing refusal code (`private_preview`, `account_closed`) → "not a member" (guest) with its sentence
  * - A network error → offline
  * - A 403 with another code → unchanged behaviour (offline)
+ * - A 429 (the network in front of the node is busy) → the chip keeps what it showed; a 5xx does too while the live socket is up
  */
 export function statusReducer(state: SyncStatusState, action: SyncStatusAction): SyncStatusState {
     switch (action.type) {
@@ -114,9 +117,14 @@ export function statusReducer(state: SyncStatusState, action: SyncStatusAction):
             };
         case 'probe_error': {
             const standing = standingFromRefusal(action.error);
-            return standing
-                ? { isHttpOnline: true, isMember: false, mode: 'guest', sentence: standing.sentence }
-                : { isHttpOnline: false, isMember: state.isMember, mode: 'offline', sentence: null };
+            if (standing) return { isHttpOnline: true, isMember: false, mode: 'guest', sentence: standing.sentence };
+            // The network in front of the node is busy (429), or the node answered a 5xx while its live socket is up:
+            // something answered, so the chip keeps what it showed and the next probe judges again. "Offline" is for when
+            // nothing answered, or a 5xx with the socket down too (a tunnel with no node behind it, 530).
+            const status = (action.error as { status?: unknown } | null)?.status;
+            if (isBusyStatus(status)) return state;
+            if (typeof status === 'number' && status >= 500 && status <= 599 && state.wsConnected === true) return state;
+            return { isHttpOnline: false, isMember: state.isMember, mode: 'offline', sentence: null, ...(state.wsConnected === undefined ? {} : { wsConnected: state.wsConnected }) };
         }
         case 'ws_change': {
             const mode: SyncMode = action.connected
@@ -126,7 +134,7 @@ export function statusReducer(state: SyncStatusState, action: SyncStatusAction):
                 : (state.isHttpOnline && state.isMember === false)
                 ? 'guest'
                 : 'offline';
-            return { ...state, mode };
+            return { ...state, mode, wsConnected: action.connected };
         }
     }
 }

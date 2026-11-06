@@ -8,6 +8,7 @@ import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard, UnreadAnswer, JuryTurnout, ServedJury } from '@beanpool/core';
 import { POLL_NEXT_START_PATH, pollNextStartMs, readCommunityCard, t, type DmLineDisclosure, type DmLineSig } from '@beanpool/core';
+import { busyError, isBusyAnswer, isBusyError, waitBeforeRetry } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -153,42 +154,56 @@ export async function signReEnrollAsk(code: string, privateKeyHex: string): Prom
 
 // Base request helper with auth
 export async function request<T>(method: string, path: string, body?: any, signal?: AbortSignal): Promise<T> {
-    const opts: RequestInit = {
-        method,
-        cache: 'no-cache',
-        headers: {
-            'Content-Type': 'application/json',
-            // The member's language, so the node's sentences can come back in it (lib/language.ts; outside the signed bytes).
-            ...languageHeaders(getNodeApiUrl()),
-        } as Record<string, string>,
-    };
-    if (signal) opts.signal = signal;
+    // One ask, signed afresh each time (a signature carries its own nonce, so an ask is never sent twice as it was).
+    const send = async (): Promise<Response> => {
+        const opts: RequestInit = {
+            method,
+            cache: 'no-cache',
+            headers: {
+                'Content-Type': 'application/json',
+                // The member's language, so the node's sentences can come back in it (lib/language.ts; outside the signed bytes).
+                ...languageHeaders(getNodeApiUrl()),
+            } as Record<string, string>,
+        };
+        if (signal) opts.signal = signal;
 
-    const bodyString = body ? JSON.stringify(body) : '';
-    if (body) {
-        opts.body = bodyString;
-    }
-
-    // Sign every request that has an identity available. Writes need it (X-1);
-    // and under the node's read-auth enforcement (SRV-2/SRV-4) gated GETs do too.
-    // GETs sign over an empty body, matching the server's `rawBody ?? ''`. Extra
-    // signature headers on a public read are simply ignored by the server.
-    const identity = await loadIdentity();
-    if (identity && identity.privateKey) {
-        try {
-            // Replay-proof signature over the host, method, path, timestamp, nonce and body (format 2).
-            // The path is signed without the query string, to match the server's ctx.path.
-            Object.assign(opts.headers as Record<string, string>,
-                await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
-        } catch (e) {
-            console.warn('[API] Could not sign request:', e);
+        const bodyString = body ? JSON.stringify(body) : '';
+        if (body) {
+            opts.body = bodyString;
         }
-    }
 
-    const baseUrl = getNodeApiUrl();
-    const res = await fetch(`${baseUrl}${path}`, opts);
-    if (!res.ok) throw await refusalError(res);
-    return res.json();
+        // Sign every request that has an identity available. Writes need it (X-1);
+        // and under the node's read-auth enforcement (SRV-2/SRV-4) gated GETs do too.
+        // GETs sign over an empty body, matching the server's `rawBody ?? ''`. Extra
+        // signature headers on a public read are simply ignored by the server.
+        const identity = await loadIdentity();
+        if (identity && identity.privateKey) {
+            try {
+                // Replay-proof signature over the host, method, path, timestamp, nonce and body (format 2).
+                // The path is signed without the query string, to match the server's ctx.path.
+                Object.assign(opts.headers as Record<string, string>,
+                    await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
+            } catch (e) {
+                console.warn('[API] Could not sign request:', e);
+            }
+        }
+
+        const baseUrl = getNodeApiUrl();
+        return fetch(`${baseUrl}${path}`, opts);
+    };
+
+    const res = await send();
+    if (res.ok) return res.json();
+    const refusal = await refusalError(res);
+    // A busy network's 429 (core busy-answer.ts): a READ is asked again once, after the wait it named; a second busy answer
+    // is thrown as it is, never a loop. A write is never sent again by itself: no double post, no double payment.
+    if (method.toUpperCase() === 'GET' && isBusyError(refusal)) {
+        await waitBeforeRetry(refusal.retryAfterMs, signal);
+        const again = await send();
+        if (again.ok) return again.json();
+        throw await refusalError(again);
+    }
+    throw refusal;
 }
 
 /**
@@ -218,6 +233,14 @@ export const groupKeysNet = {
 async function refusalError(res: Response): Promise<Error> {
     let unsaid = false;
     const err = await res.json().catch(() => { unsaid = true; return { error: res.statusText }; });
+    // The network in front of the node is too busy (a 429 that is not the node's own JSON, such as Cloudflare's page): one
+    // sentence in the member's language, code `busy`, never "Too Many Requests" (core busy-answer.ts; the phone says the same).
+    // Still `unsaid` when no JSON came: a payment's words read that (lib/debts.ts payFailureWords).
+    if (isBusyAnswer(res.status, unsaid ? undefined : err)) {
+        const busy = busyError(res.headers?.get?.('Retry-After'));
+        if (unsaid) (busy as Error & { unsaid?: boolean }).unsaid = true;
+        return busy;
+    }
     const error = new Error(err.message || err.error || t('Request failed: {status}', { status: res.status }));
     // An answer without JSON (a proxy's page): its words are only the status text. A screen may say it in its own.
     if (unsaid) (error as Error & { unsaid?: boolean }).unsaid = true;

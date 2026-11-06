@@ -219,3 +219,42 @@ describe('statusReducer', () => {
         expect(statusReducer(online, { type: 'probe_error', error: closedRefusal }).mode).toBe('guest');
     });
 });
+
+describe('statusReducer: a busy network is not an offline node (busy-answer.ts)', () => {
+    const online: SyncStatusState = { isHttpOnline: true, isMember: true, mode: 'online', sentence: null, wsConnected: true };
+
+    it('a 429 probe error keeps the state as it was: online stays online, guest stays guest, whatever the socket says', () => {
+        const busy = Object.assign(new Error('Busy right now. Try again in a moment.'), { status: 429, code: 'busy' });
+        expect(statusReducer(online, { type: 'probe_error', error: busy })).toBe(online);
+        const guest: SyncStatusState = { isHttpOnline: true, isMember: false, mode: 'guest', sentence: null, wsConnected: false };
+        expect(statusReducer(guest, { type: 'probe_error', error: busy })).toBe(guest);
+        const noSocket: SyncStatusState = { ...online, wsConnected: false };
+        expect(statusReducer(noSocket, { type: 'probe_error', error: busy }).mode).toBe('online');
+    });
+
+    it('a 5xx probe error keeps the mode while the live socket is up (the node is answering there)', () => {
+        for (const status of [500, 502, 503, 504, 524]) {
+            expect(statusReducer(online, { type: 'probe_error', error: { status } }), String(status)).toBe(online);
+        }
+    });
+
+    it('a 5xx with the socket down too (a tunnel with no node behind it) is still offline, as before', () => {
+        const noSocket: SyncStatusState = { ...online, wsConnected: false };
+        expect(statusReducer(noSocket, { type: 'probe_error', error: { status: 530 } })).toMatchObject({ isHttpOnline: false, mode: 'offline' });
+        expect(statusReducer({ ...online, wsConnected: undefined }, { type: 'probe_error', error: { status: 502 } }).mode).toBe('offline');
+    });
+
+    it('no answer at all is still offline, and so is a 404', () => {
+        expect(statusReducer(online, { type: 'probe_error', error: new TypeError('Failed to fetch') }).mode).toBe('offline');
+        expect(statusReducer(online, { type: 'probe_error', error: { status: 404 } }).mode).toBe('offline');
+    });
+
+    it("the socket's own changes are remembered, so the next probe error can tell", () => {
+        const up = statusReducer({ ...online, wsConnected: undefined }, { type: 'ws_change', connected: true });
+        expect(up.wsConnected).toBe(true);
+        expect(statusReducer(up, { type: 'probe_error', error: { status: 503 } })).toBe(up);
+        const down = statusReducer(up, { type: 'ws_change', connected: false });
+        expect(down.wsConnected).toBe(false);
+        expect(statusReducer(down, { type: 'probe_error', error: { status: 503 } }).mode).toBe('offline');
+    });
+});

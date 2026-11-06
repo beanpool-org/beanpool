@@ -31,7 +31,7 @@ export function ChatBody({ inst, card, me, colors, deps, onPick, onRemove, now }
     card: HomeChatCard | null;
     me: string | null | undefined;
     colors: AppColors;
-    /** db.ts's doors (judgeHomeChatDmLines, groupKeyringFor). */
+    /** db.ts's doors (judgeHomeChatDmLines, groupKeyringFor, isKnownDmConversation). */
     deps: HomeChatOpenDeps;
     /** Pick a chat: the card's settings list. */
     onPick: () => void;

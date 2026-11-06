@@ -114,6 +114,8 @@ export interface OpenedChat {
     lines: ReadonlyMap<string, OpenedChatLine>;
     /** A group chat this phone has held keys of (GroupKeyring.seenLocked): a readable line in a member's name is nobody's. */
     locked?: boolean;
+    /** A pick of another kind on a chat this phone knows as a DM (db.ts isKnownDmConversation): no answer, nothing drawn. */
+    knownDm?: boolean;
 }
 
 /** One line as the card draws it: who wrote it (null: nobody's, or the node's own), and what it says. */
@@ -131,9 +133,10 @@ const chatKindOf = (k: HomeChatKind) => (k === 'dm' ? 'dm' : k) as 'dm' | 'group
 
 /**
  * One line's words on the card, or null when it is never shown. `me`: the member's key ("You"). `opened`: what the
- * device made of the lines (absent: not opened yet). Until then a line the device must judge (any line of a DM or a
- * group's chat but the node's own and a removed one) is "…", nobody's, as a chat draws a line it hasn't opened yet: never
- * the node's words in a member's name, and never a warning that goes a moment later.
+ * device made of the lines (absent: not opened yet). Until then every line but the node's own and a removed one is "…",
+ * nobody's, as a chat draws a line it hasn't opened yet: never the node's words in a member's name, and never a warning
+ * that goes a moment later. An event's or an enterprise's line too: the open asks first whether this phone knows the chat
+ * as a DM (home-chat-open.ts), and until it has, a line on the node's word could be a DM's in the other person's name.
  */
 export function chatLineView(line: HomeChatLine, kind: HomeChatKind, me: string | null | undefined, opened?: OpenedChat): ChatCardLine | null {
     const mine = (key: string | null | undefined) => !!me && !!key && key === me;
@@ -142,7 +145,7 @@ export function chatLineView(line: HomeChatLine, kind: HomeChatKind, me: string 
         return { ...base, who: null, text: tombstoneWords({ senderId: line.author, metadata: parse(line.metadata ?? line.sealed?.metadata) ?? undefined }, chatKindOf(kind)) };
     }
     if (line.type === 'system' || line.author === 'SYSTEM') return { ...base, who: null, text: chatLineWords(line.text ?? '') };
-    if (!opened && (kind === 'dm' || kind === 'group' || !!line.sealed)) return { ...base, who: null, text: '…' };
+    if (!opened || opened.knownDm) return { ...base, who: null, text: '…' };
     const got = opened?.lines.get(line.id);
     if (got?.kind === 'hidden') return null;
     if (got?.kind === 'nobody') return { ...base, who: null, text: chatLineWords(got.text) };
@@ -181,8 +184,9 @@ export function chatCardView(
 ): ChatCardView {
     const pick = chatPickOf(inst);
     if (!pick) return { state: 'pick' };
-    // A body of another kind than the pick's is no answer (chatCardFor): its lines are never judged by the node's word.
-    if (!card || (!('gone' in card) && card.kind !== pick.kind)) return { state: 'waiting', name: pick.name || t('A chat') };
+    // A body of another kind than the pick's is no answer (chatCardFor): its lines are never judged by the node's word. Nor
+    // is a pick of another kind on a chat this phone knows as a DM (home-chat-open.ts): the node keeps the layout.
+    if (!card || (!('gone' in card) && card.kind !== pick.kind) || opened?.knownDm) return { state: 'waiting', name: pick.name || t('A chat') };
     if ('gone' in card) return { state: 'gone' };
     const lines = card.lines.map(l => chatLineView(l, pick.kind, me, opened)).filter((l): l is ChatCardLine => l !== null);
     return {

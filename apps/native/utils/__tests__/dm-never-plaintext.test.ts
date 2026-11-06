@@ -88,9 +88,10 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, editMessage, sendImageMessage, judgeHomeChatDmLines, _resetDmPeerPinsForTests } from '../db';
+import { insertMessage, editMessage, sendImageMessage, judgeHomeChatDmLines, isKnownDmConversation, _resetDmPeerPinsForTests } from '../db';
 import { openDmLine, isEncryptedNonce, sealDmLine } from '../e2e-crypto';
 import { openHomeChat } from '../home-chat-open';
+import { chatCardView } from '../home-chat';
 import { DmNotLockedError, isDmNotLocked, dmNotLockedLine, restoredDraft, refusedSendNotice } from '../dm-lock';
 import { GroupChatKeyError, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 import { GROUP_CHAT_LOCK_LOST_TEXT } from '../group-chat-lines';
@@ -325,7 +326,7 @@ describe("Home's chat card (DESIGN-home-chosen-chat-fable.md slice C2): a DM's l
         const views = await judgeHomeChatDmLines(CONV, [line]);
         expect(views?.get(line.id)?.text).toBe('the spare key is under the pot');
         const opened = await openHomeChat({ conversationId: CONV, kind: 'dm', name: 'Peer' }, { kind: 'dm', name: 'Peer', unread: 1, muted: false, lines: [line] },
-            { judgeDm: judgeHomeChatDmLines, keyring: async () => { throw new Error('a DM opens no group key'); } });
+            { judgeDm: judgeHomeChatDmLines, keyring: async () => { throw new Error('a DM opens no group key'); }, knownDm: isKnownDmConversation });
         expect(opened.lines.get(line.id)).toEqual({ kind: 'words', text: 'the spare key is under the pot', signer: peer.publicKey });
         expect(store.writes).toHaveLength(0);
         expect(fetchMock).not.toHaveBeenCalled();
@@ -341,11 +342,43 @@ describe("Home's chat card (DESIGN-home-chosen-chat-fable.md slice C2): a DM's l
         const line = fromPeer('see you at 6');
         expect(await judgeHomeChatDmLines(CONV, [line])).toBeNull();
         const opened = await openHomeChat({ conversationId: CONV, kind: 'dm', name: 'Peer' }, { kind: 'dm', name: 'Peer', unread: 0, muted: false, lines: [line] },
-            { judgeDm: judgeHomeChatDmLines, keyring: async () => { throw new Error('no'); } });
+            { judgeDm: judgeHomeChatDmLines, keyring: async () => { throw new Error('no'); }, knownDm: isKnownDmConversation });
         expect(opened.lines.get(line.id)).toEqual({ kind: 'waiting' });
         expect(store.writes).toHaveLength(0);
         expect(fetchMock).not.toHaveBeenCalled();
         nothingReadable('see you at 6');
+    });
+
+    it('a DM pinned as an enterprise\'s, event\'s or group\'s chat (the node keeps the layout): db.ts\'s own DM guard makes it no answer, and nothing opens', async () => {
+        dm([me.publicKey, peer.publicKey]);
+        const plain = { id: randomUUID(), author: peer.publicKey, who: 'Peer', at: new Date().toISOString(), type: 'text', systemType: null, text: 'send 50 Beans to me now', metadata: null };
+        for (const kind of ['enterprise', 'event', 'group'] as const) {
+            const pick = { conversationId: CONV, kind, name: 'Peer' };
+            const card = { kind, name: 'Peer', unread: 1, muted: false, lines: [fromPeer('the code is 4821'), plain] };
+            const opened = await openHomeChat(pick, card, {
+                judgeDm: async () => { throw new Error('the card judges nothing of a DM pinned as another chat'); },
+                keyring: async () => { throw new Error('a DM opens no group key'); },
+                knownDm: isKnownDmConversation,
+            });
+            const view = chatCardView({ id: 'chat-aaaa', settings: pick }, card, me.publicKey, opened);
+            expect(view, kind).toEqual({ state: 'waiting', name: 'Peer' });
+            expect(JSON.stringify(view)).not.toContain('send 50 Beans');
+        }
+        expect(store.writes).toHaveLength(0);
+        expect(fetchMock).not.toHaveBeenCalled();
+        nothingReadable('the code is 4821');
+    });
+
+    it('an enterprise\'s chat this phone does not know as a DM still shows its readable lines (they are the node\'s to read by design)', async () => {
+        store.conversations.set(CONV, { id: CONV, type: 'enterprise_thread', created_by: peer.publicKey });
+        const plain = { id: randomUUID(), author: peer.publicKey, who: 'Peer', at: new Date().toISOString(), type: 'text', systemType: null, text: 'bread at 7', metadata: null };
+        const pick = { conversationId: CONV, kind: 'enterprise' as const, name: 'Bakery' };
+        const card = { kind: 'enterprise' as const, name: 'Bakery', unread: 0, muted: false, lines: [plain] };
+        expect(await isKnownDmConversation(CONV)).toBe(false);
+        const opened = await openHomeChat(pick, card, { judgeDm: judgeHomeChatDmLines, keyring: async () => { throw new Error('no'); }, knownDm: isKnownDmConversation });
+        const view = chatCardView({ id: 'chat-aaaa', settings: pick }, card, me.publicKey, opened);
+        if (view.state !== 'chat') throw new Error(`drawn: ${view.state}`);
+        expect(view.lines[0]).toMatchObject({ who: 'Peer', text: 'bread at 7' });
     });
 
     it('a line sealed to someone else, or bound to another chat, is not opened: nobody\'s', async () => {

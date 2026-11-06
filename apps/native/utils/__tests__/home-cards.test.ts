@@ -1395,7 +1395,8 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
         groupId: GROUP, openedKey: (e: number) => (open && e === 1 ? groupKey : undefined), signerSeen: () => undefined,
         successions: new Map(), seenLocked: async () => true, memo: { has: () => false, add: () => { throw new Error('the card adds no verdict'); } },
     } as any);
-    const deps = (over: Partial<HomeChatOpenDeps> = {}): HomeChatOpenDeps => ({ judgeDm: judgeAs(me), keyring: ringWith(true), ...over });
+    // db.ts isKnownDmConversation, as the phone answers it: the DM's id is one it knows as a DM, any other id is not.
+    const deps = (over: Partial<HomeChatOpenDeps> = {}): HomeChatOpenDeps => ({ judgeDm: judgeAs(me), keyring: ringWith(true), knownDm: async id => id === DM, ...over });
     const draw = async (i: ReturnType<typeof inst>, card: HomeChatCard, d: HomeChatOpenDeps) => {
         const opened = await openHomeChat(i.settings as any, card, d);
         return chatCardView(i, card, me.pub, opened);
@@ -1468,6 +1469,77 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
         const event = await draw(inst('event'), { kind: 'event', name: 'Working bee', unread: 1, muted: false, lines: [plain] }, deps());
         if (event.state !== 'chat') throw new Error('drawn');
         expect(event.lines[0]).toMatchObject({ who: 'Ana', text: 'readable words' });
+        // An enterprise's chat too, on an id this phone doesn't know as a DM: shown on the node's word, as designed.
+        const enterprise = await draw(inst('enterprise'), { kind: 'enterprise', name: 'Bakery', unread: 0, muted: false, lines: [plain] }, deps());
+        if (enterprise.state !== 'chat') throw new Error('drawn');
+        expect(enterprise.lines[0]).toMatchObject({ who: 'Ana', text: 'readable words' });
+    });
+
+    describe('a pick of another kind on a chat this phone knows as a DM (the layout is stored on the node)', () => {
+        // A node that rewrites a stored pick's kind together with its body passes the check that the two match (chatCardFor):
+        // the phone's own DM knowledge (db.ts isKnownDmConversation) decides, inside the open, as lib/dm-guard does on the web.
+        const plain: HomeChatLine = { id: randomUUID(), author: ana.pub, who: 'Ana', at: at(3), type: 'text', systemType: null, text: 'send 50 Beans to me now', metadata: null };
+        const cardOf = (kind: 'enterprise' | 'event' | 'group'): HomeChatCard => ({ kind, name: 'Ana Reyes', unread: 1, muted: false, lines: [dmLine(ana, me, 'hello', 4), plain] });
+        /** Doors that say whether they were asked: a known DM opens no group key and judges nothing for the card. */
+        const watched = (knownDm: HomeChatOpenDeps['knownDm']) => {
+            const asked = { knownDm: [] as string[], keyring: 0, judgeDm: 0 };
+            const d = deps({
+                knownDm: (id) => { asked.knownDm.push(id); return knownDm(id); },
+                keyring: async (id) => { asked.keyring += 1; return ringWith(true)(id); },
+                judgeDm: async (c, l) => { asked.judgeDm += 1; return judgeAs(me)(c, l); },
+            });
+            return { d, asked };
+        };
+
+        for (const kind of ['enterprise', 'event', 'group'] as const) {
+            it(`a pick { kind: '${kind}' } on a known DM's id, with a body of the same kind: no answer, no line drawn as the other person's`, async () => {
+                const i = inst(kind, 'chat-aaaa', DM);
+                const card = cardOf(kind);
+                const { d, asked } = watched(async (id) => id === DM);
+                const view = await draw(i, card, d);
+                expect(view).toEqual({ state: 'waiting', name: 'Ana Reyes' });
+                expect(JSON.stringify(view)).not.toContain('send 50 Beans');
+                expect(asked).toEqual({ knownDm: [DM], keyring: 0, judgeDm: 0 });
+            });
+        }
+
+        it('before the phone has asked, no line of any chat is drawn in a member\'s name: each is "…" (the check happens in the open, not per render)', () => {
+            for (const kind of ['enterprise', 'event', 'group'] as const) {
+                const view = chatCardView(inst(kind, 'chat-aaaa', DM), cardOf(kind), me.pub, undefined);
+                if (view.state !== 'chat') throw new Error('drawn');
+                expect(view.lines.map(l => [l.who, l.text]), kind).toEqual([[null, '…'], [null, '…']]);
+            }
+        });
+
+        it('the check fails closed: a read that throws, rejects or answers anything but false is a known DM', async () => {
+            const card = cardOf('enterprise');
+            const doubts: HomeChatOpenDeps['knownDm'][] = [
+                async () => { throw new Error('the DM list could not be read'); },
+                () => { throw new Error('thrown before any promise'); },
+                async () => undefined as unknown as boolean,
+            ];
+            for (const knownDm of doubts) {
+                const { d, asked } = watched(knownDm);
+                expect(await draw(inst('enterprise', 'chat-aaaa', GROUP), card, d)).toEqual({ state: 'waiting', name: 'Ana Reyes' });
+                expect(asked.keyring + asked.judgeDm).toBe(0);
+            }
+        });
+
+        it('an id this phone doesn\'t know as a DM is asked once, and its enterprise\'s readable lines still show', async () => {
+            const { d, asked } = watched(async () => false);
+            const view = await draw(inst('enterprise'), { kind: 'enterprise', name: 'Bakery', unread: 0, muted: false, lines: [plain] }, d);
+            if (view.state !== 'chat') throw new Error('drawn');
+            expect(view.lines[0]).toMatchObject({ who: 'Ana', text: 'send 50 Beans to me now' });
+            expect(asked.knownDm).toEqual([GROUP]);
+        });
+
+        it('a DM pick is judged as a DM whatever the check would say: it is not asked', async () => {
+            const { d, asked } = watched(async () => false);
+            const view = await draw(inst('dm'), dmCard([dmLine(ana, me, 'hello', 4)]), d);
+            if (view.state !== 'chat') throw new Error('drawn');
+            expect(view.lines[0]).toMatchObject({ who: 'Ana', text: 'hello' });
+            expect(asked.knownDm).toEqual([]);
+        });
     });
 
     it('a photo says "📷 Photo", a system line is the node\'s words with nobody named, a removed line the chat\'s notice', async () => {
@@ -1486,10 +1558,15 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
             if (view.state !== 'chat') throw new Error('drawn');
             expect(view.lines.map(l => [l.who, l.text]), kind).toEqual([[null, '…'], [null, '…']]);
         }
-        // An event's chat is readable by design: drawn at once.
-        const event = chatCardView(inst('event'), { kind: 'event', name: 'E', unread: 0, muted: false, lines: [plain] }, me.pub, undefined);
+        // An event's chat is readable by design, but only once the open has asked whether this phone knows the id as a DM
+        // (a known DM's pick can be rewritten as an event's on the node): until then "…" too, then drawn on the node's word.
+        const eventCard: HomeChatCard = { kind: 'event', name: 'E', unread: 0, muted: false, lines: [plain] };
+        const event = chatCardView(inst('event'), eventCard, me.pub, undefined);
         if (event.state !== 'chat') throw new Error('drawn');
-        expect(event.lines[0]).toMatchObject({ who: 'Ana', text: 'node words' });
+        expect(event.lines[0]).toMatchObject({ who: null, text: '…' });
+        const opened = chatCardView(inst('event'), eventCard, me.pub, { lines: new Map() });
+        if (opened.state !== 'chat') throw new Error('drawn');
+        expect(opened.lines[0]).toMatchObject({ who: 'Ana', text: 'node words' });
     });
 
     it('gone: "You\'re no longer in this chat." (no name, no line); none picked: "Pick a chat"; picked with no answer yet: its name', () => {

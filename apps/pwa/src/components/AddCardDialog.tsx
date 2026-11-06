@@ -183,8 +183,7 @@ function ChatPickList({ chats, current, onPick }: { chats: ChatPick; current?: s
         setFailed(false);
         chats.load().then((r) => { if (live) setRows(r); }).catch(() => { if (live) setFailed(true); });
         return () => { live = false; };
-        // Read once as it opens (and again on Try again): never on every render.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Read once as it opens (and again on Try again): never on every render, so `chats` (a new object each render) isn't a dependency.
     }, [tries]);
     if (failed) {
         return (

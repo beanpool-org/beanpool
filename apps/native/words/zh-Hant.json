@@ -6784,7 +6784,7 @@
   "Stop @{name} from vouching? Their budget ends. The credit lines they gave stay with the people they gave them to.": "要讓 @{name} 停止擔保嗎？他們的預算將結束。他們贈予的信用額度仍歸獲贈者所有。",
   "Stop vouching": "停止擔保",
   "They get a budget of {amount} Beans to vouch for the people they invite, up to 100 each. Every owner and admin can see this in the known floor’s log.": "他們將獲得 {amount} 豆子的預算，用於為所邀請的人擔保，每人最多 100。每位擁有者和管理員都能在已知下限的紀錄中看到這一點。",
-  "Trading: {others} with others · {inside} inside only": "交易狀態：與其他社群 {others} · 僅內部 {inside}",
+  "Trading: {others} with others · {inside} inside only": "交易狀態：與他人 {others} · 僅內部 {inside}",
   "VOUCHERS": "擔保人",
   "Vouched {amount} to {n} person who joined|Vouched {amount} to {n} people who joined": {
     "other": "已為加入的 {n} 人擔保 {amount}"
@@ -6799,7 +6799,7 @@
   "the community’s server": "社群的伺服器",
   "the server’s shell": "伺服器的命令列",
   "trades inside only": "僅內部交易",
-  "trades with others ✓": "與其他社群交易 ✓",
+  "trades with others ✓": "與他人交易 ✓",
   "{belowZero} of {total} below zero · written off {writtenOff}": "總計 {total} 中有 {belowZero} 為負 · 已沖銷 {writtenOff}",
   "{left} left · {held} held": "剩餘 {left} · 暫扣 {held}",
   "{left} of {budget} left": "剩餘 {left} / 總計 {budget}",

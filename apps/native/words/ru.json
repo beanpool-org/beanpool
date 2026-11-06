@@ -7575,10 +7575,10 @@
   "{left} left · {held} held": "осталось {left} · удержано {held}",
   "{left} of {budget} left": "осталось {left} из {budget}",
   "{left} of {level} left": "осталось {left} из {level}",
-  "{left} of {level} left · {vouched} vouched": "осталось {left} из {level} · поручительств на {vouched}",
-  "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "осталось {left} из {level} · поручительств на {vouched} · ниже нуля на {belowZero} · списано {writtenOff} · передано {passedOn}",
+  "{left} of {level} left · {vouched} vouched": "осталось {left} из {level} · поручительств: {vouched}",
+  "{left} of {level} left · {vouched} vouched · {belowZero} below zero · {writtenOff} written off · {passedOn} passed on": "осталось {left} из {level} · поручительств: {vouched} · ниже нуля: {belowZero} · списано {writtenOff} · передано {passedOn}",
   "{name} · Voucher": "{name} · Поручитель",
-  "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · осталось {left} из {budget} · поручительств на {vouched} · ниже нуля на {belowZero} ›",
+  "{name} · {left} of {budget} left · {vouched} vouched · {belowZero} below zero ›": "{name} · осталось {left} из {budget} · поручительств: {vouched} · ниже нуля: {belowZero} ›",
   "{n} voucher|{n} vouchers": {
     "one": "{n} поручитель",
     "few": "{n} поручителя",

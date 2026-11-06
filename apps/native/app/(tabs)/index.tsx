@@ -69,7 +69,10 @@ import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-ac
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
-import { getMarketplaceTransactions, getUnreadByConversation } from '../../utils/db';
+import { fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, judgeHomeChatDmLines } from '../../utils/db';
+import { ChatBody } from '../../components/home/ChatBody';
+import { chatCardFor, chatPickList, chatsOnHome, type ChatChoice } from '../../utils/home-chat';
+import type { HomeChatOpenDeps } from '../../utils/home-chat-open';
 import { composeTargetFor } from '../../utils/compose-options';
 import { askedPushOn, inviteAskNoticeHere, toolHomeCardType, readToolsSettings, shapeFeaturesOf } from '@beanpool/core';
 import { toolOfHomeCard } from '../../tools/index';
@@ -218,6 +221,8 @@ export default function HomeScreen() {
     const [starterGuide, setStarterGuide] = useState<{ url: string | null; items: PricingGuideItem[] } | null>(null);
     const starterBusy = useRef(false);
     const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
+    /** A chat card's settings list (DESIGN-home-chosen-chat-fable.md §2): read once as its sheet opens. */
+    const [chatRows, setChatRows] = useState<{ rows: ChatChoice[] | null; failed: boolean }>({ rows: null, failed: false });
     /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
     const [notOnAccount, setNotOnAccount] = useState(false);
     /** The one-time "Home now starts with fewer cards" line (§2.6). */
@@ -801,6 +806,26 @@ export default function HomeScreen() {
         if (id) keepTips(homeAccount(id.publicKey), restartTips(ans ? tipsFor(ans, roleRef.current) : [], localDay()));
     }, [keepTips]);
 
+    // A chat card's lines open on this phone through db.ts's own doors, never fetched (utils/home-chat-open.ts).
+    // Looked up when a chat card opens its lines, not as Home draws.
+    const chatOpenDeps = useMemo<HomeChatOpenDeps>(() => ({ judgeDm: (id, lines) => judgeHomeChatDmLines(id, lines), keyring: id => groupKeyringFor(id) }), []);
+    // The chat card's settings list: the member's group-like chats (one signed read) and the phone's own DMs, once per opening.
+    useEffect(() => {
+        if (settingsFor?.type !== 'chat') return;
+        let live = true;
+        setChatRows({ rows: null, failed: false });
+        const me = identityRef.current?.publicKey;
+        void (async () => {
+            const [groups, dms] = await Promise.all([
+                fetchYourGroups().then(r => r.items).catch(() => null),
+                me ? getConversations(me).catch(() => null) : Promise.resolve([]),
+            ]);
+            // getConversations' own rows, unchanged (home-chat.ts PhoneChatRow); a read that failed: "Couldn't load your chats."
+            if (live) setChatRows(chatPickList(groups, dms));
+        })();
+        return () => { live = false; };
+    }, [settingsFor]);
+
     // ── Adding, removing, and a card's settings (CARD-FRAME §1.3) ──
     // The search the Market sent that this screen has taken (or null), so a param that outlives its read opens nothing twice.
     const savedFromMarket = useRef<string | null>(null);
@@ -1294,6 +1319,19 @@ export default function HomeScreen() {
                     onMore={q => router.navigate({ pathname: '/(tabs)/market', params: { q } })}
                 />,
             );
+            // A chat the member picked (DESIGN-home-chosen-chat-fable.md §2): its lines opened here, in memory only.
+            case 'chat': return frame(
+                <ChatBody
+                    inst={inst}
+                    card={chatCardFor(answer, inst)}
+                    me={identity?.publicKey}
+                    colors={colors}
+                    deps={chatOpenDeps}
+                    now={now}
+                    onPick={() => openSettings(inst)}
+                    onRemove={() => onRemoveCard(inst)}
+                />,
+            );
             case 'sky': {
                 // Worked out on the phone from what it already has: no request of its own (CARD-FRAME §2.4, way 3).
                 const sky = skyOf(answer, inst, place, now);
@@ -1576,6 +1614,7 @@ export default function HomeScreen() {
                     mode={settingsFor?.mode ?? 'add'}
                     // A distance needs a point the node measures from: the member's area, or the phone's place (global only).
                     hasPoint={!!place || !!answer?.me?.area}
+                    chats={settingsFor?.type === 'chat' ? { ...chatRows, onHome: chatsOnHome(listOf(layout), settingsFor.mode === 'save' ? settingsFor.id : undefined) } : undefined}
                     colors={colors}
                     onDone={onSettingsDone}
                     onClose={() => setSettingsFor(null)}

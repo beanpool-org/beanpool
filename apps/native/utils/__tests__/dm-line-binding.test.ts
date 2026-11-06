@@ -119,6 +119,7 @@ import { GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { dmPeerPinsStoreKey, dmLinesAtUpdateStoreKey, dmConversationsSeenStoreKey } from '../storage-keys';
 import { encryptDmFormat2 } from '../e2e-crypto';
+import { chatChoices, chatPickList } from '../home-chat';
 import * as phoneCrypto from '../e2e-crypto';
 // The web app's own modules, as its MessagesPage uses them: what it seals, and how it reads a thread.
 import * as webCrypto from '../../../pwa/src/lib/e2e-crypto';
@@ -348,6 +349,23 @@ describe('a line as it was sent', () => {
         ]);
         // and in the conversation list's preview
         expect((await getConversations(ana.publicKey)).find((c: any) => c.id === dm.id)?.lastMessage).toBe('No');
+    });
+});
+
+// Home's "A chat" card lists the phone's DMs from getConversations' own rows (#2943 review, finding 1: the list read
+// fields getConversations doesn't build, so it listed no DM at all on a real phone).
+describe('Home\'s chat list reads the conversation list as getConversations builds it', () => {
+    it('a DM is listed as the person Talk names, kind dm, at its ISO time', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        sql.prepare('INSERT OR REPLACE INTO members (public_key, callsign) VALUES (?, ?)').run(ben.publicKey, 'Ben Okafor');
+        const phone = await getConversations(ana.publicKey);
+        const row = phone.find(c => c.id === dm.id)!;
+        expect(row.peer).toBe('Ben Okafor');
+        const rows = chatChoices([], phone);
+        expect(rows).toEqual([{ conversationId: dm.id, kind: 'dm', name: 'Ben Okafor', emoji: '👤', at: row.rawTimestamp }]);
+        expect(Number.isNaN(Date.parse(rows[0].at!))).toBe(false);
+        expect(chatPickList([], phone)).toEqual({ rows, failed: false });
     });
 });
 

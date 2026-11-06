@@ -1150,10 +1150,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 )}
 
                                 {/* Modern Map Pins */}
-                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
                                         <span className="text-xl">🗺️</span>
-                                        <div>
+                                        <div className="min-w-0">
                                             <div className="text-[15px] font-bold text-nature-900 dark:text-white">{t('Modern Map Pins')}</div>
                                             <div className="text-xs text-nature-500 dark:text-nature-400">{t('Toggle custom pin markers')}</div>
                                         </div>
@@ -1167,10 +1167,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 </div>
 
                                 {/* Holiday Mode */}
-                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
+                                <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
                                         <span className="text-xl">🌴</span>
-                                        <div>
+                                        <div className="min-w-0">
                                             <div className="text-[15px] font-bold text-nature-900 dark:text-white">{t('Holiday Mode')}</div>
                                             <div className="text-xs text-nature-500 dark:text-nature-400">
                                                 {holidayMode ? t('Away — offers hidden') : t('Hide offers & pause requests')}
@@ -1725,8 +1725,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             <div className="py-8 text-center text-sm text-nature-400 animate-pulse">{t('Loading preferences...')}</div>
                         ) : (
                             <div className="space-y-4 mb-6">
-                                <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
-                                    <div>
+                                <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                    <div className="min-w-0">
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Chat Messages')}</div>
                                         <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone when someone messages you')}</div>
                                     </div>
@@ -1737,8 +1737,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     />
                                 </div>
 
-                                <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
-                                    <div>
+                                <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                    <div className="min-w-0">
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Marketplace Activity')}</div>
                                         <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone for new offers & needs in your area')}</div>
                                     </div>
@@ -1763,8 +1763,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     </div>
                                 )}
 
-                                <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
-                                    <div>
+                                <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                    <div className="min-w-0">
                                         <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Held in Trust & Deals')}</div>
                                         <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone for trade updates & credit transfers')}</div>
                                     </div>
@@ -1777,8 +1777,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 {/* Only where it changes something: owners and admins are always told, and a Known community never tells its members. */}
                                 {knockSwitchShown(communityInfo?.features as { door?: unknown; knocks?: unknown } | undefined, nodeRole) && (
-                                    <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
-                                        <div>
+                                    <div className="flex justify-between items-center gap-3 p-4 rounded-xl border border-nature-200 dark:border-nature-800">
+                                        <div className="min-w-0">
                                             <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Requests to join')}</div>
                                             <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts when someone asks to join your community')}</div>
                                         </div>

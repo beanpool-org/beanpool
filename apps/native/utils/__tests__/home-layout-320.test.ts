@@ -32,6 +32,8 @@ import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEA
 import { ARRANGE_WORDS, HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest, PRICING_CATEGORIES, STARTER_OFFERS, starterSheet, t } from '@beanpool/core';
 import { starter } from '../../components/home/StarterOffersSheet';
 import { FAB_BAND_DP } from '../fab-band';
+import { chatCardStyles } from '../../components/home/chat-parts';
+import { CHAT_CARD_WORDS } from '../home-chat';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
 const CARD_NAMES = HOME_CARD_TYPES.flatMap(t => (t.globalName ? [t.name, t.globalName] : [t.name]));
@@ -610,5 +612,40 @@ describe('the starter sheet at 320dp × 1.3 (cold start O2: What could you offer
         expect(source).not.toMatch(/TextInput|KeyboardProvider/);
         expect(source).toMatch(/<ScrollView contentContainerStyle=\{sheetStyles\.list\}>/);
         expect(source).toMatch(/lines=\{3\}/);
+    });
+});
+
+describe('"A chat" at 320dp × 1.3 (DESIGN-home-chosen-chat-fable.md §2, slice C2)', () => {
+    const c = chatCardStyles as unknown as Record<string, Record<string, unknown>>;
+    const sheetInner = SCREEN - 2 * num((sheetStyles as unknown as Record<string, Record<string, unknown>>).list.paddingHorizontal);
+
+    it('the name wraps to its lines and the new count wraps under it, never squeezed: each fits the card whole', () => {
+        expect(c.head.flexWrap).toBe('wrap');
+        expect(c.name.flexShrink).toBe(1);
+        expect(c.name.maxWidth).toBe('100%');
+        expect(c.pill.flexShrink).toBe(0);
+        // A long name's longest word, and the widest count a chat shows ("999 new"), each fit the card's inside.
+        expect(longestWord('Ana Castellanos-Whitfield 🔕', num(c.name.fontSize))).toBeLessThanOrEqual(CARD_INNER);
+        expect(textWidth('999 new', num(c.pillText.fontSize)) + 2 * num(c.pill.paddingHorizontal)).toBeLessThanOrEqual(CARD_INNER);
+    });
+
+    it('every line the card can say keeps its longest word in the card; the body is a 48dp target', () => {
+        for (const line of [...Object.values(CHAT_CARD_WORDS), SEARCH_OFFLINE_LINE, "🔒 This message couldn't be verified, so it isn't shown."]) {
+            expect(longestWord(t(line as never), num(c.line.fontSize)), line).toBeLessThanOrEqual(CARD_INNER);
+        }
+        expect(num(c.body.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        // Pick a chat and Remove are Home's own buttons (the row that wraps, above).
+        const pad = 2 * num(s.button.paddingHorizontal) + 2 * num(s.button.borderWidth);
+        for (const label of [CHAT_CARD_WORDS.pick, 'Remove']) expect(textWidth(t(label as never), num(s.buttonText.fontSize)) + pad, label).toBeLessThanOrEqual(CARD_INNER);
+    });
+
+    it('a settings row is a 48dp target; its name wraps and "On Home" or the time wraps under it, each fitting the sheet', () => {
+        expect(num(c.pickRow.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(c.pickRow.flexWrap).toBe('wrap');
+        expect(c.pickName.flexShrink).toBe(1);
+        expect(c.pickWhen.flexShrink).toBe(0);
+        const room = sheetInner - 2 * num(c.pickRow.paddingHorizontal) - 2 * num(c.pickRow.borderWidth);
+        expect(longestWord('📅 Neighbourhood working-bee', num(c.pickName.fontSize))).toBeLessThanOrEqual(room);
+        for (const right of ['On Home', '15 Oct', '59m ago']) expect(textWidth(right, num(c.pickWhen.fontSize)), right).toBeLessThanOrEqual(room);
     });
 });

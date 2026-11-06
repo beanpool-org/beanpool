@@ -28,7 +28,7 @@ import {
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine,
-    copyFromLine, eventCopyOf, type ShownFromLine, reorderIds,
+    copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -61,7 +61,7 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
     'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'asked', 'search', 'decide', 'groups',
-    'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
+    'chat', 'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'tools', 'community',
     ...toolHomeCardIds(),
 ]);
 /** A tool's card this build draws: worked out on the phone from the tool's document, so the node sends nothing for it. */
@@ -93,6 +93,8 @@ export const CARD_WORDS_MAX = 24;
  * type's name. Never the caption: a caption is fixed words, never a member's.
  */
 export function cardLabelName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
+    const chat = chatName(c);
+    if (chat) return t('"{words}"', { words: chat });
     const words = searchWords(c);
     if (!words) return cardName(c.type, profile);
     const kind = searchKindWord(c);
@@ -106,6 +108,18 @@ function searchWords(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | n
     return q ? (q.length > CARD_WORDS_MAX ? `${q.slice(0, CARD_WORDS_MAX).trimEnd()}…` : q) : null;
 }
 
+/**
+ * A chat card's chat, by the name kept when it was picked (DESIGN-home-chosen-chat-fable.md §2), bounded as a search's
+ * words are: so the "…", Arrange and the screen reader tell three chat cards apart. Never its caption (fixed words). Null
+ * for any other card, or one with no chat picked (named "A chat").
+ */
+function chatName(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | null {
+    if (c.type !== 'chat') return null;
+    const s = readChatSettings(c.settings);
+    const name = homeChatPicked(s) ? s.name.trim().replace(/\s+/g, ' ') : '';
+    return name ? (name.length > CARD_WORDS_MAX ? `${name.slice(0, CARD_WORDS_MAX).trimEnd()}…` : name) : null;
+}
+
 /** A saved search's kind as its names say it: "Offers" or "Needs" (the sheet's chips), nothing for Both. */
 function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string | null {
     const kind = readSearchSettings(c.settings).kind;
@@ -117,6 +131,8 @@ function searchKindWord(c: Pick<HomeCardInstance, 'type' | 'settings'>): string 
  * so two searches are two rows even with the same words; else its name.
  */
 export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, profile?: string): string {
+    const chat = chatName(c);
+    if (chat) return chat;
     const words = searchWords(c);
     if (!words) return cardName(c.type, profile);
     const kind = searchKindWord(c);
@@ -528,7 +544,12 @@ export function changeCardSettings(layout: HomeLayout | null, id: string, settin
     const reader = i < 0 ? undefined : homeCardType(list[i].type)?.readSettings;
     if (!reader) return null;
     const cards = [...list];
-    cards[i] = { ...cards[i], settings: reader(settings) };
+    const next = reader(settings);
+    // A chat card picked again for another chat takes a new id in the same place (DESIGN-home-chosen-chat-fable.md §2): the
+    // node's body is keyed by the id, so the kept answer's lines of the chat it held are never drawn under the new one.
+    const repicked = list[i].type === 'chat' && readChatSettings(list[i].settings).conversationId !== (next as { conversationId?: unknown }).conversationId;
+    const newId = repicked ? newInstanceId('chat', new Set(list.map(c => c.id))) : list[i].id;
+    cards[i] = { ...cards[i], id: newId, settings: next };
     return { ...(layout ?? defaultHomeLayout()), cards, updatedAt: at(now) };
 }
 
@@ -1063,6 +1084,9 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             // Drawn with no body too (SEARCH_OFFLINE_LINE), so a member on 2G knows the add took; a search that finds
             // nothing says so (searchEmptyLine).
             case 'search': return true;
+            // A member's chat (DESIGN-home-chosen-chat-fable.md §2): drawn with no body too ("Pick a chat", the name before
+            // the node answers, "You're no longer in this chat." with Remove): the frame never drops it by itself.
+            case 'chat': return !!answer.me;
             // Worked out on the phone; drawn only where a place is known (CARD-FRAME §4).
             case 'sky': return skyOf(answer, { settings }, ctx.place) !== null;
             case 'community': return true;

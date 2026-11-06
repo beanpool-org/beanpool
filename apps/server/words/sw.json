@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-f: the missing app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-06",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -1014,5 +1014,8 @@
   "@{name}’s credit line is frozen, so their budget can’t be raised until an admin unfreezes it. You can still lower it.": "Kikomo cha mkopo cha @{name} kimegandishwa, kwa hivyo bajeti yake haiwezi kuongezwa hadi msimamizi aondoe kizuizi. Bado unaweza kuipunguza.",
   "You’re a voucher now: you have a budget of {level} Beans to vouch for people, up to {max} each.": "Sasa wewe ni mdhamini: una bajeti ya maharagwe {level} ya kuwadhamini watu, hadi {max} kwa kila mmoja.",
   "Your budget to vouch from was raised to {level} Beans. You have {left} of it left to vouch with.": "Bajeti yako ya kudhamini iliongezeka hadi maharagwe {level}. Umebakiwa na {left} yake ya kudhamini.",
-  "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Bajeti yako ya kudhamini ilipunguzwa hadi maharagwe {level}. Umebakiwa na {left} yake ya kudhamini."
+  "Your budget to vouch from was lowered to {level} Beans. You have {left} of it left to vouch with.": "Bajeti yako ya kudhamini ilipunguzwa hadi maharagwe {level}. Umebakiwa na {left} yake ya kudhamini.",
+  "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "Sehemu ya kikomo cha mkopo ulichopewa na mtu ilianza kama dhamana ya @{name} na haiwezi kwenda kwake, kwa hivyo unaweza kumpa maharagwe {most} kwa kiwango cha juu.",
+  "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "Kikomo cha mkopo ulichopewa na mtu kilianza kama dhamana ya @{name}, kwa hivyo hakuna sehemu yake inayoweza kwenda kwake.",
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "Wamiliki wa jumuiya yako wamebadilisha jinsi inavyofanya kazi: bajeti ya kila mdhamini sasa ni maharagwe {budget}."
 }

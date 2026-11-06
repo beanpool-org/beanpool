@@ -35,6 +35,11 @@ const maps = vi.hoisted(() => ({
     fits: [] as Array<Array<{ latitude: number; longitude: number }>>,
     /** The regions a tap asked the map to move to. */
     moves: [] as Array<Record<string, number>>,
+    /**
+     * The map's own first nudge, kept out of `moves` (see animateToRegion below): map.tsx's loadPosts asks for a region a
+     * millionth of a degree off the first, in 1 ms, 500 ms after the first posts (the library's first clustering).
+     */
+    nudges: [] as Array<Record<string, number>>,
     regionChanged: (_region: Record<string, number>) => {},
     /** The map moving under a finger, before it stops. */
     moving: () => {},
@@ -87,7 +92,14 @@ vi.mock('react-native-view-shot', () => ({
 // are JSX in plain .js, which vitest does not transform under node_modules, so they are transpiled here.
 vi.mock('../../components/Map', async () => {
     const NativeMap = forwardRef((props: Record<string, any>, ref) => {
-        useImperativeHandle(ref, () => ({ animateToRegion(region: Record<string, number>) { maps.moves.push(region); }, fitToCoordinates(coords: typeof maps.fits[number]) { maps.fits.push(coords); } }));
+        useImperativeHandle(ref, () => ({
+            // The nudge comes on the map's own clock, 500 ms after the posts, not on a tap's. A test's waits can run past those
+            // 500 ms on a loaded machine (the nightly's), and the nudge then landed in the middle of a test that counts the
+            // moves a tap made, or that lands on `moves[0]`. A move asked for in 1 ms is the nudge's alone: every tap's is 250 to
+            // 500 ms, so each of those is still in `moves`. The test about the nudge pins both halves of that.
+            animateToRegion(region: Record<string, number>, ms?: number) { (ms === 1 ? maps.nudges : maps.moves).push(region); },
+            fitToCoordinates(coords: typeof maps.fits[number]) { maps.fits.push(coords); },
+        }));
         maps.regionChanged = props.onRegionChangeComplete;
         maps.moving = props.onRegionChange;
         maps.bareTap = props.onPress;
@@ -220,6 +232,7 @@ beforeEach(() => {
     maps.markers = [];
     maps.fits = [];
     maps.moves = [];
+    maps.nudges = [];
     pushes.to = [];
     focus.effects = [];
     focus.anchor = null;
@@ -463,6 +476,24 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
         expect(rows()).toHaveLength(3);
         expect(maps.moves).toEqual([]);
         expect(maps.fits).toEqual([]);
+    });
+
+    it('the map nudges itself once after its first posts, in 1 ms, and a tap never asks for that: what a tap moves stays in moves', async () => {
+        // The stand-in keeps the nudge out of `moves`, so the tests that count a tap's moves do not depend on how long they wait.
+        // This is the proof that nothing else is kept out with it.
+        posts.now = [ev('south', AT.lat, AT.lng), ev('north', metresNorth(400), AT.lng)];
+        await drawMap();
+        // Waited for on the map's own record, not by a sleep: it comes 500 ms after the first posts (map.tsx's loadPosts).
+        await vi.waitFor(() => expect(maps.nudges).toHaveLength(1), { timeout: 5_000, interval: 20 });
+        // A hair off the map's first region (0.0922 by 0.0421), where it already is.
+        expect(maps.nudges[0].latitudeDelta - 0.0922).toBeGreaterThan(0);
+        expect(maps.nudges[0].latitudeDelta - 0.0922).toBeLessThan(0.00001);
+        expect(maps.nudges[0].longitudeDelta - 0.0421).toBeGreaterThan(0);
+        expect(maps.nudges[0].longitudeDelta - 0.0421).toBeLessThan(0.00001);
+        expect(maps.moves).toEqual([]);
+        await openBubble();
+        expect(maps.moves).toHaveLength(1);
+        expect(maps.nudges).toHaveLength(1);
     });
 
     it('zooms a spread bubble, stops at the cap, and the bubble has parted when it lands', async () => {
@@ -820,8 +851,6 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
         const hall = () => [eventIn('a', 2), eventIn('b', 3), eventIn('c', 4)];
         const wait = async () => { await act(async () => { await new Promise((r) => setTimeout(r, STACK_REST_MS + 30)); }); await settle(2); };
         const stopAcross = async (region: MapRegion = ACROSS) => { await land(region as unknown as Record<string, number>); await wait(); };
-        /** The map nudges itself once after its first posts, from the first region (map.tsx's loadPosts). */
-        const pastFirstNudge = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 520)); }); maps.moves = []; };
         const expectAGoodRegion = (region: Record<string, number>) => {
             for (const value of Object.values(region)) expect(Number.isFinite(value)).toBe(true);
             expect(region.latitudeDelta).toBeGreaterThan(0);
@@ -865,7 +894,6 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             os.now = 'android';
             posts.now = [ev('south', AT.lat, AT.lng), ev('north', metresNorth(900), AT.lng)];
             await drawMap();
-            await pastFirstNudge();
             await stopAcross();
             expect(bubbles().map((b) => b.count)).toEqual([2]);
             await openBubble();
@@ -891,7 +919,6 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             os.now = 'android';
             posts.now = hall();
             await drawMap();
-            await pastFirstNudge();
             await stopAcross({ ...ACROSS, latitude: AT.lat + 20 });
             await openBubble();
             expect(heading()).toBe('3 at this spot');
@@ -935,8 +962,6 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
         const hall = () => [eventIn('a', 2), eventIn('b', 3), eventIn('c', 4)];
         const panned = (share: number) => ({ ...CAP, latitude: AT.lat + CAP.latitudeDelta * share });
         const zoomedOut = { ...CAP, latitudeDelta: CAP.latitudeDelta * 2, longitudeDelta: CAP.longitudeDelta * 2 };
-        /** The map nudges itself once after its first posts, the library's first clustering (map.tsx's loadPosts). */
-        const pastFirstNudge = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 520)); }); maps.moves = []; };
 
         it('the region these tests stop at is the cap, and one zoom out is above it', () => {
             expect(clusterZoomAt(CAP, window320)).toBe(CLUSTER_CAP_ZOOM);
@@ -947,7 +972,6 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
             os.now = platform;
             posts.now = hall();
             await drawMap();
-            await pastFirstNudge();
             await stopAt(CAP);
             expect(heading()).toBe('3 at this spot');
             expect(rows()).toHaveLength(3);
@@ -1029,7 +1053,6 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
                 const far = away();
                 posts.now = [...hall(), far];
                 await drawMap();
-                await pastFirstNudge();
                 await stopAt({ ...CAP, latitude: far.lat });
                 await tapPin(far);
                 expect(cardOpen()).toBe(true);
@@ -1044,7 +1067,6 @@ describe('a tap on a bubble (utils/map-stack.ts, core map-stack.ts)', () => {
                 const pin = beside();
                 posts.now = [...hall(), pin];
                 await drawMap();
-                await pastFirstNudge();
                 await stopAt(CAP);
                 expect(heading()).toBe('3 at this spot');
                 await tapPin(pin);

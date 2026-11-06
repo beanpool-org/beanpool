@@ -1254,3 +1254,18 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** CLAIM FALSE (no measured gain), RECURRING (the #1364 shape)
 - **Claim:** `getMember()` per row makes `readHealthAccessLog` an N+1.
 - **Why not to re-file:** the read is capped at its limit, default 100, on an owner-only screen, and each `getMember()` is one indexed read. The PR gave no timing and added a second hand-kept read of `members` beside the engine's. Bolt: file a batched read only with a timing that shows a gain someone would notice.
+
+### 2026-11-06 — Watchman: fix test-vouchers failure (#2921) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** `test-vouchers` fails; switch it to `localFetch`.
+- **Why not to re-file:** `test-vouchers` passes 185/185 on main (f1525b93) with test-all's env, and already uses `localFetch` from `keepalive-test-fetch.ts`. Run it with `scripts/server-suites.mjs` DEFAULT_ENV and paste the failing output before filing.
+
+### 2026-11-06 — Atlas: community-shape helper and API unit tests (#2916) — CLOSED, RE-FILE OF #2492
+- **Category:** FIX LANDED
+- **Claim:** `apps/manager` has no tests for the community-shape helper.
+- **Why not to re-file:** `apps/manager/src/lib/community-shape.test.ts` is on main since #2476 (743f6ce3), now 306 lines; #2492 was closed for the same reason.
+
+### 2026-11-06 — Expo: remove deprecated shouldShowAlert in the push handler (#2888) — CLOSED, DUPLICATE OF #2918
+- **Category:** FIX LANDED
+- **Claim:** `shouldShowAlert` is deprecated in expo-notifications.
+- **Why not to re-file:** the same change landed through #2918 (byte-identical diff, newer base). One PR per finding.

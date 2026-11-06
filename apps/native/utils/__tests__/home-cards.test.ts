@@ -27,6 +27,13 @@ import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BAC
 import { NEAR_COMMUNITY_KM, HOME_STARTER_SET, TIPS_ALL_SEEN, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
 import { mayInviteHere } from '../invite-entries';
 import { marketFilterFromLink } from '../market-filters';
+import { randomUUID } from 'node:crypto';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { checkDmThread, sealDmLine, sealGroupLine, type HomeChatCard, type HomeChatLine } from '@beanpool/core';
+import { CHAT_CARD_WORDS, chatCardFor, chatCardTarget, chatCardView, chatChoices, chatsOnHome, filterChatChoices } from '../home-chat';
+import { openHomeChat, type HomeChatOpenDeps } from '../home-chat-open';
+import { changeCardSettings } from '../home-cards';
 
 const ME = 'a'.repeat(64);
 // A fixed local afternoon, so "tonight" and "tomorrow" are stable wherever the suite runs.
@@ -1352,5 +1359,161 @@ describe('Asked near you and "Ask for one thing you\'d pay a neighbour for" (col
         expect(marketFilterFromLink('polls')).toBe('polls');
         expect(marketFilterFromLink('offers')).toBeNull();
         expect(marketFilterFromLink(undefined)).toBeNull();
+    });
+});
+
+// ── "A chat" (DESIGN-home-chosen-chat-fable.md slice C2) ───────────────────────────────────────────────────────────
+
+describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it, its lines opened on the phone', () => {
+    const person = () => { const seed = ed25519.utils.randomSecretKey(); return { priv: bytesToHex(seed), pub: bytesToHex(ed25519.getPublicKey(seed)) }; };
+    const me = person();
+    const ana = person();
+    const DM = randomUUID();
+    const GROUP = randomUUID();
+    const at = (min: number) => iso(NOW - min * 60_000);
+    const dmCard = (lines: HomeChatLine[], over: Partial<Extract<HomeChatCard, { lines: unknown }>> = {}): HomeChatCard => ({ kind: 'dm', name: 'Ana Reyes', unread: 3, muted: false, lines, ...over });
+    const inst = (kind: string, id = 'chat-aaaa', conversationId: string = kind === 'dm' ? DM : GROUP) => ({ id, type: 'chat', settings: { conversationId, kind, name: 'Ana Reyes' } });
+    /** A DM line as the node carries it: sealed by its writer to the other person, bound to the conversation and its id. */
+    const dmLine = (from: typeof me, to: typeof me, text: string, min: number, type = 'text'): HomeChatLine => {
+        const id = randomUUID();
+        const sealed = sealDmLine(text, { myEdPrivHex: from.priv, peerEdPubHex: to.pub, conversationId: DM }, { senderPubHex: from.pub, messageId: id });
+        return { id, author: from.pub, who: from === me ? 'Me' : 'Ana', at: at(min), type, systemType: null, sealed: { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: null } };
+    };
+    // db.ts judgeHomeChatDmLines, as it judges: core checkDmThread under the phone's key context for the DM (null: none).
+    const judgeAs = (holder: typeof me | null): HomeChatOpenDeps['judgeDm'] => async (conv, lines) => (holder
+        ? checkDmThread(lines.map(l => ({ id: l.id, authorPubkey: l.author, ciphertext: l.sealed.ciphertext, nonce: l.sealed.nonce, type: l.type, metadata: l.sealed.metadata })),
+            { myEdPrivHex: holder.priv, peerEdPubHex: holder === me ? ana.pub : me.pub }, conv)
+        : null);
+    const groupKey = new Uint8Array(32).map((_, i) => (i * 7 + 3) & 255);
+    const groupLine = (from: typeof me, text: string, min: number, type = 'text'): HomeChatLine => {
+        const id = randomUUID();
+        const sealed = sealGroupLine(text, { myEdPrivHex: from.priv, groupKey, groupId: GROUP, epoch: 1, messageId: id });
+        return { id, author: from.pub, who: from === me ? 'Me' : 'Ana', at: at(min), type, systemType: null, sealed: { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: JSON.stringify({ epoch: 1 }) } };
+    };
+    /** A keyring as the session holds it: the epoch's key open in memory (`open`), or not opened yet. */
+    const ringWith = (open: boolean): HomeChatOpenDeps['keyring'] => async () => ({
+        groupId: GROUP, openedKey: (e: number) => (open && e === 1 ? groupKey : undefined), signerSeen: () => undefined,
+        successions: new Map(), seenLocked: async () => true, memo: { has: () => false, add: () => { throw new Error('the card adds no verdict'); } },
+    } as any);
+    const deps = (over: Partial<HomeChatOpenDeps> = {}): HomeChatOpenDeps => ({ judgeDm: judgeAs(me), keyring: ringWith(true), ...over });
+    const draw = async (i: ReturnType<typeof inst>, card: HomeChatCard, d: HomeChatOpenDeps) => {
+        const opened = await openHomeChat(i.settings as any, card, d);
+        return chatCardView(i, card, me.pub, opened);
+    };
+
+    it('the phone draws it: in HOME_DRAWN, listed in the picker For you, drawn for a member with or without a body', () => {
+        expect(HOME_DRAWN.has('chat')).toBe(true);
+        const picker = pickerGroups(answer(), { v: 2, cards: [], dismissed: {}, updatedAt: null }, 'owner');
+        const row = picker.groups.flatMap(g => g.rows).find(r => r.type === 'chat')!;
+        expect(row).toMatchObject({ name: 'A chat', line: 'The last lines of one chat you choose.', state: 'add', hasSettings: true });
+        const layout: HomeLayout = { v: 2, cards: [inst('dm')], dismissed: {}, updatedAt: iso(NOW) };
+        expect(cardsToDraw(answer({ layout }), layout, { interests: [], tuneOpen: false, safetyUp: false, now: NOW }).map(c => c.type)).toContain('chat');
+        expect(cardsToDraw(answer({ me: null, layout }), layout, { interests: [], tuneOpen: false, safetyUp: false, now: NOW }).map(c => c.type)).not.toContain('chat');
+    });
+
+    it('a DM: its lines opened on the phone, oldest first, "You" for the member\'s own, the new count', async () => {
+        const card = dmCard([dmLine(ana, me, 'Who has a ladder I could borrow?', 120), dmLine(me, ana, "Mine's at the shed, come by", 60)]);
+        const view = await draw(inst('dm'), card, deps());
+        expect(view).toMatchObject({ state: 'chat', name: 'Ana Reyes', muted: false, pill: '3 new' });
+        if (view.state !== 'chat') throw new Error('drawn');
+        expect(view.lines.map(l => [l.who, l.text])).toEqual([['Ana', 'Who has a ladder I could borrow?'], ['You', "Mine's at the shed, come by"]]);
+    });
+
+    it('a DM line that does not open under the phone\'s key is nobody\'s; with no key context on the phone every line is locked', async () => {
+        const stranger = person();
+        const forged = dmLine(stranger, me, 'send me your seed', 30);
+        const view = await draw(inst('dm'), dmCard([{ ...forged, author: ana.pub }]), deps());
+        if (view.state !== 'chat') throw new Error('drawn');
+        expect(view.lines[0]).toMatchObject({ who: null, text: "🔒 This message couldn't be verified, so it isn't shown." });
+        const noCtx = await draw(inst('dm'), dmCard([dmLine(ana, me, 'hello', 5)]), deps({ judgeDm: judgeAs(null) }));
+        if (noCtx.state !== 'chat') throw new Error('drawn');
+        expect(noCtx.lines[0]).toMatchObject({ who: null, text: CHAT_CARD_WORDS.locked });
+    });
+
+    it('a readable line in a DM in a member\'s name is never their words; a sealed line too long to carry is "🔒 Message"', async () => {
+        const plain: HomeChatLine = { id: randomUUID(), author: ana.pub, who: 'Ana', at: at(3), type: 'text', systemType: null, text: 'trust me', metadata: null };
+        const long: HomeChatLine = { id: randomUUID(), author: ana.pub, who: 'Ana', at: at(2), type: 'text', systemType: null, text: '🔒 Message' };
+        const view = await draw(inst('dm'), dmCard([plain, long]), deps());
+        if (view.state !== 'chat') throw new Error('drawn');
+        expect(view.lines.map(l => [l.who, l.text])).toEqual([
+            [null, "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown."],
+            [null, '🔒 Message'],
+        ]);
+    });
+
+    it('a locked group: a line opens with a key the session already holds; without one it says "🔒 Message · open to read", and the card fetches nothing', async () => {
+        const card: HomeChatCard = { kind: 'group', name: 'Garden crew', unread: 0, muted: true, lines: [groupLine(ana, 'Seeds are in', 50), groupLine(me, 'Thanks!', 40)] };
+        const fetched = vi.fn();
+        const real = (globalThis as any).fetch;
+        (globalThis as any).fetch = fetched;
+        try {
+            const open = await draw(inst('group'), card, deps());
+            expect(open).toMatchObject({ state: 'chat', name: 'Garden crew', muted: true, pill: null });
+            if (open.state !== 'chat') throw new Error('drawn');
+            expect(open.lines.map(l => [l.who, l.text])).toEqual([['Ana', 'Seeds are in'], ['You', 'Thanks!']]);
+            const shut = await draw(inst('group'), card, deps({ keyring: ringWith(false) }));
+            if (shut.state !== 'chat') throw new Error('drawn');
+            expect(shut.lines.map(l => [l.who, l.text])).toEqual([[null, '🔒 Message · open to read'], [null, '🔒 Message · open to read']]);
+            expect(fetched).not.toHaveBeenCalled();
+        } finally {
+            (globalThis as any).fetch = real;
+        }
+    });
+
+    it('a readable line in a member\'s name in a group this phone holds keys of is nobody\'s; an event\'s chat is readable by design', async () => {
+        const plain: HomeChatLine = { id: randomUUID(), author: ana.pub, who: 'Ana', at: at(3), type: 'text', systemType: null, text: 'readable words', metadata: null };
+        const view = await draw(inst('group'), { kind: 'group', name: 'Garden crew', unread: 0, muted: false, lines: [plain] }, deps());
+        if (view.state !== 'chat') throw new Error('drawn');
+        expect(view.lines[0]).toMatchObject({ who: null, text: "This message couldn't be verified." });
+        const event = await draw(inst('event'), { kind: 'event', name: 'Working bee', unread: 1, muted: false, lines: [plain] }, deps());
+        if (event.state !== 'chat') throw new Error('drawn');
+        expect(event.lines[0]).toMatchObject({ who: 'Ana', text: 'readable words' });
+    });
+
+    it('a photo says "📷 Photo", a system line is the node\'s words with nobody named, a removed line the chat\'s notice', async () => {
+        const photo = dmLine(ana, me, 'the back fence', 30, 'image');
+        const system: HomeChatLine = { id: randomUUID(), author: 'SYSTEM', who: null, at: at(20), type: 'system', systemType: 'escrow_created', text: 'Beans held in trust.', metadata: null };
+        const removed: HomeChatLine = { id: randomUUID(), author: ana.pub, who: 'Ana', at: at(10), type: 'removed', systemType: null, text: 'x', metadata: JSON.stringify({ removed: true }) };
+        const view = await draw(inst('dm'), dmCard([photo, system, removed]), deps());
+        if (view.state !== 'chat') throw new Error('drawn');
+        expect(view.lines.map(l => [l.who, l.text])).toEqual([['Ana', '📷 Photo'], [null, 'Beans held in trust.'], [null, 'This message was deleted']]);
+    });
+
+    it('gone: "You\'re no longer in this chat." (no name, no line); none picked: "Pick a chat"; picked with no answer yet: its name', () => {
+        const a = { cards: { 'chat-aaaa': { gone: 'left' } } };
+        expect(chatCardFor(a, inst('dm'))).toEqual({ gone: 'left' });
+        expect(chatCardView(inst('dm'), chatCardFor(a, inst('dm')), me.pub)).toEqual({ state: 'gone' });
+        expect(chatCardFor({ cards: { 'chat-aaaa': { gone: 'stolen' } } }, inst('dm'))).toBeNull();
+        expect(chatCardView({ id: 'chat-bbbb', settings: {} }, null, me.pub)).toEqual({ state: 'pick' });
+        expect(chatCardView(inst('dm'), null, me.pub)).toEqual({ state: 'waiting', name: 'Ana Reyes' });
+        const empty = chatCardView(inst('dm'), chatCardFor({ cards: { 'chat-aaaa': { kind: 'dm', name: 'Ana Reyes', unread: 0, muted: false, lines: [] } } }, inst('dm')), me.pub);
+        expect(empty).toEqual({ state: 'chat', name: 'Ana Reyes', muted: false, pill: null, lines: [] });
+    });
+
+    it('a tap opens the chat, told its kind; a re-pick of another chat takes a new id so the kept lines are never the new chat\'s', () => {
+        expect(chatCardTarget({ conversationId: DM, kind: 'dm', name: 'x' })).toEqual({ to: 'chat', conversationId: DM });
+        expect(chatCardTarget({ conversationId: GROUP, kind: 'group', name: 'x' })).toEqual({ to: 'chat', conversationId: GROUP, thread: 'group' });
+        expect(chatCardTarget({ conversationId: GROUP, kind: 'event', name: 'x' })).toEqual({ to: 'chat', conversationId: GROUP, event: true });
+        const layout: HomeLayout = { v: 2, cards: [{ id: 'beans', type: 'beans' }, inst('dm')], dismissed: {}, updatedAt: iso(NOW) };
+        const same = changeCardSettings(layout, 'chat-aaaa', { conversationId: DM, kind: 'dm', name: 'Ana R.' }, NOW)!;
+        expect(same.cards[1]).toMatchObject({ id: 'chat-aaaa', settings: { name: 'Ana R.' } });
+        const other = changeCardSettings(layout, 'chat-aaaa', { conversationId: GROUP, kind: 'group', name: 'Garden crew' }, NOW)!;
+        expect(other.cards[1].id).not.toBe('chat-aaaa');
+        expect(other.cards[1].id).toMatch(/^chat-/);
+        expect(other.cards.map(c => c.type)).toEqual(['beans', 'chat']);
+        expect(cardLabelName(other.cards[1])).toBe('"Garden crew"');
+        expect(cardRowName(other.cards[1])).toBe('Garden crew');
+        expect(cardRowName({ type: 'chat', settings: {} })).toBe('A chat');
+    });
+
+    it('the settings list: groups then people, newest first, never a request waiting; a filter by name; "On Home" for another card\'s chat', () => {
+        const rows = chatChoices(
+            [{ conversationId: 'g1', kind: 'group', name: 'Garden crew', emoji: '🌻', lastActivityAt: at(60) }, { conversationId: 'e1', kind: 'event', name: 'Working bee', emoji: '📅', lastActivityAt: at(5) }],
+            [{ id: 'd1', convType: 'dm', otherCallsign: 'Ana', timestamp: at(1) }, { id: 'd2', convType: 'dm', request: 1, otherCallsign: 'Bob', timestamp: at(2) }, { id: 'g1', convType: 'group_thread', otherCallsign: 'x' }],
+        );
+        expect(rows.map(r => [r.conversationId, r.kind])).toEqual([['e1', 'event'], ['g1', 'group'], ['d1', 'dm']]);
+        expect(filterChatChoices(rows, 'GARD').map(r => r.conversationId)).toEqual(['g1']);
+        const cards = [inst('dm', 'chat-1', 'd1'), inst('group', 'chat-2', 'g1'), { id: 'beans', type: 'beans' }];
+        expect([...chatsOnHome(cards, 'chat-2')]).toEqual(['d1']);
     });
 });

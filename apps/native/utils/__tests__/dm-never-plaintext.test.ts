@@ -88,8 +88,9 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, editMessage, sendImageMessage, _resetDmPeerPinsForTests } from '../db';
-import { openDmLine, isEncryptedNonce } from '../e2e-crypto';
+import { insertMessage, editMessage, sendImageMessage, judgeHomeChatDmLines, _resetDmPeerPinsForTests } from '../db';
+import { openDmLine, isEncryptedNonce, sealDmLine } from '../e2e-crypto';
+import { openHomeChat } from '../home-chat-open';
 import { DmNotLockedError, isDmNotLocked, dmNotLockedLine, restoredDraft, refusedSendNotice } from '../dm-lock';
 import { GroupChatKeyError, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 import { GROUP_CHAT_LOCK_LOST_TEXT } from '../group-chat-lines';
@@ -302,6 +303,58 @@ describe('a chat the node reads stays readable, as designed', () => {
         const [sent] = sentBodies('/api/messages/send');
         expect(sent.nonce).toBe('plaintext-v1');
         expect(Buffer.from(sent.ciphertext, 'base64').toString('utf8')).toBe('see you at the garden');
+    });
+});
+
+describe("Home's chat card (DESIGN-home-chosen-chat-fable.md slice C2): a DM's lines open on the phone and are written nowhere", () => {
+    /** A line the other person sent, sealed to me, as the node carries it on Home (core HomeChatLine `sealed`). */
+    const fromPeer = (text: string) => {
+        const id = randomUUID();
+        const sealed = sealDmLine(text, { myEdPrivHex: bytesToHex(peer.seed), peerEdPubHex: me.publicKey, conversationId: CONV }, { senderPubHex: peer.publicKey, messageId: id });
+        return { id, author: peer.publicKey, who: 'Peer', at: new Date().toISOString(), type: 'text', systemType: null, sealed: { ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: null } };
+    };
+    const asyncWrites = async () => {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default as any;
+        return JSON.stringify(AsyncStorage.setItem.mock.calls);
+    };
+
+    it('through db.ts\'s own key context and thread check: the words open, and nothing is written to the database, to storage or to the node', async () => {
+        dm([me.publicKey, peer.publicKey]);
+        const line = fromPeer('the spare key is under the pot');
+        const before = await asyncWrites();
+        const views = await judgeHomeChatDmLines(CONV, [line]);
+        expect(views?.get(line.id)?.text).toBe('the spare key is under the pot');
+        const opened = await openHomeChat({ conversationId: CONV, kind: 'dm', name: 'Peer' }, { kind: 'dm', name: 'Peer', unread: 1, muted: false, lines: [line] },
+            { judgeDm: judgeHomeChatDmLines, keyring: async () => { throw new Error('a DM opens no group key'); } });
+        expect(opened.lines.get(line.id)).toEqual({ kind: 'words', text: 'the spare key is under the pot', signer: peer.publicKey });
+        expect(store.writes).toHaveLength(0);
+        expect(fetchMock).not.toHaveBeenCalled();
+        // The pins' own first read on a fresh phone may seed their empty store (as the DM screen's read does): never the words.
+        const since = (await asyncWrites()).slice(before.length - 1);
+        expect(since).not.toContain('the spare key is under the pot');
+        expect(since).not.toContain(b64('the spare key is under the pot'));
+        expect(since).not.toContain('plaintext-v1');
+        nothingReadable('the spare key is under the pot');
+    });
+
+    it('a chat this phone holds no row for opens nothing (the card says the line is locked) and still writes and fetches nothing', async () => {
+        const line = fromPeer('see you at 6');
+        expect(await judgeHomeChatDmLines(CONV, [line])).toBeNull();
+        const opened = await openHomeChat({ conversationId: CONV, kind: 'dm', name: 'Peer' }, { kind: 'dm', name: 'Peer', unread: 0, muted: false, lines: [line] },
+            { judgeDm: judgeHomeChatDmLines, keyring: async () => { throw new Error('no'); } });
+        expect(opened.lines.get(line.id)).toEqual({ kind: 'waiting' });
+        expect(store.writes).toHaveLength(0);
+        expect(fetchMock).not.toHaveBeenCalled();
+        nothingReadable('see you at 6');
+    });
+
+    it('a line sealed to someone else, or bound to another chat, is not opened: nobody\'s', async () => {
+        dm([me.publicKey, peer.publicKey]);
+        const other = randomUUID();
+        const sealed = sealDmLine('not for the card', { myEdPrivHex: bytesToHex(peer.seed), peerEdPubHex: me.publicKey, conversationId: 'conv-2' }, { senderPubHex: peer.publicKey, messageId: other });
+        const views = await judgeHomeChatDmLines(CONV, [{ id: other, author: peer.publicKey, type: 'text', sealed: { ...sealed, metadata: null } }]);
+        expect(views?.get(other)).toMatchObject({ text: null, mark: 'not-verified' });
+        expect(store.writes).toHaveLength(0);
     });
 });
 

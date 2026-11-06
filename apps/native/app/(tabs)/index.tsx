@@ -808,7 +808,8 @@ export default function HomeScreen() {
     }, [keepTips]);
 
     // A chat card's lines open on this phone through db.ts's own doors, never fetched (utils/home-chat-open.ts).
-    const chatOpenDeps = useMemo<HomeChatOpenDeps>(() => ({ judgeDm: judgeHomeChatDmLines, keyring: groupKeyringFor }), []);
+    // Looked up when a chat card opens its lines, not as Home draws.
+    const chatOpenDeps = useMemo<HomeChatOpenDeps>(() => ({ judgeDm: (id, lines) => judgeHomeChatDmLines(id, lines), keyring: id => groupKeyringFor(id) }), []);
     // The chat card's settings list: the member's group-like chats (one signed read) and the phone's own DMs, once per opening.
     useEffect(() => {
         if (settingsFor?.type !== 'chat') return;

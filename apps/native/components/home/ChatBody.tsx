@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { t, type HomeChatCard } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
@@ -7,7 +7,11 @@ import { SEARCH_OFFLINE_LINE, sentence, timeAgoInWords, type HomeCardInstance } 
 import { CHAT_CARD_WORDS, chatCardTarget, chatCardView, chatPickOf, type ChatCardLine, type OpenedChat } from '../../utils/home-chat';
 import { homeChatOpenKey, openHomeChat, type HomeChatOpenDeps } from '../../utils/home-chat-open';
 import { needsTargetHref } from '../../utils/needs-you';
-import { HOME_TARGET_DP, HomeButton, homeStyles } from './HomeParts';
+import { HomeButton, homeStyles } from './HomeParts';
+import { chatCardStyles } from './chat-parts';
+
+/** Words this card shares with others, as a table (words:check reads t() of a table's key). */
+const LINES = { offline: SEARCH_OFFLINE_LINE };
 
 /** One line as the card writes it: "Ana, 2h ago: Who has a ladder…", "You, 1h ago: …", or a line that is nobody's alone. */
 export function chatLineText(l: ChatCardLine, now: number = Date.now()): string {
@@ -36,7 +40,7 @@ export function ChatBody({ inst, card, me, colors, deps, onPick, onRemove, now }
     now?: number;
 }) {
     const s = homeStyles(colors);
-    const c = chatCardStyles(colors);
+    const c = chatCardStyles;
     const pick = chatPickOf(inst);
     const [opened, setOpened] = useState<{ key: string; chat: OpenedChat } | null>(null);
     const key = pick ? homeChatOpenKey(pick, card) : null;
@@ -45,7 +49,7 @@ export function ChatBody({ inst, card, me, colors, deps, onPick, onRemove, now }
         if (!pick || !key) return;
         const mine = ++turn.current;
         void openHomeChat(pick, card, deps).then(chat => { if (turn.current === mine) setOpened({ key, chat }); });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // `pick` is read through `key` (its chat id), so a new object with the same chat opens nothing again.
     }, [key, card, deps]);
     useEffect(() => { open(); }, [open]);
     useFocusEffect(open);
@@ -73,7 +77,7 @@ export function ChatBody({ inst, card, me, colors, deps, onPick, onRemove, now }
     }
     const lines = view.state === 'chat' ? view.lines.map(l => chatLineText(l, now)) : [];
     const empty = view.state === 'chat' && lines.length === 0;
-    const sub = view.state === 'waiting' ? t(SEARCH_OFFLINE_LINE) : empty ? t(CHAT_CARD_WORDS.empty) : null;
+    const sub = view.state === 'waiting' ? t(LINES.offline) : empty ? t(CHAT_CARD_WORDS.empty) : null;
     const nameLine = view.state === 'chat' && view.muted ? `${view.name} 🔕` : view.name;
     const pill = view.state === 'chat' ? view.pill : null;
     const said = [nameLine, pill, ...lines, sub].filter((x): x is string => !!x).map(sentence).join(' ');
@@ -99,22 +103,4 @@ export function ChatBody({ inst, card, me, colors, deps, onPick, onRemove, now }
             {sub && <Text style={[c.line, { color: colors.text.secondary }]} testID={`home-chat-note-${inst.id}`}>{sub}</Text>}
         </Pressable>
     );
-}
-
-const cache = new Map<AppColors, ReturnType<typeof make>>();
-/** The card's own layout: the name wraps to two lines and the pill wraps under it at 320dp × 1.3 (design §2). */
-export function chatCardStyles(colors: AppColors) {
-    let s = cache.get(colors);
-    if (!s) { s = make(); cache.set(colors, s); }
-    return s;
-}
-function make() {
-    return StyleSheet.create({
-        body: { minHeight: HOME_TARGET_DP, paddingVertical: 6, borderRadius: 10 },
-        head: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 4, marginBottom: 4 },
-        name: { fontSize: 15, fontWeight: '700', flexShrink: 1, maxWidth: '100%' },
-        pill: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, flexShrink: 0, maxWidth: '100%' },
-        pillText: { fontSize: 12, fontWeight: '700' },
-        line: { fontSize: 14, lineHeight: 20, marginTop: 2 },
-    });
 }

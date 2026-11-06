@@ -11,6 +11,7 @@ import { CHAT_CARD_WORDS, CHAT_PICK_FILTER_AFTER, chatSettingsOf, filterChatChoi
 import { POST_CATEGORIES, categoryLabel } from '../../constants/categories';
 import { HOME_TARGET_DP, homeStyles } from './HomeParts';
 import { sheetStyles } from './sheet-parts';
+import { chatCardStyles } from './chat-parts';
 import { useModalKeyboardLift } from '../useModalKeyboardLift';
 import { useScrollFieldIntoView } from '../useScrollFieldIntoView';
 
@@ -182,14 +183,15 @@ function ChatPickList({ chats, chosen, filter, onFilter, onChoose, colors, input
                 const on = !taken && r.conversationId === chosen;
                 const when = timeAgoInWords(r.at);
                 const right = taken ? t('On Home') : when;
+                const label = [r.emoji, r.name].join(' ');
                 return (
                     <Pressable key={r.conversationId} disabled={taken} onPress={() => onChoose(r.conversationId)}
-                        style={[settingsStyles.chatRow, { borderColor: on ? colors.brand.fill : colors.border.default, backgroundColor: on ? colors.surface.subtle : 'transparent' }]}
+                        style={[chatCardStyles.pickRow, { borderColor: on ? colors.brand.fill : colors.border.default, backgroundColor: on ? colors.surface.subtle : 'transparent' }]}
                         accessibilityRole="radio" accessibilityState={{ selected: on, checked: on, disabled: taken }}
-                        accessibilityLabel={right ? `${r.emoji} ${r.name}, ${right}` : `${r.emoji} ${r.name}`}
+                        accessibilityLabel={right ? [label, right].join(', ') : label}
                         testID={`card-settings-chat-${r.conversationId}`}>
-                        <Text style={[settingsStyles.chatName, { color: taken ? colors.text.secondary : colors.text.body }]} numberOfLines={2}>{`${r.emoji} ${r.name}`}</Text>
-                        {!!right && <Text style={[settingsStyles.chatWhen, { color: colors.text.secondary }]} numberOfLines={1}>{right}</Text>}
+                        <Text style={[chatCardStyles.pickName, { color: taken ? colors.text.secondary : colors.text.body }]} numberOfLines={2}>{label}</Text>
+                        {!!right && <Text style={[chatCardStyles.pickWhen, { color: colors.text.secondary }]} numberOfLines={1}>{right}</Text>}
                     </Pressable>
                 );
             })}
@@ -227,8 +229,4 @@ const settingsStyles = StyleSheet.create({
     input: { minHeight: HOME_TARGET_DP, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, fontSize: 16 },
     button: { marginTop: 16, minHeight: HOME_TARGET_DP, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
     buttonText: { fontSize: 15, fontWeight: '700' },
-    // A chat row (design §2: 48dp rows of name + "2h ago"): the name wraps to two lines, the time wraps under it at 320 × 1.3.
-    chatRow: { minHeight: HOME_TARGET_DP, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 6, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 },
-    chatName: { fontSize: 15, flexShrink: 1, maxWidth: '100%' },
-    chatWhen: { fontSize: 13, flexShrink: 0, marginLeft: 'auto' },
 });

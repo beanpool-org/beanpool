@@ -12,11 +12,18 @@ import { groupLineView, GROUP_LINE_FORMER_MEMBER, type ServedGroupLine } from '.
 import { openLine } from './group-chat-crypto';
 import type { GroupKeyring } from './group-chat-keys';
 
-/** What the opener needs from the phone: db.ts's two doors, passed in so the tests can hand fakes. */
+/** What the opener needs from the phone: db.ts's doors, passed in so the tests can hand fakes. */
 export interface HomeChatOpenDeps {
     judgeDm: (conversationId: string, lines: { id: string; author: string; type: string; sealed: NonNullable<HomeChatLine['sealed']> }[]) =>
         Promise<Map<string, { text: string | null; mark: string | null }> | null>;
     keyring: (groupId: string) => Promise<Pick<GroupKeyring, 'groupId' | 'openedKey' | 'signerSeen' | 'successions' | 'seenLocked' | 'memo'>>;
+    /** db.ts isKnownDmConversation: this phone knows the id as a DM (its pins, its DM list, a dm row or an encrypted line). */
+    knownDm: (conversationId: string) => Promise<boolean>;
+}
+
+/** The DM guard asked once, failing closed as db.ts isDmHere does: a read that throws, or any answer but `false`, is a DM. */
+async function isKnownDm(conversationId: string, deps: HomeChatOpenDeps): Promise<boolean> {
+    try { return (await deps.knownDm(conversationId)) !== false; } catch { return true; }
 }
 
 const sealedOf = (lines: readonly HomeChatLine[]) => lines.filter((l): l is HomeChatLine & { sealed: NonNullable<HomeChatLine['sealed']> } => !!l.sealed);
@@ -85,11 +92,17 @@ async function openGroup(pick: HomeChatSettings, lines: readonly HomeChatLine[],
  * judged as a DM (db.ts judgeHomeChatDmLines), a group pick by the group's rule, and a body the node sent as another kind
  * is no answer (fail closed, as the DM screen judges a chat by what this phone knows: db.ts getMessages). An event's or an
  * enterprise's chat is readable by design: its lines need no opening. Never throws: a line it can't open waits.
+ *
+ * The layout is stored on the node, so a node can rewrite a pinned DM's pick as another kind together with its body, and
+ * pass the check that the two match. So a pick of any other kind is asked of this phone's own DM knowledge first (db.ts
+ * isKnownDmConversation, once per open): one it knows as a DM is no answer (`knownDm`), as lib/dm-guard makes it on the
+ * web. Nothing of it is judged or opened, and no group key is asked for it.
  */
 export async function openHomeChat(pick: HomeChatSettings, card: HomeChatCard | null, deps: HomeChatOpenDeps): Promise<OpenedChat> {
     if (!card || 'gone' in card) return { lines: new Map() };
     if (card.kind !== pick.kind) return pick.kind === 'group' ? { lines: new Map(), locked: true } : { lines: new Map() };
     if (pick.kind === 'dm') return openDm(pick, card.lines, deps);
+    if (await isKnownDm(pick.conversationId, deps)) return { lines: new Map(), knownDm: true };
     if (pick.kind === 'group') return openGroup(pick, card.lines, deps);
     return { lines: new Map() };
 }

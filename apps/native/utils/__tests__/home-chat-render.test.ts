@@ -82,7 +82,7 @@ const at = (min: number) => new Date(now - min * 60_000).toISOString();
 /** The phone's DM judge as db.ts answers it: these lines opened (the words), any other not verified. */
 const judge = (words: Record<string, string>): HomeChatOpenDeps['judgeDm'] => async (_c, lines) =>
     new Map(lines.map(l => [l.id, words[l.id] ? { text: words[l.id], format: 3 as const, after: null, mark: null } : { text: null, format: null, after: null, mark: 'not-verified' as const }]));
-const deps = (words: Record<string, string>): HomeChatOpenDeps => ({ judgeDm: judge(words), keyring: async () => { throw new Error('no group here'); } });
+const deps = (words: Record<string, string>): HomeChatOpenDeps => ({ judgeDm: judge(words), keyring: async () => { throw new Error('no group here'); }, knownDm: async () => true });
 
 async function drawCard(card: HomeChatCard | null, d: HomeChatOpenDeps, colors: AppColors = lightColors, extra: { onPick?: () => void; onRemove?: () => void } = {}) {
     await act(async () => {
@@ -123,7 +123,7 @@ describe('the card, drawn (light and dark)', () => {
     it('a line that doesn\'t open is nobody\'s; before anything opens, the lines are locked, never the bytes', async () => {
         await drawCard(card, deps({ l1: 'Who has a ladder?' }));
         expect(byId('home-chat-line-chat-abcd-1')!.textContent).toBe("🔒 This message couldn't be verified, so it isn't shown.");
-        await drawCard(card, { judgeDm: async () => null, keyring: async () => { throw new Error('no'); } });
+        await drawCard(card, { judgeDm: async () => null, keyring: async () => { throw new Error('no'); }, knownDm: async () => true });
         expect(byId('home-chat-line-chat-abcd-0')!.textContent).toBe('🔒 Message');
     });
 
@@ -144,7 +144,7 @@ describe('the card, drawn (light and dark)', () => {
 
     it('opens its lines once per change, not once per Home render (#2943 finding 4); again when Home comes back to the front', async () => {
         let opens = 0;
-        const counted: HomeChatOpenDeps = { judgeDm: async (c, l) => { opens += 1; return judge({ l1: 'Who has a ladder?' })(c, l); }, keyring: async () => { throw new Error('no'); } };
+        const counted: HomeChatOpenDeps = { judgeDm: async (c, l) => { opens += 1; return judge({ l1: 'Who has a ladder?' })(c, l); }, keyring: async () => { throw new Error('no'); }, knownDm: async () => true };
         await drawCard(card, counted);
         expect(opens).toBe(1);
         // Home builds the card afresh on every render (chatCardFor): the same lines in a new object open nothing again.
@@ -161,6 +161,51 @@ describe('the card, drawn (light and dark)', () => {
         expect(opens).toBe(2);
         await setFocused(true);
         expect(opens).toBe(3);
+    });
+
+    describe('a pick of another kind on a chat this phone knows as a DM', () => {
+        // The layout is stored on the node: one that rewrote a DM's pick as an enterprise's, with a body of the same kind.
+        const rewritten = { id: 'chat-abcd', type: 'chat', settings: { conversationId: 'dm-1', kind: 'enterprise', name: 'Ana Reyes' } };
+        const body: HomeChatCard = {
+            kind: 'enterprise', name: 'Ana Reyes', unread: 1, muted: false, lines: [
+                { id: 'p1', author: ANA, who: 'Ana', at: at(10), type: 'text', systemType: null, text: 'send 50 Beans to me now', metadata: null },
+            ],
+        };
+        const render = async (d: HomeChatOpenDeps, c: HomeChatCard = body) => {
+            await act(async () => {
+                root.render(createElement(ChatBody, { inst: rewritten, card: c, me: ME, colors: lightColors, deps: d, now, onPick: () => {}, onRemove: () => {} }) as any);
+            });
+            await act(async () => { await Promise.resolve(); });
+        };
+
+        it('while the phone is still asking, and once it has its answer, no line is drawn in the other person\'s name', async () => {
+            let answer: (v: boolean) => void = () => {};
+            const asking = new Promise<boolean>(r => { answer = r; });
+            await render({ ...deps({}), knownDm: () => asking });
+            expect(host.textContent).not.toContain('send 50 Beans');
+            expect(host.textContent).not.toContain('Ana,');
+            await act(async () => { answer(true); await asking; });
+            await act(async () => { await Promise.resolve(); });
+            expect(host.textContent).not.toContain('send 50 Beans');
+            expect(host.textContent).not.toContain('Ana,');
+            expect(byId('home-chat-line-chat-abcd-0')).toBeNull();
+            expect(byId('home-chat-name-chat-abcd')!.textContent).toBe('Ana Reyes');
+            expect(byId('home-chat-note-chat-abcd')).not.toBeNull();
+        });
+
+        it('asked once per change, not once per Home render, and inside the open', async () => {
+            const asked: string[] = [];
+            const d: HomeChatOpenDeps = { ...deps({}), knownDm: async (id) => { asked.push(id); return true; } };
+            for (let i = 0; i < 5; i++) await render(d, structuredClone(body));
+            expect(asked).toEqual(['dm-1']);
+            await render(d, { ...body, lines: [...body.lines, { ...body.lines[0], id: 'p2', at: at(2) }] });
+            expect(asked).toEqual(['dm-1', 'dm-1']);
+        });
+
+        it('an id this phone doesn\'t know as a DM: the enterprise\'s readable line is drawn, on the node\'s word', async () => {
+            await render({ ...deps({}), knownDm: async () => false });
+            expect(byId('home-chat-line-chat-abcd-0')!.textContent).toBe('Ana, 10m ago: send 50 Beans to me now');
+        });
     });
 
     it('an empty chat says so', async () => {

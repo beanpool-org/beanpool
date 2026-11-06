@@ -69,7 +69,7 @@ import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-ac
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
 import { cachedNodeRole } from '../../utils/node-admin';
-import { fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, judgeHomeChatDmLines } from '../../utils/db';
+import { fetchYourGroups, getConversations, getMarketplaceTransactions, getUnreadByConversation, groupKeyringFor, isKnownDmConversation, judgeHomeChatDmLines } from '../../utils/db';
 import { ChatBody } from '../../components/home/ChatBody';
 import { chatCardFor, chatPickList, chatsOnHome, type ChatChoice } from '../../utils/home-chat';
 import type { HomeChatOpenDeps } from '../../utils/home-chat-open';
@@ -807,8 +807,11 @@ export default function HomeScreen() {
     }, [keepTips]);
 
     // A chat card's lines open on this phone through db.ts's own doors, never fetched (utils/home-chat-open.ts).
-    // Looked up when a chat card opens its lines, not as Home draws.
-    const chatOpenDeps = useMemo<HomeChatOpenDeps>(() => ({ judgeDm: (id, lines) => judgeHomeChatDmLines(id, lines), keyring: id => groupKeyringFor(id) }), []);
+    // Looked up when a chat card opens its lines, not as Home draws. `knownDm`: the DM guard, so a pick the node rewrote as
+    // another kind on a chat this phone knows as a DM is no answer (the opener fails closed when it throws).
+    const chatOpenDeps = useMemo<HomeChatOpenDeps>(() => ({
+        judgeDm: (id, lines) => judgeHomeChatDmLines(id, lines), keyring: id => groupKeyringFor(id), knownDm: id => isKnownDmConversation(id),
+    }), []);
     // The chat card's settings list: the member's group-like chats (one signed read) and the phone's own DMs, once per opening.
     useEffect(() => {
         if (settingsFor?.type !== 'chat') return;

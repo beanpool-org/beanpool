@@ -12,6 +12,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 - Switch each kind on or off:
 - **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in. Also when your community opens a vote on removing a member that you can vote on.
 - **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.
+- **When a neighbour asks for something I'm into:** when someone in your community posts a Need in a category you starred on **What are you into?** on **Home**, at most once a day. It is on until you switch it off. It comes with your **Marketplace Activity** alerts, so it stops if you switch those off too. Only communities that send it show this switch: the global community doesn't.
 - **Held in Trust & System:** beans held, released or in question.
 - **Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown.
 
@@ -27,6 +28,7 @@ An alert on your phone says only what kind of news it is, for example:
 
 - "You have a new message."
 - "There is news on one of your trades."
+- "Someone in your community asked for something you're into." It never says who asked or what for: tap it to open the Need.
 - "An event you're going to starts soon."
 - "Your community has a notice for you."
 - "Your community opened a vote on removing a member." It never says who the vote is about.

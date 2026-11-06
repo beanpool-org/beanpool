@@ -384,6 +384,42 @@ async function main(): Promise<void> {
         && heldRooted(rin.pk, dan.pk) === 60 && heldRooted(ria.pk, dan.pk) === 0 && heldRooted(rex.pk, dan.pk) === 0,
         `7. a ring passing the same 60 round is three rows rooted at Dan, and the card reads passed on 100 (Zoe's 40 and the ring's 60), held by 2 people (${JSON.stringify(danCard?.passedOn)})`);
 
+    // ── 7b. Never back to its root (Marty, 6 Nov: "Block it") ───────────────────────────────────────────────────────
+    // A voucher can't pool their budget into their own line through people they vouched for: a piece rooted at the
+    // recipient stays out of the split, whoever passed it on.
+    const [ivy, jon] = ['Ivy', 'Jon'].map(newId);
+    for (const who of [ivy, jon]) { enter(who); deal(who, mel); }
+    vouchFromProfile(ada.pk, { memberPubkey: ivy.pk, vouchAmount: 50 });
+    const rowsBefore7b = giftRows();
+    const straightBack = await gift(ivy, ada, 10);
+    assert(straightBack.status === 409 && straightBack.body?.code === 'back_to_root'
+        && straightBack.body?.error === 'The credit line someone gave you started as @Ada’s vouch, so none of it can go to them.' && giftRows() === rowsBefore7b,
+        `7b. Ivy's line came from Ada's vouch: none of it goes back to Ada, nothing written (${show(straightBack)})`);
+    vouchFromProfile(owen.pk, { memberPubkey: ivy.pk, vouchAmount: 25 });
+    const partBack = await gift(ivy, ada, 30);
+    assert(partBack.status === 409 && partBack.body?.code === 'back_to_root'
+        && partBack.body?.error === 'Part of the credit line someone gave you started as @Ada’s vouch and can’t go to them, so you can give them 25 Beans at most.' && giftRows() === rowsBefore7b,
+        `7b. with Owen's 25 too: past the 25 not rooted at Ada is refused, with the most she may give Ada (${show(partBack)})`);
+    const owensPart = await gift(ivy, ada, 25);
+    const toAda = db.prepare("SELECT root_pubkey AS root, amount FROM room_gifts WHERE kind = 'gift' AND from_pubkey = ? AND to_pubkey = ?").all(ivy.pk, ada.pk) as { root: string; amount: number }[];
+    assert(owensPart.status === 200 && toAda.length === 1 && toAda[0].root === owen.pk && toAda[0].amount === 25 && heldRooted(ivy.pk, ada.pk) === 50,
+        `7b. the 25 rooted at Owen goes to Ada, skipping Ada's older piece; Ivy keeps Ada's 50 (${JSON.stringify(toAda)})`);
+    const passedOn = await gift(ivy, jon, 20);
+    const roundBack = await gift(jon, ada, 20);
+    assert(passedOn.status === 200 && roundBack.status === 409 && roundBack.body?.code === 'back_to_root' && heldRooted(jon.pk, ada.pk) === 20,
+        `7b. passed on to Jon, Ada's piece still can't reach Ada (${show(roundBack)})`);
+    // Before the cap (#2927's review): with Ada 10 under the cap, Jon's 20 all rooted at her answers back_to_root, never
+    // over_cap, so refusals that write nothing can't measure her line.
+    const adaColumn = (db.prepare('SELECT earned_credit AS c FROM members WHERE public_key = ?').get(ada.pk) as { c: number }).c;
+    const ap = getMemberTrustProfile(ada.pk);
+    db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(cap - 10 - ap.earnedCredit - ap.knownGrant - ap.roomHeld, ada.pk); // setup: a granted line, as 6 does
+    const ar = getMemberTrustProfile(ada.pk);
+    require_(ar.knownGrant + ar.roomHeld + ar.otherAllowance === cap - 10, `Ada's line is ${cap - 10}, 10 under the cap (${ar.knownGrant + ar.roomHeld + ar.otherAllowance})`);
+    const nearCap = await gift(jon, ada, 20);
+    assert(nearCap.status === 409 && nearCap.body?.code === 'back_to_root' && !nearCap.text.includes(String(cap)),
+        `7b. near the cap the root rule answers first, saying nothing of Ada's line (${show(nearCap)})`);
+    db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(adaColumn, ada.pk); // setup: back as it was
+
     // ── 8. The owner's setting: a Core setting, changed in Core settings only ────────────────────────────────────────
     const SHAPE = '/api/local/admin/community-shape';
     const shapeSet = (memberGift: unknown, headers: Record<string, string> = PASSWORD()) => call(null, 'POST', SHAPE, { changes: { memberGift } }, headers);
@@ -491,7 +527,7 @@ async function main(): Promise<void> {
             try { vouchFromProfile(v.pk, { memberPubkey: to.pk, vouchAmount: [25, 50, 75, 100][rnd(4)] }); vouched++; } catch { /* a vouch rule refused it */ }
         } else {
             const from = people[rnd(people.length)];
-            const to = people[rnd(people.length)];
+            const to = [...people, ...vouchers][rnd(people.length + vouchers.length)];
             const pausedBefore = getBalance(from.pk).frozen;
             try {
                 giveCreditLine(from.pk, { memberPubkey: to.pk, amount: 1 + rnd(100) });
@@ -514,9 +550,11 @@ async function main(): Promise<void> {
         const rootless = count(`SELECT COUNT(*) AS n FROM room_gifts g WHERE g.kind = 'gift' AND (g.root_pubkey IS NULL OR NOT EXISTS
             (SELECT 1 FROM room_gifts s WHERE s.id = g.source_gift_id AND s.to_pubkey = g.from_pubkey AND s.root_pubkey = g.root_pubkey))`);
         if (rootless > 0) broken.push(`step ${step}: ${rootless} gift row(s) without their piece's root`);
+        const home = count("SELECT COUNT(*) AS n FROM room_gifts WHERE kind = 'gift' AND to_pubkey = root_pubkey");
+        if (home > 0) broken.push(`step ${step}: ${home} gift row(s) landed on their own root`);
     }
     assert(broken.length === 0 && given > 30 && refused > 0,
-        `9. over 300 random steps (${given} gifts, ${refused} refused, ${vouched} vouches): room rooted at each voucher never above their grants and top-ups, every row rooted, no piece split past its amount, each member's room their pieces' open parts, no giver paused by a gift${broken.length ? ` — ${broken.slice(0, 3).join(' | ')}` : ''}`);
+        `9. over 300 random steps (${given} gifts, ${refused} refused, ${vouched} vouches): room rooted at each voucher never above their grants and top-ups, every row rooted, no piece split past its amount, none landed on its root, each member's room their pieces' open parts, no giver paused by a gift${broken.length ? ` — ${broken.slice(0, 3).join(' | ')}` : ''}`);
     assert(accountsNow() === accountsAtStart, '9. no accounts row moved across the random gifts');
 
     // ── 10. The audit ───────────────────────────────────────────────────────────────────────────────────────────────

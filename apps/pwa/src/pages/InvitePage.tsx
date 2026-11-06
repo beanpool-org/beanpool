@@ -245,9 +245,7 @@ export function InvitePage({ identity, onNavigate, preview: propPreview, ...ways
             // invite tree. Only fall back to a self-signed offline ticket when
             // the node can't be reached.
             try {
-                const res = chosenVouch != null
-                    ? await generateInvite(identity.publicKey, intendedFor.trim() || undefined, chosenVouch)
-                    : await generateInvite(identity.publicKey, intendedFor.trim() || undefined);
+                const res = await generateInvite(identity.publicKey, intendedFor.trim() || undefined, chosenVouch ?? undefined);
                 if (res?.invite?.code) {
                     setNewCode(res.invite.code);
                     setIntendedFor('');

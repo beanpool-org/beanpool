@@ -30,7 +30,7 @@ import { tierWords } from './trust-tier';
 import { VISITOR_WORDS } from './visitor-lobby';
 import type { ShopHomeCard } from './shop';
 import { HOME_CHAT_KINDS, readChatSettings, homeChatPicked, type HomeChatCard, type HomeChatKind, type HomeChatLine } from '@beanpool/core';
-import { checkDmThread, dmLineShownText, encodePlaintext, type DmLineView, type DmThreadLine } from './e2e-crypto';
+import { checkDmThread, dmLineMarkText, dmLineShownText, encodePlaintext, type DmLineView, type DmThreadLine } from './e2e-crypto';
 import { dmKeyContext } from './dm-lock';
 import { openLine } from './group-chat-crypto';
 import { groupTombstoneText } from './group-chat-lines';
@@ -1059,6 +1059,9 @@ function dmLinesShown(card: ChatWithLines, conversationId: string, me: ChatOpene
         if (v.mark === 'from-admins') return nobodys(l, cut(v.text ?? ''));
         // Not opened (no key context, or it doesn't verify): no words and nobody's; a readable line in a member's name, Talk's words for it.
         if (v.text === null) return nobodys(l, v.mark === 'not-encrypted' ? chatLineWords(dmLineShownText(v)) : t(CHAT_CARD_WORDS.locked));
+        // An older app's line (format 2): nothing in it proves who wrote it, so the node can name either person. The card has
+        // no room for a mark under the line, so it says the mark alone, nobody's (as the phone's card and its chat list).
+        if (v.mark === 'old-app') return nobodys(l, chatLineWords(dmLineMarkText('old-app') ?? ''));
         const mine = !!me && l.author === me.publicKey;
         return { id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(v.text) };
     });

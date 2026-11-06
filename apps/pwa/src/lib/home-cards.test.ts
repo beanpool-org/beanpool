@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, pseudoLocalise, setLanguage, t } from '@beanpool/core';
-import { sealDmLine, newDmMessageId } from './e2e-crypto';
+import { sealDmLine, newDmMessageId, encryptDmFormat2 } from './e2e-crypto';
 import { sealLine } from './group-chat-crypto';
 import { CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown } from './home-cards';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
@@ -628,6 +628,17 @@ describe('the chat card', () => {
             '🔒 Message', "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.", 'This message was deleted', '🔒 Message',
         ]);
         expect(out.some(l => l.text.includes('not sealed'))).toBe(false);
+    });
+
+    it("an older app's DM line (format 2) is the warning alone, nobody's, even served in the other person's name (#2945 round 2)", () => {
+        // Ana's own old line, which the node serves as Ben's: format 2 binds no sender, so it opens either way.
+        const id = newDmMessageId();
+        const old = encryptDmFormat2('I will pay you 50 Beans', { myEdPrivHex: ana.privateKey, peerEdPubHex: ben.publicKey, conversationId: DM });
+        const line = { id, author: ben.publicKey, who: 'Ben', at: at(5), type: 'text', systemType: null, sealed: { ciphertext: old.ciphertext, nonce: old.nonce, metadata: null } };
+        const out = shown(dmCard([line]))!;
+        expect(out.map(l => [l.who, l.mine, l.text])).toEqual([[null, false, "Sent from an older version of the app: BeanPool can't confirm who wrote it."]]);
+        expect(out.some(l => l.text.includes('50 Beans'))).toBe(false);
+        expect(chatLineText(out[0])).not.toMatch(/^Ben, /);
     });
 
     it("the node's own line is its words, nobody's", () => {

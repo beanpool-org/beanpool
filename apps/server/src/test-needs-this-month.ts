@@ -359,6 +359,18 @@ async function main(): Promise<void> {
         assert(r.posted === 400 && r.answeredWithinWeek === 400, `400 Needs, 400 answered (${JSON.stringify(r)})`);
         assert(ms < 1000, `and it reads in well under a second (${ms.toFixed(1)} ms)`);
     }
+    {
+        // posts has no index on type, so the read walks the table once: 50,000 other posts beside the Needs, one pass.
+        const insert = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, status, active, audience_scope)
+                                   VALUES (?, 'offer', 'general', 't', '', 5, ?, ?, 'active', 1, 'public')`);
+        db.transaction(() => { for (let i = 0; i < 50_000; i++) insert.run(`bulk-${i}`, 'k'.repeat(64), iso(MID.getTime() - ((i % 90) + 1) * DAY)); })();
+        const started = process.hrtime.bigint();
+        const r = needsThisMonth(MID);
+        const ms = Number(process.hrtime.bigint() - started) / 1e6;
+        console.log(`   (the same 400 Needs among 50,400 posts: ${ms.toFixed(1)} ms)`);
+        assert(r.posted === 400 && r.answeredWithinWeek === 400, `the other posts are no Needs (${JSON.stringify(r)})`);
+        assert(ms < 2000, `and a walk of 50,400 posts still reads in under two seconds (${ms.toFixed(1)} ms)`);
+    }
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;

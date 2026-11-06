@@ -15,7 +15,7 @@
  * rule as a "first listing" in time-to-first-trade.ts. Every member can see every public Need, so this number is exact: it
  * tells nobody anything new.
  *
- * ANSWERED: THE FIRST ANSWER IS THE FIRST REQUEST. A Need is answered when anyone other than the person who asked, and other
+ * Answered: the first answer is the first request. A Need is answered when anyone other than the person who asked, and other
  * than a keeper of the enterprise that asked, puts in a request on it: a row in marketplace_transactions on that Need whose
  * seller is the helper (escrow.ts requestPost: on a Need the helper is the seller and the asker the buyer). However it
  * ended (agreed, turned down, withdrawn, done) the neighbour answered. It is "within a week" when that first request came
@@ -36,8 +36,9 @@
  *
  * Cost, on a panel load and on the assistant's read: one pass over the month's Needs (type 'need', created_at since the first of
  * the month), and for each one an indexed look at its requests (idx_marketplace_transactions_post_status, post_id leading) and
- * at treasury_operators' key. posts has no index on type, so the pass reads the table once, as a month of Needs on a node is a
- * few dozen to a few hundred rows. Measured in test-needs-this-month.ts. Nothing is stored or cached.
+ * at treasury_operators' key. posts has no index on type, so the pass reads the table once; the rows it keeps, a month of Needs, are a
+ * few dozen to a few hundred. Measured on a shared Mac (test-needs-this-month.ts): 400 Needs, each answered, 3 ms; the same among 50,400
+ * posts, 6 ms, on the one server thread. Nothing is stored or cached.
  */
 import { db } from '../db/db.js';
 import { getNodeFeatures } from '../config/node-profile.js';

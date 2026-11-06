@@ -35,16 +35,23 @@ export const listActive = async (env) =>
         "SELECT * FROM name_allocations WHERE status IN ('pending','live','paused','blocked','released') ORDER BY requested_at DESC"
     ).all()).results || [];
 
-// Atomic reserve. Throws (UNIQUE constraint) if the name is already held. `held_reason` (migration 0011) is written only
-// when the row carries one: a database without the column still takes every other claim.
-export const insertAllocation = (env, a) =>
-    env.DB.prepare(
-        `INSERT INTO name_allocations
-           (name, node_pubkey, hostname, mode, status, community_name, origin, public_ip, contact, attest_fails, requested_at${a.held_reason ? ', held_reason' : ''})
-         VALUES (?,?,?,?,?,?,?,?,?,0,?${a.held_reason ? ',?' : ''})`
-    ).bind(a.name, a.node_pubkey, a.hostname, a.mode, a.status,
-           a.community_name || null, a.origin || null, a.public_ip || null, a.contact || null, a.requested_at,
-           ...(a.held_reason ? [a.held_reason] : [])).run();
+// Atomic reserve. Throws (UNIQUE constraint) if the name is already held. `held_reason` and `verified_at` (migration 0011)
+// are written only when the row carries them: a database without the columns still takes every other claim.
+export const insertAllocation = async (env, a) => {
+    const ins = (withExt) => {
+        const cols = ['name', 'node_pubkey', 'hostname', 'mode', 'status', 'community_name', 'origin', 'public_ip', 'contact', 'attest_fails', 'requested_at'];
+        const vals = [a.name, a.node_pubkey, a.hostname, a.mode, a.status, a.community_name || null, a.origin || null, a.public_ip || null, a.contact || null, 0, a.requested_at];
+        if (withExt && a.held_reason) { cols.push('held_reason'); vals.push(a.held_reason); }
+        if (withExt && a.verified_at !== undefined && a.verified_at !== null) { cols.push('verified_at'); vals.push(a.verified_at); }
+        return env.DB.prepare(`INSERT INTO name_allocations (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).bind(...vals).run();
+    };
+    try {
+        return await ins(true);
+    } catch (e) {
+        if (!/(no such column|has no column named)/i.test(String(e?.message || e))) throw e;
+        return await ins(false);
+    }
+};
 
 export const updateAllocation = async (env, name, fields) => {
     const keys = Object.keys(fields);
@@ -109,6 +116,34 @@ export const countHeldBy = async (env, pubkey, since) => {
                     AND COALESCE(released_at, 0) > ?))`
     ).bind(pubkey, since).first();
     return Number(r?.n) || 0;
+};
+
+// Does `pubkey` hold a verified name (design §6 item 1, slice S5)? A name live now that has ended probation (verified_at
+// is set), or its own clean release still inside the hold: used to skip probation on a rename. A paused name never
+// counts, whoever paused it: the sweep pauses a name something other than its node answers at ('impostor',
+// 'content-swap') or that failed its re-attest ('unverified'), and probation is there to keep exactly such a name out of
+// the directory. A release is clean when its owner (or the admin's default, 'admin-held') released the name while it was
+// live: releaseRow keeps a paused name's paused_at, so releasing a paused name does not clear its pause. A key the admin
+// stopped (a name blocked or paused by the admin, or an admin-held-all release still in its hold) is never verified.
+export const holdsVerifiedName = async (env, pubkey, since, exceptName = null) => {
+    try {
+        const query = `SELECT 1 FROM name_allocations WHERE node_pubkey=?
+           ${exceptName ? 'AND name <> ?' : ''}
+           AND verified_at IS NOT NULL
+           AND (status = 'live'
+                OR (status = 'released' AND COALESCE(pause_reason, '') NOT IN ('admin', 'withdrawn', 'admin-held-all')
+                    AND paused_at IS NULL AND COALESCE(released_at, 0) > ?))
+           AND NOT EXISTS (SELECT 1 FROM name_allocations WHERE node_pubkey=?
+                             AND (status = 'blocked' OR (status = 'paused' AND pause_reason = 'admin')
+                                  OR (status = 'released' AND pause_reason = 'admin-held-all' AND COALESCE(released_at, 0) > ?)))
+           LIMIT 1`;
+        const binds = exceptName ? [pubkey, exceptName, since, pubkey, since] : [pubkey, since, pubkey, since];
+        const r = await env.DB.prepare(query).bind(...binds).first();
+        return !!r;
+    } catch (e) {
+        if (!/no such column/i.test(String(e?.message || e))) throw e;
+        return false;
+    }
 };
 
 // A signed request's one-use nonce (signing protocol v2, migration 0006): true the first time this key sends it, false

@@ -5,7 +5,8 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 
 - **Node-facing (signed):** `GET /api/registrar/available` (public) · `POST /api/registrar/claim` (a new
   name, or a heal of the claimant's own) · `POST /api/registrar/heal` · `POST /api/registrar/rotate` (a fresh
-  tunnel, below) · `GET /api/registrar/status` (with `?notices=1` and `?seen=`, and its `notices`: "Notices to operators", below) ·
+  tunnel, below) · `GET /api/registrar/status` (with `?notices=1` and `?seen=`, and its `notices`: "Notices to operators", below;
+  and `seen_from`, the address it was asked from: "Ownership", below) ·
   `POST /api/registrar/update` · `POST /api/registrar/release` (`/offline` is its old name and still works) ·
   `POST /api/registrar/holder {name}` (who holds a name, below)
 - **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
@@ -247,8 +248,20 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
   static tunnels, mail and community nodes) at most once per hour from Cloudflare: the daily digest reports "DNS records: N of CAP (P%)"
   (CAP = the `capacity` setting above, default 200; P rounded down), and an alert is raised at ≥ 80% (Marty, 28 Oct: Pro at 160 of 200): "beanpool.org has N of CAP DNS records (P%). Time to move the zone to Cloudflare Pro, or free unused names." Cleared below the threshold.
 - **Probation.** A new tenure (another key's claim; a key's own release taken back keeps what it had) is live but on
-  probation (`verified_at` NULL) until it has attested `ok` in enough sweeps in a row and been live long enough. Until
-  then its node is told `probation: true` by `/status` (and the claim and
+  probation (`verified_at` NULL) until it has attested `ok` in enough sweeps in a row and been live long enough —
+  unless its key already holds a verified name (slice S5: a rename keeps its community on the map). That is a name
+  live and verified now, or one its key released while it was live (its owner's release, or the admin's default
+  'admin-held') still inside the hold. A paused name never counts, whoever paused it: the sweep's `impostor` and
+  `content-swap`, a failed re-attest's `unverified`, and the release of a paused name (it keeps its `paused_at`) count
+  for nothing. A key the admin stopped (a name blocked or paused by the admin, or an 'admin-held-all' release still in
+  its hold) never skips it, and neither do the admin's "free now" release and a withdrawn claim. It is decided by the
+  request that makes the name live, from the key's names then, and written by that write (`verified_at` = now; its
+  answer has no `probation`): a claim that goes live at once, the approve of a held or gated claim (asked again at the
+  approve: a key whose name was blocked or paused meanwhile, or released so that it no longer counts, stays on
+  probation), and the key's next claim or the admin's "Finish now" for an auto claim whose provisioning failed. A name
+  not live yet is never verified, so its release vouches for nothing. The sweep's finish of such a claim, and a
+  take-back its re-attest did not route at once, go live on probation (the take-back unless it was verified before its
+  release). Until then its node is told `probation: true` by `/status` (and the claim and
   heal answers) and its directory listing waits, and the "New community" alert waits: it is sent at verification —
   one message for every name a sweep verifies — never at the claim, so a bot's burst never rings the phone once a
   name. Any answer but its own node's in an applied sweep starts the count again; a suspended sweep neither counts nor
@@ -392,7 +405,12 @@ an edge re-attest (`/api/attest` through the hostname) signed by the owner's key
 own release is routed by the same rule: the take-back first deletes a tunnel its release could not, so it
 normally comes back on a fresh one; a tunnel Cloudflare still won't delete, or a direct address, routes only
 after the re-attest, and otherwise the name stays paused for its key, which its next heal re-attests. `status`
-reports the owner's row in any state with `reason` and `since` (and `held_until` for a release).
+reports the owner's row in any state with `reason` and `since` (and `held_until` for a release). Every `status`
+answer, `none` included, also carries `seen_from`: the address Cloudflare's edge saw the request come from
+(`cf-connecting-ip`; an IPv4-mapped IPv6 address as plain IPv4; left out when the header is missing or not an address),
+so an owner can compare it with the A record of a domain of their own (DNS robustness design §4, slice S5). It is the
+asking node's own address, echoed only to its own signed request; the node keeps it and shows it to its owner only
+(`/api/local/admin/public-address/status` and the claim answers give it to an owner, never to an admin or a member).
 
 **Rotate** — `POST /api/registrar/rotate {name?, origin?}`, signed by the name's key (M3 of the 2026-10-01 review):
 its own tunnel name, live or paused by anything but the admin, onto a fresh tunnel. The old tunnel is deleted at

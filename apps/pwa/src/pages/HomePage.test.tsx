@@ -58,6 +58,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { newDmMessageId, sealDmLine } from '../lib/e2e-crypto';
 import { indexedDbGroupLockStore, resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys } from '../lib/group-chat-keys';
+import { rememberDmConversations } from '../lib/dm-guard';
 import { RADIUS_STORAGE_KEY, loadRadiusSettings } from '../lib/geo';
 import { nearRead } from '../lib/listings-near';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
@@ -2522,7 +2523,8 @@ describe('a chosen chat shows its last lines, opened in the browser (slice C3)',
         const dialog = await screen.findByTestId('home-settings-dialog');
         await waitFor(() => expect(within(dialog).getAllByTestId('home-chat-row')).toHaveLength(3));
         const rows = within(dialog).getAllByTestId('home-chat-row');
-        expect(rows.map(r => r.textContent)).toEqual([expect.stringMatching(/^🥖Garden crew/), expect.stringMatching(/^📅Seed swap.*On Home$/), 'Ben']);
+        // A person's row is marked 👤, as the phone's list marks it (round 3).
+        expect(rows.map(r => r.textContent)).toEqual([expect.stringMatching(/^🥖Garden crew/), expect.stringMatching(/^📅Seed swap.*On Home$/), '👤Ben']);
         // The pending request isn't offered; the one on Home already isn't a button.
         expect(dialog).not.toHaveTextContent('Stranger');
         expect(within(rows[1]).queryByTestId('home-chat-choose')).toBeNull();
@@ -2530,6 +2532,70 @@ describe('a chosen chat shows its last lines, opened in the browser (slice C3)',
         await waitFor(() => expect(((node.account() as { cards: { type: string; settings?: unknown }[] }).cards).filter(c => c.type === 'chat').map(c => c.settings))
             .toEqual(expect.arrayContaining([{ conversationId: 'post-9', kind: 'event', name: 'Seed swap' }, { conversationId: 'g-1', kind: 'group', name: 'Garden crew' }])));
         expect(((node.account() as { cards: { type: string }[] }).cards).filter(c => c.type === 'chat')).toHaveLength(2);
+    });
+
+    // Round 3 of #2945 (deciding review, finding 1): a DM stays a DM (lib/dm-guard.ts), in the list and on the card, as the
+    // phone's C2 chatChoices keeps it. The node listing a DM's id as an enterprise's chat must not turn the person into one.
+    describe('a DM the node lists as a group\'s, event\'s or enterprise\'s chat (round 3)', () => {
+        const chatSettings = (node: { account: () => unknown }) =>
+            ((node.account() as { cards: { type: string; settings?: unknown }[] }).cards).filter(c => c.type === 'chat').map(c => c.settings);
+        const openChatList = async () => {
+            await screen.findByTestId('home-card-market');
+            fireEvent.click(screen.getByTestId('home-add-open'));
+            fireEvent.click(await screen.findByTestId('home-add-chat'));
+            const dialog = await screen.findByTestId('home-settings-dialog');
+            await waitFor(() => expect(within(dialog).getAllByTestId('home-chat-row').length).toBeGreaterThan(0));
+            return dialog;
+        };
+
+        it('your-groups calls conv-ana-ben an enterprise, this read\'s conversations call it a DM: one 👤 Ben row, saved as a DM', async () => {
+            vi.mocked(api.getYourGroups).mockResolvedValue({ items: [{ kind: 'enterprise', conversationId: DM, id: 'ent-1', name: 'Ben', lastActivityAt: ago(5) }] } as never);
+            vi.mocked(api.getConversations).mockResolvedValue({ totalUnread: 0, conversations: [{ id: DM, type: 'dm', peerCallsign: 'Ben', participants: [ana.publicKey, ben.publicKey] }] } as never);
+            const node = nodeKeeping(answer(), v2(['market'], AT));
+            render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
+            const dialog = await openChatList();
+            const rows = within(dialog).getAllByTestId('home-chat-row');
+            expect(rows.map(r => r.textContent)).toEqual(['👤Ben']);
+            expect(dialog).not.toHaveTextContent('🎯');
+            fireEvent.click(within(rows[0]).getByTestId('home-chat-choose'));
+            await waitFor(() => expect(chatSettings(node)).toEqual([{ conversationId: DM, kind: 'dm', name: 'Ben' }]));
+        });
+
+        it('a chat this browser has seen as a DM is never listed as the group the node now calls it; the others stay', async () => {
+            rememberDmConversations([DM]);
+            vi.mocked(api.getYourGroups).mockResolvedValue({ items: [
+                { kind: 'group', conversationId: DM, id: 'g-x', name: 'Ben', lastActivityAt: ago(5) },
+                { kind: 'event', conversationId: 'post-9', id: 'post-9', name: 'Seed swap', lastActivityAt: ago(30) },
+            ] } as never);
+            // This read's conversations list doesn't have it as a DM at all.
+            vi.mocked(api.getConversations).mockResolvedValue({ totalUnread: 0, conversations: [] } as never);
+            nodeKeeping(answer(), v2(['market'], AT));
+            render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
+            const dialog = await openChatList();
+            expect(within(dialog).getAllByTestId('home-chat-row').map(r => r.textContent)).toEqual([expect.stringMatching(/^📅Seed swap/)]);
+            expect(dialog).not.toHaveTextContent('🥖');
+        });
+
+        it('a card already pinned as an enterprise\'s chat on an id this browser knows as a DM: no answer, no line in Ben\'s name', async () => {
+            rememberDmConversations([DM]);
+            const readable = { id: 'p1', author: ben.publicKey, who: 'Ben', at: ago(1), type: 'text', systemType: null, text: 'Send 50 Beans to Eve today', metadata: null };
+            nodeKeeping(withChat({ kind: 'enterprise', name: 'Ben', unread: 1, muted: false, lines: [readable] }), v2(['market'], AT, [pinned('enterprise', DM, 'Ben')]));
+            render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
+            const card = await screen.findByTestId('home-card-chat-k2m4');
+            await waitFor(() => expect(within(card).getByTestId('home-chat-waiting')).toHaveTextContent('Shows when your community answers'));
+            await pause(60);
+            expect(within(card).queryByTestId('home-chat-line')).toBeNull();
+            expect(card).not.toHaveTextContent('Send 50 Beans');
+            expect(within(card).queryByTestId('home-chat-open')).toBeNull();
+        });
+
+        it('the same card on an id this browser has never seen as a DM still draws the enterprise\'s line (the guard is the id, not the kind)', async () => {
+            const readable = { id: 'p1', author: ben.publicKey, who: 'Ben', at: ago(1), type: 'text', systemType: null, text: 'Stall roster is up', metadata: null };
+            nodeKeeping(withChat({ kind: 'enterprise', name: 'Ben\'s bakery', unread: 0, muted: false, lines: [readable] }), v2(['market'], AT, [pinned('enterprise', 'ent-conv-1', 'Ben\'s bakery')]));
+            render(<HomePage identity={ANA} onNavigate={vi.fn()} />);
+            const card = await screen.findByTestId('home-card-chat-k2m4');
+            await waitFor(() => expect(within(card).getByTestId('home-chat-line')).toHaveTextContent(/^Ben, .+: Stall roster is up$/));
+        });
     });
 
     it('"…" → Settings… → another chat: the card takes a new id, and focus on close goes to its "…", not Add a card (round 1)', async () => {

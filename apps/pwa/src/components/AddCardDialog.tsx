@@ -162,8 +162,8 @@ export interface ChatPick {
     pinned: readonly string[];
 }
 
-/** A row's mark by kind (§2: groups 🥖🎯📅, then people): decoration, hidden from a screen reader. */
-const CHAT_KIND_MARK: Record<HomeChatKind, string> = { group: '🥖', enterprise: '🎯', event: '📅', dm: '' };
+/** A row's mark by kind (§2: groups 🥖🎯📅, then people 👤, as the phone's list marks them): decoration, hidden from a screen reader. */
+const CHAT_KIND_MARK: Record<HomeChatKind, string> = { group: '🥖', enterprise: '🎯', event: '📅', dm: '👤' };
 
 /** Past this many rows the list has a filter box (§2). */
 export const CHAT_FILTER_FROM = 8;

@@ -51,6 +51,7 @@ import { getConversations, getHome, getNodeApiUrl, getYourGroups, groupKeysNet, 
 import { groupKeyring } from '../lib/group-chat-keys';
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import { groupIdKey, lockedGroupsOrNull } from '../lib/group-hold';
+import { isKnownDmConversation } from '../lib/dm-guard';
 import { readChatSettings, homeChatPicked } from '@beanpool/core';
 import type { ChatPickRow } from '../components/AddCardDialog';
 import { useCommunityInfo } from '../lib/features';
@@ -872,17 +873,24 @@ function DecideBody({
  * The chats a chat card can pin, read once as its settings open (§2): the member's groups', events' and enterprises' chats
  * (GET /api/your-groups), most recent first, then their direct chats (the conversations list, most recent first), never a
  * request still waiting for their answer (the node answers that one `gone`). A failed read throws: the list says so.
+ * A DM stays a DM (lib/dm-guard.ts): the DM ids come first, from this read's `dm` rows and the ones this browser has seen
+ * as DMs, and a your-groups row with one of them is left out, so the chat is listed as the person and saved as `dm`; never
+ * as a group's, event's or enterprise's chat, whose readable lines the card shows as members' words. The phone's
+ * chatChoices does the same.
  */
 async function loadChatRows(publicKey: string): Promise<ChatPickRow[]> {
     const [groups, convs] = await Promise.all([getYourGroups(), getConversations(publicKey)]);
+    const isDm = (c: { id: string; type: string }) => c.type === 'dm' || isKnownDmConversation(c.id);
+    const dmIds = new Set((convs.conversations ?? []).filter(isDm).map((c) => c.id));
     const kinds = new Set(['group', 'enterprise', 'event']);
     const chats: ChatPickRow[] = (groups.items ?? [])
         .filter((g) => kinds.has(g.kind) && typeof g.conversationId === 'string' && g.conversationId)
+        .filter((g) => !dmIds.has(g.conversationId) && !isKnownDmConversation(g.conversationId))
         .sort((x, y) => (y.lastActivityAt || '').localeCompare(x.lastActivityAt || ''))
         .map((g) => ({ conversationId: g.conversationId, kind: g.kind, name: g.name || t('Someone'), at: g.lastActivityAt ?? null }));
     const seen = new Set(chats.map((c) => c.conversationId));
     for (const c of convs.conversations ?? []) {
-        if (c.type !== 'dm' || seen.has(c.id)) continue;
+        if (!dmIds.has(c.id) || seen.has(c.id)) continue;
         if (c.request && c.request.state !== 'accepted' && c.request.from !== publicKey) continue;
         seen.add(c.id);
         chats.push({ conversationId: c.id, kind: 'dm', name: c.peerCallsign || t('Someone'), at: null });
@@ -939,7 +947,9 @@ function ChatBody({
             ? <HomeLine onClick={onPick} testId="home-chat-pick"><span className="min-w-0 break-words font-semibold">{t(CHAT_CARD_WORDS.pick)}</span></HomeLine>
             : <p data-testid="home-chat-pick" className="m-0 text-sm text-text-primary break-words">{t(CHAT_CARD_WORDS.pick)}</p>;
     }
-    const body = chatCardFor(a, card);
+    // A DM stays a DM (lib/dm-guard.ts): a card pinned as a group's, event's or enterprise's chat on an id this browser has
+    // seen as a DM (pinned before the list knew, or on another device) is no answer, so no readable line shows as anyone's words.
+    const body = picked.kind !== 'dm' && isKnownDmConversation(picked.conversationId) ? null : chatCardFor(a, card);
     if (body && 'gone' in body) {
         return (
             <div data-testid="home-chat-gone">

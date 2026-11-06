@@ -5,7 +5,12 @@
  * lib/home-layout.ts, proved in home-layout.test.ts.
  */
 import { describe, expect, it } from 'vitest';
-import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLanguage } from '@beanpool/core';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLanguage, t } from '@beanpool/core';
+import { sealDmLine, newDmMessageId } from './e2e-crypto';
+import { sealLine } from './group-chat-crypto';
+import { CHAT_CARD_WORDS, chatCardFor, chatLineText, chatLinesShown } from './home-cards';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
     HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, dealTitleLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, monthSummaryLine, probationSentence, searchCardFor, shownFrame, skyOf,
@@ -563,5 +568,117 @@ describe('usePhoneAppCardDue (front doors S4)', () => {
     it('is due after first week is over', () => {
         expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: 1000, now: 1000 })).toBe(true);
         expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: 1000, now: 2000 })).toBe(true);
+    });
+});
+
+// ── A chosen chat (DESIGN-home-chosen-chat-fable.md §1–§3, slice C3): the same bodies as the phone's card ──────────────
+// Real crypto, no mocks: a DM line sealed by one person opens here for either of them under the conversation's key
+// context, as Talk opens it (core checkDmThread); a locked group line opens only under a key handed in as already open.
+describe('the chat card', () => {
+    const person = () => {
+        const seed = ed25519.utils.randomSecretKey();
+        return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed) };
+    };
+    const ana = person();
+    const ben = person();
+    const DM = 'conv-ana-ben';
+    const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+    /** A DM line as the node carries it (core HomeChatLine): sealed by `by` to the other, its bytes as stored. */
+    const dmLine = (by: typeof ana, text: string, min: number, type = 'text') => {
+        const id = newDmMessageId();
+        const other = by === ana ? ben : ana;
+        const s = sealDmLine(text, { myEdPrivHex: by.privateKey, peerEdPubHex: other.publicKey, conversationId: DM }, { senderPubHex: by.publicKey, messageId: id });
+        return { id, author: by.publicKey, who: by === ana ? 'Ana' : 'Ben', at: at(min), type, systemType: null, sealed: { ciphertext: s.ciphertext, nonce: s.nonce, metadata: null } };
+    };
+    const dmCard = (lines: unknown[], over: Record<string, unknown> = {}) => ({ cards: { 'chat-1': { kind: 'dm', name: 'Ben', unread: 2, muted: false, lines, peer: ben.publicKey, ...over } } });
+    const inst = (kind = 'dm', conversationId = DM) => ({ id: 'chat-1', type: 'chat', settings: { conversationId, kind, name: 'Ben' } });
+    const shown = (a: unknown, i = inst(), identity: typeof ana | null = ana, groupKey?: (g: string, e: number) => Uint8Array | undefined) => {
+        const card = chatCardFor(a as never, i);
+        return card ? chatLinesShown(card, i.settings.conversationId, { identity, groupKey }) : null;
+    };
+
+    it('a DM: every line opens on the device, oldest first, the member\'s own as "You", a photo as 📷 Photo', () => {
+        const lines = [dmLine(ben, 'Who has a ladder I could borrow?', 120), dmLine(ana, "Mine's at the shed, come by", 60), dmLine(ben, '', 40, 'image')];
+        const out = shown(dmCard(lines))!;
+        expect(out.map(l => [l.who, l.mine, l.text])).toEqual([
+            ['Ben', false, 'Who has a ladder I could borrow?'], ['You', true, "Mine's at the shed, come by"], ['Ben', false, '📷 Photo'],
+        ]);
+        expect(chatLineText(out[1])).toMatch(/^You, .+: Mine's at the shed, come by$/);
+        // Ben's browser opens the same lines, his own now "You".
+        expect(shown(dmCard(lines, { peer: ana.publicKey }), inst(), ben)!.map(l => l.who)).toEqual(['You', 'Ana', 'You']);
+    });
+
+    it("a DM whose last lines are all the member's own opens with the node's peer; with none, nothing opens", () => {
+        const lines = [dmLine(ana, 'one', 3), dmLine(ana, 'two', 2)];
+        expect(shown(dmCard(lines))!.map(l => l.text)).toEqual(['one', 'two']);
+        // An older node's answer, with no peer: the other person isn't among the lines, so no line is anyone's words.
+        expect(shown(dmCard(lines, { peer: undefined }))!.map(l => [l.who, l.text])).toEqual([[null, '🔒 Message'], [null, '🔒 Message']]);
+        // Signed out (no identity): nothing opens either.
+        expect(shown(dmCard(lines), inst(), null)!.map(l => l.text)).toEqual(['🔒 Message', '🔒 Message']);
+    });
+
+    it("a DM: a line that doesn't open, a readable line in a member's name, a deleted one, one too long to carry: never anyone's words", () => {
+        const forged = { ...dmLine(ben, 'hello', 5), author: ana.publicKey, who: 'Ana' };
+        const readable = { id: 'r1', author: ben.publicKey, who: 'Ben', at: at(4), type: 'text', systemType: null, text: 'not sealed', metadata: null };
+        const deleted = { id: 'd1', author: ben.publicKey, who: 'Ben', at: at(3), type: 'removed', systemType: null, text: 'x', metadata: null };
+        const long = { id: 'l1', author: ben.publicKey, who: 'Ben', at: at(2), type: 'text', systemType: null, text: '🔒 Message' };
+        const out = shown(dmCard([forged, readable, deleted, long]))!;
+        expect(out.every(l => l.who === null && !l.mine)).toBe(true);
+        expect(out.map(l => l.text)).toEqual([
+            '🔒 Message', "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.", 'This message was deleted', '🔒 Message',
+        ]);
+        expect(out.some(l => l.text.includes('not sealed'))).toBe(false);
+    });
+
+    it("the node's own line is its words, nobody's", () => {
+        const sys = { id: 's1', author: 'SYSTEM', who: null, at: at(10), type: 'system', systemType: 'ESCROW_CREATED', text: 'Beans held in trust', metadata: null };
+        const out = shown(dmCard([sys]))!;
+        expect(out.map(l => [l.who, l.text])).toEqual([[null, 'Beans held in trust']]);
+        expect(chatLineText(out[0])).toMatch(/: Beans held in trust$/);
+    });
+
+    it('a locked group: a line opens only under a key already open on the page; without one, "🔒 Message · open to read"', () => {
+        const G = '7a1d2c3b-4a59-4e68-9d7c-8b9a0f1e2d3c';
+        const key = crypto.getRandomValues(new Uint8Array(32));
+        const seal = (by: typeof ana, text: string, min: number, type = 'text') => {
+            const id = crypto.randomUUID();
+            const s = sealLine(text, { myEdPrivHex: by.privateKey, groupKey: key, groupId: G, epoch: 1, messageId: id });
+            return { id, author: by.publicKey, who: by === ana ? 'Ana' : 'Ben', at: at(min), type, systemType: null, sealed: { ciphertext: s.ciphertext, nonce: s.nonce, metadata: JSON.stringify({ epoch: 1 }) } };
+        };
+        const lines = [seal(ben, 'Working bee Sunday', 30), seal(ana, 'I can bring tea', 20), seal(ben, '', 10, 'image')];
+        const a = { cards: { 'chat-1': { kind: 'group', name: 'Garden crew', unread: 0, muted: true, lines } } };
+        const i = inst('group', G.toUpperCase());
+        const held = shown(a, i, ana, (g, e) => (g === G && e === 1 ? key : undefined))!;
+        expect(held.map(l => [l.who, l.text])).toEqual([['Ben', 'Working bee Sunday'], ['You', 'I can bring tea'], ['Ben', '📷 Photo']]);
+        const notHeld = shown(a, i, ana, () => undefined)!;
+        expect(notHeld.map(l => [l.who, l.text])).toEqual(lines.map(() => [null, t(CHAT_CARD_WORDS.lockedOpen)]));
+        // A line the key doesn't open (sealed under another key): Talk's words, nobody's.
+        const other = crypto.getRandomValues(new Uint8Array(32));
+        expect(shown(a, i, ana, () => other)!.map(l => [l.who, l.text])).toEqual(lines.map(() => [null, "This message couldn't be verified."]));
+    });
+
+    it("an event's or enterprise's chat: readable lines as words, a photo, a convenor's removal in Talk's words", () => {
+        const lines = [
+            { id: 'e1', author: ben.publicKey, who: 'Ben', at: at(9), type: 'text', systemType: null, text: 'See you at 6', metadata: null },
+            { id: 'e2', author: ana.publicKey, who: 'Ana', at: at(8), type: 'image', systemType: null, text: '', metadata: null },
+            { id: 'e3', author: ben.publicKey, who: 'Ben', at: at(7), type: 'removed', systemType: null, text: '', metadata: JSON.stringify({ removed: true, removedBy: ana.publicKey }) },
+        ];
+        const out = shown({ cards: { 'chat-1': { kind: 'event', name: 'Seed swap', unread: 1, muted: false, lines } } }, inst('event', 'post-9'))!;
+        expect(out.map(l => [l.who, l.text])).toEqual([['Ben', 'See you at 6'], ['You', '📷 Photo'], [null, 'Removed by a convenor']]);
+    });
+
+    it('gone is gone alone, whatever else the body says; a kept answer for another kind is no answer; nothing picked is none', () => {
+        expect(chatCardFor({ cards: { 'chat-1': { gone: 'request', name: 'x', lines: [] } } } as never, inst())).toEqual({ gone: 'request' });
+        expect(chatCardFor({ cards: { 'chat-1': { gone: 'left' } } } as never, inst())).toEqual({ gone: 'left' });
+        expect(chatCardFor(dmCard([]) as never, inst('group', 'g-1'))).toBeNull();
+        expect(chatCardFor(dmCard([]) as never, { id: 'chat-1', settings: {} })).toBeNull();
+        expect(chatCardFor({ cards: {} } as never, inst())).toBeNull();
+        expect(chatCardFor({ cards: { 'chat-1': { kind: 'dm', lines: 'no' } } } as never, inst())).toBeNull();
+    });
+
+    it('is drawn once on the list, picked or not, answered or not: the frame never drops one by itself', () => {
+        const layout = { v: 2, cards: [inst(), { id: 'chat-2', type: 'chat' }], dismissed: {}, updatedAt: daysAgo(1) } as unknown as HomeLayoutV2;
+        const ids = shownFrame(answer({}), layout, { now: NOW }).map(c => c.id);
+        expect(ids).toEqual(expect.arrayContaining(['chat-1', 'chat-2']));
     });
 });

@@ -338,6 +338,7 @@ export const SUITES = [
     'test-money-limits-gate',
     'test-economic-hardening',
     'test-federation-api',
+    'test-federation-origin',
     'test-federation-receipt',
     'test-genesis',
     'test-hardening',

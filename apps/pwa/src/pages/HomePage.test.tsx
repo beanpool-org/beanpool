@@ -364,6 +364,21 @@ describe('tailoring (§4)', () => {
 });
 
 describe('interests (§4.3, §6.2)', () => {
+    it("says we'll tell you when a neighbour asks only where the community says askedPush, as the phone does (cold start N3)", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ features: { ...answer().features, askedPush: true } as HomeAnswer['features'], me: { ...answer().me!, interests: [] } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-interests');
+        expect(screen.getByTestId('home-interests-note')).toHaveTextContent("Tap a few. What you star comes first here and in the Market, and we'll tell you when a neighbour asks for it.");
+    });
+
+    it('a community that says nothing of it keeps the note that promises no push', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, interests: [] } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-interests');
+        expect(screen.getByTestId('home-interests-note')).toHaveTextContent('Tap what you like: those come first on Home and in the Market. Nothing is hidden.');
+        expect(screen.getByTestId('home-interests-note')).not.toHaveTextContent(/neighbour/);
+    });
+
     it('a member with none sees the chips; a tap reorders the Market card in place and saves on the account and in the Market', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, interests: [] } })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);

@@ -193,12 +193,19 @@ const node = vi.hoisted(() => ({
     meBeside: {} as Record<string, unknown>,
     /** GET /api/community/known-rule's answer; null: a 404, as an older node. */
     knownRule: null as null | Record<string, unknown>,
+    /** The preferences the screen saved (signedRequest to /api/members/preferences), in order. */
+    prefsSaved: [] as Record<string, unknown>[],
+    /** What GET /api/members/preferences answers beside holiday mode. */
+    prefsServed: {} as Record<string, unknown>,
 }));
 const vault = vi.hoisted(() => ({ on: false, holds: [] as any[], offer: null as any, note: null as null | string }));
 vi.mock('../db', () => ({
     getMemberProfile: async (pk: string) => (pk === 'mia-key' ? { callsign: 'Mia' } : { callsign: 'Ana', bio: 'Grows beans by the river', contact_value: '0400 000 000', contact_visibility: 'friends' }),
     updateMemberProfile: async () => {},
-    signedRequest: async (route: string) => (route === '/api/recovery/collect/mine' ? { collections: node.sessions, count: node.sessions.length } : {}),
+    signedRequest: async (route: string, body?: { preferences?: Record<string, unknown> }) => {
+        if (route === '/api/members/preferences' && body?.preferences) node.prefsSaved.push(body.preferences);
+        return route === '/api/recovery/collect/mine' ? { collections: node.sessions, count: node.sessions.length } : {};
+    },
     signedGet: async (route: string) => {
         return new Response(JSON.stringify({ show_as_connection_in_common: 'true' }), { status: 200 });
     },
@@ -339,6 +346,8 @@ beforeEach(() => {
     node.me = null;
     node.meBeside = {};
     node.knownRule = null;
+    node.prefsSaved = [];
+    node.prefsServed = {};
     readerFeaturesHeld.clear();
     sheet.props = null;
     vault.on = false;
@@ -347,7 +356,7 @@ beforeEach(() => {
     vault.note = null;
     globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
         const u = String(url);
-        if (u.includes('/api/members/preferences')) return new Response(JSON.stringify({ holiday_mode: 'false' }), { status: 200 });
+        if (u.includes('/api/members/preferences')) return new Response(JSON.stringify({ holiday_mode: 'false', ...node.prefsServed }), { status: 200 });
         if (u.includes('/api/community/known-rule') && node.knownRule) return new Response(JSON.stringify(node.knownRule), { status: 200 });
         if (u.includes('/api/community/info')) return new Response(JSON.stringify({ memberCount: 14, postCount: 30, transactionCount: 9, ...(node.rule ? { recoveryCopies: node.rule } : {}) }), { status: 200 });
         return new Response('{}', { status: 404 });
@@ -687,6 +696,46 @@ describe('Notification Preferences: "Requests to join" only where it changes som
         node.heard = false;
         await openPreferences();
         expect(knockSwitch()).toBeNull();
+    });
+});
+
+describe('Notification Preferences: "When a neighbour asks for something I\'m into" only where the community sends it (cold start N3)', () => {
+    const SWITCH = "When a neighbour asks for something I'm into";
+    const askedSwitch = () => byLabel(SWITCH);
+    const sayAskedPush = (on: boolean) => store.map.set('beanpool_node_profiles', JSON.stringify({
+        [NODE]: { profile: 'local', features: { beans: true, escrow: true, ...(on ? { askedPush: true } : {}) }, checkedAt: new Date().toISOString() },
+    }));
+    const openPreferences = async () => {
+        await renderIn('en');
+        await click(row('Notification Preferences', 'en'), 'Notification Preferences');
+        expect(host.textContent).toContain('1 day before');
+    };
+
+    it('a community that says askedPush: the switch and its line, on until turned off; a tap saves notify_asked off, a second on', async () => {
+        sayAskedPush(true);
+        await openPreferences();
+        expect(askedSwitch()).not.toBeNull();
+        expect(host.textContent).toContain(SWITCH);
+        expect(host.textContent).toContain("At most once a day, and only for what you've starred");
+        await click(askedSwitch(), SWITCH);
+        await click(askedSwitch(), SWITCH);
+        expect(node.prefsSaved).toEqual([{ notify_asked: false }, { notify_asked: true }]);
+    });
+
+    it('a member who turned it off reads it off: the first tap turns it back on', async () => {
+        sayAskedPush(true);
+        node.prefsServed = { notify_asked: 'false' };
+        await openPreferences();
+        await click(askedSwitch(), SWITCH);
+        expect(node.prefsSaved).toEqual([{ notify_asked: true }]);
+    });
+
+    it('a community that says nothing of it (the global one, Beans off, a node from before N3): no switch, nothing saved', async () => {
+        sayAskedPush(false);
+        await openPreferences();
+        expect(askedSwitch()).toBeNull();
+        expect(host.textContent).not.toContain(SWITCH);
+        expect(node.prefsSaved).toEqual([]);
     });
 });
 

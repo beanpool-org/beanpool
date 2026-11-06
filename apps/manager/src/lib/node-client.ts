@@ -2688,6 +2688,8 @@ export interface TakeoverStatus {
     /** Owners the lock could not include, and why. */
     skippedOwners: (TakeoverOwner & { why: string })[];
     recoveryCode: { codeId: number; createdAt: string } | null;
+    /** Current live registrar name, if any (Fable §1.3). */
+    liveRegistrarName?: string | null;
     /** After a take-over by code: that code is spent until a new one is made (sealed keys slice 5). */
     codeUsed?: { codeId: number; at: string; message: string } | null;
     /** Whether the envelope carries the key that opens members' sign-in recovery copies, in the node's words (recovery

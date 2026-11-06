@@ -47,7 +47,7 @@ import {
 } from '../utils/claim-key';
 import type { JoinKey } from '../utils/door-key';
 import type { BeanPoolIdentity } from '../utils/identity';
-import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
+import { numberNudge, numberOnlyAddress, registrarNameOf } from '../utils/address-follow';
 
 export { ErrorBoundary };
 
@@ -270,6 +270,7 @@ export default function ClaimCommunityScreen() {
     const [hasAddress, setHasAddress] = useState<boolean | null>(null);
     // Claimed at the server's public number, with no name yet: the owner is told what that means for members (D3).
     const [numberOnly, setNumberOnly] = useState<string | null>(null);
+    const [registrarName, setRegistrarName] = useState<string | null>(null);
     const [switching, setSwitching] = useState(false);
 
     const afterOwner = async (o: string) => {
@@ -278,6 +279,7 @@ export default function ClaimCommunityScreen() {
         const addresses = await readNodeAddresses(o);
         setHasAddress(addresses ? addresses.length > 0 : null);
         setNumberOnly(numberOnlyAddress(o, addresses));
+        setRegistrarName(registrarNameOf(o, addresses));
         setPhase('done');
     };
 
@@ -494,6 +496,11 @@ export default function ClaimCommunityScreen() {
                 <Text style={styles.lead}>{t("This phone's screen lock is how you manage it; keep it on. Add a second owner soon.")}</Text>
                 <Text style={styles.note} testID="claim-core-settings-next">{coreSettingsNextWords()}</Text>
                 {numberOnly ? <Text style={styles.note} testID="claim-number-nudge">{numberNudge(numberOnly)}</Text> : null}
+                {registrarName ? (
+                    <Text style={styles.note} testID="claim-registrar-key-note">
+                        {t("{name} belongs to this server's own key. Make a recovery code in Settings → Backups, so a new server can keep the name.", { name: registrarName })}
+                    </Text>
+                ) : null}
                 {actions.includes('set-address') || actions.includes('open-settings') ? (
                     <Pressable style={styles.primary} onPress={() => manage.start(name)} disabled={manage.busy} accessibilityRole="button">
                         <Text style={styles.primaryText}>{manage.busy ? t('Opening…') : actions.includes('set-address') ? t('Set the address') : t('Open Settings')}</Text>

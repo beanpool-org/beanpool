@@ -114,6 +114,7 @@ export const ADDRESS_SCREEN_WORDS = {
     choiceNumber: word("this server's number"),
     choiceDomain: word('your own domain'),
     recoveryReminder: word("A .beanpool.org name belongs to this server's key. Make sure you keep a recovery code in Backups, so a new server can keep the name if this server is ever lost."),
+    secondWayInNudge: word("Add this server's own address as a second way in: it keeps working if the name doesn't."),
     badgeFormer: word('Former'),
     badgeLost: word('Lost'),
     release: word('Release'),

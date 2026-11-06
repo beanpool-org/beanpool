@@ -424,7 +424,7 @@ export default function PairDeviceScreen() {
         if (target.appHost) {
             return global
                 ? t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there, or join the global community on this phone first, then scan again.', { host: target.scannedHost, own: target.appHost })
-                : t('This code is from {host}, a server your phone doesn\'t use: it uses {own}. Nothing was sent. Open BeanPool at {own} on the other device and scan the code there.', { host: target.scannedHost, own: target.appHost });
+                : t("This code is for {codeHost}. Your phone uses {currentHost}. Open Settings at {currentHost} and scan again, or move your phone first (Home card).", { codeHost: target.scannedHost, currentHost: target.appHost });
         }
         return global
             ? t('This code is from {host}, a server your phone doesn\'t use. Nothing was sent. Join the global community on this phone first, then scan again.', { host: target.scannedHost })

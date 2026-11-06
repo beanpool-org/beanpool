@@ -26,6 +26,10 @@ related: first-time-setup, what-the-server-sees, rate-limits, updates-and-health
 - The contact on the name is optional. Only the BeanPool project sees it, to reach you about the name; it is never checked, and it is deleted when the name's hold ends.
 - **New tunnel key does not help if a copy of this server's data folder, or a backup, went somewhere it shouldn't.** That copy holds your server's own key, which is what the name belongs to, and a server started from it gets the new tunnel key from the address service on its own. Nothing in Settings replaces your server's own key. Keep the data folder and backups private, and if a copy may have got out, contact the BeanPool project, who run the address service, and say so.
 
+### Your name and your server's key
+
+A .beanpool.org name belongs to your server's own key (the file data/libp2p_key). An owner's 12 words and the recovery code are not that key. A locked backup and a standby carry the key, so a restore or a take-over keeps the name. If a server is lost without a locked backup, its name sits parked for that key until the BeanPool project frees it by hand. An address on your own domain or IP address never depends on any BeanPool key.
+
 ![Public Address configuration in Settings](images/appliance-network.webp)
 
 ## Your own address: an IP address or a domain
@@ -54,7 +58,7 @@ Owners see **Your own address** under **Public Address**. Admins don't. It lists
 
 ### Behind a home router, or behind a proxy
 
-**Behind a home router** with no ports forwarded, use a .beanpool.org name. Nothing on the internet can reach your server to check an IP address or a domain. If you do forward ports 80 and 443 to it, an IP address or your own domain works the same way. But a home connection's IP address can change at any time, and only a name survives that.
+**Behind a home router** with no ports forwarded, use a .beanpool.org name. Nothing on the internet can reach your server to check an IP address or a domain. If you do forward ports 80 and 443 to it, an IP address or your own domain works the same way. But a home connection's IP address can change at any time, and only a name survives that. The tunnel is BeanPool's dynamic DNS. If you want your own domain on a changing home address, your router or DNS provider updates the record, and your server's certificate follows.
 
 **Behind a web server or proxy of your own** that holds the certificate for your domain, give the domain under Your own address as usual (**Use this domain**, or beanpool claim --address https://your.domain). When the community has no address yet, that makes it the community's address, the one the BeanPool directory lists (the list above says when a domain replaces an address it already has). Listing it only in BEANPOOL_ADDRESSES (Addresses members' apps use, below) lets members' apps use it but gives the community no address, so the directory has none to list. Your server still tries to get a certificate of its own for that domain, over port 80. Where the proxy does not pass /.well-known/acme-challenge/ on to your server, that fails quietly: the card says why, Let's Encrypt is asked at most once a day, no alert is sent, and phones see your proxy's certificate.
 

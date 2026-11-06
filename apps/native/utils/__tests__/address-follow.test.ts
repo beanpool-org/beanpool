@@ -48,7 +48,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import {
     acceptAddressFollow, addressFollowOffer, followCandidate, fetchIdentityStatement, forgetFollowChecks, keepCommunityIdentity, numberOnlyAddress,
-    readIdentityStatement, sameCommunity, snoozeAddressFollow, COMMUNITY_IDENTITY_KEY, FOLLOW_SNOOZE_KEY, FOLLOW_SNOOZE_MS,
+    registrarNameOf, readIdentityStatement, sameCommunity, snoozeAddressFollow, COMMUNITY_IDENTITY_KEY, FOLLOW_SNOOZE_KEY, FOLLOW_SNOOZE_MS,
     IDENTITY_STATEMENT_PATH, type AddressFollowDeps, type AddressFollowOffer,
 } from '../address-follow';
 import { communitySwitched } from '../community-switch';
@@ -589,5 +589,23 @@ describe('the owner\'s nudge: members reach this community by its server\'s numb
         expect(numberOnlyAddress('http://192.168.1.10:8080', [])).toBeNull();
         expect(numberOnlyAddress('https://192.168.1.10', [])).toBeNull();
         expect(numberOnlyAddress(null)).toBeNull();
+    });
+});
+
+describe('registrarNameOf', () => {
+    it('returns the .beanpool.org host when origin is a beanpool.org name', () => {
+        expect(registrarNameOf('https://byron.beanpool.org')).toBe('byron.beanpool.org');
+        expect(registrarNameOf('https://byron.beanpool.org:8443')).toBe('byron.beanpool.org');
+    });
+
+    it('returns the .beanpool.org host from addresses when origin is an IP or local address', () => {
+        expect(registrarNameOf('http://192.168.1.10:8080', ['byron.beanpool.org'])).toBe('byron.beanpool.org');
+        expect(registrarNameOf('https://203.0.113.5', ['203.0.113.5', 'mullum.beanpool.org'])).toBe('mullum.beanpool.org');
+    });
+
+    it('returns null when there is no beanpool.org name', () => {
+        expect(registrarNameOf('https://beans.example.org', ['203.0.113.5'])).toBeNull();
+        expect(registrarNameOf('https://203.0.113.5', [])).toBeNull();
+        expect(registrarNameOf(null, null)).toBeNull();
     });
 });

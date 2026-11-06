@@ -274,6 +274,17 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                 </div>
             )}
 
+            {!code && status?.liveRegistrarName && (
+                <div
+                    role="alert"
+                    data-testid="takeover-live-name-recovery-warning"
+                    className="p-3 rounded-xl border border-amber-800 bg-amber-950/50 text-amber-200 text-xs leading-relaxed"
+                    style={{ overflowWrap: 'anywhere' }}
+                >
+                    ⚠️ This community&apos;s address, {status.liveRegistrarName}, belongs to this server&apos;s key. Without a locked backup a lost server loses the key, and only the BeanPool project can give the name back, by hand. Make a recovery code: then every backup carries the key.
+                </div>
+            )}
+
             {status && status.state === 'sealed' && (
                 <div className="space-y-2">
                     <p className="text-xs font-bold text-nature-300 m-0">Any one of these can open it:</p>

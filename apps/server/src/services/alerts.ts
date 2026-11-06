@@ -104,7 +104,7 @@ import { getReplacedInfo } from './identity-epoch.js';
 import { keysAtShareSince, requestNoncePressure } from '../engine/nonce-pressure.js';
 import { reportKind, type ReportKind } from './report-kind.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, OWNER_ALERT_WORDS, type SecurityNote } from './security-signal.js';
-import { registrarNames } from '../engine/registrar-names.js';
+import { liveRegistrarName, registrarNames } from '../engine/registrar-names.js';
 import { listAutomationTokens } from '../automation-tokens.js';
 import { agentCallsTodayAll } from '../agent/limits.js';
 import { takedownsToday } from '../engine/agent-takedowns.js';
@@ -1544,8 +1544,15 @@ function backupConditions(): Condition[] {
         : { key: 'backups.offbox', active: false, detail: 'Off-box backups are arriving again.' };
     let locked = true;
     try { locked = backupLockState().locked; } catch { /* unknown: no nudge */ }
+    const liveName = liveRegistrarName();
     const none: Condition = status.destinations.length === 0 && !locked
-        ? { key: 'backups.none', active: true, detail: 'No backup leaves this server, and backups are not locked to a recovery code. Open Settings → Backups.' }
+        ? {
+            key: 'backups.none',
+            active: true,
+            detail: liveName
+                ? `No backup leaves this server, and backups are not locked to a recovery code. This community's address, ${liveName}, belongs to this server's key. Without a locked backup a lost server loses the key, and only the BeanPool project can give the name back, by hand. Make a recovery code: then every backup carries the key.`
+                : 'No backup leaves this server, and backups are not locked to a recovery code. Open Settings → Backups.',
+        }
         : { key: 'backups.none', active: false, detail: 'Backups are set up.' };
     return [offbox, none];
 }

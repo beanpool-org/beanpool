@@ -212,6 +212,17 @@ export function registrarNames(config: NodeConfig = getNodeConfig(), now = Date.
 }
 
 /**
+ * The current live .beanpool.org name this server holds, if any.
+ */
+export function liveRegistrarName(config: NodeConfig = getNodeConfig()): string | null {
+    const list = registrarNames(config);
+    const live = list.find((r) => r.role === 'current' && r.status === 'live' && !r.lost);
+    if (live) return live.address;
+    const anyLive = list.find((r) => r.status === 'live' && !r.lost);
+    return anyLive?.address ?? null;
+}
+
+/**
  * The one writer of the record. Called with every registrar answer the node acts on, BEFORE the caller changes the
  * stored `publicAddress` (the name stored until now is recorded first, so the answer can only add to it). Never
  * deletes an entry. Returns the record as it now stands.

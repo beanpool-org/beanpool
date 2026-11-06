@@ -1479,6 +1479,19 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
         expect(view.lines.map(l => [l.who, l.text])).toEqual([['Ana', '📷 Photo'], [null, 'Beans held in trust.'], [null, 'This message was deleted']]);
     });
 
+    it('before the phone has opened the lines, a line it must judge is "…": never the node\'s words in a member\'s name, nor a warning that then goes', () => {
+        const plain: HomeChatLine = { id: randomUUID(), author: ana.pub, who: 'Ana', at: at(3), type: 'text', systemType: null, text: 'node words', metadata: null };
+        for (const kind of ['group', 'dm'] as const) {
+            const view = chatCardView(inst(kind), { kind, name: 'G', unread: 0, muted: false, lines: [plain, groupLine(ana, 'x', 2)] }, me.pub, undefined);
+            if (view.state !== 'chat') throw new Error('drawn');
+            expect(view.lines.map(l => [l.who, l.text]), kind).toEqual([[null, '…'], [null, '…']]);
+        }
+        // An event's chat is readable by design: drawn at once.
+        const event = chatCardView(inst('event'), { kind: 'event', name: 'E', unread: 0, muted: false, lines: [plain] }, me.pub, undefined);
+        if (event.state !== 'chat') throw new Error('drawn');
+        expect(event.lines[0]).toMatchObject({ who: 'Ana', text: 'node words' });
+    });
+
     it('gone: "You\'re no longer in this chat." (no name, no line); none picked: "Pick a chat"; picked with no answer yet: its name', () => {
         const a = { cards: { 'chat-aaaa': { gone: 'left' } } };
         expect(chatCardFor(a, inst('dm'))).toEqual({ gone: 'left' });

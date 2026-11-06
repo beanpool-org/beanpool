@@ -124,7 +124,9 @@ const chatKindOf = (k: HomeChatKind) => (k === 'dm' ? 'dm' : k) as 'dm' | 'group
 
 /**
  * One line's words on the card, or null when it is never shown. `me`: the member's key ("You"). `opened`: what the
- * device made of the sealed lines (absent: nothing opened yet, every sealed line waits).
+ * device made of the lines (absent: not opened yet). Until then a line the device must judge (any line of a DM or a
+ * group's chat but the node's own and a removed one) is "…", nobody's, as a chat draws a line it hasn't opened yet: never
+ * the node's words in a member's name, and never a warning that goes a moment later.
  */
 export function chatLineView(line: HomeChatLine, kind: HomeChatKind, me: string | null | undefined, opened?: OpenedChat): ChatCardLine | null {
     const mine = (key: string | null | undefined) => !!me && !!key && key === me;
@@ -133,6 +135,7 @@ export function chatLineView(line: HomeChatLine, kind: HomeChatKind, me: string 
         return { ...base, who: null, text: tombstoneWords({ senderId: line.author, metadata: parse(line.metadata ?? line.sealed?.metadata) ?? undefined }, chatKindOf(kind)) };
     }
     if (line.type === 'system' || line.author === 'SYSTEM') return { ...base, who: null, text: chatLineWords(line.text ?? '') };
+    if (!opened && (kind === 'dm' || kind === 'group' || !!line.sealed)) return { ...base, who: null, text: '…' };
     const got = opened?.lines.get(line.id);
     if (got?.kind === 'hidden') return null;
     if (got?.kind === 'nobody') return { ...base, who: null, text: chatLineWords(got.text) };

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card)",
+    "draftedBy": "claude-opus-5-5 (machine draft, pinning-s1); claude-opus-5-5 (machine draft, vouch-invite); claude-opus-5-5 (machine draft, ask-admin-invite); claude-opus-5-5 (machine draft, removal-jury-j1); claude-opus-5-5 (machine draft, MCP-MODERATION S1: a post taken down); claude-sonnet-5-5 (machine draft, words-draft-e: app words, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, words-draft-e-fix1: the lights-out hall words from main, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week: the notice before the poll form and the node's refusal, 4 Nov 2026, unreviewed); claude-sonnet-5-5 (machine draft, poll once a week fix round: community polls only, the group note, and the node's refusal in hours and days, 4 Nov 2026, unreviewed); gemini-3.8-flash-high (machine draft, vouch-presets-apps-fix2: vouch presets and card); claude-sonnet-5-5 (machine draft, words-draft-1106: the voucher and budget app words, 6 Nov 2026, unreviewed)",
     "reviewed": false,
     "updated": "2026-11-06",
     "note": "Keys are the English sentences; a key that is missing shows the English.",
@@ -1005,5 +1005,8 @@
   "You’re using part of your credit line, so you can give {free} Beans of it at most now.": "你正在使用部分信用額度，因此目前最多只能贈予其中的 {free} 豆子。",
   "You’re using the credit line someone gave you, so none of it is free to give now.": "你正在使用他人贈予你的信用額度，因此目前沒有任何可贈予的額度。",
   "You’ve already vouched for @{name}.": "你已經為 @{name} 擔保過了。",
-  "You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.": "你已沒有可贈予的信用額度：只有他人贈予你的信用額度才可以轉贈。你的已知基礎額度與你賺取的信用額度始終歸你自己所有。"
+  "You’ve no credit line left to give: only credit line someone gave you can be passed on. Your known floor and the credit you earned stay yours.": "你已沒有可贈予的信用額度：只有他人贈予你的信用額度才可以轉贈。你的已知基礎額度與你賺取的信用額度始終歸你自己所有。",
+  "Part of the credit line someone gave you started as @{name}’s vouch and can’t go to them, so you can give them {most} Beans at most.": "有人贈予你的信用額度中，有一部分最初來自 @{name} 的擔保，不能給對方，因此你最多可以給對方 {most} 豆子的信用額度。",
+  "The credit line someone gave you started as @{name}’s vouch, so none of it can go to them.": "有人贈予你的信用額度最初來自 @{name} 的擔保，因此其中任何部分都不能給對方。",
+  "Your community's owners changed how it works: the budget for each voucher is now {budget} Beans.": "你所在社群的擁有者更改了運作規則：每位擔保人的預算現在是 {budget} 豆子。"
 }

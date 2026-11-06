@@ -34,6 +34,9 @@ describe('PinSheet', () => {
         render(<PinSheet post={samplePost} isOpen={true} onClose={vi.fn()} onSuccess={vi.fn()} />);
 
         expect(screen.getByRole('dialog', { name: 'Pin to the top…' })).toBeInTheDocument();
+        const closeBtn = screen.getByRole('button', { name: 'Close' });
+        expect(closeBtn).toBeInTheDocument();
+        expect(closeBtn).toHaveClass('min-w-[44px]', 'min-h-[44px]', 'w-11', 'h-11');
         expect(screen.getByRole('button', { name: /For 1 day/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /For 3 days/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /For 1 week/i })).toBeInTheDocument();

@@ -229,3 +229,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-02-20 - Add accessibilityState to voucher card actions and toggles
 **Learning:** In voucher detail cards, interactive action buttons (such as setting budget and stopping vouching) that disable while busy or unavailable lacked `accessibilityState={{ disabled, busy }}` feedback for screen readers, and collapsible section toggles ('See who they brought in' and 'Budget history') lacked `accessibilityState={{ expanded }}` to announce accordion state.
 **Action:** Always provide `accessibilityState={{ disabled, busy }}` on async action buttons and `accessibilityState={{ expanded }}` on disclosure toggles in detail cards.
+
+## 2027-02-20 - Add accessibilityLabel and busy state to remove everything button in WaysBackList
+**Learning:** In account protection ways back, the "Remove everything" action button conditionally replaces its text with an ActivityIndicator during removal and disables interaction when busy, but lacked an explicit `accessibilityLabel={t(WAYS_BACK_LINES.removeEverything)}` and `accessibilityState={{ disabled: busy, busy }}`, leaving screen readers without an accessible name or state feedback during async operations.
+**Action:** Always provide explicit `accessibilityLabel` and `accessibilityState={{ disabled: busy, busy }}` on action buttons whose visible text is conditionally replaced by an ActivityIndicator when busy.

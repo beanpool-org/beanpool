@@ -288,6 +288,8 @@ export function WaysBackList({
                             disabled={busy}
                             onPress={onRemoveEverything}
                             accessibilityRole="button"
+                            accessibilityLabel={t(WAYS_BACK_LINES.removeEverything)}
+                            accessibilityState={{ disabled: busy, busy }}
                         >
                             {busy ? <ActivityIndicator color={colors.feedback.danger.fg} /> : <Text style={s.everythingText}>{t(WAYS_BACK_LINES.removeEverything)}</Text>}
                         </Pressable>

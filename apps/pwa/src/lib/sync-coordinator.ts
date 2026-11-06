@@ -240,7 +240,9 @@ export function requestSync(scope: SyncScope = 'all'): Promise<void> {
             const runScope: SyncScope = pendingScope ?? 'all';
             pendingScope = null;
 
-            lastRunStartedAt = Date.now();
+            // Only a run of everything stands in for the sync a wide doorbell still owes (lib/sync createDeferredSync): a
+            // 'listings' run left the chats views out, so it did not read what that doorbell may have changed.
+            if (runScope === 'all') lastRunStartedAt = Date.now();
             syncPromise = performSyncImpl(runScope)
                 .catch((err) => {
                     console.error('[Sync Coordinator] Sync failed:', err);

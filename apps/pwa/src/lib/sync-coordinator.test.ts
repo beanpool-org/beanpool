@@ -499,6 +499,29 @@ describe('PWA Sync Coordinator', () => {
             expect(chats.mock.calls.length).toBe(first);     // the opening run's, none for the listing
         });
 
+        // Found in the self-check: the sync a wide doorbell still owes (an open group made, someone else's card) is dropped when a
+        // run started after it, because that run read everything changed before it. A listings run left the chats views out, so
+        // it must not stand in for it.
+        it('a run of the listing views only does not stand in for the full sync a wide doorbell still owes', async () => {
+            vi.spyOn(Math, 'random').mockReturnValue(0.5);          // the owed sync waits 150 s
+            const { chats, ring } = await open();
+            await ring({ type: 'profile_updated', publicKey: OTHER }, 0);
+            await ring(listing(OTHER), 500);
+            expect(chats).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(chats).toHaveBeenCalledTimes(1);
+        });
+
+        it('a run of everything still stands in for it, as before', async () => {
+            vi.spyOn(Math, 'random').mockReturnValue(0.5);
+            const { chats, ring } = await open();
+            await ring({ type: 'profile_updated', publicKey: OTHER }, 0);
+            await ring({ type: 'new_message', conversationId: 'c1', id: 'm1' }, 500);
+            expect(chats).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(300_000);
+            expect(chats).toHaveBeenCalledTimes(1);
+        });
+
         it('the delta cursor moves for a run of everything and not for a run of the listing views only', async () => {
             const { ring } = await open();
             saveSyncCursor(1_000);

@@ -467,7 +467,8 @@ describe('HeaderControls needs-you alert icons', () => {
         try {
             let syncListener: ((data?: unknown) => void) | null = null;
             vi.spyOn(sync, 'onSyncActivity').mockImplementation((cb) => {
-                syncListener = cb;
+                // (The listener is told which run it is in now, SyncRunInfo; this test hands it a doorbell's own data.)
+                syncListener = cb as (data?: unknown) => void;
                 return () => { syncListener = null; };
             });
 

@@ -475,3 +475,20 @@ export function numberOnlyAddress(origin: string | null | undefined, addresses?:
     });
     return hasName ? null : host;
 }
+
+/**
+ * The community's .beanpool.org name if one is known, else null.
+ * `origin` is the community's address on this phone (or the one just claimed at); `addresses` its own, as its info names them.
+ */
+export function registrarNameOf(origin: string | null | undefined, addresses?: readonly string[] | null): string | null {
+    if (origin) {
+        const o = communityOrigin(origin);
+        const host = o ? audienceOf(o) : null;
+        if (host && (host === 'beanpool.org' || host.endsWith('.beanpool.org'))) return host;
+    }
+    for (const a of addresses ?? []) {
+        const h = audienceOf(`https://${a}`);
+        if (h && (h === 'beanpool.org' || h.endsWith('.beanpool.org'))) return h;
+    }
+    return null;
+}

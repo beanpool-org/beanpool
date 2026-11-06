@@ -33,6 +33,7 @@ import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { recordReplicationAccess } from '../state-engine.js';
 import { isNodeOwner } from '../engine/node-roles.js';
+import { liveRegistrarName } from '../engine/registrar-names.js';
 import {
     getTakeoverStatus, getSealedTakeoverEnvelope, makeRecoveryCode, checkCurrentRecoveryCode, parseRecoveryCode,
     RecoveryCodeExistsError, RecoveryCodeOnStandbyError, noteEnvelopeFetch, getEnvelopeHolders,
@@ -82,6 +83,7 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
             held: standby ? getHeldEnvelopesStatus() : null,
             // After a take-over by code: "Your recovery code was used. Make a new one" until a new one is made.
             codeUsed: getTakeoverProgress().codeUsed,
+            liveRegistrarName: liveRegistrarName(),
         };
     });
 

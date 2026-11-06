@@ -426,3 +426,29 @@ describe('TakeoverLockPanel — an owner\'s way back is the community\'s (vault 
         expect(line).toHaveTextContent('Only an owner can bring an owner back.');
     });
 });
+
+describe('TakeoverLockPanel — live registrar name recovery warning (Fable §1.3 Place 2)', () => {
+    it('shows amber recovery warning when a registrar name is live and no recovery code exists', async () => {
+        const statusWithLiveName: TakeoverStatus = {
+            ...NO_CODE,
+            liveRegistrarName: 'riverbend.beanpool.org',
+        };
+        mockNode({ [statusRoute]: { json: statusWithLiveName }, [backupRoute]: { json: { role: 'primary', backupLock: NOT_LOCKED } } });
+        render(<TakeoverLockPanel activeNode={node} />);
+        const warning = await screen.findByTestId('takeover-live-name-recovery-warning');
+        expect(warning).toHaveTextContent("This community's address, riverbend.beanpool.org, belongs to this server's key.");
+        expect(warning).toHaveTextContent("Without a locked backup a lost server loses the key, and only the BeanPool project can give the name back, by hand.");
+        expect(warning).toHaveTextContent("Make a recovery code: then every backup carries the key.");
+    });
+
+    it('does not show amber recovery warning when a recovery code exists', async () => {
+        const statusWithCode: TakeoverStatus = {
+            ...SEALED,
+            liveRegistrarName: 'riverbend.beanpool.org',
+        };
+        mockNode({ [statusRoute]: { json: statusWithCode }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
+        render(<TakeoverLockPanel activeNode={node} />);
+        await screen.findByTestId('takeover-state');
+        expect(screen.queryByTestId('takeover-live-name-recovery-warning')).toBeNull();
+    });
+});

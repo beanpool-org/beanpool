@@ -426,7 +426,13 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
                 if (!io.ask) return 2;
             } else {
                 const got = await askForName(dir, name, contact, view.claim.id, io.out);
-                if (got.kind === 'live') { address = got.address; io.out(`✓ ${got.address} is live and reaches this server.`); break; }
+                if (got.kind === 'live') {
+                    address = got.address;
+                    io.out(`✓ ${got.address} is live and reaches this server.`);
+                    const host = new URL(got.address).host;
+                    io.out(`${host} belongs to this server's own key. Make a recovery code in Settings → Backups, so a new server can keep the name.`);
+                    break;
+                }
                 // Only a name still being asked for is on its way. What the QR carries meanwhile, the warning or the Address
                 // line below says: --direct may not be known yet, and the phone refuses a public http:// one.
                 if (got.kind === 'pending' || (got.kind === 'timeout' && got.taken)) coming = `${name}.beanpool.org`;

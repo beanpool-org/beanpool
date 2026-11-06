@@ -117,7 +117,7 @@ import { CLAIM_NEW_SERVER_ROUTE, claimRouteFor } from '../utils/claim-link';
 import { openDoorHref, restoreAtWaiting, takeRestoreAt } from '../utils/open-door';
 import { communityName } from '../utils/community-name';
 import { claimSuccessActions, readNodeAddresses } from '../utils/node-claim';
-import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
+import { numberNudge, numberOnlyAddress, registrarNameOf } from '../utils/address-follow';
 import { useManageNode } from '../components/useManageNode';
 import { Sentence } from '../components/Sentence';
 import { WaitingToJoin } from '../components/welcome/WaitingToJoin';
@@ -2978,6 +2978,7 @@ export default function WelcomeScreen() {
         const hasAddress = ownerAddresses ? ownerAddresses.length > 0 : null;
         const actions = claimSuccessActions({ isAnchor: true, hasAddress });
         const nudge = ownerAddresses === undefined ? null : numberOnlyAddress(createAnchorUrl, ownerAddresses);
+        const regName = ownerAddresses === undefined ? null : registrarNameOf(createAnchorUrl, ownerAddresses);
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -2988,6 +2989,11 @@ export default function WelcomeScreen() {
                         <Text style={styles.subtitle}>{t("This phone's screen lock is how you manage it; keep it on. Add a second owner soon.")}</Text>
                         <Text style={styles.subtitle} testID="owner-card-core-settings-next">{coreSettingsNextWords()}</Text>
                         {nudge ? <Text style={styles.subtitle} testID="owner-card-number-nudge">{numberNudge(nudge)}</Text> : null}
+                        {regName ? (
+                            <Text style={styles.subtitle} testID="owner-card-registrar-key-note">
+                                {t("{name} belongs to this server's own key. Make a recovery code in Settings → Backups, so a new server can keep the name.", { name: regName })}
+                            </Text>
+                        ) : null}
                         <Pressable
                             style={styles.secondaryBtn}
                             onPress={() => ownerManage.start(claimedName ?? createAnchorUrl)}

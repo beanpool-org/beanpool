@@ -1134,4 +1134,22 @@ describe('Addresses: Make main and Add an address (#2738)', () => {
         fireEvent.click(retry);
         expect(await screen.findByTestId('address-row-byron.beanpool.org')).toBeInTheDocument();
     });
+
+    it('shows the second-way-in nudge when an owner views a node with only BeanPool names', async () => {
+        stubNode({
+            ...mockReport,
+            addresses: [mockReport.addresses[0]],
+        });
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        const nudge = await screen.findByTestId('second-way-nudge');
+        expect(nudge).toHaveTextContent("Add this server's own address as a second way in: it keeps working if the name doesn't.");
+    });
+
+    it('does not show the second-way-in nudge when an address outside beanpool.org is configured', async () => {
+        // mockReport contains both byron.beanpool.org and 203.0.113.5
+        stubNode(mockReport);
+        render(<AddressesPanel activeNode={mockActiveNode} />);
+        await screen.findByTestId('address-row-byron.beanpool.org');
+        expect(screen.queryByTestId('second-way-nudge')).toBeNull();
+    });
 });

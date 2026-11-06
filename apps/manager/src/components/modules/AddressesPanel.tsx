@@ -1046,6 +1046,18 @@ export function AddressesPanel({ activeNode, onRefreshDiag, viewer = { kind: 'pa
                         </div>
                     );
                 })}
+
+                {isOwner && sortedAddresses.length > 0 && sortedAddresses.every((a) => isBeanPoolName(a.address)) && (
+                    <div
+                        data-testid="second-way-nudge"
+                        className="p-3 rounded-xl bg-nature-950/60 border border-nature-800 text-xs text-nature-300 flex items-start gap-2.5"
+                    >
+                        <span className="text-base select-none" aria-hidden="true">💡</span>
+                        <p className="m-0 leading-relaxed font-medium">
+                            {t(W.secondWayInNudge)}
+                        </p>
+                    </div>
+                )}
             </div>
 
             {/* The lower halves of the panels this list replaces (design §5.2): nothing an owner has goes. */}

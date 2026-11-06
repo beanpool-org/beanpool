@@ -20,6 +20,9 @@
  *     enterprise), whose line, every source counted, stays within the community's cap with the gift. Checked only once
  *     the giver has passed every rule of theirs, so a key that may give nothing learns nothing about the member it
  *     names; paused and frozen answer alike (`not_receiving`), so a refusal never says which (a freeze is the admins').
+ *   - Never back to its root: a piece rooted at the recipient (their vouch, or a gift split from it) can't go to them,
+ *     so a voucher can't pool their budget into their own line through accounts they vouched for (#2912's review;
+ *     Marty, 6 Nov: "Block it"). The split skips those pieces; if the rest can't cover the amount, the gift is refused.
  *
  * ## The split (§5 pick (a): the voucher's name on every piece)
  * A gift takes the giver's received pieces oldest first and writes one `room_gifts` row per piece it takes from, kind
@@ -70,6 +73,8 @@ const notEnoughRoom = (room: number, amount: number) => tr('You hold {room} Bean
 const inUse = (free: number) => tr('You’re using part of your credit line, so you can give {free} Beans of it at most now.', { free });
 const notReceiving = (name: string) => tr('@{name} can’t be given part of a credit line right now.', { name });
 const overCap = (name: string, cap: number) => tr('This gift would take @{name}’s credit line past the most this community allows ({cap} Beans), so it can’t be given.', { name, cap });
+const backToRoot = (name: string) => tr('Your credit line came from @{name}, so it can’t be given back to them.', { name });
+const partBackToRoot = (name: string, most: number) => tr('Part of your credit line came from @{name} and can’t go back to them, so you can give them {most} Beans at most.', { name, most });
 const noticeBody = (name: string, amount: number) => tr('@{name} gave you {amount} Beans of their credit line. It’s yours for good.', { name, amount });
 
 const now = () => new Date().toISOString();
@@ -182,10 +187,18 @@ function planGift(giver: string, to: string, amount: unknown): { amount: number;
     const rp = getMemberTrustProfile(to);
     const cap = creditCap(db);
     if (rp.knownGrant + rp.roomHeld + rp.otherAllowance + amount > cap) throw new CreditGiftError(409, 'over_cap', overCap(r.callsign, cap));
+    // Never back to its root: pieces rooted at the recipient stay out of the split.
+    const pieces = openPieces(giver);
+    const away = pieces.filter((p) => p.root !== to);
+    if (away.length < pieces.length) {
+        const most = away.reduce((s, p) => s + p.open, 0);
+        if (most <= 0) throw new CreditGiftError(409, 'back_to_root', backToRoot(r.callsign));
+        if (amount > most) throw new CreditGiftError(409, 'back_to_root', partBackToRoot(r.callsign, most));
+    }
     // Oldest first, one take per piece, until the amount is covered.
     const takes: { piece: Piece; take: number }[] = [];
     let left = amount;
-    for (const piece of openPieces(giver)) {
+    for (const piece of away) {
         if (left <= 0) break;
         const take = Math.min(piece.open, left);
         takes.push({ piece, take });

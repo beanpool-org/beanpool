@@ -29,6 +29,13 @@ import { formatRelativeTime } from './pulse';
 import { tierWords } from './trust-tier';
 import { VISITOR_WORDS } from './visitor-lobby';
 import type { ShopHomeCard } from './shop';
+import { HOME_CHAT_KINDS, readChatSettings, homeChatPicked, type HomeChatCard, type HomeChatKind, type HomeChatLine } from '@beanpool/core';
+import { checkDmThread, dmLineMarkText, dmLineShownText, encodePlaintext, type DmLineView, type DmThreadLine } from './e2e-crypto';
+import { dmKeyContext } from './dm-lock';
+import { openLine } from './group-chat-crypto';
+import { groupTombstoneText } from './group-chat-lines';
+import { groupLineView, isSealedGroupLine, GROUP_LINE_FORMER_MEMBER, GROUP_LINE_UNVERIFIED_TEXT } from './group-line-display';
+import { chatAuthorWords, chatLineWords } from './chat-line-words';
 export { tierWords };
 export type { HomeLayoutV2 };
 
@@ -359,6 +366,10 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
             case 'start':
                 return me.standing === 'member';
             case 'search':
+                return true;
+            // A chosen chat: always drawn, as "Pick a chat", its lines, waiting for the node, or gone with Remove; the
+            // frame never drops one by itself (DESIGN-home-chosen-chat-fable.md §2).
+            case 'chat':
                 return true;
             // Real open Needs only: drawn while the node sent a row, never an empty box (cold-start N2).
             case 'asked':
@@ -930,4 +941,198 @@ export function usePhoneAppCardDue({
     if (keptPosts >= 1) return true;
     if (weekOverAt !== null && now >= weekOverAt) return true;
     return false;
+}
+
+// ── A chosen chat (scratch/fable-design/DESIGN-home-chosen-chat-fable.md §1–§3, slice C3) ─────────────────────────────
+
+/** The chat card's own words (§2): word() keys, shown through t(). The same English as the phone's card. */
+export const CHAT_CARD_WORDS = {
+    /** No chat picked (settings that don't read). */
+    pick: word('Pick a chat'),
+    /** The chat has no line yet. */
+    empty: word('Nothing said here yet.'),
+    /** The node answered `gone`: the member isn't in it now, or it's a request they haven't accepted. */
+    gone: word("You're no longer in this chat."),
+    /** A photo's line. */
+    photo: word('📷 Photo'),
+    /** A sealed line that can't be shown here: too long to carry, or one that didn't open. */
+    locked: word('🔒 Message'),
+    /** A locked group's line while its key isn't in this browser's memory: the card never asks the node for one (§1). */
+    lockedOpen: word('🔒 Message · open to read'),
+    /** The settings list: its filter box, and what it says with no chat and after a read that failed. */
+    find: word('Find a chat'),
+    none: word('No chats yet.'),
+    failed: word("Couldn't load your chats. Try again."),
+    /** The card's name for the member's own lines. */
+    you: word('You'),
+} as const;
+
+/** The longest a line's words are on the card once opened here (the node cuts what it sends; this cuts what opens). */
+export const CHAT_LINE_CHARS = 200;
+
+/**
+ * The node's body for this chat card, when it is one: `gone` alone, or a chat of the kind the card holds now with its
+ * lines. A kept answer from before Settings… picked a chat of another kind is no answer for it (drawn as waiting until the
+ * node answers), and an odd body is none.
+ */
+export function chatCardFor(answer: Pick<HomeAnswer, 'cards'> | null | undefined, inst: Pick<HomeCardInstance, 'id' | 'settings'>): HomeChatCard | null {
+    const raw = (answer?.cards as Record<string, unknown> | undefined)?.[inst.id] as Record<string, unknown> | undefined;
+    if (!raw || typeof raw !== 'object') return null;
+    if (raw.gone === 'left' || raw.gone === 'hidden' || raw.gone === 'request') return { gone: raw.gone };
+    const s = readChatSettings(inst.settings);
+    if (!homeChatPicked(s)) return null;
+    if (!(HOME_CHAT_KINDS as readonly unknown[]).includes(raw.kind) || raw.kind !== s.kind || !Array.isArray(raw.lines)) return null;
+    const lines = (raw.lines as unknown[]).filter((l): l is HomeChatLine => {
+        const r = l as Partial<HomeChatLine> | null;
+        return !!r && typeof r === 'object' && typeof r.id === 'string' && typeof r.author === 'string' && typeof r.at === 'string' && typeof r.type === 'string';
+    });
+    return {
+        kind: raw.kind as HomeChatKind, name: typeof raw.name === 'string' ? raw.name : null,
+        unread: typeof raw.unread === 'number' && raw.unread > 0 ? Math.floor(raw.unread) : 0, muted: raw.muted === true, lines,
+        ...(typeof raw.peer === 'string' ? { peer: raw.peer } : {}),
+    };
+}
+
+/** One line of the chat card as it is drawn: who (null for the node's own line or a line that names nobody), when, the words. */
+export interface ChatLineShown {
+    id: string;
+    who: string | null;
+    mine: boolean;
+    at: string;
+    text: string;
+}
+
+/**
+ * What opens a sealed line on this device, handed in by the page: the member's identity (a DM's key context, dm-lock
+ * dmKeyContext, opened by core checkDmThread as Talk opens it), and a locked group's epoch key only when it is already open
+ * in this page's memory (group-chat-keys `openedKey`: no read, no wrap opened here). Nothing opened is kept.
+ */
+export interface ChatOpeners {
+    identity: { publicKey: string; privateKey: string } | null;
+    /** The epoch key of a group's chat, if this page already opened it (Talk opened that chat in this page's life). */
+    groupKey?: (groupId: string, epoch: number) => Uint8Array | undefined;
+    /**
+     * Whether this browser holds the group's chat locked: its kept record (group-hold `lockedGroupsOrNull`, this browser's
+     * IndexedDB, as Talk reads it; unreadable counts as locked) or what this page has seen (`seenLockedInMemory`). Both are
+     * local: the node is never asked. `undefined` while the kept record hasn't been read yet.
+     */
+    groupLocked?: (groupId: string) => boolean | undefined;
+}
+
+/** A line the card can't place yet (the kept lock record not read): nobody's, as a chat draws a line it hasn't opened. */
+export const CHAT_LINE_PENDING = '…';
+
+type ChatWithLines = Extract<HomeChatCard, { lines: HomeChatLine[] }>;
+/** A line the node stores readable (it sends its metadata, null or not); a too-long sealed one comes as `🔒 Message` with none. */
+const isReadable = (l: HomeChatLine): boolean => !l.sealed && l.metadata !== undefined;
+const isNodeLine = (l: HomeChatLine): boolean => l.type === 'system' || l.author === 'SYSTEM';
+const cut = (s: string): string => {
+    const chars = Array.from(s);
+    return chars.length > CHAT_LINE_CHARS ? `${chars.slice(0, CHAT_LINE_CHARS).join('').trimEnd()}…` : s;
+};
+const nobodys = (l: HomeChatLine, text: string): ChatLineShown => ({ id: l.id, who: null, mine: false, at: l.at, text });
+
+/**
+ * A direct chat's lines as Talk shows them (core checkDmThread, the one rule both apps judge a DM by): a sealed line opened
+ * bound to its named sender and id under this member's key context; a readable line in a member's name never anyone's
+ * words (unless it is the admin page's message); a deleted one as deleted. The other person is the node's `peer`, else
+ * the one other author among the lines; with neither, no sealed line opens.
+ */
+function dmLinesShown(card: ChatWithLines, conversationId: string, me: ChatOpeners['identity']): ChatLineShown[] {
+    const peer = (card as { peer?: unknown }).peer;
+    const others = [...new Set(card.lines.filter(l => !isNodeLine(l) && l.author !== me?.publicKey).map(l => l.author))];
+    const peerKey = typeof peer === 'string' && peer ? peer : others.length === 1 ? others[0] : null;
+    const ctx = me && peerKey ? dmKeyContext({ id: conversationId, type: 'dm', participants: [me.publicKey, peerKey] }, me) : null;
+    const thread: DmThreadLine[] = [];
+    for (const l of card.lines) {
+        if (isNodeLine(l)) continue;
+        if (l.sealed) thread.push({ id: l.id, authorPubkey: l.author, ciphertext: l.sealed.ciphertext, nonce: l.sealed.nonce, type: l.type, metadata: l.sealed.metadata, timestamp: l.at });
+        else if (isReadable(l)) thread.push({ id: l.id, authorPubkey: l.author, ciphertext: encodePlaintext(l.text ?? '').ciphertext, nonce: 'plaintext-v1', type: l.type, metadata: l.metadata ?? null, timestamp: l.at });
+    }
+    const views: Map<string, DmLineView> = checkDmThread(thread, ctx ? { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex } : null, conversationId);
+    return card.lines.map((l): ChatLineShown => {
+        if (isNodeLine(l)) return nobodys(l, cut(chatLineWords(l.text ?? '')));
+        const v = views.get(l.id);
+        // Too long to carry: the node sent `🔒 Message` and no bytes.
+        if (!v) return nobodys(l, t(CHAT_CARD_WORDS.locked));
+        if (l.type === 'removed') return nobodys(l, chatLineWords(dmLineShownText(v)));
+        if (v.mark === 'from-admins') return nobodys(l, cut(v.text ?? ''));
+        // Not opened (no key context, or it doesn't verify): no words and nobody's; a readable line in a member's name, Talk's words for it.
+        if (v.text === null) return nobodys(l, v.mark === 'not-encrypted' ? chatLineWords(dmLineShownText(v)) : t(CHAT_CARD_WORDS.locked));
+        // An older app's line (format 2): nothing in it proves who wrote it, so the node can name either person. The card has
+        // no room for a mark under the line, so it says the mark alone, nobody's (as the phone's card and its chat list).
+        if (v.mark === 'old-app') return nobodys(l, chatLineWords(dmLineMarkText('old-app') ?? ''));
+        const mine = !!me && l.author === me.publicKey;
+        return { id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(v.text) };
+    });
+}
+
+/**
+ * A group's, an event's or an enterprise's chat lines: a readable line as its words (a photo as `📷 Photo`), a removed one
+ * by who removed it (Talk's words), the node's own as its words. A locked group's sealed line opens only under an epoch
+ * key already in this page's memory, by the display rule (group-line-display.ts: the key that opens it is its author,
+ * "You" for mine, any other key "A former member"; an edit is tried as one); without one `🔒 Message · open to read`;
+ * one that doesn't open, Talk's "couldn't be verified".
+ */
+function groupLinesShown(card: ChatWithLines, conversationId: string, open: ChatOpeners): ChatLineShown[] {
+    const me = open.identity?.publicKey;
+    const groupId = conversationId.toLowerCase();
+    // A group's chat is locked here when this browser holds it so (its kept record, or what this page has seen), or when
+    // any of its lines is sealed: there a readable line in a member's name is nobody's (Talk's groupLineShown), never their
+    // words. Until the kept record is read such a line is "…", nobody's, as the phone's card draws a line it hasn't judged:
+    // never the node's words in a member's name, and never a warning that goes a moment later. An event's or enterprise's
+    // chat is readable.
+    const held = card.kind === 'group' ? open.groupLocked?.(groupId) : false;
+    const locked = card.kind === 'group' && (held === true || card.lines.some(l => !!l.sealed && isSealedGroupLine({ nonce: l.sealed.nonce, type: l.type })));
+    const pending = card.kind === 'group' && !locked && !!open.groupLocked && held === undefined;
+    const out: ChatLineShown[] = [];
+    for (const l of card.lines) {
+        if (l.type === 'removed') {
+            out.push(nobodys(l, chatLineWords(groupTombstoneText({ authorPubkey: l.author, metadata: l.metadata ?? l.sealed?.metadata ?? null }))));
+        } else if (isNodeLine(l)) {
+            out.push(nobodys(l, cut(chatLineWords(l.text ?? ''))));
+        } else if (l.sealed && isSealedGroupLine({ nonce: l.sealed.nonce, type: l.type })) {
+            const sealed = l.sealed;
+            const served = (editedAt: string | null) => ({
+                id: l.id, authorPubkey: l.author, authorCallsign: l.who, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: sealed.metadata, editedAt, type: l.type,
+            });
+            // The node left out the lines from before this member's first epoch (fromEpochOf): none here is hidden for that.
+            const ctx = { groupId, fromEpoch: 1, keyFor: (e: number) => open.groupKey?.(groupId, e), open: openLine, roster: [] };
+            // The card carries no edit mark: a line that doesn't open as written is tried as an edit (sealed as part 'edit'),
+            // as the phone's card does, so a held key never shows an edited line as "couldn't be verified".
+            let v = groupLineView(served(null), ctx);
+            if (v.unverified) v = groupLineView(served(l.at), ctx);
+            if (v.hidden) continue;
+            if (v.waitingKey) { out.push(nobodys(l, t(CHAT_CARD_WORDS.lockedOpen))); continue; }
+            if (v.unverified || !v.signer) { out.push(nobodys(l, chatLineWords(GROUP_LINE_UNVERIFIED_TEXT))); continue; }
+            const mine = !!me && v.signer === me;
+            // Named by the key that opened it: mine; the node's name for the author when that key is the author's; any other
+            // key (metadata.sender, a line from before a key change) by the display rule, which with no roster here is
+            // "A former member", as Talk and the phone name it. Opened words are never drawn with no name.
+            const who = mine ? t(CHAT_CARD_WORDS.you) : v.signer === l.author ? l.who : chatAuthorWords(v.name ?? GROUP_LINE_FORMER_MEMBER);
+            out.push({ id: l.id, who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(v.text) });
+        } else if (!isReadable(l)) {
+            // Sealed some other way, or too long to carry (`🔒 Message`, no bytes).
+            out.push(nobodys(l, t(CHAT_CARD_WORDS.locked)));
+        } else if (locked) {
+            out.push(nobodys(l, chatLineWords(GROUP_LINE_UNVERIFIED_TEXT)));
+        } else if (pending) {
+            out.push(nobodys(l, CHAT_LINE_PENDING));
+        } else {
+            const mine = !!me && l.author === me;
+            out.push({ id: l.id, who: mine ? t(CHAT_CARD_WORDS.you) : l.who, mine, at: l.at, text: l.type === 'image' ? t(CHAT_CARD_WORDS.photo) : cut(l.text ?? '') });
+        }
+    }
+    return out;
+}
+
+/** The chat card's lines, oldest first, opened on this device (§1). Nothing opened is kept anywhere. */
+export function chatLinesShown(card: HomeChatCard, conversationId: string, open: ChatOpeners): ChatLineShown[] {
+    if (!('lines' in card)) return [];
+    return card.kind === 'dm' ? dmLinesShown(card, conversationId, open.identity) : groupLinesShown(card, conversationId, open);
+}
+
+/** One line as the card writes it: "Ana, 2h ago: Who has a ladder?", "You, 1h ago: …", the node's own "2h ago: …". */
+export function chatLineText(l: ChatLineShown): string {
+    return groupLastLine({ who: l.who, at: l.at, text: l.text });
 }

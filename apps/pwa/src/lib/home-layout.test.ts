@@ -208,6 +208,21 @@ describe('adding, removing, moving, resetting (§1.3)', () => {
         expect(saved.cards.find(c => c.id === 'search-aaaa')!.settings).toEqual({ q: 'jam', kind: 'offer' });
         expect(changeCardSettings(saved, 'tips', { q: 'x' }, NOW)).toBeNull();
     });
+
+    it('a chat card picked again for another chat takes a new id in the same place (the phone\'s rule); the same chat keeps its id', () => {
+        const added = addCard(null, 'chat', NOW, { settings: { conversationId: 'conv-1', kind: 'dm', name: 'Ben' }, random: () => 0 });
+        if (!added.ok) throw new Error('the chat card was refused');
+        const before = ids(added.layout) ?? [];
+        const at = before.indexOf('chat-aaaa');
+        const renamed = changeCardSettings(added.layout, 'chat-aaaa', { conversationId: 'conv-1', kind: 'dm', name: 'Benjamin' }, NOW)!;
+        expect(ids(renamed)).toEqual(before);
+        const repicked = changeCardSettings(added.layout, 'chat-aaaa', { conversationId: 'g-7', kind: 'group', name: 'Garden crew' }, NOW)!;
+        const after = ids(repicked) ?? [];
+        expect(after[at]).toMatch(/^chat-[a-z2-7]{4}$/);
+        expect(after[at]).not.toBe('chat-aaaa');
+        expect(after.filter((_, i) => i !== at)).toEqual(before.filter((_, i) => i !== at));
+        expect(repicked.cards[at].settings).toEqual({ conversationId: 'g-7', kind: 'group', name: 'Garden crew' });
+    });
 });
 
 describe('which copy wins, and the members who were here before (§2.6)', () => {

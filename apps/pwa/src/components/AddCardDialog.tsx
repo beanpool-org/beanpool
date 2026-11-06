@@ -12,12 +12,14 @@
  * it, focus goes back to what opened it (or where the page sends it after an add; components/dialog-focus.ts). Every
  * control is at least 44 px.
  */
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, homeCardHue, readDecideSettings, readSearchSettings, readSkySettings, searchFromSheet, t, word,
-    type HomeDecideShow, type HomeSearchKind, type SkySettings, type WordKey,
+    HOME_CHAT_NAME_CHARS, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, homeCardHue, homeChatPicked, readChatSettings, readDecideSettings, readSearchSettings, readSkySettings, searchFromSheet, t, word,
+    type HomeChatKind, type HomeDecideShow, type HomeSearchKind, type SkySettings, type WordKey,
 } from '@beanpool/core';
 import { type PickerGroup, type PickerRow } from '../lib/home-layout';
+import { CHAT_CARD_WORDS } from '../lib/home-cards';
+import { formatRelativeTime } from '../lib/pulse';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { useDialogFocus } from './dialog-focus';
 
@@ -60,9 +62,11 @@ interface PickerProps {
     returnFocus?: () => HTMLElement | null | undefined;
     /** For a saved search's distance chips: see {@link CardSettingsDialog}. */
     hasPoint?: boolean;
+    /** For a chosen chat's list: see {@link CardSettingsDialog}. */
+    chats?: ChatPick;
 }
 
-export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPoint }: PickerProps) {
+export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPoint, chats }: PickerProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
     // An add sends focus to the new card's "…" (the page does it): closing then doesn't pull it back to the opener.
     const added = useRef(false);
@@ -76,7 +80,7 @@ export function AddCardDialog({ groups, full, onAdd, onClose, returnFocus, hasPo
 
     if (settingsFor) {
         return (
-            <CardSettingsDialog type={settingsFor.type} name={settingsFor.name} mode="add" keepFocus={added} hasPoint={hasPoint}
+            <CardSettingsDialog type={settingsFor.type} name={settingsFor.name} mode="add" keepFocus={added} hasPoint={hasPoint} chats={chats}
                 onSubmit={(s) => add(settingsFor.type, s)} onClose={() => setSettingsFor(null)}
                 // Back in the picker: its row's Add, else its heading.
                 returnFocus={() => dialog.current?.querySelector<HTMLElement>(`[data-testid="home-add-${settingsFor.type}"]`) ?? dialog.current?.querySelector<HTMLElement>('h2')} />
@@ -139,6 +143,105 @@ interface SettingsProps {
     keepFocus?: React.RefObject<boolean>;
     /** Where focus goes on close when what opened the settings has gone (a menu's Settings… item). */
     returnFocus?: () => HTMLElement | null | undefined;
+    /** A chosen chat's list: the member's chats, read once as it opens, and the ones already on Home. */
+    chats?: ChatPick;
+}
+
+/** One chat the settings list offers (DESIGN-home-chosen-chat-fable.md §2): a group's, an event's, an enterprise's, or a person's. */
+export interface ChatPickRow {
+    conversationId: string;
+    kind: HomeChatKind;
+    name: string;
+    /** Its last line's time, when the list knows it ("2h ago"). */
+    at?: string | null;
+}
+
+/** What the chat list reads, handed in by the page: the read (once, at setup) and the chats pinned on Home already. */
+export interface ChatPick {
+    load: () => Promise<ChatPickRow[]>;
+    pinned: readonly string[];
+}
+
+/** A row's mark by kind (§2: groups 🥖🎯📅, then people 👤, as the phone's list marks them): decoration, hidden from a screen reader. */
+const CHAT_KIND_MARK: Record<HomeChatKind, string> = { group: '🥖', enterprise: '🎯', event: '📅', dm: '👤' };
+
+/** Past this many rows the list has a filter box (§2). */
+export const CHAT_FILTER_FROM = 8;
+
+/**
+ * A chosen chat's settings: the member's chats, groups first (by kind mark), then people, each a 48 px row of its name and
+ * when it last spoke; a filter box past 8; a chat already on Home says so and isn't offered again. A tap picks it: the
+ * card keeps its id, kind and name (core readChatSettings). Read once as it opens; a failed read says so with Try again.
+ */
+function ChatPickList({ chats, current, onPick }: { chats: ChatPick; current?: string; onPick: (row: ChatPickRow) => void }) {
+    const [rows, setRows] = useState<ChatPickRow[] | null>(null);
+    const [failed, setFailed] = useState(false);
+    const [filter, setFilter] = useState('');
+    const [tries, setTries] = useState(0);
+    useEffect(() => {
+        let live = true;
+        setFailed(false);
+        chats.load().then((r) => { if (live) setRows(r); }).catch(() => { if (live) setFailed(true); });
+        return () => { live = false; };
+        // Read once as it opens (and again on Try again): never on every render, so `chats` (a new object each render) isn't a dependency.
+    }, [tries]);
+    if (failed) {
+        return (
+            <div data-testid="home-chat-pick-failed">
+                <p className="m-0 mb-2 text-sm text-nature-700 dark:text-nature-200">{t(CHAT_CARD_WORDS.failed)}</p>
+                <button type="button" className={plain} onClick={() => setTries((n) => n + 1)}>{t('Try again')}</button>
+            </div>
+        );
+    }
+    if (!rows) return <p data-testid="home-chat-pick-loading" className="m-0 text-sm text-nature-700 dark:text-nature-200">{t('Loading…')}</p>;
+    if (!rows.length) return <p data-testid="home-chat-pick-none" className="m-0 text-sm text-nature-700 dark:text-nature-200">{t(CHAT_CARD_WORDS.none)}</p>;
+    const q = filter.trim().toLocaleLowerCase();
+    const shown = q ? rows.filter((r) => r.name.toLocaleLowerCase().includes(q)) : rows;
+    const pinned = new Set(chats.pinned);
+    return (
+        <div>
+            {rows.length > CHAT_FILTER_FROM && (
+                <>
+                    <label htmlFor="home-chat-filter" className="sr-only">{t(CHAT_CARD_WORDS.find)}</label>
+                    <input id="home-chat-filter" data-testid="home-chat-filter" type="search" value={filter} onChange={(e) => setFilter(e.target.value)}
+                        placeholder={t(CHAT_CARD_WORDS.find)} autoComplete="off"
+                        className="w-full min-w-0 min-h-[44px] mb-2 px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-base text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500" />
+                </>
+            )}
+            <ul data-testid="home-chat-list" className="list-none m-0 p-0 rounded-xl border border-nature-200 dark:border-nature-800">
+                {shown.map((r) => {
+                    // On Home already (this card's own chat in Settings… included): said, never offered twice.
+                    const on = pinned.has(r.conversationId) || r.conversationId === current;
+                    const when = r.at ? formatRelativeTime(r.at) : '';
+                    const mark = CHAT_KIND_MARK[r.kind];
+                    const inner = (
+                        <>
+                            {mark && <span aria-hidden="true" className="shrink-0">{mark}</span>}
+                            <span className="flex-1 min-w-0">
+                                <span className="block min-w-0 break-words text-sm font-bold text-nature-900 dark:text-white">{r.name}</span>
+                                {when && <span className="block text-xs text-nature-700 dark:text-nature-200">{when}</span>}
+                            </span>
+                        </>
+                    );
+                    return (
+                        <li key={r.conversationId} data-testid="home-chat-row" className="border-b border-nature-100 dark:border-nature-800 last:border-b-0 min-w-0">
+                            {on ? (
+                                <div className="flex items-center gap-2 px-3 py-1 min-h-[48px] min-w-0">
+                                    {inner}
+                                    <span data-testid="home-chat-on" className="shrink-0 text-xs font-semibold text-nature-600 dark:text-nature-300">{t('On Home')}</span>
+                                </div>
+                            ) : (
+                                <button type="button" data-testid="home-chat-choose" onClick={() => onPick(r)}
+                                    className="w-full flex items-center gap-2 px-3 py-1 min-h-[48px] min-w-0 text-left bg-transparent border-0 cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl">
+                                    {inner}
+                                </button>
+                            )}
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
 }
 
 /** A saved search's kinds, as its sheet offers them (CARD-FRAME §4). word() keys: shown through t(). */
@@ -178,7 +281,7 @@ function Chips<T>({ legend, testId, options, value, onPick }: {
  * or the place this browser shared); without one the node ignores the distance, so the sheet doesn't offer it, and a
  * distance already kept stays as it was.
  */
-export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false, onSubmit, onClose, keepFocus, returnFocus }: SettingsProps) {
+export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false, onSubmit, onClose, keepFocus, returnFocus, chats }: SettingsProps) {
     const dialog = useRef<HTMLDivElement | null>(null);
     useDialogFocus(dialog, onClose, { keepFocus, fallback: returnFocus });
     const [start] = useState(() => readSearchSettings(initial));
@@ -189,6 +292,18 @@ export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false
     const [place, setPlace] = useState<SkySettings['place']>(() => readSkySettings(initial).place);
     const [show, setShow] = useState<HomeDecideShow>(() => readDecideSettings(initial).show);
     const words = q.trim();
+    if (type === 'chat') {
+        // A tap on a chat picks it: in `add` the card goes on Home with it, in `save` the card shows it instead.
+        const now = readChatSettings(initial);
+        return (
+            <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>
+                {chats
+                    ? <ChatPickList chats={chats} current={homeChatPicked(now) ? now.conversationId : undefined}
+                        onPick={(r) => onSubmit({ conversationId: r.conversationId, kind: r.kind, name: Array.from(r.name.trim()).slice(0, HOME_CHAT_NAME_CHARS).join('') })} />
+                    : <p className="m-0 text-sm text-nature-700 dark:text-nature-200">{t(CHAT_CARD_WORDS.failed)}</p>}
+            </Shell>
+        );
+    }
     if (type === 'decide') {
         return (
             <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>

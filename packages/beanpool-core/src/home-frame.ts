@@ -253,7 +253,15 @@ export type HomeChatGone = 'left' | 'hidden' | 'request';
  * unread count, whether they muted it, and its last lines), or `gone` alone.
  */
 export type HomeChatCard =
-    | { kind: HomeChatKind; name: string | null; unread: number; muted: boolean; lines: HomeChatLine[] }
+    | {
+        kind: HomeChatKind; name: string | null; unread: number; muted: boolean; lines: HomeChatLine[];
+        /**
+         * A direct chat's other person, by their key (slice C3): what the web, which keeps no list of conversations, builds
+         * the chat's key context from, so the member's own lines open too when the other person wrote none of the last
+         * three. The node tells a participant this already (the conversations list). Absent on a group's, from an older node.
+         */
+        peer?: string;
+    }
     | { gone: HomeChatGone };
 
 /**

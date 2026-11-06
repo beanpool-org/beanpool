@@ -1219,10 +1219,18 @@ function chatLineOf(r: ChatRow): HomeChatLine | null {
 
 const chatLinesOf = (rows: ChatRow[]): HomeChatLine[] => rows.map(chatLineOf).filter((l): l is HomeChatLine => l !== null);
 
-/** A direct chat on the card: the other person's name, their lines and the member's own (withheld ones included), oldest first. */
+/**
+ * A direct chat on the card: the other person's name and key, their lines and the member's own (withheld ones included),
+ * oldest first. The key (`peer`) is what the web builds the chat's key context from (slice C3): the conversations list
+ * tells a participant the same.
+ */
 function directChat(c: Ctx, id: string, other: string | null, rows: ChatRow[], unread: number): HomeChatCard {
     const name = other ? getMember(other)?.callsign : null;
-    return { kind: 'dm', name: name ? clip(name, NAME_CHARS) : null, unread, muted: muted(getChatMutesFor(c.me!).get(id), c.now), lines: chatLinesOf(rows) };
+    const peer = bounded(other, ID_CHARS);
+    return {
+        kind: 'dm', name: name ? clip(name, NAME_CHARS) : null, unread, muted: muted(getChatMutesFor(c.me!).get(id), c.now), lines: chatLinesOf(rows),
+        ...(peer ? { peer } : {}),
+    };
 }
 
 /**

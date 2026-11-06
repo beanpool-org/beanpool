@@ -48,6 +48,10 @@
  *      scripted drops at 1280 px count the ones landing a column over (design §5's stop). `HOME_ONLY=dragAcross`,
  *      `DRAG_PARTS=1,2,3,4,5`.
  *
+ *   9. A chosen chat (DESIGN-home-chosen-chat-fable.md, slice C3): picked from Add a card → A chat, its last three lines
+ *      opened in the browser (the member's own sealed lines by the node's `peer`), never in the kept Home; 320 × 1.3 and
+ *      1280, light and dark. `HOME_ONLY=chatCard`.
+ *
  * Fails on any sideways scroll, a control under 44 px, an axe violation, a document-policy violation, or a request to
  * any host but this machine.
  *
@@ -428,6 +432,116 @@ async function tipsCardChecks(page, where) {
 }
 
 // ---------- 1 and 2: a member of a local community ----------
+
+/**
+ * 9. A chosen chat (DESIGN-home-chosen-chat-fable.md §2, slice C3), against a real node: Ana picks her direct chat with
+ * Kofi from Add a card → A chat (a real dialog, axe clean), and the card shows its last three lines, opened in the
+ * browser: Kofi's line, sealed to a key this test doesn't hold, as "🔒 Message"; her own two, sealed by her key to his,
+ * as "You, …: <words>" (the node's `peer` is the only way the browser knows Kofi's key, since he wrote none of them in
+ * words it can open). Her words never reach the Home cache in IndexedDB. No sideways scroll, every control 44 px, axe
+ * clean, at 320 px with 1.3x text and at 1280, light and dark; the pictures for the PR (HOME_SHOTS). `HOME_ONLY=chatCard`.
+ */
+async function chatCard(browser, root) {
+    const ana = memberIdentity('Ana');
+    const wren = memberIdentity('Wren');
+    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 30 }, { publicKey: wren.publicKey, callsign: 'Wren', joinedDaysAgo: 20 }]);
+    console.log(`\nA chosen chat on ${node.origin}; Ana pins her chat with Wren:`);
+    try {
+        // A direct chat of two real keys, as the node stores one, and three lines sealed in it as the apps seal them.
+        const dmId = crypto.randomUUID();
+        await node.ask({ op: 'sql', params: [dmId, wren.publicKey, new Date(Date.now() - 3600_000).toISOString()],
+            sql: "INSERT INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, 'dm', NULL, NULL, ?, ?)" });
+        for (const pk of [ana.publicKey, wren.publicKey]) {
+            await node.ask({ op: 'sql', params: [dmId, pk], sql: 'INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)' });
+        }
+        const { sealDmLine } = await import('@beanpool/core');
+        const said = [[wren, 'Who has a ladder I could borrow this week?'], [ana, 'Mine is at the shed, come by after four'], [ana, 'Bring the long one back on Sunday please']];
+        for (const [i, [by, text]] of said.entries()) {
+            const id = crypto.randomUUID();
+            const peer = by === ana ? wren : ana;
+            const s = sealDmLine(text, { myEdPrivHex: by.privateKey, peerEdPubHex: peer.publicKey, conversationId: dmId }, { senderPubHex: by.publicKey, messageId: id });
+            await node.ask({ op: 'sql', params: [id, dmId, by.publicKey, s.ciphertext, s.nonce, new Date(Date.now() - (3 - i) * 600_000).toISOString()],
+                sql: "INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, ?, ?, 'text', ?)" });
+        }
+        for (const dark of [false, true]) {
+            const theme = dark ? 'dark' : 'light';
+            const { context, page } = await openContext(browser, node.origin, { identity: ana, dark, installDismissed: true });
+            try {
+                await land(page, node.origin);
+                await page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
+                // Light: Add a card → A chat. Dark (the card is on her account by then): its "…" → Settings…, the same list.
+                const pinnedAlready = await page.locator('[data-testid^="home-card-chat-"]').first().waitFor({ timeout: 8_000 }).then(() => true, () => false);
+                {
+                    if (pinnedAlready) {
+                        await page.locator('[data-testid^="home-card-chat-"]').first().getByTestId('home-card-menu').click();
+                        await page.getByTestId('home-menu-settings').click();
+                    } else {
+                        await page.getByTestId('home-add-open').click();
+                        await page.getByTestId('home-add-chat').click();
+                    }
+                    const dialog = page.getByTestId('home-settings-dialog');
+                    await dialog.getByTestId('home-chat-row').first().waitFor({ timeout: 15_000 });
+                    const rows = await dialog.getByTestId('home-chat-row').allInnerTexts();
+                    check(rows.some((r) => /Wren/.test(r)) && rows.some((r) => /Garden group/.test(r)), `the chat list: her group and Wren (${rows.map((r) => r.replace(/\s+/g, ' ')).join(' | ')})`);
+                    await touchTargets(page, '[data-testid="home-settings-dialog"]', `the chat list (${theme})`);
+                    await axeClean(page, '[data-testid="home-settings-dialog"]', `the chat list (${theme})`);
+                    await shot(page, `9-chat-list-320-${theme}`, { window: true });
+                    if (pinnedAlready) {
+                        check(/Wren[\s\S]*On Home/.test(rows.find((r) => /Wren/.test(r)) ?? ''), 'in Settings…, the chat on Home says On Home');
+                        await dialog.getByTestId('home-settings-dialog-done').click();
+                    } else {
+                        await dialog.getByTestId('home-chat-choose').filter({ hasText: 'Wren' }).click();
+                    }
+                }
+                const card = page.locator('[data-testid^="home-card-chat-"]').first();
+                await card.getByTestId('home-chat-line').nth(2).waitFor({ timeout: 15_000 });
+                const lines = await card.getByTestId('home-chat-line').allInnerTexts();
+                check(lines.length === 3 && /^Wren, .+: Who has a ladder I could borrow this week\?$/.test(lines[0]) && /^You, .+: Mine is at the shed, come by after four$/.test(lines[1])
+                    && /^You, .+: Bring the long one back on Sunday please$/.test(lines[2]), `the card's three lines, oldest first, opened in the browser, hers as "You" (${lines.join(' | ')})`);
+                check(/Wren/.test(await card.getByTestId('home-chat-name').innerText()), 'the card is named for Wren');
+                const cached = await page.evaluate(() => new Promise((resolve) => {
+                    const out = [];
+                    const open = indexedDB.open('beanpool-home');
+                    open.onerror = () => resolve('');
+                    open.onsuccess = () => {
+                        const db = open.result;
+                        const names = Array.from(db.objectStoreNames);
+                        if (!names.length) { db.close(); resolve(''); return; }
+                        const tx = db.transaction(names, 'readonly');
+                        for (const n of names) { const r = tx.objectStore(n).getAll(); r.onsuccess = () => out.push(JSON.stringify(r.result)); }
+                        tx.oncomplete = () => { db.close(); resolve(out.join('\n')); };
+                    };
+                }));
+                check(/"chat-[a-z0-9]+"/.test(cached) && !cached.includes('Mine is at the shed') && !cached.includes('Bring the long one') && !cached.includes('Who has a ladder'),
+                    `the kept copy of Home holds the chat card, its lines still sealed: the words opened are in no copy kept in the browser (${cached.length} chars kept)`);
+                await noSideScroll(page, `a chosen chat (${theme})`);
+                await touchTargets(page, '[data-testid^="home-card-chat-"]', `a chosen chat (${theme})`);
+                await axeClean(page, '[data-testid^="home-card-chat-"]', `a chosen chat (${theme})`);
+                // The name as big as the member's text: at 1.3x it is never smaller than the lines under it.
+                const sizes = await card.evaluate((el) => ({
+                    name: parseFloat(getComputedStyle(el.querySelector('[data-testid="home-chat-name"]')).fontSize),
+                    line: parseFloat(getComputedStyle(el.querySelector('[data-testid="home-chat-line"]')).fontSize),
+                }));
+                check(sizes.name > sizes.line, `the chat's name is larger than its lines at 1.3x text (${sizes.name} px over ${sizes.line} px)`);
+                fs.mkdirSync(SHOTS_DIR, { recursive: true });
+                // The whole card, under the header and above the tab bar: the page taller for the picture, then put back.
+                await page.setViewportSize({ width: VIEW.width, height: 1400 });
+                await card.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+                await card.screenshot({ path: path.join(SHOTS_DIR, `9-chat-card-320-${theme}.png`) });
+                await page.setViewportSize(VIEW);
+                await page.setViewportSize({ width: 1280, height: 900 });
+                await wait(500);
+                await axeClean(page, '[data-testid^="home-card-chat-"]', `a chosen chat at 1280 (${theme})`);
+                await page.screenshot({ path: path.join(SHOTS_DIR, `9-chat-home-1280-${theme}.png`) });
+                await page.setViewportSize(VIEW);
+            } finally {
+                await context.close();
+            }
+        }
+    } finally {
+        await node.stop();
+    }
+}
 
 async function localMember(browser, root) {
     const ana = memberIdentity('Ana');
@@ -2008,7 +2122,7 @@ async function main() {
         browser = await chromium.launch();
         console.log('The web app as built; Chromium at 320 px, 1.3x text, reduced motion.');
         const only = process.env.HOME_ONLY?.split(',').map((n) => n.trim()).filter(Boolean);
-        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode, arrangeAcross, dragAcross].filter((r) => !only?.length || only.includes(r.name))) {
+        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode, arrangeAcross, dragAcross, chatCard].filter((r) => !only?.length || only.includes(r.name))) {
             try {
                 await run(browser, root);
             } catch (e) {

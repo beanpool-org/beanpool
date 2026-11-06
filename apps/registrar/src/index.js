@@ -882,7 +882,8 @@ async function takeName(env, existing, pubkey, b, now, gate = null) {
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? missed() : provisionFailed(e); }
     const made = recorded(ids, a);
     const out = { status: 'live', hostname: a.hostname, community_name: a.community_name, contact: a.contact };
-    // A new tenure is on probation (its "New community" alert and its directory listing wait for it).
+    // A new tenure is on probation (its "New community" alert and its directory listing wait for it), unless its key holds a
+    // verified name (verifiedKey above: slice S5).
     if (onProbation({ verified_at: a.verified_at !== undefined ? a.verified_at : existing?.verified_at })) out.probation = true;
     if (takeBack) {
         if (!(await db.updateIfUnchanged(env, name, a, made, { withIds: true }))) return missed();
@@ -1332,8 +1333,10 @@ async function handleUpdate(request, env, bodyText) {
 // 'admin' is what every admin release wrote before D-C, so those rows stay free, and a Worker rolled back past D-C
 // reads 'admin-held' and 'admin-held-all' as an owner's release: held for its key. The row is written first
 // (stopRouting); false, with nothing done, if it changed since `a` was read. `actor`: who the admin is (actorOf).
+// A paused name keeps its paused_at through the release (only a live one is released with none): the release of a name
+// the sweep paused is not a clean one, so it never lets its key skip probation (db.holdsVerifiedName, slice S5).
 async function releaseRow(env, a, by, now, actor = ADMIN) {
-    const to = { status: 'released', released_at: now, pause_reason: by, paused_at: null, attest_fails: 0 };
+    const to = { status: 'released', released_at: now, pause_reason: by, paused_at: a.status === 'paused' ? (a.paused_at || now) : null, attest_fails: 0 };
     if (!(await stopRouting(env, a, to))) return false;
     const days = `${Math.round(releaseCooloffS(env) / 86400)} days`;
     const held = `held ${days} for`;
@@ -1478,15 +1481,19 @@ async function adminResume(env, a, was, now, actor) {
 }
 
 // Approve: a pending claim goes live at once, as any new claim does (its tunnel is made now).
+// Whether it skips probation (its key holds a verified name: slice S5) is decided first, as takeName decides it before
+// its ensure(): a D1 failure reading it answers 5xx with nothing made at Cloudflare, rather than leave a tunnel and a DNS
+// record no row records.
 async function adminGoLive(env, a, event, detail, extra = {}) {
+    const now = nowS();
+    const verifiedNow = !a.verified_at && (await settings.read(env)).schema
+        && await db.holdsVerifiedName(env, a.node_pubkey, now - releaseCooloffS(env), a.name);
     let ids;
     try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e, { admin: true }); }
-    const s = await settings.read(env);
-    const verified = a.verified_at || (s.schema && await db.holdsVerifiedName(env, a.node_pubkey, nowS() - releaseCooloffS(env), a.name) ? nowS() : null);
     const live = {
         ...recorded(ids, a), ...LIVE, ...extra,
         ...(a.held_reason ? { held_reason: null } : {}),
-        ...(s.schema && verified && !a.verified_at ? { verified_at: verified, ok_sweeps: null } : {}),
+        ...(verifiedNow ? { verified_at: now, ok_sweeps: null } : {}),
     };
     if (!(await db.updateIfUnchanged(env, a.name, a, live, { withIds: true }))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);

@@ -4498,6 +4498,6 @@
   "🔒 Message": "🔒 Tin nhắn",
   "🔒 Message · open to read": "🔒 Tin nhắn · mở để đọc",
   "Find a chat": "Tìm cuộc chat",
-  "You have no chats yet.": "Bạn chưa có cuộc chat nào.",
-  "Couldn't read your chats. Try again.": "Không đọc được các cuộc chat của bạn. Hãy thử lại."
+  "No chats yet.": "Chưa có cuộc chat nào.",
+  "Couldn't load your chats. Try again.": "Không tải được các cuộc chat của bạn. Hãy thử lại."
 }

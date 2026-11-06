@@ -4498,6 +4498,6 @@
   "🔒 Message": "🔒 メッセージ",
   "🔒 Message · open to read": "🔒 メッセージ · 開いて読む",
   "Find a chat": "チャットを探す",
-  "You have no chats yet.": "まだチャットがありません。",
-  "Couldn't read your chats. Try again.": "チャットを読み込めませんでした。もう一度お試しください。"
+  "No chats yet.": "まだチャットはありません。",
+  "Couldn't load your chats. Try again.": "チャットを読み込めませんでした。もう一度お試しください。"
 }

@@ -4498,6 +4498,6 @@
   "🔒 Message": "🔒 메시지",
   "🔒 Message · open to read": "🔒 메시지 · 열어서 읽기",
   "Find a chat": "채팅 찾기",
-  "You have no chats yet.": "아직 채팅이 없어요.",
-  "Couldn't read your chats. Try again.": "채팅을 불러오지 못했어요. 다시 시도해 주세요."
+  "No chats yet.": "아직 채팅이 없어요.",
+  "Couldn't load your chats. Try again.": "채팅을 불러오지 못했어요. 다시 시도해 주세요."
 }

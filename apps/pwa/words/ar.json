@@ -5398,6 +5398,6 @@
   "🔒 Message": "🔒 رسالة",
   "🔒 Message · open to read": "🔒 رسالة · افتحها لقراءتها",
   "Find a chat": "ابحث عن محادثة",
-  "You have no chats yet.": "ليست لديك محادثات بعد.",
-  "Couldn't read your chats. Try again.": "تعذّرت قراءة محادثاتك. حاول مرة أخرى."
+  "No chats yet.": "لا محادثات بعد.",
+  "Couldn't load your chats. Try again.": "تعذّر تحميل محادثاتك. حاول مرة أخرى."
 }

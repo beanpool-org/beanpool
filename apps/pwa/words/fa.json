@@ -4686,6 +4686,6 @@
   "🔒 Message": "🔒 پیام",
   "🔒 Message · open to read": "🔒 پیام · برای خواندن باز کنید",
   "Find a chat": "یافتن گفتگو",
-  "You have no chats yet.": "هنوز هیچ گفتگویی ندارید.",
-  "Couldn't read your chats. Try again.": "گفتگوهای شما خوانده نشد. دوباره تلاش کنید."
+  "No chats yet.": "هنوز گفتگویی نیست.",
+  "Couldn't load your chats. Try again.": "گفتگوهای شما بارگیری نشد. دوباره تلاش کنید."
 }

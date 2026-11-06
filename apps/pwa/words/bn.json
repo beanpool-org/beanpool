@@ -4686,6 +4686,6 @@
   "🔒 Message": "🔒 বার্তা",
   "🔒 Message · open to read": "🔒 বার্তা · পড়তে খুলুন",
   "Find a chat": "একটি আলাপ খুঁজুন",
-  "You have no chats yet.": "আপনার এখনও কোনো আলাপ নেই।",
-  "Couldn't read your chats. Try again.": "আপনার আলাপগুলো পড়া যায়নি। আবার চেষ্টা করুন।"
+  "No chats yet.": "এখনও কোনো আলাপ নেই।",
+  "Couldn't load your chats. Try again.": "আপনার আলাপগুলো লোড করা যায়নি। আবার চেষ্টা করুন।"
 }

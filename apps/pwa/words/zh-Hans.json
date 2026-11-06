@@ -4498,6 +4498,6 @@
   "🔒 Message": "🔒 消息",
   "🔒 Message · open to read": "🔒 消息 · 打开以阅读",
   "Find a chat": "查找聊天",
-  "You have no chats yet.": "你还没有聊天。",
-  "Couldn't read your chats. Try again.": "无法读取你的聊天。请重试。"
+  "No chats yet.": "还没有聊天。",
+  "Couldn't load your chats. Try again.": "无法加载你的聊天。请重试。"
 }

@@ -4676,6 +4676,6 @@
   "🔒 Message": "🔒 Mensahe",
   "🔒 Message · open to read": "🔒 Mensahe · buksan para mabasa",
   "Find a chat": "Maghanap ng usapan",
-  "You have no chats yet.": "Wala ka pang mga usapan.",
-  "Couldn't read your chats. Try again.": "Hindi mabasa ang iyong mga usapan. Subukan muli."
+  "No chats yet.": "Wala pang mga usapan.",
+  "Couldn't load your chats. Try again.": "Hindi ma-load ang iyong mga usapan. Subukan muli."
 }

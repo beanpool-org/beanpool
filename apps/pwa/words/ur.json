@@ -4686,6 +4686,6 @@
   "🔒 Message": "🔒 پیغام",
   "🔒 Message · open to read": "🔒 پیغام · پڑھنے کے لیے کھولیں",
   "Find a chat": "چیٹ تلاش کریں",
-  "You have no chats yet.": "آپ کی ابھی کوئی چیٹ نہیں ہے۔",
-  "Couldn't read your chats. Try again.": "آپ کی چیٹس پڑھی نہیں جا سکیں۔ دوبارہ کوشش کریں۔"
+  "No chats yet.": "ابھی کوئی چیٹ نہیں۔",
+  "Couldn't load your chats. Try again.": "آپ کی چیٹس لوڈ نہیں ہو سکیں۔ دوبارہ کوشش کریں۔"
 }

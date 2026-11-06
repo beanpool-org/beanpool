@@ -4676,6 +4676,6 @@
   "🔒 Message": "🔒 Mesaj",
   "🔒 Message · open to read": "🔒 Mesaj · okumak için aç",
   "Find a chat": "Sohbet bul",
-  "You have no chats yet.": "Henüz hiç sohbetin yok.",
-  "Couldn't read your chats. Try again.": "Sohbetlerin okunamadı. Tekrar dene."
+  "No chats yet.": "Henüz sohbet yok.",
+  "Couldn't load your chats. Try again.": "Sohbetlerin yüklenemedi. Tekrar dene."
 }

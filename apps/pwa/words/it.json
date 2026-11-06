@@ -4677,6 +4677,6 @@
   "🔒 Message": "🔒 Messaggio",
   "🔒 Message · open to read": "🔒 Messaggio · aprilo per leggerlo",
   "Find a chat": "Trova una chat",
-  "You have no chats yet.": "Non hai ancora nessuna chat.",
-  "Couldn't read your chats. Try again.": "Impossibile leggere le tue chat. Riprova."
+  "No chats yet.": "Ancora nessuna chat.",
+  "Couldn't load your chats. Try again.": "Impossibile caricare le tue chat. Riprova."
 }

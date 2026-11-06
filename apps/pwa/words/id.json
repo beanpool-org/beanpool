@@ -4498,6 +4498,6 @@
   "🔒 Message": "🔒 Pesan",
   "🔒 Message · open to read": "🔒 Pesan · buka untuk membaca",
   "Find a chat": "Cari obrolan",
-  "You have no chats yet.": "Anda belum punya obrolan.",
-  "Couldn't read your chats. Try again.": "Obrolan Anda tidak dapat dibaca. Coba lagi."
+  "No chats yet.": "Belum ada obrolan.",
+  "Couldn't load your chats. Try again.": "Obrolan Anda tidak dapat dimuat. Coba lagi."
 }

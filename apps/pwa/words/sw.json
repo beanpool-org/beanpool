@@ -4686,6 +4686,6 @@
   "🔒 Message": "🔒 Ujumbe",
   "🔒 Message · open to read": "🔒 Ujumbe · fungua ili kusoma",
   "Find a chat": "Tafuta gumzo",
-  "You have no chats yet.": "Bado huna magumzo.",
-  "Couldn't read your chats. Try again.": "Haikuwezekana kusoma magumzo yako. Jaribu tena."
+  "No chats yet.": "Hakuna magumzo bado.",
+  "Couldn't load your chats. Try again.": "Haikuwezekana kupakia magumzo yako. Jaribu tena."
 }

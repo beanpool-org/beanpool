@@ -961,8 +961,8 @@ export const CHAT_CARD_WORDS = {
     lockedOpen: word('🔒 Message · open to read'),
     /** The settings list: its filter box, and what it says with no chat and after a read that failed. */
     find: word('Find a chat'),
-    none: word('You have no chats yet.'),
-    failed: word("Couldn't read your chats. Try again."),
+    none: word('No chats yet.'),
+    failed: word("Couldn't load your chats. Try again."),
     /** The card's name for the member's own lines. */
     you: word('You'),
 } as const;

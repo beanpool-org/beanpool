@@ -5032,6 +5032,6 @@
   "🔒 Message": "🔒 Сообщение",
   "🔒 Message · open to read": "🔒 Сообщение · откройте, чтобы прочитать",
   "Find a chat": "Найти чат",
-  "You have no chats yet.": "У вас пока нет чатов.",
-  "Couldn't read your chats. Try again.": "Не удалось прочитать ваши чаты. Попробуйте ещё раз."
+  "No chats yet.": "Чатов пока нет.",
+  "Couldn't load your chats. Try again.": "Не удалось загрузить ваши чаты. Попробуйте ещё раз."
 }

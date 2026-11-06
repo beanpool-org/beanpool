@@ -1956,6 +1956,9 @@ describe('Arrange', () => {
             const lists: string[][] = [];
             for (const calm of [true, false]) {
                 vi.mocked(AccessibilityInfo.isReduceMotionEnabled).mockResolvedValue(calm);
+                // The band's drop timer, held by the test (motion on only): asked for, with the time it was asked for, and not yet run.
+                const drops: Array<{ run: () => void; ms: number }> = [];
+                let holding: { mockRestore(): void } | null = null;
                 try {
                     await render();
                     await open();
@@ -1965,6 +1968,18 @@ describe('Arrange', () => {
                     vi.mocked(LayoutAnimation.create).mockClear();
                     await hold(`home-hold-${third}`, at(ids, third));
                     await move(at(ids, first, 5));
+                    if (!calm) {
+                        // "The band is still there just after the drop" cannot be a race between 120 ms of the wall clock and the
+                        // ten rounds of `settle` that follow the release: a loaded machine runs those rounds past 120 ms and the band
+                        // is gone before it is looked at (the nightly's, 6 and 7 Nov). The 120 ms timer (useArrangeDrag's `ended`) is
+                        // the one timer held back; every other timer, `settle`'s included, is the real one.
+                        const realSetTimeout = globalThis.setTimeout;
+                        holding = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void, ms?: number, ...rest: unknown[]) => {
+                            if (ms !== 120) return realSetTimeout(run, ms, ...rest);
+                            drops.push({ run, ms });
+                            return 0;
+                        }) as unknown as typeof setTimeout);
+                    }
                     await release();
                     lists.push(savedOrder());
                     if (calm) {
@@ -1973,11 +1988,14 @@ describe('Arrange', () => {
                     } else {
                         expect(LayoutAnimation.create).toHaveBeenCalledWith(150, 'easeInEaseOut', 'opacity');
                         expect(LayoutAnimation.configureNext).toHaveBeenCalled();
+                        // The band settles in 120 ms: it was asked to go in exactly that, and it goes when that time is up, not before.
+                        expect(drops.map(d => d.ms)).toEqual([120]);
                         expect(has('home-arrange-ghost')).toBe(true);
-                        await act(async () => { await new Promise(r => setTimeout(r, 160)); });
+                        await act(async () => { drops[0].run(); });
                         expect(has('home-arrange-ghost')).toBe(false);
                     }
                 } finally {
+                    holding?.mockRestore();
                     vi.mocked(AccessibilityInfo.isReduceMotionEnabled).mockResolvedValue(true);
                     unmount();
                     // The second phone starts from the same list (the first one's drop is not on it).

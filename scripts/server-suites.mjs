@@ -557,6 +557,7 @@ export const SUITES = [
     'test-post-pinning-global',
     'test-home-pinned',
     'test-home-pinned-global',
+    'test-home-kept-listings',
     'test-event-zone',
     'test-online-events-nearby',
     'test-online-events-set-cap',

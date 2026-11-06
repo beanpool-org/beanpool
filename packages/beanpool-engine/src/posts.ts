@@ -439,9 +439,10 @@ export interface PostFilter {
      */
     guest?: boolean;
     /**
-     * The caller never reads `trustPoints` (apps/server routes/home-answer.ts: no Home card carries the author's badge), so
-     * the author's trust profile is not worked out for this read and `trustPoints` is left 0. Which posts there are, their
-     * order and every other field are as without it. Set only where nothing the read returns is shown with a badge.
+     * The caller never reads the author's badge, `authorEnergyCycled` (apps/server routes/home-answer.ts: no Home card
+     * carries it), so the author's trust profile is not worked out for this read and the badge is left 0, as a visitor's
+     * read leaves it. Which posts there are, their order and every other field are as without it. Set only where nothing
+     * the read returns is shown with a badge.
      */
     withoutTier?: boolean;
     /**

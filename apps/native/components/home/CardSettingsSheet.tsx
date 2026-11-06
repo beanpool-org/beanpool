@@ -6,7 +6,8 @@ import {
     type HomeDecideShow, type HomeSearchKind, type SkySettings,
 } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
-import { SEARCH_KIND_CHIPS, SKY_PLACE_CHIPS, cardName } from '../../utils/home-cards';
+import { SEARCH_KIND_CHIPS, SKY_PLACE_CHIPS, cardName, timeAgoInWords } from '../../utils/home-cards';
+import { CHAT_CARD_WORDS, CHAT_PICK_FILTER_AFTER, chatSettingsOf, filterChatChoices, type ChatChoice } from '../../utils/home-chat';
 import { POST_CATEGORIES, categoryLabel } from '../../constants/categories';
 import { HOME_TARGET_DP, homeStyles } from './HomeParts';
 import { sheetStyles } from './sheet-parts';
@@ -22,11 +23,15 @@ import { useScrollFieldIntoView } from '../useScrollFieldIntoView';
  * distance chips show only where the node has a point to measure from (the member's area, or the phone's place on the
  * global community); without one the node ignores the distance, so the sheet doesn't offer it, and a kept one stays.
  *
+ * A chat card (DESIGN-home-chosen-chat-fable.md §2) asks one thing: which chat. The member's chats are read once as the
+ * sheet opens (the screen hands them in: groups then people, never a request waiting); a filter box shows past 8 rows; a
+ * chat another chat card holds says "On Home" and can't be picked again. The choice is stored as its id, kind and name.
+ *
  * Keyboard: lifted by useModalKeyboardLift from the root provider's state, as Create a Group and Invite people are (the
  * Modal's window doesn't shrink for the keyboard, which at 320 dp covered this whole sheet: review of #1699, finding 3).
  * Never a nested KeyboardProvider inside the Modal.
  */
-export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = false, colors, onDone, onClose }: {
+export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = false, chats, colors, onDone, onClose }: {
     visible: boolean;
     type: string | null;
     /** The card's settings now (Settings…), or none (a new card). */
@@ -35,6 +40,8 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     mode: 'add' | 'save';
     /** The node has a point to measure a distance from: the distance chips show. */
     hasPoint?: boolean;
+    /** A chat card's list: the member's chats (null while they are read), whether the read failed, and the chats on Home. */
+    chats?: { rows: ChatChoice[] | null; failed: boolean; onHome: ReadonlySet<string> };
     colors: AppColors;
     onDone: (settings: Record<string, unknown>) => void;
     onClose: () => void;
@@ -48,8 +55,12 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     const [km, setKm] = useState<number | null>(null);
     const [place, setPlace] = useState<SkySettings['place']>('community');
     const [show, setShow] = useState<HomeDecideShow>('counts');
+    const [chatId, setChatId] = useState<string | null>(null);
+    const [filter, setFilter] = useState('');
     useEffect(() => {
         if (!visible) return;
+        setChatId(typeof settings?.conversationId === 'string' ? settings.conversationId : null);
+        setFilter('');
         setPlace(readSkySettings(settings).place);
         setShow(readDecideSettings(settings).show);
         const start = readSearchSettings(settings);
@@ -62,9 +73,14 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     const name = cardName(type);
     const sky = type === 'sky';
     const decide = type === 'decide';
+    const chat = type === 'chat';
     const words = q.trim();
-    const ready = sky || decide || !!words;
-    const done = () => onDone(sky ? { place } : decide ? { show } : searchFromSheet(settings, { q: words, kind, category, km }));
+    const chosen = chat ? (chats?.rows ?? []).find(r => r.conversationId === chatId && !chats?.onHome.has(r.conversationId)) ?? null : null;
+    const ready = sky || decide || (chat ? !!chosen : !!words);
+    const done = () => {
+        if (chat) { if (chosen) onDone(chatSettingsOf(chosen)); return; }
+        onDone(sky ? { place } : decide ? { show } : searchFromSheet(settings, { q: words, kind, category, km }));
+    };
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
@@ -77,7 +93,9 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
                         </Pressable>
                     </View>
                     <ScrollView style={sheetStyles.list} {...fieldScroll.scrollProps} keyboardShouldPersistTaps="handled" testID="card-settings-scroll">
-                        {sky ? (
+                        {chat ? (
+                            <ChatPickList chats={chats} chosen={chatId} filter={filter} onFilter={setFilter} onChoose={setChatId} colors={colors} inputProps={fieldScroll.inputProps} />
+                        ) : sky ? (
                             <SettingChips label={t('Whose place')} id="place" colors={colors} value={place} onPick={setPlace}
                                 options={SKY_PLACE_CHIPS.map(p => ({ value: p.place, label: t(p.label) }))} />
                         ) : decide ? (<>
@@ -129,6 +147,56 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     );
 }
 
+/** The chats a chat card can pin: 48dp rows of name and when it last spoke, a filter past 8, "On Home" for one taken. */
+function ChatPickList({ chats, chosen, filter, onFilter, onChoose, colors, inputProps }: {
+    chats?: { rows: ChatChoice[] | null; failed: boolean; onHome: ReadonlySet<string> };
+    chosen: string | null;
+    filter: string;
+    onFilter: (q: string) => void;
+    onChoose: (id: string) => void;
+    colors: AppColors;
+    inputProps: Record<string, unknown>;
+}) {
+    const rows = chats?.rows ?? null;
+    if (!rows) {
+        return <Text style={[settingsStyles.note, { color: colors.text.secondary }]} testID="card-settings-chats-note">{chats?.failed ? t(CHAT_CARD_WORDS.failed) : t('Loading…')}</Text>;
+    }
+    if (!rows.length) return <Text style={[settingsStyles.note, { color: colors.text.secondary }]} testID="card-settings-chats-note">{t(CHAT_CARD_WORDS.none)}</Text>;
+    const shown = filterChatChoices(rows, filter);
+    return (
+        <View accessibilityRole="radiogroup" accessibilityLabel={t(CHAT_CARD_WORDS.pick)} testID="card-settings-chats">
+            {rows.length > CHAT_PICK_FILTER_AFTER && (
+                <TextInput
+                    {...inputProps}
+                    value={filter}
+                    onChangeText={onFilter}
+                    placeholder={t(CHAT_CARD_WORDS.filter)}
+                    placeholderTextColor={colors.text.muted}
+                    style={[settingsStyles.input, { color: colors.text.body, borderColor: colors.border.strong, backgroundColor: colors.surface.app, marginBottom: 8 }]}
+                    accessibilityLabel={t(CHAT_CARD_WORDS.filter)}
+                    testID="card-settings-chats-filter"
+                />
+            )}
+            {shown.map(r => {
+                const taken = chats!.onHome.has(r.conversationId);
+                const on = !taken && r.conversationId === chosen;
+                const when = timeAgoInWords(r.at);
+                const right = taken ? t('On Home') : when;
+                return (
+                    <Pressable key={r.conversationId} disabled={taken} onPress={() => onChoose(r.conversationId)}
+                        style={[settingsStyles.chatRow, { borderColor: on ? colors.brand.fill : colors.border.default, backgroundColor: on ? colors.surface.subtle : 'transparent' }]}
+                        accessibilityRole="radio" accessibilityState={{ selected: on, checked: on, disabled: taken }}
+                        accessibilityLabel={right ? `${r.emoji} ${r.name}, ${right}` : `${r.emoji} ${r.name}`}
+                        testID={`card-settings-chat-${r.conversationId}`}>
+                        <Text style={[settingsStyles.chatName, { color: taken ? colors.text.secondary : colors.text.body }]} numberOfLines={2}>{`${r.emoji} ${r.name}`}</Text>
+                        {!!right && <Text style={[settingsStyles.chatWhen, { color: colors.text.secondary }]} numberOfLines={1}>{right}</Text>}
+                    </Pressable>
+                );
+            })}
+        </View>
+    );
+}
+
 /** One row of chips under its label; the chosen one is filled, and a screen reader hears it as selected. */
 function SettingChips<T>({ label, id, colors, options, value, onPick }: {
     label: string; id: string; colors: AppColors; options: ReadonlyArray<{ value: T; label: string }>; value: T; onPick: (v: T) => void;
@@ -159,4 +227,8 @@ const settingsStyles = StyleSheet.create({
     input: { minHeight: HOME_TARGET_DP, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, fontSize: 16 },
     button: { marginTop: 16, minHeight: HOME_TARGET_DP, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
     buttonText: { fontSize: 15, fontWeight: '700' },
+    // A chat row (design §2: 48dp rows of name + "2h ago"): the name wraps to two lines, the time wraps under it at 320 × 1.3.
+    chatRow: { minHeight: HOME_TARGET_DP, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 6, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8 },
+    chatName: { fontSize: 15, flexShrink: 1, maxWidth: '100%' },
+    chatWhen: { fontSize: 13, flexShrink: 0, marginLeft: 'auto' },
 });

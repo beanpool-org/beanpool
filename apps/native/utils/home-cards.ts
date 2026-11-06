@@ -29,7 +29,7 @@ import {
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
-    HOME_BELL_SETTLE_MS, crowdBellDelayMs, isCrowdDoorbell,
+    HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -1422,40 +1422,25 @@ export function isHomeDoorbellFor(data: unknown, me: string | null | undefined):
  * With `crowd`, a bell it names (one that reached every phone near a listing at once: @beanpool/core isCrowdDoorbell) is
  * read after `crowd.delayMs()` instead (a random 3 to 15 s, each device its own), set by the first of a burst and never
  * pushed back, so it is read at the latest that long after it rang and a run of bells cannot hold the read off. Bells
- * about the member themself still wait `settleMs` after the last, as before. Whichever is read first covers the other.
+ * about the member themself still wait `settleMs` after the last, as before. Whichever is read first covers the other
+ * (@beanpool/core createHomeBellSettle, which the web app's Home uses too).
  */
 export function createDoorbellDebounce(
     run: () => void,
     settleMs: number = HOME_DOORBELL_SETTLE_MS,
-    timers: { set: (fn: () => void, ms: number) => unknown; clear: (t: unknown) => void } = {
-        set: (fn, ms) => setTimeout(fn, ms), clear: t => clearTimeout(t as ReturnType<typeof setTimeout>),
-    },
+    timers?: HomeBellTimers,
     /** Which bells count: {@link isHomeDoorbell}, or Home's {@link isHomeDoorbellFor} its member. */
     wanted: (data: unknown) => boolean = isHomeDoorbell,
     /** Which counted bells reached a crowd, and how long this device waits for one. */
     crowd?: { is: (data: unknown) => boolean; delayMs: () => number },
 ): { ring: (data: unknown) => void; cancel: () => void } {
-    let timer: unknown = null;
-    let crowdTimer: unknown = null;
-    const clearBoth = () => {
-        if (timer !== null) timers.clear(timer);
-        if (crowdTimer !== null) timers.clear(crowdTimer);
-        timer = null;
-        crowdTimer = null;
-    };
-    const read = () => { clearBoth(); run(); };
+    const settle = createHomeBellSettle({ run, settleMs, crowdDelayMs: crowd?.delayMs, timers });
     return {
         ring(data) {
-            if (!wanted(data)) return;
-            if (crowd?.is(data)) {
-                if (crowdTimer === null) crowdTimer = timers.set(read, crowd.delayMs());
-                return;
-            }
-            if (timer !== null) timers.clear(timer);
-            timer = timers.set(read, settleMs);
+            if (wanted(data)) settle.ring(!!crowd?.is(data));
         },
         cancel() {
-            clearBoth();
+            settle.cancel();
         },
     };
 }

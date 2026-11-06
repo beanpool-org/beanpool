@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
     livePostChange,
     pushedPostIsStale,
@@ -29,6 +29,7 @@ import {
     isCrowdDoorbell,
     crowdBellDelayMs,
     homeBellDelayMs,
+    createHomeBellSettle,
     HOME_BELL_SETTLE_MS,
     HOME_BELL_CROWD_MAX_MS,
 } from '../live-updates.js';
@@ -545,5 +546,97 @@ describe('isCrowdDoorbell and crowdBellDelayMs: Home\'s turn after a bell that r
         expect(homeBellDelayMs({ type: 'new_post', post: offer() }, ME, () => 0.5)).toBe(9_000);
         expect(homeBellDelayMs({ type: 'new_post', post: offer({ authorPublicKey: ME }) }, ME, () => 0.5)).toBe(3_000);
         expect(homeBellDelayMs({ type: 'transaction_completed' }, ME, () => 0.5)).toBe(3_000);
+    });
+});
+
+describe('createHomeBellSettle: how Home waits after its doorbells, on the phone and on the web', () => {
+    const device = (draw: () => number) => {
+        vi.useFakeTimers();
+        const run = vi.fn();
+        const settle = createHomeBellSettle({ run, crowdDelayMs: () => crowdBellDelayMs(draw) });
+        return { run, settle };
+    };
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('a bell about the member is read 3 s after the last, each one pushing it back', () => {
+        const { run, settle } = device(() => 0.9);
+        settle.ring(false);
+        vi.advanceTimersByTime(2_000);
+        settle.ring(false);
+        vi.advanceTimersByTime(2_999);
+        expect(run).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(settle.isPending()).toBe(false);
+    });
+
+    it('a crowd\'s bell is read at this device\'s own draw from 3 s to 15 s, once, however many ring after it', () => {
+        for (const [draw, ms] of [[0, 3_000], [0.5, 9_000], [1, 15_000]] as const) {
+            const { run, settle } = device(() => draw);
+            settle.ring(true);
+            for (let i = 0; i < 5; i++) { vi.advanceTimersByTime(Math.floor((ms - 1) / 5)); settle.ring(true); }
+            expect(run).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(ms);
+            expect(run).toHaveBeenCalledTimes(1);
+            vi.advanceTimersByTime(60_000);
+            expect(run).toHaveBeenCalledTimes(1);
+            vi.useRealTimers();
+        }
+    });
+
+    it('two devices that draw differently read at different moments for the same bell', () => {
+        vi.useFakeTimers();
+        const early = vi.fn();
+        const late = vi.fn();
+        createHomeBellSettle({ run: early, crowdDelayMs: () => crowdBellDelayMs(() => 0.1) }).ring(true);
+        createHomeBellSettle({ run: late, crowdDelayMs: () => crowdBellDelayMs(() => 0.9) }).ring(true);
+        vi.advanceTimersByTime(4_500);
+        expect(early).toHaveBeenCalledTimes(1);
+        expect(late).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(10_000);
+        expect(late).toHaveBeenCalledTimes(1);
+    });
+
+    it('whichever is read first covers the other, and cancel drops both', () => {
+        const { run, settle } = device(() => 0);
+        settle.ring(false);
+        vi.advanceTimersByTime(1_000);
+        settle.ring(true);                // due at 4 s; the member\'s own is due at 3 s
+        vi.advanceTimersByTime(2_000);
+        expect(run).toHaveBeenCalledTimes(1);
+        vi.advanceTimersByTime(60_000);
+        expect(run).toHaveBeenCalledTimes(1);
+        settle.ring(true);
+        settle.ring(false);
+        expect(settle.isPending()).toBe(true);
+        settle.cancel();
+        expect(settle.isPending()).toBe(false);
+        vi.advanceTimersByTime(60_000);
+        expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it('each burst draws again once it has been read', () => {
+        const draws = [0, 0.5];
+        const { run, settle } = device(() => draws.shift() ?? 0.5);
+        settle.ring(true);
+        vi.advanceTimersByTime(3_000);
+        expect(run).toHaveBeenCalledTimes(1);
+        settle.ring(true);
+        vi.advanceTimersByTime(8_999);
+        expect(run).toHaveBeenCalledTimes(1);
+        vi.advanceTimersByTime(1);
+        expect(run).toHaveBeenCalledTimes(2);
+    });
+
+    it('with no deps but the read, it uses real timers and the 3 s to 15 s draw', () => {
+        vi.useFakeTimers();
+        const run = vi.fn();
+        const settle = createHomeBellSettle({ run });
+        settle.ring(true);
+        vi.advanceTimersByTime(15_000);
+        expect(run).toHaveBeenCalledTimes(1);
+        settle.ring(false);
+        vi.advanceTimersByTime(HOME_BELL_SETTLE_MS);
+        expect(run).toHaveBeenCalledTimes(2);
     });
 });

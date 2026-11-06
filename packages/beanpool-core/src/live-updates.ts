@@ -354,3 +354,65 @@ export function crowdBellDelayMs(random: () => number = Math.random): number {
 export function homeBellDelayMs(event: unknown, selfKey: string | null | undefined, random: () => number = Math.random): number {
     return isCrowdDoorbell(event, selfKey) ? crowdBellDelayMs(random) : HOME_BELL_SETTLE_MS;
 }
+
+export interface HomeBellTimers {
+    set: (fn: () => void, ms: number) => unknown;
+    clear: (handle: unknown) => void;
+}
+
+export interface HomeBellSettleDeps {
+    /** The read Home owes after a bell. */
+    run: () => void;
+    /** The wait after a bell about the member themself, pushed back by each one that follows: HOME_BELL_SETTLE_MS. */
+    settleMs?: number;
+    /** This device's wait after a crowd's bell: crowdBellDelayMs. */
+    crowdDelayMs?: () => number;
+    /** Looked up when used, so a fake clock installed after this was made still counts. */
+    timers?: HomeBellTimers;
+}
+
+export interface HomeBellSettle {
+    /** A bell Home cares about rang; `crowd` says it reached every phone near it at once (isCrowdDoorbell). */
+    ring(crowd: boolean): void;
+    cancel(): void;
+    isPending(): boolean;
+}
+
+/**
+ * How Home waits after its doorbells, for the phone and the web app alike. A bell about the member themself is read
+ * `settleMs` after the last one (each pushes it back, so a burst is one read). A bell that reached a crowd sets one
+ * random turn, from the first of a burst, of crowdBellDelayMs, and later bells leave it where it is, so a run of them
+ * cannot hold the read off: it comes at the latest 15 s after the first. Whichever is read first covers the other.
+ */
+export function createHomeBellSettle(deps: HomeBellSettleDeps): HomeBellSettle {
+    const settleMs = deps.settleMs ?? HOME_BELL_SETTLE_MS;
+    const crowdDelay = deps.crowdDelayMs ?? (() => crowdBellDelayMs());
+    const timers: HomeBellTimers = deps.timers ?? {
+        set: (fn, ms) => setTimeout(fn, ms),
+        clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+    };
+    let near: unknown = null;
+    let crowd: unknown = null;
+    const clearBoth = () => {
+        if (near !== null) timers.clear(near);
+        if (crowd !== null) timers.clear(crowd);
+        near = null;
+        crowd = null;
+    };
+    const read = () => {
+        clearBoth();
+        deps.run();
+    };
+    return {
+        ring(isCrowd) {
+            if (isCrowd) {
+                if (crowd === null) crowd = timers.set(read, crowdDelay());
+                return;
+            }
+            if (near !== null) timers.clear(near);
+            near = timers.set(read, settleMs);
+        },
+        cancel: clearBoth,
+        isPending: () => near !== null || crowd !== null,
+    };
+}

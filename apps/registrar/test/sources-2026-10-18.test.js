@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import worker, { attestSweep, sourceAddress } from '../src/index.js';
+import * as db from '../src/db.js';
 import { world, makeKey, attestsAs, nowS } from './harness.js';
 import { dailyLine } from '../src/watch.js';
 
@@ -804,6 +805,26 @@ test('on a database without migration 0011 (no held_reason) the sweep still fini
         w.sqlite.prepare("UPDATE name_allocations SET requested_at = requested_at - 600 WHERE name = 'oldorphan'").run();
         await attestSweep(w.env);
         assert.equal(row(w, 'oldorphan').status, 'live');
+    } finally { w.restore(); }
+});
+
+test('insertAllocation: falls back cleanly without migration 0011 columns (held_reason, verified_at)', async () => {
+    const w = await world({ migrations: ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql', '0006_request_nonces.sql', '0007_content_swap.sql', '0008_alerts.sql', '0009_watch.sql', '0010_reserve_our_hosts.sql'] });
+    try {
+        const key = await makeKey();
+        await db.insertAllocation(w.env, {
+            name: 'unmigrated-alloc',
+            node_pubkey: key.pubHex,
+            hostname: 'unmigrated-alloc.beanpool.org',
+            mode: 'tunnel',
+            status: 'pending',
+            requested_at: nowS(),
+            held_reason: 'manual',
+            verified_at: nowS(),
+        });
+        const res = row(w, 'unmigrated-alloc');
+        assert.equal(res.name, 'unmigrated-alloc');
+        assert.equal(res.status, 'pending');
     } finally { w.restore(); }
 });
 

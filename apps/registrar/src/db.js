@@ -37,7 +37,7 @@ export const listActive = async (env) =>
 
 // Atomic reserve. Throws (UNIQUE constraint) if the name is already held. `held_reason` and `verified_at` (migration 0011)
 // are written only when the row carries them: a database without the columns still takes every other claim.
-export const insertAllocation = (env, a) => {
+export const insertAllocation = async (env, a) => {
     const ins = (withExt) => {
         const cols = ['name', 'node_pubkey', 'hostname', 'mode', 'status', 'community_name', 'origin', 'public_ip', 'contact', 'attest_fails', 'requested_at'];
         const vals = [a.name, a.node_pubkey, a.hostname, a.mode, a.status, a.community_name || null, a.origin || null, a.public_ip || null, a.contact || null, 0, a.requested_at];
@@ -46,10 +46,10 @@ export const insertAllocation = (env, a) => {
         return env.DB.prepare(`INSERT INTO name_allocations (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).bind(...vals).run();
     };
     try {
-        return ins(true);
+        return await ins(true);
     } catch (e) {
-        if (!/no such column/i.test(String(e?.message || e))) throw e;
-        return ins(false);
+        if (!/(no such column|has no column named)/i.test(String(e?.message || e))) throw e;
+        return await ins(false);
     }
 };
 

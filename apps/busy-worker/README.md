@@ -76,8 +76,9 @@ Two Worker variables, both `"0"` in `wrangler.toml`:
 **`BUSY_FORCE` also turns away members who use the web app on global.** In a browser a member's page load is a GET with
 `Accept: text/html`, no cookie and no signature (the web app has no service worker and the node sets no cookie), so the Worker
 cannot tell it from a visitor's, and the page's "It keeps working as usual" is true only for the phone apps. So force it only
-when global is failing anyway. The automatic mode (no switch) shows the page only when the origin answers 5xx or times out,
-when the web app could not have loaded either.
+when global is failing anyway. The automatic mode (no switch) shows the page when the origin answers 5xx, errors, or takes
+more than 5 s to start answering a page. That last case includes a node that is slow but alive: web-app members then get the
+busy page while the phone apps, which wait with no such timeout, still get through.
 `scripts/busy-page-deploy.sh --force` / `--off` deploy with one on; a plain deploy sets both off. In the dashboard they are under
 Workers → `beanpool-busy-page` → Settings → Variables (a change there takes effect in seconds, no deploy).
 
@@ -93,7 +94,12 @@ Workers → `beanpool-busy-page` → Settings → Variables (a change there take
 2. **The visitor's address.** The node's limiters key on `CF-Connecting-IP` (`apps/server/src/client-ip.ts`). A
    Worker's request to its own zone is expected to keep the visitor's address there; check it at the rehearsal (the
    node's log should still show many addresses, not one Cloudflare address), and remove the Worker at once if not.
-3. **The node is unaware.** Nothing here changes the node, its `.env`, or any self-hoster's default.
+3. **Web-app members look like visitors.** A page load of the web app on global is a plain GET for HTML (no service worker,
+   no cookie), so `BUSY_FORCE` turns web members away too, and the automatic mode does whenever the page takes over 5 s:
+   on a slow but working node, web members see the busy page while phone members carry on. The page's "keeps working as
+   usual" is about the phone apps. Accept that, or keep the route off until the trigger and take it off as soon as the
+   node recovers.
+4. **The node is unaware.** Nothing here changes the node, its `.env`, or any self-hoster's default.
 
 ## The token
 

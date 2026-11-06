@@ -360,7 +360,7 @@ describe('Home\'s chat list reads the conversation list as getConversations buil
         await phoneOf(ana);
         sql.prepare('INSERT OR REPLACE INTO members (public_key, callsign) VALUES (?, ?)').run(ben.publicKey, 'Ben Okafor');
         const phone = await getConversations(ana.publicKey);
-        const row = phone.find((c: any) => c.id === dm.id)!;
+        const row = phone.find(c => c.id === dm.id)!;
         expect(row.peer).toBe('Ben Okafor');
         const rows = chatChoices([], phone);
         expect(rows).toEqual([{ conversationId: dm.id, kind: 'dm', name: 'Ben Okafor', emoji: '👤', at: row.rawTimestamp }]);

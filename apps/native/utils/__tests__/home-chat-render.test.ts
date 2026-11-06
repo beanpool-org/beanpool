@@ -222,7 +222,7 @@ describe('the settings list', () => {
                 root.render(createElement(CardSettingsSheet, {
                     visible: true, type: 'chat', mode: 'add', colors: lightColors, onDone: () => {}, onClose: () => {},
                     chats: { ...chatPickList(null, phoneChats), onHome: new Set<string>() },
-                }) as any);
+                }) as unknown as Parameters<Root['render']>[0]);
             });
             expect(byId('card-settings-chats-note')!.textContent, `${phoneChats.length} DMs`).toBe("Couldn't load your chats. Try again.");
             expect(host.textContent).not.toContain('No chats yet.');

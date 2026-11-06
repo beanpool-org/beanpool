@@ -30,7 +30,7 @@ import { marketFilterFromLink } from '../market-filters';
 import { randomUUID } from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { checkDmThread, sealDmLine, sealGroupLine, type HomeChatCard, type HomeChatLine } from '@beanpool/core';
+import { checkDmThread, sealDmLine, sealGroupLine, type HomeChatCard, type HomeChatLine, type HomeChatSettings } from '@beanpool/core';
 import { CHAT_CARD_WORDS, chatCardFor, chatCardTarget, chatCardView, chatChoices, chatPickList, chatsOnHome, filterChatChoices } from '../home-chat';
 import { openHomeChat, type HomeChatOpenDeps } from '../home-chat-open';
 import { changeCardSettings } from '../home-cards';
@@ -1565,9 +1565,9 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
                 // Through the kept answer, as Home reads it: no answer for this card.
                 const card = chatCardFor({ cards: { 'chat-aaaa': body } }, inst('dm'));
                 expect(card).toBeNull();
-                expect(chatCardView(inst('dm'), card, me.pub, await openHomeChat(inst('dm').settings as any, card, deps()))).toEqual({ state: 'waiting', name: 'Ana Reyes' });
+                expect(chatCardView(inst('dm'), card, me.pub, await openHomeChat(inst('dm').settings as HomeChatSettings, card, deps()))).toEqual({ state: 'waiting', name: 'Ana Reyes' });
                 // Handed the node's body straight (any other way in): the lines are still never judged by its kind.
-                const opened = await openHomeChat(inst('dm').settings as any, body, deps());
+                const opened = await openHomeChat(inst('dm').settings as HomeChatSettings, body, deps());
                 expect(opened.lines.size).toBe(0);
                 const view = chatCardView(inst('dm'), body, me.pub, opened);
                 expect(theirs(view)).toBe(false);
@@ -1588,7 +1588,7 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
             it(`a locked group answered as ${kind} stays locked: no line in a member's name`, async () => {
                 const body = { kind, name: 'Garden crew', unread: 0, muted: false, lines: [forged(), groupLine(ana, 'Seeds are in', 2)] };
                 expect(chatCardFor({ cards: { 'chat-aaaa': body } }, inst('group'))).toBeNull();
-                const opened = await openHomeChat(inst('group').settings as any, body, deps());
+                const opened = await openHomeChat(inst('group').settings as HomeChatSettings, body, deps());
                 expect(opened.locked).toBe(true);
                 expect(opened.lines.size).toBe(0);
                 const view = chatCardView(inst('group'), body, me.pub, opened);
@@ -1602,5 +1602,13 @@ describe('A chat (DESIGN-home-chosen-chat-fable.md slice C2): the phone draws it
             if (view.state !== 'chat') throw new Error('drawn');
             expect(view.lines[0]).toMatchObject({ who: null, text: "This message couldn't be verified." });
         });
+    });
+
+    it('a DM line from an old app (nothing proves who wrote it) is nobody\'s and says so, never in its author\'s name', async () => {
+        const line = dmLine(ana, me, 'meet at 5', 4);
+        const oldApp: HomeChatOpenDeps['judgeDm'] = async (_c, lines) => new Map(lines.map(l => [l.id, { text: 'meet at 5', format: 2 as const, after: null, mark: 'old-app' as const }]));
+        const view = await draw(inst('dm'), dmCard([line]), deps({ judgeDm: oldApp }));
+        if (view.state !== 'chat') throw new Error('drawn');
+        expect(view.lines[0]).toEqual({ id: line.id, at: line.at, who: null, text: "Sent from an older version of the app: BeanPool can't confirm who wrote it." });
     });
 });

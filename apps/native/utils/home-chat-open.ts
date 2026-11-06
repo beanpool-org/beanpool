@@ -6,7 +6,7 @@
  * The card never fetches (frame rule), and what is opened lives in the screen's memory only: never in SQLite, the kept
  * answer (utils/home-store.ts) or any other cache.
  */
-import { dmLineKind, dmLineShownText, type HomeChatCard, type HomeChatLine, type HomeChatSettings } from '@beanpool/core';
+import { dmLineKind, dmLineMarkText, dmLineShownText, type HomeChatCard, type HomeChatLine, type HomeChatSettings } from '@beanpool/core';
 import type { OpenedChat, OpenedChatLine } from './home-chat';
 import { groupLineView, GROUP_LINE_FORMER_MEMBER, type ServedGroupLine } from './group-line-display';
 import { openLine } from './group-chat-crypto';
@@ -32,6 +32,9 @@ async function openDm(pick: HomeChatSettings, lines: readonly HomeChatLine[], de
             const v = views?.get(l.id);
             // No context on this phone yet (or the judge failed): nothing opens, and the line says it is locked.
             if (!views || !v) { out.set(l.id, { kind: 'waiting' }); continue; }
+            // An old app's line: nothing in it proves who wrote it. The chat shows it with that mark under it; the card has
+            // no room for a mark, so it says the mark alone, nobody's, as Talk's list does (db.ts getConversations).
+            if (v.mark === 'old-app') { out.set(l.id, { kind: 'nobody', text: dmLineMarkText('old-app') ?? '' }); continue; }
             if (v.mark === 'not-verified' || v.mark === 'not-encrypted' || v.text == null) out.set(l.id, { kind: 'nobody', text: dmLineShownText(v as Parameters<typeof dmLineShownText>[0]) });
             else out.set(l.id, { kind: 'words', text: v.text, signer: l.author });
             continue;

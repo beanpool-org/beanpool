@@ -490,6 +490,7 @@ export {
 } from './engine/event-reminders.js';
 import { rollDueSeries, pruneStaleRsvps, setSeriesDateSkipped } from './engine/event-series-roll.js';
 import { HOME_PREFERENCE_KEYS, HOME_MEMBERS_ONLY_MESSAGE, homePreferenceWrites, ownHomePreferences, type HomeLayout } from './engine/home-preferences.js';
+import { ASKED_PUSH_PREF, noticeNeedAsked } from './engine/asked-push.js';
 export {
     HOME_PREFERENCE_KEYS, HOME_CARD_IDS, INTEREST_IDS, getHomeLayout, getInterests, ownHomePreferences, homePreferencesNamed,
     type HomeLayout, type HomeCardId,
@@ -5791,6 +5792,14 @@ export function createPost(
     category = postFields.category as string;
     credits = beansOffPrice(credits);
     const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
+    // A Need for the whole community tells the members who starred its category, at most once a day each, on a community
+    // that sends these (engine/asked-push.ts; cold start N3). Not one an owner's assistant made, nor a copy.
+    if (post && type === 'need') {
+        noticeNeedAsked({
+            id: post.id, type, status: post.status, category: post.category, author: authorPublicKey, actor: options?.createdBy ?? null,
+            audienceScope: options?.audienceScope ?? 'public', copied: !!options?.shownCopy || !!post.originNode, createdVia: options?.createdVia ?? null,
+        }, dispatchPushNotification);
+    }
     // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The
     // acting member is named — the keeper or convenor, not an enterprise's own key.
     if (post && options?.audienceScope === 'group' && options.targetGroupId && (type === 'event' || type === 'poll')) {
@@ -10401,7 +10410,7 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
  * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
  * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
-export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', 'eventReminderOffsets'];
+export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'notify_knocks', ASKED_PUSH_PREF, 'eventReminderOffsets'];
 
 /**
  * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
@@ -10447,6 +10456,8 @@ export function getMemberPreferences(publicKey: string, reader?: string): Record
         notify_escrow: 'true',
         notify_recovery: 'true',
         notify_knocks: 'false',
+        // "When a neighbour asks for something I'm into" (engine/asked-push.ts): on until the member turns it off.
+        [ASKED_PUSH_PREF]: 'true',
     };
     for (const r of rows) {
         // The stored reminders key (EVENT_REMINDER_PREF_KEY) isn't one of these either: it is served as eventReminderOffsets below.

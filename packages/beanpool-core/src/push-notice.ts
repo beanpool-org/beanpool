@@ -62,6 +62,35 @@ export function knockSwitchShown(features: { door?: unknown; knocks?: unknown } 
     return features?.knocks !== false && features?.door !== 'admins';
 }
 
+/**
+ * Whether a community sends `market.asked` (DESIGN-cold-start-trades-fable.md §2.1, slice N3): a local community with
+ * Beans on, never the global one, which gets the Asked near you card and not the buzz. The server's own rule, which it
+ * says to the apps as `features.askedPush` ({@link askedPushOn}).
+ */
+export function askedPushSent(profile: unknown, beans: unknown): boolean {
+    return profile === 'local' && beans === true;
+}
+
+/**
+ * Whether the community a member is in tells them when a neighbour asks for something they starred: only where its
+ * features say `askedPush` (a server from before slice N3 says nothing, sends no such push and takes no `notify_asked`).
+ * Both apps read it: the What are you into? card says so only here ({@link ASKED_PUSH_WORDS}.interestsNote), and Settings →
+ * Notifications shows its switch only here.
+ */
+export function askedPushOn(features: { askedPush?: unknown } | null | undefined): boolean {
+    return features?.askedPush === true;
+}
+
+/** The words both apps show for the `market.asked` push (design §2.1): the card's sentence and the Settings switch. */
+export const ASKED_PUSH_WORDS = {
+    /** What are you into?'s note where the community sends the push. */
+    interestsNote: word("Tap a few. What you star comes first here and in the Market, and we'll tell you when a neighbour asks for it."),
+    /** Settings → Notifications: the switch's name (and its label for a screen reader). */
+    switchName: word("When a neighbour asks for something I'm into"),
+    /** …and its line. */
+    switchLine: word("At most once a day, and only for what you've starred"),
+} as const;
+
 /** Where the app goes for a notice whose details it can't fetch: the tab its kind belongs to. */
 export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings' | 'people';
 
@@ -101,6 +130,9 @@ export const PUSH_NOTICE_KINDS = {
     // To every seated juror when the member the jury is deciding about answers the case (design §7).
     'decision.jury-reply': { body: word('The member your jury is deciding about has answered the case. Open BeanPool to read it.'), tab: 'home' },
     'market.request': { body: word('Someone answered one of your listings.'), tab: 'market' },
+    // To members who starred the category of a neighbour's new Need (server engine/asked-push.ts; cold start N3): at most
+    // one a day each, only where the community says `askedPush`. It names nobody and no listing; its details open the Need.
+    'market.asked': { body: word("Someone in your community asked for something you're into."), tab: 'market' },
     'market.answer': { body: word('There is news on one of your requests.'), tab: 'market' },
     'market.listing': { body: word('There is news on one of your listings.'), tab: 'market' },
     'trade.update': { body: word('There is news on one of your trades.'), tab: 'market' },

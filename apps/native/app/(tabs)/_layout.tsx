@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
-import { dealsNeedingMe, helpSheetFor, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { dealsNeedingMe, helpSheetFor, isOthersListingDoorbell, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
 import { webSocketAliveSince } from '../../services/ws-client';
 import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
@@ -303,7 +303,9 @@ export default function TabLayout() {
                 if (lastReadOkAtRef.current <= lastDoorbellAt) readForDoorbell();
             }, DOORBELL_READ_GAP_MS - sinceRead + 1);
         };
-        const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
+        // A new listing by someone else changes no chat and no unread count: it reads nothing here (core isOthersListingDoorbell).
+        const wsSub = DeviceEventEmitter.addListener('ws_activity', (data?: unknown) => {
+            if (isOthersListingDoorbell(data, identity.publicKey)) return;
             lastDoorbellAt = Date.now();
             readForDoorbell();
         });

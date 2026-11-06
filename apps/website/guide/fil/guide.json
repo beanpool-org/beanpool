@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 7,
+  "version": 8,
   "language": "fil",
-  "hash": "660a45f08897c24916c5da60ef4a2d98ea66bb8195e5551a675ba6056daae9fc",
+  "hash": "1b9d5b8bb6f97a380ecd2d33bfad6559f0d865e06162f4bec9bb961e9e27642b",
   "sections": [
     {
       "id": "about",
@@ -790,6 +790,25 @@
       "blocks": [
         {
           "type": "h2",
+          "text": "Ang Merkado sa iisang pagkakasunod-sunod"
+        },
+        {
+          "type": "p",
+          "text": "Sa telepono, makukuha mo ito gamit ang updated na app; sa web browser, kapag na-update na ang server ng iyong komunidad."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Pinakabago muna, pareho sa telepono at sa web.** Inililista ng Merkado ang mga post na pinakabago muna sa ilalim ng **Ngayong araw**, **Kahapon**, **Ngayong Linggo** at **Mga Mas Lumang Listahan**, ayon sa araw na inilista ang bawat isa. Wala na ang mga heading na **Mga paparating na event**, **Mga Poll** at **Pinakamalapit muna**.",
+            "**Isang beses bumabalik ang event.** Sa araw bago ito magsimula, inililista muli ang event sa ilalim ng **Ngayong araw**. Ganoon din ang botohan sa araw bago ito magsara. Pagkatapos, lumulubog sila gaya ng ibang post.",
+            "**Dalawang puwesto sa isang araw.** Ang ikatlong post ng isang tao sa isang araw, at ang mga kasunod nito, ay nasa likod ng mga post ng lahat ng iba pa sa araw na iyon.",
+            "**Hindi iniaakyat ng pag-edit ang isang post.** Para makitang muli, mag-post muli.",
+            "**Sa pandaigdigang komunidad**, ipinapakita ng Merkado ang pinakabago sa loob ng 250 km ng iyong lugar, bawat post ay may layo nito. Sinasabi ito ng isang linya sa itaas ng listahan. Hindi na kailangan ng telepono ang iyong lokasyon para dito. Sa web app, ganoon din para sa **Distansya** na pipiliin mo.",
+            "**Hindi nagbago:** nananatili sa itaas ang mga post na ipinin ng may-ari, inililista pa rin ng **Mga Event** ang pinakamaaga muna, at ang paghahanap ay nakakahanap ng pinakaangkop sa iyong mga salita. Tingnan ang \"Pag-browse sa merkado\"."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "Ang pandaigdigang komunidad, malapit sa iyo"
         },
         {
@@ -804,7 +823,7 @@
             "**Iyong lugar.** Sa web app, ang pagsali sa pandaigdigang komunidad ay may isa pang hakbang pagkatapos ng iyong larawan: **Saan ka humigit-kumulang?** Sa telepono, itinatanong ito kapag sumali ka gamit ang account na mayroon ka na; itinatakda ito ng bagong account sa telepono mamaya sa Mga Setting, sa ilalim ng **Iyong lugar**. Sa hakbang na iyon, i-tap ang **Gamitin ang location ko**, **Mag-type ng bayan o lugar**, o **Laktawan muna**. Itinatago ito sa humigit-kumulang 10 km, hindi kailanman ang eksaktong lokasyon mo. Baguhin o i-clear ito sa Mga Setting, sa ilalim ng **Iyong lugar**. Tingnan ang \"Iyong lugar\".",
             "**Walang lugar, walang problema.** Kung wala nito, makikita mo ang mga pinakabagong listing mula sa kahit saan, at sinasabi ito ng isang linya sa itaas ng Merkado. Sa telepono, i-tap ito upang itakda ang iyong lugar.",
             "**Mga bagong listing malapit sa iyo.** Dumarating ang mga ito kapag nai-post na. Ang mga malalayo ay hindi na nakakarating sa iyong telepono.",
-            "**Sa web app**, nagsisimula ang Merkado at ang Mapa mula sa iyong lugar, o mula sa lugar na pipiliin mo gamit ang **Distansya**: pinakamalapit muna, bawat listing ay may layo nito. Tingnan ang \"Paghahanap ng bagay sa malapit\".",
+            "**Sa web app**, nagsisimula ang Merkado at ang Mapa mula sa iyong lugar, o mula sa lugar na pipiliin mo gamit ang **Distansya**: bawat listing ay may layo nito. Ipinapakita ng Mapa ang pinakamalapit muna. Inililista ng Merkado ang pinakabago muna, gaya ng sinasabi ng \"Ang Merkado sa iisang pagkakasunod-sunod\", sa itaas. Tingnan ang \"Paghahanap ng bagay sa malapit\".",
             "**Walang sariling lugar ang mga poll**, kaya ipinapakita ang bawat isa sa lugar ng miyembro na gumawa nito.",
             "**I-type ang iyong bayan.** Sa pandaigdigang komunidad, ang **Hanapin ang iyong komunidad** sa Home ay hindi na nangangailangan ng iyong lokasyon: i-tap ang **o i-type ang iyong bayan** at piliin ang iyong bayan. Isang tinatayang lokasyon lang ang itinatago. Tingnan ang \"Paghahanap ng kalapit na komunidad\".",
             "**Pag-post nang walang presyo.** Sa pandaigdigang komunidad, hindi humihingi ng presyo ang form ng pag-post, dahil ang mga munggo ay nasa mga lokal na komunidad. Sa web app, gumagana na ngayon ang **Mag-post ng Alok** at **Mag-post ng Kahilingan** nang wala nito. Humihingi pa rin ng presyo ang lokal na komunidad."
@@ -918,12 +937,12 @@
         {
           "type": "ul",
           "items": [
-            "**Bawat grupo ay may chat.** May tatlong button na ngayon ang Talk: **Mga Mensahe**, **Mga Grupo** at **Mga Tao**. Inililista ng **Mga Grupo** ang iyong mga grupo, ang mga negosyong pinapangalagaan mo at ang mga event na pupuntahan mo, bawat isa ay may pinakabagong mensahe at bilang ng hindi pa nababasa.",
-            "**Isang paraan upang magsimula ng grupo.** Binubuksan ng **Bagong grupo** sa Talk at **+** sa Commons ang parehong form, na pinili ang **Social Circle** para sa iyo. Pagkatapos mong gawin ito, mapupunta ka sa chat nito, na magtatanong kung sino ang gusto mong imbitahan.",
+            "**Bawat grupo ay may chat.** May tatlong button na ngayon ang Usapan: **Mga Mensahe**, **Mga Grupo** at **Mga Tao**. Inililista ng **Mga Grupo** ang iyong mga grupo, ang mga negosyong pinapangalagaan mo at ang mga event na pupuntahan mo, bawat isa ay may pinakabagong mensahe at bilang ng hindi pa nababasa.",
+            "**Isang paraan upang magsimula ng grupo.** Binubuksan ng **Bagong grupo** sa Usapan at **+** sa Commons ang parehong form, na pinili ang **Social Circle** para sa iyo. Pagkatapos mong gawin ito, mapupunta ka sa chat nito, na magtatanong kung sino ang gusto mong imbitahan.",
             "**Mga Imbitasyon.** Maaaring mag-imbita ang mga convenor mula sa menu ng chat. Ipinapakita ng imbitasyon kung sino ang nagpadala nito, at dadalhin ka ng **Sumali sa grupo** nang direkta sa chat.",
             "**I-mute ang isang chat**: Sa loob ng 8 oras, Sa loob ng isang linggo o Palagi. Sa isang grupo, nakakalusot pa rin ang mga @pagbanggit.",
             "**Isang header para sa bawat chat**: ang pangalan ng grupo, negosyo o event sa itaas. I-tap ito upang makita ang grupo, negosyo o event.",
-            "Inalis na ang mga lumang group chat sa Talk, kasama ang kanilang mga mensahe.",
+            "Inalis na ang mga lumang group chat sa Usapan, kasama ang kanilang mga mensahe.",
             "Bawat grupo ay mayroon na ngayong **nangungunang convenor** — ang sinumang gumawa nito, sa simula. Ang sinumang convenor ay nag-aalaga pa rin sa mga miyembro at mga post, ngunit ang pinuno lamang ang maaaring mag-alis o magbaba ng antas ng isang convenor, at walang sinuman ang maaaring mag-alis sa pinuno. Maaaring ipasa ng pinuno ang pamumuno sa iba. Kung hindi magparamdam ang pinuno sa loob ng 30 araw, maaaring pumili ang grupo ng bago, sa screen ng grupo sa itaas ng listahan. Tingnan ang \"Mga tuntunin at mga desisyon\".",
             "**Mga boto sa isang grupo.** Maaaring bumoto ang mga miyembro ng grupo sa sariling mga bagay ng grupo, tulad ng bagong convenor o bagong pinuno: buksan ang grupo at tumingin sa ilalim ng **Mga Desisyon**.",
             "**Pagpili ng bagong pinuno para sa tahimik na grupo.** Ang mga tao lamang na nasa grupo bago naging tahimik ang pinuno nito ang maaaring bumoto. Ang mga taong sumali, o ginawang mga convenor, pagkatapos noon ay walang masasabi, kaya hindi maaaring kunin ng mga bagong account ang isang grupong naging tahimik ang pinuno."
@@ -1817,9 +1836,9 @@
         {
           "type": "ul",
           "items": [
-            "**Ina-archive ang isang listing 90 araw matapos itong huling magbago.** Inaalis ito sa Merkado at sa Mapa, at binubura ang mga larawan nito. Ang pag-edit dito, pag-pause dito o pagbabalik dito ay pawang binibilang bilang pagbabago: ang pagbubukas nito gamit ang **I-edit ang Post** at pag-tap sa **I-save** ay nagpapanatili rito para sa isa pang 90 araw. Kapag na-archive ang isa sa iyo, makakatanggap ka ng notipikasyon kasama ang iyong mga alerto sa **Aktibidad sa Marketplace**. Maaari mo itong i-post muli anumang oras.",
+            "**Ina-archive ang isang listing 90 araw matapos itong huling magbago.** Inaalis ito sa Merkado at sa Mapa, at binubura ang mga larawan nito. Ang pag-edit dito, pag-pause dito o pagbabalik dito ay pawang binibilang bilang pagbabago: ang pagbubukas nito gamit ang **I-edit ang Post** at pag-tap sa **I-save** ay nagpapanatili rito para sa isa pang 90 araw. Wala sa mga ito ang nag-aakyat dito sa Merkado, na naglilista ng mga post na pinakabago muna. Kapag na-archive ang isa sa iyo, makakatanggap ka ng notipikasyon kasama ang iyong mga alerto sa **Aktibidad sa Marketplace**. Maaari mo itong i-post muli anumang oras.",
             "**Hanggang 5 larawan bawat listing.**",
-            "**Itinatago ng iyong telepono ang pinakamalapit na 500 listing**, sa loob ng 250 km ng iyong lugar. Itinatago rin nito ang sa iyo, at ang anuman kung saan mayroon kang deal o pag-uusap. Ang paghahanap ng Merkado ay patuloy pa ring nakakahanap ng mga listing mula saanman. Tingnan ang \"Iyong lugar\".",
+            "**Itinatago ng iyong telepono ang pinakamalapit na 500 listing**, sa loob ng 250 km ng iyong lugar. Itinatago rin nito ang sa iyo, at ang anuman kung saan mayroon kang deal o pag-uusap. Inililista ng Merkado ang mga nasa loob ng 250 km ng iyong lugar na pinakabago muna, at sinasabi ng bawat card kung gaano ito kalayo. Ang paghahanap ng Merkado ay patuloy pa ring nakakahanap ng mga listing mula saanman. Tingnan ang \"Iyong lugar\".",
             "**Maaari kang magbantay ng hanggang 3 lokasyon** gamit ang **Sabihan ako kapag may nagsimula rito**. Upang magbantay ng isa pa, ihinto ang pagbabantay sa isa. Tingnan ang \"Paghahanap ng kalapit na komunidad\"."
           ]
         },
@@ -2840,7 +2859,7 @@
           "type": "ul",
           "items": [
             "**Pagsali gamit ang imbitasyon:** sinasabi ng button ng unang hakbang ang **Gumawa ng Identity at Sumali →**. Kung may ibang may hawak na ng pangalang pinili mo rito, makukuha mo ito na may idinagdag na numero. Ipinapakita ng **← Bumalik** sa **Larawan** ang iyong pangalan lamang, na may **Susunod →**: palitan ito (hanggang 20 character) o panatilihin ito, sa parehong account. Kung mayroon nang ganoong bagong pangalan ang iba, sinasabi ito ng pahina at nagmumungkahi ng iba.",
-            "**Mga Tab:** ang web app ay may **Home**, **Merkado**, **Mapa**, **Komun**, **Usapan**, **Mga Tao** at **Talaan**. Ang tinatawag ng app sa telepono na **Usapan** ay **Usapan** sa web, at may sariling tab ang **Mga Tao**.",
+            "**Mga Tab:** ang web app ay may **Home**, **Merkado**, **Mapa**, **Komun**, **Usapan**, **Mga Tao** at **Talaan**. Tinatawag ng dalawang app ang tab na ito na **Usapan**, at sa web ay may sariling tab ang **Mga Tao**.",
             "**Mga Setting at ang iyong profile:** ang maliliit na button sa kanang itaas: ang iyong profile, ang **?**, pagkatapos ay Mga Setting. Sa isang malapad na screen ang mga ito ay nasa ibaba ng menu sa kaliwa.",
             "**Pag-post ng Alok o Kahilingan:** gamitin ang **Bagong Post** sa pahina ng **Mapa**.",
             "**Hitsura:** tinatawag ang pagpipilian na **Katulad ng device** sa halip na \"Katulad ng telepono\".",
@@ -2943,19 +2962,26 @@
         },
         {
           "type": "p",
-          "text": "I-tap ang **Merkado** sa hanay ng mga tab. Makikita mo kung ano ang iniaalok at hinahanap ng mga tao sa iyong komunidad, pinakabago muna, na nakapangkat ayon sa araw na na-post ang mga ito."
+          "text": "I-tap ang **Merkado** sa hanay ng mga tab. Makikita mo kung ano ang iniaalok at hinahanap ng mga tao sa iyong komunidad, pinakabago muna, sa ilalim ng **Ngayong araw**, **Kahapon**, **Ngayong Linggo** at **Mga Mas Lumang Listahan**, ayon sa araw na inilista ang bawat isa. Pareho ang paglilista ng telepono at ng web app."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Isang beses bumabalik ang event.** Sa araw bago ito magsimula, inililista muli ang event sa ilalim ng **Ngayong araw**, kasama ng mga bagong post ng araw na iyon, at pagkatapos ay lumulubog gaya ng iba. Ang lingguhang event ay bumabalik nang isang beses sa isang linggo.",
+            "**Isang beses ding bumabalik ang botohan**, sa araw bago ito magsara.",
+            "**Walang kukuha ng higit sa dalawang puwesto sa isang araw.** Ang ikatlong post ng isang tao sa isang araw, at ang mga kasunod nito, ay nasa likod ng mga post ng lahat ng iba pa sa araw na iyon.",
+            "**Hindi iniaakyat ng pag-edit ang isang post.** Ganoon din ang pag-pause dito, o ang sagot dito. Para makitang muli, mag-post muli.",
+            "**Isang linya ang nagpapakita kung saan ka huminto.** Ang **Bago mula noong huli kang tumingin** ay nasa ibabaw ng unang post na nakalista na noong huli kang umalis sa Merkado sa teleponong ito o sa browser na ito; wala ito sa unang beses, kapag walang mas bago, o habang naghahanap o nagfi-filter ka, at hindi ito iginuguhit ng grid ng telepono.",
+            "**Ang post na ipinin ng may-ari** ay nasa pinakaitaas, sa ilalim ng **Naka-pin**, gaano man ito katagal na."
+          ]
         },
         {
           "type": "p",
-          "text": "Sa telepono, nauuna ang mga event. Kung pinayagan mo na ang app na gamitin ang iyong lokasyon, ipinapakita ng listahan at ng mga compact view ang mga listing na pinakamalapit muna sa halip, sa ilalim ng **Pinakamalapit muna**, na may mga botohan sa ilalim ng **Mga Poll**. Pinapanatili ng **Para sa Iyo** ang sarili nitong pagkakasunod-sunod. Hilahin pababa ang listahan upang i-refresh ito."
+          "text": "Sa listahan at mga compact view, makikita mo ang mga heading ng araw. Ipinapakita ng grid ang parehong pagkakasunod-sunod nang wala ang mga ito. Sa telepono, nagbubukas ang Merkado bilang listahan; sa web app, bilang mga card. Pinapanatili ng **Para sa Iyo** ang sarili nitong pagkakasunod-sunod. Sa ilalim ng **Mga Event**, nauuna ang pinakamaaga, kasama ang **Ngayong araw**, **Ngayong weekend** at **Susunod na 7 araw**. Ipinapakita ng paghahanap ang mga post na pinakaangkop sa iyong mga salita. Sa telepono, hilahin pababa ang listahan upang i-refresh ito."
         },
         {
           "type": "p",
-          "text": "Sa web app nagbubukas ang Merkado bilang mga card. Sa listahan at mga compact view, ang mga event ay nasa ilalim ng araw kung kailan na-post ang mga ito. Sa isang lokal na komunidad hindi inilalagay ng web app ang pinakamalapit muna."
-        },
-        {
-          "type": "p",
-          "text": "Sa pandaigdigang komunidad, ipinapakita muna ng web app ang mga listing na malapit sa iyo: ang pinakamalapit sa loob ng iyong **Distansya**, o sa loob ng 250 km ng iyong lugar (ang tinatayang lugar na ibinigay mo sa komunidad noong sumali ka, o sa **Mga Setting**), bawat isa ay may layo nito. Sinasabi ng isang linya sa itaas ng listahan kung alin. Malapit sa iyong lugar mayroon itong **Ipakita kahit saan** para sa pinakabago mula sa lahat ng dako. Kapag may **Distansya**, buksan ang **Distansya** at i-tap ang **I-reset** upang bumalik sa iyong lugar, pagkatapos ay i-tap ang **Ipakita kahit saan**. Sa telepono, itinatago ng pandaigdigang komunidad ang mga listing na pinakamalapit sa iyong lugar, kaya ang mga iyon ang ipinapakita ng Merkado. Tingnan ang \"Paghahanap ng bagay sa malapit\"."
+          "text": "Sa pandaigdigang komunidad, ipinapakita ng Merkado ang pinakabago sa loob ng 250 km ng iyong lugar (ang tinatayang lugar na ibinigay mo sa komunidad noong sumali ka, o sa **Mga Setting**), bawat post ay may layo nito. Sinasabi ito ng isang linya sa itaas ng listahan: **Pinakabago sa loob ng 250 km mula sa iyong lugar.** Pareho ito sa telepono at sa web app, at sa telepono hindi nito kailangang payagan mo ang app na gamitin ang iyong lokasyon. Kapag may **Distansya**, ipinapakita ng dalawang app ang pinakabago sa loob nito. Sa web app, sinasabi na ng linya ang **Pinakabago sa loob ng 5 km mula sa lugar na pinili mo.**, at ipinapakita ng bawat post ang layo nito. Sa web app, malapit sa iyong lugar mayroon ang linya ng **Ipakita kahit saan** para sa pinakabago mula sa lahat ng dako. Kapag may **Distansya**, buksan ang **Distansya** at i-tap ang **I-reset** upang bumalik sa iyong lugar, pagkatapos ay i-tap ang **Ipakita kahit saan**. Kapag wala pang walo ang malapit sa iyo, ang pinakabago mula sa ibang lugar ay nasa ilalim nito, sa ilalim ng **Pinakabago mula sa ibang lugar**, sa telepono at sa web app. Wala ang mga ito kapag pumili ka ng **Distansya**, nag-type ng paghahanap, o tumitingin sa **Mga Event**. Tingnan ang \"Paghahanap ng bagay sa malapit\"."
         },
         {
           "type": "p",
@@ -3768,8 +3794,8 @@
       "slug": "near-you",
       "title": "Paghahanap ng bagay sa malapit",
       "summary": "Ipakita lamang ang mga post sa loob ng partikular na distansya mula sa iyo, o sa anumang lugar na piliin mo.",
-      "sourceHash": "2db25a661f8751ec",
-      "source-hash": "2db25a661f8751ec",
+      "sourceHash": "f519dd5b8dbe3492",
+      "source-hash": "f519dd5b8dbe3492",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3824,8 +3850,8 @@
         {
           "type": "ul",
           "items": [
-            "Kapag may napiling **Distansya** sa Merkado, parehong ipinapakita ang pinakamalapit na mga listing sa loob nito, pinakamalapit muna. Nagpapakita ang Mapa ng hanggang 200 pin.",
-            "Kung wala nito, ipinapakita ng mga ito ang pinakamalapit na mga listing sa loob ng 250 km mula sa iyong lugar: ang tinatayang lugar na ibinigay mo sa komunidad noong sumali ka, o mamaya sa **Mga Setting**, sa ilalim ng **Iyong lugar**. Sinasabi ng isang linya sa itaas ng listahan ng Merkado ang **Pinakamalapit muna sa iyong lugar, sa loob ng 250 km.** I-tap ang **Ipakita kahit saan** para sa pinakabago mula sa lahat ng dako, at **Malapit sa iyong lugar** upang bumalik.",
+            "Kapag may napiling **Distansya** sa Merkado, parehong ipinapakita ang mga listing sa loob nito. Inililista ng Merkado ang mga ito na pinakabago muna, bawat isa ay may layo nito, sa ilalim ng isang linyang nagsasabing **Pinakabago sa loob ng 5 km mula sa lugar na pinili mo.** (kasama ang iyong distansya). Ipinapakita ng Mapa ang pinakamalapit, hanggang 200 pin.",
+            "Kung wala nito, ipinapakita ng mga ito ang pinakamalapit na mga listing sa loob ng 250 km mula sa iyong lugar: ang tinatayang lugar na ibinigay mo sa komunidad noong sumali ka, o mamaya sa **Mga Setting**, sa ilalim ng **Iyong lugar**. Inililista ng Merkado ang mga ito na pinakabago muna, sa ilalim ng isang linyang nagsasabing **Pinakabago sa loob ng 250 km mula sa iyong lugar.** Ipinapakita ng Mapa ang pinakamalapit muna. I-tap ang **Ipakita kahit saan** para sa pinakabago mula sa lahat ng dako, at **Malapit sa iyong lugar** upang bumalik.",
             "Kung wala ang alinman, makikita mo ang pinakabago mula sa lahat ng dako, at binubuksan ng **Tingnan ang malapit sa iyo** ang tagapili ng distansya. Sinasabi ng isang linya sa itaas ng listahan ng Merkado kung alin sa mga ito ang iyong nakikita. Kapag may **Distansya** wala itong button: buksan ang **Distansya** at i-tap ang **I-reset**. Babalik ka pagkatapos sa malapit sa iyong lugar, o, kapag walang nakatakdang lugar, makikita mo ang pinakabago mula sa lahat ng dako.",
             "Ipinapakita ng bawat listing kung gaano ito kalayo, tulad ng **📍 12 km**. Ang sarili mong mga listing ay palaging nasa Mapa, at nasa Merkado malapit sa iyong lugar, saanman naroon ang mga ito. Kapag may **Distansya**, ipinapakita lamang ng Merkado ang nasa loob nito, maging ang sa iyo.",
             "Habang ang listahan ay malapit sa iyo, ang mga post na walang lokasyon ay iniiwan. Ang isang botohan mula sa isang taong hindi pa nagtatakda ng kanilang lugar ay isa sa mga ito. Upang makita ang mga ito, i-reset ang **Distansya** kung pumili ka ng isa, pagkatapos ay i-tap ang **Ipakita kahit saan**.",
@@ -3843,7 +3869,7 @@
         },
         {
           "type": "p",
-          "text": "Itinatago ng telepono ang mga listing na pinakamalapit sa iyong lugar: hanggang 500, sa loob ng 250 km. Itinatago rin nito ang sarili mong mga listing, at alinman na mayroon kang deal, chat o sagot. Ipinapakita ng Merkado at ng Mapa kung ano ang itinatago ng telepono. Kapag walang nakatakdang lugar, itinatago nito ang mga pinakabagong listing sa halip, at sinasabi ito ng isang linya sa itaas ng Merkado. Tingnan ang \"Iyong lugar\"."
+          "text": "Itinatago ng telepono ang mga listing na pinakamalapit sa iyong lugar: hanggang 500, sa loob ng 250 km. Itinatago rin nito ang sarili mong mga listing, at alinman na mayroon kang deal, chat o sagot. Ipinapakita ng Merkado at ng Mapa kung ano ang itinatago ng telepono. Inililista ng Merkado ang mga ito na pinakabago muna, bawat isa ay may layo nito, sa ilalim ng parehong linya, **Pinakabago sa loob ng 250 km mula sa iyong lugar.** Hindi nito kailangang payagan mo ang app na gamitin ang iyong lokasyon. Kapag walang nakatakdang lugar, itinatago nito ang mga pinakabagong listing sa halip, at sinasabi ito ng isang linya sa itaas ng Merkado. Tingnan ang \"Iyong lugar\"."
         },
         {
           "type": "h2",
@@ -5356,7 +5382,7 @@
         },
         {
           "type": "p",
-          "text": "Nasa Merkado ang mga botohan. I-tap ang **Mga Poll** sa itaas na hanay upang makita lamang ang mga botohan."
+          "text": "Nasa Merkado ang mga botohan. I-tap ang **Mga Poll** sa itaas na hanay upang makita lamang ang mga botohan. Inililista muli nang isang beses ang isang botohan, sa ilalim ng **Ngayong araw**, sa araw bago ito magsara."
         },
         {
           "type": "ul",
@@ -5416,7 +5442,8 @@
         {
           "type": "ul",
           "items": [
-            "Sa **Merkado**, i-tap ang **Mga Event**. Pumili ng **Ngayong araw**, **Ngayong weekend** o **Susunod na 7 araw**.",
+            "Sa **Merkado**, i-tap ang **Mga Event**. Nauuna ang pinakamaaga. Pumili ng **Ngayong araw**, **Ngayong weekend** o **Susunod na 7 araw**.",
+            "Sa **Merkado**, sa ilalim ng **Lahat**, inililista muli nang isang beses ang isang event, sa ilalim ng **Ngayong araw**, sa araw bago ito magsimula, at pagkatapos ay lumulubog gaya ng ibang post. Ang lingguhang event ay bumabalik nang isang beses sa isang linggo.",
             "Sa **Mapa**, ang mga event ay mga lilang pin. Sa telepono, i-tap ang **Mga Event** upang makita lamang ang mga ito. Sa web app palagi silang naroon, at pinapakipot ng mga chip ng petsa ang mga ito."
           ]
         },
@@ -6201,8 +6228,8 @@
       "slug": "trust-badges",
       "title": "Mga trust badge",
       "summary": "Baguhan, Residente, Pangasiwa at Pinuno. Ano ang kahulugan ng mga ito, at bakit wala itong ina-unlock.",
-      "sourceHash": "a6cc3bb74fc395bb",
-      "source-hash": "a6cc3bb74fc395bb",
+      "sourceHash": "9cb2cc1e373c7763",
+      "source-hash": "9cb2cc1e373c7763",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6234,7 +6261,7 @@
         },
         {
           "type": "p",
-          "text": "Ang tiwala ay nagmumula sa isang vouch kapag sumali ka, mula sa mga nakumpletong kalakalan, at mula sa tiwalang ipinagkaloob ng isang admin. Sa isang komunidad na nagpapatunay sa mga miyembro nito, ang pagiging kumpirmado ay nagbibigay sa iyo ng mas mataas na limitasyon sa kredito, hindi mas mataas na badge: binibilang lamang ng iyong badge kung ano ang nagawa, kaya hindi nito kailanman ipinapakita na ikaw ay kumpirmado."
+          "text": "Nagmumula ang tiwala sa mga nakumpletong palitan at sa tiwalang ipinagkaloob ng admin. Sa komunidad na kumukumpirma ng mga miyembro, ang pagiging kumpirmado ay nagbibigay ng mas mataas na limitasyon sa credit, hindi mas mataas na badge: binibilang lamang ng badge ang nagawa mo, kaya hindi nito ipinapakita na ikaw ay kumpirmado."
         },
         {
           "type": "h2",
@@ -6530,7 +6557,7 @@
         },
         {
           "type": "p",
-          "text": "Sa pandaigdigang komunidad, ang iyong lugar ay humigit-kumulang kung nasaan ka: mga 10 km sa paligid ng isang bayan o isang lugar, hindi kailanman ang iyong eksaktong lokasyon. Ginagamit ito ng pandaigdigang komunidad upang ipakita sa iyo kung ano ang iniaalok na malapit sa iyo: ang pinakamalapit na 500 listing sa loob ng 250 km mula rito. Tingnan ang \"Higit sa isang komunidad\"."
+          "text": "Sa pandaigdigang komunidad, ang iyong lugar ay humigit-kumulang kung nasaan ka: mga 10 km sa paligid ng isang bayan o isang lugar, hindi kailanman ang iyong eksaktong lokasyon. Ginagamit ito ng pandaigdigang komunidad upang ipakita sa iyo kung ano ang iniaalok na malapit sa iyo: ang pinakamalapit na 500 listing sa loob ng 250 km mula rito. Inililista na ng Merkado ang mga ito na pinakabago muna, bawat isa ay may layo nito. Tingnan ang \"Higit sa isang komunidad\"."
         },
         {
           "type": "p",

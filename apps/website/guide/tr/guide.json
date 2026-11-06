@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 7,
+  "version": 8,
   "language": "tr",
-  "hash": "7198de99409b0547c30519904aedc49d06e91b241699516749d71f4e92110fb9",
+  "hash": "0a851ee25691e8024451e33207a5f72c1f13d3cb325ba3a55b08e5415eff0b00",
   "sections": [
     {
       "id": "about",
@@ -790,6 +790,25 @@
       "blocks": [
         {
           "type": "h2",
+          "text": "Pazar tek bir sırada"
+        },
+        {
+          "type": "p",
+          "text": "Telefonda güncel uygulamayla gelir; web tarayıcısında ise topluluğunuzun sunucusu güncellendiğinde."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Önce en yeni, telefonda ve webde aynı.** Pazar, gönderileri en yeniden başlayarak, her birinin paylaşıldığı güne göre **Bugün**, **Dün**, **Bu Hafta** ve **Daha Eski İlanlar** altında listeler. **Yaklaşan etkinlikler**, **Anketler** ve **Önce en yakın** başlıkları artık yok.",
+            "**Bir etkinlik bir kez geri gelir.** Başlamasından bir gün önce bir etkinlik **Bugün** altında yeniden listelenir. Bir anket de kapanmasından bir gün önce aynısını yapar. Sonra diğer gönderiler gibi aşağı iner.",
+            "**Günde iki yer.** Bir kişinin o gün üçüncü gönderisi ve sonrakiler, o günün herkesin gönderilerinden sonra gelir.",
+            "**Bir gönderiyi düzenlemek onu yukarı taşımaz.** Tekrar görülmek için yeniden paylaşın.",
+            "**Küresel toplulukta** Pazar, bölgenizin 250 km yakınındaki en yenileri gösterir; her gönderi ne kadar uzakta olduğuyla birlikte gelir. Listenin üzerindeki bir satır bunu belirtir. Telefonun bunun için artık konumunuza ihtiyacı yok. Web uygulamasında seçtiğiniz **Mesafe** için de aynısı geçerlidir.",
+            "**Değişmeyenler:** bir sahibin sabitlediği gönderiler en üstte kalır, **Etkinlikler** yine en yakın tarihli olanı ilk sırada listeler ve bir arama sözcüklerinize en iyi uyanı bulur. Bkz. \"Pazarda gezinme\"."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "Küresel topluluk, yakınınızda"
         },
         {
@@ -804,7 +823,7 @@
             "**Bölgeniz.** Web uygulamasında küresel topluluğa katılmanın fotoğrafınızdan sonra bir adımı daha vardır: **Yaklaşık olarak neredesiniz?** Telefonda, zaten sahip olduğunuz bir hesapla katıldığınızda sorulur; yeni bir telefon hesabı bunu daha sonra Ayarlar'da **Bölgeniz** altından belirler. Bu adımda **Konumumu kullan**, **Bir kasaba veya semt yaz** veya **Şimdilik atla** seçeneğine dokunun. Yaklaşık 10 km'lik bir alan olarak tutulur, tam konumunuz asla tutulmaz. Ayarlar'da **Bölgeniz** altından değiştirin veya temizleyin. \"Bölgeniz\" bölümüne bakın.",
             "**Bölge yoksa sorun yok.** Bir bölge olmadan her yerden en yeni ilanları görürsünüz ve Pazar'ın üzerindeki bir satır bunu belirtir. Telefonda bölgenizi belirlemek için bu satıra dokunun.",
             "**Yakınınızdaki yeni ilanlar.** Paylaşıldıkça gelirler. Uzaktakiler artık telefonunuza ulaşmaz.",
-            "**Web uygulamasında** Pazar ve Harita bölgenizden veya **Mesafe** ile seçtiğiniz bir yerden başlar: en yakın olan ilk sırada, her ilanın ne kadar uzakta olduğu belirtilir. \"Yakınınızdakileri bulma\" bölümüne bakın.",
+            "**Web uygulamasında** Pazar ve Harita bölgenizden veya **Mesafe** ile seçtiğiniz bir yerden başlar: her ilanın ne kadar uzakta olduğu belirtilir. Harita en yakın olanı ilk sırada gösterir. Pazar en yenileri ilk sırada listeler; yukarıdaki \"Pazar tek bir sırada\" bölümü de böyle diyor. \"Yakınınızdakileri bulma\" bölümüne bakın.",
             "**Anketlerin** kendilerine ait bir konumları yoktur, bu nedenle her anket onu oluşturan üyenin bölgesinde gösterilir.",
             "**Kasabanızı yazın.** Küresel toplulukta Ana Sayfa'daki **Topluluğunu bul** artık konumunuza ihtiyaç duymaz: **veya kasabanı yaz** seçeneğine dokunup kasabanızı seçin. Yalnızca yaklaşık bir nokta tutulur. \"Yakınınızda bir topluluk bulma\" bölümüne bakın.",
             "**Fiyatsız paylaşım.** Küresel toplulukta ilan formu fiyat sormaz; çünkü Fasulyeler yerel topluluklarda geçerlidir. Web uygulamasında **Teklif Paylaş** ve **İhtiyaç Paylaş** artık fiyatsız çalışır. Yerel bir topluluk hâlâ fiyat ister."
@@ -1817,9 +1836,9 @@
         {
           "type": "ul",
           "items": [
-            "**Bir ilan en son değiştirilmesinden 90 gün sonra arşivlenir.** Pazar'dan ve Harita'dan kaldırılır ve fotoğrafları silinir. Düzenlemek, duraklatmak veya tekrar yayına almak bir değişiklik sayılır: ilanı **İlanı Düzenle** ile açıp **Kaydet**'e dokunmak onu 90 gün daha tutar. Sizin bir ilanınız arşivlendiğinde, **Pazaryeri Etkinliği** uyarılarınızla bir bildirim alırsınız. İstediğiniz zaman tekrar paylaşabilirsiniz.",
+            "**Bir ilan en son değiştirilmesinden 90 gün sonra arşivlenir.** Pazar'dan ve Harita'dan kaldırılır ve fotoğrafları silinir. Düzenlemek, duraklatmak veya tekrar yayına almak bir değişiklik sayılır: ilanı **İlanı Düzenle** ile açıp **Kaydet**'e dokunmak onu 90 gün daha tutar. Bunların hiçbiri onu, gönderileri en yeniden başlayarak listeleyen Pazar'da yukarı taşımaz. Sizin bir ilanınız arşivlendiğinde, **Pazaryeri Etkinliği** uyarılarınızla bir bildirim alırsınız. İstediğiniz zaman tekrar paylaşabilirsiniz.",
             "**Bir ilanda en fazla 5 fotoğraf.**",
-            "**Telefonunuz**, bölgenizin 250 km yakınındaki **en yakın 500 ilanı tutar**. Ayrıca kendi ilanlarınızı ve bir anlaşmanız ya da hakkında bir sohbetiniz olan tüm ilanları tutar. Pazar'ın araması yine de her yerdeki ilanları bulur. \"Bölgeniz\" bölümüne bakın.",
+            "**Telefonunuz**, bölgenizin 250 km yakınındaki **en yakın 500 ilanı tutar**. Ayrıca kendi ilanlarınızı ve bir anlaşmanız ya da hakkında bir sohbetiniz olan tüm ilanları tutar. Pazar, bölgenizin 250 km yakınındakileri en yeniden başlayarak listeler ve her kart ne kadar uzakta olduğunu söyler. Pazar'ın araması yine de her yerdeki ilanları bulur. \"Bölgeniz\" bölümüne bakın.",
             "**Burada bir topluluk başladığında bana haber ver** ile **en fazla 3 yeri izleyebilirsiniz**. Başka birini izlemek için birini izlemeyi durdurun. \"Yakınınızda bir topluluk bulma\" bölümüne bakın."
           ]
         },
@@ -2840,7 +2859,7 @@
           "type": "ul",
           "items": [
             "**Bir davetle katılma:** ilk adımın düğmesinde **Kimlik Oluştur ve Katıl →** yazar. Buradaki biri seçtiğiniz ada zaten sahipse bir sayı eklenmiş olarak alırsınız. **Fotoğraf** üzerindeki **← Geri**, **İleri →** ile birlikte yalnızca adınızı gösterir: aynı hesap üzerinde değiştirin (20 karaktere kadar) veya koruyun. Biri yeni ada zaten sahipse sayfa bunu belirtir ve başkalarını önerir.",
-            "**Sekmeler:** web uygulamasında **Ana Sayfa**, **Pazar**, **Harita**, **Ortak**, **Sohbet**, **Kişiler** ve **Defter** bulunur. Telefon uygulamasının **Sohbet** dediği yer web'de **Sohbet**'tir ve **Kişiler** kendi sekmesine sahiptir.",
+            "**Sekmeler:** web uygulamasında **Ana Sayfa**, **Pazar**, **Harita**, **Ortak**, **Sohbet**, **Kişiler** ve **Defter** bulunur. İki uygulama da bu sekmeye **Sohbet** der ve web'de **Kişiler** kendi sekmesine sahiptir.",
             "**Ayarlar ve profiliniz:** sağ üstteki küçük düğmeler: profiliniz, **?**, ardından Ayarlar. Geniş bir ekranda soldaki menünün altındadırlar.",
             "**Bir Teklif veya İhtiyaç paylaşma:** **Harita** sayfasında **Yeni İlan** seçeneğini kullanın.",
             "**Görünüm:** bu seçenek \"Telefonla aynı\" yerine **Cihazla aynı** olarak adlandırılır.",
@@ -2943,19 +2962,26 @@
         },
         {
           "type": "p",
-          "text": "Sekme satırında **Pazar** seçeneğine dokunun. Topluluğunuzdaki insanların ne teklif ettiğini ve ne aradığını, en yeniden başlayarak ve paylaşıldıkları güne göre gruplanmış olarak görürsünüz."
+          "text": "Sekme satırında **Pazar** seçeneğine dokunun. Topluluğunuzdaki insanların ne teklif ettiğini ve ne aradığını, en yeniden başlayarak, her birinin paylaşıldığı güne göre **Bugün**, **Dün**, **Bu Hafta** ve **Daha Eski İlanlar** altında görürsünüz. Telefon ve web uygulaması onu aynı şekilde listeler."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bir etkinlik bir kez geri gelir.** Başlamasından bir gün önce bir etkinlik, o günün yeni gönderilerinin arasında **Bugün** altında yeniden listelenir, sonra diğerleri gibi aşağı iner. Haftalık bir etkinlik haftada bir geri gelir.",
+            "**Bir anket de bir kez geri gelir**, kapanmasından bir gün önce.",
+            "**Hiç kimse günde iki yerden fazlasını almaz.** Bir kişinin o gün üçüncü gönderisi ve sonrakiler, o günün herkesin gönderilerinden sonra gelir.",
+            "**Bir gönderiyi düzenlemek onu yukarı taşımaz.** Duraklatmak da, ona gelen bir yanıt da taşımaz. Tekrar görülmek için yeniden paylaşın.",
+            "**Bir satır nerede kaldığınızı gösterir.** **Son baktığınızdan beri yeni**, bu telefonda ya da bu tarayıcıda Pazar'dan en son ayrıldığınızda zaten listelenmiş olan ilk gönderinin üstünde durur; ilk seferde, daha yeni bir şey olmadığında ya da arama veya filtre kullanırken görünmez, telefondaki ızgara da onu çizmez.",
+            "**Bir sahibin sabitlediği gönderi**, yaşı ne olursa olsun, **Sabitlendi** altında en üstte durur."
+          ]
         },
         {
           "type": "p",
-          "text": "Telefonda etkinlikler ilk sırada gelir. Uygulamanın konumunuzu kullanmasına zaten izin verdiyseniz liste ve kompakt görünümler bunun yerine **Önce en yakın** altında en yakın ilanları ve **Anketler** altında anketleri gösterir. **Sana Özel** kendi sırasını korur. Listeyi yenilemek için aşağı çekin."
+          "text": "Liste ve kompakt görünümlerde gün başlıklarını görürsünüz. Izgara aynı sırayı bunlar olmadan gösterir. Telefonda Pazar liste olarak açılır; web uygulamasında kartlar halinde açılır. **Sana Özel** kendi sırasını korur. **Etkinlikler** altında en yakın tarihli olan ilk sırada gelir; **Bugün**, **Bu hafta sonu** ve **Gelecek 7 gün** ile. Bir arama, sözcüklerinize en iyi uyan gönderileri gösterir. Telefonda listeyi yenilemek için aşağı çekin."
         },
         {
           "type": "p",
-          "text": "Web uygulamasında Pazar kartlar halinde açılır. Liste ve kompakt görünümlerde etkinlikler paylaşıldıkları günün altında yer alır. Yerel bir toplulukta web uygulaması en yakın olanları ilk sıraya koymaz."
-        },
-        {
-          "type": "p",
-          "text": "Küresel toplulukta web uygulaması önce yakınınızdaki ilanları gösterir: her biri ne kadar uzakta olduğu bilgisiyle birlikte **Mesafe**'niz içindeki veya bölgenizin (katılırken topluluğa verdiğiniz yaklaşık konum veya **Ayarlar**'daki) 250 km yakınındaki en yakın ilanlar. Listenin üzerindeki bir satır hangisi olduğunu belirtir. Bölgenizin yakınındayken her yerden en yenileri görmek için **Her yeri göster** seçeneği bulunur. Bir **Mesafe** seçiliyken bölgenize geri dönmek için **Mesafe**'yi açıp **Sıfırla**'ya dokunun, ardından **Her yeri göster** seçeneğine dokunun. Telefonda küresel topluluk bölgenize en yakın ilanları tutar, bu nedenle Pazar bunları gösterir. \"Yakınınızdakileri bulma\" bölümüne bakın."
+          "text": "Küresel toplulukta Pazar, bölgenizin (katılırken topluluğa verdiğiniz yaklaşık konum veya **Ayarlar**'daki) 250 km yakınındaki en yenileri gösterir; her gönderi ne kadar uzakta olduğuyla birlikte gelir. Listenin üzerindeki bir satır bunu belirtir: **Bölgenin 250 km çevresindeki en yeniler.** Telefonda ve web uygulamasında aynıdır; telefonda uygulamanın konumunuzu kullanmasına izin vermeniz gerekmez. Bir **Mesafe** seçtiğinizde iki uygulama da onun içindeki en yenileri gösterir. Web uygulamasında satır o zaman **Seçtiğin yerin 5 km çevresindeki en yeniler.** der ve her gönderi ne kadar uzakta olduğunu da gösterir. Web uygulamasında, bölgenizin yakınındayken satırda her yerden en yenileri görmek için **Her yeri göster** seçeneği bulunur. Bir **Mesafe** seçiliyken bölgenize geri dönmek için **Mesafe**'yi açıp **Sıfırla**'ya dokunun, ardından **Her yeri göster** seçeneğine dokunun. Yakınınızda sekizden az olduğunda, başka yerlerden en yeniler **Başka yerlerden en yeniler** altında, telefonda ve web uygulamasında altta gelir. Bir **Mesafe** seçtiğinizde, bir arama yazdığınızda veya **Etkinlikler**'e baktığınızda gelmezler. \"Yakınınızdakileri bulma\" bölümüne bakın."
         },
         {
           "type": "p",
@@ -3768,8 +3794,8 @@
       "slug": "near-you",
       "title": "Yakınınızdakileri bulma",
       "summary": "Yalnızca size veya seçtiğiniz herhangi bir yere belirli bir mesafedeki ilanları gösterin.",
-      "sourceHash": "2db25a661f8751ec",
-      "source-hash": "2db25a661f8751ec",
+      "sourceHash": "f519dd5b8dbe3492",
+      "source-hash": "f519dd5b8dbe3492",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3824,8 +3850,8 @@
         {
           "type": "ul",
           "items": [
-            "Pazar'da bir **Mesafe** seçildiğinde her ikisi de bunun içindeki en yakın ilanları, en yakın olanlar ilk sırada olacak şekilde gösterir. Harita 200'e kadar iğne gösterir.",
-            "Bir mesafe seçilmediğinde, bölgenizin 250 km yakınındaki en yakın ilanları gösterirler: katıldığınızda topluluğa verdiğiniz yaklaşık yer veya daha sonra **Ayarlar** altında **Bölgeniz** bölümünde belirlediğiniz yer. Pazar listesinin üzerindeki bir satır **Önce bölgenize en yakın olanlar, 250 km içinde.** der. Her yerden en yeniler için **Her yeri göster** seçeneğine ve geri dönmek için **Bölgenizin yakınında** seçeneğine dokunun.",
+            "Pazar'da bir **Mesafe** seçildiğinde her ikisi de bunun içindeki ilanları gösterir. Pazar bunları en yeniden başlayarak, her biri ne kadar uzakta olduğuyla birlikte, **Seçtiğin yerin 5 km çevresindeki en yeniler.** diyen bir satırın altında listeler (kendi mesafenizle). Harita en yakın olanları, 200'e kadar iğne gösterir.",
+            "Bir mesafe seçilmediğinde, bölgenizin 250 km yakınındaki en yakın ilanları gösterirler: katıldığınızda topluluğa verdiğiniz yaklaşık yer veya daha sonra **Ayarlar** altında **Bölgeniz** bölümünde belirlediğiniz yer. Pazar bunları en yeniden başlayarak, **Bölgenin 250 km çevresindeki en yeniler.** diyen bir satırın altında listeler. Harita en yakın olanı ilk sırada gösterir. Her yerden en yeniler için **Her yeri göster** seçeneğine ve geri dönmek için **Bölgenizin yakınında** seçeneğine dokunun.",
             "İkisi de yoksa her yerden en yenileri görürsünüz ve **Yakınınızda neler olduğunu görün** mesafe seçiciyi açar. Pazar listesinin üzerindeki bir satır bunlardan hangisini gördüğünüzü belirtir. Bir **Mesafe** seçiliyken düğmesi yoktur: **Mesafe**'yi açın ve **Sıfırla**'ya dokunun. Ardından tekrar bölgenizin yakınına dönersiniz veya belirlenmiş bir bölge yoksa her yerden en yenileri görürsünüz.",
             "Her ilan **📍 12 km** gibi ne kadar uzakta olduğunu gösterir. Kendi ilanlarınız nerede olurlarsa olsunlar her zaman Harita'da ve bölgenizin yakınındaki Pazar'da yer alır. Bir **Mesafe** belirlendiğinde Pazar yalnızca bunun içindekileri gösterir, sizinkiler de dahil.",
             "Liste yakınınızdayken konumu olmayan gönderiler dışarıda bırakılır. Bölgesini belirlememiş birinden gelen bir anket bunlardan biridir. Onları görmek için belirlediyseniz **Mesafe**'yi sıfırlayın, ardından **Her yeri göster** seçeneğine dokunun.",
@@ -3843,7 +3869,7 @@
         },
         {
           "type": "p",
-          "text": "Telefon bölgenize en yakın ilanları tutar: 250 km içinde 500'e kadar. Ayrıca kendi ilanlarınızı ve üzerinde bir anlaşmanız, sohbetiniz veya yanıtınız olan ilanları tutar. Pazar ve Harita telefonun tuttuklarını gösterir. Bölge belirlenmemişse bunun yerine en yeni ilanları tutar ve Pazar'ın üzerindeki bir satır bunu belirtir. \"Bölgeniz\" bölümüne bakın."
+          "text": "Telefon bölgenize en yakın ilanları tutar: 250 km içinde 500'e kadar. Ayrıca kendi ilanlarınızı ve üzerinde bir anlaşmanız, sohbetiniz veya yanıtınız olan ilanları tutar. Pazar ve Harita telefonun tuttuklarını gösterir. Pazar bunları en yeniden başlayarak, her biri ne kadar uzakta olduğuyla birlikte, aynı satırın, **Bölgenin 250 km çevresindeki en yeniler.** altında listeler. Bunun için uygulamanın konumunuzu kullanmasına izin vermeniz gerekmez. Bölge belirlenmemişse bunun yerine en yeni ilanları tutar ve Pazar'ın üzerindeki bir satır bunu belirtir. \"Bölgeniz\" bölümüne bakın."
         },
         {
           "type": "h2",
@@ -5356,7 +5382,7 @@
         },
         {
           "type": "p",
-          "text": "Anketler Pazar'dadır. Yalnızca anketleri görmek için üst satırdaki **Anketler**'e dokunun."
+          "text": "Anketler Pazar'dadır. Yalnızca anketleri görmek için üst satırdaki **Anketler**'e dokunun. Bir anket, kapanmasından bir gün önce **Bugün** altında bir kez yeniden listelenir."
         },
         {
           "type": "ul",
@@ -5416,7 +5442,8 @@
         {
           "type": "ul",
           "items": [
-            "**Pazar**'da **Etkinlikler**'e dokunun. **Bugün**, **Bu hafta sonu** veya **Gelecek 7 gün** seçeneklerinden birini belirleyin.",
+            "**Pazar**'da **Etkinlikler**'e dokunun. En yakın tarihli olan ilk sırada gelir. **Bugün**, **Bu hafta sonu** veya **Gelecek 7 gün** seçeneklerinden birini belirleyin.",
+            "**Pazar**'da **Tümü** altında bir etkinlik, başlamasından bir gün önce **Bugün** altında bir kez yeniden listelenir, sonra diğer gönderiler gibi aşağı iner. Haftalık bir etkinlik haftada bir geri gelir.",
             "**Harita**'da etkinlikler mor iğnelerdir. Telefonda yalnızca onları görmek için **Etkinlikler**'e dokunun. Web uygulamasında her zaman oradadırlar ve tarih filtreleri onları daraltır."
           ]
         },
@@ -6201,8 +6228,8 @@
       "slug": "trust-badges",
       "title": "Güven rozetleri",
       "summary": "Yeni Gelen, Sakin, Temsilci ve Büyük. Anlamları ve neden ayrıcalık kilidi açmadıkları.",
-      "sourceHash": "a6cc3bb74fc395bb",
-      "source-hash": "a6cc3bb74fc395bb",
+      "sourceHash": "9cb2cc1e373c7763",
+      "source-hash": "9cb2cc1e373c7763",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6234,7 +6261,7 @@
         },
         {
           "type": "p",
-          "text": "Güven; katıldığınızdaki bir kefaletten, tamamlanan takaslardan ve bir yöneticinin verdiği güvenden gelir. Üyelerini teyit eden bir toplulukta teyit edilmiş olmak size daha yüksek bir kredi limiti verir, daha yüksek bir rozet değil: rozetiniz yalnızca yaptıklarınızı sayar, bu nedenle teyit edilmiş olduğunuzu asla göstermez."
+          "text": "Güven, tamamlanan takaslardan ve bir yöneticinin verdiği güvenden gelir. Üyelerini onaylayan bir toplulukta, onaylanmış olmak daha yüksek bir rozet değil, daha yüksek bir kredi limiti sağlar: rozetiniz yalnızca yaptıklarınızı sayar, bu nedenle onaylandığınızı asla göstermez."
         },
         {
           "type": "h2",
@@ -6530,7 +6557,7 @@
         },
         {
           "type": "p",
-          "text": "Küresel toplulukta bölgeniz yaklaşık olarak bulunduğunuz yerdir: bir kasaba veya bir noktanın çevresinde yaklaşık 10 km, asla tam konumunuz değildir. Küresel topluluk, yakınınızda nelerin sunulduğunu size göstermek için bunu kullanır: 250 km mesafedeki en yakın 500 ilan. Bkz. \"Birden fazla topluluk\"."
+          "text": "Küresel toplulukta bölgeniz yaklaşık olarak bulunduğunuz yerdir: bir kasaba veya bir noktanın çevresinde yaklaşık 10 km, asla tam konumunuz değildir. Küresel topluluk, yakınınızda nelerin sunulduğunu size göstermek için bunu kullanır: 250 km mesafedeki en yakın 500 ilan. Pazar bunları sonra en yeniden başlayarak, her biri ne kadar uzakta olduğuyla birlikte listeler. Bkz. \"Birden fazla topluluk\"."
         },
         {
           "type": "p",

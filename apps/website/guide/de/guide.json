@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 7,
+  "version": 8,
   "language": "de",
-  "hash": "25628d1dbc84c64504644461e0daaf9a91d9a47b07064a0ed7301a9690943ba7",
+  "hash": "31bd930763ee3b7e5aa10dcc6eb534ab7a3d55e9dd2cb8d32870bdb5847cff79",
   "sections": [
     {
       "id": "about",
@@ -790,6 +790,25 @@
       "blocks": [
         {
           "type": "h2",
+          "text": "Der Markt in einer Reihenfolge"
+        },
+        {
+          "type": "p",
+          "text": "Auf dem Telefon bekommst du das mit einer aktuellen App; im Webbrowser, sobald der Server deiner Gemeinschaft aktualisiert ist."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Neueste zuerst, auf dem Telefon und im Web gleich.** Der Markt listet Beiträge mit den neuesten zuerst, unter **Heute**, **Gestern**, **Diese Woche** und **Ältere Angebote**, nach dem Tag, an dem sie veröffentlicht wurden. Die Überschriften **Kommende Veranstaltungen**, **Umfragen** und **Nächste zuerst** gibt es nicht mehr.",
+            "**Eine Veranstaltung kommt einmal wieder.** Am Tag vor ihrem Beginn wird eine Veranstaltung noch einmal unter **Heute** aufgeführt. Eine Umfrage macht das am Tag vor ihrem Ende genauso. Danach sinken sie wie jeder andere Beitrag.",
+            "**Zwei Plätze am Tag.** Der dritte Beitrag einer Person an einem Tag und alle weiteren kommen nach allen anderen Beiträgen dieses Tages.",
+            "**Einen Beitrag zu bearbeiten schiebt ihn nicht nach oben.** Um wieder gesehen zu werden, veröffentliche ihn erneut.",
+            "**In der globalen Community** zeigt der Markt die neuesten im Umkreis von 250 km um deine Gegend, jeden Beitrag mit seiner Entfernung. Eine Zeile über der Liste sagt es dir. Das Telefon braucht dafür deinen Standort nicht mehr. In der Web-App gilt das Gleiche für eine **Entfernung**, die du wählst.",
+            "**Nicht geändert:** Beiträge, die ein Owner angepinnt hat, bleiben oben, **Veranstaltungen** listet weiterhin die zeitnächsten zuerst, und eine Suche findet, was am besten zu deinen Wörtern passt. Siehe „Im Markt stöbern“."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "Die globale Community in deiner Nähe"
         },
         {
@@ -804,7 +823,7 @@
             "**Deine Gegend.** In der Web-App gibt es beim Beitritt zur globalen Community nach deinem Foto einen weiteren Schritt: **Ungefähr wo bist du?** Auf dem Telefon wird dies abgefragt, wenn du mit einem bestehenden Konto beitrittst; ein neues Konto auf dem Telefon richtet dies später in den Einstellungen unter **Deine Gegend** ein. Tippe in diesem Schritt auf **Meinen Standort verwenden**, **Ort oder Stadtteil eingeben** oder **Vorerst überspringen**. Sie wird nur auf etwa 10 km genau gespeichert, nie dein genauer Standort. Du kannst sie in den Einstellungen unter **Deine Gegend** ändern oder löschen. Siehe „Deine Gegend“.",
             "**Keine Gegend festgelegt – kein Problem.** Ohne Angabe siehst du die neuesten Einträge von überall, worauf ein Hinweis über dem Markt hinweist. Tippe auf dem Telefon darauf, um deine Gegend festzulegen.",
             "**Neue Angebote in deiner Nähe.** Sie treffen ein, sobald sie veröffentlicht werden. Weit entfernte Einträge erreichen dein Telefon nicht mehr.",
-            "**In der Web-App** starten Markt und Karte von deiner Gegend aus oder von einem Ort, den du unter **Entfernung** wählst: Nächstgelegene zuerst, jedes Angebot mit Entfernungsangabe. Siehe „Dinge in der Nähe finden“.",
+            "**In der Web-App** starten Markt und Karte von deiner Gegend aus oder von einem Ort, den du unter **Entfernung** wählst: jedes Angebot mit Entfernungsangabe. Die Karte zeigt die nächsten zuerst. Der Markt listet die neuesten zuerst, wie „Der Markt in einer Reihenfolge“ oben sagt. Siehe „Dinge in der Nähe finden“.",
             "**Umfragen** haben keinen eigenen Ort, daher wird jede Umfrage in der Gegend des Mitglieds angezeigt, das sie erstellt hat.",
             "**Ort eingeben.** In der globalen Community benötigt **Finde deine Community** auf der Startseite deinen Standort nicht mehr: Tippe auf **oder Ort eingeben** und wähle deinen Ort. Es wird nur ein ungefährer Punkt gespeichert. Siehe „Community in der Nähe finden“.",
             "**Ohne Preis veröffentlichen.** In der globalen Community fragt das Beitragsformular nach keinem Preis, da Bohnen in lokalen Gemeinschaften zu Hause sind. In der Web-App funktionieren **Angebot veröffentlichen** und **Gesuch veröffentlichen** nun ohne Preisangabe. Eine lokale Gemeinschaft fragt weiterhin nach einem Preis."
@@ -1817,9 +1836,9 @@
         {
           "type": "ul",
           "items": [
-            "**Ein Eintrag wird 90 Tage nach seiner letzten Änderung archiviert.** Er wird aus dem Markt und von der Karte entfernt und seine Fotos werden gelöscht. Bearbeiten, Pausieren oder Wiedereinstellen zählen alle als Änderung: Ihn über **Beitrag bearbeiten** zu öffnen und auf **Speichern** zu tippen, bewahrt ihn für weitere 90 Tage. Wenn einer deiner Einträge archiviert wird, erhältst du eine Benachrichtigung mit deinen Hinweisen zu **Marktplatz-Aktivität**. Du kannst ihn jederzeit erneut veröffentlichen.",
+            "**Ein Eintrag wird 90 Tage nach seiner letzten Änderung archiviert.** Er wird aus dem Markt und von der Karte entfernt und seine Fotos werden gelöscht. Bearbeiten, Pausieren oder Wiedereinstellen zählen alle als Änderung: Ihn über **Beitrag bearbeiten** zu öffnen und auf **Speichern** zu tippen, bewahrt ihn für weitere 90 Tage. Nichts davon schiebt ihn im Markt nach oben, der Beiträge mit den neuesten zuerst listet. Wenn einer deiner Einträge archiviert wird, erhältst du eine Benachrichtigung mit deinen Hinweisen zu **Marktplatz-Aktivität**. Du kannst ihn jederzeit erneut veröffentlichen.",
             "**Bis zu 5 Fotos pro Eintrag.**",
-            "**Dein Telefon speichert die nächsten 500 Einträge**, im Umkreis von 250 km deines Gebiets. Es behält auch deine eigenen sowie alle, bei denen du einen Deal oder eine Unterhaltung hast. Die Suche des Markts findet weiterhin Einträge von überall her. Siehe „Dein Gebiet“.",
+            "**Dein Telefon speichert die nächsten 500 Einträge**, im Umkreis von 250 km deines Gebiets. Es behält auch deine eigenen sowie alle, bei denen du einen Deal oder eine Unterhaltung hast. Der Markt listet die im Umkreis von 250 km um dein Gebiet mit den neuesten zuerst, jede Karte mit ihrer Entfernung. Die Suche des Markts findet weiterhin Einträge von überall her. Siehe „Dein Gebiet“.",
             "**Du kannst bis zu 3 Orte beobachten** mit **Benachrichtigen, wenn hier eine startet**. Um einen weiteren zu beobachten, beende die Beobachtung eines bestehenden. Siehe „Community in der Nähe finden“."
           ]
         },
@@ -2840,7 +2859,7 @@
           "type": "ul",
           "items": [
             "**Mit einer Einladung beitreten:** Die Schaltfläche des ersten Schritts heißt **Identität erstellen & beitreten →**. Wenn jemand hier bereits den von dir gewählten Namen hat, erhältst du ihn mit einer angehängten Zahl. **← Zurück** auf **Dein Foto** zeigt deinen Namen allein mit **Weiter →**: Ändere ihn (bis zu 20 Zeichen) oder behalte ihn, auf demselben Konto. Wenn jemand den neuen Namen bereits hat, weist die Seite darauf hin und schlägt andere vor.",
-            "**Tabs:** Die Web-App bietet **Startseite**, **Markt**, **Karte**, **Gemeingut**, **Chat**, **Personen** und **Buch**. Was in der Smartphone-App **Chat** (Talk) heißt, ist im Web **Chat**, und **Personen** hat einen eigenen Tab.",
+            "**Tabs:** Die Web-App bietet **Startseite**, **Markt**, **Karte**, **Gemeingut**, **Chat**, **Personen** und **Buch**. Beide Apps nennen diesen Tab **Chat**, und im Web hat **Personen** einen eigenen Tab.",
             "**Einstellungen und dein Profil:** Die kleinen Schaltflächen oben rechts: Dein Profil, das **?**, dann die Einstellungen. Auf einem breiten Bildschirm befinden sie sich ganz unten im Menü auf der linken Seite.",
             "**Ein Angebot oder Gesuch aufgeben:** Verwende **Neuer Beitrag** auf der Seite **Karte**.",
             "**Erscheinungsbild:** Die Option heißt **Wie Gerät** anstelle von „Wie Smartphone“.",
@@ -2943,19 +2962,26 @@
         },
         {
           "type": "p",
-          "text": "Tippe in der Tab-Leiste auf **Markt**. Du siehst, was die Menschen in deiner Community anbieten und suchen, neueste zuerst, gruppiert nach dem Tag der Veröffentlichung."
+          "text": "Tippe in der Tab-Leiste auf **Markt**. Du siehst, was die Menschen in deiner Community anbieten und suchen, neueste zuerst, unter **Heute**, **Gestern**, **Diese Woche** und **Ältere Angebote**, nach dem Tag, an dem sie veröffentlicht wurden. Das Telefon und die Web-App listen ihn gleich."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Eine Veranstaltung kommt einmal wieder.** Am Tag vor ihrem Beginn wird eine Veranstaltung noch einmal unter **Heute** aufgeführt, unter den neuen Beiträgen dieses Tages, und sinkt dann wie jeder andere. Eine wöchentliche Veranstaltung kommt einmal pro Woche wieder.",
+            "**Eine Umfrage kommt auch einmal wieder**, am Tag vor ihrem Ende.",
+            "**Niemand belegt mehr als zwei Plätze am Tag.** Der dritte Beitrag einer Person an einem Tag und alle weiteren kommen nach allen anderen Beiträgen dieses Tages.",
+            "**Einen Beitrag zu bearbeiten schiebt ihn nicht nach oben.** Auch Pausieren nicht, und auch keine Antwort darauf. Um wieder gesehen zu werden, veröffentliche ihn erneut.",
+            "**Eine Zeile zeigt, wo du aufgehört hast.** **Neu seit deinem letzten Besuch** steht über dem ersten Beitrag, der schon gelistet war, als du den Markt zuletzt auf diesem Telefon oder in diesem Browser verlassen hast; beim ersten Mal, wenn nichts Neueres da ist und während du suchst oder filterst, erscheint sie nicht, und das Raster auf dem Telefon zeigt sie nicht.",
+            "**Ein Beitrag, den ein Owner angepinnt hat,** steht ganz oben, unter **Angepinnt**, egal wie alt er ist."
+          ]
         },
         {
           "type": "p",
-          "text": "Auf dem Smartphone stehen Veranstaltungen an erster Stelle. Wenn du der App bereits erlaubt hast, deinen Standort zu verwenden, zeigen die Listen- und Kompaktansichten die Einträge stattdessen nach Nähe an, unter **Nächste zuerst**, mit Umfragen unter **Umfragen**. **Für dich** behält seine eigene Reihenfolge bei. Ziehe die Liste nach unten, um sie zu aktualisieren."
+          "text": "In der Listen- und Kompaktansicht siehst du die Tagesüberschriften. Das Raster zeigt dieselbe Reihenfolge ohne sie. Auf dem Telefon öffnet sich der Markt als Liste, in der Web-App als Kacheln. **Für dich** behält seine eigene Reihenfolge bei. Unter **Veranstaltungen** steht die zeitnächste zuerst, mit **Heute**, **Dieses Wochenende** und **Nächste 7 Tage**. Eine Suche zeigt die Beiträge, die am besten zu deinen Wörtern passen. Ziehe die Liste auf dem Telefon nach unten, um sie zu aktualisieren."
         },
         {
           "type": "p",
-          "text": "In der Web-App öffnet sich der Markt als Kacheln. In der Listen- und Kompaktansicht stehen Veranstaltungen unter dem Tag, an dem sie veröffentlicht wurden. In einer lokalen Community sortiert die Web-App nicht nach Nähe."
-        },
-        {
-          "type": "p",
-          "text": "In der globalen Community zeigt die Web-App die Einträge in deiner Nähe zuerst an: die nächsten innerhalb deiner gewählten **Entfernung** oder im Umkreis von 250 km um deine Gegend (der ungefähre Ort, den du der Community beim Beitritt oder in den **Einstellungen** angibst), jeweils mit Entfernungsangabe. Eine Zeile über der Liste informiert darüber, welche Ansicht aktiv ist. Bei Anzeige nach Gegend gibt es **Überall anzeigen** für die neuesten von überall her. Bei gesetzter **Entfernung** öffne **Entfernung** und tippe auf **Zurücksetzen**, um zu deiner Gegend zurückzukehren, und tippe dann auf **Überall anzeigen**. Auf dem Smartphone behält die globale Community die Einträge, die deiner Gegend am nächsten liegen; genau diese zeigt der Markt an. Siehe „Dinge in der Nähe finden“."
+          "text": "In der globalen Community zeigt der Markt die neuesten im Umkreis von 250 km um deine Gegend (der ungefähre Ort, den du der Community beim Beitritt oder in den **Einstellungen** angibst), jeden Beitrag mit seiner Entfernung. Eine Zeile über der Liste sagt das: **Neueste im Umkreis von 250 km um deine Gegend.** Auf dem Telefon und in der Web-App ist es gleich, und auf dem Telefon musst du der App nicht erlauben, deinen Standort zu verwenden. Mit einer **Entfernung** zeigen beide Apps die neuesten darin. In der Web-App steht in der Zeile dann **Neueste im Umkreis von 5 km um den gewählten Ort.**, und jeder Beitrag zeigt seine Entfernung. In der Web-App hat die Zeile bei Anzeige nach Gegend **Überall anzeigen** für die neuesten von überall her. Bei gesetzter **Entfernung** öffne **Entfernung** und tippe auf **Zurücksetzen**, um zu deiner Gegend zurückzukehren, und tippe dann auf **Überall anzeigen**. Siehe „Dinge in der Nähe finden“."
         },
         {
           "type": "p",
@@ -3768,8 +3794,8 @@
       "slug": "near-you",
       "title": "Dinge in der Nähe finden",
       "summary": "Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.",
-      "sourceHash": "2db25a661f8751ec",
-      "source-hash": "2db25a661f8751ec",
+      "sourceHash": "f519dd5b8dbe3492",
+      "source-hash": "f519dd5b8dbe3492",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3824,8 +3850,8 @@
         {
           "type": "ul",
           "items": [
-            "Wenn im Markt eine **Entfernung** gewählt ist, zeigen beide die nächstgelegenen Einträge innerhalb dieses Umkreises an, die nächsten zuerst. Die Karte zeigt bis zu 200 Stecknadeln.",
-            "Ohne Entfernungsfilter zeigen sie die nächstgelegenen Einträge im Umkreis von 250 km um deine Gegend an: den ungefähren Ort, den du der Community beim Beitritt mitgeteilt hast oder später in den **Einstellungen** unter **Deine Gegend**. Eine Zeile über der Liste im Markt besagt: **Zuerst die nächsten aus deiner Gegend, innerhalb von 250 km.** Tippe auf **Überall anzeigen**, um die neuesten Einträge von überall zu sehen, und auf **In deiner Nähe**, um zurückzukehren.",
+            "Wenn im Markt eine **Entfernung** gewählt ist, zeigen beide die Einträge innerhalb dieses Umkreises an. Der Markt listet sie mit den neuesten zuerst, jeden mit seiner Entfernung, unter einer Zeile, die sagt: **Neueste im Umkreis von 5 km um den gewählten Ort.** (mit deiner Entfernung). Die Karte zeigt die nächsten, bis zu 200 Stecknadeln.",
+            "Ohne Entfernungsfilter zeigen sie die nächstgelegenen Einträge im Umkreis von 250 km um deine Gegend an: den ungefähren Ort, den du der Community beim Beitritt mitgeteilt hast oder später in den **Einstellungen** unter **Deine Gegend**. Der Markt listet sie mit den neuesten zuerst, unter einer Zeile, die sagt: **Neueste im Umkreis von 250 km um deine Gegend.** Die Karte zeigt die nächsten zuerst. Tippe auf **Überall anzeigen**, um die neuesten Einträge von überall zu sehen, und auf **In deiner Nähe**, um zurückzukehren.",
             "Ist weder das eine noch das andere gesetzt, siehst du die neuesten Einträge von überall her, und **Finde heraus, was in deiner Nähe ist** öffnet die Entfernungsauswahl. Eine Zeile über der Marktliste zeigt an, welche dieser Ansichten aktiv ist. Bei gesetzter **Entfernung** gibt es keine Schaltfläche: Öffne **Entfernung** und tippe auf **Zurücksetzen**. Du bist dann wieder bei deiner Gegend, oder, falls keine Gegend festgelegt ist, siehst du die neuesten Einträge von überall.",
             "Jeder Eintrag zeigt an, wie weit er entfernt ist, wie **📍 12 km**. Deine eigenen Einträge sind immer auf der Karte und im Markt bei deiner Gegend zu finden, wo immer sie liegen. Bei gesetzter **Entfernung** zeigt der Markt nur das an, was innerhalb dieses Umkreises liegt, einschließlich deiner eigenen Einträge.",
             "Solange die Liste auf deine Nähe beschränkt ist, bleiben Beiträge ohne Ortsangabe außen vor. Eine Umfrage von jemandem, der seine Gegend nicht festgelegt hat, gehört dazu. Um sie zu sehen, setze die **Entfernung** zurück, falls du eine gewählt hast, und tippe dann auf **Überall anzeigen**.",
@@ -3843,7 +3869,7 @@
         },
         {
           "type": "p",
-          "text": "Das Smartphone speichert die Einträge, die deiner Gegend am nächsten liegen: bis zu 500, innerhalb von 250 km. Es behält auch deine eigenen Einträge sowie alle, zu denen du einen Deal, einen Chat oder eine Antwort hast. Der Markt und die Karte zeigen, was das Smartphone gespeichert hat. Ist keine Gegend festgelegt, speichert es stattdessen die neuesten Einträge, worauf eine Zeile über dem Markt hinweist. Siehe „Deine Gegend“."
+          "text": "Das Smartphone speichert die Einträge, die deiner Gegend am nächsten liegen: bis zu 500, innerhalb von 250 km. Es behält auch deine eigenen Einträge sowie alle, zu denen du einen Deal, einen Chat oder eine Antwort hast. Der Markt und die Karte zeigen, was das Smartphone gespeichert hat. Der Markt listet es mit den neuesten zuerst, jeden Eintrag mit seiner Entfernung, unter derselben Zeile, **Neueste im Umkreis von 250 km um deine Gegend.** Dafür musst du der App nicht erlauben, deinen Standort zu verwenden. Ist keine Gegend festgelegt, speichert es stattdessen die neuesten Einträge, worauf eine Zeile über dem Markt hinweist. Siehe „Deine Gegend“."
         },
         {
           "type": "h2",
@@ -5356,7 +5382,7 @@
         },
         {
           "type": "p",
-          "text": "Umfragen befinden sich im Markt. Tippe in der oberen Zeile auf **Umfragen**, um nur Umfragen anzuzeigen."
+          "text": "Umfragen befinden sich im Markt. Tippe in der oberen Zeile auf **Umfragen**, um nur Umfragen anzuzeigen. Eine Umfrage wird am Tag vor ihrem Ende noch einmal unter **Heute** aufgeführt."
         },
         {
           "type": "ul",
@@ -5416,7 +5442,8 @@
         {
           "type": "ul",
           "items": [
-            "Tippe im **Markt** auf **Veranstaltungen**. Wähle **Heute**, **Dieses Wochenende** oder **Nächste 7 Tage**.",
+            "Tippe im **Markt** auf **Veranstaltungen**. Die zeitnächste steht zuerst. Wähle **Heute**, **Dieses Wochenende** oder **Nächste 7 Tage**.",
+            "Im **Markt** wird eine Veranstaltung unter **Alle** noch einmal unter **Heute** aufgeführt, am Tag vor ihrem Beginn, und sinkt dann wie jeder andere Beitrag. Eine wöchentliche Veranstaltung kommt einmal pro Woche wieder.",
             "Auf der **Karte** sind Veranstaltungen lila Stecknadeln. Tippe auf dem Smartphone auf **Veranstaltungen**, um nur diese zu sehen. In der Web-App werden sie immer angezeigt, und die Datums-Filter grenzen sie ein."
           ]
         },
@@ -6201,8 +6228,8 @@
       "slug": "trust-badges",
       "title": "Vertrauensstufen",
       "summary": "Neuling, Bewohner, Verwalter und Ältester. Was sie bedeuten und warum sie nichts freischalten.",
-      "sourceHash": "a6cc3bb74fc395bb",
-      "source-hash": "a6cc3bb74fc395bb",
+      "sourceHash": "9cb2cc1e373c7763",
+      "source-hash": "9cb2cc1e373c7763",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6234,7 +6261,7 @@
         },
         {
           "type": "p",
-          "text": "Vertrauen entsteht durch eine Bürgschaft beim Beitritt, durch abgeschlossene Handelsgeschäfte und durch Vertrauen, das ein Admin gewährt hat. In einer Community, die ihre Mitglieder bestätigt, bringt die Bestätigung ein höheres Kreditlimit, kein höheres Abzeichen: Dein Abzeichen zählt nur, was du getan hast, sodass es nie zeigt, dass du bestätigt bist."
+          "text": "Vertrauen entsteht durch abgeschlossene Handelsgeschäfte und durch von einem Admin gewährtes Vertrauen. In einer Community, die ihre Mitglieder bestätigt, erhältst du durch die Bestätigung einen höheren Kreditrahmen, kein höheres Abzeichen: Dein Abzeichen zählt nur, was du getan hast, und zeigt daher niemals an, dass du bestätigt bist."
         },
         {
           "type": "h2",
@@ -6530,7 +6557,7 @@
         },
         {
           "type": "p",
-          "text": "In der globalen Gemeinschaft ist deine Gegend ungefähr dort, wo du dich befindest: ein Umkreis von etwa 10 km um eine Stadt oder einen Ort, niemals dein genauer Standort. Die globale Gemeinschaft nutzt dies, um dir Angebote in deiner Nähe anzuzeigen: die nächsten 500 Einträge im Umkreis von 250 km. Siehe „Mehrere Communitys“."
+          "text": "In der globalen Gemeinschaft ist deine Gegend ungefähr dort, wo du dich befindest: ein Umkreis von etwa 10 km um eine Stadt oder einen Ort, niemals dein genauer Standort. Die globale Gemeinschaft nutzt dies, um dir Angebote in deiner Nähe anzuzeigen: die nächsten 500 Einträge im Umkreis von 250 km. Der Markt listet sie dann mit den neuesten zuerst, jeden mit seiner Entfernung. Siehe „Mehrere Communitys“."
         },
         {
           "type": "p",

@@ -53,6 +53,7 @@ import { HOLD_MS } from '../components/HomeCard';
 import { FEWER_CARDS_LINE, removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, readCachedHome, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
+import { routeLivePostChange } from '../lib/live-posts';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { newDmMessageId, sealDmLine } from '../lib/e2e-crypto';
@@ -294,6 +295,69 @@ describe('one request, the cached answer first (§5)', () => {
         hooks.sync.forEach(cb => cb());
         await vi.advanceTimersByTimeAsync(5_000);
         expect(api.getHome).toHaveBeenCalledTimes(1);
+    });
+
+    // Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §5, §8 fix 2): every tab near a
+    // new listing re-read Home exactly 3 s on. A run asked for only by new listings by someone else (lib/sync-coordinator
+    // SyncScope 'listings') and a listing written ahead (lib/live-posts) now wait this tab's own random 3 to 15 s.
+    describe('a crowd\'s doorbell waits this tab\'s own random 3 to 15 s; the rest wait 3 s', () => {
+        const listingRun = { scope: 'listings' } as const;
+        const livePost = (author: string) => ({
+            kind: 'upsert' as const, created: true,
+            post: { id: 'post-1', type: 'offer', authorPublicKey: author, updatedAt: '2026-11-07T01:00:00.000Z', audienceScope: 'public' as const },
+        });
+        const landed = async () => {
+            vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(api.getHome).toHaveBeenCalledTimes(1);
+            vi.useFakeTimers();
+        };
+        const reads = async (ms: number) => { await vi.advanceTimersByTimeAsync(ms); return vi.mocked(api.getHome).mock.calls.length; };
+        afterEach(() => { vi.restoreAllMocks(); });
+
+        it.each([[0, 3_000], [0.5, 9_000], [0.9999999, 15_000]])('a listings run with the random at %s is read after %s ms, not before', async (random, turn) => {
+            await landed();
+            vi.spyOn(Math, 'random').mockReturnValue(random);
+            hooks.sync.forEach(cb => (cb as (run?: unknown) => void)(listingRun));
+            expect(await reads(turn - 1)).toBe(1);
+            expect(await reads(1)).toBe(2);
+            expect(await reads(60_000)).toBe(2);
+        });
+
+        it('a listing written ahead by someone else is a crowd\'s too', async () => {
+            await landed();
+            vi.spyOn(Math, 'random').mockReturnValue(0.5);
+            routeLivePostChange(livePost('f'.repeat(64)), ME.publicKey);
+            expect(await reads(8_999)).toBe(1);
+            expect(await reads(1)).toBe(2);
+        });
+
+        it('a run of everything, a bare call and a notice wait 3 s whatever the random says', async () => {
+            await landed();
+            vi.spyOn(Math, 'random').mockReturnValue(0.5);
+            hooks.sync.forEach(cb => (cb as (run?: unknown) => void)({ scope: 'all' }));
+            expect(await reads(2_999)).toBe(1);
+            expect(await reads(1)).toBe(2);
+            hooks.sync.forEach(cb => cb());
+            expect(await reads(3_000)).toBe(3);
+            hooks.announce.forEach(cb => cb({ type: 'system_announcement', title: 'Market day moved' }));
+            expect(await reads(2_999)).toBe(3);
+            expect(await reads(1)).toBe(4);
+        });
+
+        it('a run of bells is one read, no later than 15 s after the first, and a tab that is hidden reads none', async () => {
+            await landed();
+            vi.spyOn(Math, 'random').mockReturnValue(0.9999999);
+            for (let i = 0; i < 14; i++) { hooks.sync.forEach(cb => (cb as (run?: unknown) => void)(listingRun)); await vi.advanceTimersByTimeAsync(1_000); }
+            expect(vi.mocked(api.getHome).mock.calls.length).toBe(1);
+            expect(await reads(1_000)).toBe(2);
+            expect(await reads(60_000)).toBe(2);
+            Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+            hooks.sync.forEach(cb => (cb as (run?: unknown) => void)(listingRun));
+            expect(await reads(30_000)).toBe(2);
+            Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+        });
     });
 });
 

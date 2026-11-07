@@ -51,7 +51,7 @@
  * the boot log says why. Both locks only ever keep money on and the door shut, never the reverse.
  */
 import { db } from '../db/db.js';
-import { prepared, MAX_POST_PHOTOS } from '@beanpool/engine';
+import { prepared, readWhileUnchanged, MAX_POST_PHOTOS } from '@beanpool/engine';
 import { askedPushSent } from '@beanpool/core';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { isPrivatePreview, privatePreviewAtBoot } from './private-preview.js';
@@ -415,8 +415,27 @@ export function profileDefaults(profile: NodeProfile): ProfileSwitches {
     return { ...DEFAULTS[profile] };
 }
 
-/** The operator's overrides from `node_config`, valid ones only. An unknown switch or a value other than true/false is logged and ignored. */
+/**
+ * The operator's overrides from `node_config`, valid ones only. An unknown switch or a value other than true/false is logged and ignored.
+ * A new object every time: nobody who changes it changes what the next read gets.
+ */
 export function readProfileOverrides(): Partial<ProfileSwitches> {
+    return { ...sharedOverrides() };
+}
+
+/**
+ * The overrides as the table holds them now, read again only after the database has been written (statements.ts
+ * readWhileUnchanged: any write by anyone, in this process or another, so a switch set from the owner's console, an MCP
+ * tool, the command line, a standby's copy or a takeover is the next read's). Every listing of a page asks whether Beans are on
+ * (the known floor's dial), so this read was 3.8% of the launch mix's busy time on the global node
+ * (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §7). Shared and never changed: the callers that hand it on copy it.
+ */
+const PROFILE_OVERRIDES_SLOT = 'nodeProfile.overrides';
+function sharedOverrides(): Readonly<Partial<ProfileSwitches>> {
+    return readWhileUnchanged(db, PROFILE_OVERRIDES_SLOT, loadProfileOverrides);
+}
+
+function loadProfileOverrides(): Partial<ProfileSwitches> {
     const overrides: Partial<ProfileSwitches> = {};
     for (const { key, value } of overrideRows()) {
         const name = key.slice(OVERRIDE_PREFIX.length) as ProfileSwitch;
@@ -458,7 +477,7 @@ function overrideRows(): { key: string; value: string }[] {
 
 /** The profile's defaults with the operator's overrides on top: what the node is SET to do. */
 export function getConfiguredSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
-    return { ...DEFAULTS[profile], ...readProfileOverrides() };
+    return { ...DEFAULTS[profile], ...sharedOverrides() };
 }
 
 /**

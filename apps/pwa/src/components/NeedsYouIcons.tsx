@@ -292,13 +292,15 @@ export function NeedsYouIcons({
         const wide = typeof window !== 'undefined' ? window.matchMedia?.('(min-width: 768px)') : undefined;
         wide?.addEventListener?.('change', poke);
 
+        // `chats`: a run asked for only by new listings by someone else leaves this out (lib/sync-coordinator SyncScope). Nothing
+        // in "your groups" or this row changes with one, and Home's own read of it is what the row draws from while fresh.
         const unsubSync = onSyncActivity((data?: unknown) => {
             if (isOwnInviteChange(data, identityPubkey)) {
                 forgetHomeForHeader();
             }
             if (settleTimer) clearTimeout(settleTimer);
             settleTimer = setTimeout(poke, WS_SETTLE_MS);
-        });
+        }, { chats: true });
 
         const unsubRead = onConversationRead(() => {
             forgetHomeForHeader();

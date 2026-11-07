@@ -5138,3 +5138,59 @@ describe('What could you offer? (cold start O2): the sheet First steps opens, th
         expect(sheet()).toBeNull();
     });
 });
+
+// Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §5, §8 fix 2): every phone near a
+// new listing read Home exactly 3 s on, so the node built about a hundred Homes back to back. A bell that reached a crowd now
+// waits this device's own random 3 to 15 s; a bell about the member themself waits 3 s as before.
+describe('the wait after a doorbell on Home', () => {
+    const listing = (author: string, extra: Record<string, unknown> = {}) => ({
+        type: 'new_post', post: { id: 'post-9', type: 'event', authorPublicKey: author, updatedAt: '2026-10-28T06:00:00.000Z', audienceScope: 'public', ...extra },
+    });
+    /** Rings Home's doorbell with Math.random at `random`, and returns the waits the screen set while it did. */
+    const waitsFor = async (data: unknown, random: number) => {
+        const ws = vi.mocked(DeviceEventEmitter.addListener).mock.calls.filter(c => c[0] === 'ws_activity').at(-1)![1] as (d: unknown) => void;
+        const timers = vi.spyOn(globalThis, 'setTimeout');
+        const rand = vi.spyOn(Math, 'random').mockReturnValue(random);
+        try {
+            await act(async () => { ws(data); });
+            return timers.mock.calls.map(c => c[1]).filter((ms): ms is number => typeof ms === 'number');
+        } finally {
+            rand.mockRestore();
+            timers.mockRestore();
+        }
+    };
+
+    // One landing each: the first bell of a burst sets the turn, and later bells of it leave it where it is.
+    it.each([[0, 3_000], [0.25, 6_000], [0.5, 9_000], [0.75, 12_000], [0.9999999, 15_000]])(
+        'a new listing by someone else is read after this device\'s own random turn: Math.random at %s waits %s ms, never under 3 s or over 15 s',
+        async (random, turn) => {
+            await render();
+            const waits = await waitsFor(listing('d'.repeat(64)), random);
+            expect(waits).toContain(turn);
+            expect(turn).toBeGreaterThanOrEqual(3_000);
+            expect(turn).toBeLessThanOrEqual(15_000);
+        },
+    );
+
+    it('the member\'s own listing, a deal\'s step and a bell naming no listing wait 3 s whatever the random says', async () => {
+        await render();
+        for (const bell of [listing(who.identity.publicKey), { type: 'transaction_completed' }, { type: 'new_post' }]) {
+            const waits = await waitsFor(bell, 0.5);
+            expect(waits).toContain(3_000);
+            expect(waits).not.toContain(9_000);
+        }
+    });
+
+    it('a crowd\'s bell still brings one read of Home, not none and not one per bell', async () => {
+        await render();
+        const before = homeReads().length;
+        const ws = vi.mocked(DeviceEventEmitter.addListener).mock.calls.filter(c => c[0] === 'ws_activity').at(-1)![1] as (d: unknown) => void;
+        const rand = vi.spyOn(Math, 'random').mockReturnValue(0);
+        try {
+            await act(async () => { for (let i = 0; i < 4; i++) ws(listing('d'.repeat(64), { id: `post-${i}` })); });
+        } finally { rand.mockRestore(); }
+        await act(async () => { await new Promise(r => setTimeout(r, 3_300)); });
+        await settle();
+        expect(homeReads().length).toBe(before + 1);
+    });
+});

@@ -29,6 +29,7 @@ import {
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
     knockStillAnswerable, capitalFirst, inviteAskNeedsLine,
     copyFromLine, eventCopyOf, type ShownFromLine, reorderIds, newInstanceId, readChatSettings, homeChatPicked,
+    HOME_BELL_SETTLE_MS, crowdBellDelayMs, createHomeBellSettle, isCrowdDoorbell, type HomeBellTimers,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -1392,8 +1393,11 @@ export function cardCaption(type: HomeCardId, answer: Pick<HomeAnswer, 'profile'
 export const HOME_DOORBELLS: ReadonlySet<string> = new Set([
     'new_post', 'transaction_completed', 'decision_vote_cast', 'group_updated', 'profile_updated', 'system_announcement',
 ]);
-/** One read after a burst of doorbells (§5.2: debounced 3 s), never one per bell. */
-export const HOME_DOORBELL_SETTLE_MS = 3_000;
+/**
+ * One read after a burst of doorbells (§5.2: debounced 3 s), never one per bell. This is the wait after a bell about the
+ * member themself; a bell that reached a crowd of phones at once waits a random 3 to 15 s instead (createDoorbellDebounce).
+ */
+export const HOME_DOORBELL_SETTLE_MS = HOME_BELL_SETTLE_MS;
 /** The backstop, as the header's (NeedsYouIcons SAFETY_POLL_MS), while Home is in front. Never a per-card timer. */
 export const HOME_SAFETY_POLL_MS = 120_000;
 /** How long the header draws from Home's answer instead of its own reads (§5.2 "fresher than 120 s"). */
@@ -1414,26 +1418,34 @@ export function isHomeDoorbellFor(data: unknown, me: string | null | undefined):
 /**
  * A debouncer for the doorbell: each bell pushes the read back to `settleMs` after the last one, so a burst costs one
  * read. Pure over its timer functions, for the tests.
+ *
+ * With `crowd`, a bell it names (one that reached every phone near a listing at once: @beanpool/core isCrowdDoorbell) is
+ * read after `crowd.delayMs()` instead (a random 3 to 15 s, each device its own), set by the first of a burst and never
+ * pushed back, so it is read at the latest that long after it rang and a run of bells cannot hold the read off. Bells
+ * about the member themself still wait `settleMs` after the last, as before. Whichever is read first covers the other
+ * (@beanpool/core createHomeBellSettle, which the web app's Home uses too).
  */
 export function createDoorbellDebounce(
     run: () => void,
     settleMs: number = HOME_DOORBELL_SETTLE_MS,
-    timers: { set: (fn: () => void, ms: number) => unknown; clear: (t: unknown) => void } = {
-        set: (fn, ms) => setTimeout(fn, ms), clear: t => clearTimeout(t as ReturnType<typeof setTimeout>),
-    },
+    timers?: HomeBellTimers,
     /** Which bells count: {@link isHomeDoorbell}, or Home's {@link isHomeDoorbellFor} its member. */
     wanted: (data: unknown) => boolean = isHomeDoorbell,
+    /** Which counted bells reached a crowd, and how long this device waits for one. */
+    crowd?: { is: (data: unknown) => boolean; delayMs: () => number },
 ): { ring: (data: unknown) => void; cancel: () => void } {
-    let timer: unknown = null;
+    const settle = createHomeBellSettle({ run, settleMs, crowdDelayMs: crowd?.delayMs, timers });
     return {
         ring(data) {
-            if (!wanted(data)) return;
-            if (timer !== null) timers.clear(timer);
-            timer = timers.set(() => { timer = null; run(); }, settleMs);
+            if (wanted(data)) settle.ring(!!crowd?.is(data));
         },
         cancel() {
-            if (timer !== null) timers.clear(timer);
-            timer = null;
+            settle.cancel();
         },
     };
+}
+
+/** Home's crowd rule for this member (index.tsx): who counts as a crowd's bell, and this device's own random wait. */
+export function homeCrowdFor(me: () => string | null | undefined): { is: (data: unknown) => boolean; delayMs: () => number } {
+    return { is: data => isCrowdDoorbell(data, me()), delayMs: () => crowdBellDelayMs() };
 }

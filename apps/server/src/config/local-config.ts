@@ -308,15 +308,66 @@ let restoredFromBackup: { at: string; why: string; brokenCopy: string | null } |
 let restoredInMemory: { size: number; mtimeMs: number; config: string } | null = null;
 export function localConfigRestoredNotice(): typeof restoredFromBackup { return restoredFromBackup; }
 
-/** The file's config, or why it isn't one (an empty or cut-off file, JSON that isn't an object). */
-function parseConfigFile(file: string): { config: LocalConfig } | { error: string } {
+/** The config in a file's text, or why it isn't one (an empty or cut-off file, JSON that isn't an object). A new object every time. */
+function parseConfigText(text: string): { config: LocalConfig } | { error: string } {
     try {
-        const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as unknown;
+        const parsed = JSON.parse(text) as unknown;
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { error: 'not a JSON object' };
         return { config: parsed as LocalConfig };
     } catch (e) {
         return { error: (e as Error).message };
     }
+}
+
+/** The file's config, or why it isn't one (an empty or cut-off file, JSON that isn't an object). */
+function parseConfigFile(file: string): { config: LocalConfig } | { error: string } {
+    try {
+        return parseConfigText(fs.readFileSync(file, 'utf-8'));
+    } catch (e) {
+        return { error: (e as Error).message };
+    }
+}
+
+/**
+ * local-config.json's text as the last read found it, kept while the file is the same file. The gateway reads the config
+ * on every request (getGatewayConfig, twice), and opening, reading and closing a file on each was 4.5% of the launch mix's
+ * busy time on the global node (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §7). The text is kept, not the
+ * object: every call still parses a new one, so no caller can change what the next gets.
+ *
+ * "The same file" is one `stat` that agrees on the device, inode, size, modified time and changed time. A save replaces
+ * the file whole (writeFileAtomic), so it is a new inode; a hand edit or another process's save moves the times. Three
+ * guards, so nothing stale is ever served:
+ *   - the stat is taken BEFORE the file is read: a change between the two is seen as one at the next call (the other order
+ *     could keep old text under a new stamp);
+ *   - nothing is kept until the file has been still for CONFIG_STILL_MS: a clock that ticks in milliseconds (or seconds)
+ *     could give an edit made just after the read the same stamp, and a file changed a moment ago is read every time, as it
+ *     always was;
+ *   - saveLocalConfig, and a restore that rewrites the file, forget the text at once, whatever the stat would say.
+ * A file that does not parse is never kept, so the restore from the last good copy runs on every read of it as before.
+ */
+let keptConfig: { dev: number; ino: number; size: number; mtimeMs: number; ctimeMs: number; text: string } | null = null;
+const CONFIG_STILL_MS = 2_000;
+
+/** What local-config.json holds now: null when there is no file, else the config or why it isn't one. */
+function readMainConfigFile(): { config: LocalConfig } | { error: string } | null {
+    let st: fs.Stats | undefined;
+    try { st = fs.statSync(CONFIG_PATH, { throwIfNoEntry: false }); } catch { st = undefined; }
+    if (!st) {
+        keptConfig = null;
+        return null;
+    }
+    const k = keptConfig;
+    if (k && k.size === st.size && k.mtimeMs === st.mtimeMs && k.ctimeMs === st.ctimeMs && k.ino === st.ino && k.dev === st.dev) {
+        return parseConfigText(k.text);
+    }
+    keptConfig = null;
+    let text: string;
+    try { text = fs.readFileSync(CONFIG_PATH, 'utf-8'); } catch (e) { return { error: (e as Error).message }; }
+    const read = parseConfigText(text);
+    if ('config' in read && Date.now() - st.mtimeMs > CONFIG_STILL_MS) {
+        keptConfig = { dev: st.dev, ino: st.ino, size: st.size, mtimeMs: st.mtimeMs, ctimeMs: st.ctimeMs, text };
+    }
+    return read;
 }
 
 /**
@@ -345,6 +396,7 @@ function restoreFromBackup(why: string): LocalConfig {
     }
     let brokenCopy: string | null = `${CONFIG_PATH}.broken-${Date.now()}`;
     try { fs.copyFileSync(CONFIG_PATH, brokenCopy); } catch { brokenCopy = null; }
+    keptConfig = null;
     try {
         writeFileAtomic(CONFIG_PATH, JSON.stringify(backup.config, null, 2), { newMode: 0o600 });
         restoredInMemory = null;
@@ -399,8 +451,8 @@ export function ensureLocalConfigBackup(): void {
 export function getLocalConfig(): LocalConfig {
     // No file: a new install (or one wiped on purpose). A file that is there always parses, since every save replaces it
     // whole (writeFileAtomic); one that doesn't was broken some other way, and never reads as a new install.
-    if (!fs.existsSync(CONFIG_PATH)) return { ...DEFAULT_CONFIG };
-    const read = parseConfigFile(CONFIG_PATH);
+    const read = readMainConfigFile();
+    if (read === null) return { ...DEFAULT_CONFIG };
     return 'config' in read ? read.config : (restoredCopyStillApplies() ?? restoreFromBackup(read.error));
 }
 
@@ -437,6 +489,7 @@ export function saveLocalConfig(config: LocalConfig): void {
     // holds the admin's hash and token hashes.
     const json = JSON.stringify(config, null, 2);
     let saved = false;
+    keptConfig = null;
     try {
         if (!fs.existsSync(DATA_DIR)) {
             fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -445,6 +498,8 @@ export function saveLocalConfig(config: LocalConfig): void {
         saved = true;
     } catch (e) {
         console.error(`[Config] Failed to save local config (${CONFIG_PATH}; nothing changed on disk):`, e);
+    } finally {
+        keptConfig = null;
     }
     if (saved) {
         try {

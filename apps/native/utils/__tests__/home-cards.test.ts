@@ -20,8 +20,10 @@ import {
     joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     askedFacts, addCard, fewerCardsNews, needsLineA11y, pickerGroups, removeCard, resetLayout, safetyWord, sentence, starredFirst, stepLines, voteLabelHere,
     MARK_SENT_MAX, layoutPrint, ownMarkedSave, readMarkSent, rememberMarkSent, sameList, searchCardFor, skyOf,
+    homeCrowdFor, isHomeDoorbellFor,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
+import { crowdBellDelayMs } from '@beanpool/core';
 import { arrangeCards, cardLine } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
 import { NEAR_COMMUNITY_KM, HOME_STARTER_SET, TIPS_ALL_SEEN, HOME_V1_CARD_IDS, defaultCards, defaultHomeLayout, homeCardType, normalizeCategory, skyToday, starterCards, translateV1 } from '@beanpool/core';
@@ -765,6 +767,117 @@ describe('deep links and doorbells', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    // Capacity rehearsal 7 Nov (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §8 fix 2): the bell that reaches
+    // every phone near a listing waits this device's own random 3 to 15 s, not the same 3 s on all of them.
+    describe('a crowd\'s bell: a random turn of 3 to 15 s, per device', () => {
+        const ME = 'm'.repeat(64);
+        const OTHER = 'o'.repeat(64);
+        const listing = (author: string, extra: Record<string, unknown> = {}) => ({
+            type: 'new_post', post: { id: 'post-1', type: 'event', authorPublicKey: author, updatedAt: '2026-10-28T06:00:00.000Z', audienceScope: 'public', ...extra },
+        });
+        const device = (random: () => number, run = vi.fn()) => {
+            const crowd = { is: (d: unknown) => homeCrowdFor(() => ME).is(d), delayMs: () => crowdBellDelayMs(random) };
+            return { run, bell: createDoorbellDebounce(run, HOME_DOORBELL_SETTLE_MS, undefined, d => isHomeDoorbellFor(d, ME), crowd) };
+        };
+        const fake = (fn: () => void) => { vi.useFakeTimers(); try { fn(); } finally { vi.useRealTimers(); } };
+
+        it('is read once, at this device\'s own draw: not before 3 s, and no later than 15 s', () => fake(() => {
+            for (const [draw, ms] of [[0, 3_000], [0.25, 6_000], [0.5, 9_000], [0.9999999, 15_000]] as const) {
+                const { run, bell } = device(() => draw);
+                bell.ring(listing(OTHER));
+                vi.advanceTimersByTime(ms - 1);
+                expect(run).not.toHaveBeenCalled();
+                vi.advanceTimersByTime(1);
+                expect(run).toHaveBeenCalledTimes(1);
+                vi.advanceTimersByTime(60_000);
+                expect(run).toHaveBeenCalledTimes(1);
+            }
+        }));
+
+        it('two devices that draw differently read at different moments (the spread), and the same listing rings them both', () => fake(() => {
+            const a = device(() => 0.1);
+            const b = device(() => 0.9);
+            a.bell.ring(listing(OTHER));
+            b.bell.ring(listing(OTHER));
+            vi.advanceTimersByTime(4_500);
+            expect(a.run).toHaveBeenCalledTimes(1);
+            expect(b.run).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(10_000);
+            expect(b.run).toHaveBeenCalledTimes(1);
+        }));
+
+        it('each burst draws again: a bell after the read has its own turn', () => fake(() => {
+            const draws = [0, 0.5];
+            const { run, bell } = device(() => draws.shift() ?? 0.5);
+            bell.ring(listing(OTHER));
+            vi.advanceTimersByTime(3_000);
+            expect(run).toHaveBeenCalledTimes(1);
+            bell.ring(listing(OTHER, { id: 'post-2' }));
+            vi.advanceTimersByTime(8_999);
+            expect(run).toHaveBeenCalledTimes(1);
+            vi.advanceTimersByTime(1);
+            expect(run).toHaveBeenCalledTimes(2);
+        }));
+
+        it('is not pushed back by more bells: a run of them cannot hold the read off, and still costs one read', () => fake(() => {
+            const { run, bell } = device(() => 0.5);              // 9 s
+            for (let i = 0; i < 8; i++) { bell.ring(listing(OTHER, { id: `post-${i}` })); vi.advanceTimersByTime(1_000); }
+            expect(run).not.toHaveBeenCalled();                   // 8 s in
+            vi.advanceTimersByTime(1_000);
+            expect(run).toHaveBeenCalledTimes(1);                 // 9 s: the first bell's turn
+            vi.advanceTimersByTime(30_000);
+            expect(run).toHaveBeenCalledTimes(1);
+        }));
+
+        it('a bell about the member themself still waits 3 s after the last, and a crowd\'s turn does not delay it', () => fake(() => {
+            const { run, bell } = device(() => 0.9);              // 13.8 s
+            bell.ring(listing(OTHER));
+            bell.ring(listing(ME));                               // their own listing: a person, not a crowd
+            vi.advanceTimersByTime(2_000);
+            bell.ring({ type: 'transaction_completed' });         // pushes it back, as before
+            vi.advanceTimersByTime(2_999);
+            expect(run).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(1);
+            expect(run).toHaveBeenCalledTimes(1);
+            vi.advanceTimersByTime(30_000);                       // that read covered the crowd's too
+            expect(run).toHaveBeenCalledTimes(1);
+        }));
+
+        it('a crowd\'s read covers a bell about the member that rang just before it', () => fake(() => {
+            const { run, bell } = device(() => 0);                // 3 s
+            bell.ring({ type: 'transaction_completed' });         // due at 3 s
+            vi.advanceTimersByTime(1_000);
+            bell.ring(listing(OTHER));                            // due at 4 s
+            vi.advanceTimersByTime(2_000);
+            expect(run).toHaveBeenCalledTimes(1);                 // 3 s: the member's own
+            vi.advanceTimersByTime(30_000);
+            expect(run).toHaveBeenCalledTimes(1);
+        }));
+
+        it('cancel drops a crowd\'s read too, and the bells Home does not care about set nothing', () => fake(() => {
+            const { run, bell } = device(() => 0);
+            bell.ring(listing(OTHER));
+            bell.cancel();
+            bell.ring({ type: 'new_message' });
+            bell.ring({ type: 'pong' });
+            vi.advanceTimersByTime(60_000);
+            expect(run).not.toHaveBeenCalled();
+        }));
+
+        it('Home\'s own crowd rule asks for the member\'s key as it is now, and draws from 3 s to 15 s', () => {
+            let key: string | null = ME;
+            const crowd = homeCrowdFor(() => key);
+            expect(crowd.is(listing(OTHER))).toBe(true);
+            key = OTHER;                                          // another account on the phone: the listing is theirs
+            expect(crowd.is(listing(OTHER))).toBe(false);
+            for (let i = 0; i < 500; i++) {
+                const d = crowd.delayMs();
+                expect(d).toBeGreaterThanOrEqual(3_000);
+                expect(d).toBeLessThanOrEqual(15_000);
+            }
+        });
     });
 });
 

@@ -52,7 +52,7 @@ import {
 } from '../../components/home/HomeCardBodies';
 import {
     FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, NOT_ON_ACCOUNT_LINE, SKY_NO_PLACE_LINE, addCard, addedLine, arrangeCards, listOf, moveCardTo, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName, cardOnNode, cardRowName,
-    canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, isHomeDoorbellFor,
+    canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, homeCrowdFor, isHomeDoorbellFor,
     effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, resetLayout, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
     type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
@@ -701,13 +701,14 @@ export default function HomeScreen() {
     }, [dropKnocks]));
 
     // The app coming back while Home is in front, and the doorbells that matter to Home (one read after a burst): its
-    // member's own group invitations among them, which Needs you lists.
+    // member's own group invitations among them, which Needs you lists. A bell that reached every phone near it at once
+    // (a listing by someone else) is read after this device's own random 3 to 15 s; one about the member, 3 s after.
     const meRef = useRef(identity?.publicKey);
     meRef.current = identity?.publicKey;
     useEffect(() => {
         const bell = createDoorbellDebounce(() => {
             if (focused.current && AppState.currentState === 'active') void refreshRef.current('bell');
-        }, HOME_DOORBELL_SETTLE_MS, undefined, data => isHomeDoorbellFor(data, meRef.current));
+        }, HOME_DOORBELL_SETTLE_MS, undefined, data => isHomeDoorbellFor(data, meRef.current), homeCrowdFor(() => meRef.current));
         const ws = DeviceEventEmitter.addListener('ws_activity', (data: unknown) => { if (focused.current) bell.ring(data); });
         const app = AppState.addEventListener('change', st => {
             if (st === 'active' && focused.current) void refreshRef.current('focus');

@@ -613,6 +613,42 @@ export interface VerifyOptions {
     perMinute?: number;
 }
 
+// A signer's key as the KeyObject crypto.verify takes. Building one (the SPKI wrapper, then OpenSSL's parse of it) was 3.2% of
+// the launch mix's busy time on the global node, once for every signed request of the same few thousand keys
+// (scratch/global-node/REPORT-global-load-rehearsal-2026-11-07.md §7). The last SIGNER_KEY_CACHE_MAX distinct keys are kept,
+// most recently used last, so a flood of one-off keys pushes out the keys nobody has used and the cache holds at most that
+// many small objects. A KeyObject is immutable, so verifying with a kept one answers what a new one would. Only a key spelled
+// as 64 hex characters (every signer provenKeySpelling lets through) is kept: any other spelling is built each time, as it
+// was, and a key that fails to build throws before anything is kept, so a bad key is refused every time it is presented.
+const SIGNER_KEY_CACHE_MAX = 1024;
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+const KEPT_KEY_SPELLING = /^[0-9a-fA-F]{64}$/;
+const signerKeys = new Map<string, crypto.KeyObject>();
+
+function signerKeyObject(pubKeyHex: string): crypto.KeyObject {
+    const keepable = KEPT_KEY_SPELLING.test(pubKeyHex);
+    if (keepable) {
+        const kept = signerKeys.get(pubKeyHex);
+        if (kept) {
+            signerKeys.delete(pubKeyHex);
+            signerKeys.set(pubKeyHex, kept);
+            return kept;
+        }
+    }
+    const spki = Buffer.concat([ED25519_SPKI_PREFIX, Buffer.from(pubKeyHex, 'hex')]);
+    const key = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+    if (keepable) {
+        if (signerKeys.size >= SIGNER_KEY_CACHE_MAX) signerKeys.delete(signerKeys.keys().next().value!);
+        signerKeys.set(pubKeyHex, key);
+    }
+    return key;
+}
+
+/** How many signers' keys are kept (for suites). */
+export function signerKeyCacheSize(): number {
+    return signerKeys.size;
+}
+
 /**
  * `spelling`: how the signature is written. A request's and a `/ws` token's are base64 only, as origin/main read them:
  * the middleware stores X-Signature as sent (a transfer's `auth_signature`) and a backup reads it as base64
@@ -621,8 +657,7 @@ export interface VerifyOptions {
  */
 function ed25519Verify(bytes: Uint8Array, signature: string, pubKeyHex: string, spelling: 'base64' | 'base64-or-hex'): boolean {
     try {
-        const spki = Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(pubKeyHex, 'hex')]);
-        const key = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+        const key = signerKeyObject(pubKeyHex);
         const clean = String(signature ?? '').trim();
         const hex = spelling === 'base64-or-hex' && /^[0-9a-fA-F]{128}$/.test(clean);
         const sig = Buffer.from(clean, hex ? 'hex' : 'base64');
